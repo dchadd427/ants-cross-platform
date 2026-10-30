@@ -1,0 +1,91 @@
+/* The Games list, Quick host and the Room's Public | Private switch (web/home/games.js, docs/HOME_SCREEN.md). Loaded after the first paint; the page's colors, .btn, .banner, .joinbox and .hint are the page's own
+   (web/lobby.html). Every target is at least 44 px high and wide. */
+
+/* ---- the Games button while the list is open ---- */
+.hchip.games[aria-expanded="true"] { background-color: #0b1a17; color: var(--gold); box-shadow: inset 0 0 0 2px var(--frame-hi), 3px 4px 0 var(--shadow); }
+
+/* ---- the popover under the bar ---- */
+.gpop { position: fixed; z-index: 55; box-sizing: border-box; padding: 14px 16px 16px; overflow-y: auto; overscroll-behavior: contain; color: var(--cream); background: #050b0e;
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.gphead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.gptitle { margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
+.gpcount { font-size: 15px; color: #a8cfc0; text-align: right; }
+.gjoining { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 4px 4px 4px 10px; font-size: 16px; color: var(--cream); border-left: 6px solid var(--gold); background: rgba(255, 255, 255, .05); }
+.gjoining span { min-width: 0; overflow-wrap: anywhere; }
+.gjoining .btn { flex: none; min-height: 44px; min-width: 88px; }
+.gpnote { margin: 0 0 8px; padding: 6px 10px; font-size: 15px; line-height: 1.3; color: #ffe4de; background: var(--bad-bg); border-left: 6px solid var(--bad-edge); border-radius: 3px; overflow-wrap: anywhere; }
+.gpbody { min-width: 0; }
+.glist { list-style: none; margin: 0; padding: 0; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
+.gitem { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; }
+.glist .gitem + .gitem { border-top: 1px solid #17382f; }
+.gmap { display: block; width: 56px; height: 56px; flex: none; background: #14201b; border: 2px solid var(--frame); box-shadow: 0 0 0 1px var(--edge); }
+.gmap img { display: block; width: 100%; height: 100%; image-rendering: auto; }
+.gtxt { display: grid; gap: 4px; min-width: 0; }
+.gtop { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; min-width: 0; }
+.gname { font-size: 20px; line-height: 1.2; overflow-wrap: anywhere; }
+.gmapname { font-size: 15px; color: #a8cfc0; overflow-wrap: anywhere; }
+.gline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 15px; }
+.gcount { color: var(--cream); font-variant-numeric: tabular-nums; }
+.gbots { color: #a8cfc0; }
+.gdots { display: inline-flex; gap: 5px; }
+.gdot { display: inline-block; flex: none; box-sizing: border-box; width: 16px; height: 16px; border-radius: 50%; --c: #79bf93; }
+.gdot.c0 { --c: #79bf93; } .gdot.c1 { --c: #d4707f; } .gdot.c2 { --c: #8f8fd6; } .gdot.c3 { --c: #b3afb9; }
+.gdot.player { background: var(--c); box-shadow: 0 0 0 1px #000; }
+.gdot.bot { border: 2px solid var(--c); background: transparent; }
+.gdot.open { border: 2px dashed #2f7a5e; background: transparent; }
+.glegend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 12px 0 0; font-size: 14px; color: #a8cfc0; }
+.gleg { display: inline-flex; align-items: center; gap: 8px; }
+.glegend .gdot { width: 12px; height: 12px; }
+.glegend .gdot.player { --c: #79bf93; } .glegend .gdot.bot { --c: #d4707f; }
+.gjoin { min-width: 72px; min-height: 44px; }
+.gempty, .goff { display: grid; justify-items: center; gap: 6px; padding: 22px 16px 18px; text-align: center; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
+.gempty[hidden], .goff[hidden], .glist[hidden], .glegend[hidden], .gpnote[hidden], .gjoining[hidden] { display: none; }
+.gempty .ant { --k: 2; margin: 0 auto 4px; filter: brightness(0) invert(1); opacity: .13; animation: none; }       /* (the ant of an open color: a shadow of one) */
+.gemtitle { margin: 0; font-size: 22px; line-height: 1.2; }
+.gemline { margin: 0 0 4px; font-size: 15px; line-height: 1.35; color: #a8cfc0; }
+.btn.ghostbtn { margin-top: 6px; }
+.gcode { margin-top: 14px; }
+.gclabel { display: block; font-size: 14px; color: #a8cfc0; }
+.gcode .joinbox { margin-top: 6px; }
+.gcode .joinbox input { min-height: 48px; font-size: 16px; }
+.gcode .gcgo { min-width: 72px; min-height: 44px; align-self: center; }
+.gcode .hint { margin-top: 6px; overflow-wrap: anywhere; }
+
+/* ---- the confirm card: the question, what it is about, and the answer that changes nothing ---- */
+.gshade { position: absolute; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); }
+.gconfirm { box-sizing: border-box; width: min(440px, 100%); max-height: 100%; overflow-y: auto; padding: 18px 20px 18px; text-align: center; color: var(--cream); background: #050b0e;
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.gctitle { margin: 0 0 8px; font-size: 26px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
+.gcline { margin: 0 0 14px; font-size: 16px; line-height: 1.4; overflow-wrap: anywhere; }
+.gconfirm .gitem { margin: 0 0 16px; padding: 8px 10px; text-align: left; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
+.gconfirm .gmap { width: 48px; height: 48px; }
+.gcbtns { display: flex; gap: 12px; justify-content: center; }
+.gcbtns .btn { flex: 1 1 0; min-height: 48px; padding: 6px 10px; white-space: normal; }
+.gcbtns .gstay { color: var(--cream); background: #0b1117; box-shadow: inset 0 0 0 2px var(--frame-hi); }
+.gcbtns .gstay:hover { background-color: #13222b; }
+
+/* ---- the strip of a notice (the page's .banner, with its buttons) ---- */
+.gstrip .gbtns { display: flex; gap: 10px; flex: none; }
+.gstrip .btn { min-height: 44px; }
+
+/* ---- the Room's card: the switch (a leader), the chip (a guest) and the line under them ---- */
+.vis { display: inline-flex; gap: 10px; margin: 0 auto 0 18px; align-self: center; }
+.vbtn { min-height: 44px; padding: 4px 14px; gap: 8px; align-items: baseline; font-size: 17px; }
+.vbtn small { font-size: 13px; opacity: .9; }
+.vbtn b { font-weight: 500; }
+.vbtn[aria-pressed="true"] { color: var(--gold); background-color: #0b1a17; box-shadow: inset 0 0 0 2px var(--frame-hi), 3px 4px 0 var(--shadow); cursor: default; }
+.vbtn[disabled] { cursor: default; }
+.vwide { display: none; }
+.visnote { margin: 0 0 8px; font-size: 15px; line-height: 1.35; color: #9fe0bd; }
+.vistag { display: inline-block; margin-left: 12px; padding: 0 10px; font-size: 14px; line-height: 1.7; vertical-align: middle; color: var(--gold); background: #2a2208; border: 1px solid #6b5a14; border-radius: 3px; }
+.vistag[hidden], .vis[hidden], .visnote[hidden] { display: none; }
+@media (min-width: 721px) { .vwide { display: inline; } .visnote { margin: -6px 0 12px; } }
+@media (max-width: 720px) {
+    .vis { display: flex; margin: 12px 0 0; }
+    .vbtn { flex: 1 1 0; min-width: 0; justify-content: center; padding: 4px 8px; }
+    .visnote { margin: 8px 0 0; }
+}
+
+/* ---- a phone upright and a short window ---- */
+@media (max-width: 720px) { .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
+@media (max-height: 500px) and (orientation: landscape) { .gptitle { font-size: 20px; } .gpop { padding: 10px 14px 12px; } .gcbtns .btn { min-height: 44px; } .gconfirm { padding: 12px 16px; } .gctitle { font-size: 22px; } .gcline { margin-bottom: 10px; } }

@@ -36,7 +36,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_check.js")
 HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 46000, 14200           # bytes, raw and gzipped, both files together (about 44,300 and 13,800, with the login: the button, the chip, the account line, the mark of Discord): they load after the first paint, so they cost the first look nothing
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 51000, 15900           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer): they load after the first paint, so they cost the first look nothing
 
 
 def read(*parts):
@@ -158,13 +158,13 @@ class TheFolderAndTheScript(unittest.TestCase):
     def test_it_opens_no_socket_when_it_is_loaded_only_when_it_is_mounted(self):
         self.assertNotRegex(self.code, r"new\s+WebSocket", "the socket class is the page's (win.WebSocket), made in go() only")
         self.assertEqual(len(re.findall(r"new Socket\(", self.code)), 1)
-        self.assertEqual(self.code.count("        paint();\n        go();\n        return {"), 1, "go() runs when the dock is mounted, never when the file is loaded")
+        self.assertEqual(self.code.count("        paint();\n        go();\n        win.addEventListener('resize'"), 1, "go() runs when the dock is mounted, never when the file is loaded")
         self.assertNotRegex(self.code, r"\n    go\(|\n\}\)\(.*go\(")
         self.assertIn("root.AntsHomeChat = api;", self.js)
 
     def test_the_limits_are_the_hubs_and_the_pace_is_below_it(self):
         self.assertIn("var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };", self.js)
-        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000 };", self.js)
+        self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };", self.js)
         self.assertIn("var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };", self.js, "the wait is spread from half a step to one and a half, within 1 to 60 s")
         self.assertIn("var PACE = { burst: 2, every: 2500, same: 31000 };", self.js, "below the hub's: 3 at once, one every 2 s, the same text twice within 30 s")
 
@@ -182,7 +182,7 @@ class TheFolderAndTheScript(unittest.TestCase):
 
     def test_the_log_and_the_controls_have_their_names_and_the_dock_its_focus_handling(self):
         for needle in ("log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite');", "log.setAttribute('tabindex', '0');", "note.setAttribute('role', 'status');",
-                       "field.setAttribute('aria-label', TEXT.field);", "fold.setAttribute('aria-controls', 'gchat-body');", "fold.setAttribute('aria-expanded', open ? 'true' : 'false');",
+                       "field.setAttribute('aria-label', TEXT.field);", "fold.setAttribute('aria-controls', 'gchat-body');", "fold.setAttribute('aria-expanded', out ? 'true' : 'false');",
                        "box.setAttribute('aria-labelledby', 'gchat-title');", "e.key === 'Escape' && open", "e.preventDefault()"):
             self.assertIn(needle, self.js, needle)
 
@@ -214,11 +214,15 @@ class TheStyle(unittest.TestCase):
         self.assertIn('.gc[data-open="false"] { height: 62px; }', compact)
         self.assertIn("left: 16px; right: 16px; bottom: 12px;", compact)
         self.assertIn("height: min(490px, calc(100% - 200px));", compact, "under the bar of a phone (184 px)")
-        self.assertIn('.gc[data-open="true"] { min-height: 200px; }', compact, "with the strips above Home there is less room: the open panel is never a sliver")
+        self.assertIn(".gc { --gc-min: 200px; left: 16px;", compact, "the least height of the open panel (chat.js reads it: with the strips above Home there is less room, and then the strip shows instead)")
+        self.assertIn('.gc[data-open="true"] { min-height: var(--gc-min); }', compact, "with the strips above Home there is less room: the open panel is never a sliver")
+        self.assertIn(".gc[hidden] { display: none; }", self.css, "a window that has no room even for the strip shows nothing")
         self.assertIn('.gc[data-open="true"] { left: 10px; right: 10px; }', compact)
         side = re.search(r"@media \(max-height: 500px\) and \(orientation: landscape\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn("width: 420px; height: min(286px, calc(100% - 76px)); }", side, "its top clears the bar of 62 px")
-        self.assertIn('.gc[data-open="true"] { min-height: 150px; }', side, "an open panel is never a sliver; a folded strip has no minimum")
+        self.assertIn(".gc, .gc[data-open=\"true\"] { --gc-min: 150px; left: 14px;", side, "the least height of the open panel sideways (chat.js reads it)")
+        self.assertIn('.gc[data-open="true"] { min-height: var(--gc-min); }', side, "an open panel is never a sliver; a folded strip has no minimum")
+        self.assertNotIn("min-height: 150px", self.css.replace("--gc-min: 150px", ""), "the least height is the property's: one number for the style and the script")
         self.assertIn('left: 14px; right: auto;', side)
 
     def test_the_title_of_a_folded_strip_is_the_short_one_and_the_long_one_stays_for_a_screen_reader(self):

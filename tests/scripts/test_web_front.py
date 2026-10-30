@@ -897,8 +897,7 @@ class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
         self.assertIn("NAME_MAX = 32;", self.page)
 
     def test_a_notice_is_a_notice_and_a_hint_is_a_hint(self):
-        self.assertRegex(self.page, r'<p class="hint" id="joinhint" role="status">')                                 # (the line under the field of a room code that does not lead anywhere)
-        self.assertIn('aria-describedby="joinhint"', self.page)
+        self.assertNotIn('id="joinhint"', self.page)                                                                 # (the line under the field of a room code is the Games list's now: web/home/games.js makes it, with the page's own .hint)
         for selector in (".hint:empty", ".name-step-msg:empty"):
             self.assertEqual(self.sheet.value(selector, "display"), "none", selector)
         self.assertIn('id="banner" role="status"', self.page)                                                        # (the strip at the top: what the page changed for you, or what did not work)
@@ -964,7 +963,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertEqual(self.sheet.value(".invite input", "text-overflow"), "ellipsis")                        # (a field can shrink under its row: a long link never makes the page wider)
         self.assertEqual(self.sheet.value(".joinbox input", "min-width"), "0")
         self.assertEqual(self.sheet.value(".joinbox input", "flex"), "1")
-        for selector in (".invite-note", ".invite-note .rt", ".rejoin", ".banner"):                           # (the lines of the page wrap: the note under the link, the strips)
+        for selector in (".invite-note", ".rejoin", ".banner"):                           # (the lines of the page wrap: the note under the link, the strips)
             self.assertEqual(self.sheet.value(selector, "flex-wrap"), "wrap", selector)
         self.assertIn(".head { margin-bottom: 10px; flex-wrap: wrap; }", self.phone)
 
@@ -1050,7 +1049,6 @@ class TheColors(unittest.TestCase):
             ("the room code", (".code", "color"), (".panel", "background")),
             ("the room code's box", (".code b", "color"), (".code b", "background")),
             ("the note under the link", (".invite-note", "color"), (".panel", "background")),
-            ("the links under the link", (".invite-note button", "color"), (".panel", "background")),
             ("a hint", (".hint", "color"), (".panel", "background")),
             ("the note under the colors", (".slots-note", "color"), (".panel", "background")),
             ("a refused team", (".teams-note.warn", "color"), (".panel", "background")),

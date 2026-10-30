@@ -73,7 +73,8 @@ const W = (o) => Object.assign({ t: 'welcome', v: 1, you: null, login: false, on
 const HISTORY = [L(1, 'pebble', 'anyone up for Islands?'), L(2, 'clover', 'I have a room open', true), L(3, 'juniper', 'joining!')].map((m) => { const x = Object.assign({}, m); delete x.t; return x; });
 const YOU = { name: 'maple.leaf', mod: false };
 
-// one dock on a fake page: o.width and o.height (the window), o.random, o.noWebSocket, o.throws (a constructor that throws), o.hidden
+// one dock on a fake page: o.width and o.height (the window), o.random, o.noWebSocket, o.throws (a constructor that throws), o.hidden; o.hostHeight, o.barHeight and o.least (the style's --gc-min): Home's div, the bar in it and the
+// least height of the open panel, as a browser measures them; o.observe: the window has a ResizeObserver (r.watch.fn() is its callback)
 function rig(o) {
     o = o || {};
     const env = { elements: {}, innerHTMLWrites: [] };
@@ -92,6 +93,10 @@ function rig(o) {
         fail() { this.readyState = 3; if (this.onerror) this.onerror({}); if (this.onclose) this.onclose({ code: 1006 }); return this; }
     }
     const host = new El(env, 'div', 'home');
+    const watch = { fn: null, target: null };
+    if (o.least !== undefined) win.getComputedStyle = () => ({ getPropertyValue: (p) => (p === '--gc-min' ? o.least + 'px' : '') });
+    if (o.observe) win.ResizeObserver = function (fn) { watch.fn = fn; this.observe = (t) => { watch.target = t; }; };
+    if (o.hostHeight !== undefined) { host.clientHeight = o.hostHeight; const bar = new El(env, 'header'); bar.className = 'hbar'; bar.offsetHeight = o.barHeight; host.appendChild(bar); }
     const errors = [];
     const hidden = (on) => { doc.hidden = on; (doc.listeners.visibilitychange || []).forEach((fn) => fn({})); };
     doc.hidden = !!o.hidden;
@@ -104,7 +109,7 @@ function rig(o) {
     const fetcher = o.noFetch ? undefined : (path, init) => { fetches.push({ path, init }); if (o.fetchThrows) throw new Error('no network'); return { then(ok, bad) { pending = { ok, bad }; } }; };
     const dock = Chat.mount({ doc, win, host, chip, screen: o.screen, fetch: fetcher, now: clock.now, random: o.random || (() => 0), WebSocket: o.noWebSocket ? undefined : HubSocket, error: (e) => errors.push(e) });
     if (o.home !== false) dock.shown(true);                // (the page tells the dock which screen shows, right after it is mounted)
-    const r = { env, clock, Chat, doc, win, host, sockets, dock, errors, hidden, HubSocket, root: dock.root, chip, went, fetches };
+    const r = { env, clock, Chat, doc, win, host, sockets, dock, errors, hidden, HubSocket, watch, root: dock.root, chip, went, fetches };
     r.answer = (response) => { const p = pending; pending = null; p.ok(response); };
     r.refuse = () => { const p = pending; pending = null; p.bad(new Error('the network')); };
     r.pending = () => pending !== null;
@@ -287,6 +292,116 @@ function rig(o) {
     check('... a field that has new words in it is left alone', d.field().value === 'new words');
     const f = rig(); f.live(W({ you: YOU })); f.dock.say('sent and shown'); f.s().recv(L(77, 'maple.leaf', 'sent and shown')); f.s().recv({ t: 'err', code: 'bad' });
     check('a line that came back as a line is not put back into the field by a later err', f.field().value === '');
+    const g = rig(); g.live(W({ you: YOU }));
+    same('a line that the hub refused (a rate, as when another tab of the account said the same text a moment ago) is not one that was said: the same text goes again 3 s later, and is sent (the page holds back only what the hub accepted)',
+        [g.dock.say('hello'), (g.s().recv({ t: 'err', code: 'rate' }), g.clock.advance(3000), g.dock.say('hello')), g.s().sent.length], ['', '', 2]);
+    const k = rig(); k.live(W({ you: YOU }));
+    k.dock.say('A'); k.s().recv(L(9, 'maple.leaf', 'A')); k.clock.advance(2500); k.dock.say('B'); k.s().recv({ t: 'err', code: 'rate' }); k.clock.advance(2500);
+    same('... an err forgets the refused text only: A (accepted, as a line) is still held back for 31 s, B may go again', [k.dock.say('A'), k.dock.say('B')], ['rate', '']);
+    const q = rig(); q.live(W({ you: YOU }));
+    q.dock.say('first'); q.s().recv({ t: 'err', code: 'rate' }); q.clock.advance(3000); q.dock.say('first');
+    same('... and an err that comes for a text that was sent twice forgets it again (every refusal is its own)', [(q.s().recv({ t: 'err', code: 'rate' }), q.clock.advance(3000), q.dock.say('first')), q.s().sent.length], ['', 3]);
+    const two = rig(); two.live(W({ you: YOU }));
+    two.dock.say('first'); two.clock.advance(2500); two.dock.say('second');
+    two.s().recv({ t: 'err', code: 'rate' });
+    two.clock.advance(5000);
+    same('two lines are in flight and the hub refuses: it refuses the OLDER one (it answers in order): that text goes back into the field and may be sent again, the other is still held back for 31 s', [two.field().value, two.dock.say('first'), two.dock.say('second')], ['first', '', 'rate']);
+    const mix = rig(); mix.live(W({ you: YOU }));
+    mix.dock.say('A'); mix.clock.advance(2500); mix.dock.say('B');
+    mix.s().recv(L(40, 'maple.leaf', 'A'));
+    mix.s().recv({ t: 'err', code: 'rate' });
+    mix.clock.advance(5000);
+    same('... the first came back as a line (answered), the second is refused: the second is the one that is forgotten, the first stays held back', [mix.field().value, mix.dock.say('B'), mix.dock.say('A')], ['B', '', 'rate']);
+    const none = rig(); none.live(W({ you: YOU }));
+    none.dock.say('X'); none.s().recv(L(41, 'maple.leaf', 'X')); none.dock.say('Y'); none.s().recv(L(42, 'maple.leaf', 'Y'));
+    none.s().recv({ t: 'err', code: 'rate' });
+    check('an err that comes when every line was answered refuses nothing: no text comes back into the field, nothing is forgotten', none.field().value === '' && none.dock.say('X') === 'rate');
+    const errs = rig(); errs.live(W({ you: YOU }));
+    errs.dock.say('A'); errs.clock.advance(2500); errs.dock.say('B');
+    errs.s().recv({ t: 'err', code: 'rate' });
+    const firstBack = errs.field().value;
+    errs.field().value = '';
+    errs.s().recv({ t: 'err', code: 'rate' });
+    same('two lines are in flight and the hub refuses both, one after the other: A comes back, then B (each refusal takes its line off the list of those that wait)', [firstBack, errs.field().value], ['A', 'B']);
+    const tabs = rig(); tabs.live(W({ you: YOU }));
+    tabs.dock.say('A');
+    tabs.s().recv(L(60, 'maple.leaf', 'said in another tab of the account'));
+    tabs.s().recv({ t: 'err', code: 'rate' });
+    same('a line of the same account that was said in another tab is nobody\'s answer here: the refusal that follows is still for A', tabs.field().value, 'A');
+    const nfd = rig(); nfd.live(W({ you: YOU }));
+    nfd.dock.say('café');
+    nfd.s().recv(L(70, 'maple.leaf', 'café'));
+    nfd.clock.advance(2500); nfd.dock.say('beta two');
+    nfd.s().recv({ t: 'err', code: 'rate' });
+    same('a line that the hub composes (NFC) before it says it back is the line that was sent: its echo answers it, and the next refusal is for the next line, not for this one (the field gets "beta two")', nfd.field().value, 'beta two');
+    const decomposed = rig(); decomposed.live(W({ you: YOU }));
+    decomposed.dock.say('caf\u00e9');
+    decomposed.s().recv(L(74, 'maple.leaf', 'cafe\u0301'));
+    decomposed.clock.advance(2500); decomposed.dock.say('beta two');
+    decomposed.s().recv({ t: 'err', code: 'rate' });
+    same('(the two sides are compared composed: a hub that says a composed line back decomposed answers it too)', decomposed.field().value, 'beta two');
+    const mod = rig(); mod.live(W({ you: { name: 'maple.leaf', mod: true } }));
+    mod.dock.say('/mute victim 1'); mod.clock.advance(2500); mod.dock.say('beta two');
+    mod.s().recv({ t: 'err', code: 'rate' });
+    same('a command of a moderator ("/mute victim 1": the hub takes it and says nothing, no echo and no err) is not a line that waits for an answer: the next refusal is for "beta two", and Enter does not issue the command again', mod.field().value, 'beta two');
+    const slash = rig(); slash.live(W({ you: YOU }));
+    slash.dock.say('/shrug'); slash.s().recv({ t: 'err', code: 'rate' });
+    same('(a line that begins with a slash from a visitor who is no moderator is a line like any other: a refusal gives it back)', slash.field().value, '/shrug');
+    const modOther = rig(); modOther.live(W({ you: { name: 'maple.leaf', mod: true } }));
+    modOther.dock.say('not a command'); modOther.s().recv({ t: 'err', code: 'rate' });
+    same('(a moderator\'s line that is no command is a line like any other)', modOther.field().value, 'not a command');
+    const cut = rig(); cut.live(W({ you: YOU }));
+    cut.dock.say('hi 🫩');
+    cut.s().recv(L(71, 'maple.leaf', 'hi'));
+    cut.clock.advance(2500); cut.dock.say('beta two');
+    cut.s().recv({ t: 'err', code: 'rate' });
+    same('a line that the hub says back with characters taken out (it takes out one that no Unicode version it knows has assigned) is answered by that echo: the line that is refused next is "beta two"', cut.field().value, 'beta two');
+    const order = rig(); order.live(W({ you: YOU }));
+    order.dock.say('hello world'); order.clock.advance(2500); order.dock.say('hello');
+    order.s().recv(L(75, 'maple.leaf', 'hello'));
+    order.s().recv({ t: 'err', code: 'rate' });
+    same('an echo that is the same text as a line that waits answers that line, not an older one that it is only part of ("hello" is part of "hello world": the refusal is for "hello world")', order.field().value, 'hello world');
+    const part = rig(); part.live(W({ you: YOU }));
+    part.dock.say('hello world'); part.clock.advance(2500); part.dock.say('beta two');
+    part.s().recv(L(76, 'maple.leaf', 'hello'));
+    part.s().recv({ t: 'err', code: 'rate' });
+    same('an echo that is part of the oldest line that waits (with characters taken out) answers it: "hello" is the echo of "hello world", whose rest the hub took out, and the refusal is for "beta two"', part.field().value, 'beta two');
+    const stranger = rig(); stranger.live(W({ you: YOU }));
+    stranger.dock.say('hello world'); stranger.s().recv(L(77, 'maple.leaf', 'goodbye'));
+    stranger.s().recv({ t: 'err', code: 'rate' });
+    same('an echo that is no part of the oldest line (a line of another tab of the account) answers nothing of this tab\'s', stranger.field().value, 'hello world');
+    const dup = rig(); dup.live(W({ you: YOU }));
+    dup.dock.say('ab'); dup.s().recv(L(79, 'maple.leaf', 'aab'));
+    dup.s().recv({ t: 'err', code: 'rate' });
+    same('an echo is part of a line only when its characters stand in the line in the same order, each at its own place ("aab" is not part of "ab")', dup.field().value, 'ab');
+    const ghost = rig(); ghost.live(W({ you: YOU }));
+    ghost.dock.say('ghost'); ghost.clock.advance(2500); ghost.dock.say('beta two');
+    ghost.clock.advance(5499);
+    ghost.s().recv({ t: 'err', code: 'rate' });
+    same('a line that nobody answers (no echo, no refusal) is waited for for 8 s: a refusal 7,999 ms after it was sent is still taken for it', ghost.field().value, 'ghost');
+    const late = rig(); late.live(W({ you: YOU }));
+    late.dock.say('ghost'); late.clock.advance(2500); late.dock.say('beta two');
+    late.clock.advance(5500);
+    late.s().recv({ t: 'err', code: 'rate' });
+    same('... and 8,000 ms after it was sent nobody waits for it any more: the refusal is for "beta two"', late.field().value, 'beta two');
+    const behind = rig(); behind.live(W({ you: YOU }));
+    behind.dock.say('ghost'); behind.clock.advance(7000); behind.dock.say('hi 🫩'); behind.clock.advance(2000);
+    behind.s().recv(L(78, 'maple.leaf', 'hi'));
+    behind.dock.say('beta two');
+    behind.s().recv({ t: 'err', code: 'rate' });
+    same('a line that nobody answered does not stand in front of the one that comes after it: when the echo "hi" comes, the ghost of 9 s ago is no longer waited for, and "hi" answers "hi ...", not nobody', behind.field().value, 'beta two');
+    const later = rig(); later.live(W({ you: YOU }));
+    later.dock.say('zzz'); later.dock.say('café'); later.clock.advance(2500); later.dock.say('beta');
+    later.s().recv(L(80, 'maple.leaf', 'café'));
+    later.s().recv({ t: 'err', code: 'rate' });
+    const laterFirst = later.field().value;
+    later.field().value = '';
+    later.s().recv({ t: 'err', code: 'rate' });
+    same('two lines wait, the second one is composed by the hub (its echo is the composed text, the oldest line is still waiting): the echo answers the second, not the oldest; the refusals are for "zzz" and then for "beta"', [laterFirst, later.field().value], ['zzz', 'beta']);
+    const gone = rig(); gone.live(W({ you: YOU }));
+    gone.dock.say('lost line'); gone.s().fail(); gone.clock.advance(2500); gone.s().open().recv(W({ you: YOU }));
+    gone.s().recv({ t: 'err', code: 'rate' });
+    check('a line that was in flight when the link went has no answer to wait for: an err of the new link does not bring it back', gone.field().value === '');
 }
 {   // the counts of the welcome, the history's own ids, the noise of one socket, the order of the ids
     const o = (online) => { const q = rig(); q.live(W({ online })); return [q.on(), one(q.root, 'gc-online').hidden]; };
@@ -479,8 +594,13 @@ function rig(o) {
     r.s().recv(L(70, 'a', 'x')); r.s().recv(L(71, 'a', 'y')); r.s().recv(L(72, 'a', 'z'));
     r.clock.advance(3000);
     check('a window of three lines has one that is not read: "One more message"', news().textContent === 'One more message' && r.log().getAttribute('aria-live') === 'polite');
+    r.s().recv(L(75, 'a', 'next'));
+    check('the summary of a window is gone when the next window starts (it was told; the same words twice in a row must be told twice, and a text that does not change is not announced)', news().textContent === '' && r.log().getAttribute('aria-live') === 'polite');
+    r.s().recv(L(76, 'a', 'next 2')); r.s().recv(L(77, 'a', 'next 3'));
+    r.clock.advance(3000);
+    check('... and the same words come again at the end of that window', news().textContent === 'One more message');
     for (let i = 0; i < 8; i++) { r.s().recv(L(80 + i, 'a', 'slow ' + i)); r.clock.advance(2000); }
-    check('a line every 2 s for 16 s is never quiet and never summarized', r.log().getAttribute('aria-live') === 'polite' && news().textContent === 'One more message');
+    check('a line every 2 s for 16 s is never quiet and never summarized (and the last summary went when the first of them started its window)', r.log().getAttribute('aria-live') === 'polite' && news().textContent === '');
     const q = rig();
     q.live(W({ you: YOU }));
     q.clock.advance(400);
@@ -563,6 +683,66 @@ function rig(o) {
     lt.live(W({ you: YOU }));
     same('a line with < or > is not sent (the hub refuses it, and a refusal is a mistake against the 20 a minute): "Lines cannot hold < or >"', [lt.dock.say('a < b'), lt.note(), lt.dock.say('x > y'), lt.sockets[0].sent.length, lt.dock.say('fine') === ''], ['markup', 'Lines cannot hold < or >', 'markup', 0, true]);
     check('the field takes at most 400 characters (a paste cannot be a megabyte), and nothing threw', r.field().getAttribute('maxlength') === '400' && r.errors.length === 0);
+}
+{   // the panel stays under Home's bar: notices above Home (and a small phone) take its room, and then the strip shows instead of the panel, or nothing when not even the strip fits (home.css and chat.css have the numbers)
+    const shape = (r) => [r.root.getAttribute('data-open'), r.root.hidden === true, one(r.root, 'gc-body').hidden === true, r.fold().getAttribute('aria-expanded')].join();
+    const at = (r, hostHeight) => { r.host.clientHeight = hostHeight; r.watch.fn(); return shape(r); };       // (Home's height changes: a notice came or went)
+    const r = rig({ width: 390, height: 844, hostHeight: 619, barHeight: 184, least: 200, observe: true });
+    r.live(W({ you: YOU, history: HISTORY }));
+    r.dock.open(true);
+    same('a phone with room under the bar (619 px of Home, a bar of 184: 435 px, the panel needs 200 and 12 below it): the open panel shows', shape(r), 'true,false,false,true');
+    check('(the observer watches Home\'s div)', r.watch.target === r.host);
+    same('a notice above Home takes room (295 px of Home: 111 px under the bar): the strip shows instead, and its button says "Open chat" (the panel is not out) and why it does not open', [at(r, 295), r.fold().getAttribute('aria-label')], ['false,false,true,false', 'Open chat, No room to open it: close a notice']);
+    check('(the strip says nothing of it until somebody presses it: the last line is there)', r.peek() === 'juniper: joining!');
+    r.fold().click();
+    check('a press that wants the panel where there is no room says so on the strip ("No room to open it: close a notice"), and nothing else is lost', r.peek() === 'No room to open it: close a notice' && shape(r) === 'false,false,true,false');
+    r.clock.advance(5999);
+    check('... for 6 s', r.peek() === 'No room to open it: close a notice');
+    r.clock.advance(1);
+    check('... and then the last line is back', r.peek() === 'juniper: joining!');
+    r.root.children[0].fire('click', { target: r.root.children[0] });
+    check('a press on the strip itself says so too', r.peek() === 'No room to open it: close a notice');
+    r.clock.advance(6000);
+    at(r, 619);
+    r.fold().click(); r.fold().click();
+    check('a window that has room is told nothing (the minus button folds and opens)', r.peek() !== 'No room to open it: close a notice' && r.fold().getAttribute('aria-label') === 'Fold chat');
+    at(r, 295);
+    r.clock.advance(6000);
+    r.dock.open(true);
+    same('... 212 px under the bar is the least for the panel, 211 is not (the strip), 74 is the least for the strip, 73 is not (nothing shows)', [at(r, 184 + 212), at(r, 184 + 211), at(r, 184 + 74), at(r, 184 + 73)], ['true,false,false,true', 'false,false,true,false', 'false,false,true,false', 'false,true,true,false']);
+    same('... and when the notice goes the panel is back, as the visitor left it (the wish to have it open is kept)', [at(r, 207), at(r, 619)], ['false,true,true,false', 'true,false,false,true']);
+    r.dock.open(false); at(r, 295); r.dock.open(true);
+    same('a visitor that folds it while the room is small, and opens it again, gets the panel when the room is back', [shape(r), at(r, 619)], ['false,false,true,false', 'true,false,false,true']);
+    r.dock.open(true); at(r, 184 + 100);
+    r.fold().click();
+    same('in a window with no room for the panel the minus-or-open button keeps the wish to have it out (it does not close what is not out), and the panel is there when the room is back', [shape(r), at(r, 619)], ['false,false,true,false', 'true,false,false,true']);
+    at(r, 184 + 100);
+    r.s().recv(L(30, 'a', 'one while the strip shows'));
+    check('a line that comes while the strip stands in for the open panel is unread (the log is not on the screen)', r.pill() === '1', r.pill());
+    r.root.hidden = false; r.host.clientHeight = 619; r.win.listeners.resize.forEach((fn) => fn({}));
+    same('the window\'s own resize measures again (a browser with no ResizeObserver)', shape(r), 'true,false,false,true');
+    check('... and the panel that is out again is read: nothing is unread', r.pill() === '');
+    const quiet = rig({ width: 390, height: 844, hostHeight: 295, barHeight: 184, least: 200, observe: true });
+    quiet.live(W({ you: YOU, history: HISTORY }));
+    check('a strip that nobody asked to open says nothing of the room that it lacks: no hint, and the button says "Open chat" and nothing more', quiet.root.getAttribute('data-open') === 'false' && quiet.fold().getAttribute('aria-label') === 'Open chat' && quiet.peek() === 'juniper: joining!');
+    quiet.root.children[0].fire('click', { target: quiet.root.children[0] });
+    check('a press on the strip wants the panel and there is no room for it: the strip says so, and the button gives the reason from then on', quiet.peek() === 'No room to open it: close a notice' && quiet.fold().getAttribute('aria-label') === 'Open chat, No room to open it: close a notice' && quiet.root.getAttribute('data-open') === 'false');
+    const low = rig({ width: 568, height: 320, hostHeight: 152, barHeight: 62, least: 150, observe: true });
+    low.dock.open(true);
+    same('a phone held sideways with two notices above Home (152 px of Home, a bar of 62): 90 px is the strip\'s, not the panel\'s (150 and 12 below it)', shape(low), 'false,false,true,false');
+    same('... the panel needs 150 and 12 below it there: 162 px under the bar is enough, 161 is not', [at(low, 62 + 162), at(low, 62 + 161)], ['true,false,false,true', 'false,false,true,false']);
+    const desk = rig({ width: 1280, height: 800, hostHeight: 640, barHeight: 78, least: 0, observe: true });
+    check('a desktop (the style gives the panel no least height: it keeps under the bar by its own maximum) is never put away', desk.root.getAttribute('data-open') === 'true' && at(desk, 60) === 'true,false,false,true');
+    const bare = rig({ width: 390, height: 844 });
+    bare.dock.open(true);
+    check('a browser that cannot measure (no style, no sizes) leaves the dock as the visitor wants it, and nothing throws', shape(bare) === 'true,false,false,true' && bare.errors.length === 0);
+    const nobar = rig({ width: 390, height: 844, least: 200 });
+    nobar.dock.open(true);
+    check('a Home that has no bar to measure (or no height of its own) is left alone, too', shape(nobar) === 'true,false,false,true' && nobar.errors.length === 0);
+    const refuses = rig({ width: 390, height: 844, hostHeight: 619, barHeight: 184, least: 200 });
+    refuses.win.getComputedStyle = () => { throw new Error('no style here'); };
+    refuses.dock.shown(true); refuses.dock.open(true);
+    check('a window whose getComputedStyle throws is as one that cannot measure', shape(refuses) === 'true,false,false,true' && refuses.errors.length === 0);
 }
 {   // fold, strip, unread, the Room
     const r = rig();
@@ -648,7 +828,7 @@ function rig(o) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 6. The page: the dock comes after the first paint, only when Home is shown; a missing or broken one changes nothing
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-const fresh = (env) => env.body.children.filter((c) => c.tagName === 'script' || c.tagName === 'link');
+const fresh = (env) => env.body.children.filter((c) => (c.tagName === 'script' || c.tagName === 'link') && /^home\/chat\.(js|css)$/.test(String(c.src || c.href || '')));       // (the files of the dock: the page asks for those of the Games list too, which the checks of that list own)
 function hubFor(env, o) {                                // the page's window gets a hub socket class (the page's own game socket is the harness's); returns the sockets it opened
     const sockets = [];
     env.win.WebSocket = function (url) { if (o && o.throws) throw new Error('refused'); this.url = url; this.sent = []; this.readyState = 0; this.close = () => { this.readyState = 3; }; this.send = (x) => { if (this.readyState !== 1) throw new Error('not open'); this.sent.push(x); }; sockets.push(this); };

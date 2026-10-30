@@ -933,7 +933,7 @@ same('a button that is not OK or none says what it does, in words (the page does
 same('what those buttons do', R.ACTS, { busy: 'This asks the server again.', away: 'This window takes the room back, and the other window closes.', version: 'This reloads the page.' });
 same('the buttons are OK, Try again, Use this window, Reload or none', Object.keys(R.META).map((k) => R.META[k].btn).filter((b, i, a) => a.indexOf(b) === i).sort(), ['', 'OK', 'Reload', 'Try again', 'Use this window']);
 same('a strip that has no button is one that goes by itself (the connection is back): lost and unreachable', Object.keys(R.META).filter((k) => R.META[k].btn === '').sort(), ['lost', 'unreachable']);
-same('the line under the "Have a code?" field', [R.TEXT.noroom(), R.HINT.own, R.HINT.same, R.HINT.full, R.HINT.running], [
+same('the line under the "Join by code" field', [R.TEXT.noroom(), R.HINT.own, R.HINT.same, R.HINT.full, R.HINT.running], [
     'There is no room with that code. Check it, or ask the host to send the link again.', 'That is your own room.', 'You are in that room already.', 'That room is full.', 'The match in that room has already started.'
 ]);
 same('banner of a kind that has no strip of its own (the code field\'s) is a gold strip with OK', [R.banner('noroom', {}).tone, R.banner('noroom', {}).btn], ['warn', 'OK']);
