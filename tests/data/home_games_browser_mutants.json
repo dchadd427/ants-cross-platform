@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
+ "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) and of the own-room row of the Games list (web/home/games.js) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
  "mutants": [
   {
    "id": "short_window_rule_applies_at_normal_sizes",
@@ -20,6 +20,41 @@
    "file": "web/home/games.css",
    "old": "@media (max-width: 260px) { .gconfirm {",
    "new": "@media (max-width: 0px) { .gconfirm {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "own_room_row_has_a_join",
+   "file": "web/home/games.js",
+   "old": "if (onList && !yours) {",
+   "new": "if (onList) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "own_room_row_comes_last",
+   "file": "web/home/games.js",
+   "old": "return rows.filter(function (r) { return r.code === own; }).concat(visibleRows()); }",
+   "new": "return visibleRows().concat(rows.filter(function (r) { return r.code === own; })); }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "own_room_not_counted_on_the_button",
+   "file": "web/home/games.js",
+   "old": "var n = listRows().length,",
+   "new": "var n = visibleRows().length,",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "own_room_alone_is_no_row",
+   "file": "web/home/games.js",
+   "old": "popEmpty.hidden = !(loaded && !off && !shown.length);",
+   "new": "popEmpty.hidden = !(loaded && !off && !visibleRows().length);",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "best_tag_on_the_own_row",
+   "file": "web/home/games.js",
+   "old": "n === lead && shown.length - lead > 1, n < lead)",
+   "new": "n === 0 && shown.length - lead > 1, n < lead)",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]

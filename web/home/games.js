@@ -38,7 +38,7 @@
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
         noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
@@ -399,24 +399,25 @@
         codeInput.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') joinTyped(); }));
         codeGo.addEventListener('click', guard(function () { joinTyped(); }));
 
-        function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }
+        function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first (Quick join and BEST)
+        function listRows() { var own = ownCode(); return rows.filter(function (r) { return r.code === own; }).concat(visibleRows()); }      // the list: the page's own public room first (tagged Yours), then the others
         function paintPill() {
-            var n = visibleRows().length, shown = loaded && !off;
+            var n = listRows().length, shown = loaded && !off;
             parts.pill.hidden = !shown;
             parts.pill.textContent = shown ? countText(n) : '';
             parts.games.setAttribute('aria-label', shown ? 'Games, ' + countText(n) + ' open' : 'Games');
         }
         // One row: the map's picture (an original's own), who hosts, which map, the seats as dots and as n/size, the bots, and (in the list) the Join button
-        function rowNode(row, onList, best) {
+        function rowNode(row, onList, best, yours) {
             var li = el(onList ? 'li' : 'div', 'gitem'), seats = seatsOf(row), pic = el('span', 'gmap'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
             if (row.mapKey) { var img = el('img'); img.src = 'front/preview_' + row.mapKey + '.png'; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); pic.appendChild(img); }
             pic.setAttribute('aria-hidden', 'true'); dots.setAttribute('aria-hidden', 'true');
             top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
-            if (best) top.appendChild(el('span', 'gbest', TEXT.best));       // (beside the map's name; a narrow row wraps it under)
+            if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)
             text.appendChild(top); text.appendChild(line); li.appendChild(pic); li.appendChild(text);
-            if (onList) {
+            if (onList && !yours) {
                 var b = button('gjoin', TEXT.join, guard(function () { joinRow(row); }));
                 b.setAttribute('aria-label', 'Join ' + possessive(row.host) + ' room, ' + seats.count + ' seats taken, ' + seats.bots + ', ' + row.mapName); b.setAttribute('data-code', row.code);
                 joinButtons.push(b); li.appendChild(b);
@@ -424,16 +425,16 @@
             return li;
         }
         function paintList() {
-            var shown = visibleRows(), active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null;
+            var shown = listRows(), lead = shown.length - visibleRows().length, active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null;
             popCount.textContent = !loaded || off ? '' : shown.length === 0 ? TEXT.none : countText(shown.length) + ' waiting' + TEXT.live;
             popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
-            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
+            var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
             if (sig === paintedSig) return;
             paintedSig = sig;
             while (popList.firstChild) popList.removeChild(popList.firstChild);
             joinButtons = [];
-            shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === 0 && shown.length > 1)); });
+            shown.forEach(function (r, n) { popList.appendChild(rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)); });
             busy(joining, popJoinText.textContent);
             if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
         }

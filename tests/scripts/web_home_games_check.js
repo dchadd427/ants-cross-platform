@@ -5,7 +5,7 @@
 //   2. the way in: nothing is lit before the script comes, Quick host, Quick join and Games are lit by it, a script that does not come leaves the page as it was;
 //   3. the looks at /lobbies with the fake clock: the first one when the page is up, 30 s, 5 s while the popover is open and at once when it opens, none while the tab is hidden or the Room shows, one at a time,
 //      the jitter's bounds, the wait that doubles after every failure and starts again after a good answer, a look that never ends, the list that is off (404, 503, garbage, a network that fails);
-//   4. the popover: the rows as text (a name with markup, a map's file name), the seats as dots, the count on the Games button, the page's own room left out, the empty state, "Games list is off right now", Escape and a
+//   4. the popover: the rows as text (a name with markup, a map's file name), the seats as dots, the count on the Games button, the page's own public room as the first row (Yours), the empty state, "Games list is off right now", Escape and a
 //      press elsewhere put it away; a hostile list (markup, look-alike characters, 10,000 rows, wrong types, duplicate codes);
 // The Room's switch, Quick host and Join are web_home_games_room_check.js. tests/scripts/test_web_home_games.py runs both with node (the quick tier).
 // usage: node web_home_games_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
@@ -279,7 +279,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     await flush();
     same('a short window (a phone held sideways, 844 x 390) has it 450 px wide and 270 px high at most: the list scrolls inside it', [popOf(low).style.width, popOf(low).style.maxHeight], ['450px', '270px']);
 }
-{   // the page's own room is not in its list, and the count follows
+{   // the page's own public room is the first row of its list, tagged Yours (no Join), and the count follows; the other rooms are as before
     const site = fakeSite();
     const env = await page({ site });
     const sock = myRoom(env, ['Maya']);
@@ -288,14 +288,27 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     env.roomBar('rhome').click();
     await flush();
     await wait(env, 30000);
-    check('the page\'s own room (by its code) is left out of the list and of the count', pillOf(env).textContent === '1' && env.home('games').getAttribute('aria-label') === 'Games, 1 open');
+    check('the page\'s own room (by its code) counts: the button says 2', pillOf(env).textContent === '2' && env.home('games').getAttribute('aria-label') === 'Games, 2 open');
     tap(env.home('games'));
     await flush();
-    same('... and of the popover', rowsOf(env).map((li) => textOf(first(li, 'gname'))), ['Clover']);
-    check('... the heading says 1 waiting', first(popOf(env), 'gpcount').textContent === '1 waiting · updates live');
+    same('... the popover lists it first, then the other room', rowsOf(env).map((li) => textOf(first(li, 'gname'))), ['Maya', 'Clover']);
+    check('... the heading says 2 waiting', first(popOf(env), 'gpcount').textContent === '2 waiting · updates live');
+    const own = rowsOf(env)[0];
+    check('... the own row is tagged Yours and has no Join button and no BEST tag; one other room is not BEST either', textOf(first(own, 'gyours')) === 'Yours' && find(own, 'gjoin').length === 0 && find(own, 'gbest').length === 0 && find(rowsOf(env)[1], 'gbest').length === 0 && find(rowsOf(env)[1], 'gyours').length === 0 && joinOf(rowsOf(env)[1]) !== null);
+    check('... the own row shows what the others show (the map, the seats as n/size, the bots)', textOf(first(own, 'gmapname')) === 'Treasure' && textOf(first(own, 'gcount')) === '2/4' && textOf(first(own, 'gbots')) === 'no bots' && find(own, 'gdot').length === 4);
+    check('... the focus is on the Join of the other room, not on the own row', env.focused === joinOf(rowsOf(env)[1]));
     site.body = listOf([row(code, 'Maya', {})]);
     await wait(env, 5000);
-    check('a list with nothing but the page\'s own room is empty: "none waiting", the empty state with Host one!, no list, the count 0', first(popOf(env), 'gpcount').textContent === 'none waiting' && first(popOf(env), 'gempty').hidden === false && first(popOf(env), 'glist').hidden === true && pillOf(env).textContent === '0');
+    check('a list with nothing but the page\'s own room is one row, Yours: "1 waiting", the count 1, no "No open games right now."', first(popOf(env), 'gpcount').textContent === '1 waiting · updates live' && first(popOf(env), 'gempty').hidden === true && first(popOf(env), 'glist').hidden === false && rowsOf(env).length === 1 && textOf(first(rowsOf(env)[0], 'gyours')) === 'Yours' && pillOf(env).textContent === '1');
+    site.body = listOf([row(code, 'Maya', {}), row('abc234', 'Clover', {}), row('def567', 'Fern', { free: 3, people: 1 })]);
+    await wait(env, 5000);
+    same('two other rooms: the own row first, BEST on the best other row only', rowsOf(env).map((li) => textOf(first(li, 'gname')) + (find(li, 'gbest').length ? '+BEST' : '') + (find(li, 'gyours').length ? '+Yours' : '')), ['Maya+Yours', 'Clover+BEST', 'Fern']);
+    site.body = listOf([row('abc234', 'Clover')]);
+    await wait(env, 5000);
+    check('the own room goes private (it is not in the next answer): its row is gone, the count is 1', rowsOf(env).length === 1 && textOf(first(rowsOf(env)[0], 'gname')) === 'Clover' && pillOf(env).textContent === '1');
+    site.body = listOf([]);
+    await wait(env, 5000);
+    check('no rows at all: "none waiting", the empty state with Host one!, the count 0', first(popOf(env), 'gpcount').textContent === 'none waiting' && first(popOf(env), 'gempty').hidden === false && first(popOf(env), 'glist').hidden === true && pillOf(env).textContent === '0');
     check('... the empty state says it and offers Host one!', textOf(first(popOf(env), 'gempty')).indexOf('No open games right now.') !== -1 && textOf(first(popOf(env), 'gempty')).indexOf('Rooms show up here when their host switches them to Public.') !== -1 && first(first(popOf(env), 'gempty'), 'ghostbtn').textContent === 'Host one!');
 }
 {   // the count: 50 rows are "50+"

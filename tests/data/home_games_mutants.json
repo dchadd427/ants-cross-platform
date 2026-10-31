@@ -305,8 +305,8 @@
   {
    "id": "off_list_still_counted",
    "file": "web/home/games.js",
-   "old": "var n = visibleRows().length, shown = loaded && !off;",
-   "new": "var n = visibleRows().length, shown = loaded;",
+   "old": "var n = listRows().length, shown = loaded && !off;",
+   "new": "var n = listRows().length, shown = loaded;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1621,29 +1621,29 @@
   {
    "id": "qj_best_tag_on_the_last_row",
    "file": "web/home/games.js",
-   "old": "rowNode(r, true, n === 0 && shown.length > 1)",
-   "new": "rowNode(r, true, n === shown.length - 1 && shown.length > 1)",
+   "old": "rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)",
+   "new": "rowNode(r, true, n === shown.length - 1 && shown.length - lead > 1, n < lead)",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "qj_best_tag_on_a_list_of_one",
    "file": "web/home/games.js",
-   "old": "rowNode(r, true, n === 0 && shown.length > 1)",
-   "new": "rowNode(r, true, n === 0)",
+   "old": "rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)",
+   "new": "rowNode(r, true, n === lead, n < lead)",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "qj_best_tag_on_every_row",
    "file": "web/home/games.js",
-   "old": "rowNode(r, true, n === 0 && shown.length > 1)",
-   "new": "rowNode(r, true, shown.length > 1)",
+   "old": "rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)",
+   "new": "rowNode(r, true, shown.length - lead > 1, n < lead)",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "qj_best_tag_is_not_drawn",
    "file": "web/home/games.js",
-   "old": "            if (best) top.appendChild(el('span', 'gbest', TEXT.best));       // (beside the map's name; a narrow row wraps it under)\n",
-   "new": "",
+   "old": "            if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));",
+   "new": "            if (yours) top.appendChild(el('span', 'gyours', TEXT.yours));",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -2265,8 +2265,8 @@
   {
    "id": "qj_best_tag_is_under_the_name_not_beside_it",
    "file": "web/home/games.js",
-   "old": "if (best) top.appendChild(el('span', 'gbest', TEXT.best));       // (beside the map's name; a narrow row wraps it under)\n            text.appendChild(top); text.appendChild(line);",
-   "new": "text.appendChild(top); if (best) text.appendChild(el('span', 'gbest', TEXT.best)); text.appendChild(line);",
+   "old": "if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)\n            text.appendChild(top); text.appendChild(line);",
+   "new": "text.appendChild(top); if (best || yours) text.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best)); text.appendChild(line);",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
