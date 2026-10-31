@@ -447,6 +447,60 @@ async function flows() {
                 await qa.context().close(); await qb.context().close();
             }
         }
+        // ---- 1g. the page's own public room is the first row of its Games list, tagged Yours, with no Join; the count and the heading include it; BEST and Quick join are for the other rooms (real clicks, real rooms) ---------
+        for (const size of [SIZES[2], SIZES[0]]) {
+            const label = size[0] + ' ' + size[1] + 'x' + size[2];
+            const rowsOf = (p) => p.evaluate(() => Array.from(document.querySelectorAll('.glist .gitem')).map((li) => ({ name: li.querySelector('.gname').textContent, yours: !!li.querySelector('.gyours') && li.querySelector('.gyours').textContent, best: !!li.querySelector('.gbest'), buttons: li.querySelectorAll('button').length, join: !!li.querySelector('.gjoin') })));
+            const hostPublic = async (name) => {
+                const p = await newPage(browser, live, name, size); await lit(p);
+                await p.click('.quick.host');
+                await until(name + ' room is public', async () => (await p.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
+                return p;
+            };
+            const openGames = async (p) => { if (!(await p.evaluate(() => document.querySelector('.gpop') && !document.querySelector('.gpop').hidden))) await p.click('.hchip.games'); };
+            const maple = await hostPublic('Maple');
+            await maple.click('.rhome');
+            await openGames(maple);
+            await until('the own room is the one row', async () => (await rowsOf(maple)).length === 1, 12000);
+            let rows = await rowsOf(maple);
+            check(label + ': only the own public room is open: one row, Maple, tagged Yours, with no Join button and no button at all, no BEST', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].join && rows[0].buttons === 0 && !rows[0].best);
+            check(label + ': ... the button counts it (1), the heading says "1 waiting · updates live", and "No open games right now." is not shown', (await textOf(maple, '.hchip.games .pill')) === '1' && (await textOf(maple, '.gpcount')) === '1 waiting · updates live' && (await maple.evaluate(() => document.querySelector('.gempty').hidden && !document.querySelector('.glist').hidden)));
+            await maple.click('.glist .gitem');
+            check(label + ': ... a press on the own row changes nothing: Home, the list still open, the room still Maple\'s', (await screenOf(maple)) === 'home' && (await maple.evaluate(() => !document.querySelector('.gpop').hidden && document.querySelectorAll('.glist .gitem').length === 1)));
+            const sage = await hostPublic('Sage'), tess = await hostPublic('Tess');
+            await until('the list holds three rows', async () => (await rowsOf(maple)).length === 3, 14000);
+            rows = await rowsOf(maple);
+            check(label + ': own room and two others: Yours is the first row, BEST is on the second and on no other, only the other two have a Join', rows[0].name === 'Maple' && rows[0].yours === 'Yours' && !rows[0].best && !rows[0].join && !rows[1].yours && rows[1].best && rows[1].join && !rows[2].yours && !rows[2].best && rows[2].join, JSON.stringify(rows));
+            check(label + ': ... the button says 3 and the heading "3 waiting · updates live"', (await textOf(maple, '.hchip.games .pill')) === '3' && (await textOf(maple, '.gpcount')) === '3 waiting · updates live');
+            const bestHost = rows[1].name;
+            // the own room goes private: its row is gone at the next look
+            await maple.keyboard.press('Escape');
+            await maple.click('.hchip.mine');
+            await maple.click('.vbtn[aria-pressed="false"]');
+            await until('the room is private', async () => (await maple.evaluate(() => document.querySelector('.vbtn[aria-pressed="true"] b').textContent)) === 'Private', 10000);
+            await maple.click('.rhome');
+            await openGames(maple);
+            await until('the own row is gone', async () => (await rowsOf(maple)).length === 2, 14000);
+            rows = await rowsOf(maple);
+            check(label + ': the own room goes private: its row disappears at the next look, the other two stay (BEST on the first), the button says 2', rows.every((r) => r.name !== 'Maple' && !r.yours && r.join) && rows[0].best && !rows[1].best && (await textOf(maple, '.hchip.games .pill')) === '2' && (await textOf(maple, '.gpcount')) === '2 waiting · updates live');
+            // public again, and Quick join: the own room is skipped by its code, the page joins the best other room
+            await maple.keyboard.press('Escape');
+            await maple.click('.hchip.mine');
+            await maple.click('.vbtn[aria-pressed="false"]');
+            await until('the room is public again', async () => (await maple.evaluate(() => document.querySelector('.vbtn[aria-pressed="true"] b').textContent)) === 'Public', 10000);
+            await maple.click('.rhome');
+            await openGames(maple);
+            await until('the own row is back, first', async () => { const r = await rowsOf(maple); return r.length === 3 && r[0].yours === 'Yours'; }, 14000);
+            rows = await rowsOf(maple);
+            check(label + ': public again: Yours is first again and BEST is still on the first other row (' + rows[1].name + ')', rows[1].best && !rows[2].best && !rows[0].best);
+            await maple.keyboard.press('Escape');
+            await maple.click('.quick.join');
+            await until('Maple is in another room', async () => (await screenOf(maple)) === 'room' && (await textOf(maple, '#room-h')) !== 'Maple’s room', 15000).catch(() => null);
+            const wentTo = await textOf(maple, '#room-h');
+            check(label + ': Quick join skips the own room (by its code) and joins the best other room: ' + wentTo, (await screenOf(maple)) === 'room' && /^(Sage|Tess)’s room$/.test(wentTo) && wentTo === bestHost + '’s room', wentTo + ' / ' + bestHost);
+            for (const p of [maple, sage, tess]) check(label + ': no script error in the page', p.errors.length === 0, p.errors.join(' | '));
+            for (const p of [maple, sage, tess]) await p.context().close();
+        }
     } finally {
         for (const s of [live, fake, emptySite, offSite]) s.close();
         await browser.close();
