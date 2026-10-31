@@ -500,9 +500,10 @@ bool decode(const uint8_t* data, size_t size, RoomMsg& out) {
     if (m.leader != kNoLeader && (m.leader >= sim::MAX_PLAYERS || m.slots[m.leader].state != SlotState::Client)) return false;
     // the room's own teams (protocol 15): none, or two seats, the lower first; and no rule bit that this build does not know
     if ((m.team_a != kNoTeam || m.team_b != kNoTeam) && (m.team_a >= m.team_b || m.team_b >= sim::MAX_PLAYERS)) return false;
-    if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting)) != 0) return false;
+    if ((m.flags & ~(kRoomLeaderStarts | kRoomLobby | kRoomStarting | kRoomPublic)) != 0) return false;
     // the lobby room's fields (protocol 16): a kind of each color (0 - 4), a game only for a seat that a person holds, "starting" only in a lobby room; no room that is not a lobby room has a plan or a game
     if (m.starting() && !m.lobby()) return false;
+    if (m.is_public() && !m.lobby()) return false;                        // (protocol 22: only a lobby room is public)
     if (m.lobby() && !m.leader_starts()) return false;                    // (a lobby room is made with kCreateLeaderStarts: its leader starts it)
     for (size_t seat = 0; seat < plan.size(); ++seat) {
         if (plan[seat] > kPlanKindLast || (plan[seat] != 0 && !m.lobby())) return false;
@@ -847,6 +848,19 @@ bool decode(const uint8_t* data, size_t size, RemoveMsg& out) {
     m.guard = r->u32();
     if (!r->done() || m.seat >= sim::MAX_PLAYERS || m.guard == 0) return false;       // a seat of the room and a guard that was computed
     out = m;
+    return true;
+}
+
+std::vector<uint8_t> encode(const VisibilityMsg& m) {
+    return {static_cast<uint8_t>(MsgType::Visibility), static_cast<uint8_t>(m.is_public ? 1 : 0)};
+}
+bool decode(const uint8_t* data, size_t size, VisibilityMsg& out) {
+    ByteReader storage(nullptr, 0);
+    ByteReader* r = nullptr;
+    if (!open(data, size, MsgType::Visibility, r, storage)) return false;
+    const uint8_t value = r->u8();
+    if (!r->done() || value > 1) return false;                         // exactly the type and 0 or 1
+    out.is_public = value == 1;
     return true;
 }
 

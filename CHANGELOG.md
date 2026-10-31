@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.13.0 - 2026-10-30 - Home, public rooms, the games list and the chat
+
+**For players:**
+- **A new front page: Home and the Room.** Home is a top bar over a stand-in picture with **Quick host**, **Quick join**, **My room**, **Games** and the Menu; the Room is the room page under a slim bar with **Home** and **Leave room** (it asks first when other people are in the room). Going between the two is instant and keeps your seat, and a plain visit makes no room until you press My room. [Home and the Room](docs/HOME_SCREEN.md)
+- **Public rooms.** The host switches the Room **Private** (link only) or **Public** (listed in Open games). Every new room is private; it is private again when another person leads, and a public room that nobody used for 30 minutes goes private by itself (the host gets a one-tap **Make it public**). **Quick host** makes your room public in one press, and makes the room first if you have none.
+- **The Games list** shows the open games, best first: host, map, seats, bots and **Join**, with **Join by code** at the bottom. A room is on it only while a newcomer could join; your own public room is its first row, tagged **Yours** (nothing to press), and counts on the button. **Quick join** takes the best open game for you, trying up to three, with a **Cancel**; a refused Join costs you nothing, your own room is kept until the new one welcomes you.
+- **A global chat** in the lower-left corner of Home (a strip along the bottom on a phone). Everybody can read it; to write you log in. It runs in its own container (`ants-hub`), so the site and the games work while it is off, and it keeps lines for 7 days. [The chat hub](docs/HUB.md)
+- **Log in with Discord** to write in the chat. It asks for your Discord id and username only and keeps nothing else; **Log out** and **Forget me** (deletes your lines) are in the chat. A Discord account under 7 days old cannot write. Login works once the site's operator has set up the Discord application; until then the chat is read-only for everybody.
+- **Everybody needs the new version.** A game or page of v0.12 cannot join a v0.13 server: reload the page.
+
+**Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the host makes a lobby room public or private), and one new Room flag, public; a v0.12 game cannot play with a v0.13 one ([public rooms](docs/PUBLIC_ROOMS.md)). One rule fix: the layer-2 id 38 is no bridge any more, as in the original (a water tile that holds it stays water: only a swimmer can enter it, and anyone else put there drowns). No shipped or community map holds it and every state hash of the library is unchanged, so recordings play as before (rules number 5); only a player's own map that holds id 38 plays differently from v0.12. **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies` and the status of a lobby room has `"public"`; the site's nginx passes `/lobbies`, `/hub/ws` and the login's pages; the stack has a new container `ants-hub` and its volume (the staging stack gets its own, `ants-hub-staging` with the volume `ants-staging-hub-data`), with the `ANTS_HUB_*` settings, and the chat and the login must not go live behind a reverse proxy before `docker/trusted-proxies.conf` names it ([the chat hub](docs/HUB.md#behind-a-reverse-proxy-not-ready-for-the-public-until-this-is-set)).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...a33dcb7e)
+
 ## v0.12.152 - 2026-10-29 - Map Maker: a Bridge chip, and a hint for a bridge that is not on water
 
 **For players:**
@@ -505,32 +519,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...1ac880b2)
 
-## v0.12.108 - 2026-10-22 - Auto edges draw a strip of water one cell wide in mud, in any painting order
+## Older versions (v0.12.108 and before)
 
-**For players:**
-- **Map Maker (v1.5.1), Auto edges: water painted one cell wide inside mud now gets its soft edges.** A narrow stream used to keep hard square sides, with a single rounded piece where it bent. The mud on both sides of it now takes the edge pieces toward the water, the way the game's own maps draw a narrow lake. It comes out the same whether you paint the water first and the mud round it, or the mud first and the water inside.
-- **The same for every other pair of ground that has edge pieces:** a strip one cell wide of gravel in mud or dirt, of slate in dirt or mud, of dirt in mud, and a one-cell inlet or a single cell of one kind inside another (the square notch in a blob of mud is rounded too). **Fix edges...** does the same on a map you have already drawn. It still never takes a piece away, and what you placed by hand stays.
-- **Water beside gravel, dirt or slate keeps a hard edge:** the game has no edge piece for those pairs, so none is put there.
-- **Painting in several strokes always leaves what Fix edges would make.** Auto edges now looks a little further round each stroke, so a piece from an earlier step is never left out of date.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ee66fc...be7df044)
-
-## v0.12.107 - 2026-10-22 - Map Maker: the Pick up tool moves, copies and deletes what is on a map
-
-**For players:**
-- **The Map Maker has a new tool, Pick up (key P).** Tap a hill, object, food pile, plant or starting ant and a gold ring shows everything it covers (a hill's 4 x 4 square and its door, a pile's footprint). A bar then offers **Move**, **Copy here**, **Delete**, **Select an area...** and **Cancel**.
-- **Move shows a see-through copy of the thing where it would land.** It is green when it fits and red when it does not, with the reason in plain words ("The red hill cannot go here. It needs a free 4 x 4 square, and the mushroom is in the way."). On a desktop it follows the mouse. Use the arrow buttons (or the arrow keys, Shift for 8 cells) to nudge it, or drag it, then press **Done**. Enter does the same, Escape cancels, Delete deletes.
-- **Ants: "this ant or its group".** One tap picks one ant; Move, Copy here and Delete each ask whether to take only that ant or the whole group of that team's ants that stand together.
-- **Select an area** picks every object that lies whole inside a box you draw, so a whole stretch of the map can be moved or copied at once.
-- **One Undo undoes a whole move, copy or delete**, including an area. A short help sheet, "What can be picked up?", is opened from the tool's note, and on a short screen (a phone held sideways) the bar is smaller and can be folded away.
-- **The old Move tool is now called Pan** (the M key still chooses it). It only looks around and never changes the map. Maps in the library are never changed by any tool.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.0.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/146ef42b...dc352756)
-
-## Older versions (v0.12.106 and before)
-
-Every release before v0.12.107, and the long notes of v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.109, and the long notes of v0.12.108, v0.12.107, v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

@@ -7,15 +7,14 @@
 //      is chosen (makeNameGate): the game is not started, so it does not connect, before the button; the chosen name goes into the game's arguments as --name;
 //   4. web/lobby.html (the front page, the lobby: a room on the game server, protocol 16) read from the file: its scripts, its ids, the name card's wiring, a name only ever as text
 //      (textContent, a value, an attribute, encodeURIComponent in an address), and the links that are made for somebody else (no name in them);
-//   5. web/lobby.html as a whole, run with a small fake of the browser's DOM, its two scripts (front/lobby_rules.js and front/lobby_net.js, the real files) and a scripted game server:
-//      a plain visit makes a room at once under the remembered or picked name (Hello's name, room, key and the session storage that keeps them), the pencil renames the host, a link of somebody
-//      else's room (?room=) and a typed code (Have a code?) ask for a name first and send nothing before it, START hands the seat to the game page (ants.rejoin.<room>.<seat>; no leave()), the
+//   5. web/lobby.html as a whole, run with the fake browser of tests/scripts/web_page_harness.js (a small fake of the DOM, the page's real scripts and a scripted game server):
+//      a plain visit is Home and makes no room; My room makes one under the remembered or picked name (Hello's name, room, key and the session storage that keeps them), the pencil renames the host, a link of somebody
+//      else's room (?room=) and a typed code (Join by code, in the Games list) ask for a name first and send nothing before it, START hands the seat to the game page (ants.rejoin.<room>.<seat>; no leave()), the
 //      Rejoin strip, a name that is refused starts nothing, and the line of numbers in the footer. What a fake DOM cannot say (the look, the phone widths, the pointer, the real focus and the real
 //      WebSocket) is the job of the browser checks (web_home_check.py and the web_lobby_*_check.js against the server), and the block REJOIN has its own check, web_rejoin_block_check.js.
 // tests/scripts/test_web_name.py runs this with node (the quick tier). usage: node web_name_check.js web/shell.html web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
-const nodeCrypto = require('crypto');
 // the pages load web/shapes.js (the one table of the shapes) before their own code: it is the global AntsShapes of the code that is run here
 globalThis.AntsShapes = require(require('path').resolve(__dirname, '..', '..', 'web', 'shapes.js'));
 
@@ -368,18 +367,17 @@ for (const [label, e, want] of [
 // 4. web/lobby.html, read from the file: its scripts, its ids, the wiring of the name card, what it does with a name and what it puts into a link
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const path = require('path');
-const lobbyDir = path.dirname(path.resolve(lobbyPath));
-const lobbyMarkup = lobbyText.slice(lobbyText.indexOf('<body>'), lobbyText.indexOf('<script'));
-const lobbyScripts = [...lobbyText.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
-const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
+// the fake browser, in tests/scripts/web_page_harness.js (the page's own markup and scripts, a fake DOM, a scripted game server): runLobby(search, stored, options) and the messages of a game server
+const H = require('./web_page_harness.js')(lobbyPath);
+const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, SUGGESTION, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom, CODE, grouped, BLOCK_PARAMS, blockText, noBlockOf, THROWS, runLobby } = H;
 {
-    same('the page loads its scripts (the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'inline']);
+    same('the page loads its scripts (the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
     const missing = [...asked].filter((id) => markupIds.indexOf(id) === -1);
     check('every id that the script asks for is in the markup (' + asked.size + ' of them)', missing.length === 0, missing.join(','));
-    for (const id of ['name-step', 'name-step-title', 'name-step-input', 'name-step-go', 'name-step-msg', 'name-step-hint', 'who-notice', 'name-step-own', 'rejoin', 'rejoin-note', 'rejoin-go', 'link', 'copy', 'havecode', 'joinbox', 'joincode', 'joingo', 'joinhint', 'slots', 'start', 'banner', 'banner-text', 'stats', 'stats-live', 'stats-played'])
+    for (const id of ['name-step', 'name-step-title', 'name-step-input', 'name-step-go', 'name-step-msg', 'name-step-hint', 'who-notice', 'name-step-own', 'rejoin', 'rejoin-note', 'rejoin-go', 'link', 'copy', 'slots', 'start', 'banner', 'banner-text', 'stats', 'stats-live', 'stats-played'])
         check('the page has #' + id + ' once', lobbyMarkup.split('id="' + id + '"').length === 2);
     for (const gone of ['more', 'morebox', 'more-here', 'more-windows', 'room-panel', 'sync', 'grid', 'frames-note', 'any-link', 'seat-rows', 'play-tab', 'all-here', 'all-windows', 'new-room', 'room-code', 'room-map'])
         check('the test room\'s #' + gone + ' is gone with "More ways to play"', lobbyMarkup.indexOf('id="' + gone + '"') === -1);
@@ -410,273 +408,21 @@ const lobbyScript = lobbyScripts[lobbyScripts.length - 1][2];
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 5. web/lobby.html as a whole, with a small fake of the browser, its two scripts (front/lobby_rules.js and front/lobby_net.js, the real files) and a scripted game server
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// The scripts of front/ are run as they are, in a sandbox that has the fake WebSocket and the fake clock of one page (they are ES5 with no module system: a page gets a global, node gets module.exports)
-function loadFront(file, scope) {
-    const root = {};
-    new Function('self', 'WebSocket', 'setTimeout', 'clearTimeout', fs.readFileSync(path.join(lobbyDir, 'front', file), 'utf8'))(root, scope.WebSocket, scope.setTimeout, scope.clearTimeout);
-    return root;
-}
-const NOSCOPE = { WebSocket: function () { throw new Error('no socket here'); }, setTimeout() { return 0; }, clearTimeout() {} };
-const RULES0 = loadFront('lobby_rules.js', NOSCOPE).AntsLobbyRules;
-const NET0 = loadFront('lobby_net.js', NOSCOPE).AntsLobbyNet;
-const CHAT0 = loadFront('lobby_chat.js', NOSCOPE).AntsLobbyChat;
 check('the three scripts of front/ give the page its globals', !!RULES0 && !!NET0 && !!CHAT0 && typeof RULES0.nameCheck === 'function' && typeof NET0.LobbyClient === 'function' && typeof CHAT0.mount === 'function');
-const SUGGESTION = RULES0.pickName(0.5);               // the page's picked name when Math.random() says 0.5 (the fake page's does)
-const hex = (bytes) => NET0.hexOf(bytes);
-
-// the messages of a game server, as the C++ server writes them (the check of the client, tests/scripts/web_lobby_client_check.js, runs the client against the same builders)
-const E = NET0.SLOT.Empty, C = NET0.SLOT.Client;
-function str8(w, s) { w.push(s.length); for (let i = 0; i < s.length; i++) w.push(s.charCodeAt(i)); }
-const KEY = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x30 + i));
-const welcome = (player, key, flags) => Uint8Array.from([2, player, 4].concat(Array.from(key || KEY), [flags === undefined ? 2 : flags]));
-const reject = (reason) => Uint8Array.from([3, reason]);
-// seats: [state, name] x 4; o: { map, you, leader, teamA, teamB, flags (3: a lobby that the leader starts; 7: and START was pressed), plan, inGame, mode }
-function roomMessage(seats, o) {
-    o = o || {};
-    const w = [12];
-    for (const s of seats) { w.push(s[0]); str8(w, s[1]); w.push(20, 0, 0); }
-    str8(w, o.map === undefined ? 'TREASURE.LVL' : o.map);
-    w.push(0, o.you === undefined ? 0 : o.you, o.leader === undefined ? 0 : o.leader, o.teamA === undefined ? 255 : o.teamA, o.teamB === undefined ? 255 : o.teamB, o.flags === undefined ? 3 : o.flags);
-    for (const k of (o.plan || [0, 0, 0, 0])) w.push(k);
-    w.push(o.inGame || 0, o.mode || 0);                                               // (protocol 17: the game mode is the last byte)
-    return Uint8Array.from(w);
-}
-// What the page's Hello says: its name, its room, whether it brings a key and a lobby block (a page that makes the room, or one that only joins)
-const helloBytes = (name, room, o) => NET0.encodeHello({ name, room, key: (o && o.key) || null, platform: 0x13, create: o && o.join ? null : { map: 'TREASURE.LVL' } });
-const helloName = (b) => String.fromCharCode(...b.slice(4, 4 + b[3]));
-const helloRoom = (b) => { const at = 4 + b[3] + 2 + 1; return String.fromCharCode(...b.slice(at + 1, at + 1 + b[at])); };
-const CODE = /^[a-z2-9]{6}$/;
-const grouped = (code) => code.slice(0, 3) + ' ' + code.slice(3);
-const BLOCK_PARAMS = ['roommap', 'roomseats', 'roomteams', 'roomleaderstart'];
-const blockText = (link) => { const m = /[?&]room=[^&#]*((?:&room(?:map|seats|teams|leaderstart)=[^&#]*)*)/.exec(String(link)); return m ? m[1] : null; };
-const noBlockOf = (env, link) => blockText(link) === '' && BLOCK_PARAMS.every((k) => env.param(link, k) === null) && !/room(map|seats|teams|leaderstart)/.test(String(link));
-
-class El {
-    constructor(env, tag, id) {
-        this.env = env; this.tagName = tag; this.id = id || ''; this.children = []; this.parent = null; this.attributes = {}; this.listeners = {};
-        this._text = ''; this.style = {}; this.hidden = false; this.value = ''; this.className = ''; this.src = ''; this.alt = ''; this.readOnly = false; this._checked = false; this.disabled = false; this.selected = false;
-    }
-    get parentNode() { return this.parent; }
-    get checked() { return this._checked; }
-    set checked(on) {                                    // a radio button: checking it unchecks the others of its group (the same name), as a browser does
-        const radio = (e) => e.tagName === 'input' && e.attributes.type === 'radio' && e.attributes.name;
-        if (on && radio(this)) for (const other of Object.values(this.env.elements)) if (other !== this && radio(other) && other.attributes.name === this.attributes.name) other._checked = false;
-        this._checked = !!on;
-    }
-    get placeholder() { return Object.prototype.hasOwnProperty.call(this.attributes, 'placeholder') ? this.attributes.placeholder : ''; }
-    set placeholder(v) { this.attributes.placeholder = String(v); }
-    get maxLength() { return Object.prototype.hasOwnProperty.call(this.attributes, 'maxlength') ? Number(this.attributes.maxlength) : -1; }
-    set maxLength(v) { this.attributes.maxlength = String(v); }
-    get textContent() { return this._text + this.children.map((c) => c.textContent).join(''); }
-    set textContent(v) { this.children = []; this._text = String(v); }
-    set innerHTML(v) { this.env.innerHTMLWrites.push(String(v)); this.children = []; this._text = String(v); }
-    get innerHTML() { return this._text; }
-    get firstChild() { return this.children[0] || null; }
-    getBoundingClientRect() { return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }; }
-    appendChild(c) { c.parent = this; this.children.push(c); return c; }
-    insertBefore(c, ref) { const at = this.children.indexOf(ref); c.parent = this; if (at === -1) this.children.push(c); else this.children.splice(at, 0, c); return c; }
-    removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parent = null; return c; }
-    replaceChild(fresh, old) {
-        const at = this.children.indexOf(old);
-        if (at !== -1) this.children[at] = fresh;
-        fresh.parent = this; old.parent = null;
-        if (this.env.elements[old.id] === old) this.env.elements[old.id] = fresh;     // (what the page asks for by that id is the new node)
-        return old;
-    }
-    replaceWith(fresh) { if (this.parent) this.parent.replaceChild(fresh, this); }
-    cloneNode(deep) {
-        const copy = new El(this.env, this.tagName, this.id);
-        copy.attributes = Object.assign({}, this.attributes); copy.className = this.className; copy.hidden = this.hidden; copy.value = this.value; copy._checked = this._checked; copy._text = this._text; copy.readOnly = this.readOnly; copy.disabled = this.disabled;
-        if (deep) for (const c of this.children) copy.appendChild(c.cloneNode ? c.cloneNode(true) : Object.assign({}, c, { parent: null }));
-        return copy;
-    }
-    setAttribute(k, v) { this.attributes[k] = String(v); if (k === 'class') this.className = String(v); }
-    getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k) ? this.attributes[k] : null; }
-    removeAttribute(k) { delete this.attributes[k]; }
-    hasAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k); }
-    addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
-    fire(t, ev) { (this.listeners[t] || []).forEach((fn) => fn(ev || {})); }
-    click() { this.fire('click', { target: this, detail: 1 }); }
-    key(k) { this.fire('keydown', { key: k, preventDefault() {} }); }
-    focus() { this.env.focused = this; this.env.doc.activeElement = this; }
-    blur() { if (this.env.doc.activeElement === this) this.env.doc.activeElement = null; this.fire('blur', {}); }
-    select() {}
-    contains(o) { for (let n = o; n; n = n.parent) if (n === this) return true; return false; }
-    get classList() {
-        const el = this;
-        const has = () => new Set(String(el.className).split(/\s+/).filter(Boolean));
-        return {
-            add(c) { const s = has(); s.add(c); el.className = [...s].join(' '); },
-            remove(c) { const s = has(); s.delete(c); el.className = [...s].join(' '); },
-            toggle(c, force) { const s = has(); const on = force === undefined ? !s.has(c) : !!force; if (on) s.add(c); else s.delete(c); el.className = [...s].join(' '); return on; },
-            contains(c) { return has().has(c); },
-        };
-    }
-    all() { return [this].concat(...this.children.map((c) => (c.all ? c.all() : []))); }
-    findAll(pred) { return this.all().filter((e) => e.tagName && pred(e)); }
-    // a selector of this fake: a list of simple selectors (a tag, .class, [attribute], [attribute="value"], in any mix)
-    matches(selector) {
-        return selector.split(',').some((part) => {
-            const m = /^\s*([a-z0-9]*)((?:\.[\w-]+|\[[\w-]+(?:="[^"]*")?\])*)\s*$/i.exec(part);
-            if (!m) throw new Error('the fake DOM does not know the selector ' + selector);
-            if (m[1] && this.tagName !== m[1].toLowerCase()) return false;
-            for (const q of m[2].match(/\.[\w-]+|\[[\w-]+(?:="[^"]*")?\]/g) || []) {
-                if (q[0] === '.') { if (String(this.className).split(/\s+/).indexOf(q.slice(1)) === -1) return false; }
-                else {
-                    const a = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(q);
-                    if (!this.hasAttribute(a[1]) || (a[2] !== undefined && this.getAttribute(a[1]) !== a[2])) return false;
-                }
-            }
-            return true;
-        });
-    }
-    closest(selector) { for (let n = this; n && n.matches; n = n.parent) if (n.matches(selector)) return n; return null; }
-    querySelector(selector) { return this.all().find((e) => e !== this && e.tagName && e.matches(selector)) || null; }
-}
-
-const THROWS = 'THROWS';
-// One page: the markup of the page and its script, run in a fake browser. search is the address's query; stored is what local storage holds (THROWS: a browser that refuses its storage);
-// options: session (what this tab's session storage holds), noSession, clipboard (false: none), copyResult, share, fetch, noFetch, ua, random (what Math.random() says: 0.5), noWebSocket.
-// env.sockets are the sockets that the page opened (env.last() the newest); env.arrive() opens the newest and plays a server's Welcome and Room.
-function runLobby(search, stored, options) {
-    options = options || {};
-    const env = { innerHTMLWrites: [], assigned: [], replaced: [], opened: [], copied: [], commanded: [], shared: [], elements: {}, focused: null, confirms: [], reloads: 0, sockets: [], timers: [], clock: 0, nextTimer: 1 };
-    env.root = new El(env, 'html', '');
-    for (const m of lobbyMarkup.matchAll(/<(\w+)([^>]*)>/g)) {
-        const idm = /\bid="([^"]+)"/.exec(m[2]);
-        if (!idm) continue;
-        const el = new El(env, m[1], idm[1]);
-        el.hidden = /\bhidden\b/.test(m[2].replace(/aria-hidden/g, '').replace(/="[^"]*"/g, ''));       // (the boolean attribute, not a word inside a value)
-        el._checked = /\bchecked\b/.test(m[2].replace(/="[^"]*"/g, ''));                                      // (the same for a radio button that is checked in the markup)
-        for (const a of m[2].matchAll(/([\w-]+)="([^"]*)"/g)) { el.attributes[a[1]] = a[2]; if (a[1] === 'class') el.className = a[2]; }
-        if (m[1] === 'input' && el.attributes.value !== undefined) el.value = el.attributes.value;
-        el.parent = env.root;
-        env.elements[idm[1]] = el;
-    }
-    // the markup's own text (the buttons say Join, Rejoin it, START!): what stands between a tag with an id and the next tag
-    for (const m of lobbyMarkup.matchAll(/<(\w+)[^>]*\bid="([^"]+)"[^>]*>([^<]*)</g)) env.elements[m[2]]._text = m[3].replace(/&rsquo;/g, '’').replace(/&amp;/g, '&').replace(/&#8249;/g, '‹').replace(/&#8250;/g, '›');
-    const doc = {
-        body: new El(env, 'body', ''),
-        getElementById(id) { if (!env.elements[id]) throw new Error('the page asked for #' + id + ', which its markup does not have'); return env.elements[id]; },
-        createElement(tag) { return new El(env, tag, ''); },
-        createTextNode(text) { return { isText: true, textContent: String(text), parent: null }; },
-        activeElement: null,
-        elementFromPoint() { return null; },
-        execCommand(cmd) {                                // the copy command copies what the last field of the page holds (options.copyResult: false is a browser that did not copy, 'throws' one that refuses)
-            const field = doc.body.children[doc.body.children.length - 1];
-            env.commanded.push({ cmd, value: field ? field.value : null });
-            if (options.copyResult === 'throws') throw new Error('not allowed');
-            return options.copyResult !== false;
-        },
-        hidden: false, listeners: {},
-        addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); },
-        removeEventListener() {},
-    };
-    env.doc = doc;
-    const data = stored === THROWS ? {} : Object.assign({}, stored);
-    const storage = {
-        data,
-        getItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
-        setItem(k, v) { if (stored === THROWS) throw new Error('storage is blocked'); data[k] = String(v); },
-        get length() { if (stored === THROWS) throw new Error('storage is blocked'); return Object.keys(data).length; },
-        key(i) { if (stored === THROWS) throw new Error('storage is blocked'); const names = Object.keys(data); return i < names.length ? names[i] : null; },
-        removeItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); delete data[k]; },
-    };
-    // the tab's own storage (the lobby keeps its room and its key there): options.session is what it holds, options.noSession is a browser that has none; where the other storage throws this one does too
-    const sessionData = stored === THROWS ? {} : Object.assign({}, options.session);
-    const session = {
-        data: sessionData,
-        getItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); return Object.prototype.hasOwnProperty.call(sessionData, k) ? sessionData[k] : null; },
-        setItem(k, v) { if (stored === THROWS) throw new Error('storage is blocked'); sessionData[k] = String(v); },
-        removeItem(k) { if (stored === THROWS) throw new Error('storage is blocked'); delete sessionData[k]; },
-    };
-    const history = { replaceState(...a) { env.replaced.push(a); } };
-    const win = {
-        location: { search, href: 'https://play.test/' + search, pathname: '/', origin: 'https://play.test', protocol: 'https:', host: 'play.test', assign(u) { env.assigned.push(u); }, reload() { env.reloads++; } },
-        localStorage: storage, history,
-        crypto: nodeCrypto.webcrypto,
-        listeners: {},
-        addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); },
-        removeEventListener() {},
-        open(url, name, features) { env.opened.push({ url, name, features }); return { closed: false, focus() {} }; },
-        confirm(q) { env.confirms.push(q); return true; },
-    };
-    if (!options.noSession) win.sessionStorage = session;
-    // a clock that stands still until env.advance(ms): the page's toasts and the client's waits
-    const setTimer = (fn, ms) => { const id = env.nextTimer++; env.timers.push({ id, at: env.clock + ms, fn }); return id; };
-    const clearTimer = (id) => { env.timers = env.timers.filter((t) => t.id !== id); };
-    env.advance = (ms) => {
-        const until = env.clock + ms;
-        for (;;) {
-            const due = env.timers.filter((t) => t.at <= until).sort((a, b) => a.at - b.at || a.id - b.id)[0];
-            if (!due) break;
-            env.timers = env.timers.filter((t) => t !== due);
-            env.clock = Math.max(env.clock, due.at);
-            due.fn();
-        }
-        env.clock = until;
-    };
-    class FakeSocket {
-        constructor(url) { this.url = url; this.sent = []; this.closed = false; this.readyState = 0; env.sockets.push(this); }
-        send(bytes) { if (this.closed || this.readyState !== 1) throw new Error('send on a socket that is not open'); this.sent.push(Uint8Array.from(bytes)); }
-        close() { this.closed = true; }
-        open() { this.readyState = 1; if (this.onopen) this.onopen(); return this; }
-        receive(bytes) { if (this.onmessage) this.onmessage({ data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) }); return this; }
-        drop() { this.closed = true; if (this.onclose) this.onclose({ code: 1006 }); }
-    }
-    const scope = { WebSocket: options.noWebSocket ? undefined : FakeSocket, setTimeout: setTimer, clearTimeout: clearTimer };
-    win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
-    win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;
-    win.AntsLobbyChat = loadFront('lobby_chat.js', scope).AntsLobbyChat;
-    win.AntsRematch = loadFront('rematch.js', scope).AntsRematch;
-    win.AntsGameModes = loadFront('game_modes.js', scope).AntsGameModes;
-    win.AntsGameType = loadFront('game_type.js', scope).AntsGameType;
-    const nav = { userAgent: options.ua || 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36', platform: 'Linux x86_64' };
-    if (options.clipboard !== false) nav.clipboard = { writeText(t) { env.copied.push(t); return { then() {} }; } };       // (options.clipboard: false is a browser without the clipboard's own API: the copy command is used)
-    // options.share: a browser that has navigator.share (true: it takes the data; 'throws': it throws; 'rejects': the person closes the sheet, a promise that fails)
-    if (options.share === true) nav.share = (d) => { env.shared.push(d); return Promise.resolve(); };
-    if (options.share === 'throws') nav.share = () => { throw new Error('not allowed'); };
-    if (options.share === 'rejects') nav.share = (d) => { env.shared.push(d); return Promise.reject(new Error('AbortError')); };
-    // the site's answers (options.fetch(url, init) -> a promise of a response; the default is no network at all; options.noFetch is a browser that has no fetch)
-    env.fetches = [];
-    const network = options.fetch || (() => Promise.reject(new Error('the test has no network')));
-    const fetchSpy = options.noFetch ? undefined : (url, init) => { env.fetches.push({ url, init }); return network(url, init); };
-    const fakeMath = Object.assign(Object.create(Math), { random: () => (options.random === undefined ? 0.5 : options.random) });     // (the page's picked name, and the order of its random names, are the same on every run)
-    new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'clearTimeout', 'fetch', 'BroadcastChannel', 'Math', lobbyScript)(win, doc, history, nav, () => 0, setTimer, clearTimer, fetchSpy, undefined, fakeMath);
-    env.storage = storage;
-    env.session = session;
-    env.win = win;
-    env.body = doc.body;
-    env.$ = (id) => env.elements[id];
-    env.type = (id, text) => { const el = env.elements[id]; el.value = text; el.fire('input', {}); };
-    env.param = (url, key) => new URL(url).searchParams.get(key);
-    env.last = () => env.sockets[env.sockets.length - 1];
-    // The newest socket opens and the server welcomes it as seat `seat` and tells it the room: seats [[state, name] x 4], o as roomMessage takes it (you: the seat, leader: the first)
-    env.arrive = (o) => {
-        o = o || {};
-        const seat = o.seat === undefined ? 0 : o.seat;
-        const s = env.last().open();
-        s.receive(welcome(seat, o.key, o.flags));
-        s.receive(roomMessage(o.seats || [[C, 'Maya'], [E, ''], [E, ''], [E, '']], Object.assign({ you: seat, leader: 0 }, o.room || {})));
-        return s;
-    };
-    // a person presses a button of the page by its id; the card of a color by its seat; the buttons inside it
-    env.card = (seat) => env.$('slots').children.find((li) => li.getAttribute('data-i') === String(seat));
-    env.inCard = (seat, attr) => env.card(seat).findAll((e) => e.hasAttribute(attr))[0] || null;
-    env.press = (el) => env.$('slots').fire('click', { target: el, detail: 1 });
-    env.pagePlays = () => env.assigned.length > 0;
-    env.dumpAll = () => Object.values(env.elements).flatMap((e) => e.all()).map((e) => e.textContent + '|' + JSON.stringify(e.attributes) + '|' + e.value).join('\n') + env.innerHTMLWrites.join('') + JSON.stringify(env.replaced) + JSON.stringify(env.assigned);
-    return env;
-}
 
 
 (async () => {
 
-// ---- 5.1 the plain visit: the page is the lobby, its room is made at once, under the name that this browser remembers or a picked one; nothing is asked first
+// ---- 5.1 the plain visit: the page opens on Home and makes no room; My room makes it (under the name that this browser remembers or a picked one); nothing is asked first
+// (the checks of Home itself are in tests/scripts/web_home_screen_check.js; here and below runLobby presses My room for a plain visit, as a person does, so that the room's own checks have a room)
 {
+    const home = runLobby('', {}, { stayHome: true });
+    check('a plain visit asks nothing first: no name card, no banner; Home is up and the room is there behind it, and no room is made (no socket)', home.$('name-step').hidden && home.$('banner').hidden && !home.$('lobby').hidden && home.screen() === 'home' && home.sockets.length === 0);
+    home.home('mine').click();
+    same('My room makes the room on the game server: one socket, to this site\'s /ws', home.sockets.map((s) => s.url), ['wss://play.test/ws']);
     const env = runLobby('', {});
-    check('a plain visit asks nothing first: no name card, no strip, no banner; the lobby is up', env.$('name-step').hidden && env.$('rejoin').hidden && env.$('banner').hidden && !env.$('lobby').hidden);
-    same('... it makes a room on the game server at once: one socket, to this site\'s /ws', env.sockets.map((s) => s.url), ['wss://play.test/ws']);
+    check('the room is up for the checks below: no card, no strip, no banner', env.$('name-step').hidden && env.$('rejoin').hidden && env.$('banner').hidden && !env.$('lobby').hidden);
+    same('... it is made on the game server at once: one socket, to this site\'s /ws', env.sockets.map((s) => s.url), ['wss://play.test/ws']);
     const hello = env.last().open().sent[0];
     const code = helloRoom(hello);
     check('... the Hello makes the room: a new code of six characters, the name picked for a visitor who has none, no key, the lobby block', CODE.test(code) && helloName(hello) === SUGGESTION && hex(hello) === hex(helloBytes(SUGGESTION, code)), hex(hello));
@@ -907,7 +653,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('... the address stays the link (nothing replaced) and no strip is shown', none.replaced.length === 0 && none.$('banner').hidden);
     none.$('name-step-own').click();
     const mine = none.last().open().sent[0];
-    check('... "Start a room of my own instead" then makes a room of its own under the same name (a new code, no key, the lobby block) and puts the plain address in the bar', none.sockets.length === 2 && none.$('name-step').hidden && CODE.test(helloRoom(mine)) && helloRoom(mine) !== 'k7m2xq' && hex(mine) === hex(helloBytes('Zed', helloRoom(mine))) && none.replaced.length === 1 && none.replaced[0][2] === '/');
+    check('... "Start a room of my own instead" then makes a room of its own under the same name (a new code, no key, the lobby block) and puts the address of the Room ("/#room": no link in it) in the bar', none.sockets.length === 2 && none.$('name-step').hidden && CODE.test(helloRoom(mine)) && helloRoom(mine) !== 'k7m2xq' && hex(mine) === hex(helloBytes('Zed', helloRoom(mine))) && none.replaced.length === 1 && none.replaced[0][2] === '/#room');
     const retry = link('Zed');
     retry.last().receive(reject(6));
     retry.$('name-step-go').click();
@@ -945,7 +691,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
         e.last().open().receive(reject(reason));
         const next = e.last().open().sent[0];
         check('a link to a room that is ' + what + ': the page makes a room of its own under the same name (a new code, no key), and the strip says why', e.sockets.length === 2 && CODE.test(helloRoom(next)) && helloRoom(next) !== 'k7m2xq' && hex(next) === hex(helloBytes('Zed', helloRoom(next))) && e.$('banner-text').textContent === sentence, e.$('banner-text').textContent);
-        check('... and its address is the plain page again (the link is no longer in the bar)', e.replaced.length === 1 && e.replaced[0][2] === '/');
+        check('... and its address is the Room\'s, "/#room" (the link is no longer in the bar)', e.replaced.length === 1 && e.replaced[0][2] === '/#room');
     }
     const kicked = runLobby('', { 'ants.name': 'Sam' });
     kicked.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } }).receive(reject(4));
@@ -957,7 +703,7 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     const env = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' });
     env.$('name-step-own').click();
     const hello = env.last().open().sent[0];
-    check('"Start a room of my own instead" closes the card, makes a room of the visitor\'s own (a new code, the remembered name) and puts the plain address in the bar', env.$('name-step').hidden && env.sockets.length === 1 && CODE.test(helloRoom(hello)) && helloRoom(hello) !== 'k7m2xq' && hex(hello) === hex(helloBytes('Maya', helloRoom(hello))) && env.replaced.length === 1 && env.replaced[0][2] === '/');
+    check('"Start a room of my own instead" closes the card, makes a room of the visitor\'s own (a new code, the remembered name) and puts the address of the Room ("/#room": no link in it) in the bar', env.$('name-step').hidden && env.sockets.length === 1 && CODE.test(helloRoom(hello)) && helloRoom(hello) !== 'k7m2xq' && hex(hello) === hex(helloBytes('Maya', helloRoom(hello))) && env.replaced.length === 1 && env.replaced[0][2] === '/#room');
     const kept = { 'ants.lobby': JSON.stringify({ c: 'abc234', k: hex(KEY), n: 'Maya', o: 1 }) };
     const env2 = runLobby('?room=k7m2xq', { 'ants.name': 'Maya' }, { session: kept });
     check('a tab that has a room of its own is asked first too, and nothing connects before the card is done (the own room waits)', !env2.$('name-step').hidden && env2.sockets.length === 0);
@@ -972,26 +718,40 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('an address with only a picture is the plain page too', runLobby('?aspect=4:3', {}).$('name-step').hidden);
 }
 
-// ---- 5.4 "Have a code?": the name card first, then a look at the room while the page's own room stays
+// ---- 5.4 "Join by code" (the Games list's, web/home/games.js): the name card first, then a look at the room while the page's own room stays
+// (the page loads the script after its first paint: env.advance(0); Games opens the list, whose last row is the field and its button; tests/scripts/web_home_games_room_check.js has the question that comes first when others are in the room)
+const idle = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+async function codeBox(env) {
+    env.advance(0);
+    await idle();
+    env.home('games').click();
+    const pop = env.$('home').findAll((e) => String(e.className).split(/\s+/).indexOf('gpop') !== -1)[0];
+    const part = (cls) => pop.findAll((e) => String(e.className).split(/\s+/).indexOf(cls) !== -1)[0];
+    return { input: part('joinbox').children[0], go: part('gcgo'), hint: part('hint') };
+}
 {
-    const env = runLobby('', { 'ants.name': 'Maya' });
+    const env = runLobby('', { 'ants.name': 'Maya' }, { lazy: true });
     const own = env.arrive({ key: KEY });
     const ownCode = helloRoom(own.sent[0]);
-    check('"Have a code?" opens the box (hidden until then) and puts the cursor in it', env.$('joinbox').hidden && (env.$('havecode').click(), !env.$('joinbox').hidden && env.focused === env.$('joincode')));
+    env.roomBar('rhome').click();
+    const box = await codeBox(env);
+    check('Join by code is in the Games list: a field (empty, with the cursor in the list) and a button', box.input.value === '' && box.go.textContent === 'Join' && box.hint.textContent === '');
     for (const [what, typed, why] of [['nothing', '', 'Type or paste the code first.'], ['a line of blanks', '   \n', 'Type or paste the code first.'], ['text that is no code', 'not a code!', 'A room code has letters and numbers only, like k7m 2xq.'], ['a path', 'k7m2/xq', 'A room code has letters and numbers only, like k7m 2xq.'],
                                        ['an accent', 'abé', 'A room code has letters and numbers only, like k7m 2xq.'], ['33 characters', 'x'.repeat(33), 'A room code has letters and numbers only, like k7m 2xq.'], ['an address', '?room=x&seat=1', 'A room code has letters and numbers only, like k7m 2xq.']]) {
-        env.type('joincode', typed);
-        env.$('joingo').click();
-        check('typing ' + what + ' and pressing Join explains it under the box and opens no card, no socket', env.$('joinhint').textContent === why && env.$('name-step').hidden && env.sockets.length === 1, env.$('joinhint').textContent);
+        box.input.value = typed;
+        box.input.fire('input', {});
+        box.go.click();
+        check('typing ' + what + ' and pressing Join explains it under the box and opens no card, no socket', box.hint.textContent === why && env.$('name-step').hidden && env.sockets.length === 1, box.hint.textContent);
     }
-    env.type('joincode', '  ' + grouped(ownCode).toUpperCase() + ' ');
-    env.$('joingo').click();
-    check('the code of the page\'s own room (typed as shown, in capitals) is its own: "That is your own room." and no card', env.$('joinhint').textContent === 'That is your own room.' && env.$('name-step').hidden && env.sockets.length === 1);
-    env.type('joincode', 'K7M 2xq');
-    check('typing again takes the hint away', env.$('joinhint').textContent === '');
-    env.$('joincode').key('Enter');
+    box.input.value = '  ' + grouped(ownCode).toUpperCase() + ' ';
+    box.go.click();
+    check('the code of the page\'s own room (typed as shown, in capitals) is its own: "That is your own room." and no card', box.hint.textContent === 'That is your own room.' && env.$('name-step').hidden && env.sockets.length === 1);
+    box.input.value = 'K7M 2xq';
+    box.input.fire('input', {});
+    check('typing again takes the hint away', box.hint.textContent === '');
+    box.input.key('Enter');
     check('Enter in the box asks for the name too: the card is up, titled with the code as typed in two groups, and nothing connects yet (blanks and capitals of a typed or pasted code do not matter)', !env.$('name-step').hidden && env.$('name-step-title').textContent === 'Join the room k7m 2xq' && env.$('name-step-go').textContent === 'Join' && env.$('name-step-input').value === 'Maya' && env.sockets.length === 1);
-    check('... the code in the box stays as it was typed', env.$('joincode').value === 'K7M 2xq');
+    check('... the code in the box stays as it was typed', box.input.value === 'K7M 2xq');
     env.type('name-step-input', 'Bot (x)');
     env.$('name-step-go').click();
     check('a bad name is explained on the card and nothing is looked at', /computer players/.test(env.$('name-step-msg').textContent) && env.sockets.length === 1 && !env.$('name-step').hidden);
@@ -1001,53 +761,56 @@ for (const [what, stored, want] of [['a remembered name', 'Maya', 'Maya'], ['a r
     check('a good name looks at the room: a second socket, with the Hello of a page that only joins (no lobby block: a code with no room is answered "no such room", never made), under the name typed (< > & are just characters)', env.sockets.length === 2 && env.$('name-step').hidden && hex(probe.open().sent[0]) === hex(helloBytes('Ann & <b>Bob</b>', 'k7m2xq', { join: true })), hex(probe.sent[0] || []));
     check('... the page\'s own room stays while it looks: no Leave, the socket open, the code and the link still the own room\'s', !own.closed && own.sent.length === 1 && env.$('code').textContent === grouped(ownCode) && env.$('link').value === 'https://play.test/?room=' + ownCode && env.storage.data['ants.name'] === 'Ann & <b>Bob</b>');
     probe.receive(reject(6));
-    check('a room that does not exist: the box says so, and the own room is as it was', env.$('joinhint').textContent === 'There is no room with that code. Check it, or ask the host to send the link again.' && !own.closed && env.$('code').textContent === grouped(ownCode) && env.innerHTMLWrites.length === 0);
+    check('a room that does not exist: the box says so, and the own room is as it was', box.hint.textContent === 'There is no room with that code. Check it, or ask the host to send the link again.' && !own.closed && env.$('code').textContent === grouped(ownCode) && env.innerHTMLWrites.length === 0);
 }
 {
-    const typedJoin = (typed, name) => {
-        const e = runLobby('', {});
+    const typedJoin = async (typed, name) => {
+        const e = runLobby('', {}, { lazy: true });
         e.arrive({ key: KEY });
-        e.$('havecode').click();
-        e.type('joincode', typed);
-        e.$('joingo').click();
+        e.roomBar('rhome').click();
+        const box = await codeBox(e);
+        box.input.value = typed;
+        box.go.click();
         if (name !== undefined) e.type('name-step-input', name);
         e.$('name-step-go').click();
+        e.box = box;
         return e;
     };
     for (const [typed, want] of [['k7m2xq', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], ['  k7m 2xq  ', 'k7m2xq'], ['k7m\t2xq\n', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], [' k 7 m 2 x q ', 'k7m2xq'], ['K7M 2XQ', 'k7m2xq'], ['my_room-1', 'my_room-1'], ['a', 'a'], ['--', '--'],
                                  ['a'.repeat(32), 'a'.repeat(32)], ['demo-small-2p-x7k2', 'demo-small-2p-x7k2'], ['demo-tiny-2p-t01-abcdef', 'demo-tiny-2p-t01-abcdef'], ['abc def ghi', 'abcdefghi']]) {
-        const e = typedJoin(typed);
+        const e = await typedJoin(typed);
         const hello = e.last().open().sent[0];
-        check('Join takes ' + JSON.stringify(typed) + ' as the code ' + want + ' (blanks dropped, capitals lowered; nothing else is made of it, and an older, longer code is a code too): a joining Hello for it, under the picked name', e.sockets.length === 2 && hex(hello) === hex(helloBytes(SUGGESTION, want, { join: true })) && e.$('joinhint').textContent === '', hex(hello));
+        check('Join takes ' + JSON.stringify(typed) + ' as the code ' + want + ' (blanks dropped, capitals lowered; nothing else is made of it, and an older, longer code is a code too): a joining Hello for it, under the picked name', e.sockets.length === 2 && hex(hello) === hex(helloBytes(SUGGESTION, want, { join: true })) && e.box.hint.textContent === '', hex(hello));
     }
-    const full = typedJoin('k7m2xq', 'Zed');
+    const full = await typedJoin('k7m2xq', 'Zed');
     full.last().open().receive(reject(1));
-    check('a room that is full: "That room is full." under the box', full.$('joinhint').textContent === 'That room is full.');
-    const running = typedJoin('k7m2xq', 'Zed');
+    check('a room that is full: "That room is full." under the box', full.box.hint.textContent === 'That room is full.');
+    const running = await typedJoin('k7m2xq', 'Zed');
     running.last().open().receive(reject(3));
-    check('a room whose match has started: "The match in that room has already started."', running.$('joinhint').textContent === 'The match in that room has already started.');
-    const old = typedJoin('k7m2xq', 'Zed');
+    check('a room whose match has started: "The match in that room has already started."', running.box.hint.textContent === 'The match in that room has already started.');
+    const old = await typedJoin('k7m2xq', 'Zed');
     old.last().open().receive(reject(2));
     check('a server that speaks another version: the strip asks for a reload', !old.$('banner').hidden && /A newer version of Ants is out/.test(old.$('banner-text').textContent) && old.$('banner-x').textContent === 'Reload');
     // the probe is welcomed: the page leaves its own room and shows that one
-    const ok = typedJoin('k7m2xq', 'Zed');
+    const ok = await typedJoin('k7m2xq', 'Zed');
     const ownSocket = ok.sockets[0];
     const p = ok.last().open();
     p.receive(welcome(1, Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i)), 0));
     p.receive(roomMessage([[C, 'Maya'], [C, 'Zed'], [E, ''], [E, '']], { you: 1, leader: 0 }));
-    check('a room that takes the player: the page leaves its own room (a Leave on the old socket, which closes) and shows that room: the code, the host\'s name, the link to it', ownSocket.sent.length === 2 && ownSocket.sent[1][0] === NET0.MSG.Leave && ownSocket.closed && ok.$('code').textContent === 'k7m 2xq' && ok.$('room-h').textContent === 'Maya’s room' && ok.$('link').value === 'https://play.test/?room=k7m2xq' && ok.$('joinbox').hidden);
+    check('a room that takes the player: the page leaves its own room (a Leave on the old socket, which closes) and shows that room: the code, the host\'s name, the link to it', ownSocket.sent.length === 2 && ownSocket.sent[1][0] === NET0.MSG.Leave && ownSocket.closed && ok.$('code').textContent === 'k7m 2xq' && ok.$('room-h').textContent === 'Maya’s room' && ok.$('link').value === 'https://play.test/?room=k7m2xq' && ok.box.input.value === '');
     same('... and this tab keeps that room (session storage), not the old one: the code, the key, the name, and that the page did not make it', JSON.parse(ok.session.data['ants.lobby']), { c: 'k7m2xq', k: hex(Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i))), n: 'Zed', o: 0 });
     p.receive(reject(6));
     const asked = ok.last().open();
     asked.receive(reject(6));
     check('a typed code whose room is lost later (a restart): the Hello that asks again has no block, and its NoSuchRoom is the busy strip, not the card of a link (only a link\'s first Hello is told "no room with that code")', ok.sockets.length === 3 && hex(ok.sockets[2].sent[0]) === hex(helloBytes('Zed', 'k7m2xq', { join: true })) && !ok.$('banner').hidden && ok.$('banner-x').textContent === 'Try again' && ok.$('name-step').hidden);
-    const away = runLobby('', {});
+    const away = runLobby('', {}, { lazy: true });
     away.arrive({ key: KEY });
-    away.$('havecode').click();
-    away.type('joincode', 'k7m2xq');
-    away.$('joingo').click();
+    away.roomBar('rhome').click();
+    const awayBox = await codeBox(away);
+    awayBox.input.value = 'k7m2xq';
+    awayBox.go.click();
     away.$('name-step-own').click();
-    check('"Start a room of my own instead" on that card closes it and the own room stays (no new socket)', away.$('name-step').hidden && away.sockets.length === 1 && !away.sockets[0].closed && away.$('joinbox').hidden === false);
+    check('"Start a room of my own instead" on that card closes it and the own room stays (no new socket)', away.$('name-step').hidden && away.sockets.length === 1 && !away.sockets[0].closed && awayBox.go.disabled === false);
 }
 
 // ---- 5.5 START: the page hands its seat to the game page with the key in the browser's storage, and does not leave the room
@@ -1298,11 +1061,12 @@ for (const bad of ['Bot (Medium)', ' bOt(x', 'Zoë', '名前', 'x'.repeat(33), '
     link.type('name-step-input', 'Zed');
     link.$('name-step-go').click();
     check('... and the field says it is no longer wrong when the name is good (aria-invalid goes back to false, the message is empty, the page joins)', link.sockets.length === 1 && link.$('name-step-input').getAttribute('aria-invalid') === 'false' && link.$('name-step-msg').textContent === '');
-    const typed = runLobby('', {});
+    const typed = runLobby('', {}, { lazy: true });
     typed.arrive();
-    typed.$('havecode').click();
-    typed.type('joincode', 'ABC-1');
-    typed.$('joingo').click();
+    typed.roomBar('rhome').click();
+    const typedBox = await codeBox(typed);
+    typedBox.input.value = 'ABC-1';
+    typedBox.go.click();
     typed.type('name-step-input', bad);
     typed.$('name-step-go').click();
     check('... the card of a typed code: nothing is looked at, and the same message', typed.sockets.length === 1 && typed.$('name-step-msg').textContent.length > 8 && !typed.$('name-step').hidden);

@@ -30,7 +30,7 @@ COPIED_UNUSED = (
     (".gitattributes", None, "copied only so that COPY VERSION .git* works without a .git folder"),
     (".gitignore", None, "copied only so that COPY VERSION .git* works without a .git folder"),
 )
-DEFINITIONS = ("Dockerfile", "Dockerfile.server", ".dockerignore")
+DEFINITIONS = ("Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore")
 
 
 def translate(pattern):
@@ -130,7 +130,7 @@ class Classifier:
         self.compose = compose
         self.ignore = DockerIgnore(self.read(root, ".dockerignore"))
         self.sources = []
-        for dockerfile in ("Dockerfile", "Dockerfile.server"):
+        for dockerfile in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub"):
             self.sources += [(s, self.matcher(s)) for s in copy_sources(self.read(root, dockerfile))]
 
     @staticmethod

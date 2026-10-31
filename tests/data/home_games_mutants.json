@@ -1,0 +1,2427 @@
+{
+ "note": "Mutants of the front page's public Room and Games list (docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): web/home/games.js and games.css, and the places of web/home/home.js, web/lobby.html, the Dockerfile, build_web.sh and the CI list that carry them, against tests/scripts/web_home_games_check.js and web_home_games_room_check.js (the page in a fake browser) and the static checks of tests/scripts/test_web_home_games.py. Run from the checkout: python3 tools/mutate.py tests/data/home_games_mutants.json --keep-going --jobs 1 --timeout 300. Every mutant must be caught; the same test file runs the list in the quick tier on a copy.",
+ "mutants": [
+  {
+   "id": "code_any_text",
+   "file": "web/home/games.js",
+   "old": "if (typeof raw.code !== 'string' || !/^[a-z0-9_-]{1,32}$/.test(raw.code)) return null;",
+   "new": "if (typeof raw.code !== 'string' || raw.code === '') return null;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "code_capitals_ok",
+   "file": "web/home/games.js",
+   "old": "!/^[a-z0-9_-]{1,32}$/.test(raw.code)",
+   "new": "!/^[A-Za-z0-9_-]{1,32}$/.test(raw.code)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_any_character",
+   "file": "web/home/games.js",
+   "old": "!/^[\\x20-\\x7e]{0,32}$/.test(raw.host)",
+   "new": "!/^[\\s\\S]{0,32}$/.test(raw.host)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_64_characters",
+   "file": "web/home/games.js",
+   "old": "!/^[\\x20-\\x7e]{0,32}$/.test(raw.host)",
+   "new": "!/^[\\x20-\\x7e]{0,64}$/.test(raw.host)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_no_type_check",
+   "file": "web/home/games.js",
+   "old": "if (typeof raw.host !== 'string' || ",
+   "new": "if (",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "map_unchecked",
+   "file": "web/home/games.js",
+   "old": "!rules.validMapFile(raw.map)",
+   "new": "false",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "mode_unchecked",
+   "file": "web/home/games.js",
+   "old": "if (typeof raw.mode !== 'string' || !/^[\\x20-\\x7e]{0,32}$/.test(raw.mode)) return null;",
+   "new": "if (false) return null;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "numbers_with_fractions",
+   "file": "web/home/games.js",
+   "old": "return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 0 && v <= max;",
+   "new": "return typeof v === 'number' && v >= 0 && v <= max;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "seats_do_not_add_up",
+   "file": "web/home/games.js",
+   "old": " || raw.people + raw.bots + raw.free !== raw.size) return null;",
+   "new": ") return null;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_free_color_ok",
+   "file": "web/home/games.js",
+   "old": "if (raw.size < 1 || raw.free < 1 ||",
+   "new": "if (raw.size < 1 ||",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "size_of_five",
+   "file": "web/home/games.js",
+   "old": "!whole(raw.size, 4)",
+   "new": "!whole(raw.size, 5)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "age_unchecked",
+   "file": "web/home/games.js",
+   "old": " || !whole(raw.age, 2147483647)) return null;",
+   "new": ") return null;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "format_unchecked",
+   "file": "web/home/games.js",
+   "old": " || data.format !== 1 ||",
+   "new": " ||",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "lobbies_not_a_list_ok",
+   "file": "web/home/games.js",
+   "old": " || !Array.isArray(data.lobbies)) return null;",
+   "new": ") return null;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "duplicate_codes_kept",
+   "file": "web/home/games.js",
+   "old": "if (!row || seen[row.code] === true) continue;",
+   "new": "if (!row) continue;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "rows_cap_51",
+   "file": "web/home/games.js",
+   "old": "var ROWS_MAX = 50;",
+   "new": "var ROWS_MAX = 51;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "rows_not_capped",
+   "file": "web/home/games.js",
+   "old": "&& i < SCAN_MAX && rows.length < ROWS_MAX; i++",
+   "new": "&& i < SCAN_MAX; i++",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "scan_not_bounded",
+   "file": "web/home/games.js",
+   "old": "i < data.lobbies.length && i < SCAN_MAX &&",
+   "new": "i < data.lobbies.length &&",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "count_not_capped",
+   "file": "web/home/games.js",
+   "old": "function countText(n) { return n >= ROWS_MAX ? ROWS_MAX + '+' : String(n); }",
+   "new": "function countText(n) { return String(n); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "count_cap_after_50",
+   "file": "web/home/games.js",
+   "old": "return n >= ROWS_MAX ? ROWS_MAX + '+' : String(n);",
+   "new": "return n > ROWS_MAX ? ROWS_MAX + '+' : String(n);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_backoff",
+   "file": "web/home/games.js",
+   "old": "var wait = Math.min(cap, base * Math.pow(2, Math.min(failures, 10)));",
+   "new": "var wait = base;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "backoff_without_cap",
+   "file": "web/home/games.js",
+   "old": "var wait = Math.min(cap, base * Math.pow(2, Math.min(failures, 10)));",
+   "new": "var wait = base * Math.pow(2, Math.min(failures, 10));",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "backoff_triples",
+   "file": "web/home/games.js",
+   "old": "base * Math.pow(2, Math.min(failures, 10))",
+   "new": "base * Math.pow(3, Math.min(failures, 10))",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cap_closed_10_minutes",
+   "file": "web/home/games.js",
+   "old": "CAP_CLOSED = 300000",
+   "new": "CAP_CLOSED = 600000",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cap_open_2_minutes",
+   "file": "web/home/games.js",
+   "old": "CAP_OPEN = 60000",
+   "new": "CAP_OPEN = 120000",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "jitter_30_percent",
+   "file": "web/home/games.js",
+   "old": "var JITTER = 0.2;",
+   "new": "var JITTER = 0.3;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_jitter",
+   "file": "web/home/games.js",
+   "old": "var JITTER = 0.2;",
+   "new": "var JITTER = 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "jitter_not_held_to_0_1",
+   "file": "web/home/games.js",
+   "old": "Math.min(1, Math.max(0, random))",
+   "new": "random",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "closed_wait_60_s",
+   "file": "web/home/games.js",
+   "old": "EVERY_CLOSED = 30000",
+   "new": "EVERY_CLOSED = 60000",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "open_wait_10_s",
+   "file": "web/home/games.js",
+   "old": "EVERY_OPEN = 5000",
+   "new": "EVERY_OPEN = 10000",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "look_while_hidden",
+   "file": "web/home/games.js",
+   "old": "function wanted() { return !gone && visible() && onHome(); }",
+   "new": "function wanted() { return !gone && onHome(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "look_on_the_room_screen",
+   "file": "web/home/games.js",
+   "old": "function wanted() { return !gone && visible() && onHome(); }",
+   "new": "function wanted() { return !gone && visible(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_look_when_it_opens",
+   "file": "web/home/games.js",
+   "old": "place(); paintList(); poll();",
+   "new": "place(); paintList();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "looks_at_once_doubled",
+   "file": "web/home/games.js",
+   "old": "            if (!wanted() || polling) return;\n            var wait = lastLook",
+   "new": "            if (!wanted()) return;\n            var wait = lastLook",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "failures_not_forgotten",
+   "file": "web/home/games.js",
+   "old": "else { off = false; failures = 0; rows = list; }",
+   "new": "else { off = false; rows = list; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "failures_not_counted",
+   "file": "web/home/games.js",
+   "old": "{ off = true; failures++; rows = []; }",
+   "new": "{ off = true; rows = []; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "look_without_a_time_limit",
+   "file": "web/home/games.js",
+   "old": "timer = later(function () { finish(null); try { if (ctrl) ctrl.abort(); } catch (e) { /* it was over */ } }, FETCH_MS);",
+   "new": "timer = null;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "failed_look_never_ends",
+   "file": "web/home/games.js",
+   "old": "}).then(null, function () { finish(null); });",
+   "new": "}).then(null, function () { });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cookies_sent",
+   "file": "web/home/games.js",
+   "old": "credentials: 'omit'",
+   "new": "credentials: 'include'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cache_allowed",
+   "file": "web/home/games.js",
+   "old": "cache: 'no-store'",
+   "new": "cache: 'default'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "query_on_the_address",
+   "file": "web/home/games.js",
+   "old": "var LIST_URL = '/lobbies';",
+   "new": "var LIST_URL = '/lobbies?x=1';",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "status_unchecked",
+   "file": "web/home/games.js",
+   "old": "if (!res || res.status !== 200) { finish(null); return null; }",
+   "new": "if (!res) { finish(null); return null; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "body_unbounded",
+   "file": "web/home/games.js",
+   "old": "typeof text === 'string' && text.length <= BODY_MAX ? JSON.parse(text) : null",
+   "new": "typeof text === 'string' ? JSON.parse(text) : null",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "off_list_still_counted",
+   "file": "web/home/games.js",
+   "old": "var n = listRows().length, shown = loaded && !off;",
+   "new": "var n = listRows().length, shown = loaded;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "page_own_room_listed",
+   "file": "web/home/games.js",
+   "old": "function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }",
+   "new": "function visibleRows() { return bestOrder(rows); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "only_page_own_room_listed",
+   "file": "web/home/games.js",
+   "old": "return bestOrder(rows.filter(function (r) { return r.code !== own; }));",
+   "new": "return bestOrder(rows.filter(function (r) { return r.code === own; }));",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_as_markup",
+   "file": "web/home/games.js",
+   "old": "top.appendChild(el('span', 'gname', row.host));",
+   "new": "var hn = el('span', 'gname'); hn.innerHTML = row.host; top.appendChild(hn);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "map_as_markup",
+   "file": "web/home/games.js",
+   "old": "top.appendChild(el('span', 'gmapname', row.mapName));",
+   "new": "var mn = el('span', 'gmapname'); mn.innerHTML = row.mapName; top.appendChild(mn);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "picture_from_the_rows_text",
+   "file": "web/home/games.js",
+   "old": "img.src = 'front/preview_' + row.mapKey + '.png';",
+   "new": "img.src = 'front/preview_' + row.map + '.png';",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "bots_drawn_as_open",
+   "file": "web/home/games.js",
+   "old": "for (i = 0; i < row.bots; i++) dots.push('bot');",
+   "new": "for (i = 0; i < row.bots; i++) dots.push('open');",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "count_of_persons_only",
+   "file": "web/home/games.js",
+   "old": "count: (row.people + row.bots) + '/' + row.size",
+   "new": "count: row.people + '/' + row.size",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_label_without_the_room",
+   "file": "web/home/games.js",
+   "old": "b.setAttribute('aria-label', 'Join ' + possessive(row.host) + ' room, '",
+   "new": "b.setAttribute('aria-label', 'Join, '",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "outside_press_keeps_it_open",
+   "file": "web/home/games.js",
+   "old": "if ((pop.contains && pop.contains(t)) || (parts.games.contains && parts.games.contains(t))) return;\n            closeList(false);",
+   "new": "if ((pop.contains && pop.contains(t)) || (parts.games.contains && parts.games.contains(t))) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "inside_press_closes_it",
+   "file": "web/home/games.js",
+   "old": "if ((pop.contains && pop.contains(t)) || (parts.games.contains && parts.games.contains(t))) return;",
+   "new": "if (parts.games.contains && parts.games.contains(t)) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "escape_does_not_close_the_list",
+   "file": "web/home/games.js",
+   "old": "if (dialog) closeAsk(true); else if (isOpen) closeList(true);",
+   "new": "if (dialog) closeAsk(true);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "escape_does_not_close_the_question",
+   "file": "web/home/games.js",
+   "old": "if (dialog) closeAsk(true); else if (isOpen) closeList(true);",
+   "new": "if (isOpen) closeList(true);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "focus_not_given_back_to_games",
+   "file": "web/home/games.js",
+   "old": "if (back && parts.games.focus) parts.games.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "focus_not_moved_in_when_it_opens",
+   "file": "web/home/games.js",
+   "old": "if (first && first.focus) first.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "room_does_not_close_the_list",
+   "file": "web/home/games.js",
+   "old": "if (name === 'room') { closeAll(); placeVis(); } else poll();",
+   "new": "if (name === 'room') { placeVis(); } else poll();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_back_does_not_look",
+   "file": "web/home/games.js",
+   "old": "if (name === 'room') { closeAll(); placeVis(); } else poll();",
+   "new": "if (name === 'room') { closeAll(); placeVis(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "tab_back_does_not_look",
+   "file": "web/home/games.js",
+   "old": "poll(); schedule(); armRefresh();",
+   "new": "schedule(); armRefresh();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "start_does_not_stop_it",
+   "file": "web/home/games.js",
+   "old": "gone = true; closeAll(); clearNotice();",
+   "new": "closeAll(); clearNotice();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "start_leaves_the_list_up",
+   "file": "web/home/games.js",
+   "old": "gone = true; closeAll(); clearNotice();",
+   "new": "gone = true; clearNotice();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_height_limit",
+   "file": "web/home/games.js",
+   "old": "pop.style.maxHeight = Math.max(160, (win.innerHeight || 600) - top - 12) + 'px';",
+   "new": "pop.style.maxHeight = '';",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "phone_margin_lost",
+   "file": "web/home/games.js",
+   "old": "var left = wide ? Math.max(10, Math.min(r.left - 4, width - w - 14)) : 10;",
+   "new": "var left = wide ? Math.max(10, Math.min(r.left - 4, width - w - 14)) : 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "phone_layout_from_900",
+   "file": "web/home/games.js",
+   "old": "var NARROW = 720;",
+   "new": "var NARROW = 900;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "switch_never_moves_to_the_phone_place",
+   "file": "web/home/games.js",
+   "old": "if (narrow()) { slots.parentNode.insertBefore(visBox, slots);",
+   "new": "if (false) { slots.parentNode.insertBefore(visBox, slots);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "old_room_left_before_the_new_one_welcomes",
+   "file": "web/home/games.js",
+   "old": "                busy(true, 'Joining ' + possessive(row.host) + ' room…'); popNote.textContent = ''; popNote.hidden = true;\n",
+   "new": "                var before = client(); if (before) before.leave(); busy(true, 'Joining ' + possessive(row.host) + ' room…'); popNote.textContent = ''; popNote.hidden = true;\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "old_room_left_by_the_page_before_welcome",
+   "file": "web/lobby.html",
+   "old": "            p.connect();\n            return p;",
+   "new": "            if (client) client.leave();\n            p.connect();\n            return p;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_question_with_others",
+   "file": "web/home/games.js",
+   "old": "return !!(c && c.room && c.room.lobby && (!c.isLeader() || others(c).length > 0));",
+   "new": "return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "question_even_when_alone",
+   "file": "web/home/games.js",
+   "old": "(!c.isLeader() || others(c).length > 0)",
+   "new": "(!c.isLeader() || true)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_question_for_a_guest",
+   "file": "web/home/games.js",
+   "old": "(!c.isLeader() || others(c).length > 0)",
+   "new": "(c.isLeader() && others(c).length > 0)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stay_here_joins",
+   "file": "web/home/games.js",
+   "old": "{ text: o.stay || TEXT.stay, cls: 'gstay', back: true }], focus: 1 });",
+   "new": "{ text: o.stay || TEXT.stay, cls: 'gstay', back: true, run: yes }], focus: 1 });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "focus_on_the_leaving_answer",
+   "file": "web/home/games.js",
+   "old": "{ text: o.stay || TEXT.stay, cls: 'gstay', back: true }], focus: 1 });",
+   "new": "{ text: o.stay || TEXT.stay, cls: 'gstay', back: true }], focus: 0 });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "rest_of_home_not_inert",
+   "file": "web/home/games.js",
+   "old": "if (on) for (i = 0; i < kids.length; i++)",
+   "new": "if (on) for (i = 0; i < 0; i++)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "inert_never_taken_off",
+   "file": "web/home/games.js",
+   "old": "if (!on) { quiet.forEach(function (k) { k.removeAttribute('inert'); }); quiet = []; }",
+   "new": "if (!on) { quiet = []; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "full_and_started_swapped",
+   "file": "web/home/games.js",
+   "old": "var words = res.kind === 'full' ? TEXT.full : res.kind === 'running' ? TEXT.started :",
+   "new": "var words = res.kind === 'full' ? TEXT.started : res.kind === 'running' ? TEXT.full :",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "gone_game_in_the_codes_words",
+   "file": "web/home/games.js",
+   "old": "res.kind === 'version' ? res.text : fromList ? TEXT.gone : res.text;",
+   "new": "res.kind === 'version' ? res.text : res.text;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "refusal_does_not_look_again",
+   "file": "web/home/games.js",
+   "old": "else codeHint.textContent = words;\n            poll();",
+   "new": "else codeHint.textContent = words;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "buttons_stay_off_after_a_refusal",
+   "file": "web/home/games.js",
+   "old": "guard(function (res) { if (mine !== joinSeq) return; busy(false); if (res && res.ok) joined(possessive(row.host) + ' room'); else if (res) refused(res, true); })",
+   "new": "guard(function (res) { if (mine !== joinSeq) return; if (res && res.ok) joined(possessive(row.host) + ' room'); else if (res) refused(res, true); })",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "joined_does_not_show_the_room",
+   "file": "web/home/games.js",
+   "old": "notice('joined', 'Joined ' + what + '.', '', []);\n            ctl.show('room', 'push');",
+   "new": "notice('joined', 'Joined ' + what + '.', '', []);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "double_join_press",
+   "file": "web/home/games.js",
+   "old": "        function joinRow(row) {\n            if (joining || finding) return;\n            if (over())",
+   "new": "        function joinRow(row) {\n            if (over())",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "buttons_take_presses_while_joining",
+   "file": "web/home/games.js",
+   "old": "joinButtons.forEach(function (b) { b.disabled = on; });",
+   "new": "joinButtons.forEach(function (b) { });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "typed_code_asks_nothing_first",
+   "file": "web/home/games.js",
+   "old": "function (go) { function start() { busy(true); go(); } if (needsAsk(c)) askLeave(c, null, start); else start(); }",
+   "new": "function (go) { busy(true); go(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_while_a_match_runs",
+   "file": "web/home/games.js",
+   "old": "            var c = client();\n            if (matchRunning(c)) { closeAll(); runningNotice(); return; }\n            function go() {",
+   "new": "            var c = client();\n            function go() {",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "page_asks_no_question_for_a_code",
+   "file": "web/lobby.html",
+   "old": "(before || function (go) { go(); })(function () {",
+   "new": "(function (go) { go(); })(function () {",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "own_code_taken_for_a_room",
+   "file": "web/lobby.html",
+   "old": "            if (client && typed.code === client.code) return ownRoom ? Rules.HINT.own : Rules.HINT.same;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "server_that_never_answers_is_waited_for",
+   "file": "web/lobby.html",
+   "old": "}, 15000);",
+   "new": "}, 15000000);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "silent_second_client_stays",
+   "file": "web/lobby.html",
+   "old": "if (!adopted) { p.leave(); failed('silent',",
+   "new": "if (!adopted) { failed('silent',",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "version_without_the_strip",
+   "file": "web/lobby.html",
+   "old": "{ showBanner('version'); failed('version', Rules.TEXT.version()); }",
+   "new": "failed('version', Rules.TEXT.version());",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "page_name_not_handed_over",
+   "file": "web/lobby.html",
+   "old": "typed: joinTyped, name: myName,",
+   "new": "typed: joinTyped, name: function () { return ''; },",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "second_room_made",
+   "file": "web/home/games.js",
+   "old": "            function flip() { startPending(c); ctl.show('room', 'push'); doPending(c); }",
+   "new": "            function flip() { startHost(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "guest_hosts_without_asking",
+   "file": "web/home/games.js",
+   "old": "ask({ title: 'Leave ' + hostLabel(c) + ' room and host your own?', line: 'A new room opens for you, with its own map and colors. It goes public.', yes: TEXT.leaveHost }, function () { page.leave(); startHost(); });",
+   "new": "page.leave(); startHost();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "already_public_sends_again",
+   "file": "web/home/games.js",
+   "old": "if (room.isPublic) { endPending(); notice('already', TEXT.already, '', []); return; }",
+   "new": "if (room.isPublic) { endPending(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "match_running_not_looked_at",
+   "file": "web/home/games.js",
+   "old": "if (matchRunning(c)) { runningNotice(); return; }",
+   "new": "if (false) { runningNotice(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "rejoin_offer_not_looked_at",
+   "file": "web/home/games.js",
+   "old": "return !!(c && c.room && c.room.starting) || rejoinOffered(); }",
+   "new": "return !!(c && c.room && c.room.starting); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_rejoin_button",
+   "file": "web/home/games.js",
+   "old": "rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []",
+   "new": "[]",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "second_press_sends_again",
+   "file": "web/home/games.js",
+   "old": "            if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "request_for_the_wrong_room",
+   "file": "web/home/games.js",
+   "old": "|| (pending.forClient && pending.forClient !== c)) return;",
+   "new": ") return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "request_forgotten_without_a_word",
+   "file": "web/home/games.js",
+   "old": "if (was && was.sent) notice('public', TEXT.stillPrivate, 'warn', []);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "request_never_forgotten",
+   "file": "web/home/games.js",
+   "old": "            }), PENDING_MS);",
+   "new": "            }), PENDING_MS * 1000);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "request_taken_to_somebody_elses_room",
+   "file": "web/home/games.js",
+   "old": "if (!c.isLeader() || room.starting) { endPending(); return; }",
+   "new": "if (room.starting) { endPending(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "no_retry_for_the_pace",
+   "file": "web/home/games.js",
+   "old": "if (++pending.tries <= 3) later(guard(function () { var k = client(); if (pending && k === c) doPending(k); }), RETRY_MS);\n            else endPending();",
+   "new": "endPending();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "notice_before_the_room_says_so",
+   "file": "web/home/games.js",
+   "old": "if (c.setPublic(true)) { pending.sent = true; lastSent = now(); lock(); return; }",
+   "new": "if (c.setPublic(true)) { pending.sent = true; lastSent = now(); lock(); publicNotice(c); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "guest_has_the_switch",
+   "file": "web/home/games.js",
+   "old": "if (!c.isLeader()) { visTag.textContent = room.isPublic ? TEXT.publicRoom : TEXT.privateRoom; visTag.hidden = false; return; }",
+   "new": "if (false) { visTag.textContent = room.isPublic ? TEXT.publicRoom : TEXT.privateRoom; visTag.hidden = false; return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "state_assumed_from_the_press",
+   "file": "web/home/games.js",
+   "old": "if (c.setPublic(want)) { hint = ''; if (!want) askedAt = now();",
+   "new": "if (c.setPublic(want)) { hint = ''; c.room.isPublic = want; if (!want) askedAt = now();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "switch_always_pressable",
+   "file": "web/home/games.js",
+   "old": "var can = c.canAct() && !room.starting && !locked;",
+   "new": "var can = true;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "double_press_of_the_switch",
+   "file": "web/home/games.js",
+   "old": "if (!c || !c.room || c.room.isPublic === want || locked) return;",
+   "new": "if (!c || !c.room || c.room.isPublic === want) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "public_said_to_a_public_room",
+   "file": "web/home/games.js",
+   "old": "if (!c || !c.room || c.room.isPublic === want || locked) return;",
+   "new": "if (!c || !c.room || locked) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "held_back_press_says_nothing",
+   "file": "web/home/games.js",
+   "old": "else { hint = TEXT.noteWait; lock(); }",
+   "new": "else { hint = ''; lock(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "own_private_is_a_news",
+   "file": "web/home/games.js",
+   "old": "if (!want) askedAt = now(); else lastSent = now(); lock(); }",
+   "new": "if (!want) { } else lastSent = now(); lock(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "guest_gets_the_button",
+   "file": "web/home/games.js",
+   "old": "else if (c.isLeader() && !room.starting) notice('idle'",
+   "new": "else if (!room.starting) notice('idle'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_change_not_told",
+   "file": "web/home/games.js",
+   "old": "if (changed) notice('private', TEXT.hostChanged, '', []);",
+   "new": "if (false) notice('private', TEXT.hostChanged, '', []);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_change_called_idle",
+   "file": "web/home/games.js",
+   "old": "var changed = Net.diffRooms(prev, room).some(function (e) { return e.type === 'host'; });",
+   "new": "var changed = false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "make_it_public_does_nothing",
+   "file": "web/home/games.js",
+   "old": "run: function () { var k = client(); return !!k && k.setPublic(true); }",
+   "new": "run: function () { return true; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "make_it_public_forgets_a_held_back_press",
+   "file": "web/home/games.js",
+   "old": "run: function () { var k = client(); return !!k && k.setPublic(true); }",
+   "new": "run: function () { var k = client(); if (k) k.setPublic(true); return true; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "idle_notice_stays_when_public_again",
+   "file": "web/home/games.js",
+   "old": "clearNotice('idle'); clearNotice('private');",
+   "new": "clearNotice('private');",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_from_a_hidden_tab",
+   "file": "web/home/games.js",
+   "old": "&& c.canAct() && visible() && !onHome() && now() - lastInput < ACTIVE_MS);",
+   "new": "&& c.canAct() && !onHome() && now() - lastInput < ACTIVE_MS);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_from_home",
+   "file": "web/home/games.js",
+   "old": "&& c.canAct() && visible() && !onHome() && now() - lastInput < ACTIVE_MS);",
+   "new": "&& c.canAct() && visible() && now() - lastInput < ACTIVE_MS);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_by_a_guest",
+   "file": "web/home/games.js",
+   "old": "room.isPublic && !room.starting && c.isLeader() && c.canAct()",
+   "new": "room.isPublic && !room.starting && c.canAct()",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_while_start_waits",
+   "file": "web/home/games.js",
+   "old": "room.isPublic && !room.starting && c.isLeader()",
+   "new": "room.isPublic && c.isLeader()",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_of_a_private_room",
+   "file": "web/home/games.js",
+   "old": "return !!(!gone && room && room.lobby && room.isPublic && !room.starting",
+   "new": "return !!(!gone && room && room.lobby && !room.starting",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_every_5_minutes",
+   "file": "web/home/games.js",
+   "old": "var REFRESH_MS = 600000;",
+   "new": "var REFRESH_MS = 300000;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_every_20_minutes",
+   "file": "web/home/games.js",
+   "old": "var REFRESH_MS = 600000;",
+   "new": "var REFRESH_MS = 1200000;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_only_once",
+   "file": "web/home/games.js",
+   "old": "            }\n            armRefresh();\n        }\n\n        // ---- Quick host",
+   "new": "            }\n        }\n\n        // ---- Quick host",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_ignores_the_last_word",
+   "file": "web/home/games.js",
+   "old": "refreshTimer = later(guard(fireRefresh), Math.max(0, REFRESH_MS - (now() - lastSent)));",
+   "new": "refreshTimer = later(guard(fireRefresh), REFRESH_MS);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "press_is_no_use",
+   "file": "web/home/games.js",
+   "old": "if (c.setPublic(want)) { hint = ''; if (!want) askedAt = now(); else lastSent = now(); lock(); }",
+   "new": "if (c.setPublic(want)) { hint = ''; if (!want) askedAt = now(); lock(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "script_never_asked_for",
+   "file": "web/home/home.js",
+   "old": "            wantGames();\n            win.addEventListener('popstate'",
+   "new": "            win.addEventListener('popstate'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "script_asked_for_before_the_paint",
+   "file": "web/home/home.js",
+   "old": "            afterPaint(load);",
+   "new": "            load();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "script_asked_for_without_the_frame",
+   "file": "web/home/home.js",
+   "old": "win.requestAnimationFrame(function () { setTimeout(fn, 0); }); } : function (fn) { setTimeout(fn, 0); };",
+   "new": "fn(); } : function (fn) { fn(); };",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_does_not_tell_start",
+   "file": "web/home/home.js",
+   "old": "gamesCall('opening'); inert(held);",
+   "new": "inert(held);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_does_not_tell_the_screen",
+   "file": "web/home/home.js",
+   "old": "            gamesCall('shown', name);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_does_not_tell_the_room",
+   "file": "web/home/home.js",
+   "old": "            gamesCall('sync');\n        }",
+   "new": "        }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quick_join_lit_too",
+   "file": "web/home/home.js",
+   "old": "quickJoin = stub('quick join', TEXT.quickJoin);",
+   "new": "quickJoin = button('quick join', TEXT.quickJoin);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "list_failure_reaches_home",
+   "file": "web/home/home.js",
+   "old": "function gamesCall(name, arg) { try { if (games) games[name](arg); } catch (e) { /* the list is its own */ } }",
+   "new": "function gamesCall(name, arg) { if (games) games[name](arg); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "mount_failure_reaches_home",
+   "file": "web/home/home.js",
+   "old": "function one() { if (--parts === 0) { try { onReady(); } catch (e) { /* the part is its own */ } } }",
+   "new": "function one() { if (--parts === 0) { onReady(); } }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "image_check_without_the_list",
+   "file": ".github/workflows/ci.yml",
+   "old": " home/games.js home/games.css ",
+   "new": " ",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "local_build_without_the_list",
+   "file": "build_web.sh",
+   "old": "cp -f \"${SCRIPT_DIR}/web/home\"/* \"${DIST_DIR}/home/\"",
+   "new": "cp -f \"${SCRIPT_DIR}/web/home\"/home.* \"${DIST_DIR}/home/\"",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "image_without_the_list",
+   "file": "Dockerfile",
+   "old": "COPY web/home/ /usr/share/nginx/html/home/",
+   "new": "COPY web/home/home.js web/home/home.css /usr/share/nginx/html/home/",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_target_too_small",
+   "file": "web/home/games.css",
+   "old": ".gjoin { min-width: 72px; min-height: 44px; }",
+   "new": ".gjoin { min-width: 72px; min-height: 40px; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "switch_target_too_small",
+   "file": "web/home/games.css",
+   "old": ".vbtn { min-height: 44px;",
+   "new": ".vbtn { min-height: 40px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "question_buttons_too_small",
+   "file": "web/home/games.css",
+   "old": ".gcbtns .btn { flex: 1 1 0; min-height: 48px;",
+   "new": ".gcbtns .btn { flex: 1 1 0; min-height: 38px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "notice_button_too_small",
+   "file": "web/home/games.css",
+   "old": ".gstrip .btn { min-height: 44px; }",
+   "new": ".gstrip .btn { min-height: 38px; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "code_button_too_small",
+   "file": "web/home/games.css",
+   "old": ".gcode .gcgo { min-width: 72px; min-height: 44px;",
+   "new": ".gcode .gcgo { min-width: 72px; min-height: 36px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "list_does_not_scroll",
+   "file": "web/home/games.css",
+   "old": "padding: 14px 16px 16px; overflow-y: auto;",
+   "new": "padding: 14px 16px 16px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "list_over_the_menu",
+   "file": "web/home/games.css",
+   "old": ".gpop { position: fixed; z-index: 55;",
+   "new": ".gpop { position: fixed; z-index: 65;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "long_words_on_a_phone",
+   "file": "web/home/games.css",
+   "old": ".vwide { display: none; }",
+   "new": ".vwide { display: inline; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "picture_from_another_site",
+   "file": "web/home/games.css",
+   "old": ".gmap { display: block;",
+   "new": ".gmap { background: url(\"https://example.test/p.png\"); display: block;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_games_not_told",
+   "file": "web/home/home.js",
+   "old": "            gamesCall('stalled', words);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "late_games_not_told_it_stalled",
+   "file": "web/home/home.js",
+   "old": "if (stalled) gamesCall('stalled', said);",
+   "new": "if (false) gamesCall('stalled', said);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "late_games_not_inert",
+   "file": "web/home/home.js",
+   "old": "                gamesCall('inert', held || going);\n            });",
+   "new": "            });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "games_not_inert_with_the_page",
+   "file": "web/home/home.js",
+   "old": "n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }",
+   "new": "n.removeAttribute('inert'); } }); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_leaves_quick_host_on",
+   "file": "web/home/games.js",
+   "old": "[parts.quickHost, parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true;",
+   "new": "[parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_leaves_games_on",
+   "file": "web/home/games.js",
+   "old": "[parts.quickHost, parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true;",
+   "new": "[parts.quickHost, parts.quickJoin].forEach(function (b) { b.disabled = true;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_gives_no_reason",
+   "file": "web/home/games.js",
+   "old": "b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });",
+   "new": "b.setAttribute('aria-disabled', 'true'); });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_not_said_to_a_screen_reader",
+   "file": "web/home/games.js",
+   "old": "b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });",
+   "new": "b.disabled = true; b.setAttribute('title', words); });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_switch_says_nothing",
+   "file": "web/home/games.js",
+   "old": "            hint = words; paintVis();\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "start_leaves_its_notice",
+   "file": "web/home/games.js",
+   "old": "gone = true; closeAll(); clearNotice();",
+   "new": "gone = true; closeAll();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "part_not_inert_with_the_page_strip",
+   "file": "web/home/games.js",
+   "old": "[strip, pop].forEach(function (n) { if (on)",
+   "new": "[pop].forEach(function (n) { if (on)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "part_never_lifts_inert",
+   "file": "web/home/games.js",
+   "old": "if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }",
+   "new": "n.setAttribute('inert', ''); }); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "stalled_not_given_to_home",
+   "file": "web/home/games.js",
+   "old": "opening: opening, stalled: stalled, inert: inert,",
+   "new": "opening: opening, inert: inert,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "inert_not_given_to_home",
+   "file": "web/home/games.js",
+   "old": "opening: opening, stalled: stalled, inert: inert,",
+   "new": "opening: opening, stalled: stalled,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "late_games_looks_once_before_it_waits",
+   "file": "web/home/games.js",
+   "old": "gone = !!env.handoff,",
+   "new": "gone = false,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_does_not_tell_the_part_that_start_is_on_its_way",
+   "file": "web/home/home.js",
+   "old": "handoff: going || stalled });",
+   "new": "handoff: false });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "home_tells_the_part_that_start_is_always_on_its_way",
+   "file": "web/home/home.js",
+   "old": "handoff: going || stalled });",
+   "new": "handoff: true });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "outside_press_seen_after_the_cards_own_buttons",
+   "file": "web/home/games.js",
+   "old": "            closeList(false);\n        }), true);",
+   "new": "            closeList(false);\n        }));",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "outside_press_closes_a_join_on_its_way",
+   "file": "web/home/games.js",
+   "old": "if (!isOpen || dialog || joining || !t) return;",
+   "new": "if (!isOpen || dialog || !t) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "outside_press_closes_under_the_question",
+   "file": "web/home/games.js",
+   "old": "if (!isOpen || dialog || joining || !t) return;",
+   "new": "if (!isOpen || joining || !t) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quick_host_flips_a_room_with_people_without_asking",
+   "file": "web/home/games.js",
+   "old": "            if (names.length) ask({ title: 'Make your room public?'",
+   "new": "            if (false) ask({ title: 'Make your room public?'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quick_host_asks_a_leader_who_is_alone",
+   "file": "web/home/games.js",
+   "old": "            if (names.length) ask({ title: 'Make your room public?'",
+   "new": "            if (true) ask({ title: 'Make your room public?'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quick_host_question_names_nobody",
+   "file": "web/home/games.js",
+   "old": "line: rules.listOf(names) + (names.length > 1 ? ' are' : ' is') + ' in it.",
+   "new": "line: 'People are in it.'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quick_host_question_does_not_flip",
+   "file": "web/home/games.js",
+   "old": "stay: TEXT.keepPrivate }, flip);",
+   "new": "stay: TEXT.keepPrivate }, function () {});",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quick_host_alone_does_not_flip",
+   "file": "web/home/games.js",
+   "old": "            else flip();\n        }",
+   "new": "            else {}\n        }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_ignores_that_the_leader_is_gone",
+   "file": "web/home/games.js",
+   "old": " && visible() && !onHome() && now() - lastInput < ACTIVE_MS);",
+   "new": " && visible() && !onHome());",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "repeat_never_comes_back_after_a_touch",
+   "file": "web/home/games.js",
+   "old": "lastInput = now(); if (was) armRefresh(); }",
+   "new": "lastInput = now(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_touch_is_not_noted",
+   "file": "web/home/games.js",
+   "old": "var was = now() - lastInput >= ACTIVE_MS; lastInput = now(); if (was)",
+   "new": "var was = now() - lastInput >= ACTIVE_MS; if (was)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "away_for_two_hours_is_still_there",
+   "file": "web/home/games.js",
+   "old": "var ACTIVE_MS = 1200000;",
+   "new": "var ACTIVE_MS = 7200000;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_touch_is_a_press_only",
+   "file": "web/home/games.js",
+   "old": "['pointerdown', 'keydown', 'touchstart'].forEach",
+   "new": "['pointerdown'].forEach",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_key_is_not_a_touch",
+   "file": "web/home/games.js",
+   "old": "['pointerdown', 'keydown', 'touchstart'].forEach",
+   "new": "['pointerdown', 'touchstart'].forEach",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "quick_host_on_its_way_to_a_game",
+   "file": "web/home/games.js",
+   "old": "        function quickHost() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }\n            if (over()) { itsWay(); return; }",
+   "new": "        function quickHost() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_row_on_its_way_to_a_game",
+   "file": "web/home/games.js",
+   "old": "        function joinRow(row) {\n            if (joining || finding) return;\n            if (over()) { itsWay(); return; }",
+   "new": "        function joinRow(row) {\n            if (joining || finding) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_by_code_on_its_way_to_a_game",
+   "file": "web/home/games.js",
+   "old": "then the look at the room\n            if (joining || finding) return;\n            if (over()) { itsWay(); return; }",
+   "new": "then the look at the room\n            if (joining || finding) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_page_is_never_on_its_way_to_a_game",
+   "file": "web/home/games.js",
+   "old": "try { return !!page.handing && !!page.handing(); } catch (e) { return false; }",
+   "new": "return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_page_that_throws_when_asked_is_on_its_way",
+   "file": "web/home/games.js",
+   "old": "try { return !!page.handing && !!page.handing(); } catch (e) { return false; }",
+   "new": "return !!page.handing && !!page.handing();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "welcome_in_a_page_on_its_way_stays_seated",
+   "file": "web/lobby.html",
+   "old": "if (handing) { adopted = true; clearTimeout(timer); p.leave(); return; }",
+   "new": "if (handing) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "welcome_in_a_page_on_its_way_is_not_let_go_of",
+   "file": "web/lobby.html",
+   "old": "if (handing) { adopted = true; clearTimeout(timer); p.leave(); return; }",
+   "new": "if (handing) { adopted = true; clearTimeout(timer); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "welcome_in_a_page_on_its_way_reports_silence_later",
+   "file": "web/lobby.html",
+   "old": "if (handing) { adopted = true; clearTimeout(timer); p.leave(); return; }",
+   "new": "if (handing) { p.leave(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "bridge_does_not_say_that_it_is_on_its_way",
+   "file": "web/lobby.html",
+   "old": "handing: function () { return handing; }, cancel:",
+   "new": "cancel:",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "bridge_has_no_cancel",
+   "file": "web/lobby.html",
+   "old": " cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_lets_go_of_the_page_own_client",
+   "file": "web/lobby.html",
+   "old": "cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); }",
+   "new": "cancel: function () { if (lastProbe) lastProbe.leave(); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "last_probe_is_not_noted",
+   "file": "web/lobby.html",
+   "old": "var p = lastProbe = makeClient(",
+   "new": "var p = makeClient(",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_does_not_let_the_second_client_go",
+   "file": "web/home/games.js",
+   "old": "            try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ }\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_keeps_waiting",
+   "file": "web/home/games.js",
+   "old": "            try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ }\n            busy(false);\n",
+   "new": "            try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ }\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_does_not_take_the_focus_to_the_field",
+   "file": "web/home/games.js",
+   "old": "            if (isOpen && codeInput.focus) codeInput.focus();\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "answer_after_cancel_is_heard_by_a_row",
+   "file": "web/home/games.js",
+   "old": "guard(function (res) { if (mine !== joinSeq) return; busy(false); if (res && res.ok) joined(possessive(row.host)",
+   "new": "guard(function (res) { busy(false); if (res && res.ok) joined(possessive(row.host)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "answer_after_cancel_is_heard_by_a_typed_code",
+   "file": "web/home/games.js",
+   "old": "            codeHint.textContent = page.typed(codeInput.value, guard(function (res) {\n                if (mine !== joinSeq) return;\n",
+   "new": "            codeHint.textContent = page.typed(codeInput.value, guard(function (res) {\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_join_says_nothing_while_it_waits",
+   "file": "web/home/games.js",
+   "old": "popJoin.hidden = !on; popJoinText.textContent",
+   "new": "popJoin.hidden = true; popJoinText.textContent",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_join_by_code_says_the_wrong_words",
+   "file": "web/home/games.js",
+   "old": "joiningCode: 'Joining the room…'",
+   "new": "joiningCode: 'Joining…'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_join_of_a_row_does_not_name_the_room",
+   "file": "web/home/games.js",
+   "old": "busy(true, 'Joining ' + possessive(row.host) + ' room…');",
+   "new": "busy(true);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_cancel_is_not_a_button_of_44_px",
+   "file": "web/home/games.css",
+   "old": ".gjoining .btn { flex: none; min-height: 44px; min-width: 88px; }",
+   "new": ".gjoining .btn { flex: none; min-height: 30px; min-width: 60px; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_joining_line_is_always_there",
+   "file": "web/home/games.css",
+   "old": ".gpnote[hidden], .gjoining[hidden] { display: none; }",
+   "new": ".gpnote[hidden] { display: none; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_code_twice_when_it_is_a_name_of_object",
+   "file": "web/home/games.js",
+   "old": "var rows = [], seen = Object.create(null);",
+   "new": "var rows = [], seen = {};",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "rows_are_made_again_at_every_look",
+   "file": "web/home/games.js",
+   "old": "            if (sig === paintedSig) return;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "rows_are_made_again_when_a_room_ages",
+   "file": "web/home/games.js",
+   "old": "return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }",
+   "new": "return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size, r.age]; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "rows_are_not_made_again_when_a_room_fills",
+   "file": "web/home/games.js",
+   "old": "return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }",
+   "new": "return [r.code, r.host, r.map]; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_huge_answer_is_read",
+   "file": "web/home/games.js",
+   "old": "                        if (length > BODY_MAX) { finish(null); try { if (ctrl) ctrl.abort(); } catch (e) { /* it was over */ } return null; }          // (an answer that says that it is huge is not read)\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_huge_answer_is_read_up_to_the_limit_only_when_exact",
+   "file": "web/home/games.js",
+   "old": "if (length > BODY_MAX) { finish(null);",
+   "new": "if (length >= BODY_MAX) { finish(null);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "looks_are_not_a_second_apart",
+   "file": "web/home/games.js",
+   "old": "var FLOOR_MS = 1000;",
+   "new": "var FLOOR_MS = 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_look_that_waits_for_its_second_is_lost",
+   "file": "web/home/games.js",
+   "old": "if (wait > 0) { floorTimer = later(guard(function () { floorTimer = null; poll(); }), wait); return; }",
+   "new": "if (wait > 0) return;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_second_is_taken_from_the_wrong_look",
+   "file": "web/home/games.js",
+   "old": "            if (pollTimer !== null) { cancel(pollTimer); pollTimer = null; }\n            lastLook = now();\n",
+   "new": "            if (pollTimer !== null) { cancel(pollTimer); pollTimer = null; }\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_hint_of_a_held_back_press_stays",
+   "file": "web/home/games.js",
+   "old": "lockTimer = null; locked = false; hint = ''; paintVis();",
+   "new": "lockTimer = null; locked = false; paintVis();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_held_back_press_does_not_wait",
+   "file": "web/home/games.js",
+   "old": "else { hint = TEXT.noteWait; lock(); }",
+   "new": "else hint = TEXT.noteWait;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_private_that_nobody_answered_is_remembered_for_ever",
+   "file": "web/home/games.js",
+   "old": "var asked = askedAt && now() - askedAt < ASK_MS;",
+   "new": "var asked = !!askedAt;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_private_is_forgotten_at_once",
+   "file": "web/home/games.js",
+   "old": "var asked = askedAt && now() - askedAt < ASK_MS;",
+   "new": "var asked = false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_second_press_of_a_double_press_is_a_cancel",
+   "file": "web/home/games.js",
+   "old": "            popJoinStop.disabled = !!on;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_never_comes_back",
+   "file": "web/home/games.js",
+   "old": "if (joining) popJoinStop.disabled = false; }), CANCEL_AFTER_MS);",
+   "new": "}), CANCEL_AFTER_MS);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_waits_for_a_minute",
+   "file": "web/home/games.js",
+   "old": "var CANCEL_AFTER_MS = 700;",
+   "new": "var CANCEL_AFTER_MS = 60000;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_waits_for_no_time",
+   "file": "web/home/games.js",
+   "old": "var CANCEL_AFTER_MS = 700;",
+   "new": "var CANCEL_AFTER_MS = 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_is_taken_away_at_every_look",
+   "file": "web/home/games.js",
+   "old": "            if (on === was) return;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cancel_timer_outlives_the_join",
+   "file": "web/home/games.js",
+   "old": "            if (cancelTimer !== null) { cancel(cancelTimer); cancelTimer = null; }\n            popJoinStop.disabled = !!on;",
+   "new": "            popJoinStop.disabled = !!on;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_says_nothing",
+   "file": "web/home/games.js",
+   "old": "            notice('opening', TEXT.opening, 'warn', [{ text: TEXT.reload, run:",
+   "new": "            if (false) notice('opening', TEXT.opening, 'warn', [{ text: TEXT.reload, run:",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_has_no_reload",
+   "file": "web/home/games.js",
+   "old": "'warn', [{ text: TEXT.reload, run: function () { try { win.location.reload(); } catch (e) { /* none */ } return false; } }]);",
+   "new": "'warn', []);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_reload_does_not_reload",
+   "file": "web/home/games.js",
+   "old": "try { win.location.reload(); } catch (e) { /* none */ } return false;",
+   "new": "return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_leaves_the_list_open",
+   "file": "web/home/games.js",
+   "old": "        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)\n            closeAll();\n",
+   "new": "        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "on_its_way_is_no_warning",
+   "file": "web/home/games.js",
+   "old": "notice('opening', TEXT.opening, 'warn',",
+   "new": "notice('opening', TEXT.opening, '',",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_emptiest_room_first",
+   "file": "web/home/games.js",
+   "old": "return rows.slice().sort(function (a, b) { return a.free - b.free || b.age - a.age; });",
+   "new": "return rows.slice().sort(function (a, b) { return b.free - a.free || b.age - a.age; });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_youngest_room_first",
+   "file": "web/home/games.js",
+   "old": "return rows.slice().sort(function (a, b) { return a.free - b.free || b.age - a.age; });",
+   "new": "return rows.slice().sort(function (a, b) { return a.free - b.free || a.age - b.age; });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_no_tie_break_by_age",
+   "file": "web/home/games.js",
+   "old": "return rows.slice().sort(function (a, b) { return a.free - b.free || b.age - a.age; });",
+   "new": "return rows.slice().sort(function (a, b) { return a.free - b.free; });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_most_people_not_fewest_free",
+   "file": "web/home/games.js",
+   "old": "return rows.slice().sort(function (a, b) { return a.free - b.free || b.age - a.age; });",
+   "new": "return rows.slice().sort(function (a, b) { return b.people - a.people || b.age - a.age; });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_order_changes_the_list_it_was_given",
+   "file": "web/home/games.js",
+   "old": "function bestOrder(rows) { return rows.slice().sort(",
+   "new": "function bestOrder(rows) { return rows.sort(",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_list_is_in_the_servers_order",
+   "file": "web/home/games.js",
+   "old": "return bestOrder(rows.filter(function (r) { return r.code !== own; })); }",
+   "new": "return rows.filter(function (r) { return r.code !== own; }); }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_on_the_last_row",
+   "file": "web/home/games.js",
+   "old": "rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)",
+   "new": "rowNode(r, true, n === shown.length - 1 && shown.length - lead > 1, n < lead)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_on_a_list_of_one",
+   "file": "web/home/games.js",
+   "old": "rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)",
+   "new": "rowNode(r, true, n === lead, n < lead)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_on_every_row",
+   "file": "web/home/games.js",
+   "old": "rowNode(r, true, n === lead && shown.length - lead > 1, n < lead)",
+   "new": "rowNode(r, true, shown.length - lead > 1, n < lead)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_is_not_drawn",
+   "file": "web/home/games.js",
+   "old": "            if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));",
+   "new": "            if (yours) top.appendChild(el('span', 'gyours', TEXT.yours));",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_never_updates_live",
+   "file": "web/home/games.js",
+   "old": "countText(shown.length) + ' waiting' + TEXT.live;",
+   "new": "countText(shown.length) + ' waiting';",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_one_try",
+   "file": "web/home/games.js",
+   "old": "var TRIES_MAX = 3,",
+   "new": "var TRIES_MAX = 1,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_two_tries",
+   "file": "web/home/games.js",
+   "old": "var TRIES_MAX = 3,",
+   "new": "var TRIES_MAX = 2,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_four_tries",
+   "file": "web/home/games.js",
+   "old": "var TRIES_MAX = 3,",
+   "new": "var TRIES_MAX = 4,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_no_wait_between_tries",
+   "file": "web/home/games.js",
+   "old": "Math.round(random() * TRY_GAP_MS)",
+   "new": "0",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_long_wait_between_tries",
+   "file": "web/home/games.js",
+   "old": "Math.round(random() * TRY_GAP_MS)",
+   "new": "Math.round(random() * TRY_GAP_MS * 10)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_one_try_too_many_in_the_loop",
+   "file": "web/home/games.js",
+   "old": "if (k >= n) { var back",
+   "new": "if (k > n) { var back",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_the_best_room_is_not_the_first_tried",
+   "file": "web/home/games.js",
+   "old": "var row = cands[k++];",
+   "new": "var row = cands[n - 1 - k++];",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_tries_the_page_own_room",
+   "file": "web/home/games.js",
+   "old": "var cands = visibleRows(), c2 = client();",
+   "new": "var cands = bestOrder(rows), c2 = client();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_leaves_before_the_welcome",
+   "file": "web/home/games.js",
+   "old": "                var row = cands[k++];\n",
+   "new": "                var row = cands[k++]; var before = client(); if (before) before.leave();\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_leaves_the_old_room_when_the_card_opens",
+   "file": "web/home/games.js",
+   "old": "            finding = true; mine = ++joinSeq; told.textContent = '';\n            findingCard(mine, 0, opener);",
+   "new": "            finding = true; mine = ++joinSeq; told.textContent = ''; if (c) c.leave();\n            findingCard(mine, 0, opener);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_refusal_ends_the_tries",
+   "file": "web/home/games.js",
+   "old": "later(guard(next), Math.round(random() * TRY_GAP_MS));",
+   "new": "dropCard(); nobody(false);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_another_version_goes_on_to_the_next_room",
+   "file": "web/home/games.js",
+   "old": "if (res && (res.kind === 'version' || res.kind === 'silent')) {",
+   "new": "if (res && res.kind === 'silent') {",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_no_answer_goes_on_to_the_next_room",
+   "file": "web/home/games.js",
+   "old": "if (res && (res.kind === 'version' || res.kind === 'silent')) {",
+   "new": "if (res && res.kind === 'version') {",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_no_answer_says_nothing",
+   "file": "web/home/games.js",
+   "old": "if (words) notice('silent', words, 'warn', []);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_another_version_says_the_page_words_too",
+   "file": "web/home/games.js",
+   "old": "var words = res.kind === 'silent' ? TEXT.silent : '';",
+   "new": "var words = TEXT.silent;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_the_card_stays_after_a_version",
+   "file": "web/home/games.js",
+   "old": "                        finding = false; dropCard();\n",
+   "new": "                        finding = false;\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_joined_card_has_no_row",
+   "file": "web/home/games.js",
+   "old": "card({ mark: 'check', title: 'Joined ' + possessive(row.host) + ' room', row: seen,",
+   "new": "card({ mark: 'check', title: 'Joined ' + possessive(row.host) + ' room',",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_joined_row_does_not_count_the_page",
+   "file": "web/home/games.js",
+   "old": "people: row.people + 1, bots: row.bots, free: row.free - 1,",
+   "new": "people: row.people, bots: row.bots, free: row.free,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_joined_card_stays_a_minute",
+   "file": "web/home/games.js",
+   "old": "var JOINED_MS = 1500;",
+   "new": "var JOINED_MS = 60000;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_joined_card_goes_at_once",
+   "file": "web/home/games.js",
+   "old": "var JOINED_MS = 1500;",
+   "new": "var JOINED_MS = 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_the_room_does_not_open",
+   "file": "web/home/games.js",
+   "old": "onClose: function () { if (!gone) ctl.show('room', 'push'); } });",
+   "new": "onClose: function () { } });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_the_room_opens_in_a_hand_off",
+   "file": "web/home/games.js",
+   "old": "onClose: function () { if (!gone) ctl.show('room', 'push'); } });",
+   "new": "onClose: function () { ctl.show('room', 'push'); } });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_joined_button_does_not_take_the_focus",
+   "file": "web/home/games.js",
+   "old": "acts: [{ text: TEXT.goRoom, cls: 'gyes' }], focus: 0,",
+   "new": "acts: [{ text: TEXT.goRoom, cls: 'gyes' }],",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_joined_card_is_a_strip_too",
+   "file": "web/home/games.js",
+   "old": "            dropCard(); told.textContent = 'Joined ' + possessive(row.host) + ' room.';\n            card({ mark: 'check',",
+   "new": "            dropCard(); told.textContent = 'Joined ' + possessive(row.host) + ' room.'; notice('joined', 'Joined ' + possessive(row.host) + ' room.', '', []);\n            card({ mark: 'check',",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_none_card_says_the_wrong_thing",
+   "file": "web/home/games.js",
+   "old": "title: off ? TEXT.off : TEXT.emptyTitle,",
+   "new": "title: TEXT.emptyTitle,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_none_card_for_a_list_that_is_on_says_off",
+   "file": "web/home/games.js",
+   "old": "title: off ? TEXT.off : TEXT.emptyTitle,",
+   "new": "title: TEXT.off,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_host_one_does_nothing",
+   "file": "web/home/games.js",
+   "old": "{ text: TEXT.hostOne, cls: 'gyes big', run: quickHost },",
+   "new": "{ text: TEXT.hostOne, cls: 'gyes big' },",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_not_now_hosts",
+   "file": "web/home/games.js",
+   "old": "{ text: TEXT.notNow, cls: 'gstay', back: true, before:",
+   "new": "{ text: TEXT.notNow, cls: 'gstay', back: true, run: quickHost, before:",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_none_card_does_not_say_what_host_one_does",
+   "file": "web/home/games.js",
+   "old": "before: mine ? TEXT.noneYours : TEXT.noneNew }]",
+   "new": "before: TEXT.noneYours }]",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_none_card_for_a_room_says_a_new_one",
+   "file": "web/home/games.js",
+   "old": "before: mine ? TEXT.noneYours : TEXT.noneNew }]",
+   "new": "before: TEXT.noneNew }]",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_none_card_is_not_the_ant",
+   "file": "web/home/games.js",
+   "old": "card({ mark: 'shadow', stack: true,",
+   "new": "card({ mark: 'dots', stack: true,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_finding_card_has_no_bar",
+   "file": "web/home/games.js",
+   "old": "bar: 'busy', acts: [{ text: TEXT.cancel,",
+   "new": "acts: [{ text: TEXT.cancel,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_bar_does_not_move",
+   "file": "web/home/games.js",
+   "old": "dialog.bar.firstChild.style.width = Math.round(100 * k / (n + 1)) + '%';",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_never_asks",
+   "file": "web/home/games.js",
+   "old": "                if (needsAsk(c2)) {                      // (the question is about the best room)",
+   "new": "                if (false) {                      // (the question is about the best room)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_always_asks",
+   "file": "web/home/games.js",
+   "old": "                if (needsAsk(c2)) {                      // (the question is about the best room)",
+   "new": "                if (true && c2) {                      // (the question is about the best room)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_question_without_the_best_row",
+   "file": "web/home/games.js",
+   "old": "askLeave(c2, cands[0], go, { best: true, opener: opener });",
+   "new": "askLeave(c2, null, go, { best: true, opener: opener });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_question_row_is_not_the_best",
+   "file": "web/home/games.js",
+   "old": "askLeave(c2, cands[0], go, { best: true, opener: opener });",
+   "new": "askLeave(c2, cands[cands.length - 1], go, { best: true, opener: opener });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_question_has_no_best_tag",
+   "file": "web/home/games.js",
+   "old": "askLeave(c2, cands[0], go, { best: true, opener: opener });",
+   "new": "askLeave(c2, cands[0], go, { opener: opener });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_stay_goes_on_trying",
+   "file": "web/home/games.js",
+   "old": "                    dialog.onClose = function () { if (mine === joinSeq) stopFinding(); };",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_stay_does_not_give_the_look_up",
+   "file": "web/home/games.js",
+   "old": "dialog.onClose = function () { if (mine === joinSeq) stopFinding(); };",
+   "new": "dialog.onClose = function () { };",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_guest_is_not_asked",
+   "file": "web/home/games.js",
+   "old": "return !!(c && c.room && c.room.lobby && (!c.isLeader() || others(c).length > 0));",
+   "new": "return !!(c && c.room && c.room.lobby && (c.isLeader() && others(c).length > 0));",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_leader_is_always_asked",
+   "file": "web/home/games.js",
+   "old": "return !!(c && c.room && c.room.lobby && (!c.isLeader() || others(c).length > 0));",
+   "new": "return !!(c && c.room && c.room.lobby);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_is_never_asked",
+   "file": "web/home/games.js",
+   "old": "if (gone || !c || !c.room || !c.room.lobby || !others(c).length) return false;",
+   "new": "return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_is_asked_when_alone",
+   "file": "web/home/games.js",
+   "old": "if (gone || !c || !c.room || !c.room.lobby || !others(c).length) return false;",
+   "new": "if (gone || !c || !c.room || !c.room.lobby) return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_is_asked_only_when_alone",
+   "file": "web/home/games.js",
+   "old": "if (gone || !c || !c.room || !c.room.lobby || !others(c).length) return false;",
+   "new": "if (gone || !c || !c.room || !c.room.lobby || others(c).length) return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_is_asked_of_a_page_that_is_gone",
+   "file": "web/home/games.js",
+   "old": "if (gone || !c || !c.room",
+   "new": "if (!c || !c.room",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_says_it_asked_and_does_not",
+   "file": "web/home/games.js",
+   "old": "askLeave(c, null, go, { yes: TEXT.leaveRoom, opener: opener });\n            return true;",
+   "new": "return true;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_says_it_did_not_ask_and_asks",
+   "file": "web/home/games.js",
+   "old": "askLeave(c, null, go, { yes: TEXT.leaveRoom, opener: opener });\n            return true;",
+   "new": "askLeave(c, null, go, { yes: TEXT.leaveRoom, opener: opener });\n            return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_answer_is_leave_and_join",
+   "file": "web/home/games.js",
+   "old": "askLeave(c, null, go, { yes: TEXT.leaveRoom, opener: opener });",
+   "new": "askLeave(c, null, go, { opener: opener });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_stay_does_not_take_the_focus_back",
+   "file": "web/home/games.js",
+   "old": "askLeave(c, null, go, { yes: TEXT.leaveRoom, opener: opener });",
+   "new": "askLeave(c, null, go, { yes: TEXT.leaveRoom });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_never_asks_in_the_button",
+   "file": "web/home/home.js",
+   "old": "if (!asking(go)) go(); });",
+   "new": "go(); });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_never_leaves_after_not_asking",
+   "file": "web/home/home.js",
+   "old": "if (!asking(go)) go(); });",
+   "new": "asking(go); });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_button_does_not_ask_games",
+   "file": "web/home/home.js",
+   "old": "try { return !!games && !!games.leaving(go, leave); } catch (e) { return false; }",
+   "new": "return false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_a_games_part_that_throws_stops_the_leaving",
+   "file": "web/home/home.js",
+   "old": "try { return !!games && !!games.leaving(go, leave); } catch (e) { return false; }",
+   "new": "return !!games && !!games.leaving(go, leave);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_card_is_in_the_hidden_home",
+   "file": "web/home/games.js",
+   "old": "            doc.body.appendChild(shade);\n            dialog = d;",
+   "new": "            host.appendChild(shade);\n            dialog = d;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cards_do_not_hold_the_page",
+   "file": "web/home/games.js",
+   "old": "            inertOthers(true, [shade]); hold(true);",
+   "new": "            inertOthers(true, [shade]);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "cards_never_let_the_page_go",
+   "file": "web/home/games.js",
+   "old": "            inertOthers(false, []); hold(false);",
+   "new": "            inertOthers(false, []);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_bridge_does_not_hold_the_page",
+   "file": "web/lobby.html",
+   "old": "cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); }, hold: inert,",
+   "new": "cancel: function () { if (lastProbe && lastProbe !== client) lastProbe.leave(); },",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_card_is_not_fixed_over_the_window",
+   "file": "web/home/games.css",
+   "old": ".gshade { position: fixed; inset: 0;",
+   "new": ".gshade { position: absolute; inset: 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_button_not_lit",
+   "file": "web/home/games.js",
+   "old": "enable(parts.games); enable(parts.quickHost); enable(parts.quickJoin);",
+   "new": "enable(parts.games); enable(parts.quickHost);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_button_does_nothing",
+   "file": "web/home/games.js",
+   "old": "        parts.quickJoin.addEventListener('click', guard(quickJoin));\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_home_does_not_hand_the_button_over",
+   "file": "web/home/home.js",
+   "old": "parts: { quickHost: quickHost, quickJoin: quickJoin, games: gamesBtn, pill: gamesPill }",
+   "new": "parts: { quickHost: quickHost, games: gamesBtn, pill: gamesPill }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_double_press_is_two_tries",
+   "file": "web/home/games.js",
+   "old": "        function quickJoin() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }\n",
+   "new": "        function quickJoin() {\n            if (joining) { stillJoining(); return; }\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_press_while_a_join_waits",
+   "file": "web/home/games.js",
+   "old": "        function quickJoin() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }\n",
+   "new": "        function quickJoin() {\n            if (finding) return;\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_page_on_its_way_to_a_game_tries",
+   "file": "web/home/games.js",
+   "old": "        function quickJoin() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }\n            if (over()) { itsWay(); return; }",
+   "new": "        function quickJoin() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_page_on_its_way_to_a_game_says_nothing",
+   "file": "web/home/games.js",
+   "old": "        function quickJoin() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }\n            if (over()) { itsWay(); return; }",
+   "new": "        function quickJoin() {\n            if (finding) return;\n            if (joining) { stillJoining(); return; }\n            if (over()) { return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_match_that_runs_is_left",
+   "file": "web/home/games.js",
+   "old": "            var c = client();\n            if (matchRunning(c)) { closeAll(); runningNotice(); return; }\n            var opener = parts.quickJoin, mine;",
+   "new": "            var c = client();\n            var opener = parts.quickJoin, mine;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_cancel_takes_a_press_at_once",
+   "file": "web/home/games.js",
+   "old": "acts: [{ text: TEXT.cancel, cls: 'gstay', back: true, wait: true }], opener: opener,",
+   "new": "acts: [{ text: TEXT.cancel, cls: 'gstay', back: true }], opener: opener,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_cancel_does_not_let_the_second_client_go",
+   "file": "web/home/games.js",
+   "old": "function stopFinding() { finding = false; joinSeq++; try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ } }",
+   "new": "function stopFinding() { finding = false; joinSeq++; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_cancel_does_not_end_the_try",
+   "file": "web/home/games.js",
+   "old": "function stopFinding() { finding = false; joinSeq++; try",
+   "new": "function stopFinding() { finding = false; try",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_cancel_keeps_the_press_off",
+   "file": "web/home/games.js",
+   "old": "function stopFinding() { finding = false; joinSeq++; try",
+   "new": "function stopFinding() { joinSeq++; try",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_cancel_gives_the_focus_to_nobody",
+   "file": "web/home/games.js",
+   "old": "{ text: TEXT.cancel, cls: 'gstay', back: true, wait: true }], opener: opener,",
+   "new": "{ text: TEXT.cancel, cls: 'gstay', back: true, wait: true }],",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_closed_card_does_not_end_the_try",
+   "file": "web/home/games.js",
+   "old": "onClose: function () { if (mine === joinSeq) stopFinding(); } });\n        }\n        function nobody",
+   "new": "onClose: function () { } });\n        }\n        function nobody",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_look_is_made_every_time",
+   "file": "web/home/games.js",
+   "old": "if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }\n            lastLook = now();\n            if (typeof win.fetch !== 'function') { settle(null); done(); return; }",
+   "new": "lastLook = now();\n            if (typeof win.fetch !== 'function') { settle(null); done(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_look_is_never_made",
+   "file": "web/home/games.js",
+   "old": "if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }",
+   "new": "if (loaded) { done(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_look_is_not_noted",
+   "file": "web/home/games.js",
+   "old": "if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }\n            lastLook = now();",
+   "new": "if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_the_answer_is_not_heard_by_the_list",
+   "file": "web/home/games.js",
+   "old": "look().then(function (data) { settle(data); done(); });",
+   "new": "look().then(function (data) { done(); });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_card_that_closes_does_not_remember_to_hand_back",
+   "file": "web/home/games.js",
+   "old": "if (a.run && dialog === d) d.onClose = null;",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_card_that_gives_way_runs_its_close",
+   "file": "web/home/games.js",
+   "old": "function dropCard() { if (dialog) { dialog.onClose = null; closeAsk(false); } }",
+   "new": "function dropCard() { if (dialog) { closeAsk(false); } }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_card_that_is_closed_runs_nothing",
+   "file": "web/home/games.js",
+   "old": "            if (d.onClose) d.onClose();\n        }",
+   "new": "        }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_card_with_a_timer_never_closes",
+   "file": "web/home/games.js",
+   "old": "if (o.timer) d.timer = later(guard(function () { d.timer = null; if (dialog === d) closeAsk(false); }), o.timer);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_stack_of_buttons_is_a_row",
+   "file": "web/home/games.js",
+   "old": "btns = el('div', 'gcbtns' + (o.stack || (o.acts || []).length === 1 ? ' solo' : '')), d,",
+   "new": "btns = el('div', 'gcbtns'), d,",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_a_card_with_only_a_waiting_button_has_no_focus",
+   "file": "web/home/games.js",
+   "old": "(focus || box).focus();",
+   "new": "if (focus) focus.focus();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_the_card_is_no_place_for_the_focus",
+   "file": "web/home/games.js",
+   "old": "            box.setAttribute('tabindex', '-1');\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_joined_line_before_the_room",
+   "file": "web/home/games.js",
+   "old": "row: seen, after: [TEXT.roomOpening], bar: 'fill',",
+   "new": "row: seen, lines: [TEXT.roomOpening], bar: 'fill',",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_after_lines_are_not_drawn",
+   "file": "web/home/games.js",
+   "old": "            (o.after || []).forEach(function (t) { box.appendChild(el('p', 'gcline', t)); });\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_host_one_is_a_small_button",
+   "file": "web/home/games.js",
+   "old": "cls: 'gyes big', run: quickHost",
+   "new": "cls: 'gyes', run: quickHost",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_is_under_the_name_not_beside_it",
+   "file": "web/home/games.js",
+   "old": "if (best || yours) top.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best));       // (beside the map's name; a narrow row wraps it under)\n            text.appendChild(top); text.appendChild(line);",
+   "new": "text.appendChild(top); if (best || yours) text.appendChild(el('span', yours ? 'gyours' : 'gbest', yours ? TEXT.yours : TEXT.best)); text.appendChild(line);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_best_tag_is_before_the_name",
+   "file": "web/home/games.js",
+   "old": "top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
+   "new": "if (best) top.appendChild(el('span', 'gbest', TEXT.best)); top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_rejoin_offer_not_looked_at",
+   "file": "web/home/games.js",
+   "old": "if (matchRunning(c)) { runningNotice(); return; }",
+   "new": "if (c && c.room && c.room.starting) { runningNotice(); return; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_rejoin_offer_not_looked_at",
+   "file": "web/home/games.js",
+   "old": "            var c = client();\n            if (matchRunning(c)) { closeAll(); runningNotice(); return; }\n            function go() {",
+   "new": "            var c = client();\n            if (c && c.room && c.room.starting) { closeAll(); runningNotice(); return; }\n            function go() {",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "typed_while_a_match_runs",
+   "file": "web/home/games.js",
+   "old": "            var c = client();\n            if (matchRunning(c)) { closeAll(); runningNotice(); return; }\n            var mine = ++joinSeq;\n            codeHint",
+   "new": "            var c = client();\n            var mine = ++joinSeq;\n            codeHint",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "typed_rejoin_offer_not_looked_at",
+   "file": "web/home/games.js",
+   "old": "            var c = client();\n            if (matchRunning(c)) { closeAll(); runningNotice(); return; }\n            var mine = ++joinSeq;\n            codeHint",
+   "new": "            var c = client();\n            if (c && c.room && c.room.starting) { closeAll(); runningNotice(); return; }\n            var mine = ++joinSeq;\n            codeHint",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_rejoin_offer_not_looked_at",
+   "file": "web/home/games.js",
+   "old": "            var c = client();\n            if (matchRunning(c)) { closeAll(); runningNotice(); return; }\n            var opener = parts.quickJoin, mine;",
+   "new": "            var c = client();\n            if (c && c.room && c.room.starting) { closeAll(); runningNotice(); return; }\n            var opener = parts.quickJoin, mine;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "card_is_not_described",
+   "file": "web/home/games.js",
+   "old": " box.setAttribute('aria-describedby', 'gc-line'); }",
+   "new": " }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "card_description_names_nothing",
+   "file": "web/home/games.js",
+   "old": "first.id = 'gc-line';",
+   "new": "first.id = 'gc-other';",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "card_description_is_the_title_only",
+   "file": "web/home/games.js",
+   "old": "var first = box.querySelector('.gcline');\n            if (first) {",
+   "new": "var first = null;\n            if (first) {",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_is_not_told",
+   "file": "web/home/games.js",
+   "old": " told.textContent = 'Joined ' + possessive(row.host) + ' room.';",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "join_is_told_without_the_room",
+   "file": "web/home/games.js",
+   "old": "told.textContent = 'Joined ' + possessive(row.host) + ' room.';",
+   "new": "told.textContent = 'Joined.';",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "told_line_is_not_emptied_by_the_next_press",
+   "file": "web/home/games.js",
+   "old": "finding = true; mine = ++joinSeq; told.textContent = '';",
+   "new": "finding = true; mine = ++joinSeq;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "told_line_is_no_status",
+   "file": "web/home/games.js",
+   "old": "told.setAttribute('role', 'status'); ",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "told_line_is_seen",
+   "file": "web/home/games.js",
+   "old": "var told = el('p', 'sr');",
+   "new": "var told = el('p', '');",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "told_line_is_not_in_the_page",
+   "file": "web/home/games.js",
+   "old": " doc.body.appendChild(told);",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "qj_press_during_a_join_is_silent",
+   "file": "web/home/games.js",
+   "old": "            if (finding) return;\n            if (joining) { stillJoining(); return; }\n            if (over()) { itsWay(); return; }\n            var c = client();",
+   "new": "            if (finding || joining) return;\n            if (over()) { itsWay(); return; }\n            var c = client();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "host_press_during_a_join_is_silent",
+   "file": "web/home/games.js",
+   "old": "            if (finding) return;\n            if (joining) { stillJoining(); return; }\n            if (over()) { itsWay(); return; }\n            closeAll();",
+   "new": "            if (finding || joining) return;\n            if (over()) { itsWay(); return; }\n            closeAll();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_join_that_waits_is_not_shown_again",
+   "file": "web/home/games.js",
+   "old": "            openList();\n            notice('joining'",
+   "new": "            notice('joining'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "a_join_that_waits_is_not_explained",
+   "file": "web/home/games.js",
+   "old": "            notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_join_notice_is_not_a_warning",
+   "file": "web/home/games.js",
+   "old": "notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);",
+   "new": "notice('joining', popJoinText.textContent + TEXT.joinFirst, '', []);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_join_notice_stays_when_the_join_ends",
+   "file": "web/home/games.js",
+   "old": "            if (!on) clearNotice('joining');\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "the_join_notice_goes_with_any_notice",
+   "file": "web/home/games.js",
+   "old": "if (!on) clearNotice('joining');",
+   "new": "if (!on) clearNotice();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  }
+ ]
+}

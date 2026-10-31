@@ -1297,7 +1297,7 @@ void run_lobby_rooms_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Color Move, Plan, Rename, Removal); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
+    TEST_CASE("N4.34 Forgiveness (Protocol 16): A Lobby Room Lives As Long As Its People Stay, So Every Minute A Guest Is Forgiven One Violation And One Ignored Request Of Each Kind (START, Color Move, Plan, Rename, Removal, Visibility); What Is Forgiven Makes Room In The Free Allowance Again, A Flood That Is Faster Than That Is Thrown Out As Ever, And A Room That Is No Lobby Room Forgives Nothing") {
         ASSERT_EQ(HostLobby::Config{}.forgive_ms, kLobbyForgiveMs);
         ASSERT_EQ(kLobbyForgiveMs, 60000u);
         // `wish` is a message that this guest may send but the room ignores (counted, free up to 16, then a violation each): the room has no use for it from this sender now
@@ -1368,6 +1368,14 @@ void run_lobby_rooms_tests() {
             const std::vector<uint8_t> remove_wish = encode(RemoveMsg{2, seating_hash(room.host.room())});
             case_of("removal", room, bob, remove_wish, true);
             allowance_of("removal", room, cat, remove_wish);
+        }
+        {   // a Visibility from a guest that is not the leader (protocol 22)
+            Room room(lobby_room_config(200));
+            room.join_seat("Ann");
+            const size_t bob = room.join_seat("Bob");
+            const size_t cat = room.join_seat("Cat");
+            case_of("visibility", room, bob, encode(VisibilityMsg{true}), true);
+            allowance_of("visibility", room, cat, encode(VisibilityMsg{true}));
         }
         {   // a rename while the leader's START waits for a page's game (the wait is longer than the test)
             HostLobby::Config hc = lobby_room_config(93);
