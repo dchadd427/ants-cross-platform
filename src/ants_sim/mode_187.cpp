@@ -5,7 +5,7 @@
 
 namespace ants::sim {
 
-// The closed hill (docs/GAMEPLAY.md, "187"): no ant enters its hill. `hill_closed()` (sim_engine_impl.hpp) is the one question; the places that ask it are go_to (through refuse_hill_order below),
+// The closed hill (docs/GAMEPLAY.md, "187"): no ant enters its hill. `hill_closed()` (sim_engine_impl.hpp) is the one question; the places that ask it are go_to (through hill_goal_refused below),
 // low_hp_check, anthillq_run, predict_order_ack and is_special_target_valid. set_hill_open_187 is the one way to play a 187 match of the earlier rules (a recording of the rules number 6).
 void SimulationEngine::set_hill_open_187(bool open) {
     impl_->hill_open_187_ = open;
