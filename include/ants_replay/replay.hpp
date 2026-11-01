@@ -60,15 +60,26 @@ inline constexpr uint8_t kNoSeat = 255;
 /// History: 1 and 2 (game mode 187) were the numbers until the bombs of a map file (the layer-2 ids 129 .. 132) became the planted bombs of their colors (Grid::init_from_level, docs/reverse_engineering/map_file_bombs.md), which moves the plays of
 /// the community maps that hold them: the original's game was 3 then and game mode 187 (which plays on those maps too) 4. The loader as the original's (docs/reverse_engineering/map_loader_fidelity.md, v0.12.10) moved the plays of the community maps again: 5 and 6. A file of 1 to 4 is an earlier version's.
 inline constexpr uint16_t kSimRules = 5;
-/// The rules number of a match played by game mode 1, "187" (sim::GameMode::Kills187, docs/GAMEPLAY.md): the head carries the mode in field 17 (written only when it is not 0) and this number in field 16. A build that
+/// The rules numbers of a match played by game mode 1, "187" (sim::GameMode::Kills187, docs/GAMEPLAY.md): the head carries the mode in field 17 (written only when it is not 0) and one of these numbers in field 16. A build that
 /// predates the mode skips field 17 and refuses the file for its rules number (it plays kSimRules only), so no older build plays a 187 match as the original's game; every file of mode 0 keeps kSimRules and plays
-/// wherever it did. A change of the original's rules after this takes the next number that is neither of these two (the static_assert below stops the one that would collide).
-inline constexpr uint16_t kSimRulesMode187 = 6;
-static_assert(kSimRulesMode187 != kSimRules, "a mode of its own has rules of its own");
+/// wherever it did. A change of the original's rules after this takes the next number that is none of these (the static_assert below stops the one that would collide).
+/// kSimRulesMode187Heal (6) is 187 as it was first released: the hill works, an ant that enters it is healed, an ant at 1 hp walks home and the waiting ring queues. kSimRulesMode187 (7) is 187 now: an ant cannot
+/// enter its hill (docs/GAMEPLAY.md, "187"). This build plays both: a file of 6 plays with the hill open (SimulationEngine::set_hill_open_187, replay::begin_match), a file of 7 and every match that is played
+/// now with the hill closed, and a match is recorded under kSimRulesMode187 (sim_rules_for_mode). The next change of 187's rules takes 8.
+inline constexpr uint16_t kSimRulesMode187Heal = 6;
+inline constexpr uint16_t kSimRulesMode187 = 7;
+static_assert(kSimRulesMode187Heal != kSimRules && kSimRulesMode187 != kSimRules && kSimRulesMode187 != kSimRulesMode187Heal, "a mode of its own has rules of its own");
 
 /// The rules number that a match of game mode `mode` is recorded under (0: no mode of that number exists)
 constexpr uint16_t sim_rules_for_mode(uint8_t mode) noexcept {
     return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? kSimRules : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187 : uint16_t{0};
+}
+
+/// Whether this build plays a match of game mode `mode` under the rules number `rules`: the original's game under kSimRules, 187 under either of its two numbers (a mode that this build does not know: never)
+constexpr bool plays_mode_rules(uint8_t mode, uint16_t rules) noexcept {
+    return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? rules == kSimRules
+         : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? (rules == kSimRulesMode187 || rules == kSimRulesMode187Heal)
+         : false;
 }
 
 /// What the start of the match was: with the commands it is the whole match.
@@ -115,8 +126,8 @@ struct Replay {
 /// The rules number of the simulation that `head` needs: its own `sim_rules`, else (a file made before the field) the one that the table of protocol numbers gives, else 0 (unknown: no build claims
 /// it). The table (replay.cpp) holds the protocol numbers that are known to play a match out the same way, each proved with a reference file played under the newer engine.
 uint16_t sim_rules_of(const Header& head) noexcept;
-/// True when this build plays `head`'s match exactly as it was played: its rules number is the one of its game mode (kSimRules with mode 0, kSimRulesMode187 with mode 1). The numbers of the modes that this build plays,
-/// as a sentence for a refusal: "1 and 2".
+/// True when this build plays `head`'s match exactly as it was played: its rules number is one of its game mode (kSimRules with mode 0, kSimRulesMode187Heal or kSimRulesMode187 with mode 1). The numbers that this build plays,
+/// as a sentence for a refusal: "5, 6 and 7".
 bool plays_here(const Header& head) noexcept;
 std::string played_rules_text();
 

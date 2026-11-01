@@ -883,11 +883,11 @@ Requests (2026-10-07): the front page should almost be the game lobby: a visitor
 
 ## Protocol 17: the game mode of a match
 
-A request (2026-10-09): the game gets a second set of rules, **187** ([`GAMEPLAY.md`](GAMEPLAY.md): the map without food and power-ups, the score is the number of enemy ants a team has killed, the last side with ants or eggs wins at once), chosen for a match with the room and **the same on every machine**: a match that one machine played by one set of rules and another by the other would be out of sync from its first tick. The original's game is mode 0 (`sim::GameMode::HighestScore`, the name "highest-score"), 187 is mode 1 (`GameMode::Kills187`, the name "187"). No rule of the original's game changes: every golden hash, every state hash of a match of mode 0 and every replay made before the mode are as they were.
+The game gets a second set of rules, **187** ([`GAMEPLAY.md`](GAMEPLAY.md): the map without food and power-ups, the score is the number of enemy ants a team has killed, the last side with ants or eggs wins at once), chosen for a match with the room and **the same on every machine**: a match that one machine played by one set of rules and another by the other would be out of sync from its first tick. The original's game is mode 0 (`sim::GameMode::HighestScore`, the name "highest-score"), 187 is mode 1 (`GameMode::Kills187`, the name "187"). No rule of the original's game changes: every golden hash, every state hash of a match of mode 0 and every replay made before the mode are as they were.
 
 ### The change in the network
 
-* `kProtocolVersion` goes from 16 to **17**; three layouts get one byte at their end and nothing else changes. A Hello of 16 is refused with `VersionMismatch`, as every other version is (the Hello's layout is the same, the number tells them apart: a machine of protocol 16 cannot read the mode and would play the original's game in a room that chose another). The create block is untouched.
+* `kProtocolVersion` goes from 16 to **17**; three layouts get one byte at their end and nothing else changes. A Hello of 16 is refused with `VersionMismatch`, as every other version is (a machine of protocol 16 cannot read the mode and would play the original's game in a room that chose another). The create block is untouched.
 
 * **Start** ends with `mode` (`u8`) after the four platform bytes, **Room** ends with it after the `in_game` mask, **Plan** (type 32) after the two team bytes: `[32][map str8][plan0 .. plan3][team_a][team_b][mode]`. The decoders are strict as ever (`r.done()`) and refuse **a mode above `sim::kLastGameMode` (1)** in each of them, so no machine ever plays a mode it does not know as another one (a Start of 17 from a newer build that has a mode 2 is a Start that this build does not decode: the machine never loads, which is better than playing the wrong game); the layouts of protocol 16 (one byte less), a byte more and every truncation are no message either. A Room of any room can carry any mode this build knows; the mode is not part of the seating hash (`seating_hash`), so a color move or a removal is not ignored because the mode changed.
 
@@ -917,7 +917,7 @@ No layout changed: a bot is named `Pip (bot, Hard)`, a lobby room's Room message
 
 ## Protocol 21: [`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md)
 
-## Protocol 22: [`PUBLIC_ROOMS.md`](PUBLIC_ROOMS.md)
+## Protocol 22: [`PUBLIC_ROOMS.md`](PUBLIC_ROOMS.md), which also holds the closed hill of 187 (no wire change)
 
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 

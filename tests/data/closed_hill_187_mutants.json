@@ -1,0 +1,254 @@
+{
+ "note": "Mutants of the closed hill of game mode 187 for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the engine (the refusal, the 1 hp retreat, the waiting ring, the home order, the prediction, the thief, the state hash, the original's game) against test_closed_hill_187 (2.9.9), the two rules numbers of a replay (the player, the head check, the number a match is recorded under) against test_rules_187 (2.29.1), the history's count of old recordings against test_history_store, and the bots (the brawl, the controller's filter, the view) against test_ai AI30.11. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/closed_hill_187_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "hill_refusal_off",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "    if (!hill_closed()) return false;\n    for (const auto& ah : grid_.anthills()) {",
+   "new": "    if (true) return false;\n    for (const auto& ah : grid_.anthills()) {",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "2.1"
+  },
+  {
+   "id": "hill_refusal_only_the_entrance_row",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "t.x > static_cast<int32_t>(ah.x) + 3",
+   "new": "t.x > static_cast<int32_t>(ah.x) + 1",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "2.2"
+  },
+  {
+   "id": "hill_refusal_says_nothing",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "        post_news(a.player_id, strings::kCantGoThere);\n        return true;",
+   "new": "        return true;",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "2.1"
+  },
+  {
+   "id": "hill_refusal_lets_a_thief_raid",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "if (ah.team_id != a.player_id && a.type != AntType::Thief) return false;",
+   "new": "if (ah.team_id != a.player_id) return false;",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "4.4"
+  },
+  {
+   "id": "one_hp_retreat_left_on",
+   "file": "src/ants_sim/combat_system.cpp",
+   "old": "if (a.hp == 1 && !hill_closed()) {",
+   "new": "if (a.hp == 1) {",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "3.1"
+  },
+  {
+   "id": "waiting_ring_left_on",
+   "file": "src/ants_sim/action_system.cpp",
+   "old": "    if (hill_closed()) return;                  // 187 now: nobody enters a hill",
+   "new": "    if (false) return;                  // 187 now: nobody enters a hill",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "3.3"
+  },
+  {
+   "id": "home_order_taken",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "return !impl_->hill_closed();                       // (187 now: the order was refused)",
+   "new": "return true;                       // (187 now: the order was refused)",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "2.4"
+  },
+  {
+   "id": "prediction_acknowledges_the_refused_click",
+   "file": "src/ants_sim/command_system.cpp",
+   "old": "if (hill_team >= 0 && impl_->hill_closed()) return 0;",
+   "new": "if (false) return 0;",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "2.5"
+  },
+  {
+   "id": "thief_cursor_on_a_closed_hill",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "return ah.team_id != own_team && !impl.hill_closed();",
+   "new": "return ah.team_id != own_team;",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "4.4"
+  },
+  {
+   "id": "closed_hill_not_in_the_hash",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "        if (e.hill_closed()) h.u8(1);\n",
+   "new": "",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "1.2"
+  },
+  {
+   "id": "mode_zero_hash_gets_the_byte",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (e.hill_closed()) h.u8(1);",
+   "new": "if (!e.hill_open_187_) h.u8(1);",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "1.2"
+  },
+  {
+   "id": "mode_zero_hill_is_closed",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 && !hill_open_187_;",
+   "new": "return !hill_open_187_;",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "1.1"
+  },
+  {
+   "id": "rules_6_played_as_7",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 && !hill_open_187_;",
+   "new": "return game_mode_ == GameMode::Kills187;",
+   "build": [
+    "test_closed_hill_187",
+    "test_rules_187"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187 && timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "2.1"
+  },
+  {
+   "id": "rules_7_played_as_6",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 && !hill_open_187_;",
+   "new": "return false;",
+   "build": [
+    "test_closed_hill_187",
+    "test_rules_187"
+   ],
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187 && timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "1.1"
+  },
+  {
+   "id": "player_swaps_6_and_7",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) == kSimRulesMode187Heal);",
+   "new": "sim_rules_of(replay.head) == kSimRulesMode187);",
+   "build": "test_rules_187",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "RP12.2"
+  },
+  {
+   "id": "player_always_closed",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_hill_open_187(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) == kSimRulesMode187Heal);",
+   "new": "engine.set_hill_open_187(false);",
+   "build": "test_rules_187",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "RP12.2"
+  },
+  {
+   "id": "player_always_open",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_hill_open_187(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) == kSimRulesMode187Heal);",
+   "new": "engine.set_hill_open_187(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187));",
+   "build": "test_rules_187",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "RP12.3"
+  },
+  {
+   "id": "head_check_accepts_rules_8",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187Heal)",
+   "new": "(rules >= kSimRulesMode187Heal)",
+   "build": "test_rules_187",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "RP12.1"
+  },
+  {
+   "id": "head_check_refuses_rules_6",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187Heal)",
+   "new": "(rules == kSimRulesMode187)",
+   "build": "test_rules_187",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "RP12.1"
+  },
+  {
+   "id": "match_recorded_under_rules_6",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187 : uint16_t{0};",
+   "new": "mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187Heal : uint16_t{0};",
+   "build": "test_rules_187",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "RP12.1"
+  },
+  {
+   "id": "mode_187_with_rules_5_is_a_file",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "h.mode != 0 && h.sim_rules < kSimRulesMode187Heal",
+   "new": "h.mode != 0 && h.sim_rules < 5",
+   "build": "test_rules_187",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_187",
+   "expect": "RP12.1"
+  },
+  {
+   "id": "history_counts_rules_7_only",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "replay::plays_mode_rules(entry.mode, entry.sim_rules)",
+   "new": "entry.sim_rules == replay::sim_rules_for_mode(entry.mode)",
+   "build": "test_history_store",
+   "test": "timeout 900 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.3b"
+  },
+  {
+   "id": "brawl_still_sends_the_hurt_home",
+   "file": "src/ants_ai/brawl_task.cpp",
+   "old": "if (a.hp <= params_.retreat_hp && v.hill_enterable()) {",
+   "new": "if (a.hp <= params_.retreat_hp) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.11"
+  },
+  {
+   "id": "controller_lets_a_hill_click_through",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (!sim.own_hill_enterable()) {",
+   "new": "if (false) {",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.11"
+  },
+  {
+   "id": "controller_filters_every_hill",
+   "file": "src/ants_ai/bot_controller.cpp",
+   "old": "if (hill.team_id == s.seat && tile.x >=",
+   "new": "if (tile.x >=",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.11"
+  },
+  {
+   "id": "view_always_says_the_hill_works",
+   "file": "src/ants_ai/bot_view.cpp",
+   "old": "v.hill_enterable_ = sim.own_hill_enterable();",
+   "new": "v.hill_enterable_ = true;",
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI30.11' ./build/tests/test_ai/test_ai",
+   "expect": "AI30.11"
+  },
+  {
+   "id": "set_game_mode_keeps_the_earlier_rule",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "    impl_->hill_open_187_ = false;                  // (the rules of a match that is played now;",
+   "new": "    // (the rules of a match that is played now;",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "1.1"
+  }
+ ]
+}
