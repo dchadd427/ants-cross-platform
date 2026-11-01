@@ -256,14 +256,18 @@ int main() {
             sim.execute_melee_attack(striker, victim);                                       // a worker's blow takes 1 hit point
             bool went_home = false;
             bool queued = false;
+            bool refused = false;
+            sim.clear_news_events();
             for (int t = 0; t < 700; ++t) {
                 sim.tick();
                 if (sim.get_unit(victim).state == UnitState::EnteringBase) went_home = true;
                 if (sim.is_ant_in_base_queue(victim)) queued = true;
+                if (sim.get_unit(victim).state == UnitState::CantGo) refused = true;
             }
             const AntUnit& u = sim.get_unit(victim);
             if (r == Rules::Closed187) {
                 ASSERT_FALSE(went_home || queued);
+                ASSERT_FALSE(refused || sim.has_news_event(0, strings::kCantGoThere));       // (no walk home was even tried, so none was refused)
                 ASSERT_EQ(u.hp, 1);
                 ASSERT_TRUE(u.is_alive());
                 ASSERT_TRUE(u.waypoints.empty() && u.orig_order == AntUnit::kOrderNone);
@@ -301,8 +305,16 @@ int main() {
             const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{19, 23});     // the ring tile
             sim.get_unit(id).home_state = 2;                                                // (queued at the ring, as the earlier rule leaves an ant that waits)
             sim.get_unit(id).home_time_ms = 0;
-            const bool entered = ever_entered(sim, id, 100);
+            sim.clear_news_events();
+            bool refused = false;
+            bool entered = false;
+            for (int t = 0; t < 100; ++t) {
+                sim.tick();
+                if (sim.get_unit(id).state == UnitState::EnteringBase) entered = true;
+                if (sim.get_unit(id).state == UnitState::CantGo) refused = true;
+            }
             ASSERT_EQ(entered, r == Rules::Open187);
+            ASSERT_FALSE(refused || (r == Rules::Closed187 && sim.has_news_event(0, strings::kCantGoThere)));      // (the ring does not even try to send the queued ant in)
         }
     } TEST_END();
 
