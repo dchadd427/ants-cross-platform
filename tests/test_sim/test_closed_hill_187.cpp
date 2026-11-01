@@ -201,6 +201,31 @@ int main() {
         ASSERT_TRUE(sim.get_unit(w2).state != UnitState::Walking && sim.get_unit(w2).state != UnitState::CantGo);
     } TEST_END();
 
+    TEST_CASE("2.3b every type of ant that clicks the ENEMY's hill is stopped silently in every rule, as always (only a thief goes to an enemy hill, and in 187 now not even it); an ant that cannot take orders is not touched by a click on the own hill") {
+        for (const Rules r : kAllRules) {
+            for (const AntType type : {AntType::Worker, AntType::Combat, AntType::Bomber, AntType::Fire, AntType::Swimmer}) {
+                SimulationEngine sim;
+                make_world(sim, r);
+                const uint32_t id = sim.spawn_unit(0, type, TileCoord{30, 30});
+                sim.clear_news_events();
+                sim.apply_command(click(0, CommandType::GroupMove, 41, 41, {id}));
+                ASSERT_FALSE(sim.has_news_event(0, strings::kCantGoThere));
+                ASSERT_TRUE(sim.get_unit(id).state != UnitState::CantGo && sim.get_unit(id).state != UnitState::Walking);
+            }
+        }
+        for (const bool frozen : {false, true}) {
+            SimulationEngine sim;
+            make_world(sim, Rules::Closed187);
+            const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{24, 24});
+            if (frozen) sim.get_unit(id).frozen = true; else sim.get_unit(id).engaged = true;
+            sim.clear_news_events();
+            sim.apply_command(click(0, CommandType::GroupMove, 21, 21, {id}));
+            sim.issue_move_order(id, TileCoord{21, 21});
+            ASSERT_FALSE(sim.has_news_event(0, strings::kCantGoThere));                      // (the order is not taken at all: no refusal, no can't-go clip)
+            ASSERT_TRUE(sim.get_unit(id).state != UnitState::CantGo);
+        }
+    } TEST_END();
+
     TEST_CASE("2.4 the home order (OrderType::ReturnToBase) is refused in 187 now (false, \"Can't go there.\") and accepted in the original's game and in the earlier rule; join_base_queue queues nobody") {
         for (const Rules r : kAllRules) {
             SimulationEngine sim;

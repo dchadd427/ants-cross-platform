@@ -249,6 +249,24 @@
    "build": "test_closed_hill_187",
    "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
    "expect": "1.1"
+  },
+  {
+   "id": "hill_refusal_for_every_type_but_workers",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "if (ah.team_id != a.player_id && a.type != AntType::Thief) return false;",
+   "new": "if (ah.team_id != a.player_id && a.type == AntType::Worker) return false;",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "2.3b"
+  },
+  {
+   "id": "go_to_never_asks_for_the_refusal",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "    if (hill_goal_refused(a, t)) return false;     // 187 now",
+   "new": "    // 187 now",
+   "build": "test_closed_hill_187",
+   "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
+   "expect": "2.1"
   }
  ]
 }

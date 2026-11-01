@@ -7,8 +7,8 @@
 namespace ants::ai {
 
 struct BrawlParams {
-    uint8_t retreat_hp{3};               // an ant with this many hit points or fewer walks home to heal
-    uint8_t return_hp{9};                // ... and fights again with this many or more
+    uint8_t retreat_hp{3};               // earlier rule only (the hill works): an ant with this many hit points or fewer walks home to heal
+    uint8_t return_hp{9};                // ... and fights again with this many or more (earlier rule only)
     uint32_t per_target{2};              // the most ants that strike one victim at a time (one blow lands per hit clip, a third ant only finishes)
     uint32_t crowd{3};                   // ants without a victim of their own join a fight up to this many on one victim
     uint32_t hp_weight{30};              // a victim's hit points count this much against a tile of distance (10) when the victims are ranked
