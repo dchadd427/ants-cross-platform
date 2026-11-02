@@ -274,7 +274,7 @@ class TheStyle(unittest.TestCase):
         self.assertNotRegex(news, r"display: *none|visibility: *hidden", "a screen reader reads it")
 
     def test_the_login_in_the_bar_and_in_the_dock(self):
-        self.assertIn("@media (max-width: 720px), (max-height: 500px) { .hbar .hlogin { padding: 0; } .hlogin .gc-cn { display: none; } }", self.css, "on a phone, held either way, the chip is the mark or the circle only (46 x 46, as drawn): the breakpoints are the dock's")
+        self.assertIn("@media (max-width: 1279px), (max-height: 500px) { .hbar .hlogin { padding: 0; } .hlogin .gc-cn { display: none; } }", self.css, "on a phone, held either way, and in any window under 1280 px wide, the chip is the mark or the circle only (46 x 46, as drawn; the name needs the width of a desktop: docs/HOME_SCREEN.md, \"The top bar\")")
         name = self.rule(".gc-an")
         self.assertIn("overflow-wrap: anywhere;", name)
         self.assertIn("min-width: 0;", name)

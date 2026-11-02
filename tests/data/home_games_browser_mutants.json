@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) and of the own-room row of the Games list (web/home/games.js) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
+ "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) and of the own-room row of the Games list (web/home/games.js) and of the steps of the two bars for narrow windows (web/home/home.css, web/home/chat.css) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
  "mutants": [
   {
    "id": "short_window_rule_applies_at_normal_sizes",
@@ -55,6 +55,55 @@
    "file": "web/home/games.js",
    "old": "n === lead && shown.length - lead > 1, n < lead)",
    "new": "n === 0 && shown.length - lead > 1, n < lead)",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "bar_trim_step_dropped",
+   "file": "web/home/home.css",
+   "old": "@media (min-width: 721px) and (max-width: 1076px) {",
+   "new": "@media (min-width: 721px) and (max-width: 0px) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "bar_trim_step_ends_one_band_early",
+   "file": "web/home/home.css",
+   "old": "@media (min-width: 721px) and (max-width: 1076px) {",
+   "new": "@media (min-width: 721px) and (max-width: 1066px) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "bar_one_low_row_ends_one_band_early",
+   "file": "web/home/home.css",
+   "old": "(min-width: 721px) and (max-width: 891px), (orientation: landscape) and (min-width: 640px) and (max-width: 720px) {\n    .hbar { gap: 8px;",
+   "new": "(min-width: 721px) and (max-width: 839px), (orientation: landscape) and (min-width: 640px) and (max-width: 720px) {\n    .hbar { gap: 8px;",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "bar_smallest_step_dropped",
+   "file": "web/home/home.css",
+   "old": "@media (min-width: 721px) and (max-width: 774px), (orientation: landscape)",
+   "new": "@media (min-width: 721px) and (max-width: 0px), (orientation: landscape)",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "login_chip_keeps_its_name_in_a_narrow_window",
+   "file": "web/home/chat.css",
+   "old": "@media (max-width: 1279px), (max-height: 500px) {",
+   "new": "@media (max-width: 899px), (max-height: 500px) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "three_rows_start_one_band_late",
+   "file": "web/home/home.css",
+   "old": "@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {",
+   "new": "@media (max-width: 720px) and (orientation: portrait), (max-width: 579px) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "bar_smallest_step_dropped_for_a_phone_held_sideways",
+   "file": "web/home/home.css",
+   "old": "(orientation: landscape) and (min-width: 640px) and (max-width: 720px) {\n    .hbar { gap: 6px",
+   "new": "(orientation: landscape) and (min-width: 640px) and (max-width: 0px) {\n    .hbar { gap: 6px",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]

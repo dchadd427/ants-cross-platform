@@ -70,8 +70,8 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 .mfacts { margin-top: 4px; padding-top: 10px; border-top: 1px solid #1d3a31; font-size: 14px; line-height: 1.5; white-space: pre-line; color: #a8cfc0; }
 .mfacts[hidden] { display: none; }
 
-/* ---- a phone upright: three rows ---- */
-@media (max-width: 720px) and (orientation: portrait) {
+/* ---- a phone upright, or any window under 640 px: three rows ---- */
+@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {
     .hbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; padding: 12px 16px 10px; }
     .hbar .hbrand { align-self: center; } .hbar .hlogo { width: 92px; }
     .hbar .hright { grid-column: 2; grid-row: 1; margin-left: 0; justify-self: end; }
@@ -84,8 +84,15 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .ytitle { font-size: 17px; } .yline { font-size: 14px; }
     .hmenubox { width: calc(100vw - 20px); }
 }
-/* ---- a short window (a phone held sideways): one low row ---- */
-@media (max-height: 500px) and (orientation: landscape) {
+/* ---- a window that is not wide: the bar trims in steps (docs/HOME_SCREEN.md, "The top bar") ---- */
+@media (min-width: 721px) and (max-width: 1076px) {
+    .hbar { gap: 8px; padding-left: 20px; padding-right: 20px; }
+    .hbar .hlogo { width: 96px; }
+    .hbar .btn { padding: 6px 12px; }
+    .hbar .quick { padding: 6px 12px; font-size: 16px; letter-spacing: .04em; gap: 8px; }
+}
+/* ---- a short window (a phone held sideways) or a narrower one: one low row ---- */
+@media (max-height: 500px) and (orientation: landscape) and (min-width: 640px), (min-width: 721px) and (max-width: 891px), (orientation: landscape) and (min-width: 640px) and (max-width: 720px) {
     .hbar { gap: 8px; padding: 8px 20px 8px; }
     .hbar .hlogo { width: 84px; }
     .hbar .btn { min-height: 44px; padding: 4px 12px; font-size: 15px; }
@@ -93,6 +100,15 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .quick::before { display: none; }
     .hbar .mine .pill { display: none; }
     .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: "Room"; font-size: 15px; }
+}
+/* ---- ... under 773 px the type shrinks again ---- */
+@media (min-width: 721px) and (max-width: 774px), (orientation: landscape) and (min-width: 640px) and (max-width: 720px) {
+    .hbar { gap: 6px; padding-left: 10px; padding-right: 10px; }
+    .hbar .hlogo { width: 64px; }
+    .hbar .btn { padding: 4px 8px; font-size: 14px; }
+    .hbar .quick { padding: 4px 10px; font-size: 14px; letter-spacing: .04em; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
     .yard { margin: 0 8px 8px; }
     .ylabel { top: 8px; padding: 8px 18px 6px; width: min(480px, calc(100% - 32px)); }
     .ytitle { font-size: 16px; } .yline { display: none; } .yres { margin-top: 2px; }

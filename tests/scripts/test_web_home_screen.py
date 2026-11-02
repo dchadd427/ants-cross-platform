@@ -228,8 +228,10 @@ class TheStyle(unittest.TestCase):
         self.assertIn("@media (prefers-reduced-motion: reduce) { .yant .ant { animation: none; } }", self.css)
 
     def test_the_bars_have_a_layout_for_a_phone_upright_and_for_a_short_window(self):
-        self.assertIn("@media (max-width: 720px) and (orientation: portrait) {", self.css)
+        self.assertIn("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {", self.css)
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) {", self.css)
+        for step in ("@media (min-width: 721px) and (max-width: 1076px) {", "(min-width: 721px) and (max-width: 891px), ", "@media (min-width: 721px) and (max-width: 774px), "):
+            self.assertIn(step, self.css, "the bar's steps for a window that is not wide (docs/HOME_SCREEN.md, \"The top bar\"): the real-browser check is tests/scripts/web_home_games_browser.js")
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)", "nothing scrolls sideways")
 
 

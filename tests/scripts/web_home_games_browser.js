@@ -501,6 +501,41 @@ async function flows() {
             for (const p of [maple, sage, tess]) check(label + ': no script error in the page', p.errors.length === 0, p.errors.join(' | '));
             for (const p of [maple, sage, tess]) await p.context().close();
         }
+
+        // ---- 1h. the bars at many widths (docs/HOME_SCREEN.md, "The top bar"): in Home's bar and the Room's bar every button and the logo is inside the window and inside the bar's own padding (left >= 0, right <= the window's width), and the page has no sideways scroll, at the sizes ----
+        // of the approved pictures, in the band of narrow desktop windows (900 to 1000 px, where the bar was once wider than the window, so that the Menu button was cut off), on every tenth width from 320 to 1300 at five heights and on both sides of every
+        // limit of the bar's steps; Home with its widest state (the counts "4/4" and "50+" on My room and Games, the login chip with a long name), one window that only changes its size (the media queries answer at once)
+        {
+            const WIDEST = () => {
+                const set = (q, text) => { const e = document.querySelector(q); if (e) { e.hidden = false; e.textContent = text; } };
+                set('.mine .pill', '4/4'); set('.games .pill', '50+');
+                const chip = document.querySelector('.hlogin');
+                if (chip) { chip.hidden = false; chip.textContent = ''; for (const [c, t] of [['gc-av', 'M'], ['gc-cn', 'Maple_Leaf_Longname_88']]) { const i = document.createElement('span'); i.className = c; i.textContent = t; chip.appendChild(i); } }
+            };
+            const OUT = () => {                                                      // what of the visible bar is out of the window, and whether the page scrolls sideways
+                const w = document.documentElement.clientWidth, home = document.body.getAttribute('data-screen') === 'home', bar = document.querySelector(home ? '.hbar' : '.rbar'), out = [];
+                const box = bar.getBoundingClientRect(), css = window.getComputedStyle(bar), left = Math.max(0, box.left + parseFloat(css.paddingLeft)), right = Math.min(w, box.right - parseFloat(css.paddingRight));       // (the bar's own padding stays free: the window's edge is not the limit)
+                bar.querySelectorAll('button, a, img, input, .hbrand').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width < 3 || r.height < 3 || e.closest('[hidden]')) return; if (r.right > right + 0.5 || r.left < left - 0.5) out.push((e.className || e.tagName) + ' ' + Math.round(r.left) + '..' + Math.round(r.right) + ' (' + Math.round(left) + '..' + Math.round(right) + ')'); });
+                if (bar.scrollWidth > bar.clientWidth + 0.5) out.push('the bar is wider than itself: ' + bar.scrollWidth + ' > ' + bar.clientWidth);
+                if (document.documentElement.scrollWidth > w) out.push('the page scrolls sideways: ' + document.documentElement.scrollWidth + ' > ' + w);
+                return out;
+            };
+            const sizes = [[900, 700], [920, 700], [960, 700], [1000, 700], [844, 390], [390, 844], [360, 640], [320, 568], [1280, 800], [1920, 1080]];
+            for (const h of [360, 500, 501, 700, 1000]) for (let w = 320; w <= 1300; w += 10) sizes.push([w, h]);
+            for (const edge of [1280, 1077, 892, 775, 721, 640, 390, 389]) for (const h of [360, 700]) sizes.push([edge, h], [edge - 1, h]);
+            const bar = await newPage(browser, live, 'Maple', SIZES[2]); await lit(bar);
+            await bar.evaluate(WIDEST);
+            const badHome = [], badRoom = [];
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(OUT); if (o.length) badHome.push(w + 'x' + h + ': ' + o.join(', ')); }
+            check('Home\'s bar at ' + sizes.length + ' sizes (900 to 1000 px wide, 844 x 390, 390 x 844, 360 x 640, every tenth width from 320 to 1300 px, and both sides of every limit) with the widest counts and a long name on the login chip: every button inside the window and no sideways scroll', badHome.length === 0, badHome.slice(0, 6).join(' | ') + (badHome.length > 6 ? ' ... ' + badHome.length + ' sizes' : ''));
+            await bar.setViewportSize({ width: SIZES[2][1], height: SIZES[2][2] });
+            await bar.click('.hchip.mine');
+            await until('the page shows the Room', async () => (await screenOf(bar)) === 'room', 10000);
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); const o = await bar.evaluate(OUT); if (o.length) badRoom.push(w + 'x' + h + ': ' + o.join(', ')); }
+            check('the Room\'s slim bar at the same ' + sizes.length + ' sizes: every button and the logo inside the window and no sideways scroll', badRoom.length === 0, badRoom.slice(0, 6).join(' | ') + (badRoom.length > 6 ? ' ... ' + badRoom.length + ' sizes' : ''));
+            check('(no script error in the page)', bar.errors.length === 0, bar.errors.join(' | '));
+            await bar.context().close();
+        }
     } finally {
         for (const s of [live, fake, emptySite, offSite]) s.close();
         await browser.close();
