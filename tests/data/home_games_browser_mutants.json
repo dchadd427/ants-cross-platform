@@ -161,6 +161,20 @@
    "old": "@media (max-width: 479px) { .hbar { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr) auto; } }",
    "new": "@media (max-width: 479px) { .hbar { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; } }",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "phone_sideways_two_rows_orientation_dropped",
+   "file": "web/home/home.css",
+   "old": "@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {",
+   "new": "@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) {",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "phone_sideways_chat_panel_covers_the_second_row",
+   "file": "web/home/chat.css",
+   "old": "calc(100% - 118px)",
+   "new": "calc(100% - 76px)",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]
 }

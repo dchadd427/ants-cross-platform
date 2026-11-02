@@ -521,7 +521,7 @@ async function flows() {
                 return out;
             };
             const sizes = [[900, 700], [920, 700], [960, 700], [1000, 700], [844, 390], [390, 844], [360, 640], [320, 568], [1280, 800], [1920, 1080]];
-            const SIDEWAYS = [[568, 320], [600, 300], [630, 360], [480, 320], [360, 240], [361, 240], [420, 240], [479, 300], [359, 240], [639, 500], [600, 500], [600, 501], [639, 501], [640, 360], [844, 390]];       // (a phone held sideways, and both sides of the limits of the two compact rows: 360 and 639 px wide, 500 px high)
+            const SIDEWAYS = [[568, 320], [600, 300], [630, 360], [480, 320], [360, 240], [361, 240], [420, 240], [479, 300], [359, 240], [639, 500], [600, 500], [600, 501], [639, 501], [640, 360], [844, 390], [360, 480], [500, 500]];       // (a phone held sideways, and both sides of the limits of the two compact rows: 360 and 639 px wide, 500 px high, and upright: 360 x 480 and 500 x 500 keep the three rows)
             for (const h of [240, 300, 360, 500, 501, 700, 1000]) for (let w = 320; w <= 1300; w += 10) sizes.push([w, h]);
             for (const edge of [1280, 1077, 892, 775, 721, 640, 390, 389, 360]) for (const h of [240, 360, 700]) sizes.push([edge, h], [edge - 1, h]);
             sizes.push(...SIDEWAYS);
@@ -541,13 +541,23 @@ async function flows() {
             };
             const badRows = [];
             for (const [w, h] of SIDEWAYS) {
-                await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const m = await bar.evaluate(BARS), two = w >= 360 && w <= 639 && h <= 500;
+                await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const m = await bar.evaluate(BARS), two = w >= 360 && w <= 639 && h <= 500 && w > h;
                 if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
                 if (!two && w <= 639 && m.bar < 150) badRows.push(w + 'x' + h + ': the phone\'s three rows expected, the bar is ' + m.bar + ' px high');
                 if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
                 if (w === 568 && h === 320 && m.yard < 190) badRows.push('568x320: the Yard is only ' + m.yard + ' px high');
             }
-            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the Yard 190 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the phone\'s three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
+            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the Yard 190 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the phone\'s three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501, and upright 360 x 480 and 500 x 500) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
+            // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px): chat.css
+            const badPanel = [];
+            for (const [w, h] of [[568, 320], [480, 300], [600, 400], [630, 360], [640, 360], [844, 390]]) {
+                await bar.setViewportSize({ width: w, height: h });
+                await bar.evaluate(() => { const g = document.querySelector('.gc'); if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); });
+                await sleep(100);
+                const m = await bar.evaluate(() => { const g = document.querySelector('.gc'), b = document.querySelector('.hbar').getBoundingClientRect(); return g ? { open: g.getAttribute('data-open'), hidden: g.hidden, top: Math.round(g.getBoundingClientRect().top * 10) / 10, bar: Math.round(b.bottom * 10) / 10 } : null; });
+                if (!m || m.hidden || m.open !== 'true' || m.top < m.bar - 0.5) badPanel.push(w + 'x' + h + ': ' + JSON.stringify(m));
+            }
+            check('the chat dock\'s open panel starts at or below the bottom of the bar at 568 x 320, 480 x 300, 600 x 400, 630 x 360, 640 x 360 and 844 x 390 (the two compact rows are 106 px, the panel used to start at 64 px)', badPanel.length === 0, badPanel.join(' | '));
             await bar.setViewportSize({ width: SIZES[2][1], height: SIZES[2][2] });
             await bar.click('.hchip.mine');
             await until('the page shows the Room', async () => (await screenOf(bar)) === 'room', 10000);

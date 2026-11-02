@@ -2639,6 +2639,20 @@
    "old": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0;",
    "new": "points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = unanswered.length - 1;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "sideways_two_row_panel_covers_the_bar",
+   "file": "web/home/chat.css",
+   "old": "calc(100% - 118px)",
+   "new": "calc(100% - 76px)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "sideways_two_row_panel_rule_dropped",
+   "file": "web/home/chat.css",
+   "old": "(orientation: landscape) { .gc, .gc[data-open=\"true\"] { height: min(286px, calc(100% - 118px))",
+   "new": "(orientation: landscape) { .gcx, .gc[data-open=\"true\"] { height: min(286px, calc(100% - 118px))",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }
