@@ -224,6 +224,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn('.gc[data-open="true"] { min-height: var(--gc-min); }', side, "an open panel is never a sliver; a folded strip has no minimum")
         self.assertNotIn("min-height: 150px", self.css.replace("--gc-min: 150px", ""), "the least height is the property's: one number for the style and the script")
         self.assertIn('left: 14px; right: auto;', side)
+        self.assertIn('@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) { .gc, .gc[data-open="true"] { height: min(286px, calc(100% - 118px)); } }', self.css, "a phone held sideways has the two compact rows of home.css (106 px): the open panel's top clears them (the same limits as there)")
 
     def test_the_title_of_a_folded_strip_is_the_short_one_and_the_long_one_stays_for_a_screen_reader(self):
         compact = re.search(r"@media \(max-width: 720px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
@@ -274,7 +275,7 @@ class TheStyle(unittest.TestCase):
         self.assertNotRegex(news, r"display: *none|visibility: *hidden", "a screen reader reads it")
 
     def test_the_login_in_the_bar_and_in_the_dock(self):
-        self.assertIn("@media (max-width: 720px), (max-height: 500px) { .hbar .hlogin { padding: 0; } .hlogin .gc-cn { display: none; } }", self.css, "on a phone, held either way, the chip is the mark or the circle only (46 x 46, as drawn): the breakpoints are the dock's")
+        self.assertIn("@media (max-width: 1279px), (max-height: 500px) { .hbar .hlogin { padding: 0; } .hlogin .gc-cn { display: none; } }", self.css, "on a phone, held either way, and in any window under 1280 px wide, the chip is the mark or the circle only (46 x 46, as drawn; the name needs the width of a desktop: docs/HOME_SCREEN.md, \"The top bar\")")
         name = self.rule(".gc-an")
         self.assertIn("overflow-wrap: anywhere;", name)
         self.assertIn("min-width: 0;", name)
