@@ -23,6 +23,13 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## Next
+
+**For players:**
+- **The game type 187 has a closed hill.** In a 187 match no ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there."), an ant at 1 hit point no longer walks home, and the computer players send none of their hurt ants home. Old 187 recordings still play as they were.
+
+**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match plays differently, so a v0.13 game cannot play with a game of this release. The rules number of the game type 187 is 7 now (6 before): new matches record 7 and a recording of 6 still plays. The original's game (mode 0) is as it was: every state hash of the 540 maps of the library is unchanged.
+
 ## v0.13.0 - 2026-11-02 - Home, public rooms, the games list and the chat
 
 **For players:**
@@ -33,7 +40,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Log in with Discord** to write in the chat. It asks for your Discord id and username only and keeps nothing else; **Log out** and **Forget me** (deletes your lines) are in the chat. A Discord account under 7 days old cannot write. Login works once the site's operator has set up the Discord application; until then the chat is read-only for everybody.
 - **Everybody needs the new version.** A game or page of v0.12 cannot join a v0.13 server: reload the page.
 
-**Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the host makes a lobby room public or private), and one new Room flag, public; a v0.12 game cannot play with a v0.13 one ([public rooms](docs/PUBLIC_ROOMS.md)). One rule fix: the layer-2 id 38 is no bridge any more, as in the original (a water tile that holds it stays water: only a swimmer can enter it, and anyone else put there drowns). No shipped or community map holds it and every state hash of the library is unchanged, so recordings play as before (rules number 5); only a player's own map that holds id 38 plays differently from v0.12. One rule of the game type 187: the hill is closed. No ant can enter it, so nothing heals, an order to go home is refused ("Can't go there."), an ant at 1 hit point no longer walks home, and the computer players send none; old 187 recordings still play (rules number 6; new matches are 7). **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies` and the status of a lobby room has `"public"`; the site's nginx passes `/lobbies`, `/hub/ws` and the login's pages; the stack has a new container `ants-hub` and its volume (the staging stack gets its own, `ants-hub-staging` with the volume `ants-staging-hub-data`), with the `ANTS_HUB_*` settings, and the chat and the login must not go live behind a reverse proxy before `docker/trusted-proxies.conf` names it ([the chat hub](docs/HUB.md#behind-a-reverse-proxy-not-ready-for-the-public-until-this-is-set)).
+**Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the host makes a lobby room public or private), and one new Room flag, public; a v0.12 game cannot play with a v0.13 one ([public rooms](docs/PUBLIC_ROOMS.md)). One rule fix: the layer-2 id 38 is no bridge any more, as in the original (a water tile that holds it stays water: only a swimmer can enter it, and anyone else put there drowns). No shipped or community map holds it and every state hash of the library is unchanged, so recordings play as before (rules number 5); only a player's own map that holds id 38 plays differently from v0.12. **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies` and the status of a lobby room has `"public"`; the site's nginx passes `/lobbies`, `/hub/ws` and the login's pages; the stack has a new container `ants-hub` and its volume (the staging stack gets its own, `ants-hub-staging` with the volume `ants-staging-hub-data`), with the `ANTS_HUB_*` settings, and the chat and the login must not go live behind a reverse proxy before `docker/trusted-proxies.conf` names it ([the chat hub](docs/HUB.md#behind-a-reverse-proxy-not-ready-for-the-public-until-this-is-set)).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...57c6f8ae)
 
