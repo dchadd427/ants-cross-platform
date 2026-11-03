@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) and of the own-room row of the Games list (web/home/games.js) and of the steps of the two bars for narrow windows and the two compact rows of a phone held sideways (web/home/home.css, web/home/chat.css) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
+ "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) and of the own-room row of the Games list (web/home/games.js) and of the steps of the two bars for narrow windows and the two compact rows of a phone held sideways and of the page's end above the system bar of a phone (web/home/home.css, web/home/chat.css) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
  "mutants": [
   {
    "id": "short_window_rule_applies_at_normal_sizes",
@@ -174,6 +174,27 @@
    "file": "web/home/chat.css",
    "old": "calc(100% - 118px)",
    "new": "calc(100% - 76px)",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "safe_area_padding_dropped",
+   "file": "web/home/home.css",
+   "old": "padding-bottom: env(safe-area-inset-bottom); ",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "safe_area_padding_only_half",
+   "file": "web/home/home.css",
+   "old": "padding-bottom: env(safe-area-inset-bottom);",
+   "new": "padding-bottom: calc(env(safe-area-inset-bottom) / 2);",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "phone_chat_strip_sunk_under_the_visible_bottom",
+   "file": "web/home/chat.css",
+   "old": "right: 16px; bottom: 12px; width: auto;",
+   "new": "right: 16px; bottom: -30px; width: auto;",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]

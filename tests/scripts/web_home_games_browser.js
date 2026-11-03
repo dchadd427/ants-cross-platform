@@ -566,6 +566,26 @@ async function flows() {
             check('(no script error in the page)', bar.errors.length === 0, bar.errors.join(' | '));
             await bar.context().close();
         }
+
+        // ---- 1i. a phone whose page reaches under the system bar (viewport-fit=cover): the layout window is taller than what shows, and the browser says by how much (env(safe-area-inset-bottom), here the DevTools override of it). Home, its Yard and the
+        // chat strip (closed, and the panel open) end at or above the visible bottom (the window's height less the inset), at 448 x 998 and 390 x 880 (a 36 px bar), 844 x 390 (24 px), 1280 x 800 (none); Home still fills the window when there is no inset (docs/HOME_SCREEN.md, "The page's height") ----
+        {
+            const bad = [];
+            for (const [w, h, inset] of [[448, 998, 36], [390, 880, 36], [390, 844, 0], [844, 390, 24], [1280, 800, 0]]) {
+                const page = await newPage(browser, live, 'Maple', [0, w, h]); await lit(page);
+                await (await page.context().newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, bottom: inset, right: 0 } });
+                await page.waitForSelector('.gc:not([hidden])');
+                for (const open of [false, true]) {
+                    await page.evaluate((o) => { const g = document.querySelector('.gc'); if ((g.getAttribute('data-open') === 'true') !== o) document.querySelector('.gc-fold').click(); }, open);
+                    await sleep(150);
+                    const m = await page.evaluate(() => { const b = (q) => Math.round(document.querySelector(q).getBoundingClientRect().bottom * 10) / 10; return { home: b('#home'), yard: b('.yard'), chat: b('.gc'), open: document.querySelector('.gc').getAttribute('data-open'), end: window.innerHeight }; });
+                    const limit = h - inset;
+                    if (m.open !== String(open) || m.home > limit + 0.5 || m.yard > limit + 0.5 || m.chat > limit + 0.5 || (inset === 0 && m.home < limit - 0.5)) bad.push(w + 'x' + h + ' inset ' + inset + ' ' + (open ? 'open' : 'strip') + ': ' + JSON.stringify(m));
+                }
+                await page.context().close();
+            }
+            check('with the system bar over the last 36 px (448 x 998, 390 x 880), 24 px (844 x 390) or nothing (390 x 844, 1280 x 800): Home, the Yard and the chat dock (strip and open panel) end at or above the visible bottom (the window less the inset), and Home fills the window when there is no inset', bad.length === 0, bad.join(' | '));
+        }
     } finally {
         for (const s of [live, fake, emptySite, offSite]) s.close();
         await browser.close();
