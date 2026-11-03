@@ -262,8 +262,8 @@
   {
    "id": "go_to_never_asks_for_the_refusal",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "    if (hill_goal_refused(a, t)) return false;     // 187 now",
-   "new": "    // 187 now",
+   "old": "if (hill_goal_refused(a, t)) return false;     // 187 now",
+   "new": "// 187 now",
    "build": "test_closed_hill_187",
    "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
    "expect": "2.1"
