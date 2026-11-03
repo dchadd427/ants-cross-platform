@@ -235,12 +235,22 @@ The match ends:
 - when the clock runs out (checked every 200 ms, like the original's CHECKGO task);
 - when no team has an egg, a hatch or an ant left;
 - when the teams that still have something are one alliance whose combined score is strictly the best (a tie is never a win);
+- when exactly one side is left, one team or one alliance, and no food is left that could score: that side wins whatever the scores are, a tie and a score of 0 included ([the last side standing](#the-last-side-standing));
 - when a drop-out leaves one team or an allied pair alone;
 - when a player quits while exactly one other side is left (the quitter's row goes last on the results). With more sides left, a quit is a drop-out.
 
 The score is the food your ants have deposited at your hill, plus the loot your thieves have brought home, minus the loot that thieves took from you and minus the 200 points that each hatched egg costs. When the clock runs out, the results rank the teams by score; an alliance's two scores are added, and the top row wins. The results screen is described in [`VIEW_AND_HUD.md`](VIEW_AND_HUD.md).
 
 Ground truth: [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) sections 5.47 (the end rules) and 5.49 (the results and their ranking).
+
+### The last side standing
+
+The original's rule above never lets a tie for the top or a score of 0 win, so a match on a map with no food (or with its food all eaten) in which every side but one was wiped out played on to the clock. Since v0.14 it ends instead (the simulation's rules number 8; a recording of the rules number 5 is played by the original's rule alone, [`REPLAYS.md`](REPLAYS.md#the-file)):
+
+- **When.** At the first check (every 200 ms) at which exactly one side has an ant, an egg or a hatch in progress, at least two teams are in the match, and nothing is left that could score. A side is a team or an alliance: an alliance with a live seat and a dead one is one side, and two allies that both live are one side. A team that dropped out is no side. A side that has only an egg, or only a hatch in progress, is alive, so the match goes on until it is an ant or the egg is gone. Nothing needs to be done by anybody: no message, no new screen.
+- **Nothing left that could score** means: no food object with a unit left that is worth points (a pile, or a lunchbox that a dead ant dropped), no ant that carries food or a thief's loot, and no ant in the middle of a bite. **Power-ups, bombs and fire walls do not count**: a power-up only changes the type of the ant that takes it, a bomb or a fire only hurts, the flower droppers drop power-ups and nothing else, and none of them can bring an ant, an egg, a pile or a point (the engine has no other source of food). A pile that no ant can reach counts, because the rule cannot tell; such a match plays to the clock as before.
+- **Who wins.** The side that is left, whatever the scores are (the same ranking mechanism as 187's, `MatchResult::standing`): its row, or its alliance's row with the dead ally on it, goes first on every machine's results, so a tie is never lost to the local team's order and a dead team with a higher score does not take the win. A match that the clock or a quit ends is ranked as it always was (the quitter last, then by score); a lone survivor with food still on the map is not yet a win, the race for the food goes on.
+- **What does not change.** The original's rule, the clock, 187 (which ends at one side left whatever is on the map and never reads this rule), the screens, the texts and the computer players (they read the same public view; a match that ends early is the same end as any other). The state hash does not carry the rule: the same match has the same hash under both rules until the tick it ends under one of them, and the match state in the hash then shows the difference. Code: `SimulationEngineImpl::last_side_decides`, `scoring_food_left` and `last_standing` (`src/ants_sim/last_side.cpp`), `SimulationEngine::set_last_side_rule`; tests: suite 2.9.10 (`tests/test_sim/test_last_side.cpp`) and 2.29.2 (`tests/test_replay/test_rules_last_side.cpp`).
 
 ## 187 (a game type of the remake)
 

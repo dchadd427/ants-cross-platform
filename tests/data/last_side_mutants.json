@@ -1,0 +1,257 @@
+{
+ "note": "Mutants of the last side standing of the original's game (rules number 8) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the end rule (when it holds: the sides, one team, what counts as food and what does not), who is put first in the results (the clock and the original's rule ranking as they were), the switch (the rule is not 187's, set_game_mode sets it back, the state hash does not carry it) against test_last_side (2.9.10), the rules numbers of a replay (the player's choice of rule from the head, what a build plays, what a match is recorded under, the head check and the refusal) against test_rules_last_side (2.29.2), and the history's list of recordings that play against test_history_store. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/last_side_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "rule_never_ends_a_match",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "return last_side_ends() && last_side_decides();",
+   "new": "return false;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "2.1"
+  },
+  {
+   "id": "rule_ends_with_two_sides_left",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "alive_sides() == 1 && !scoring_food_left()",
+   "new": "alive_sides() <= 2 && !scoring_food_left()",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "2.7"
+  },
+  {
+   "id": "rule_ends_with_nobody_counted_as_a_side",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "alive_sides() == 1 && !scoring_food_left()",
+   "new": "alive_sides() <= 1 && !scoring_food_left()",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "2.6"
+  },
+  {
+   "id": "food_never_counts",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "in_match >= 2 && alive_sides() == 1 && !scoring_food_left()",
+   "new": "in_match >= 2 && alive_sides() == 1",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "3.1"
+  },
+  {
+   "id": "a_unit_worth_nothing_counts",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "if (pile.remaining > 0 && pile.value > 0) return true;",
+   "new": "if (pile.remaining > 0) return true;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "3.3"
+  },
+  {
+   "id": "a_spent_pile_counts",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "if (pile.remaining > 0 && pile.value > 0) return true;",
+   "new": "if (pile.value > 0) return true;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "3.1"
+  },
+  {
+   "id": "food_on_the_ground_is_forgotten",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "if (pile.remaining > 0 && pile.value > 0) return true;",
+   "new": "if (false) return true;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "3.1"
+  },
+  {
+   "id": "carried_food_is_forgotten",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "if (a->is_holding() || orig_action_of(*a) == AntUnit::kActionHarvest) return true;",
+   "new": "if (orig_action_of(*a) == AntUnit::kActionHarvest) return true;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "3.5"
+  },
+  {
+   "id": "a_bite_in_progress_is_forgotten",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "if (a->is_holding() || orig_action_of(*a) == AntUnit::kActionHarvest) return true;",
+   "new": "if (a->is_holding()) return true;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "3.9"
+  },
+  {
+   "id": "a_powerup_counts_as_food",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "    for (const auto& a : ants_) {\n        if (a == nullptr || a->removed) continue;\n        if (a->is_holding()",
+   "new": "    for (int32_t i = 0; i < static_cast<int32_t>(grid_.width() * grid_.height()); ++i) {\n        if (grid_.get_cell(TileCoord{i % static_cast<int32_t>(grid_.width()), i / static_cast<int32_t>(grid_.width())}).has_powerup()) return true;\n    }\n    for (const auto& a : ants_) {\n        if (a == nullptr || a->removed) continue;\n        if (a->is_holding()",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "3.7"
+  },
+  {
+   "id": "one_team_is_a_side_to_beat",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "return in_match >= 2 && alive_sides() == 1",
+   "new": "return in_match >= 1 && alive_sides() == 1",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "6.1"
+  },
+  {
+   "id": "no_survivor_is_put_first",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && last_side_decides());",
+   "new": "return game_mode_ == GameMode::Kills187;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "2.1"
+  },
+  {
+   "id": "survivor_is_put_first_at_the_clock",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && last_side_decides());",
+   "new": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && alive_sides() == 1);",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "5.2"
+  },
+  {
+   "id": "survivor_is_put_first_with_the_original_rule_off",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && last_side_decides());",
+   "new": "return game_mode_ == GameMode::Kills187 || last_side_decides();",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "2.2"
+  },
+  {
+   "id": "the_rule_is_on_in_187",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "bool last_side_ends() const noexcept { return game_mode_ == GameMode::HighestScore && last_side_rule_; }",
+   "new": "bool last_side_ends() const noexcept { return last_side_rule_; }",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "1.1"
+  },
+  {
+   "id": "set_game_mode_keeps_the_old_rule",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "impl_->hill_open_187_ = false; impl_->last_side_rule_ = true;",
+   "new": "impl_->hill_open_187_ = false;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "1.1"
+  },
+  {
+   "id": "the_rule_is_in_the_state_hash",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "        if (e.hill_closed()) h.u8(1);",
+   "new": "        if (e.hill_closed()) h.u8(1);\n        if (e.last_side_ends()) h.u8(2);",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "1.2"
+  },
+  {
+   "id": "last_standing_is_the_highest_team",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {\n        if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;",
+   "new": "    for (int k = MAX_PLAYERS - 1; k >= 0; --k) {\n        if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return static_cast<uint8_t>(k);",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "4.2"
+  },
+  {
+   "id": "player_plays_every_file_by_the_new_rule",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_last_side_rule(!(replay.head.mode == 0 && sim_rules_of(replay.head) == kSimRulesBeforeLastSide));",
+   "new": "engine.set_last_side_rule(true);",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.2"
+  },
+  {
+   "id": "player_plays_every_file_by_the_old_rule",
+   "file": "src/ants_replay/player.cpp",
+   "old": "engine.set_last_side_rule(!(replay.head.mode == 0 && sim_rules_of(replay.head) == kSimRulesBeforeLastSide));",
+   "new": "engine.set_last_side_rule(false);",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.3"
+  },
+  {
+   "id": "player_plays_the_number_8_by_the_old_rule",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) == kSimRulesBeforeLastSide));",
+   "new": "sim_rules_of(replay.head) >= kSimRulesBeforeLastSide));",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.3"
+  },
+  {
+   "id": "the_original_plays_only_number_8",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeLastSide)",
+   "new": "(rules == kSimRules)",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.1"
+  },
+  {
+   "id": "the_original_plays_every_number_from_5",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeLastSide)",
+   "new": "(rules >= kSimRulesBeforeLastSide)",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.1"
+  },
+  {
+   "id": "a_match_is_recorded_under_the_old_number",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? kSimRules : mode",
+   "new": "mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? kSimRulesBeforeLastSide : mode",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.1"
+  },
+  {
+   "id": "the_refusal_names_three_numbers",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "std::to_string(kSimRulesBeforeLastSide) + \", \" + std::to_string(kSimRulesMode187Heal) + \", \" + std::to_string(kSimRulesMode187) + \" and \" + std::to_string(kSimRules);",
+   "new": "std::to_string(kSimRulesBeforeLastSide) + \", \" + std::to_string(kSimRulesMode187Heal) + \" and \" + std::to_string(kSimRulesMode187);",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.1"
+  },
+  {
+   "id": "a_187_head_may_name_the_number_8",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "    } else if (h.sim_rules == kSimRules && h.mode != 0) {",
+   "new": "    } else if (false) {",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.1"
+  },
+  {
+   "id": "the_recorder_leaves_the_number_of_a_187_head",
+   "file": "src/ants_replay/recorder.cpp",
+   "old": "if (head.mode != 0) head.sim_rules = sim_rules_for_mode(head.mode);",
+   "new": "if (head.mode != 0 && head.sim_rules < kSimRulesMode187) head.sim_rules = sim_rules_for_mode(head.mode);",
+   "build": "test_rules_last_side",
+   "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
+   "expect": "RP13.1"
+  },
+  {
+   "id": "the_history_plays_only_number_8",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "replay::plays_mode_rules(entry.mode, entry.sim_rules)",
+   "new": "(entry.sim_rules == replay::kSimRules || entry.sim_rules == replay::kSimRulesMode187 || entry.sim_rules == replay::kSimRulesMode187Heal)",
+   "build": "test_history_store",
+   "test": "timeout 900 ./build/tests/test_server/test_history_store",
+   "expect": "HS5.3"
+  }
+ ]
+}

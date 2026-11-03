@@ -80,7 +80,7 @@ JsonValue row_json(const HistoryRow& r) {
     return o;
 }
 
-// 0 the row of the side left standing (mode 187), 1 any other, 2 the quitter's
+// 0 the row of the side left standing (187, and the original's game when one side was left and no food could score), 1 any other, 2 the quitter's
 int rank_class(const HistoryRow& r, int quitter, uint8_t standing) {
     if (row_has(r, quitter)) return 2;
     if (standing < sim::MAX_PLAYERS && row_has(r, standing)) return 0;

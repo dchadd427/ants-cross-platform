@@ -859,7 +859,7 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("RP2.4 A Replay Of Other Simulation Rules Is Not Played: The Error Names Both Numbers And The Game That Made It; The Head Of Any Rules Still Reads; Another Protocol Number Alone Is No Reason") {
         Played p = play_scripted(tiny, 31, 150);
-        const uint16_t foreign = static_cast<uint16_t>(kSimRulesMode187 + 1);        // (a number that no build plays: 2 is the rules of game mode 187)
+        const uint16_t foreign = static_cast<uint16_t>(kSimRules + 1);        // (a number that no build plays: the one after the newest)
         p.replay.head.sim_rules = foreign;
         p.replay.head.game_version = "v0.1.2";
         const std::vector<uint8_t> bytes = encoded(p.replay);
@@ -867,7 +867,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(d.ok && d.replay.head.sim_rules == foreign);
         const Outcome o = play(d.replay, tiny.level);
         ASSERT_TRUE(!o.ran && !o.ok);
-        ASSERT_TRUE(contains(o.error, "simulation rules " + std::to_string(foreign)) && contains(o.error, "simulation rules " + std::to_string(kSimRules)) && contains(o.error, "v0.1.2"));
+        ASSERT_TRUE(contains(o.error, "simulation rules " + std::to_string(foreign)) && contains(o.error, "simulation rules " + played_rules_text()) && contains(o.error, "v0.1.2"));
         ASSERT_EQ(o.turns, 0u);
         // a protocol number that moved while the simulation did not: the file still plays (RP7.1)
         Played q = play_scripted(tiny, 31, 150);
@@ -1906,7 +1906,7 @@ int main(int argc, char* argv[]) {
         uint16_t sim_rules;
         uint64_t hash;
     };
-    constexpr ReferenceHash kReferenceHashes[] = {{1, 0x7a96df7831c965e0ull}, {3, 0x7a96df7831c965e0ull}, {5, 0xaa55a2a4a1ec6beeull}};      // (3: the bombs of a map file; TINY has none, so the match ended where it did. 5: the loader as the original's: the hash holds the file's solid bit of every power-up, pile and fire wall cell, which moves it on every map)
+    constexpr ReferenceHash kReferenceHashes[] = {{1, 0x7a96df7831c965e0ull}, {3, 0x7a96df7831c965e0ull}, {5, 0xaa55a2a4a1ec6beeull}, {8, 0xaa55a2a4a1ec6beeull}};      // (3: the bombs of a map file; TINY has none, so the match ended where it did. 5: the loader as the original's: the hash holds the file's solid bit of every power-up, pile and fire wall cell, which moves it on every map. 8: the last side standing: nothing in the reference match leaves one side with no food to score, so it ends where it did; the match that does is test_rules_last_side)
 
     TEST_CASE("RP7.3 The Reference Match Ends In The Hash That Its Rules Number Says: The Simulation Cannot Change Without kSimRules") {
         const Played p = play_scripted(tiny, 31, 1500);
@@ -1984,7 +1984,7 @@ int main(int argc, char* argv[]) {
     TEST_CASE("RP7.4 A Match Of Game Mode 187 Carries Its Mode In Head Field 17 (Written Only For A Mode That Is Not 0) And The Rules Number 7 (Since The Closed Hill; 6 Before It) In Field 16: Read Back, Written The Same, Played To The Same End; A Match Of Mode 0 Has No Field 17 And Keeps Rules 1") {
         const Played p = play_scripted(tiny, 33, 300, 0x0F, sim::StartTeams{}, false, nullptr, k187);
         ASSERT_TRUE(!p.file.empty() && p.replay.complete);
-        ASSERT_TRUE(p.replay.head.mode == k187 && p.replay.head.sim_rules == kSimRulesMode187 && kSimRulesMode187 == 7 && kSimRulesMode187Heal == 6 && kSimRules == 5);
+        ASSERT_TRUE(p.replay.head.mode == k187 && p.replay.head.sim_rules == kSimRulesMode187 && kSimRulesMode187 == 7 && kSimRulesMode187Heal == 6 && kSimRulesBeforeLastSide == 5 && kSimRules == 8);
         ASSERT_TRUE(plays_here(p.replay.head) && sim_rules_of(p.replay.head) == 7u);
         // the head: field 17 is one byte, 1, written right before field 16 (the last), which says 7
         const std::vector<HeadField> fields = fields_of(chunks_of(p.file)[0].payload);
@@ -2136,10 +2136,10 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(o.ok && o.hash == p.hash);
         }
         // the table of the numbers: what plays here, mode by mode
-        ASSERT_TRUE(sim_rules_for_mode(0) == 5 && sim_rules_for_mode(1) == 7 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 8 && sim_rules_for_mode(1) == 7 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         {
             struct Case { uint8_t mode; uint16_t rules; bool plays; };
-            for (const Case& c : {Case{0, 5, true}, Case{1, 6, true}, Case{1, 7, true}, Case{0, 6, false}, Case{1, 5, false}, Case{0, 1, false}, Case{1, 2, false}, Case{0, 3, false}, Case{1, 4, false}, Case{0, 4, false}, Case{1, 3, false}, Case{0, 7, false}, Case{1, 8, false}, Case{2, 6, false}, Case{2, 5, false}, Case{2, 3, false}, Case{2, 4, false}, Case{2, 1, false}, Case{2, 2, false}, Case{2, 7, false}, Case{0, 0, false}, Case{1, 0, false}, Case{2, 0, false}, Case{3, 0, false}, Case{255, 0, false}}) {
+            for (const Case& c : {Case{0, 5, true}, Case{0, 8, true}, Case{1, 8, false}, Case{0, 9, false}, Case{1, 6, true}, Case{1, 7, true}, Case{0, 6, false}, Case{1, 5, false}, Case{0, 1, false}, Case{1, 2, false}, Case{0, 3, false}, Case{1, 4, false}, Case{0, 4, false}, Case{1, 3, false}, Case{0, 7, false}, Case{1, 8, false}, Case{2, 6, false}, Case{2, 5, false}, Case{2, 3, false}, Case{2, 4, false}, Case{2, 1, false}, Case{2, 2, false}, Case{2, 7, false}, Case{0, 0, false}, Case{1, 0, false}, Case{2, 0, false}, Case{3, 0, false}, Case{255, 0, false}}) {
                 Header h = original.replay.head;
                 h.mode = c.mode;
                 h.sim_rules = c.rules;
@@ -2263,7 +2263,7 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(earlier.hash, old_line->hash);
         ASSERT_TRUE(earlier.hash != p.hash);
         // the original's line stays what it was, and its match ends there still (the 187 engine is not in its way)
-        ASSERT_TRUE(kReferenceHashes[0].sim_rules == 1 && kReferenceHashes[1].hash == 0x7a96df7831c965e0ull && kReferenceHashes[2].sim_rules == kSimRules && kReferenceHashes[2].hash == 0xaa55a2a4a1ec6beeull);
+        ASSERT_TRUE(kReferenceHashes[0].sim_rules == 1 && kReferenceHashes[1].hash == 0x7a96df7831c965e0ull && kReferenceHashes[2].sim_rules == kSimRulesBeforeLastSide && kReferenceHashes[2].hash == 0xaa55a2a4a1ec6beeull && kReferenceHashes[3].sim_rules == kSimRules && kReferenceHashes[3].hash == kReferenceHashes[2].hash);
         const Played original = play_scripted(tiny, 31, 1500);
         ASSERT_EQ(original.hash, 0xaa55a2a4a1ec6beeull);
     } TEST_END();

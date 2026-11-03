@@ -14,6 +14,7 @@ add_library(ants_sim STATIC
     game_strings.cpp
     start_teams.cpp
     mode_187.cpp
+    last_side.cpp
     event_queue.cpp
     order_claims.cpp
 )

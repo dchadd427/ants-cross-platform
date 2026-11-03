@@ -27,8 +27,9 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **The game type 187 has a closed hill.** In a 187 match no ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there."), an ant at 1 hit point no longer walks home, and the computer players send none of their hurt ants home. Old 187 recordings still play as they were.
+- **A match ends when one side is left and no food can score.** In the original's game, when all sides but one have no ant, egg or hatch left and no food is left on the ground or in an ant's grip, the side that is left wins, even with tied scores or 0 (the match used to play on to the clock). Power-ups and bombs are not food. No screen changes; 187 and old recordings are as they were.
 
-**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match plays differently, so a v0.13 game cannot play with a game of this release. The rules number of the game type 187 is 7 now (6 before): new matches record 7 and a recording of 6 still plays. The original's game (mode 0) is as it was: every state hash of the 540 maps of the library is unchanged.
+**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match and the end of a match in the original's game play differently, so a v0.13 game cannot play with a game of this release. The rules number is 7 now for 187 (6 before) and 8 for the original's game (5 before): new matches record them and recordings of 5 and 6 still play as they were. Every state hash of the 540 maps of the library is unchanged.
 
 ## v0.13.0 - 2026-11-02 - Home, public rooms, the games list and the chat
 
@@ -487,10 +488,10 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **The Hard computer players shove more enemies into water, bombs and fire.** An enemy ant next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over many maps they get a seventh to a quarter more kills.
-- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake, which the game used to answer with "Can't go there": about 31 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
-- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home. Where the food lies over water or behind a gate, the ants keep that work.
+- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake ("Can't go there"): about 31 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
+- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home. Food over water or behind a gate keeps them at work.
 - **The ring of fire round an enemy gate is lit only when that team has food to bank.** Hard builds and puts out its other fire walls as often as before.
-- **This is not a stronger player.** Against the old Hard player it wins as often (about 50 of 100, with four players or with two), and against Medium as often as before. An enemy beside the water within reach is still left alone about 7 times in 10 (a Hard ant only goes for one that has stood still for a second), ants stand idle a little more because they no longer run pointless trips, and on one map, Acid Blood, the new kill made it play worse until the last ants were told to stay at their work. Easy and Medium are unchanged.
+- **This is not a stronger player.** Against the old Hard player it wins as often (about 50 of 100, with four players or with two), and against Medium as often as before. An enemy beside the water within reach is still left alone about 7 times in 10, ants stand idle a little more because they no longer run pointless trips, and on one map, Acid Blood, the new kill made it play worse until the last ants were told to stay at their work. Easy and Medium are unchanged.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
 
@@ -499,7 +500,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.111 - 2026-10-23 - Map Maker: Start from a game map opens the six original maps
 
 **For players:**
-- **Map Maker (v1.5.3): "Start from a game map" now opens the six maps that came with the game.** Tiny, Small, Medium, Gauntlet, Treasure and Islands always said "The map file could not be downloaded. Check your connection and try again.", because the site had no copy of those six files to hand out (only the players' maps). It has them now. Pick one and the editor opens a copy of it under a free name, so you can edit and save it right away; the original is never changed.
+- **Map Maker (v1.5.3): "Start from a game map" now opens the six maps that came with the game.** Tiny, Small, Medium, Gauntlet, Treasure and Islands always said "The map file could not be downloaded. Check your connection and try again.", because the site had no copy of them (only the players' maps). It has them now: the editor opens a copy under a free name, to edit and save at once; the original is never changed.
 - **The message now tells the truth.** A map the site does not have says "This map is not available from the site right now." A site that answers badly says "The site could not send this map. Try again in a moment." "Check your connection" stays for a connection that really failed.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the site and the Map Maker page only).
@@ -509,9 +510,9 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
 
 **For players:**
-- **Pick up: a drag now ends when you let go.** Drag a hill, object, food pile, plant or ant (or a whole group or area) in the Map Maker and let go of the mouse or lift your finger: it is put down where the see-through copy is, in one step that one Undo takes back. Before, the copy kept following the mouse after you let go until you pressed Enter or Done.
-- **A red place keeps it in your hand.** If you let go where it cannot go (on a mushroom, over the edge, in the water), nothing is changed, the copy stays red and says why, and you can drag it on to a free place.
-- **Escape takes it back.** Escape while you drag, a touch that is cancelled, or leaving the window, puts the thing back where it was. A plain click or tap still only places the copy, and the arrow buttons, Enter and Done work as before.
+- **Pick up: a drag now ends when you let go.** Drag a hill, object, food pile, plant, ant, group or area in the Map Maker and let go: it is put down where the see-through copy is, in one step that one Undo takes back. Before, the copy followed the mouse until you pressed Enter or Done.
+- **A red place keeps it in your hand.** Let go where it cannot go (on a mushroom, over the edge, in the water) and nothing changes: the copy stays red, says why, and can be dragged on.
+- **Escape takes it back** (also a cancelled touch, or leaving the window). A plain click or tap still only places the copy; the arrow buttons, Enter and Done work as before.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.2.
 

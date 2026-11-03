@@ -388,11 +388,17 @@ int main() {
         ASSERT_EQ(r.winning_players[0], 0);
     } TEST_END();
 
-    TEST_CASE("3.4 the original's rule would not end that match: a last side with 0 points never wins; 187 ends it, 4 teams in the match, three of them gone") {
+    TEST_CASE("3.4 the original's CHECKGO alone (rules number 5) would not end that match: a last side with 0 points never wins; the last-side rule (rules number 8) and 187 end it, 4 teams in the match, three of them gone") {
         SimulationEngine plain = small_world(GameMode::HighestScore, {0, 1});
+        plain.set_last_side_rule(false);
         for (const AntSnapshot& a : ants_of(plain, 1)) plain.kill_unit(a.id);
         run_ticks(plain, 200);
         ASSERT_FALSE(plain.is_match_over());
+        SimulationEngine last_side = small_world(GameMode::HighestScore, {0, 1});         // (no food on that map: nothing is left to score)
+        for (const AntSnapshot& a : ants_of(last_side, 1)) last_side.kill_unit(a.id);
+        run_ticks(last_side, 200);
+        ASSERT_TRUE(last_side.is_match_over());
+        ASSERT_EQ(last_side.get_world_state().match_result.standing, 0);
         SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2, 3});
         for (int t : {1, 2}) for (const AntSnapshot& a : ants_of(e, static_cast<uint8_t>(t))) e.kill_unit(a.id);
         run_ticks(e, 40);

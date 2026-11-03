@@ -453,7 +453,7 @@ bool SimulationEngineImpl::checkgo_end_rules() const {
         if ((roster_mask_ & (1u << local)) == 0 || team_dropped(local)) continue;     // a dropped team's machine is gone
         if (checkgo_ends_for(local)) return true;
     }
-    return false;
+    return last_side_ends() && last_side_decides();         // (the rules number 8: the one side that is left wins when nothing is left to score; last_side.cpp)
 }
 
 bool SimulationEngineImpl::drop_leaves_winner() const {
@@ -485,10 +485,10 @@ MatchResult SimulationEngineImpl::make_match_result() const {
         for (const auto& a : ants_) {
             if (a != nullptr && !a->removed && a->player_id < MAX_PLAYERS) ++result.ants_left[a->player_id];
         }
-        if (match_state_ == MatchState::GameOver) {
-            result.standing = last_standing_187();
-            result.decide_winners();                     // the cues follow the rows, which follow the team that is left
-        }
+    }
+    if (match_state_ == MatchState::GameOver && side_left_wins()) {
+        result.standing = last_standing();               // the side that is left goes first, whatever the scores are (187; the original's game under the rules number 8, last_side.cpp)
+        result.decide_winners();                         // the cues follow the rows, which follow the team that is left
     }
     return result;
 }
@@ -929,7 +929,7 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
 
 void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->game_mode_ = mode;
-    impl_->hill_open_187_ = false;                  // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187)
+    impl_->hill_open_187_ = false; impl_->last_side_rule_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_last_side_rule)
     impl_->world_state_dirty_ = true;
 }
 

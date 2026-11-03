@@ -105,16 +105,16 @@ int main() {
     const Tiny tiny;
     if (!tiny.ok) std::cout << "  (cannot load TINY)\n";
 
-    TEST_CASE("RP12.1 This build plays 5 for the original's game and 6 and 7 for 187, nothing else; a 187 match is recorded under 7; a head may name 6 or 7 only with the mode, and a refusal names all three numbers") {
-        ASSERT_TRUE(kSimRules == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187 == 7);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 5 && sim_rules_for_mode(1) == 7 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+    TEST_CASE("RP12.1 This build plays 5 and 8 for the original's game and 6 and 7 for 187, nothing else; a 187 match is recorded under 7; a head may name 6 or 7 only with the mode, and a refusal names all four numbers") {
+        ASSERT_TRUE(kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187 == 7 && kSimRules == 8);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 8 && sim_rules_for_mode(1) == 7 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         for (uint16_t rules = 0; rules < 12; ++rules) {
-            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5);
+            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8);
             ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6 and 7"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7 and 8"));
         // heads: the mode and the number go together
         Header head;
         head.map_name = "TINY.LVL";
@@ -143,13 +143,16 @@ int main() {
             ASSERT_TRUE(encode(r, error).empty() && !plays_here(h));                         // (the mode with the original's number: a build that skips field 17 would play it as the original's game)
             h.sim_rules = 8;
             r.head = h;
+            ASSERT_TRUE(encode(r, error).empty() && !plays_here(h));                         // (the original's number 8 with the mode, like 5)
+            h.sim_rules = 9;
+            r.head = h;
             ASSERT_FALSE(encode(r, error).empty());                                          // (a number from a newer build is a file; it is just not played here)
             ASSERT_FALSE(plays_here(h));
             h.sim_rules = 4;
             ASSERT_FALSE(plays_here(h));
         }
-        // a match that a Recorder starts is recorded under the number of the rules it is played by: a head that says 5 or 6 for 187 gets 7
-        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}}) {
+        // a match that a Recorder starts is recorded under the number of the rules it is played by: a head that says 5, 6 or 8 for 187 gets 7
+        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = said;
@@ -158,8 +161,8 @@ int main() {
         }
         Header refused = head;
         refused.set_mode(k187);
-        refused.sim_rules = 8;
-        ASSERT_TRUE(rules_refusal(refused).find("simulation rules 5, 6 and 7") != std::string::npos);
+        refused.sim_rules = 9;
+        ASSERT_TRUE(rules_refusal(refused).find("simulation rules 5, 6, 7 and 8") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP12.2 An old 187 recording (rules number 6, made by the build before the closed hill) plays to every hash it holds and to its final hash, byte for byte, and its play uses the hill; the same file under the number 7 is another match") {
@@ -188,11 +191,12 @@ int main() {
         const Outcome closed = play(with_rules(old, 7), tiny.level);
         ASSERT_FALSE(closed.ok);
         ASSERT_TRUE(closed.first_bad_turn > 0 && closed.first_bad_turn < kFixtureTurns);                    // (it is named: the first hash that differs)
-        // and under the number 5, or as the original's game, it is not played at all
+        // and under the number 5 (a number of the original's game, with the mode of 187) it is not played at all, and as the original's game it is another match
         const Outcome five = play(with_rules(old, 5), tiny.level);
         ASSERT_FALSE(five.ran);
         Replay as_original = old;
         as_original.head.set_mode(0);
+        as_original.head.sim_rules = kSimRulesBeforeLastSide;                              // (the mode taken away and the number of the original's game before the rule: it plays, as another match)
         ASSERT_FALSE(play(as_original, tiny.level).ok);
     } TEST_END();
 
@@ -249,12 +253,12 @@ int main() {
         ASSERT_FALSE(open.ok);                                                               // (the hill that works is another match)
     } TEST_END();
 
-    TEST_CASE("RP12.4 The original's game is what it was: the number 5, a head with no field 17 and no 187 number, and a mode-0 file that names 6 or 7 is refused") {
+    TEST_CASE("RP12.4 The original's game is what it was: a head with no field 17 and no 187 number (its number is 8 now, test_rules_last_side), and a mode-0 file that names 6 or 7 is refused") {
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
         Recorder rec(head);
-        ASSERT_EQ(rec.replay().head.sim_rules, 5);
+        ASSERT_EQ(rec.replay().head.sim_rules, 8);
         ASSERT_EQ(rec.replay().head.mode, 0);
         ASSERT_TRUE(plays_here(rec.replay().head));
         for (const uint16_t rules : {uint16_t{6}, uint16_t{7}}) {

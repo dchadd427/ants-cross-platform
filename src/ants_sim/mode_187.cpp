@@ -1,5 +1,5 @@
 // The rules of the game type 187 that need a function of their own (include/ants_sim/game_mode.hpp, docs/GAMEPLAY.md "187"):
-// the end rule, the side that stands last, and the line "<Name> (<Color>) is out of ants!".
+// the closed hill, the end rule, and the line "<Name> (<Color>) is out of ants!" (the side that stands last is last_side.cpp's).
 #include "ants_sim/game_strings.hpp"
 #include "sim_engine_impl.hpp"
 
@@ -57,18 +57,6 @@ void SimulationEngineImpl::announce_out_of_ants_187() {
         post_news_flash(strings::kOutOfAnts, player_display_name(k), player_color_name(k));
         audio_queue_.push_back(AudioEvent{SoundID::PlayerDropOut, 0, 0, 1, 255});
     }
-}
-
-uint8_t SimulationEngineImpl::last_standing_187() const {
-    uint32_t in_match = 0;
-    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
-        if ((roster_mask_ & (1u << k)) != 0) ++in_match;
-    }
-    if (in_match < 2 || alive_sides() != 1) return PLAYER_NEUTRAL;
-    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
-        if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;
-    }
-    return PLAYER_NEUTRAL;
 }
 
 }  // namespace ants::sim
