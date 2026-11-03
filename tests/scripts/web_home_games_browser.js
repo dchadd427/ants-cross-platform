@@ -5,6 +5,8 @@
 //      the map, the seats), joins it from the list (a second client that only joins; the page's own room goes when the new one welcomes it), and the first sees the guest in its room;
 //   2. what a screen shows: with --shots DIR, pictures of Home (the count on the Games button), the Games list (rows and the empty state), the Room (public and private, a guest's chip), the card of the question and the notices,
 //      at 390 x 844, 844 x 390 and 1280 x 800 (the sizes of the approved pictures), named games4_*.png, and a few measurements (every target at least 44 px, nothing wider than the window).
+//   0. the Yard's stand-in: a page of a build with the site label "staging" (the build argument ANTS_SITE_LABEL, which the Dockerfile stamps into the title and the footer) has it (the card, the tag, five ants, the size that
+//      it prints); a page with no label (production) has the bar over a plain sandy field, #yard empty, and the box of everything is the same either way; at 1280 x 800, 900 x 700, 390 x 844, 844 x 390 and 568 x 320.
 // usage: node web_home_games_browser.js --server PATH/ants_server --maps PATH/Original-Ants/Maps [--shots DIR]     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
@@ -59,7 +61,8 @@ async function startServer() {
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ttf': 'font/ttf', '.svg': 'image/svg+xml', '.json': 'application/json', '.wasm': 'application/wasm' };
 function standIn(server, o) {
     o = o || {};
-    const stamp = (text) => text.replace(/@@SITE_TITLE@@/g, '').replace(/@@SITE_FOOTER@@/g, '').replace(/@@GAME_VERSION@@/g, '0.13.0').replace(/@@BUILD_ID@@/g, 'standin').replace(/@@BUILD_DATE@@/g, '2026-01-01 00:00').replace(/@@BUILD_TIMESTAMP@@/g, '2026-01-01');
+    const label = o.label || '';       // (o.label: the build argument ANTS_SITE_LABEL, put into the title and the footer as the Dockerfile's step does; none is the production site)
+    const stamp = (text) => text.replace(/@@SITE_TITLE@@/g, label ? ' (' + label + ')' : '').replace(/@@SITE_FOOTER@@/g, label ? '<strong id="site-label">' + label + '</strong>&#8197;&bull;&#8197;' : '').replace(/@@GAME_VERSION@@/g, '0.13.0').replace(/@@BUILD_ID@@/g, 'standin').replace(/@@BUILD_DATE@@/g, '2026-01-01 00:00').replace(/@@BUILD_TIMESTAMP@@/g, '2026-01-01');
     const proxy = (req, res, port, target) => {
         const up = http.request({ host: '127.0.0.1', port, path: target, method: req.method, headers: { host: '127.0.0.1' } }, (r) => { res.writeHead(r.statusCode, { 'content-type': r.headers['content-type'] || 'application/json', 'cache-control': 'no-store' }); r.pipe(res); });
         up.on('error', () => { res.writeHead(503, { 'content-type': 'application/json' }); res.end('{"error":"lobbies_off"}'); });
@@ -126,6 +129,31 @@ async function flows() {
     const emptySite = await standIn(server, { lobbies: () => ({ format: 1, lobbies: [], count: 0 }) });
     const offSite = await standIn(server, { lobbies: () => null });
     try {
+        // ---- 0. the Yard's stand-in is the test site's: the page of a build with the label "staging" has it, the page of a build with none (production) has the bar over a plain sandy field -------------------------------
+        {
+            const staging = await standIn(server, { label: 'staging' });
+            const look = (page) => page.evaluate(() => {
+                const yard = document.getElementById('yard'), bar = document.querySelector('.hbar'), r = (e) => { const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
+                const cs = getComputedStyle(yard), mid = document.elementFromPoint(Math.round(window.innerWidth / 2), Math.round(bar.getBoundingClientRect().bottom) + 30);
+                return { title: document.title, label: !!document.getElementById('site-label'), yard: r(yard), bar: r(bar), kids: yard.children.length, text: yard.textContent, ants: document.querySelectorAll('.yant, .ytag, .ylabel, .yres').length, standin: yard.classList.contains('standin'),
+                    image: cs.backgroundImage, edge: getComputedStyle(yard, '::before').content, mid: mid && (mid.id || mid.className), size: /reserved: (\d+) x (\d+) px/.exec(yard.textContent), host: r(document.getElementById('home')), errors: 0 };
+            });
+            for (const size of [['desktop', 1280, 800], ['tablet', 900, 700], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
+                const plain = await newPage(browser, live, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
+                await plain.waitForSelector('#yard'); await test.waitForSelector('#yard'); await test.waitForFunction(() => /reserved: \d+/.test(document.getElementById('yard').textContent));
+                const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')';
+                check('production, ' + at + ': no site label, and Home is the bar over a plain field: #yard is empty (no card, no tag, no ants, no words, no size), without the stand-in class, a gradient and no picture, no dashed edge, and the point under the bar is the field',
+                    !a.label && a.title.indexOf('staging') === -1 && a.kids === 0 && a.text === '' && a.ants === 0 && !a.standin && /^radial-gradient/.test(a.image) && a.image.indexOf('url(') === -1 && (a.edge === 'none' || a.edge === 'normal') && a.mid === 'yard', JSON.stringify(a));
+                check('the test site, ' + at + ': the label "staging" is in the title and the footer, and the stand-in is there: the card, the tag, five ants, the picture, the dashed edge, and the size that it prints is the Yard\'s own',
+                    b.label && b.title.indexOf('(staging)') !== -1 && b.standin && b.ants === 8 && b.text.indexOf('The Yard will live here') !== -1 && b.text.indexOf('Your 3 ants') !== -1 && b.image.indexOf('url(') !== -1 && b.edge === '""' && !!b.size
+                    && Math.abs(+b.size[1] - b.host[2]) <= 1 && Math.abs(+b.size[2] - (b.host[3] - b.bar[3])) <= 1 && Math.abs(b.yard[3] - (b.host[3] - b.bar[3])) <= 25, JSON.stringify(b));
+                check('... and the page is the same size with and without it: the bar, the Yard\'s box and Home\'s box are the same ' + at, JSON.stringify([a.bar, a.yard, a.host]) === JSON.stringify([b.bar, b.yard, b.host]), JSON.stringify([a.bar, a.yard, a.host]) + ' / ' + JSON.stringify([b.bar, b.yard, b.host]));
+                check('... and neither page said anything wrong (no error of the page)', plain.errors.length === 0 && test.errors.length === 0, plain.errors.concat(test.errors).join('; '));
+                await plain.context().close(); await test.context().close();
+            }
+            staging.close();
+        }
+
         // ---- 1. two contexts against the real server --------------------------------------------------------------------------------------------------------------------------------------------
         const maple = await newPage(browser, live, 'Maple', SIZES[2]);
         await lit(maple);

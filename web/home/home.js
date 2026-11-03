@@ -29,7 +29,7 @@
     var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog.html'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal.html']];
     var YARD_ANTS = ['', '', '', 'red', 'blue'];                  // the stand-in's five ants (their places are the style's): the first three are yours
 
-    // ---- the pure parts -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // ---- the pure parts ----
     // "3/4": the colors that play (a person or a computer player) of the colors that are not out of the match, from the page's model; null before the room has told its plan
     function countOf(model) {
         if (!model || !model.slots || model.slots.length !== 4) return null;
@@ -48,9 +48,10 @@
     }
     // The screen that a page opens on: a link (or a test room) opens the Room; a reload keeps the screen that the address names; else Home
     function firstScreen(link, hasSeat, hash) { return link ? 'room' : hasSeat && hash === HASH ? 'room' : 'home'; }
+    function labelled(doc) { try { return !!doc.getElementById('site-label'); } catch (e) { return false; } }      // (the footer's site label, ANTS_SITE_LABEL)
     function reservedText(width, height) { return 'reserved: ' + Math.round(width) + ' x ' + Math.round(height) + ' px (everything under the top bar)'; }
 
-    // ---- the screens -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // ---- the screens ----
     // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make() (a room of the page's own), leave(), how(), stalled(words) (optional: the hand-off did not come in 15 s, and again after a minute) } })
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
@@ -95,16 +96,18 @@
         var menuHome = menuButton();
         right.appendChild(login); right.appendChild(menuHome);
         [logo(), quickHost, quickJoin, mine, gamesBtn, right].forEach(function (n) { bar.appendChild(n); });
-        var yard = el('main', 'yard'); yard.id = 'yard';
-        var label = el('div', 'ylabel'), reserved = el('p', 'yres');
-        label.appendChild(el('h2', 'ytitle', TEXT.yardTitle)); label.appendChild(el('p', 'yline', TEXT.yardLine)); label.appendChild(reserved);
-        yard.appendChild(label);
-        var tag = el('span', 'ytag', TEXT.yourAnts); yard.appendChild(tag);
-        YARD_ANTS.forEach(function (team, i) {
-            var spot = el('div', 'yant y' + (i + 1)), ant = el('span', 'ant' + (team ? ' ant-' + team : ''));
-            spot.setAttribute('aria-hidden', 'true');
-            spot.appendChild(ant); yard.appendChild(spot);
-        });
+        var standIn = labelled(doc), yard = el('main', standIn ? 'yard standin' : 'yard'), reserved = null; yard.id = 'yard';       // (the stand-in: a labelled site only)
+        if (standIn) {
+            var label = el('div', 'ylabel'); reserved = el('p', 'yres');
+            label.appendChild(el('h2', 'ytitle', TEXT.yardTitle)); label.appendChild(el('p', 'yline', TEXT.yardLine)); label.appendChild(reserved);
+            yard.appendChild(label);
+            yard.appendChild(el('span', 'ytag', TEXT.yourAnts));
+            YARD_ANTS.forEach(function (team, i) {
+                var spot = el('div', 'yant y' + (i + 1)), ant = el('span', 'ant' + (team ? ' ant-' + team : ''));
+                spot.setAttribute('aria-hidden', 'true');
+                spot.appendChild(ant); yard.appendChild(spot);
+            });
+        }
         var opening = el('div', 'hopen', TEXT.opening); opening.setAttribute('role', 'status'); opening.setAttribute('aria-live', 'polite'); opening.hidden = true;
         host.appendChild(bar); host.appendChild(yard); host.appendChild(opening);
 
@@ -118,7 +121,7 @@
         [homeBtn, logo(), el('span', 'grow'), leave, menuRoom].forEach(function (n) { rbar.appendChild(n); });
         env.lobby.parentNode.insertBefore(rbar, env.lobby);
 
-        // ---- the Menu: one box for both bars --------------------------------------------------------------------------------------------------------------------------------------------------------
+        // ---- the Menu: one box for both bars ----
         function link(text, href, cls) {
             var a = el('a', cls, text);
             a.href = href;
@@ -181,7 +184,7 @@
             if (e && e.key === 'Escape' && menuOpen) { var back = menuFor; closeMenu(); if (back && back.focus) back.focus(); }
         });
 
-        // ---- the screens and the address --------------------------------------------------------------------------------------------------------------------------------------------------------
+        // ---- the screens and the address ----
         function path() { return win.location.pathname.replace(/^\/+/, '/'); }
         function stateOf(name) { var state = {}; state[STATE_KEY] = name; return state; }
         // A button makes a new history entry for the screen that it goes to ("/" for Home, "/#room" for the Room), so that Back comes back. The entry that the page opened on has no mark of ours (a link
@@ -195,7 +198,7 @@
         }
         function fit() {                                    // what the Yard has: the page under the bar, as the picture prints it
             var r = host.getBoundingClientRect(), b = bar.getBoundingClientRect();
-            if (r.width > 0 && r.height > 0) reserved.textContent = reservedText(r.width, r.height - b.height);
+            if (reserved && r.width > 0 && r.height > 0) reserved.textContent = reservedText(r.width, r.height - b.height);
         }
         // how: 'push' (a button: a new entry), 'pop' (the browser moved: no entry), 'first' (the page's first look: none either)
         function show(name, how) {

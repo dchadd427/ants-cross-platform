@@ -91,10 +91,9 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const logo = env.$('home').findAll((e) => e.tagName === 'img')[0];
     check('the logo is the page\'s own picture, at the size of its file, with its words', logo.src === 'front/logo.png' && logo.getAttribute('width') === '581' && logo.getAttribute('height') === '218' && logo.alt === 'Ants!');
     const yard = env.$('home').children[1];
-    check('the Yard\'s container is #yard, and it holds the stand-in: the label, the tag and five ants (three of them yours, the others a red and a blue), none of them read out', yard.id === 'yard' && yard.findAll((e) => classes(e).indexOf('yant') !== -1).length === 5
-          && yard.findAll((e) => classes(e).indexOf('ytag') !== -1)[0].textContent === 'Your 3 ants' && yard.findAll((e) => classes(e).indexOf('ant-red') !== -1).length === 1 && yard.findAll((e) => classes(e).indexOf('ant-blue') !== -1).length === 1
-          && yard.findAll((e) => classes(e).indexOf('yant') !== -1).every((a) => a.getAttribute('aria-hidden') === 'true'));
-    check('the label says that the Yard will live here and prints the size that it has', /The Yard will live here/.test(yard.textContent) && /reserved: \d+ x \d+ px \(everything under the top bar\)/.test(yard.textContent));
+    // the site label (the Dockerfile's step, ANTS_SITE_LABEL: "staging" on the test site, none on production) decides whether the Yard shows its stand-in: here no label is stamped, as on production
+    check('the Yard\'s container is #yard, and with no site label it is the plain field: no label card, no tag, no ants, no words, nothing that prints a size, and no stand-in class', yard.id === 'yard' && classes(yard).join() === 'yard'
+          && yard.children.length === 0 && yard.textContent === '' && !/Yard will live|reserved: /.test(env.dumpAll()));
     const opening = env.$('home').children[2];
     check('the card that says that the game is opening is there and not shown, as a status', opening.hidden === true && opening.getAttribute('role') === 'status' && opening.textContent === 'Opening the game…');
     // the Room's slim bar: Home, the logo, Leave room, Menu, before the page's own room card
@@ -102,6 +101,21 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     same('the Room has a slim bar before its card: Home, the logo, a spacer, Leave room, Menu', rbar.children.map((c) => c.tagName + ':' + (c.textContent || c.getAttribute('aria-label') || classes(c)[0])), ['button:‹Home', 'h1:hbrand', 'span:grow', 'button:Leave room', 'button:Menu']);
     check('... and the Menu button has its name and says whether it is open (it promises no other kind of popup)', rbar.children[4].getAttribute('aria-label') === 'Menu' && rbar.children[4].getAttribute('aria-haspopup') === null && rbar.children[4].getAttribute('aria-expanded') === 'false');
     check('each bar has the page\'s heading, an h1 around the logo (the screen that shows has one), and the chevron of the Home button is not read out', [bar, rbar].every((b) => b.children[b === bar ? 0 : 1].tagName === 'h1' && b.children[b === bar ? 0 : 1].children[0].tagName === 'img') && rbar.children[0].children[0].getAttribute('aria-hidden') === 'true');
+}
+{   // a page with a site label in its footer (the test site's build: ANTS_SITE_LABEL=staging) shows the Yard's stand-in; a build with no label (production, a local build) does not
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, label: 'staging' });
+    const yard = env.$('home').children[1];
+    same('with the site label "staging" the order of Home is the same: the bar, the Yard, the opening card', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#yard', 'div#hopen']);
+    check('the Yard\'s container is #yard and it holds the stand-in: the label, the tag and five ants (three of them yours, the others a red and a blue), none of them read out', yard.id === 'yard' && classes(yard).join() === 'yard,standin' && yard.findAll((e) => classes(e).indexOf('yant') !== -1).length === 5
+          && yard.findAll((e) => classes(e).indexOf('ytag') !== -1)[0].textContent === 'Your 3 ants' && yard.findAll((e) => classes(e).indexOf('ant-red') !== -1).length === 1 && yard.findAll((e) => classes(e).indexOf('ant-blue') !== -1).length === 1
+          && yard.findAll((e) => classes(e).indexOf('yant') !== -1).every((a) => a.getAttribute('aria-hidden') === 'true'));
+    check('the label says that the Yard will live here and prints the size that it has', /The Yard will live here/.test(yard.textContent) && /reserved: \d+ x \d+ px \(everything under the top bar\)/.test(yard.textContent));
+    env.home('mine').click(); env.roomBar('rhome').click();
+    check('... and Home -> the Room -> Home keeps it as it is (the size is printed again, no second stand-in)', env.screen() === 'home' && yard.findAll((e) => classes(e).indexOf('yant') !== -1).length === 5 && yard.findAll((e) => classes(e).indexOf('ylabel') !== -1).length === 1);
+    for (const name of ['x', 'test-2']) {         // (a label is a label: whatever the build named the site)
+        const other = runLobby('', {}, { stayHome: true, label: name });
+        check('any label shows the stand-in (' + name + ')', classes(other.$('home').children[1]).indexOf('standin') !== -1);
+    }
 }
 {   // without the script of Home the page cannot do anything, and says so (as for any of its scripts)
     const env = runLobby('', {}, { noHome: true });
