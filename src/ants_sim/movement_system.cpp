@@ -1,5 +1,6 @@
 // Original ant movement system: exact ports of the Ants.exe locomotion, order, path-manager delivery
-// and tile-blocking code. Function addresses refer to Original-Ants/Ants.exe (image base 0x01000000); see docs/GAME_REVERSE_ENGINEERING.md, "Movement ground truth", for the verified pseudocode.
+// and tile-blocking code. Function addresses refer to Original-Ants/Ants.exe (image base 0x01000000);
+// see docs/GAME_REVERSE_ENGINEERING.md, "Movement ground truth", for the verified pseudocode.
 //
 // Mapping of the original multiplayer model onto the remake: in Ants.exe each machine makes decisions
 // only for its own team's ants ("IsLocal") and broadcasts the results. The remake has one authoritative
@@ -1366,8 +1367,7 @@ bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd) 
 // FUN_0101fc50: snap, idle, classify, adjust the goal and queue an asynchronous path request.
 bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool special) {
     if (user_cmd && !can_take_user_order(a)) return false;
-    occ_refresh_for_order();
-    if (hill_goal_refused(a, t)) return false;     // 187 now: no ant enters its hill, and a raid would take kills that nobody could bring home
+    occ_refresh_for_order(); if (hill_goal_refused(a, t)) return false;     // 187 now: no ant enters its hill, and a raid would take kills that nobody could bring home
     // Anthill clicked: own hill -> entrance; enemy hill -> raid tile for thieves, otherwise stop.
     for (const auto& ah : grid_.anthills()) {
         const int32_t bx = static_cast<int32_t>(ah.x);
