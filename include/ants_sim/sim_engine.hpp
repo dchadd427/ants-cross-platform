@@ -499,6 +499,13 @@ public:
     /// the match when one side is left (docs/GAMEPLAY.md, "187"). init() keeps it, so an engine that is re-initialised plays the same rules again.
     void set_game_mode(GameMode mode);
     GameMode game_mode() const noexcept;
+    /// 187 only, the rules number of the recording that is being played (replay::kSimRulesMode187Heal): with `open` set the hill works as the original's does in 187 matches recorded before the rule below, ants
+    /// enter it and are healed, an ant left with one hit point walks home by itself and the waiting ring queues; the default (false) is the rule of 187 now (docs/GAMEPLAY.md, "187"): an ant cannot enter
+    /// its hill at all. An order to enter is refused with "Can't go there.", the 1 hp retreat and the waiting ring are off, and nothing heals. It is chosen after set_game_mode (which sets it back to the rule of 187 now, so that a program that played an old recording and then starts a match plays by the rules of a match) and before init(), which keeps it;
+    /// the original's game (mode 0) never reads it. A match that is played now never sets it: only the player of an old recording does.
+    void set_hill_open_187(bool open);
+    /// Whether an ant of this match can enter its own hill: always in the original's game, in 187 only while the rule of the old recordings is set (set_hill_open_187)
+    bool own_hill_enterable() const noexcept;
 
     // Fog of War
     void set_fog_of_war_enabled(bool enabled);

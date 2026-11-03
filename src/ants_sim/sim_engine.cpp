@@ -541,7 +541,7 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::ReturnToBase: {
             unit->ability_target = TileCoord{-1, -1};
             join_base_queue(order.ant_id);
-            return true;
+            return !impl_->hill_closed();                       // (187 now: the order was refused)
         }
         case OrderType::Attack:
             unit->ability_target = TileCoord{-1, -1};
@@ -929,6 +929,7 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
 
 void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->game_mode_ = mode;
+    impl_->hill_open_187_ = false;                  // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187)
     impl_->world_state_dirty_ = true;
 }
 
@@ -1185,7 +1186,7 @@ bool SimulationEngine::is_special_target_valid(AntType type, TileCoord tile, boo
             for (const auto& ah : impl.grid_.anthills()) {
                 if (tile.x >= static_cast<int32_t>(ah.x) && tile.x <= static_cast<int32_t>(ah.x) + 3 &&
                     tile.y >= static_cast<int32_t>(ah.y) && tile.y <= static_cast<int32_t>(ah.y) + 3) {
-                    return ah.team_id != own_team;
+                    return ah.team_id != own_team && !impl.hill_closed();      // (187 now: no raid, a thief's click on a hill is refused)
                 }
             }
             return false;

@@ -434,6 +434,21 @@ target_link_libraries(test_game_mode PRIVATE ants_test_paths)
 
 add_test(NAME test_game_mode COMMAND test_game_mode)
 
+# The closed hill of 187: no ant enters its hill, the order is refused, no heal, no 1 hp retreat, the earlier rule beside it
+add_executable(test_closed_hill_187
+    test_closed_hill_187.cpp
+)
+
+target_link_libraries(test_closed_hill_187 PRIVATE
+    ants_sim
+)
+
+target_include_directories(test_closed_hill_187 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_closed_hill_187 COMMAND test_closed_hill_187)
+
 # The line "<Name> (<Color>) is out of ants!" and its cue (187), the engine copy and the state hash
 add_executable(test_out_of_ants
     test_out_of_ants.cpp

@@ -5,6 +5,32 @@
 
 namespace ants::sim {
 
+// The closed hill (docs/GAMEPLAY.md, "187"): no ant enters its hill. `hill_closed()` (sim_engine_impl.hpp) is the one question; the places that ask it are go_to (through hill_goal_refused below),
+// low_hp_check, anthillq_run, predict_order_ack and is_special_target_valid. set_hill_open_187 is the one way to play a 187 match of the earlier rules (a recording of the rules number 6).
+void SimulationEngine::set_hill_open_187(bool open) {
+    impl_->hill_open_187_ = open;
+    impl_->world_state_dirty_ = true;
+}
+
+bool SimulationEngine::own_hill_enterable() const noexcept {
+    return !impl_->hill_closed();
+}
+
+// Whether the goal `t` of an order of `a` is a hill that the ant may not go to now (its own, or an enemy's raid goal of a thief), and if so the refusal: the way a goal that no walk reaches is refused
+// (deliver_path), "Can't go there." and the can't-go clip, the ant stopped where it stands. An enemy hill clicked by a worker is stopped silently as it always was (go_to).
+bool SimulationEngineImpl::hill_goal_refused(AntUnit& a, TileCoord t) {
+    if (!hill_closed()) return false;
+    for (const auto& ah : grid_.anthills()) {
+        if (t.x < static_cast<int32_t>(ah.x) || t.x > static_cast<int32_t>(ah.x) + 3 || t.y < static_cast<int32_t>(ah.y) || t.y > static_cast<int32_t>(ah.y) + 3) continue;
+        if (ah.team_id != a.player_id && a.type != AntType::Thief) return false;       // (go_to's own rule: only a thief goes to an enemy hill, and 187 now has no raid)
+        stop_sync(a);
+        enter_cant_go(a);
+        post_news(a.player_id, strings::kCantGoThere);
+        return true;
+    }
+    return false;
+}
+
 bool SimulationEngineImpl::end_rule_187() const {
     uint32_t in_match = 0;
     for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {

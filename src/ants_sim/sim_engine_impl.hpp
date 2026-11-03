@@ -96,6 +96,9 @@ public:
     /// the engine.
     uint8_t out_of_ants_told_{0};
     GameMode game_mode_{GameMode::HighestScore};   // the rules of the match (set before init, kept by it)
+    bool hill_open_187_{false};             // 187 only: the rules of the recordings before the closed hill (set_hill_open_187); the original's game never reads it
+    /// 187 with the hill closed (the rule of 187 now): no ant enters its hill, so nothing heals, an ant at 1 hp does not retreat and the waiting ring is idle
+    bool hill_closed() const noexcept { return game_mode_ == GameMode::Kills187 && !hill_open_187_; }
     uint16_t quitter_{NO_QUITTER};          // the team whose quit (FUN_0101453f, one other side left) ended the match: the word of the game-over message
 
     uint64_t current_tick_{0};
@@ -591,6 +594,7 @@ public:
     // hill, hatch and raid actions (action_system.cpp)
     bool action_cleanup(AntUnit& a, uint8_t old_action, uint8_t new_action);   // SetAction old-action cleanup (table 0x101b48f)
     void enter_hill(AntUnit& a);                       // message 7 handler FUN_01021494
+    bool hill_goal_refused(AntUnit& a, TileCoord t);   // 187 now (hill_closed): an order onto a hill is refused with "Can't go there." (mode_187.cpp); true when it was
     void enter_clip_end(AntUnit& a);                   // step callback, actions 2 / 0x14, last frame
     void cleanup_enter(AntUnit& a);                    // FUN_0101e165: deposit and heal
     bool raid_arrive(AntUnit& a, StepEvt& e);          // FUN_0101ccaf case 0xb (true: the raid started)
