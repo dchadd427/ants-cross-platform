@@ -129,29 +129,60 @@ async function flows() {
     const emptySite = await standIn(server, { lobbies: () => ({ format: 1, lobbies: [], count: 0 }) });
     const offSite = await standIn(server, { lobbies: () => null });
     try {
-        // ---- 0. the Yard's stand-in is the test site's: the page of a build with the label "staging" has it, the page of a build with none (production) has the bar over a plain sandy field -------------------------------
+        // ---- 0. the Yard: the test site (the label "staging") has the stand-in and the Games popover; the site with no label (production) has the Games list docked in the Yard, always there --------------------------
         {
-            const staging = await standIn(server, { label: 'staging' });
+            const staging = await standIn(server, { label: 'staging', lobbies: FIVE });
+            const prod = await standIn(server, { lobbies: FIVE });
             const look = (page) => page.evaluate(() => {
-                const yard = document.getElementById('yard'), bar = document.querySelector('.hbar'), r = (e) => { const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
-                const cs = getComputedStyle(yard), mid = document.elementFromPoint(Math.round(window.innerWidth / 2), Math.round(bar.getBoundingClientRect().bottom) + 30);
-                return { title: document.title, label: !!document.getElementById('site-label'), yard: r(yard), bar: r(bar), kids: yard.children.length, text: yard.textContent, ants: document.querySelectorAll('.yant, .ytag, .ylabel, .yres').length, standin: yard.classList.contains('standin'),
-                    image: cs.backgroundImage, edge: getComputedStyle(yard, '::before').content, mid: mid && (mid.id || mid.className), size: /reserved: (\d+) x (\d+) px/.exec(yard.textContent), host: r(document.getElementById('home')), errors: 0 };
+                const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
+                const yard = document.getElementById('yard'), bar = document.querySelector('.hbar'), pop = document.querySelector('.gpop'), chat = document.querySelector('.gc'), cs = getComputedStyle(yard);
+                const covered = [...document.querySelectorAll('.gpop .gjoin, .gpop .gcode input')].filter((b) => {          // (a button that shows in the list's own window, and is under something else: the chat panel or its strip)
+                    const p = pop.getBoundingClientRect(), q = b.getBoundingClientRect(); if (q.top < p.top || q.bottom > p.bottom) return false;
+                    const top = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(top === b || b.contains(top));
+                }).length;
+                return { title: document.title, label: !!document.getElementById('site-label'), yard: r(yard), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), popIn: !!pop && pop.parentNode === yard, popShown: !!pop && !pop.hidden, role: pop && pop.getAttribute('role'),
+                    stand: yard.querySelectorAll('.ylabel, .ytag, .yant, .yres').length, standin: yard.classList.contains('standin'), text: yard.textContent, image: cs.backgroundImage, edge: getComputedStyle(yard, '::before').content, covered,
+                    rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, size: /reserved: (\d+) x (\d+) px/.exec(yard.textContent), hasPopup: document.querySelector('.hchip.games').getAttribute('aria-haspopup'),
+                    wide: document.documentElement.scrollWidth <= window.innerWidth };
             });
-            for (const size of [['desktop', 1280, 800], ['tablet', 900, 700], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
-                const plain = await newPage(browser, live, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
-                await plain.waitForSelector('#yard'); await test.waitForSelector('#yard'); await test.waitForFunction(() => /reserved: \d+/.test(document.getElementById('yard').textContent));
+            for (const size of [['desktop', 1280, 800], ['tablet', 900, 700], ['narrow tablet', 768, 1024], ['small window', 800, 600], ['stacked', 760, 700], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
+                const plain = await newPage(browser, prod, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
+                await plain.waitForSelector('.gpop .gitem'); await plain.waitForSelector('.gc'); await test.waitForFunction(() => /reserved: \d+/.test(document.getElementById('yard').textContent)); await test.waitForSelector('.gc'); await sleep(300);
                 const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')';
-                check('production, ' + at + ': no site label, and Home is the bar over a plain field: #yard is empty (no card, no tag, no ants, no words, no size), without the stand-in class, a gradient and no picture, no dashed edge, and the point under the bar is the field',
-                    !a.label && a.title.indexOf('staging') === -1 && a.kids === 0 && a.text === '' && a.ants === 0 && !a.standin && /^radial-gradient/.test(a.image) && a.image.indexOf('url(') === -1 && (a.edge === 'none' || a.edge === 'normal') && a.mid === 'yard', JSON.stringify(a));
-                check('the test site, ' + at + ': the label "staging" is in the title and the footer, and the stand-in is there: the card, the tag, five ants, the picture, the dashed edge, and the size that it prints is the Yard\'s own',
-                    b.label && b.title.indexOf('(staging)') !== -1 && b.standin && b.ants === 8 && b.text.indexOf('The Yard will live here') !== -1 && b.text.indexOf('Your 3 ants') !== -1 && b.image.indexOf('url(') !== -1 && b.edge === '""' && !!b.size
-                    && Math.abs(+b.size[1] - b.host[2]) <= 1 && Math.abs(+b.size[2] - (b.host[3] - b.bar[3])) <= 1 && Math.abs(b.yard[3] - (b.host[3] - b.bar[3])) <= 25, JSON.stringify(b));
-                check('... and the page is the same size with and without it: the bar, the Yard\'s box and Home\'s box are the same ' + at, JSON.stringify([a.bar, a.yard, a.host]) === JSON.stringify([b.bar, b.yard, b.host]), JSON.stringify([a.bar, a.yard, a.host]) + ' / ' + JSON.stringify([b.bar, b.yard, b.host]));
+                check('production, ' + at + ': no site label; the Games list is docked in the Yard (a region, shown, five rows with a Join each), the Yard has no stand-in (no card, tag, ants, size, class, picture or dashed edge), Games names no popup',
+                    !a.label && a.title.indexOf('staging') === -1 && a.popIn && a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && a.stand === 0 && !a.standin && a.text.indexOf('Yard will live') === -1 && /^radial-gradient/.test(a.image) && a.image.indexOf('url(') === -1
+                    && (a.edge === 'none' || a.edge === 'normal') && a.hasPopup === null, JSON.stringify(a));
+                const inside = a.pop && a.pop[0] >= a.yard[0] && a.pop[1] >= a.yard[1] && a.pop[0] + a.pop[2] <= a.yard[0] + a.yard[2] && a.pop[1] + a.pop[3] <= a.yard[1] + a.yard[3];
+                const clear = a.chat && a.pop && (a.pop[0] >= a.chat[0] + a.chat[2] || a.pop[1] + a.pop[3] <= a.chat[1]);
+                check('... the list is inside the Yard and clear of the chat dock (right of its panel, or above its strip), no Join or code field that it shows is under anything else, and there is no sideways scrollbar ' + at, inside && clear && a.covered === 0 && a.wide, JSON.stringify(a));
+                check('the test site, ' + at + ': the label "staging" is in the title and the footer, the stand-in is there (the card, the tag, five ants, the picture, the dashed edge, the size that it prints), and the list is the popover that it was: not in the Yard, hidden until Games is pressed',
+                    b.label && b.title.indexOf('(staging)') !== -1 && b.standin && b.stand === 8 && b.text.indexOf('The Yard will live here') !== -1 && b.text.indexOf('Your 3 ants') !== -1 && b.image.indexOf('url(') !== -1 && b.edge === '""' && !!b.size
+                    && Math.abs(+b.size[1] - b.host[2]) <= 1 && Math.abs(+b.size[2] - (b.host[3] - b.bar[3])) <= 1 && !b.popIn && !b.popShown && b.role === 'dialog' && b.hasPopup === 'dialog', JSON.stringify(b));
+                check('... and the page is the same size with and without the label: the bar, the Yard\'s box and Home\'s box are the same ' + at, JSON.stringify([a.bar, a.yard, a.host]) === JSON.stringify([b.bar, b.yard, b.host]), JSON.stringify([a.bar, a.yard, a.host]) + ' / ' + JSON.stringify([b.bar, b.yard, b.host]));
+                await plain.click('.hchip.games'); await test.click('.hchip.games'); await sleep(200);
+                const a2 = await look(plain), b2 = await look(test);
+                check('Games on production takes the focus into the list and the list stays; on the test site it opens the popover (a dialog, under the bar, over the stand-in)' + ' ' + at, a2.popShown && a2.popIn && await plain.evaluate(() => !!document.activeElement.closest('.gpop')) && b2.popShown && !b2.popIn && b2.role === 'dialog', JSON.stringify([a2.popShown, b2.popShown]));
                 check('... and neither page said anything wrong (no error of the page)', plain.errors.length === 0 && test.errors.length === 0, plain.errors.concat(test.errors).join('; '));
                 await plain.context().close(); await test.context().close();
             }
-            staging.close();
+            {   // an empty list and a long one, on production: the empty state with Host one!, and a list that scrolls inside itself with the Join by code box at its end
+                const none = await standIn(server, { lobbies: () => ({ format: 1, lobbies: [], count: 0 }) });
+                const many = await standIn(server, { lobbies: () => ({ format: 1, count: 12, lobbies: Array.from({ length: 12 }, (_, i) => ({ code: 'm' + (i + 2) + 'x2q' + i, host: 'Host' + i, map: 'TREASURE.LVL', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 10 + i })) }) });
+                for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
+                    const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
+                    await empty.waitForSelector('.gpop .gempty:not([hidden])'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc');
+                    check('production, ' + size[0] + ': no open games shows the empty state and Join by code in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'); return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcode input') && /none waiting/.test(p.textContent); }));
+                    const m = await long.evaluate(async () => {
+                        const p = document.querySelector('.gpop'), q = p.getBoundingClientRect(), y = document.getElementById('yard').getBoundingClientRect(); const scrolls = p.scrollHeight > p.clientHeight + 4;
+                        p.scrollTop = p.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcode input'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
+                        return { scrolls, bottom: q.bottom <= y.bottom + 1, codeReachable: top === c, count: document.querySelectorAll('.gpop .gitem').length, wide: document.documentElement.scrollWidth <= window.innerWidth };
+                    });
+                    check('production, ' + size[0] + ': twelve games scroll inside the list (it stays in the Yard) and Join by code is reachable at the end of it, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.count === 12 && m.wide, JSON.stringify(m));
+                    await empty.context().close(); await long.context().close();
+                }
+                none.close(); many.close();
+            }
+            staging.close(); prod.close();
         }
 
         // ---- 1. two contexts against the real server --------------------------------------------------------------------------------------------------------------------------------------------
@@ -300,7 +331,7 @@ async function flows() {
             await page.click('.gstrip .btn:last-child');
             await page.click('.hchip.games'); await page.waitForSelector('.glist .gitem');
             await page.click('.gjoin');
-            check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list put away, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelector('.gpop').hidden)) && sockets.length === 0);
+            check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the popover put away (the docked list of a site with no label stays), no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => { const p = document.querySelector('.gpop'); return p.classList.contains('gdock') ? !p.hidden : p.hidden; })) && sockets.length === 0);
             await page.click('.gstrip .btn:last-child');
             await page.click('.hchip.games'); await page.waitForSelector('.gcode input');
             await page.fill('.gcode input', 'abc234');

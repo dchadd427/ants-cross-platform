@@ -92,7 +92,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('the logo is the page\'s own picture, at the size of its file, with its words', logo.src === 'front/logo.png' && logo.getAttribute('width') === '581' && logo.getAttribute('height') === '218' && logo.alt === 'Ants!');
     const yard = env.$('home').children[1];
     // the site label (the Dockerfile's step, ANTS_SITE_LABEL: "staging" on the test site, none on production) decides whether the Yard shows its stand-in: here no label is stamped, as on production
-    check('the Yard\'s container is #yard, and with no site label it is the plain field: no label card, no tag, no ants, no words, nothing that prints a size, and no stand-in class', yard.id === 'yard' && classes(yard).join() === 'yard'
+    check('the Yard\'s container is #yard, and with no site label it is the plain sandy field (the Games list docks into it when games.js has loaded: tests/scripts/web_home_games_check.js): no label card, no tag, no ants, no words, nothing that prints a size, and no stand-in class', yard.id === 'yard' && classes(yard).join() === 'yard'
           && yard.children.length === 0 && yard.textContent === '' && !/Yard will live|reserved: /.test(env.dumpAll()));
     const opening = env.$('home').children[2];
     check('the card that says that the game is opening is there and not shown, as a status', opening.hidden === true && opening.getAttribute('role') === 'status' && opening.textContent === 'Opening the game…');

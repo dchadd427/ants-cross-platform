@@ -252,7 +252,7 @@
             askedGames = true;
             lazy(GAMES, function () {
                 if (!win.AntsHomeGames) return;
-                games = win.AntsHomeGames.mount({ doc: doc, win: win, host: host, page: page, parts: { quickHost: quickHost, quickJoin: quickJoin, games: gamesBtn, pill: gamesPill }, ctl: { show: show, screen: function () { return screen; } }, handoff: going || stalled });
+                games = win.AntsHomeGames.mount({ doc: doc, win: win, host: host, dock: standIn ? null : yard, page: page, parts: { quickHost: quickHost, quickJoin: quickJoin, games: gamesBtn, pill: gamesPill }, ctl: { show: show, screen: function () { return screen; } }, handoff: going || stalled });
                 gamesCall('shown', screen);
                 if (stalled) gamesCall('stalled', said);          // (the part came after START: it mounts waiting for the game, and after 15 s it says why its buttons are off)
                 gamesCall('inert', held || going);
