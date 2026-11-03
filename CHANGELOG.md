@@ -23,7 +23,7 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## v0.13.0 - 2026-10-30 - Home, public rooms, the games list and the chat
+## v0.13.0 - 2026-11-02 - Home, public rooms, the games list and the chat
 
 **For players:**
 - **A new front page: Home and the Room.** Home is a top bar over a stand-in picture with **Quick host**, **Quick join**, **My room**, **Games** and the Menu; the Room is the room page under a slim bar with **Home** and **Leave room** (it asks first when other people are in the room). Going between the two is instant and keeps your seat, and a plain visit makes no room until you press My room. [Home and the Room](docs/HOME_SCREEN.md)
@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the host makes a lobby room public or private), and one new Room flag, public; a v0.12 game cannot play with a v0.13 one ([public rooms](docs/PUBLIC_ROOMS.md)). One rule fix: the layer-2 id 38 is no bridge any more, as in the original (a water tile that holds it stays water: only a swimmer can enter it, and anyone else put there drowns). No shipped or community map holds it and every state hash of the library is unchanged, so recordings play as before (rules number 5); only a player's own map that holds id 38 plays differently from v0.12. One rule of the game type 187: the hill is closed. No ant can enter it, so nothing heals, an order to go home is refused ("Can't go there."), an ant at 1 hit point no longer walks home, and the computer players send none; old 187 recordings still play (rules number 6; new matches are 7). **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies` and the status of a lobby room has `"public"`; the site's nginx passes `/lobbies`, `/hub/ws` and the login's pages; the stack has a new container `ants-hub` and its volume (the staging stack gets its own, `ants-hub-staging` with the volume `ants-staging-hub-data`), with the `ANTS_HUB_*` settings, and the chat and the login must not go live behind a reverse proxy before `docker/trusted-proxies.conf` names it ([the chat hub](docs/HUB.md#behind-a-reverse-proxy-not-ready-for-the-public-until-this-is-set)).
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...a33dcb7e)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...57c6f8ae)
 
 ## v0.12.152 - 2026-10-29 - Map Maker: a Bridge chip, and a hint for a bridge that is not on water
 

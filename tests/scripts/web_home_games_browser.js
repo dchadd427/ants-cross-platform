@@ -501,6 +501,71 @@ async function flows() {
             for (const p of [maple, sage, tess]) check(label + ': no script error in the page', p.errors.length === 0, p.errors.join(' | '));
             for (const p of [maple, sage, tess]) await p.context().close();
         }
+
+        // ---- 1h. the bars at many widths (docs/HOME_SCREEN.md, "The top bar"): in Home's bar and the Room's bar every button and the logo is inside the window and inside the bar's own padding (left >= 0, right <= the window's width), and the page has no sideways scroll, at the sizes ----
+        // of the approved pictures, in the band of narrow desktop windows (900 to 1000 px, where the bar was once wider than the window, so that the Menu button was cut off), on every tenth width from 320 to 1300 at five heights and on both sides of every
+        // limit of the bar's steps; Home with its widest state (the counts "4/4" and "50+" on My room and Games, the login chip with a long name), one window that only changes its size (the media queries answer at once)
+        {
+            const WIDEST = () => {
+                const set = (q, text) => { const e = document.querySelector(q); if (e) { e.hidden = false; e.textContent = text; } };
+                set('.mine .pill', '4/4'); set('.games .pill', '50+');
+                const chip = document.querySelector('.hlogin');
+                if (chip) { chip.hidden = false; chip.textContent = ''; for (const [c, t] of [['gc-av', 'M'], ['gc-cn', 'Maple_Leaf_Longname_88']]) { const i = document.createElement('span'); i.className = c; i.textContent = t; chip.appendChild(i); } }
+            };
+            const OUT = () => {                                                      // what of the visible bar is out of the window, and whether the page scrolls sideways
+                const w = document.documentElement.clientWidth, home = document.body.getAttribute('data-screen') === 'home', bar = document.querySelector(home ? '.hbar' : '.rbar'), out = [];
+                const box = bar.getBoundingClientRect(), css = window.getComputedStyle(bar), left = Math.max(0, box.left + parseFloat(css.paddingLeft)), right = Math.min(w, box.right - parseFloat(css.paddingRight));       // (the bar's own padding stays free: the window's edge is not the limit)
+                bar.querySelectorAll('button, a, img, input, .hbrand').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width < 3 || r.height < 3 || e.closest('[hidden]')) return; if (r.right > right + 0.5 || r.left < left - 0.5) out.push((e.className || e.tagName) + ' ' + Math.round(r.left) + '..' + Math.round(r.right) + ' (' + Math.round(left) + '..' + Math.round(right) + ')'); });
+                if (bar.scrollWidth > bar.clientWidth + 0.5) out.push('the bar is wider than itself: ' + bar.scrollWidth + ' > ' + bar.clientWidth);
+                if (document.documentElement.scrollWidth > w) out.push('the page scrolls sideways: ' + document.documentElement.scrollWidth + ' > ' + w);
+                return out;
+            };
+            const sizes = [[900, 700], [920, 700], [960, 700], [1000, 700], [844, 390], [390, 844], [360, 640], [320, 568], [1280, 800], [1920, 1080]];
+            const SIDEWAYS = [[568, 320], [600, 300], [630, 360], [480, 320], [360, 240], [361, 240], [420, 240], [479, 300], [359, 240], [639, 500], [600, 500], [600, 501], [639, 501], [640, 360], [844, 390], [360, 480], [500, 500]];       // (a phone held sideways, and both sides of the limits of the two compact rows: 360 and 639 px wide, 500 px high, and upright: 360 x 480 and 500 x 500 keep the three rows)
+            for (const h of [240, 300, 360, 500, 501, 700, 1000]) for (let w = 320; w <= 1300; w += 10) sizes.push([w, h]);
+            for (const edge of [1280, 1077, 892, 775, 721, 640, 390, 389, 360]) for (const h of [240, 360, 700]) sizes.push([edge, h], [edge - 1, h]);
+            sizes.push(...SIDEWAYS);
+            const bar = await newPage(browser, live, 'Maple', SIZES[2]); await lit(bar);
+            await bar.evaluate(WIDEST);
+            const badHome = [], badRoom = [];
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(OUT); if (o.length) badHome.push(w + 'x' + h + ': ' + o.join(', ')); }
+            check('Home\'s bar at ' + sizes.length + ' sizes (900 to 1000 px wide, 844 x 390, 390 x 844, 360 x 640, every tenth width from 320 to 1300 px, and both sides of every limit) with the widest counts and a long name on the login chip: every button inside the window and no sideways scroll', badHome.length === 0, badHome.slice(0, 6).join(' | ') + (badHome.length > 6 ? ' ... ' + badHome.length + ' sizes' : ''));
+            // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 110 px, the Yard keeps the rest: 190 px at 568 x 320), every target at
+            // least 44 px high and wide and no two of them over each other; one pixel narrower, one pixel higher, or upright, the phone's three rows stay (150 px or more); from 640 px wide it is the one low row (at most 70 px)
+            const BARS = () => {
+                const box = (e) => e.getBoundingClientRect(), bar = document.querySelector('.hbar'), yard = document.querySelector('.yard'), small = [], over = [], cut = [], list = [];
+                bar.querySelectorAll('button').forEach((e) => { const r = box(e); if (r.width >= 3 && !e.closest('[hidden]')) list.push([e, r]); });
+                bar.querySelectorAll('button, button *').forEach((e) => { if (e.clientWidth && e.scrollWidth > e.clientWidth + 0.5 && !e.closest('[hidden]')) cut.push((e.className || e.tagName) + ' ' + (e.scrollWidth - e.clientWidth)); });       // (a word or a count that is wider than its box)
+                list.forEach(([e, r], i) => { if (r.height < 43.5 || r.width < 43.5) small.push(e.className + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); for (const [f, q] of list.slice(i + 1)) if (Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1) over.push(e.className + ' on ' + f.className); });
+                return { bar: Math.round(box(bar).height), yard: Math.round(box(yard).height), small, over, cut };
+            };
+            const badRows = [];
+            for (const [w, h] of SIDEWAYS) {
+                await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const m = await bar.evaluate(BARS), two = w >= 360 && w <= 639 && h <= 500 && w > h;
+                if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
+                if (!two && w <= 639 && m.bar < 150) badRows.push(w + 'x' + h + ': the phone\'s three rows expected, the bar is ' + m.bar + ' px high');
+                if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
+                if (w === 568 && h === 320 && m.yard < 190) badRows.push('568x320: the Yard is only ' + m.yard + ' px high');
+            }
+            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the Yard 190 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the phone\'s three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501, and upright 360 x 480 and 500 x 500) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
+            // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px): chat.css
+            const badPanel = [];
+            for (const [w, h] of [[568, 320], [480, 300], [600, 400], [630, 360], [640, 360], [844, 390]]) {
+                await bar.setViewportSize({ width: w, height: h });
+                await bar.evaluate(() => { const g = document.querySelector('.gc'); if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); });
+                await sleep(100);
+                const m = await bar.evaluate(() => { const g = document.querySelector('.gc'), b = document.querySelector('.hbar').getBoundingClientRect(); return g ? { open: g.getAttribute('data-open'), hidden: g.hidden, top: Math.round(g.getBoundingClientRect().top * 10) / 10, bar: Math.round(b.bottom * 10) / 10 } : null; });
+                if (!m || m.hidden || m.open !== 'true' || m.top < m.bar - 0.5) badPanel.push(w + 'x' + h + ': ' + JSON.stringify(m));
+            }
+            check('the chat dock\'s open panel starts at or below the bottom of the bar at 568 x 320, 480 x 300, 600 x 400, 630 x 360, 640 x 360 and 844 x 390 (the two compact rows are 106 px, the panel used to start at 64 px)', badPanel.length === 0, badPanel.join(' | '));
+            await bar.setViewportSize({ width: SIZES[2][1], height: SIZES[2][2] });
+            await bar.click('.hchip.mine');
+            await until('the page shows the Room', async () => (await screenOf(bar)) === 'room', 10000);
+            for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); const o = await bar.evaluate(OUT); if (o.length) badRoom.push(w + 'x' + h + ': ' + o.join(', ')); }
+            check('the Room\'s slim bar at the same ' + sizes.length + ' sizes: every button and the logo inside the window and no sideways scroll', badRoom.length === 0, badRoom.slice(0, 6).join(' | ') + (badRoom.length > 6 ? ' ... ' + badRoom.length + ' sizes' : ''));
+            check('(no script error in the page)', bar.errors.length === 0, bar.errors.join(' | '));
+            await bar.context().close();
+        }
     } finally {
         for (const s of [live, fake, emptySite, offSite]) s.close();
         await browser.close();
