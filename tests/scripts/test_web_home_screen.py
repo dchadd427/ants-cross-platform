@@ -35,7 +35,7 @@ NODE = shutil.which("node")
 FILES = ("home.js", "home.css")
 LATER = ("games.js", "games.css")                    # the files that load after the first paint (tests/scripts/test_web_home_games.py has their budgets)
 CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
-HOME_BUDGET, HOME_GZIP_BUDGET = 39 * 1000, 11600     # bytes, raw and gzipped, both files together (about 38,760 and 11,570, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+HOME_BUDGET, HOME_GZIP_BUDGET = 39 * 1000, 11600     # bytes, raw and gzipped, both files together (about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -180,7 +180,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn('body[data-screen="home"] main.wrap, body[data-screen="home"] .bar { display: none; }', css)
         self.assertIn('body[data-screen="room"] #home { display: none; }', css)
         self.assertRegex(css, r"\.mast \{ display: none; \}")
-        self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; \}')
+        self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')
         self.assertRegex(css, r'body\[data-screen="home"\] \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
 
     def test_the_rooms_bar_gives_the_logo_what_is_left_on_a_narrow_phone(self):
