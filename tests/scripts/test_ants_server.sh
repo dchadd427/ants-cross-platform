@@ -1007,8 +1007,8 @@ stop_server
 PROTOCOL16="$("$SERVER" --version 2> /dev/null | sed -n 's/.*(network protocol \([0-9][0-9]*\)).*/\1/p')"
 LOBBY_PY="$WORK/lobby_raw.py"
 cat > "$LOBBY_PY" <<'PY'
-import json, socket, struct, sys, time, urllib.request
-port, ws, ctl, secret, protocol = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], int(sys.argv[5])
+import json, socket, struct, sys, time, urllib.error, urllib.request
+port, ws, ctl, secret, protocol, replay = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], int(sys.argv[5]), int(sys.argv[6])
 def frame(p): return struct.pack('<I', len(p)) + p
 def str8(t):
     b = t.encode()
@@ -1076,6 +1076,48 @@ h = Peer('Hal', 'lob00005', 1, LOBBY, bytes(range(1, 17)))
 out['page_key_no_room'] = answer_text(h)                                           # a Hello with a key never makes a room: NoSuchRoom (6)
 i = Peer('Ian', 'Lob00006', 1, LOBBY)
 out['capital_letter'] = answer_text(i)                                             # a code with a capital is never a visitor's: NoSuchRoom (6)
+# the public list of games (protocol 22; GET /lobbies of the public door, --replay-port): a new room is private, a guest cannot make it public, its leader can (type 35, one byte: 1 public, 0 private), and the list holds the
+# room's code, the leader's name and the numbers and nothing of the people (no key, no address, no other name); the door answers GET only and no query
+def lobbies(method='GET', query=''):
+    try:
+        request = urllib.request.Request('http://127.0.0.1:%d/lobbies%s' % (replay, query), method=method)
+        with urllib.request.urlopen(request, timeout=3) as answer:
+            return answer.status, answer.read().decode()
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode()
+    except Exception as error:
+        return 0, 'error:%s' % error
+def list_text():
+    status, body = lobbies()
+    return body if status == 200 else 'status-%d' % status
+def wait_listed(wanted, secs):
+    end = time.time() + secs
+    text = list_text()
+    while (wanted not in text) and time.time() < end:
+        time.sleep(0.1)
+        text = list_text()
+    return text
+def sees_public(peer):                                                              # the last Room message that the peer read says public (the flags are 7 bytes from the end: flags, four plans, the games, the mode)
+    peer.wait_for((99,), 0.5)
+    rooms = [m for m in peer.msgs if m[0] == 12]
+    return bool(rooms) and (rooms[-1][-7] & 8) != 0
+if lobbies()[0] == 200 and wa is not None and wb is not None and wc is not None:                  # (a server with the public door and the lobbies)
+    out['list_private'] = list_text()
+    b.sock.sendall(frame(bytes([35, 1])))                                               # Bea does not lead: nothing happens
+    time.sleep(0.4)
+    out['list_after_guest'] = list_text()
+    out['guest_sees_public'] = 'yes' if sees_public(b) else 'no'
+    a.sock.sendall(frame(bytes([35, 1])))
+    out['list_public'] = wait_listed('lob00001', 3.0)
+    out['leader_sees_public'] = 'yes' if sees_public(a) else 'no'
+    out['guest_sees_public_now'] = 'yes' if sees_public(b) else 'no'
+    leaks = [text for text in (wa[3:19].hex(), wa[3:19].hex().upper(), wb[3:19].hex(), wc[3:19].hex(), '127.0.0.1', 'Bea', 'Cy', 'lob00002', 'platform') if text in out['list_public']]
+    out['list_leaks'] = ','.join(leaks) if leaks else 'none'
+    out['list_post'] = str(lobbies('POST')[0])
+    out['list_query'] = str(lobbies('GET', '?a=1')[0])
+    a.sock.sendall(frame(bytes([35, 0])))
+    time.sleep(0.5)
+    out['list_made_private'] = list_text()
 try:
     request = urllib.request.Request('http://127.0.0.1:%d/rooms/lob00001' % ctl, headers={'Authorization': 'Bearer ' + secret})
     room = json.load(urllib.request.urlopen(request, timeout=3))
@@ -1088,6 +1130,13 @@ try:
     out['busy'] = '%d/%d' % (busy['matches'], busy['players'])
 except Exception as error:
     out['busy'] = 'error:%s' % error
+if 'list_made_private' in out:                                                      # (after the status above, which counts the two pages) the leader makes the room public and goes: Bea leads a room she never made public
+    a.sock.sendall(frame(bytes([35, 1])))
+    out['list_public_again'] = wait_listed('lob00001', 3.0)
+    a.sock.sendall(frame(bytes([17])))                                              # Leave
+    time.sleep(0.6)
+    out['list_leader_left'] = list_text()
+    out['new_leader_sees_public'] = 'yes' if sees_public(b) else 'no'
 for key in sorted(out):
     print('%s=%s' % (key, out[key]))
 PY
@@ -1095,10 +1144,11 @@ lobby_value() { echo "$LOBBY_OUT" | sed -n "s/^$1=//p"; }
 LOBBY_PORT="$(free_port)"
 LOBBY_WS="$(free_port)"
 LOBBY_CTL="$(free_port)"
-ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 2 > "$WORK/lobby.log" 2>&1 &
+LOBBY_REPLAY="$(free_port)"
+ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --replay-port "$LOBBY_REPLAY" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 2 > "$WORK/lobby.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" 2>&1)"
+LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" "$LOBBY_REPLAY" 2>&1)"
 check "a lobby page's Hello with a lobby block makes a lobby room (the Welcome says it made it and gives a key)" "$([ "$(lobby_value page_makes_lobby)" = "yes" ]; echo $?)"
 check "the Room message of that room says it is a lobby room" "$([ "$(lobby_value room_says_lobby)" = "yes" ]; echo $?)"
 check "a second page finds the room (seat 1, not created)" "$([ "$(lobby_value second_page_joins)" = "yes" ]; echo $?)"
@@ -1111,17 +1161,24 @@ check "a Hello with a key makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value 
 check "a code with an upper-case letter makes no lobby room (NoSuchRoom)" "$([ "$(lobby_value capital_letter)" = "reject-6" ]; echo $?)"
 check "the control interface sees the lobby: waiting, on the server's map, for four, with its two pages" "$([ "$(lobby_value status)" = "waiting/TINY.LVL/4" ] && [ "$(lobby_value joined)" = "2" ]; echo $?)"
 check "GET /busy counts the people of the lobbies as players and no match (a lobby never holds a deploy back)" "$([ "$(lobby_value busy)" = "0/4" ]; echo $?)"
+check "GET /lobbies of the public door (network protocol 22) lists nothing while every room is private (a new room is private)" "$([ "$(lobby_value list_private)" = '{"format":1,"lobbies":[],"count":0}' ]; echo $?)"
+check "... a guest's Visibility changes nothing (only the leader is heard)" "$([ "$(lobby_value list_after_guest)" = '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value guest_sees_public)" = "no" ]; echo $?)"
+check "... the leader's Visibility makes the room public: the list holds its code, the leader's name, the map and the numbers, and both pages are told in the Room message (the flag, bit 3)" "$([ "$(lobby_value list_public)" = '{"format":1,"lobbies":[{"code":"lob00001","host":"Ada","map":"TINY.LVL","mode":"highest-score","people":2,"bots":0,"free":2,"size":4,"age":0}],"count":1}' ] && [ "$(lobby_value leader_sees_public)" = "yes" ] && [ "$(lobby_value guest_sees_public_now)" = "yes" ]; echo $?)"
+check "... the answer holds no key, no address, no other person's name, no platform and no private room's code" "$([ "$(lobby_value list_leaks)" = "none" ]; echo $?)"
+check "... the door answers GET only and no query (a POST is 405 and a query 404)" "$([ "$(lobby_value list_post)" = "405" ] && [ "$(lobby_value list_query)" = "404" ]; echo $?)"
+check "... and the leader's Visibility of private takes the room out of the list again" "$([ "$(lobby_value list_made_private)" = '{"format":1,"lobbies":[],"count":0}' ]; echo $?)"
+check "... a public room whose leader goes is private and off the list, and the person who leads next is told it is private (the choice was the leader's)" "$([ "$(lobby_value list_public_again)" != '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value list_leader_left)" = '{"format":1,"lobbies":[],"count":0}' ] && [ "$(lobby_value new_leader_sees_public)" = "no" ]; echo $?)"
 stop_server
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 0 > "$WORK/lobby0.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" 2>&1)"
+LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" "$LOBBY_REPLAY" 2>&1)"
 check "with --demo-lobbies 0 a lobby page is told NoSuchRoom, and a game still makes its public room" "$([ "$(lobby_value page_makes_lobby)" = "no" ] && [ "$(lobby_value game_makes_public_room)" = "yes" ]; echo $?)"
 stop_server
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL > "$WORK/lobbyd.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" 2>&1)"
+LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" "$LOBBY_REPLAY" 2>&1)"
 check "without the option a server with public rooms makes lobby rooms (the default pool has a place for the third lobby that the pool of two refused)" "$([ "$(lobby_value page_makes_lobby)" = "yes" ] && [ "$(lobby_value pool_full)" = "welcome" ]; echo $?)"
 stop_server
 
@@ -1129,10 +1186,10 @@ stop_server
 # site's proxy reaches it: the lobby made by one code and joined by the same link, a color move and a change of places, the plan, a name, a removal, the leader going, a dropped link and its key, a
 # key for a room that is gone, a second window, START that waits, the chat at the server's pace, and the pages in GET /busy (tests/scripts/web_lobby_server_check.js)
 if command -v node > /dev/null 2>&1; then
-    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
+    ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --replay-port "$LOBBY_REPLAY" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
     SERVER_PID=$!
     for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
-    run_limited $((120 * TIME_SCALE)) "node web_lobby_server_check.js (the lobby page's client against the server)" "$WORK/page_check.out" node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS"
+    run_limited $((120 * TIME_SCALE)) "node web_lobby_server_check.js (the lobby page's client against the server)" "$WORK/page_check.out" node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS" "http://127.0.0.1:$LOBBY_REPLAY"
     PAGE_RC=$?
     PAGE_OUT="$(cat "$WORK/page_check.out")"
     [ "$PAGE_RC" -ne 0 ] && echo "$PAGE_OUT" | sed 's/^/    /'

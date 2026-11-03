@@ -137,7 +137,7 @@ class TheLegalPage(unittest.TestCase):
         for sentence in NOTICE:
             self.assertIn(sentence, self.text)
         self.assertIn("not legal advice", self.text)
-        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable"])                  # the two phrases that matter are in bold
+        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable", "id", "username", "Log out", "Forget me"])       # the two phrases that matter are in bold (and the words of the chat panel)
 
     def test_it_says_what_the_readme_says_of_the_original_game(self):
         for words in ("belong to their copyright holders", "does not own them and cannot license them", "open an issue", "it will be taken out"):
@@ -147,10 +147,26 @@ class TheLegalPage(unittest.TestCase):
             self.assertIn(words, self.text)
         self.assertIn("the maps that players made", self.text)
 
-    def test_it_is_short_and_says_nothing_of_what_the_site_stores_or_for_how_long(self):
-        self.assertLessEqual(len(self.text.split()), 300)                                                      # (250 until the Discord link's panel, and the coffee button's, joined the five of the notice)
+    def without_the_chat_panel(self):
+        start = self.main.index('<section class="panel" id="chat-login">')
+        return plain(self.main[:start] + self.main[self.main.index("</section>", start) + len("</section>"):])
+
+    def test_it_is_short_and_says_nothing_of_what_the_site_stores_or_for_how_long_apart_from_the_panel_of_the_chat(self):
+        text = self.without_the_chat_panel()
+        self.assertLessEqual(len(text.split()), 300)                                                           # (250 until the Discord link's panel, and the coffee button's, joined the five of the notice)
         for word in ("record", "recorded", "recordings", "stored", "kept", "retain", "retention", "cookie", "cookies", "privacy", "personal", "days", "names"):
-            self.assertNotRegex(self.text.lower(), r"\b%s\b" % word, word)
+            self.assertNotRegex(text.lower(), r"\b%s\b" % word, word)
+
+    def test_the_panel_of_the_chat_says_what_is_kept_for_how_long_the_cookies_and_how_to_leave(self):
+        start = self.main.index('<section class="panel" id="chat-login">')
+        panel = plain(self.main[start:self.main.index("</section>", start)])
+        for words in ("Discord id and username", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for 7 days", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
+                      "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username", "a ban or a mute, if there is one, stays",
+                      "Reading the chat and playing need no login"):
+            self.assertIn(words, panel, words)
+        self.assertLessEqual(len(panel.split()), 230)
+        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "Log out", "Forget me"])
+        self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)
 
     def test_it_links_the_licence_the_third_party_notices_and_the_issues_page_of_the_repository(self):
         hrefs = re.findall(r'<a href="([^"]*)"', self.main)

@@ -52,7 +52,7 @@ class ThePage(unittest.TestCase):
         self.assertGreater(self.page.index('href="front/game_type.css"'), self.page.index("</style>"), "the sheet comes after the page's own style")
 
     def test_the_page_stops_with_its_line_when_the_new_scripts_did_not_come(self):
-        self.assertIn("if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType) {", self.page)
+        self.assertIn("if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !window.AntsHome) {", self.page)
 
     def test_a_choice_is_a_plan_with_the_mode_and_is_kept_in_the_browser(self):
         self.assertIn("onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); }", self.page)

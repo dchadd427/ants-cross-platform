@@ -1014,7 +1014,7 @@ void run_failure_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 21);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
+        ASSERT_EQ(kProtocolVersion, 22);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -1618,7 +1618,7 @@ void run_protocol12_tests() {
 
 void run_protocol17_tests() {
     TEST_CASE("N2.112 Protocol 17, The Game Mode: The Start, The Room And The Plan End With One Byte, 0 (The Original's Highest Score) Or 1 (187); Every Byte Above sim::kLastGameMode Is Refused In Each Of Them (Never Played As Another Mode), So Are The Layouts Of Protocol 16 (No Byte), A Byte More And Every Truncation; The Mode Is Not Part Of The Seating Hash; The Words Of The Modes Parse Exactly") {
-        ASSERT_TRUE(kProtocolVersion == 21 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
+        ASSERT_TRUE(kProtocolVersion == 22 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
         ASSERT_TRUE(static_cast<uint8_t>(sim::GameMode::HighestScore) == 0 && static_cast<uint8_t>(sim::GameMode::Kills187) == 1);
         // the Start: the last byte, after the platforms of the four seats
         {

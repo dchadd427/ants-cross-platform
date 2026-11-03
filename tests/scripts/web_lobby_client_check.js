@@ -1,4 +1,4 @@
-// Runs the lobby page's client of network protocol 21 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
+// Runs the lobby page's client of network protocol 22 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
 // takes in, the answers to the server's pings, what changed between two Room messages (joined, left, renamed, moved, swapped, a new host), the requests that only the leader may make and the
 // bytes they put on the wire (the guard of a color move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.
@@ -442,7 +442,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
 // ---- a page that joins and never makes: join: true (a code that somebody typed) -----------------------------------------------------------------------------------------------------------------------
 // The Hello of a page that makes a lobby room carries the create block (the map, four seats, no team, the leader starts, a lobby); a page that was only given a code to join sends none, so that a code
 // with no room is answered NoSuchRoom instead of making one. The bytes are held to the lines that the C++ encoder wrote (tests/data/lobby_messages.txt, which web_lobby_net_check.js holds the codec
-// to) and to a Hello written out by hand here: type 1, protocol 21, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
+// to) and to a Hello written out by hand here: type 1, protocol 22, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
 
 {
     const golden = {};
@@ -454,7 +454,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     const block = (map) => [map.length].concat(Array.from(map, (ch) => ch.charCodeAt(0)), [4, 255, 255, 3]);        // the create block: the map, four seats, no team, leader starts + lobby
     const byHand = (name, code, o) => {
         o = o || {};
-        const w = [1, 21, 0];
+        const w = [1, 22, 0];
         str8(w, name);
         w.push(0, 0, 255);
         str8(w, code);
@@ -487,7 +487,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     same('... with join: that line without its block (00 04 ffff 03)', hello(Object.assign({}, keyed, { join: true })).hex, golden['page-with-key'].slice(0, golden['page-with-key'].length - '0004ffff03'.length));
     same('... and the same written out by hand', hello(Object.assign({}, keyed, { join: true })).hex, hex(byHand('Sam', 'abc234', { key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux })));
     same('with no name and the code xx, join: the line of the C++ encoder that has no block (page-no-block)', hello({ join: true, name: '', code: 'xx' }).hex, golden['page-no-block']);
-    check('a Hello without a block has no key, no platform: zeros', /^0115000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
+    check('a Hello without a block has no key, no platform: zeros', /^0116000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
 
     {   // the way back of a page that joined: every Hello it sends has the key and no block
         const w = world();
@@ -1026,6 +1026,97 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
     same('a line from a player and a line of the room are heard', [events(d, 'chat'), events(d, 'notice')], [[{ sender: 3, team: true, text: 'hi' }], [{ text: 'hi' }]]);
 }
 
+// ---- setPublic (network protocol 22): the leader makes the room public (listed on the server's list of games) or private -----------------------------------------------------------------------------------
+{
+    const golden = {};
+    for (const raw of fs.readFileSync(path.join(__dirname, '..', 'data', 'lobby_messages.txt'), 'utf8').split('\n')) {
+        const parts = raw.trim().split(/\s+/);
+        if (parts[0] === 'visibility' && parts.length === 3) golden[parts[1]] = parts[2];
+    }
+    check('the golden file has the two Visibility lines', golden['visibility-public'] === '2301' && golden['visibility-private'] === '2300');
+    const seats = [[C, 'Priya'], [C, 'Sam'], [E, ''], [E, '']];
+    {   // the leader of a lobby room: the bytes are the C++ encoder's, and the room it hears back says it
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        c.connect();
+        w.last().open();
+        w.last().receive(welcome(0, seq(0x30), 2));
+        check('before the first Room message nothing is sent', c.setPublic(true) === false && w.last().sent.length === 1);
+        w.last().receive(room(seats, { you: 0, leader: 0 }));
+        check('a room that says nothing about it is private', c.room.isPublic === false && c.room.lobby === true);
+        const base = w.last().sent.length;
+        check('setPublic(true) sends the Visibility of the C++ encoder (public)', c.setPublic(true) === true && hex(w.last().sent[base]) === golden['visibility-public']);
+        w.last().receive(room(seats, { you: 0, leader: 0, flags: 11 }));
+        check('the Room message with the flag says public', c.room.isPublic === true && c.room.flags === 11);
+        w.advance(1250);
+        check('setPublic(false) sends the Visibility of the C++ encoder (private)', c.setPublic(false) === true && hex(w.last().sent[base + 1]) === golden['visibility-private']);
+        check('the page sends exactly the two messages, nothing else', w.last().sent.length === base + 2);
+        check('a Room message that is public without a lobby is no Room message (the client keeps the room it has)', (() => { w.last().receive(room(seats, { you: 0, leader: 0, flags: 9 })); return c.room.flags === 11; })());
+    }
+    {   // what a page does not send: the argument must be a boolean, the page must lead an open lobby room that is online
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, {});
+        const base = w.last().sent.length;
+        const bad = [['setPublic()', () => c.setPublic()], ['setPublic(1)', () => c.setPublic(1)], ['setPublic(0)', () => c.setPublic(0)], ['setPublic("true")', () => c.setPublic('true')], ['setPublic(null)', () => c.setPublic(null)],
+            ['setPublic({})', () => c.setPublic({})], ['setPublic([true])', () => c.setPublic([true])], ['setPublic(NaN)', () => c.setPublic(NaN)]];
+        for (const [label, fn] of bad) {
+            const r = attempt(fn);
+            check(label + ' is false: no exception, nothing sent', r.value === false && !r.threw, JSON.stringify(r));
+        }
+        check('nothing was sent by any of them (and none of them spent the budget)', w.last().sent.length === base && c.setPublic(true) === true && c.setPublic(false) === true);
+    }
+    {   // not the leader
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, { you: 1, leader: 0 });
+        check('a person who does not lead cannot make the room public or private', c.setPublic(true) === false && c.setPublic(false) === false && w.last().sent.length === 1);
+    }
+    {   // the START waits: the server hears nobody, so the page sends nothing; a room that is no lobby room has no such thing
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, { flags: 15, inGame: 1 });
+        check('while the START waits (the room is public and starting) nothing is sent', c.room.isPublic === true && c.room.starting === true && c.setPublic(false) === false && w.last().sent.length === 1);
+        const x = world();
+        const d = client(x, { silenceMs: 0 });
+        online(x, d, seats, { flags: 1 });
+        check('a room that is no lobby room cannot be made public', d.room.lobby === false && d.setPublic(true) === false && x.last().sent.length === 1);
+    }
+    {   // not online: a link that is lost, a client that has left
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, {});
+        w.last().drop();
+        check('while the link is down nothing is sent', c.status === 'offline' && c.setPublic(true) === false);
+        const x = world();
+        const d = client(x, { silenceMs: 0 });
+        online(x, d, seats, {});
+        d.leave();
+        check('after leave() nothing is sent', d.setPublic(true) === false);
+    }
+    {   // a page that sends too fast is held back a little under the server's budget (a burst of 2 where the server's is 3, then one every 1.25 s where the server's is a second); the replay through the server's bucket is below
+        const w = world();
+        const c = client(w, { silenceMs: 0 });
+        online(w, c, seats, {});
+        const base = w.last().sent.length;
+        let renamed = 0;
+        for (let i = 0; i < 6; i++) { if (c.rename('N' + i)) renamed++; }
+        check('(the names have a budget of their own: two went, and the room\'s public choice is not touched by it)', renamed === 2 && w.last().sent.length === base + 2);
+        let ok = 0;
+        for (let i = 0; i < 6; i++) { if (c.setPublic(i % 2 === 0)) ok++; }
+        check('visibility: a burst of 2 (the server\'s is 3), then no more, whatever the names used up', ok === 2 && w.last().sent.length === base + 4);
+        w.advance(1249);
+        check('... not before 1.25 s are over', c.setPublic(true) === false);
+        w.advance(1);
+        check('... one every 1.25 s then (the refresh a page sends every ten minutes is never held back)', c.setPublic(true) === true && c.setPublic(true) === false);
+        w.advance(10 * 60 * 1000);
+        check('... and after ten minutes of rest the budget is full again, to its burst and no further', [0, 1, 2, 3, 4].filter(() => c.setPublic(true)).length === 2);
+    }
+    {   // the codec knows the type: 35 is the last message, the flag is 8, the protocol is 22
+        check('PROTOCOL, MSG.Last and the Visibility encoder', N.PROTOCOL === 22 && N.MSG.Visibility === 35 && N.MSG.Last === 35 && hex(N.encodeVisibility(true)) === '2301' && hex(N.encodeVisibility(false)) === '2300' && hex(N.encodeVisibility(7)) === '2301');
+    }
+}
+
 // ---- the SERVER's buckets, replayed (include/ants_net/flood.hpp) --------------------------------------------------------------------------------------------------------------------------------------
 // The server counts the moment at which it HANDLES a request, not the moment at which the page sent it, and a request that finds less than a whole token is dropped without a word (the sender sees nothing; the
 // room just does not change). So a page that paced a kind of request at exactly the server's rate lost one whenever the network (or the server's loop) delayed a request and not the next: two requests that
@@ -1036,10 +1127,10 @@ const FLOOD = (() => {
     try { text = fs.readFileSync(path.resolve(__dirname, '..', '..', 'include', 'ants_net', 'flood.hpp'), 'utf8'); } catch (e) { /* the check below says so */ }
     const number = (name) => { const m = new RegExp('inline constexpr uint32_t ' + name + ' = ([0-9]+);').exec(text); return m ? +m[1] : NaN; };
     return { move: [number('kSeatMoveBurst'), number('kSeatMovesPerSecond')], plan: [number('kPlanBurst'), number('kPlansPerSecond')], rename: [number('kNameBurst'), number('kNamesPerSecond')],
-             remove: [number('kRemoveBurst'), number('kRemovesPerSecond')], chat: [number('kChatBurst'), number('kChatPerSecond')] };
+             remove: [number('kRemoveBurst'), number('kRemovesPerSecond')], visibility: [number('kVisibilityBurst'), number('kVisibilityPerSecond')], chat: [number('kChatBurst'), number('kChatPerSecond')] };
 })();
-const KINDS = ['move', 'plan', 'rename', 'remove', 'chat'];
-check('the server\'s limits can be read from include/ants_net/flood.hpp (a burst and a rate for each of the five kinds)', KINDS.every((k) => FLOOD[k].every((n) => Number.isInteger(n) && n > 0)), JSON.stringify(FLOOD));
+const KINDS = ['move', 'plan', 'rename', 'remove', 'visibility', 'chat'];
+check('the server\'s limits can be read from include/ants_net/flood.hpp (a burst and a rate for each of the six kinds)', KINDS.every((k) => FLOOD[k].every((n) => Number.isInteger(n) && n > 0)), JSON.stringify(FLOOD));
 // how many requests the server's bucket drops, for these moments (ms) of the page's requests and these delays (ms) of the link: MessageBudget::take with the kind's burst and rate (thousandths of a request, a
 // bucket that is full at the first request, a request that finds less than a whole one is DROPPED and still sets the clock); the link keeps the order of the requests (one is never handled before the one before it)
 const serverDrops = (kind, moments, delays) => {
@@ -1054,12 +1145,13 @@ const serverDrops = (kind, moments, delays) => {
     }
     return dropped;
 };
-// what a page asks for, for each kind, in a room of two people where it leads (a plan that keeps everything, a color move of the guest to an empty color, a new name, the removal of the guest, a line)
+// what a page asks for, for each kind, in a room of two people where it leads (a plan that keeps everything, a color move of the guest to an empty color, a new name, the removal of the guest, a public or private room, a line)
 const ASKS = {
     move: (d) => d.move(1, 2),
     plan: (d) => d.setPlan({ map: '', kinds: [0, 0, 0, 0], teamA: 255, teamB: 255 }),
     rename: (d, i) => d.rename('Name ' + i),
     remove: (d) => d.remove(1),
+    visibility: (d, i) => d.setPublic(i % 2 === 0),
     chat: (d, i) => d.say('line ' + i)
 };
 // the moments (ms) at which a page asks for `kind` when it asks at every millisecond in the given spans, as the client keeps its pace
@@ -1223,7 +1315,7 @@ const exactMoments = (kind) => {
 
 {   // EVERY kind of request keeps a margin under the server's bucket of its kind (docs/NETWORK_PORT.md, "Flood control"): a burst one smaller and a pace of 0.8 of the server's rate. The page asks as fast as it may
     // and the requests are replayed through the server's own bucket with every combination of 0 and 50 / 100 / 150 ms of delay: the server may drop none. The chat has its own block above (the same numbers
-    // are in this one, so that the five kinds are held to one rule); a request that the page refuses is the page's word (false, nothing sent), a request that the server drops is nobody's.
+    // are in this one, so that the six kinds are held to one rule); a request that the page refuses is the page's word (false, nothing sent), a request that the server drops is nobody's.
     const asking = { 'a page that asks every millisecond for 16 s': [[0, 16000]],
                      'a page that asks in three runs (2 s, 2.5 s of quiet, 1.5 s, 7 s of quiet, 3 s)': [[0, 2000], [4500, 6000], [13000, 16000]],
                      'a page that asks after 5 s of quiet': [[5000, 12000]] };

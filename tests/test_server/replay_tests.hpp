@@ -102,7 +102,7 @@ ctl::HttpResponse public_call(const RoomManager& mgr, const char* method, const 
     rq.method = method;
     rq.path = path;
     rq.query = query;
-    return handle_public_replays(mgr, rq);
+    return handle_public_replays(mgr, rq, 1000);
 }
 
 std::vector<uint8_t> body_bytes(const ctl::HttpResponse& r) { return std::vector<uint8_t>(r.body.begin(), r.body.end()); }

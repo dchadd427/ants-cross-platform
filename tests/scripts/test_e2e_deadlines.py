@@ -264,7 +264,7 @@ if "--help" in args:
     print("fake ants_server")
     sys.exit(0)
 if "--version" in args:
-    print("fake ants_server 0 (network protocol 21)")
+    print("fake ants_server 0 (network protocol 22)")
     sys.exit(0)
 def value(name):
     return args[args.index(name) + 1] if name in args else ""

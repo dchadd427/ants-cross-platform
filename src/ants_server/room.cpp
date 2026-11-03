@@ -1125,6 +1125,29 @@ uint32_t Room::abandoned_ms(uint32_t now_ms) const {
     return now_ms - last_person_ms_;
 }
 
+// A public lobby room that a newcomer can join now (room.hpp). Each condition is one thing a visitor would be sent to a dead end by: a room that has begun or loads, one that is private, one whose START waits (it takes nobody
+// new), one nobody is at, one with no free color, one that keeps seats for the people of its last match.
+bool Room::listing(uint32_t now_ms, LobbyListing& out) const {
+    if (!lobby_waiting() || !lobby_.is_public()) return false;                 // (a room that waits is a lobby in its open phase: Loading and Running are other states of the room)
+    if (lobby_.starting() || lobby_.any_reserved()) return false;
+    const uint8_t leader = lobby_.leader();
+    if (leader >= sim::MAX_PLAYERS || lobby_.connected() == 0) return false;
+    const size_t free_now = lobby_.open_colors();
+    if (free_now == 0) return false;
+    out = LobbyListing{};
+    out.code = spec_.code;
+    const std::string& leader_name = lobby_.room().slots[leader].name;
+    out.host = leader_name.empty() ? "Player " + std::to_string(static_cast<unsigned>(leader) + 1u) : leader_name;      // (a Hello with no name: the list names the person as the lobby names a player who gave none)
+    out.map = lobby_.map_name();
+    out.mode = lobby_.mode();
+    out.people = static_cast<uint8_t>(lobby_.people_colors());
+    out.bots = static_cast<uint8_t>(lobby_.bot_colors());
+    out.free_colors = static_cast<uint8_t>(free_now);
+    out.size = static_cast<uint8_t>(lobby_.match_colors());
+    out.age_ms = lobby_.listed_age_ms(now_ms);
+    return true;
+}
+
 RoomStatus Room::status(uint32_t now_ms) const {
     RoomStatus s;
     s.code = spec_.code;
@@ -1139,6 +1162,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
     if (spec_.lobby) {
         const net::RoomMsg& shown = lobby_.room();
         s.starting = lobby_.starting();
+        s.lobby_public = lobby_.is_public();
         s.reopened = reopened_;
         for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
             if (lobby_.in_game(seat)) s.games = static_cast<uint8_t>(s.games | (1u << seat));

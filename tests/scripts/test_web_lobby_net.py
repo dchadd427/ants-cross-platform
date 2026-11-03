@@ -100,7 +100,7 @@ class TheBudgetChecksAreNotVacuous(unittest.TestCase):
     (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's. The chat's own are in lobby_chat_mutants.json (test_web_lobby_chat.py)."""
 
     FILES = ("web/front/lobby_net.js", "tests/scripts/web_lobby_client_check.js", "tests/data/lobby_messages.txt", "include/ants_net/flood.hpp",      # (the check reads the golden messages and, from the header, the server's limits)
-             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/shapes.js", "tests/scripts/web_name_check.js")      # (and the page in a fake browser: a team press that the page's pace refuses)
+             "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js", "web/shapes.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js", "web/home/home.js", "web/home/games.js")      # (and the page in a fake browser: a team press that the page's pace refuses)
 
     @classmethod
     def setUpClass(cls):
@@ -150,6 +150,26 @@ class TheBudgetChecksAreNotVacuous(unittest.TestCase):
             if status == 0:
                 missed.append(m["id"])
         self.assertEqual(missed, [], "the checks did not see these changes")
+
+
+@unittest.skipUnless(NODE, "node is not installed: the page's public-room codec was NOT run (tests/scripts/web_lobby_net_check.js, web_lobby_client_check.js)")
+class ThePublicRoomChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
+    """the mutants of the page's own codec in tests/data/public_rooms_mutants.json (network protocol 22: the number, the Visibility message, the Room flag, setPublic and its pace; the file also has the C++ ones, which
+    tools/mutate.py runs) on a COPY of the files, as the class above does for the paces; the same three tests run on this list."""
+
+    FILES = TheBudgetChecksAreNotVacuous.FILES + ("tests/scripts/web_lobby_net_check.js",)      # (the second command of these mutants is the codec check against the golden messages)
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with open(os.path.join(REPO, "tests", "data", "public_rooms_mutants.json"), encoding="utf-8") as f:
+            cls.spec = {"mutants": [m for m in json.load(f)["mutants"] if m["file"] == "web/front/lobby_net.js"]}
+
+    def test_the_list_is_whole(self):
+        ids = [m["id"] for m in self.spec["mutants"]]
+        self.assertEqual(len(ids), len(set(ids)), "an id twice")
+        for needed in ("page_protocol_still_21", "page_public_without_lobby", "page_setpublic_anybody", "page_setpublic_while_starting", "page_setpublic_at_the_servers_bucket", "page_setpublic_burst_without_reserve"):
+            self.assertIn(needed, ids)
 
 
 if __name__ == "__main__":

@@ -142,7 +142,7 @@ class TheAllowancesAndTheCache(unittest.TestCase):
             self.assertIn("limit_req zone=%s burst=%d nodelay;" % (zone_name, burst), block, zone_name)
             self.assertIn("limit_req_status 503;", block, zone_name)
         self.assertEqual(sorted(re.findall(r"limit_req_zone [^;]*\bzone=(\w+):", HEAD)),
-                         ["ants_admin_api", "ants_admin_login", "ants_busy", "ants_history", "ants_history_deaths", "ants_history_items", "ants_history_query", "ants_live", "ants_live_files", "ants_local", "ants_map_files", "ants_map_previews", "ants_maps", "ants_replay_files", "ants_replays", "ants_stats", "ants_submit_post", "ants_submit_read", "ants_test_maps"])      # (a flood of one is not another's)
+                         ["ants_admin_api", "ants_admin_login", "ants_busy", "ants_history", "ants_history_deaths", "ants_history_items", "ants_history_query", "ants_hub_callback", "ants_hub_login", "ants_hub_req", "ants_hub_session", "ants_live", "ants_live_files", "ants_lobbies", "ants_local", "ants_map_files", "ants_map_previews", "ants_maps", "ants_replay_files", "ants_replays", "ants_stats", "ants_submit_post", "ants_submit_read", "ants_test_maps"])      # (a flood of one is not another's)
         for block in (LIST, SNAPSHOT):
             self.assertNotRegex(block, r"zone=ants_(replays|replay_files|stats|busy|local)\b")      # (the recorded matches' allowances are theirs: a crowd that watches does not use up the downloads')
         self.assertNotIn("zone=ants_live ", SNAPSHOT)

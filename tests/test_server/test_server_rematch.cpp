@@ -58,13 +58,17 @@ struct Played {
     Client* pia_game{nullptr};
     Client* bob_game{nullptr};
 };
-void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, Played& out, bool quit = true, uint8_t bob_platform = 0, const std::string& map_folder = std::string()) {
+void play_and_quit(World& w, const std::string& code, const net::PlanMsg& plan, Played& out, bool quit = true, uint8_t bob_platform = 0, const std::string& map_folder = std::string(), bool make_public = false) {
     Client& pia = w.connect_page("Pia", code, lobby_block_of());
     Client& bob = w.connect_page("Bob", code, lobby_block_of());
     w.run(300);
     ASSERT_TRUE(pia.lobby->is_leader() && bob.lobby->my_seat() == 1);
     ASSERT_TRUE(pia.lobby->request_plan(plan));
     w.run(300);
+    if (make_public) {                                                               // (protocol 22: the leader opens the room to everybody before the START)
+        ASSERT_TRUE(pia.lobby->request_visibility(true));
+        w.run(300);
+    }
     ASSERT_TRUE(pia.lobby->request_start());
     w.run(300);
     ASSERT_TRUE(w.status(code).starting);
@@ -623,7 +627,7 @@ void run_rematch_tests() {
         ctl::HttpRequest rq;
         rq.method = "GET";
         rq.path = "/replays";
-        const ctl::HttpResponse r = handle_public_replays(w.mgr, rq);
+        const ctl::HttpResponse r = handle_public_replays(w.mgr, rq, w.now);
         ctl::JsonValue j;
         ASSERT_TRUE(r.status == 200 && ctl::parse_json(r.body, j, &why));
         ASSERT_EQ(j.get("replays").size(), size_t{1});
@@ -712,5 +716,53 @@ void run_rematch_tests() {
         ASSERT_EQ(door_answer_of(w, cat), static_cast<net::RejectReason>(0));                          // (1 + 1: the six are free again)
         std::error_code ignore;
         fs::remove_all(dir, ignore);
+    } TEST_END();
+
+    TEST_CASE("S3.241 A Public Lobby And Its Rematch (Protocol 22): The Match Of A Public Room Keeps \"public\" In Its Status; The Lobby That Follows It Is A New Room, Private; When Its First Person Back Makes It Public It Is Not Listed While A Seat Is Kept For A Person Who Is Not Back, And It Is Once That Person Is Back, Or Was Removed") {
+        const auto listed = [](World& w) {
+            ctl::HttpRequest rq;
+            rq.method = "GET";
+            rq.path = "/lobbies";
+            ctl::JsonValue j;
+            ctl::parse_json(handle_public_replays(w.mgr, rq, w.now).body, j, nullptr);
+            std::string out;
+            for (size_t i = 0; i < j.get("lobbies").size(); ++i) out += (out.empty() ? "" : ",") + j.get("lobbies").at(i).get("code").str();
+            return out;
+        };
+        for (const bool removes : {false, true}) {
+            World w(rematch_limits());
+            const std::string code = removes ? "rmt00041" : "rmt00040";
+            Played p;
+            play_and_quit(w, code, plan_of({K::Open, K::Open, K::Open, K::Nobody}), p, true, 0, std::string(), true);
+            // the match's room was public when it began, and says so; the code is a lobby's again, and a new room is private
+            const RoomStatus end = w.ended(code);
+            ASSERT_TRUE(end.state == RoomState::Finished && end.lobby && end.lobby_public);
+            ASSERT_TRUE(ctl::to_json(status_to_json(end)).find("\"public\":true") != std::string::npos);
+            std::optional<RoomStatus> lobby = lobby_of(w, code);
+            ASSERT_TRUE(lobby.has_value() && lobby->reopened && !lobby->lobby_public);
+            ASSERT_EQ(listed(w), "");
+            // Pia's page comes back with her key (she leads) and makes the room public: Bob's seat is kept for him (the START waits for him), and the room is not listed
+            w.next_key = p.pia;
+            Client& pia_back = w.connect_page("Pia", code, lobby_block_of());
+            w.next_key = net::SeatKey{};
+            w.run(300);
+            ASSERT_TRUE(pia_back.lobby->is_leader() && !pia_back.lobby->room_is_public());
+            ASSERT_TRUE(pia_back.lobby->request_visibility(true));
+            w.run(300);
+            ASSERT_TRUE(pia_back.lobby->room_is_public() && lobby_of(w, code)->lobby_public && lobby_of(w, code)->reserved == 0x2);
+            ASSERT_EQ(listed(w), "");
+            if (removes) {
+                ASSERT_TRUE(pia_back.lobby->request_remove(1));                                  // the leader removes the person who is not back: the kept seat is gone
+                w.run(300);
+            } else {
+                w.next_key = p.bob;
+                Client& bob_back = w.connect_page("Bob", code, lobby_block_of());                // Bob's page is back
+                w.next_key = net::SeatKey{};
+                w.run(300);
+                ASSERT_TRUE(bob_back.lobby->phase() == net::ClientLobby::Phase::InRoom);
+            }
+            ASSERT_TRUE(lobby_of(w, code)->reserved == 0);
+            ASSERT_EQ(listed(w), code);
+        }
     } TEST_END();
 }

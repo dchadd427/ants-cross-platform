@@ -106,7 +106,7 @@ class ThePage(unittest.TestCase):
         self.assertLess(self.page.index("front/lobby_chat.js"), self.page.index("AntsLobbyChat"), "loaded before the page's own code uses it")
 
     def test_the_page_stops_with_its_line_when_the_script_did_not_come(self):
-        self.assertRegex(self.page, r"if \(!Rules \|\| !Net \|\| !Chat \|\| !Rematch \|\| !Modes \|\| !GameType\) \{")                           # (the rematch's strip too: front/rematch.js)
+        self.assertRegex(self.page, r"if \(!Rules \|\| !Net \|\| !Chat \|\| !Rematch \|\| !Modes \|\| !GameType \|\| !window\.AntsHome\) \{")                           # (the rematch's strip too: front/rematch.js)
 
     def test_the_page_mounts_the_box_with_its_colors_its_client_and_its_toast_and_gives_it_every_client(self):
         self.assertRegex(self.page, r"var chat = Chat\.mount\(\{ doc: document, host: \$\('chat'\), colors: COLORS, say: function \(text\) \{ return !!client && client\.say\(text\); \}, toast: say \}\);")

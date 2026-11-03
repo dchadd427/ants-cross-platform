@@ -215,13 +215,16 @@ ants-cross-platform/
 ├── docker-compose.yml                  # The web game alone (service ants-beta); the whole site is
 │                                       # docker-compose.stack.yml
 ├── docker-compose.server.yml           # Example service of the dedicated game server
-├── docker-compose.stack.yml            # The web game and the game server together as one stack (Portainer,
-│                                       # auto-deploy)
-├── docker-compose.staging.yml          # The same two services as a second stack with its own names, ports, volumes
+├── docker-compose.stack.yml            # The web game, the game server and the chat hub together as one stack
+│                                       # (Portainer, auto-deploy)
+├── docker-compose.staging.yml          # The same three services as a second stack with its own names, ports, volumes
 │                                       # and network, for trying finished work
 ├── Dockerfile                          # Multi-stage Emscripten + Nginx build
 ├── Dockerfile.server                   # The dedicated game server alone (no SDL, no sprites or sounds; it carries
 │                                       # the six maps)
+├── Dockerfile.hub                      # The chat hub alone (Python, standard library only; docs/HUB.md)
+├── hub/                                # The chat hub's code: WebSocket framing, text rules, limits, SQLite store,
+│                                       # the admin command line (docs/HUB.md)
 ├── build_web.sh                        # Local WebAssembly build into dist/
 ├── run_tests.sh                        # Master test suite runner script
 ├── run_tests.bat                       # Windows runner (part of the suites only, see docs/BUILD_AND_RUN.md)

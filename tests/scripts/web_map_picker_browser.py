@@ -32,6 +32,7 @@ sys.path.insert(0, HERE)
 from web_hidden_check import find_browser, free_port                          # noqa: E402
 from web_rejoin_check import Player, Server, wait_for, REPO                    # noqa: E402
 from web_map_fetch_check import Front                                           # noqa: E402
+from web_front_room import press_my_room                                     # noqa: E402
 
 PARTS = ("desktop", "phone", "error", "match", "solo")
 KEYS = {"ArrowDown": 40, "ArrowUp": 38, "ArrowLeft": 37, "ArrowRight": 39, "Enter": 13, "Escape": 27, "Home": 36, "End": 35, "Tab": 9}
@@ -60,6 +61,7 @@ class Visitor(Player):
         deadline = time.time() + 60
         while time.time() < deadline:
             time.sleep(0.4)
+            press_my_room(self.ev)                                                  # (a plain visit is Home and makes no room: My room does, once; docs/HOME_SCREEN.md)
             if wait_for(lambda: self.ev("!!document.getElementById('code') && document.getElementById('code').textContent.length > 0 && !document.getElementById('start').disabled"), 1.0):
                 return True
         return False

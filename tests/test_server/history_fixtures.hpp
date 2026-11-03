@@ -377,7 +377,7 @@ struct Server {
         rq.method = method;
         rq.path = path;
         rq.query = query;
-        return handle_public_replays(mgr, rq);
+        return handle_public_replays(mgr, rq, 0);
     }
 };
 

@@ -102,7 +102,7 @@ struct Rooms {
         rq.method = method;
         rq.path = path;
         rq.query = query;
-        return public_door ? handle_public_replays(mgr, rq) : handle_control(mgr, rq, now);
+        return public_door ? handle_public_replays(mgr, rq, now) : handle_control(mgr, rq, now);
     }
 };
 

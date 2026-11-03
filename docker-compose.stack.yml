@@ -44,10 +44,20 @@
 #   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the sign-in cookie of the owner's page (a long random text: openssl rand -hex 32). Without it every /admin/api path answers 404.
 #                                                   The accounts are made on the server, not here: docs/MAP_SUBMISSIONS.md, "Deploying" (docker exec -it ants-server ants_server --admin-create <username> --db /results/ants.db)
 #
+#   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from, and the base of the Discord login's way back
+#                                                   (<this address>/hub/callback; optional; this is the default). Empty or wrong: the hub refuses every socket and the page says "Chat is offline"
+#   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB.md, "Login": the site's operator makes the application, adds the redirect
+#                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment (Portainer) and never from a file of
+#                                                   the repository; without them the chat is read-only for everybody and says so. The secret is read by the hub and printed nowhere
+#   ANTS_HUB_MIN_ACCOUNT_DAYS=7                     a Discord account younger than this many days cannot write in the chat (0 lets every account write; optional; this is the default)
+#   ANTS_HUB_MODS=<account id>,<account id>         the accounts that may type /mute name minutes and /del id in the chat (optional; digits only, comma separated; none by default; the account
+#                                                   ids are Discord's). Moderation from a terminal: docker exec ants-hub python -m hub.admin list
+#
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
 # The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all. Every container of that network can reach the control port (behind the secret)
-# and the replay port (read only, no secret): do not put a container there that you do not trust.
+# and the replay port (read only, no secret): do not put a container there that you do not trust. The same holds for the chat hub (port 4040, not published): the site's nginx passes /hub/ws to it and
+# tells it the visitor's address in X-Client-Address, which it believes.
 services:
   ants-beta:
     build:
@@ -110,9 +120,44 @@ services:
     security_opt: ["no-new-privileges:true"]
     pids_limit: 64
 
+  # The global chat (docs/HUB.md): wss://<site>/hub/ws, passed by the page's nginx over the network above (port 4040, not published on the host). The site starts and works without it (nginx finds it by name
+  # when a request comes; "Chat is offline" until it is there). Its database (the chat lines of the last 7 days, mutes and bans) is the volume ants-hub-data: keep it. No ANTS_BUILD_ID: a deploy that
+  # changes nothing in hub/ builds the same image, and the chat is not restarted. Reading is open to everybody; writing needs the Discord login, which is on only where the two settings of the application
+  # are given (the hub then also needs to reach discord.com over https: the network below lets it out).
+  ants-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
+    container_name: ants-hub
+    restart: unless-stopped
+    environment:
+      ANTS_HUB_PUBLIC_URL: ${ANTS_HUB_PUBLIC_URL:-https://beta.playants.org}
+      ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}
+      ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}
+      ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}
+      ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}
+    volumes:
+      - ants-hub-data:/data
+    networks:
+      - proxy-network
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 32
+    mem_limit: 192m
+    tmpfs:
+      - /tmp
+    # the hub writes a few lines for each connection: the log is kept small (docker's own default keeps all of it)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   ants-server-results:
   ants-maps:
+  ants-hub-data:
 
 networks:
   proxy-network:

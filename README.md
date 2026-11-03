@@ -6,7 +6,7 @@ A faithful, deterministic C++17 engine remake and port of the 1998 real-time str
 
 The engine loads the original game's data files (`ants.chd` and `Maps/*.LVL`) directly, without pre-conversion. The game's mechanics are re-derived from the disassembly of the original program, system by system ([the original program](docs/ORIGINAL_PROGRAM.md)); the network play, the computer players, the 16:9 picture, the zoom, the touch controls and the browser build are this project's own. It runs a deterministic 20 Hz simulation, with 32-channel spatial audio, MP3 music (the original's four pieces), TrueType text and an SDL2 2D renderer (hardware-accelerated, with a software fallback).
 
-**Current version: v0.12.152** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.12.107 are in the short **[changelog](CHANGELOG.md)** (also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**); the releases before v0.12.107 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+**Current version: v0.13.0** (shown on screen next to the FPS meter; in the room and the match of a network game the same corner also shows **ping** and **delay**, see [Network play](docs/MULTIPLAYER.md)). The releases since v0.12.109 are in the short **[changelog](CHANGELOG.md)** (also published at **[beta.playants.org/changelog.html](https://beta.playants.org/changelog.html)**); the releases before v0.12.109 are only in git history. How work flows from a commit to a release: [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Play
 
@@ -29,6 +29,7 @@ The script builds the game each time it starts (quick when nothing changed) and 
 **Playing**
 
 - [Play in the browser](docs/PLAY_IN_BROWSER.md): the front page, rooms and rejoining, the 16:9 picture and mouse lock in the browser, hidden tabs, sound, the asset catalog (a page of every sprite, sound and animation of `ants.chd`)
+- [Home and the Room](docs/HOME_SCREEN.md): the front page's two screens, the top bar, My room, the Menu, the addresses and the START hand-off
 - [How the game plays](docs/GAMEPLAY.md): the data files, the 20 Hz simulation, the six kinds of ant and their abilities, movement, food, power-ups, combat, the anthill, the start and end of a match, fog of war
 - [View and HUD](docs/VIEW_AND_HUD.md): the 16:9 view, mouse-wheel zoom, edge scrolling and the minimap, the HUD, messages and the chat log, the results screen, sound and music
 - [Controls](docs/CONTROLS.md): the start menu, the setup screen, options and settings, the mouse controls, the keyboard
@@ -42,6 +43,9 @@ The script builds the game each time it starts (quick when nothing changed) and 
 
 - [Build and run](docs/BUILD_AND_RUN.md): prerequisites, building, the launch scripts, sanitizers, Docker
 - [The dedicated server](docs/SERVER.md): `ants_server`, its options, the control interface, reconnecting, the Docker stack
+- [Public rooms and the list of games](docs/PUBLIC_ROOMS.md): the leader's choice, the idle rule and `GET /lobbies` of the game server (network protocol 22)
+- [The site statistics](docs/SITE_STATS.md): `GET /stats` and `POST /stats/local`, the counters and the nginx blocks
+- [The chat hub](docs/HUB.md): `ants-hub`, the global chat service next to the game server: its protocol and limits, the text rules, moderation from a terminal, the stack and nginx wiring
 - [Testing and CI](docs/TESTING.md): the test suites and tiers, the browser checks, continuous integration
 - [Workflow](docs/WORKFLOW.md): branches, pull requests, releases and the deploy; the rules for contributors are in [`AGENTS.md`](AGENTS.md)
 

@@ -142,8 +142,7 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                     std::string lower_name = tname;
                     for (char& ch : lower_name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
                     if (lower_name.find("bridge") != std::string::npos ||
-                               (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4) ||
-                               c2.tile_index == TILE_BRIDGE4B) {
+                               (c2.tile_index >= TILE_BRIDGE1 && c2.tile_index <= TILE_BRIDGE4)) {
                         cell.is_obstacle_overlay = false;
                     } else if (lower_name.rfind("broken", 0) == 0) {
                         // Flat floor dishware/debris (broken1, broken2, broken3) is walkable
@@ -443,7 +442,7 @@ void Grid::advance_bridge(uint32_t x, uint32_t y, uint8_t owner_player) noexcept
 void Grid::regress_bridge(uint32_t x, uint32_t y) noexcept {
     if (!in_bounds(static_cast<int32_t>(x), static_cast<int32_t>(y))) return;
     auto& cell = get_cell_mut(x, y);
-    if (cell.interactive_id == TILE_BRIDGE4 || cell.interactive_id == TILE_BRIDGE4B) {
+    if (cell.interactive_id == TILE_BRIDGE4) {
         cell.interactive_id = TILE_BRIDGE3;
         cell.timer_ticks = 0;
     } else if (cell.interactive_id == TILE_BRIDGE3) {

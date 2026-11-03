@@ -64,7 +64,7 @@ class ComposeFilesAsText(unittest.TestCase):
         cls.staging = read(STAGING)
 
     def test_container_names_are_its_own(self):
-        self.assertEqual(container_names(self.staging), ["ants-beta-staging", "ants-server-staging"])
+        self.assertEqual(container_names(self.staging), ["ants-beta-staging", "ants-server-staging", "ants-hub-staging"])
         self.assertEqual(set(container_names(self.stack)) & set(container_names(self.staging)), set())
 
     def test_host_ports_are_its_own_and_the_server_ports_stay_on_loopback(self):
@@ -78,22 +78,25 @@ class ComposeFilesAsText(unittest.TestCase):
             self.assertIn('"127.0.0.1:', line, "the WebSocket and control ports are for this machine only: " + line)
 
     def test_volumes_and_the_network_are_its_own_and_not_the_production_network(self):
-        self.assertEqual(sorted(top_level_keys(self.staging, "volumes")), ["ants-staging-maps", "ants-staging-results"])
+        self.assertEqual(sorted(top_level_keys(self.staging, "volumes")), ["ants-staging-hub-data", "ants-staging-maps", "ants-staging-results"])
         self.assertEqual(set(top_level_keys(self.stack, "volumes")) & set(top_level_keys(self.staging, "volumes")), set())
         self.assertNotIn("proxy-network", self.staging.replace("docker-compose.stack.yml", ""))      # the page's nginx must not find the production server by the name ants-server
         self.assertNotIn("external: true", "\n".join(code_lines(self.staging)))
         self.assertEqual(top_level_keys(self.staging, "networks"), ["staging"])
         self.assertIn("name: ants-staging-network", self.staging)
         self.assertNotIn("ants-staging", self.stack)
+        self.assertNotIn("ants-hub-staging", self.stack)
 
-    def test_the_services_are_the_same_two_with_the_same_images_and_the_server_command(self):
+    def test_the_services_are_the_same_three_with_the_same_images_and_the_server_command(self):
         for text in (self.stack, self.staging):
             self.assertIn("dockerfile: Dockerfile\n", text)
             self.assertIn("dockerfile: Dockerfile.server\n", text)
+            self.assertIn("dockerfile: Dockerfile.hub\n", text)
             self.assertRegex(text, r"(?m)^  ants-beta:\s*$")
             self.assertRegex(text, r"(?m)^  ants-server:\s*$")
+            self.assertRegex(text, r"(?m)^  ants-hub:\s*$")
             self.assertNotIn("Dockerfile.login", text)
-            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server"])      # (these two and no other: the server plays its own matches of computer players, there is no bot arena container, and the owner signs in at the game server itself, docs/MAP_SUBMISSIONS.md)
+            self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub"])      # (these three and no other: the server plays its own matches of computer players, there is no bot arena container, the administrators sign in at the game server itself, docs/MAP_SUBMISSIONS.md, and the chat is the hub, docs/HUB.md)
             self.assertNotIn("profiles:", "\n".join(code_lines(text)))                            # (and none that waits behind a profile for somebody to ask for it)
         command = lambda text: [l.strip() for l in code_lines(text) if l.strip().startswith("command:")]
         self.assertEqual(len(command(self.staging)), 1)
@@ -130,7 +133,7 @@ class ComposeConfig(unittest.TestCase):
             self.skipTest("docker compose is not available: " + self.error[:200])
 
     def test_both_files_render(self):
-        self.assertEqual(sorted(self.configs["staging"]["services"]), ["ants-beta", "ants-server"])
+        self.assertEqual(sorted(self.configs["staging"]["services"]), ["ants-beta", "ants-hub", "ants-server"])
 
     def test_nothing_that_matters_is_shared(self):
         stack, staging = self.configs["stack"], self.configs["staging"]

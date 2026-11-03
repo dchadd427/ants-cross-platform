@@ -4,15 +4,15 @@
 The front page is the lobby (web/lobby.html, the approved pictures; network protocol 16): opening "/" makes a ROOM on the game server and seats the visitor in it (a code of six letters and
 numbers, shown as `k7m 2xq`; a link, ?room=<code>, to send on), four color cards (Black top left, Green top right, Red bottom left, Blue bottom right; a color that nobody holds is open, a bot of a level or
 Nobody; players are dragged between colors), the map, the picture's shape (Picture: a dropdown of the seven shapes of the table, the one nearest the screen until a pick) and START! at its side, and the footer with the version and the links. A visitor who
-opens somebody's link, or types a code into "Have a code?", is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
+opens somebody's link, or types a code into Join by code (the Games list of Home), is asked for a name first. START hands every browser that is in the room to the game page, which takes its seat with the key that the lobby page
 wrote to the browser's storage; START with nobody else in the match plays a game on this computer. Needs a running web page that has nginx's routes (the web image of this tree: `docker build -t ants-beta .`,
-run it on a port), a Chromium-based browser and Python 3, and, because opening "/" makes a room, the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
+run it on a port), a Chromium-based browser and Python 3, and, because the check presses My room (a plain visit is Home and makes no room), the site's /ws leading to a game server: --ws-port is the port that it leads to, and the check starts the
 native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTools protocol is spoken with the client of web_hidden_check.py, standard library only. Each part opens the site in a throwaway
 headless browser (its own profile and port; nothing of yours is touched), the parts with several people in one browser each. Parts:
 
-  * front    the page at "/" on a first visit (a room of its own: a new code of six letters and numbers from the alphabet without look-alikes, the link with it, Copy link and Have a code? (there is no other way to play on the page);
+  * front    the page at "/" on a first visit (a room of its own: a new code of six letters and numbers from the alphabet without look-alikes, the link with it, Copy link (there is no other way to play on the page);
              the four cards in their places, the host's with You and the pencil, the others open with their drop-down; the map side with its picture, arrows and the Treasure default; START!; the footer's version, build, links
-             and notice; Picture (in the match column, under the map's line and above START!, not in the footer) with the shape nearest the screen (16:10 at 1440 x 900) checked on a first visit and 4:3 remembered, a stale or bad value ignored); How it works; Have a code? with its lines for a bad, an own and a code that has no room; the name card of a link to
+             and notice; Picture (in the match column, under the map's line and above START!, not in the footer) with the shape nearest the screen (16:10 at 1440 x 900) checked on a first visit and 4:3 remembered, a stale or bad value ignored); How it works; Join by code (the Games list) with its lines for a bad, an own and a code that has no room; the name card of a link to
              a room that is gone (which comes back with the line that says so, and the room of one's own that its button makes); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
              below it, nothing sticking out of a card, the grip's dots clear of the names, START! in view on a phone, the map's name not cut off; Share where the browser has it; the game server that cannot be reached (the gold
              strip, and the room made by itself when it is back); the contrast of all text and of the form controls (4.5:1) in each of these states, at 1440 and 390 px;
@@ -26,7 +26,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
   * play     START with a bot in every other color takes THIS tab to the game page (no new tab): the arguments are the site's door, the room's code, the seat, the name and the shape and nothing else (the server holds the
              plan), the address keeps the code and the shape, the key of the seat is in the browser, and the match starts by itself (no START of the player's, the "Get ready" dialog closes by itself); the server's status
              lists the three bots (Bot (Medium), seats 1 - 3) and the player, the bots' scores, which the HUD shows at the bottom, rise from 0; the game page's Menu link asks first and, with Yes, goes back to the front page
-             in the same tab, which makes a room again for the same name;
+             in the same tab, which opens on Home: My room there makes a room again for the same name;
   * solo     START with nobody else in the match (every other color Nobody) takes THIS tab to the game page of a game on this computer, a game for one (the map, --alone and the name, no room, no bot): the match runs
              with its one colony and only that: Red, Blue and Black have no hill, no ants and no eggs, at Green; Classic 4:3, chosen under Screen, reaches that game (and with nothing chosen the page hands on no shape at all: the game page picks its own, 16:10 at 1440 x 900);
   * leave    Leave game: a game on this computer against one bot (in each shape of the picture) played to its results with the quit dialog (Ctrl+Q, Yes), and a click on the results' Leave Game button takes THIS tab back
@@ -59,6 +59,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import web_aspect_check as aspect                                            # noqa: E402
 import web_rejoin_check as rejoin                                            # noqa: E402  (its Server: the site's game server of this tree; its Player: a person's own browser)
 from web_aspect_check import Browser, NotReachable, Tab                    # noqa: E402
+from web_front_room import press_my_room                                     # noqa: E402
 
 # The browsers of this check are a 1440 x 900 screen unless a part says otherwise: a first visit starts in the shape nearest to it (web/shapes.js, firstVisit; web_aspect_check.py's oracle),
 # and the front page hands a shape on to the game only when the player picked one.
@@ -241,7 +242,9 @@ def lobby_of(t):
 
 
 def seated(t):
-    """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color."""
+    """The page is in its room: the room has welcomed it (the colors are not greyed out) and a person sits in a color. A plain visit opens on Home and makes no room (docs/HOME_SCREEN.md): the first
+    time that this asks about a page that holds no room, it presses My room, as a person does (web_front_room.py)."""
+    press_my_room(t.ev)
     return bool(t.ev("!document.body.classList.contains('offline') && !!document.querySelector('#slots li.k-person')"))
 
 
@@ -308,6 +311,15 @@ def set_mode(t, color, word):
 
 def open_name_card(t):
     return bool(t.ev("!document.getElementById('name-step').hidden"))
+
+
+def open_games(t):
+    """Home, then the Games list (web/home/games.js: the page loads it after its first paint, so the button is waited for), with the cursor in the field of Join by code."""
+    t.ev("(function () { var h = document.querySelector('.rhome'); if (h && document.body.getAttribute('data-screen') === 'room') h.click(); return 1; })()")
+    wait_for(lambda: t.ev("(function () { var g = document.querySelector('.hchip.games'); return !!g && !g.disabled; })()"), 10)
+    click_on(t, ".hchip.games")
+    wait_for(lambda: t.ev("!document.querySelector('.gpop').hidden"), 5)
+    t.ev("document.querySelector('.gpop .joinbox input').focus(); 1")
 
 
 def fill_name_card(t, name, press=True):
@@ -453,7 +465,7 @@ def main():
                 time.sleep(settle + 0.5)
 
         def clear_storage():
-            """The site's storage of this tab emptied (a page of the site that holds no room: the front page makes one at once and keeps its key in the tab's session storage)."""
+            """The site's storage of this tab emptied (a page of the site that holds no room: My room makes one and the page keeps its key in the tab's session storage)."""
             tab.open(web + "changelog.html", wait=False)
             time.sleep(1.0)
             tab.ev("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} 1")
@@ -563,7 +575,7 @@ def main():
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("front") and not can_play:
-            note("front: left out (no game server: give --ws-port; opening the front page makes a room)")
+            note("front: left out (no game server: give --ws-port; My room makes a room)")
         if wanted("front") and can_play:
             print("[web home] the front page: a first visit")
             clear_storage()
@@ -577,8 +589,8 @@ def main():
                 tag: document.querySelector('.mast .tag').textContent, sub: document.querySelector('.mast .sub').textContent,
                 head: [document.getElementById('room-h').textContent, document.querySelector('.code').textContent],
                 link: [document.getElementById('link').value, document.getElementById('link').readOnly, document.getElementById('link').getAttribute('aria-label')],
-                buttons: ['copy', 'havecode'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
-                joinbox: document.getElementById('joinbox').hidden, noMore: !document.getElementById('more') && !document.getElementById('morebox') && document.body.textContent.indexOf('More ways to play') === -1,
+                buttons: ['copy'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
+                noMore: !document.getElementById('more') && !document.getElementById('morebox') && document.body.textContent.indexOf('More ways to play') === -1,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
                 aspect: [document.getElementById('aspect-select').value, document.body.getAttribute('data-aspect')],
                 note: [document.getElementById('fit-note').hidden, document.getElementById('fit-note').textContent, getComputedStyle(document.getElementById('fit-note')).display], screenSize: [screen.width, screen.height],
@@ -596,8 +608,8 @@ def main():
                   "the room: \"Your room\" with a code of six letters and numbers (no i, l, o, 0 or 1) shown in two groups of three (%r, the link carries %r)" % (st["code"], code))
             check(info["link"] == [web + "?room=" + code, True, "Invitation link"] and info["linkLine"] == "Players who open this link take the next free color.",
                   "the link is the page's address with ?room=<code> in a read-only field, and the line under it says what it does (%r)" % (info["link"][0],))
-            check(info["buttons"] == ["Copy link", "Have a code?"] and info["share"] == "none" and info["joinbox"],
-                  "Copy link and Have a code? are there (the second opens nothing yet; Share is for a phone) (%s)" % (info["buttons"],))
+            check(info["buttons"] == ["Copy link"] and info["share"] == "none",
+                  "Copy link is there (Share is for a phone; Join by code is in the Games list of Home) (%s)" % (info["buttons"],))
             check(info["noMore"], "there is no \"More ways to play\": the map selection screen is the only way to play")
             status = server.room(code) or {}
             check(status.get("lobby") is True and status.get("state") == "waiting" and status.get("leader") == 0 and status.get("joined") == 1 and status.get("starting") is False and status.get("plan", "").startswith("oooo"),
@@ -675,24 +687,24 @@ def main():
             real_click("#how-close")
             check(value("document.getElementById('how').hidden") is True, "the Close button closes it too")
 
-            # Have a code?
-            real_click("#havecode")
-            check(value("!document.getElementById('joinbox').hidden && document.activeElement.id") == "joincode", "Have a code? opens the field, with the focus in it")
-            contrast("1440 px with the code field open", least=45)
-            real_click("#joingo")
-            check(lobby()["start"]["text"] == "START!" and value("document.getElementById('joinhint').textContent") == "Type or paste the code first.", "Join with nothing typed says to type or paste the code first")
-            tab.ev("document.getElementById('joincode').focus(); 1")
+            # Join by code (the Games list of Home)
+            open_games(tab)
+            check(value("!document.querySelector('.gpop').hidden"), "Games opens the list, with Join by code at its end")
+            contrast("1440 px with the Games list open", least=45)
+            real_click(".gpop .gcgo")
+            check(value("document.querySelector('.gpop .hint').textContent") == "Type or paste the code first.", "Join with nothing typed says to type or paste the code first")
+            tab.ev("document.querySelector('.gpop .joinbox input').focus(); 1")
             tab.call("Input.insertText", {"text": "a!b"})
-            real_click("#joingo")
-            check(value("document.getElementById('joinhint').textContent") == "A room code has letters and numbers only, like k7m 2xq.", "a code with a sign in it is told: letters and numbers only (%r)" % value("document.getElementById('joinhint').textContent"))
+            real_click(".gpop .gcgo")
+            check(value("document.querySelector('.gpop .hint').textContent") == "A room code has letters and numbers only, like k7m 2xq.", "a code with a sign in it is told: letters and numbers only (%r)" % value("document.querySelector('.gpop .hint').textContent"))
             contrast("1440 px with a line under the code field", least=45)
-            tab.ev("document.getElementById('joincode').value = ''; document.getElementById('joincode').focus(); 1")
+            tab.ev("document.querySelector('.gpop .joinbox input').value = ''; document.querySelector('.gpop .joinbox input').focus(); 1")
             tab.call("Input.insertText", {"text": code[:3].upper() + " " + code[3:]})
-            real_click("#joingo")
-            check(value("document.getElementById('joinhint').textContent") == "That is your own room." and not open_name_card(tab), "the page's own code (capitals and the space do not matter) is \"That is your own room.\" and asks for no name")
-            tab.ev("document.getElementById('joincode').value = ''; document.getElementById('joincode').focus(); 1")
+            real_click(".gpop .gcgo")
+            check(value("document.querySelector('.gpop .hint').textContent") == "That is your own room." and not open_name_card(tab), "the page's own code (capitals and the space do not matter) is \"That is your own room.\" and asks for no name")
+            tab.ev("document.querySelector('.gpop .joinbox input').value = ''; document.querySelector('.gpop .joinbox input').focus(); 1")
             tab.call("Input.insertText", {"text": "zzz zzz"})
-            real_click("#joingo")
+            real_click(".gpop .gcgo")
             asked = wait_for(lambda: open_name_card(tab), 5)
             card = json.loads(value(NAME_CARD_JS))
             check(bool(asked) and card["title"] == "Join the room zzz zzz" and card["button"] == "Join" and card["own"] == "Start a room of my own instead" and card["placeholder"] in NAMES and card["notice"]["text"] == LOBBY_NOTICE,
@@ -700,17 +712,18 @@ def main():
             contrast("1440 px with the name card up", least=40)
             shot("home_front_name_card")
             click_on(tab, "#name-step-go")
-            ok = wait_for(lambda: value("document.getElementById('joinhint').textContent") != "", 8)
-            check(bool(ok) and value("document.getElementById('joinhint').textContent") == "There is no room with that code. Check it, or ask the host to send the link again." and not open_name_card(tab) and lobby()["code"] == st["code"],
-                  "Join with a code that has no room: \"%s\" and the page's own room stays (%s)" % (value("document.getElementById('joinhint').textContent"), lobby()["code"]))
-            tab.ev("document.getElementById('joincode').value = ''; document.getElementById('joincode').focus(); 1")
+            ok = wait_for(lambda: value("document.querySelector('.gpop .hint').textContent") != "", 8)
+            check(bool(ok) and value("document.querySelector('.gpop .hint').textContent") == "There is no room with that code. Check it, or ask the host to send the link again." and not open_name_card(tab) and lobby()["code"] == st["code"],
+                  "Join with a code that has no room: \"%s\" and the page's own room stays (%s)" % (value("document.querySelector('.gpop .hint').textContent"), lobby()["code"]))
+            tab.ev("document.querySelector('.gpop .joinbox input').value = ''; document.querySelector('.gpop .joinbox input').focus(); 1")
             tab.call("Input.insertText", {"text": "zzz zzz"})
-            real_click("#joingo")
+            real_click(".gpop .gcgo")
             wait_for(lambda: open_name_card(tab), 5)
             click_on(tab, "#name-step-own")
             check(not open_name_card(tab) and lobby()["code"] == st["code"] and lobby()["heading"] == "Your room", "\"Start a room of my own instead\" closes the card and the page's own room stays")
-            real_click("#havecode")
-            check(value("document.getElementById('joinbox').hidden") is True, "Have a code? closes what it opened")
+            real_click(".hchip.games")
+            check(value("document.querySelector('.gpop').hidden") is True, "Games again puts the list away")
+            real_click(".hchip.mine")
 
             # the footer
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
@@ -1217,10 +1230,10 @@ def main():
             click_on(quinn, "#banner-x")
             check(lobby_of(quinn)["banner"]["shown"] is False, "OK closes the strip")
 
-            # ---- a typed code: "Have a code?"
-            click_on(quinn, "#havecode")
+            # ---- a typed code: Join by code, in the Games list
+            open_games(quinn)
             quinn.call("Input.insertText", {"text": code[:3].upper() + " " + code[3:]})
-            click_on(quinn, "#joingo")
+            click_on(quinn, ".gpop .gcgo")
             asked = wait_for(lambda: open_name_card(quinn), 5)
             card = json.loads(quinn.ev(NAME_CARD_JS))
             check(bool(asked) and card["title"] == "Join the room %s %s" % (code[:3], code[3:]) and card["input"] == "Quinn", "the host's code, typed with a capital and a space, opens the name card with the remembered name (%r)" % card["title"])
@@ -1229,8 +1242,8 @@ def main():
             qs = lobby_of(quinn)
             status = server.room(code) or {}
             check(bool(ok) and qs["heading"] == "Ann’s room" and card_of(qs, "blue")["badge"] == "You" and named(status) == {0: "Ann", 2: "Quinn", 3: "Pip"}
-                  and quinn.ev("document.getElementById('joinbox').hidden && document.getElementById('joincode').value === ''") is True and not qs["banner"]["shown"],
-                  "Join: Quinn is back in Ann's room, in Blue, the code field has closed (the removal is no ban: the room has %s)" % named(status))
+                  and quinn.ev("document.querySelector('.gpop').hidden && document.querySelector('.gpop .joinbox input').value === ''") is True,
+                  "Join: Quinn is back in Ann's room, in Blue, the Games list has closed (the removal is no ban: the room has %s)" % named(status))
             check(toast_has(host, "Quinn joined as Blue.") and card_of(lobby_of(host), "blue")["name"] == "Quinn", "the host is told, and the cards agree")
             check((server.room(own_code) or {}).get("joined", 0) == 0 or server.room(own_code) is None, "the room that Quinn had of its own is left (%s)" % ((server.room(own_code) or {}).get("joined"),))
 
@@ -1406,7 +1419,7 @@ def main():
                         front_ready()
                         remembered = lobby()
                         check(code_of(remembered) != code and card_of(remembered, "green")["name"] == "Bob" and remembered["map"] == "treasure" and tab.ev("localStorage.getItem('ants.name')") == "Bob" and not remembered["guest"],
-                              "menu: the front page makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
+                              "menu: the front page (Home), after My room, makes a room again, a new code (%s), for the same name, and the map is Treasure (%s)" % (code_of(remembered), card_of(remembered, "green")["name"]))
                         note("the front page after the Menu of a match that goes on: rejoin line %s (%r)" % ("shown" if remembered["rejoin"] else "not shown", tab.ev("document.getElementById('rejoin-note').textContent")))
             else:
                 check(False, "the game page of the room is ready")
