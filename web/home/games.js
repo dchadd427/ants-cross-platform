@@ -45,7 +45,7 @@
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
-    // ---- the pure parts -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // ---- the pure parts ----
     function whole(v, max) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 0 && v <= max; }
     // One row of the list as the page may show it, or null. The nine fields of docs/PUBLIC_ROOMS.md, each of its type and in its range (unknown extra fields are ignored): code (what a room code may be, no capital), host (printable ASCII,
     // up to 32: the server's own rule for a name), map (a map file's name), mode, people, bots, free and size (people + bots + free = size, 1 to 4, a color for a newcomer), age.
@@ -91,7 +91,7 @@
     }
     function possessive(name) { return name + '’s'; }
 
-    // ---- the screens ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // ---- the screens ----
     // mount({ doc, win, host (Home's div), page (web/lobby.html's bridge: client(), make(), leave(), join(code, name, done), typed(text, done, before), name()), parts: { quickHost, games, pill } (Home's buttons),
     //         ctl: { show(screen, how), screen() }, handoff (START is on its way already: the part mounts waiting), later, cancel, random, now (the clocks: tests give their own) }) returns { sync, shown, leaving, opening, stalled, inert, poll, state }
     function mount(env) {
@@ -100,7 +100,7 @@
         var later = env.later || function (fn, ms) { return setTimeout(fn, ms); }, cancel = env.cancel || function (id) { clearTimeout(id); };
         var random = env.random || Math.random, now = env.now || function () { return Date.now(); };
 
-        var rows = [], loaded = false, off = false, failures = 0, isOpen = false, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
+        var docked = !!env.dock, rows = [], loaded = false, off = false, failures = 0, isOpen = docked, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [], finding = false;
 
@@ -136,7 +136,7 @@
             return leader && leader.name ? possessive(leader.name) : 'the host’s';
         }
 
-        // ---- the notices: one strip with the page's own look, above both screens ------------------------------------------------------------------------------------------------------------------------
+        // ---- the notices: one strip with the page's own look, above both screens ----
         var strip = el('div', 'banner gstrip'), stripText = el('span'), stripBtns = el('div', 'gbtns');
         strip.setAttribute('role', 'status'); strip.hidden = true; strip.appendChild(stripText); strip.appendChild(stripBtns);
         function placeStrip() {                            // Home: with the page's own strips above the bar; the Room: under its slim bar, as drawn
@@ -164,7 +164,7 @@
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
 
-        // ---- the Public | Private switch of the Room's card (a guest reads the state; the leader changes it) ---------------------------------------------------------------------------------------------
+        // ---- the Public | Private switch of the Room's card (a guest reads the state; the leader changes it) ----
         var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn'), visPublic = el('button', 'btn vbtn'), visTag = el('span', 'vistag'), visNote = el('p', 'visnote');
         visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visTag.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
         [visPrivate, visPublic].forEach(function (b) { b.type = 'button'; visBox.appendChild(b); });
@@ -203,7 +203,7 @@
             paintVis();
         }
 
-        // ---- what the room says (every Room message of the page's client) -----------------------------------------------------------------------------------------------------------------------------------
+        // ---- what the room says (every Room message of the page's client) ----
         function track(c) {
             if (!c) { tracked = null; lastRoom = null; return; }
             if (c === tracked) return;
@@ -237,7 +237,7 @@
             else if (c.isLeader() && !room.starting) notice('idle', TEXT.idle, 'warn', [{ text: TEXT.makePublic, run: function () { var k = client(); return !!k && k.setPublic(true); } }]);
         }
 
-        // ---- the repeat that keeps a public room public: every 10 minutes, while the leader looks at the Room and the tab is visible ------------------------------------------------------------------------------
+        // ---- the repeat that keeps a public room public: every 10 minutes, while the leader looks at the Room and the tab is visible ----
         function wantRefresh() {
             var c = client(), room = c && c.room;
             return !!(!gone && room && room.lobby && room.isPublic && !room.starting && c.isLeader() && c.canAct() && visible() && !onHome() && now() - lastInput < ACTIVE_MS);
@@ -261,7 +261,7 @@
             armRefresh();
         }
 
-        // ---- Quick host -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // ---- Quick host ----
         function stopPending() { if (pendingTimer !== null) { cancel(pendingTimer); pendingTimer = null; } }
         function endPending() { pending = null; stopPending(); }
         function startPending(forClient) {                     // forClient: the client whose room is to be made public (a room that is left meanwhile is not the one: a later room is never made public by it)
@@ -316,7 +316,7 @@
             else flip();
         }
 
-        // ---- the confirm card (the approved picture): the question, what it is about, and the answer that changes nothing has the focus ----------------------------------------------------------------------------
+        // ---- the confirm card (the approved picture): the question, what it is about, and the answer that changes nothing has the focus ----
         function inertOthers(on, except) {
             var kids = host.children || [], i;
             if (on) for (i = 0; i < kids.length; i++) if (except.indexOf(kids[i]) === -1) { kids[i].setAttribute('inert', ''); quiet.push(kids[i]); }
@@ -377,12 +377,12 @@
             if (d.onClose) d.onClose();
         }
 
-        // ---- the list's popover -------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // ---- the list's popover ----
         var pop = el('section', 'gpop'), popHead = el('div', 'gphead'), popTitle = el('h2', 'gptitle', TEXT.title), popCount = el('span', 'gpcount'), popNote = el('p', 'gpnote');
         var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popEmpty = el('div', 'gempty'), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
         var popJoin = el('div', 'gjoining'), popJoinText = el('span'), popJoinStop = button('sm', TEXT.cancel, guard(function () { cancelJoin(); }));
         var codeBox = el('div', 'gcode'), codeLabel = el('label', 'gclabel', TEXT.code), codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
-        pop.hidden = true; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
+        pop.hidden = !docked; pop.setAttribute('role', docked ? 'region' : 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
         popHead.appendChild(popTitle); popHead.appendChild(popCount);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
@@ -394,7 +394,8 @@
         codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeBox.appendChild(codeLabel); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
         [popList, popLoad, popEmpty, popOff].forEach(function (n) { popBody.appendChild(n); });
         [popHead, popJoin, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
-        host.appendChild(pop);
+        if (docked) pop.className += ' gdock';
+        (env.dock || host).appendChild(pop);
         codeInput.addEventListener('input', guard(function () { codeHint.textContent = ''; }));
         codeInput.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') joinTyped(); }));
         codeGo.addEventListener('click', guard(function () { joinTyped(); }));
@@ -439,6 +440,7 @@
             if (focusCode) { var again = popList.querySelector('[data-code="' + focusCode + '"]'); if (again && again.focus) again.focus(); }
         }
         function place() {                                 // under the bar, at the Games button (a phone: the whole width); no taller than what is left of the window
+            if (docked) return;
             var bar = parts.games.parentNode, r = parts.games.getBoundingClientRect(), b = (bar && bar.getBoundingClientRect ? bar : parts.games).getBoundingClientRect();
             var top = Math.round(b.bottom + 8), width = win.innerWidth || 1000, wide = width > NARROW, w = wide ? 450 : width - 20;
             var left = wide ? Math.max(10, Math.min(r.left - 4, width - w - 14)) : 10;
@@ -450,11 +452,11 @@
             isOpen = true; pop.hidden = false; popNote.textContent = ''; codeHint.textContent = '';
             parts.games.setAttribute('aria-expanded', 'true');
             place(); paintList(); poll();
-            var first = popList.querySelector('button') || popEmpty.querySelector('button') || codeInput;
-            if (first && first.focus) first.focus();
+            focusList();
         }
+        function focusList() { var first = popList.querySelector('button') || popEmpty.querySelector('button') || codeInput; if (first && first.focus) first.focus(); }
         function closeList(back) {
-            if (!isOpen) return;
+            if (!isOpen || docked) return;
             isOpen = false; pop.hidden = true;
             parts.games.setAttribute('aria-expanded', 'false');
             if (back && parts.games.focus) parts.games.focus();
@@ -462,7 +464,7 @@
         }
         function closeAll() { closeAsk(false); closeList(false); }
 
-        // ---- Join: the page's probe (a second client that only joins: the old room is let go of when the new one welcomes it) and the words of what it says -------------------------------------------------------------
+        // ---- Join: the page's probe (a second client that only joins: the old room is let go of when the new one welcomes it) and the words of what it says ----
         function needsAsk(c) {                             // somebody is in the room that this page leaves: a guest always (the host is there), the leader when others are
             return !!(c && c.room && c.room.lobby && (!c.isLeader() || others(c).length > 0));
         }
@@ -526,7 +528,7 @@
             }), function (go) { function start() { busy(true); go(); } if (needsAsk(c)) askLeave(c, null, start); else start(); }) || '';
         }
 
-        // ---- Quick join: the best open room, by one look at the list and the page's probe (the old room goes when the new one welcomes the page) ----------------------------------------------------------------
+        // ---- Quick join: the best open room, by one look at the list and the page's probe (the old room goes when the new one welcomes the page) ----
         function look1(done) {                             // a look for a press (one of less than a second ago is as good)
             if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }
             lastLook = now();
@@ -599,7 +601,7 @@
             return true;
         }
 
-        // ---- the looks at GET /lobbies ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // ---- the looks at GET /lobbies ----
         function wanted() { return !gone && visible() && onHome(); }
         function schedule() {
             if (pollTimer !== null) { cancel(pollTimer); pollTimer = null; }
@@ -648,11 +650,11 @@
             schedule();
         }
 
-        // ---- the page's own events ------------------------------------------------------------------------------------------------------------------------------------------------------------
+        // ---- the page's own events ----
         function enable(b) { b.disabled = false; b.removeAttribute('aria-disabled'); }
-        parts.games.setAttribute('aria-haspopup', 'dialog'); parts.games.setAttribute('aria-expanded', 'false');
+        if (!docked) { parts.games.setAttribute('aria-haspopup', 'dialog'); parts.games.setAttribute('aria-expanded', 'false'); }
         parts.pill.hidden = true;
-        parts.games.addEventListener('click', guard(function () { if (isOpen) closeList(true); else openList(); }));
+        parts.games.addEventListener('click', guard(function () { if (docked) focusList(); else if (isOpen) closeList(true); else openList(); }));
         parts.quickHost.addEventListener('click', guard(quickHost));
         parts.quickJoin.addEventListener('click', guard(quickJoin));
         enable(parts.games); enable(parts.quickHost); enable(parts.quickJoin);

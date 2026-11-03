@@ -9,6 +9,7 @@ at its cap and web/lobby.html at its line limit.
     room, the page calls Home from render(), from the hand-off to the game and from the dialog's inert, and it is still under its line limit;
   - the folder: exactly home.js and home.css, under their budgets (raw and gzipped), nothing of it in web/front/;
   - the style: which screen shows what, every target at least 44 px, nothing loaded from another site, the pictures are data;
+  - the Yard's stand-in: built only where the page carries the site label that the Dockerfile stamps (the test site); production's Yard is the plain sandy field in the same box;
   - the way into the image: the Dockerfile, the local web build and the CI's list of the image's files carry the folder;
   - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (node, when it is installed: tests/scripts/web_home_screen_check.js: a plain visit, My room, Home, Back and Forward, a link, a reload,
     Leave room, START while a guest sits on Home, the strips, the Menu);
@@ -34,7 +35,7 @@ NODE = shutil.which("node")
 FILES = ("home.js", "home.css")
 LATER = ("games.js", "games.css")                    # the files that load after the first paint (tests/scripts/test_web_home_games.py has their budgets)
 CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
-HOME_BUDGET, HOME_GZIP_BUDGET = 39 * 1000, 11600     # bytes, raw and gzipped, both files together (about 38,940 and 11,450, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+HOME_BUDGET, HOME_GZIP_BUDGET = 39 * 1000, 11600     # bytes, raw and gzipped, both files together (about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -179,7 +180,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn('body[data-screen="home"] main.wrap, body[data-screen="home"] .bar { display: none; }', css)
         self.assertIn('body[data-screen="room"] #home { display: none; }', css)
         self.assertRegex(css, r"\.mast \{ display: none; \}")
-        self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; \}')
+        self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')
         self.assertRegex(css, r'body\[data-screen="home"\] \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
 
     def test_the_rooms_bar_gives_the_logo_what_is_left_on_a_narrow_phone(self):
@@ -233,6 +234,59 @@ class TheStyle(unittest.TestCase):
         for step in ("@media (min-width: 721px) and (max-width: 1076px) {", "(min-width: 721px) and (max-width: 891px), ", "@media (min-width: 721px) and (max-width: 774px), ", "@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {"):
             self.assertIn(step, self.css, "the bar's steps for a window that is not wide (docs/HOME_SCREEN.md, \"The top bar\"): the real-browser check is tests/scripts/web_home_games_browser.js")
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)", "nothing scrolls sideways")
+
+
+class TheYardsStandInIsForTheTestSiteOnly(unittest.TestCase):
+    """The stand-in of the Yard (the card "The Yard will live here", the sandy picture with its ants, the size that it prints) shows on a site that carries a site label (docs/HOME_SCREEN.md: the staging site, whose
+    web image the build argument ANTS_SITE_LABEL=staging stamps into the footer) and nowhere else: production has no label, so Home there is the bar over a plain sandy field. The decision is the page's own markup, the
+    same mechanism that puts "staging" into the title and the footer (the Dockerfile's step; tests/scripts/test_staging_stack.py): no second variable, no host name."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.js = read("web", "home", "home.js")
+        cls.css = read("web", "home", "home.css")
+        cls.code = re.sub(r"//.*", "", cls.js)
+
+    def test_the_label_is_read_from_the_footer_that_the_dockerfile_stamps(self):
+        self.assertIn("doc.getElementById('site-label')", self.code)
+        self.assertIn('<strong id=\\"site-label\\">', read("Dockerfile"), "the id that Home looks for is the one that the Dockerfile's step stamps")
+        self.assertEqual(read("web", "lobby.html").count("@@SITE_FOOTER@@"), 1)
+        for name in ("hostname", "location.host", "playants", "ANTS_SITE_LABEL", "staging.", "localStorage", "sessionStorage"):
+            self.assertNotIn(name, self.code, "Home decides by the page's own site label, not by %s" % name)
+
+    def test_the_stand_in_is_built_only_where_there_is_a_label(self):
+        code = self.code
+        start = code.index("var standIn = labelled(doc)")
+        block = code[start:code.index("var opening = el('div', 'hopen'")]
+        self.assertIn("el('main', standIn ? 'yard standin' : 'yard')", block)
+        inside = block[block.index("if (standIn) {"):]
+        for part in ("'ylabel'", "'yres'", "TEXT.yardTitle", "TEXT.yardLine", "TEXT.yourAnts", "YARD_ANTS.forEach", "'yant y'"):
+            self.assertIn(part, inside, part)
+            self.assertNotIn(part, block[:block.index("if (standIn) {")], "%s is built outside the label's branch" % part)
+        for part in ("'ylabel'", "'yres'", "TEXT.yardTitle", "TEXT.yardLine", "TEXT.yourAnts", "YARD_ANTS.forEach"):
+            self.assertEqual(code.count(part), 1, "%s is used once, in the label's branch" % part)
+        self.assertEqual(code.count("reserved = null"), 1)
+        self.assertIn("if (reserved && r.width > 0 && r.height > 0) reserved.textContent", code, "the size is printed on the stand-in only")
+        self.assertIn("function labelled(doc) { try { return !!doc.getElementById('site-label'); } catch (e) { return false; } }", code, "no label (production, a local build) is the plain field")
+
+    def test_the_plain_field_is_the_page_s_own_sand_and_the_pictures_are_the_stand_ins(self):
+        rules = [(sel.strip(), body) for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", self.css, flags=re.S))]
+        yard = next(body for sel, body in rules if sel == ".yard")                    # (the first: the later ones only change its margin)
+        standin = next(body for sel, body in rules if sel == ".standin")
+        self.assertNotIn("url(", yard, "the plain field has no picture")
+        self.assertIn("--field: radial-gradient(ellipse at 50% 40%, #e0ca8f 0, #d3b676 46%, #a98848 100%)", yard, "the sand of the Yard's own colors")
+        self.assertIn("background: var(--field)", yard)
+        self.assertIn("flex: 1 1 auto", yard)                                         # (the box is the same with and without the stand-in: the bar's and the chat panel's room do not change)
+        self.assertIn("margin: 0 10px 10px", yard)
+        self.assertIn("border: 2px solid #8a5a1e", yard)
+        self.assertIn("url(\"data:image/svg+xml", standin)
+        self.assertTrue(standin.rstrip().endswith("var(--field);"), "the stand-in's picture lies on the same sand")
+        self.assertIn("border: 2px dashed", next(body for sel, body in rules if sel == ".standin::before"))
+        self.assertNotIn(".yard::before", [sel for sel, _ in rules])
+        self.assertRegex(self.css, r"@media \(orientation: portrait\) \{ \.standin \{ background-image: url\(")
+        for sel, body in rules:                                                       # (a picture of the Yard's ground is on a rule of the stand-in; the bar's two small icons are the buttons')
+            if "url(" in body and not sel.startswith(".quick"):
+                self.assertEqual(sel, ".standin", "a picture on %s" % sel)
 
 
 class TheWayIntoTheImage(unittest.TestCase):

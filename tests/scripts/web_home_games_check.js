@@ -11,7 +11,7 @@
 // usage: node web_home_games_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby } = R;
+const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
 
 (async () => {
 
@@ -78,7 +78,7 @@ const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, fi
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const site = fakeSite();
-    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch });
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch, label: 'staging' });
     check('before the page has painted, nothing of the list is asked for: no script, no style, no look at /lobbies', env.lazyLoads.filter((f) => /games/.test(f)).length === 0 && site.calls.length === 0);
     check('... Quick host, Quick join and Games are drawn and disabled (nothing on the bar is a button that does nothing)', ['host', 'join', 'games'].every((c) => env.home(c).disabled === true && env.home(c).getAttribute('aria-disabled') === 'true'));
     env.advance(0);
@@ -411,6 +411,45 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     let tightest = Infinity;
     for (let i = 1; i < times.length; i++) tightest = Math.min(tightest, times[i] - times[i - 1]);
     check('no two looks of the whole run are less than a second apart (the smallest gap is ' + tightest + ' ms)', tightest >= 1000);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. A site with no label (production): the list is the page under the bar, docked in the Yard, always there; the test site (the label "staging") keeps the popover (sections 3 to 8 run it)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const site = fakeSite();
+    site.body = listOf([row('p4n8dz', 'Pebble', { people: 1, free: 3, age: 10 }), row('c1v3rr', 'Clover', { people: 2, bots: 1, free: 1, age: 200 }), row('j7n1pr', 'Juniper', { free: 2, age: 120 })]);
+    const env = await page({ site, options: { label: '' } });
+    const pop = popOf(env), yard = env.$('home').children[1];
+    check('with no site label the list is in the Yard, not a popover: #yard holds it, it is shown from the first look on (nobody pressed Games), and it is a region named "Open games", not a dialog', yard.id === 'yard' && pop.parent === yard && classes(pop).indexOf('gdock') !== -1 && pop.hidden === false
+          && pop.getAttribute('role') === 'region' && pop.getAttribute('aria-label') === 'Open games' && classes(yard).indexOf('standin') === -1);
+    check('... the Yard holds nothing else (no stand-in), and Games names no popup and says nothing of being open (it is not a popover)', yard.children.length === 1 && env.home('games').getAttribute('aria-haspopup') === null && env.home('games').getAttribute('aria-expanded') === null);
+    same('... the rows are the Games list\'s own, best first (the fewest open seats, then the oldest), BEST on the first, with a Join button each', [rowsOf(env).map((li) => textOf(first(li, 'gname'))), find(popOf(env), 'gbest').length, rowsOf(env).map((li) => !!joinOf(li))], [['Clover', 'Juniper', 'Pebble'], 1, [true, true, true]]);
+    same('... the count beside the heading and on the Games button are the same 3', [textOf(first(popOf(env), 'gpcount')).indexOf('3 waiting') === 0, textOf(first(env.home('games'), 'pill'))], [true, '3']);
+    check('... and the "Join by code" box is at the bottom of it', !!first(popOf(env), 'gcode') && popOf(env).children[popOf(env).children.length - 1] === first(popOf(env), 'gcode'));
+    tap(env.home('games'));
+    check('Games takes the focus to the list (the first Join) and the list stays; pressed again, the same; Escape and a press elsewhere do not put it away', env.focused === joinOf(rowsOf(env)[0]) && pop.hidden === false);
+    tap(env.home('games')); pressEscape(env); pressElsewhere(env, env.$('home'));
+    check('... (still there)', pop.hidden === false && env.looks() >= 1 && popOf(env) === pop);
+    await wait(env, 5000); await wait(env, 5000);
+    check('the list is looked at every 5 s while Home shows, without any press (the pace of an open list), and the same rows stay (the same nodes)', env.site.times.slice(0, 3).join() === '0,5000,10000' && rowsOf(env).length === 3);
+    tap(joinOf(rowsOf(env)[0]));
+    check('Join in the docked list is the popover\'s Join: a second client that only joins, with the room of the row', env.sockets.length === 1 && hex(env.last().sent[0] || env.last().open().sent[0]) === hex(helloBytes('Maya', 'c1v3rr', { join: true })));
+    env.home('mine').click();
+    const onRoom = env.looks();
+    await wait(env, 20000);
+    check('while the Room shows nothing is asked (the list is not on screen)', env.screen() === 'room' && env.looks() === onRoom);
+}
+{
+    const env = await page({ options: { label: '' } });     // no rooms: the empty state is in the Yard too, with Host one!, and Join by code under it
+    check('no open games: the empty state ("No open games right now.", Host one!) and Join by code are in the docked list', textOf(popOf(env)).indexOf('No open games right now.') !== -1 && !first(popOf(env), 'gempty').hidden && !!first(popOf(env), 'gcode') && textOf(first(popOf(env), 'gpcount')) === 'none waiting');
+    tap(first(first(popOf(env), 'gempty'), 'ghostbtn'));
+    check('... Host one! is Quick host (the Room shows, a room of the page\'s own)', env.screen() === 'room' && env.sockets.length === 1);
+}
+{
+    const env = await page({ options: { label: 'staging' } });         // the test site: the popover, closed until Games is pressed, as ever
+    check('with the label "staging" the list is the popover that it was: not in the Yard, hidden until Games is pressed, a dialog', popOf(env).parent !== env.$('home').children[1] && popOf(env).hidden === true && popOf(env).getAttribute('role') === 'dialog' && classes(popOf(env)).indexOf('gdock') === -1
+          && env.home('games').getAttribute('aria-haspopup') === 'dialog');
 }
 
 done('the games list');
