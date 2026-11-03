@@ -655,9 +655,51 @@
   {
    "id": "style_loads_another_site",
    "file": "web/home/home.css",
-   "old": ".yard::before { content: \"\";",
-   "new": ".yard::before { background: url(https://example.test/x.png); content: \"\";",
+   "old": ".standin::before { content: \"\";",
+   "new": ".standin::before { background: url(https://example.test/x.png); content: \"\";",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "yard_stand_in_on_every_site",
+   "file": "web/home/home.js",
+   "old": "var standIn = labelled(doc), yard",
+   "new": "var standIn = true, yard",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
+  },
+  {
+   "id": "yard_stand_in_on_no_site",
+   "file": "web/home/home.js",
+   "old": "return !!doc.getElementById('site-label');",
+   "new": "return false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
+  },
+  {
+   "id": "yard_size_printed_without_stand_in",
+   "file": "web/home/home.js",
+   "old": "if (reserved && r.width > 0 && r.height > 0) reserved.textContent",
+   "new": "if (r.width > 0 && r.height > 0) reserved.textContent",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
+  },
+  {
+   "id": "yard_ants_built_for_every_site",
+   "file": "web/home/home.js",
+   "old": "        if (standIn) {\n            var label = el('div', 'ylabel');",
+   "new": "        if (standIn || true) {\n            var label = el('div', 'ylabel');",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
+  },
+  {
+   "id": "plain_yard_has_the_dashed_edge",
+   "file": "web/home/home.css",
+   "old": ".standin::before { content:",
+   "new": ".yard::before { content:",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
+  },
+  {
+   "id": "plain_yard_has_the_picture",
+   "file": "web/home/home.css",
+   "old": ".standin { background: url(\"data:image/svg+xml",
+   "new": ".yard { background: url(\"data:image/svg+xml",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
   },
   {
    "id": "style_scrolls_sideways",

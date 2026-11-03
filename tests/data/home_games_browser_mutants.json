@@ -177,6 +177,27 @@
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   },
   {
+   "id": "docked_list_covers_the_chat_panel",
+   "file": "web/home/games.css",
+   "old": "left: 428px; right: 12px;",
+   "new": "left: 12px; right: 12px;",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "docked_list_reaches_under_the_chat_strip",
+   "file": "web/home/games.css",
+   "old": "top: 8px; left: 8px; right: 8px; width: auto; max-height: calc(100% - 90px);",
+   "new": "top: 8px; left: 8px; right: 8px; width: auto; max-height: calc(100% - 20px);",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "docked_list_is_not_inside_the_yard",
+   "file": "web/home/home.js",
+   "old": "dock: standIn ? null : yard,",
+   "new": "dock: standIn ? null : host,",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
    "id": "safe_area_padding_dropped",
    "file": "web/home/home.css",
    "old": "padding-bottom: env(safe-area-inset-bottom); ",
