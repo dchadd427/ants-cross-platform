@@ -7,7 +7,7 @@ body[data-screen="room"] #home { display: none; }
 .mast { display: none; }                                    /* the old logo row: its buttons are in the Menu now, and the slim bar below has the logo */
 .strips { flex: none; padding-top: 0; padding-bottom: 0; }
 .strips > :not([hidden]) { margin-top: 16px; margin-bottom: 0; }
-body[data-screen="home"] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }       /* (a strip above the page, "Back from the match", takes its height out of the screen's) */
+body[data-screen="home"] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); overflow: hidden; }       /* (a strip above the page, "Back from the match", takes its height out of the screen's) */
 body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 
