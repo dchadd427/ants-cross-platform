@@ -997,6 +997,7 @@ void run_runner_tests();
 void run_reconnect_core_tests();
 void run_match_tests();
 void run_failure_tests();
+void run_hash_tests();
 void run_dropout_tests();
 void run_migration_tests();
 void run_reconnect_session_tests();
