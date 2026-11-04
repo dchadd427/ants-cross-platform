@@ -1,0 +1,4 @@
+[submodule "probesub"]
+	path = third_party/probesub
+	url = https://example.org/probesub.git
+	ignore = all
