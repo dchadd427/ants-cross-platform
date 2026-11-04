@@ -85,6 +85,20 @@ check('a number is no name', M.validName(5) === false);
     check('a head with a name and no hash names no map', M.mapOfReplay(Uint8Array.from([...head('Some Map.lvl', 'aabbccddeeff0011').slice(0, 8 + 4 + 4), 2, 0, 0, 0, 1, 0, 0, 0, 0, 0])) === null);
     const damaged = bytes.slice(); damaged[8] = 0x58;
     check('a first chunk that is not HEAD names no map', M.mapOfReplay(damaged) === null);
+    // what a head says of the match, whatever the map is (the page of a file of the visitor's own shows it before the game has read the file, and when the game never will; the six originals too)
+    same('the head of a recording written by the C++ encoder says its map', M.infoOfReplay(bytes).map, 'Test Players Map (1).lvl');
+    same('the head of an original map says it too, and the seats and their names when it has them', M.infoOfReplay(head('TREASURE.LVL', '0011223344556677')), { map: 'TREASURE.LVL', names: ['', '', '', ''] });
+    {
+        const field = (id, body) => [id, body.length, ...body];
+        const payload = [1, 0, 21, 0, ...field(3, [...Buffer.from('Dune.lvl')]), ...field(4, [...Buffer.from('0011223344556677', 'hex').reverse()]), ...field(6, [13]), ...field(8, [...Buffer.from('Mika')]), ...field(9, [...Buffer.from('')]),
+                         ...field(10, [...Buffer.from('Bot (Medium)')]), ...field(11, [...Buffer.from('x'.repeat(65))])];
+        const file = Uint8Array.from([0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a, ...Buffer.from('HEAD'), payload.length, 0, 0, 0, ...payload, 0, 0, 0, 0]);
+        same('the roster and the names of the seats', M.infoOfReplay(file), { map: 'Dune.lvl', roster: 13, names: ['Mika', '', 'Bot (Medium)', ''] });         // (a name of 65 bytes is no name: the game refuses it)
+        const withCtl = (() => { const p2 = [1, 0, 21, 0, ...field(3, [...Buffer.from('Dune.lvl')]), ...field(4, [...Buffer.from('0011223344556677', 'hex').reverse()]), ...field(8, [0x4d, 0x0a, 0x61]), ...field(9, [0xc3, 0xa9])];
+                                   return Uint8Array.from([0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a, ...Buffer.from('HEAD'), p2.length, 0, 0, 0, ...p2, 0, 0, 0, 0]); })();
+        same('a name with a control character or bytes above ASCII is no name', M.infoOfReplay(withCtl).names, ['', '', '', '']);
+    }
+    same('a recording cut inside its head, bytes that are none and nothing say nothing', [M.infoOfReplay(bytes.slice(0, 40)), M.infoOfReplay(Uint8Array.from({ length: 80 }, (_, i) => i)), M.infoOfReplay(null), M.infoOfReplay(new Uint8Array(0))], [null, null, null, null]);
 }
 
 // ---- the map that a recording carries (its optional tmap chunk) -------------------------------------------------------------------------------------------------------------------------------------------
@@ -346,7 +360,7 @@ const rejects = () => Promise.reject(new Error('offline'));
         same('fetchOnly writes nothing', Object.keys(r.written), []);
         const q = rig([Promise.resolve(response(200, OTHER))]);
         const bad = await q.maps.fetchOnly(NAME, HASH);
-        check('fetchOnly refuses another file', bad.ok === false && /not the host's copy/.test(bad.text), JSON.stringify(bad));
+        check('fetchOnly refuses another file, in the words of a recording and not those of a room', bad.ok === false && bad.mismatch === true && /not the file that this match was played on \(the files differ\)/.test(bad.text) && !/host/.test(bad.text), JSON.stringify(bad));
         const z = rig([Promise.resolve(response(404, new Uint8Array(0)))]);
         const gone = await z.maps.fetchOnly(NAME, HASH);
         check('fetchOnly says a map that is gone', gone.ok === false && /not on the server/.test(gone.text));

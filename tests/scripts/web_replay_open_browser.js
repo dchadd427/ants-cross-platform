@@ -10,6 +10,8 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
+const tools = require('./replay_file_tools.js');
 
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i === -1 ? null : args[i + 1]; };
@@ -20,6 +22,7 @@ let playwright;
 try { playwright = require('playwright'); } catch (e) { console.log('SKIP: Playwright is not installed: the real browser was NOT run (tests/scripts/web_replay_open_browser.js)'); process.exit(0); }
 const WEB = path.resolve(__dirname, '..', '..', 'web');
 const FIXTURE = fs.readFileSync(path.resolve(__dirname, '..', 'data', 'replay_bots_tiny.antsrep'));
+const TINY_MAP = fs.readFileSync(path.resolve(__dirname, '..', '..', 'Original-Ants', 'Maps', 'TINY.LVL'));
 const FILLED = { '@@SITE_TITLE@@': '', '@@SITE_FOOTER@@': '', '@@GAME_VERSION@@': 'v0.0.0', '@@BUILD_ID@@': '20260101-0000', '@@BUILD_DATE@@': '2026-01-01 00:00 PT', '@@BUILD_TIMESTAMP@@': '0', '@@DATA_SIZE@@': '2000' };
 
 let checks = 0, failures = 0;
@@ -41,7 +44,7 @@ async function until(label, fn, ms) {
 
 // ---- the stand-in for the site
 const MAPS = ['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'ISLANDS'];
-function seat(n, color, name, bot, o) { return Object.assign({ seat: n, color, colour: color, name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, o || {}); }
+function seat(n, color, name, bot, o) { return Object.assign({ seat: n, color, name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, o || {}); }
 function record(id, ended, map, format, seats, rows, o) {
     return Object.assign({ v: 1, id, ended, map, game: 'v0.0.0', turns: 14400, seconds: 720, finished: true, quitter: null, mode: 'highest-score', format, draw: false, result: 'decided', computers_only: false,
         seats, rows, recording: 'watch', file: id + '.antsrep', keep_days: 30 }, o || {});
@@ -113,7 +116,7 @@ async function main() {
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the pages were NOT run in a browser'); return; }
     const shot = async (page, name) => { if (shotsDir) { fs.mkdirSync(shotsDir, { recursive: true }); await page.screenshot({ path: path.join(shotsDir, name + '.png') }); } };
     try {
-        const parts = { strip: partStrip };
+        const parts = { strip: partStrip, hand: partHand, cards: partCards };
         for (const name of PARTS) if ((!only || only === name) && parts[name]) await parts[name](browser, shot);
     } finally { await browser.close(); }
 }
@@ -160,6 +163,346 @@ async function partStrip(browser, shot) {
         const p2 = await open(c2, empty);
         await shot(p2, 'built_b_' + kind + '_empty');
         await c2.close(); empty.server.close();
+    }
+    site.server.close();
+}
+
+
+// ---- what the checks of the next two parts share
+const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+const asFile = (name, buffer) => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(buffer) });
+const NAME = 'ants-TREASURE-20261006-143209.antsrep';                      // (a name that the desktop game gives: the local time, no Z)
+// the game is up (the stand-in has read the file) and has reported it: the tag over the picture is shown
+const stubStarted = (page) => page.waitForFunction(() => window.__stub && window.__stub.total > 0 && !document.getElementById('rtag').hidden, null, { timeout: 15000 });
+const stubSha = (page, file) => page.evaluate(async (p) => {
+    const b = window.__stub && window.__stub.files[p];
+    if (!b) return null;
+    const d = await crypto.subtle.digest('SHA-256', b);
+    return Array.from(new Uint8Array(d)).map((x) => x.toString(16).padStart(2, '0')).join('');
+}, file);
+async function chooseFile(page, trigger, file) {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click(trigger)]);
+    await chooser.setFiles(file);
+}
+const text = (page, selector) => page.evaluate((sel) => { const e = document.querySelector(sel); return e ? e.textContent : null; }, selector);
+const LOCAL_URL = /\/play\.html\?local=[0-9a-f]{32}$/;
+const bodiless = (hits) => hits.every((h) => h.method === 'GET' && h.bodyLength === 0 && h.contentLength === '');
+const askedFor = (hits, re) => hits.filter((h) => re.test(h.path));
+// a page of the site in a fresh context, with what the stand-in game says (window.__stubReport) set before the page's own scripts run
+async function newPage(browser, context, report, extra) {
+    const ctx = await browser.newContext(context);
+    await ctx.addInitScript((r) => { if (r) window.__stubReport = r; }, report || null);
+    if (extra) await ctx.addInitScript(extra);
+    return { ctx, page: await ctx.newPage() };
+}
+async function openMatches(site, page) {
+    await page.goto(site.url('/matches.html'));
+    await page.waitForSelector('#opener:not([hidden])');
+}
+// the card of the player: its title, its buttons (the words), and whether it offers the file for download
+async function cardOf(page) {
+    await page.waitForSelector('#rm:not([hidden])', { timeout: 15000 });
+    return page.evaluate(() => ({
+        title: document.getElementById('rm-title').textContent,
+        body: document.getElementById('rm-body').innerText,
+        buttons: [].map.call(document.querySelectorAll('#rm-body .rm-btns .btn'), (b) => ({ text: b.textContent, tag: b.tagName, href: b.getAttribute('href'), download: b.hasAttribute('download') })),
+        downloads: document.querySelectorAll('#rm-body a[download], #rm-body a[href^="/replays/"]').length,
+    }));
+}
+
+// ---- part hand: the file goes from the Matches page to the player, on this device and nowhere else
+async function partHand(browser, shot) {
+    const site = await makeSite();
+    const report = { map: 'TREASURE.LVL', turns: 20060 };
+    // 1. a computer: chosen with the button
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, report);
+        await openMatches(site, page);
+        await page.waitForSelector('#body .list');
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL);
+        await stubStarted(page);
+        const url = page.url();
+        check('the player gets exactly the bytes of the file (SHA-256)', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
+        const args = await page.evaluate(() => window.__stub.args);
+        check('the game is started with --replay and the file, and not as a live match', args.join(' ').indexOf('--replay /replay.antsrep') !== -1 && args.indexOf('--replay-live') === -1, args.join(' '));
+        const head = await text(page, '#r-title');
+        check('the header says the map, Your file, the name of the file and its length', /^Treasure/.test(head) && /Your file/.test(head) && head.indexOf(NAME) !== -1 && /16:43/.test(head), head);
+        check('the header holds no date (a desktop file name has the local time: nothing is guessed from it)', !/Today|Yesterday|Oct \d|\d+:\d\d (AM|PM)/.test(head), head);
+        check('the chips are the players of the report', (await page.$$eval('#r-meta .chip .nm', (n) => n.map((x) => x.textContent))).join('|') === 'Mika|Bot (Medium)|Bot (Medium)|Bot (Medium)');
+        check('the buttons: Matches and Fullscreen, no Copy link, no Stats, no Download', await page.isVisible('#all-btn') && (await text(page, '#all-btn')).trim() === '‹ Matches' && await page.isVisible('#fullscreen-btn-r')
+              && !(await page.isVisible('#copy-btn')) && !(await page.isVisible('#stats-btn')) && (await page.$$eval('[data-dl]', (n) => n.every((x) => x.getClientRects().length === 0))));
+        check('the body says replay and ownfile, not live', await page.evaluate(() => document.body.classList.contains('replay') && document.body.classList.contains('ownfile') && !document.body.classList.contains('live')));
+        await sleep(300);
+        await shot(page, 'built_d_desktop_player');
+        const all = site.hits.slice();
+        check('no request of the whole visit carries a body, none is a POST, none asks the site for a recording or its stats', bodiless(all) && askedFor(all, /^\/(replays|history\/|stats)/).length === 0, JSON.stringify(askedFor(all, /^\/(replays|history\/|stats)/)));
+        check('no request names the file or its bytes', all.every((h) => (h.path + h.query).indexOf(NAME) === -1));
+        // 2. the player is reloaded: the record is still there
+        await page.reload();
+        await stubStarted(page);
+        check('a reload of the player plays the same file again (the record stays)', page.url() === url && (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
+        // 3. a second file takes the place of the first: the address of the first finds nothing, and does not start the game
+        await page.goto(site.url('/matches.html'));
+        await page.waitForSelector('#opener:not([hidden])');
+        await chooseFile(page, '#open-btn', asFile('second.antsrep', FIXTURE));
+        await page.waitForURL(LOCAL_URL);
+        check('a second file has an address of its own', page.url() !== url);
+        await page.goto(url);
+        const gone = await cardOf(page);
+        check('the address of the first file, after a second was opened, is the card "Choose the replay file again" and no game', gone.title === 'Choose the replay file again' && (await page.evaluate(() => typeof window.__stub)) === 'undefined', gone.title);
+        check('... which has a button for a file and a link to all matches, and nothing to download', gone.buttons.length === 2 && gone.buttons[0].text === 'Open a replay file' && gone.buttons[1].text === '‹ All matches' && gone.buttons[1].href === '/matches.html' && gone.downloads === 0, JSON.stringify(gone.buttons));
+        await shot(page, 'built_e_desktop_again');
+        await chooseFile(page, '#rm-body .rm-btns button', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL);
+        await stubStarted(page);
+        check('a file chosen on the card plays', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
+        await ctx.close();
+    }
+    // 4. an address with no record, or one that is no id, starts nothing
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, report);
+        const before = site.hits.length;
+        for (const bad of ['/play.html?local=', '/play.html?local=xyz', '/play.html?local=' + '0'.repeat(32), '/play.html?local=' + 'A'.repeat(32), '/play.html?local=../../etc/passwd']) {
+            await page.goto(site.url(bad));
+            const c = await cardOf(page);
+            check('no record behind ' + bad + ': the card, and no game', c.title === 'Choose the replay file again' && (await page.evaluate(() => typeof window.__stub)) === 'undefined', c.title);
+        }
+        check('none of them asked for a recording', askedFor(site.hits.slice(before), /^\/replays/).length === 0);
+        await ctx.close();
+    }
+    // 5. a record older than a day is thrown away by either page
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, report);
+        await openMatches(site, page);
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL);
+        await stubStarted(page);
+        const age = (days) => page.evaluate((d) => new Promise((resolve, reject) => {
+            const open = indexedDB.open('ants-own-replay', 1);
+            open.onerror = () => reject(open.error);
+            open.onsuccess = () => {
+                const tx = open.result.transaction('slot', 'readwrite'), store = tx.objectStore('slot'), get = store.get('file');
+                get.onsuccess = () => { const rec = get.result; rec.at = Date.now() - d * 24 * 3600 * 1000 - 1000; store.put(rec, 'file'); };
+                tx.oncomplete = () => resolve(true);
+            };
+        }), days);
+        const slot = () => page.evaluate(() => new Promise((resolve) => { const o = indexedDB.open('ants-own-replay', 1); o.onsuccess = () => { const g = o.result.transaction('slot').objectStore('slot').get('file'); g.onsuccess = () => resolve(g.result ? g.result.id : null); }; }));
+        const url = page.url();
+        await age(0.5);
+        await page.goto(url); await stubStarted(page);
+        check('a record of half a day is still played', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
+        await age(1);
+        await page.goto(url);
+        check('a record of a day and a second is gone when the player opens: the card', (await cardOf(page)).title === 'Choose the replay file again' && (await slot()) === null);
+        await page.goto(site.url('/matches.html')); await page.waitForSelector('#opener:not([hidden])');
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL); await stubStarted(page);
+        await age(2);
+        check('before the Matches page opens the old record is there', (await slot()) !== null);
+        await page.goto(site.url('/matches.html')); await page.waitForSelector('#opener:not([hidden])');
+        await until('the Matches page throws the old record away', async () => (await slot()) === null, 5000);
+        check('and the Matches page threw it away', (await slot()) === null);
+        await ctx.close();
+    }
+    // 6. a file that is refused leaves the record that was there
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, report);
+        await openMatches(site, page);
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL); await stubStarted(page);
+        const url = page.url();
+        await page.goto(site.url('/matches.html')); await page.waitForSelector('#opener:not([hidden])');
+        await chooseFile(page, '#open-btn', asFile('notes.txt', Buffer.from('this is a text file and no replay at all, long enough to hold a head if it were one')));
+        await page.waitForSelector('#open-note .card');
+        check('a file that is no replay is refused with its card', /not a readable replay/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches.html') !== -1);
+        await page.goto(url); await stubStarted(page);
+        check('and the record that was there still plays', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
+        await ctx.close();
+    }
+    // 7. a phone: the same, and More has a way to open another file
+    {
+        const { ctx, page } = await newPage(browser, PHONE, report);
+        await openMatches(site, page);
+        await page.waitForSelector('#body .list');
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL); await stubStarted(page); await sleep(300);
+        await shot(page, 'built_d_phone_player');
+        check('a phone plays the same bytes', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
+        await page.click('.header-actions.rep-only summary');
+        const more = await page.$$eval('.header-actions.rep-only .more-list > *', (n) => n.filter((x) => x.getClientRects().length > 0).map((x) => x.textContent));
+        check('More holds one thing on a phone: Open another file', more.length === 1 && more[0] === 'Open another file', JSON.stringify(more));
+        const url = page.url();
+        await chooseFile(page, '#own-more', asFile('other.antsrep', FIXTURE));
+        await page.waitForFunction((u) => location.href !== u, url);
+        check('another file from More goes to the player at its own address', LOCAL_URL.test(page.url()));
+        await ctx.close();
+    }
+    // 8. the site is down: the strip and the player do not need it
+    {
+        const down = await makeSite({ down: true });
+        const { ctx, page } = await newPage(browser, DESKTOP, report);
+        await page.goto(down.url('/matches.html'));
+        await page.waitForSelector('#opener:not([hidden])');
+        await page.waitForSelector('#body .note');
+        check('with the server down the list says so and the strip is there', await page.isVisible('#open-btn') && /Try again|could not|Could not|not answer|isn/.test(await text(page, '#body .note') || ''), await text(page, '#body .note'));
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL); await stubStarted(page);
+        check('and the file plays', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
+        await ctx.close();
+        down.server.close();
+    }
+    // 9. a browser that keeps no site data: the card that says so
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, report, () => { Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }); });
+        await openMatches(site, page);
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForSelector('#open-note .card');
+        check('no IndexedDB: the card says that the browser will not keep the file, the page stays', /will not keep the file/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches.html') !== -1);
+        await ctx.close();
+    }
+    site.server.close();
+}
+
+// ---- part cards: what the game says of a file, the maps, and the way out of every card
+async function partCards(browser, shot) {
+    const site = await makeSite();
+    const open = async (page, file) => {
+        await openMatches(site, page);
+        await chooseFile(page, '#open-btn', file);
+        await page.waitForURL(LOCAL_URL);
+    };
+    // 1. the game refuses the file for its version (the game decides: the stand-in answers as the game does)
+    for (const [kind, report, title, needs] of [['older', { failure: 2, game: 'v0.11.0', map: 'TREASURE.LVL', turns: 20060 }, 'Recorded by an older version', /played on v0\.11\.0\. The rules of the game have changed since.*this version \(v0\.0\.0\) can’t show it/],
+                                                 ['newer', { failure: 3, game: 'v0.14.2', map: 'TREASURE.LVL', turns: 20060 }, 'Recorded by a newer version', /played on v0\.14\.2, and this page is v0\.0\.0\. Load the page again to get the newer version/]]) {
+        for (const [kindName, context] of [['desktop', DESKTOP], ['phone', PHONE]]) {
+            const { ctx, page } = await newPage(browser, context, report);
+            await open(page, asFile(NAME, FIXTURE));
+            const card = await cardOf(page);
+            check('a file of ' + kind + ' version (' + kindName + '): the card "' + title + '" with the approved sentence', card.title === title && needs.test(card.body.replace(/\s+/g, ' ')), card.title + ' / ' + card.body);
+            const want = kind === 'newer' ? ['Open another file', 'Load the page again', '‹ All matches'] : ['Open another file', '‹ All matches'];
+            check('... its buttons are ' + want.join(', ') + ' and nothing to download', JSON.stringify(card.buttons.map((b) => b.text)) === JSON.stringify(want) && card.downloads === 0 && !/download/i.test(card.body), JSON.stringify(card.buttons));
+            check('... the header still says whose file it is', /Your file/.test(await text(page, '#r-title')) && (await page.$$eval('#r-meta .chip', (n) => n.length)) === 4);
+            await sleep(200);
+            await shot(page, 'built_c_' + kindName + '_otherversion_' + kind);
+            if (kindName === 'desktop') {
+                const url = page.url();
+                await chooseFile(page, '#rm-body .rm-btns button', asFile('again.antsrep', FIXTURE));
+                await page.waitForFunction((u) => location.href !== u, url);
+                check('Open another file opens a chooser and a file from it goes to its own address', LOCAL_URL.test(page.url()));
+                const url2 = page.url();
+                await cardOf(page);
+                await chooseFile(page, '#rm-body .rm-btns button', asFile('notes.txt', Buffer.from('not a replay, but long enough to look at, as a head would need it to be')));
+                await page.waitForSelector('#toast:not([hidden])');
+                check('a file that is refused from the card is a note on the page, and the page stays', /not a readable replay/.test(await text(page, '#toast')) && page.url() === url2, await text(page, '#toast'));
+                if (kind === 'newer') {
+                    await page.evaluate(() => { window.__reloaded = 0; });
+                    await Promise.all([page.waitForNavigation(), page.click('#rm-body .rm-btns a[href="#"]')]);
+                    check('Load the page again reloads the page (the record stays: the same card)', (await cardOf(page)).title === title && page.url() === url2);
+                }
+            }
+            await ctx.close();
+        }
+    }
+    // 2. the game cannot read the file, or has not the map: the generic card, without a download
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, { failure: 1, text: 'chunk CMDS at byte 900: the checksum is wrong (the file is damaged)', map: 'TREASURE.LVL', turns: 20060 });
+        await open(page, asFile(NAME, FIXTURE));
+        const card = await cardOf(page);
+        check('a file that the game cannot read: "This replay can’t be played here", the game\'s reason, Open another file and All matches, no download', card.title === 'This replay can’t be played here' && /the checksum is wrong/.test(card.body)
+              && JSON.stringify(card.buttons.map((b) => b.text)) === JSON.stringify(['Open another file', '‹ All matches']) && card.downloads === 0, JSON.stringify(card));
+        await ctx.close();
+    }
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, { failure: 4, text: 'the map cannot be found', map: 'Dune.lvl', turns: 20060 });
+        await open(page, asFile(NAME, FIXTURE));
+        const card = await cardOf(page);
+        check('the game has not the map: "This site doesn’t have the map" with the map\'s name', card.title === 'This site doesn’t have the map' && /played on the map Dune\.lvl/.test(card.body) && card.downloads === 0, JSON.stringify(card));
+        await ctx.close();
+    }
+    // 3. the maps of a file: an original is in the game; a map of the library is fetched by its name and checked; a map that the file carries is used without asking; a hostile name asks for nothing
+    const DUNE = TINY_MAP;
+    const dune = (embed) => tools.withMap(FIXTURE, 'Dune.lvl', DUNE, embed);
+    {
+        const { ctx, page } = await newPage(browser, DESKTOP, null);
+        const before = site.hits.length;
+        await open(page, asFile('dune.antsrep', dune(false)));
+        const card = await cardOf(page);
+        const maps = askedFor(site.hits.slice(before), /^\/maps\/files\//);
+        check('a map of the library that the site has not: "This site doesn’t have the map", the map\'s name, "no longer has it"', card.title === 'This site doesn’t have the map' && /map Dune\.lvl/.test(card.body) && /no longer has it/.test(card.body), JSON.stringify(card));
+        check('... the game is not started, and the site was asked once for that map by its name (a GET with no body)', (await page.evaluate(() => typeof window.__stub)) === 'undefined' && maps.length === 1 && maps[0].path === '/maps/files/Dune.lvl' && bodiless(maps), JSON.stringify(maps));
+        check('... the header says the map and the players of the file\'s head, though the game never read it', /^Dune/.test(await text(page, '#r-title')) && (await page.$$eval('#r-meta .chip .nm', (n) => n.length)) === 4);
+        await sleep(200);
+        await shot(page, 'built_c_desktop_mapmissing');
+        await ctx.close();
+        const { ctx: c2, page: p2 } = await newPage(browser, PHONE, null);
+        await open(p2, asFile('dune.antsrep', dune(false)));
+        await cardOf(p2);
+        await sleep(200);
+        await shot(p2, 'built_c_phone_mapmissing');
+        await c2.close();
+    }
+    {
+        site.maps['Dune.lvl'] = Buffer.concat([DUNE, Buffer.from('x')]);
+        const { ctx, page } = await newPage(browser, DESKTOP, null);
+        await open(page, asFile('dune.antsrep', dune(false)));
+        const card = await cardOf(page);
+        check('a map of that name that is another file: the card says it is not the same file, the game is not started', card.title === 'This site doesn’t have the map' && /has a map of that name, but it is not the same file/.test(card.body) && !/host/.test(card.body)
+              && (await page.evaluate(() => typeof window.__stub)) === 'undefined', JSON.stringify(card));
+        await ctx.close();
+    }
+    {
+        site.maps['Dune.lvl'] = DUNE;
+        const { ctx, page } = await newPage(browser, DESKTOP, null);
+        const before = site.hits.length;
+        await open(page, asFile('dune.antsrep', dune(false)));
+        await stubStarted(page);
+        const maps = askedFor(site.hits.slice(before), /^\/maps\/files\//);
+        check('a map of the library that the site has: fetched by its name, checked against the head\'s hash and handed to the game', maps.length === 1 && maps[0].path === '/maps/files/Dune.lvl' && (await stubSha(page, 'Original-Ants/Maps/Dune.lvl')) === sha256(DUNE));
+        check('... the whole visit carries no body and asks for no recording', bodiless(site.hits.slice(before)) && askedFor(site.hits.slice(before), /^\/(replays|history\/)/).length === 0);
+        await ctx.close();
+    }
+    {
+        delete site.maps['Dune.lvl'];
+        const { ctx, page } = await newPage(browser, DESKTOP, null);
+        const before = site.hits.length;
+        await open(page, asFile('dune.antsrep', dune(true)));
+        await stubStarted(page);
+        check('a file that carries its map plays with nothing fetched: the map the game gets is the file\'s', askedFor(site.hits.slice(before), /^\/maps\/files\//).length === 0 && (await stubSha(page, 'Original-Ants/Maps/Dune.lvl')) === sha256(DUNE));
+        await ctx.close();
+        const { ctx: c2, page: p2 } = await newPage(browser, DESKTOP, null);
+        const before2 = site.hits.length;
+        const bad = tools.withMap(FIXTURE, 'Dune.lvl', DUNE, true);
+        const spoilt = Uint8Array.from(bad); spoilt[tools.chunks(bad)[1].at + 8 + 5] ^= 1;       // (a byte of the carried map: its checksum and its hash are wrong now)
+        await open(p2, asFile('spoilt.antsrep', spoilt));
+        const card = await cardOf(p2).catch(() => null);
+        check('a carried map that is not the one the head names is not used: the page asks the site for the map by its name instead (and the card for a map that the site has not)', askedFor(site.hits.slice(before2), /^\/maps\/files\/Dune\.lvl$/).length === 1 && !!card, JSON.stringify(card));
+        await c2.close();
+    }
+    {
+        for (const [label, name, expectAsked] of [['a map name with a path in it', '../../etc/passwd.lvl', 0], ['a map name with a slash', 'a/b.lvl', 0], ['a map name that is not printable', 'a\u0001b.lvl', 0], ['a map name that is percent codes', 'x%2e%2e%2fy.lvl', 1]]) {
+            const { ctx, page } = await newPage(browser, DESKTOP, null);
+            const before = site.hits.length;
+            const file = tools.withHead(FIXTURE, (fields) => { tools.setField(fields, 3, tools.text(name)); tools.setField(fields, 4, tools.hashBytes('0123456789abcdef')); });
+            await open(page, asFile('hostile.antsrep', file));
+            const card = await cardOf(page);
+            const maps = askedFor(site.hits.slice(before), /^\/maps\/files\//);
+            check(label + ': ' + (expectAsked ? 'the name is percent-encoded, one request, no game' : 'the site is not asked at all, no game'), maps.length === expectAsked && (!expectAsked || maps[0].path === '/maps/files/x%252e%252e%252fy.lvl') && (await page.evaluate(() => typeof window.__stub)) === 'undefined', JSON.stringify(maps));
+            check(label + ': a card with no way to download (' + card.title + ')', card.downloads === 0 && !!card.title);
+            await ctx.close();
+        }
+    }
+    // 4. everything that a file says is text: names of players, the map, the name of the file
+    {
+        const evil = '<img src=x onerror=window.__pwn=1>';
+        const file = tools.withHead(FIXTURE, (fields) => { tools.setField(fields, 8, tools.text(evil)); tools.setField(fields, 9, tools.text('"><script>window.__pwn=1</script>')); });
+        const { ctx, page } = await newPage(browser, DESKTOP, { map: 'TINY.LVL', names: [evil, '"><script>window.__pwn=1</script>', 'Bot (Medium)', 'Bot (Medium)'] });
+        await open(page, asFile('"><img src=x onerror=window.__pwn=1>.antsrep', file));
+        await stubStarted(page);
+        await sleep(300);
+        check('a name of a player, the name of the file: text, never markup (nothing ran, no element was made)', (await page.evaluate(() => window.__pwn)) === undefined && (await page.$$eval('#r-title img, #r-meta img, #r-title script, #r-meta script', (n) => n.length)) === 0);
+        check('... the chip shows the name as it is, and the header the name of the file as it is', (await page.$$eval('#r-meta .chip .nm', (n) => n.map((x) => x.textContent)))[0] === evil && /"><img src=x onerror=window\.__pwn=1>\.antsrep/.test(await text(page, '#r-title')));
+        await ctx.close();
     }
     site.server.close();
 }

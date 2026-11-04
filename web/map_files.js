@@ -74,15 +74,31 @@
             while (pos < end && shift < 35) { var b = bytes[pos++]; v += (b & 0x7f) * Math.pow(2, shift); if (!(b & 0x80)) return v; shift += 7; }
             return -1;
         }
-        var name = '', hash = '';
+        var name = '', hash = '', roster, names = ['', '', '', ''];
         while (pos < end) {
             var id = varint(), len = varint();
             if (id < 0 || len < 0 || pos + len > end) return null;
             if (id === 3) { name = ''; for (var i = 0; i < len; i++) name += String.fromCharCode(bytes[pos + i]); }
             else if (id === 4 && len === 8) { hash = ''; for (var k = 7; k >= 0; k--) hash += ('0' + bytes[pos + k].toString(16)).slice(-2); }
+            else if (id === 6 && len === 1) roster = bytes[pos];                                                             // (the seats that play: bit 0 green ... bit 3 black)
+            else if (id >= 8 && id <= 11) names[id - 8] = printable(bytes, pos, len);                                          // (what each seat's player typed)
             pos += len;
         }
-        return name && hash ? { name: name, hash: hash, next: end + 4 } : null;
+        return name && hash ? { name: name, hash: hash, next: end + 4, roster: roster, names: names } : null;
+    }
+    // bytes[at, at + len) as text when every one is printable ASCII and there are at most 64 (the game's own rule for a text of a head), else ''
+    function printable(bytes, at, len) {
+        if (len > 64) return '';
+        var text = '';
+        for (var i = 0; i < len; i++) { if (bytes[at + i] < 0x20 || bytes[at + i] > 0x7E) return ''; text += String.fromCharCode(bytes[at + i]); }
+        return text;
+    }
+
+    // What a recording says of itself in its head, for a page that shows it before the game has read the file (or when the game never will): { map (any of the seven: "Dune.lvl", "TREASURE.LVL"), roster
+    // (the seats' bits, or undefined), names (four texts: what each seat's player typed, '' for none) }, or null when the file is no recording or its head has no map. Text from a file: the page only shows it as text.
+    function infoOfReplay(bytes) {
+        var head = headOf(bytes);
+        return head ? { map: head.name, roster: head.roster, names: head.names } : null;
     }
 
     // The map that a recording (.antsrep) was played on: { name, hash } from its HEAD chunk, or null when the file is no recording, has no such fields or plays one of the six originals.
@@ -163,13 +179,14 @@
 
         // The bytes of the map, fetched and checked: hashed against the room's (`expect()` is read when the bytes are here, as the Start may come while they travel; '' means none yet), with one more fetch that
         // skips the HTTP cache when the hash is wrong, in case the cache holds the map of before an update of the site.
-        function verified(name, expect, fresh) {
+        function verified(name, expect, fresh, replay) {
             return download(name, fresh, tries).then(function (result) {
                 if (!result.ok) return result;
                 var h = hash64(result.bytes), want = expect();
                 if (want && h !== want) {
-                    if (!fresh) return verified(name, expect, true);
-                    return { ok: false, mismatch: true, text: 'The map ' + name + ' on this site is not the host\'s copy of it (the files differ). The host may need to choose the map again.' };
+                    if (!fresh) return verified(name, expect, true, replay);
+                    return { ok: false, mismatch: true, text: replay ? 'The map ' + name + ' on this site is not the file that this match was played on (the files differ).'
+                                                                     : 'The map ' + name + ' on this site is not the host\'s copy of it (the files differ). The host may need to choose the map again.' };
                 }
                 return { ok: true, bytes: result.bytes, hash: h };
             });
@@ -227,7 +244,7 @@
         // For a page that has the bytes before the game runs (a recording: the file system is not there yet): the checked bytes, to be written when it is. { ok, bytes } or { ok: false, text }
         function fetchOnly(name, hash) {
             if (!validName(name)) return Promise.resolve({ ok: false, text: 'The map name ' + name + ' is not one that the game takes.' });
-            return verified(name, function () { return hash || ''; }, false);
+            return verified(name, function () { return hash || ''; }, false, true);
         }
 
         return { request: request, status: status, message: message, fetchOnly: fetchOnly, fileUrl: fileUrl, entries: entries };
@@ -287,5 +304,5 @@
         }, function () { fail('Could not download the map ' + file + '. Check your connection and try again.', false); });
     }
 
-    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, embeddedMapOfReplay: embeddedMapOfReplay, create: create };
+    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, infoOfReplay: infoOfReplay, embeddedMapOfReplay: embeddedMapOfReplay, create: create };
 });

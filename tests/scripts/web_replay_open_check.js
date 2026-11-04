@@ -23,22 +23,9 @@ function same(label, got, want) {
     check(label, a === b, 'got ' + a + ', wanted ' + b);
 }
 
-// ---- a CRC-32 and a chunk writer of the check's own (the page's crc32 is the thing under test: this one is the plain bit by bit definition)
-function crcOf(bytes, seed) {
-    let c = ~(seed || 0) >>> 0;
-    for (const b of bytes) {
-        c = (c ^ b) >>> 0;
-        for (let k = 0; k < 8; k++) c = (c & 1 ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1)) >>> 0;
-    }
-    return ~c >>> 0;
-}
-const le32 = (n) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
-const MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];
-function chunk(tag, payload, o) {                       // o.length: the length field that is written; o.crc: the checksum that is written (else the right one)
-    const t = Array.from(tag, (ch) => ch.charCodeAt(0));
-    const crc = o && o.crc !== undefined ? o.crc : crcOf(Uint8Array.from(payload), crcOf(Uint8Array.from(t)));
-    return t.concat(le32(o && o.length !== undefined ? o.length : payload.length), Array.from(payload), le32(crc));
-}
+// ---- a CRC-32 and a chunk writer that are not the page's (tests/scripts/replay_file_tools.js: the plain definition, bit by bit)
+const tools = require('./replay_file_tools.js');
+const crcOf = tools.crc32, le32 = tools.le32, MAGIC = tools.MAGIC, chunk = tools.chunk;
 const file = (...parts) => Uint8Array.from([].concat(MAGIC, ...parts.map((p) => Array.from(p))));
 const zeros = (n) => new Array(n).fill(0);
 const verdict = (bytes) => R.localCheck(bytes);
@@ -55,6 +42,21 @@ check('the limit of a head is the game\'s kMaxHeadBytes', R.HEAD_MAX_BYTES === 4
 same('the page\'s checksum is the definition\'s (the vector of the standard, and the head of the file)', [R.crc32(Uint8Array.from('123456789', (ch) => ch.charCodeAt(0)), 0, 9, 0), R.crc32(FIXTURE, 16, 16 + headLength, R.crc32(FIXTURE, 8, 12, 0))],
      [0xcbf43926, (FIXTURE[8 + 8 + headLength] | (FIXTURE[9 + 8 + headLength] << 8) | (FIXTURE[10 + 8 + headLength] << 16) | (FIXTURE[11 + 8 + headLength] << 24)) >>> 0]);
 same('a checksum goes on from the one before it', R.crc32(Uint8Array.from([1, 2, 3, 4]), 2, 4, R.crc32(Uint8Array.from([1, 2, 3, 4]), 0, 2, 0)), crcOf(Uint8Array.from([1, 2, 3, 4])));
+
+// ---- the tools that make the other recordings of these checks: they must be right themselves (a file made by hand from the real one is the real one with one thing changed)
+same('FNV-1a 64 of nothing and of "a" (the published vectors)', [tools.fnv64([]), tools.fnv64([0x61])], ['cbf29ce484222325', 'af63dc4c8601ec8c']);
+same('the chunks of the real file are the head, the commands, the hashes and the end', (() => { const c = tools.chunks(FIXTURE); return [c[0].tag, c[1].tag, c[c.length - 2].tag, c[c.length - 1].tag, c.some((x) => x.tag === 'tmap')]; })(), ['HEAD', 'CMDS', 'hash', 'ENDS', false]);
+same('a head read and written again is the same head, byte for byte', Array.from(tools.withHead(FIXTURE, () => {})), Array.from(FIXTURE));
+{
+    const dune = Uint8Array.from(tools.text('a map file that is not one'));
+    const named = tools.withMap(FIXTURE, 'Dune.lvl', dune, false), carried = tools.withMap(FIXTURE, 'Dune.lvl', dune, true), older = tools.withRules(FIXTURE, 4);
+    const headOf = (f) => tools.readHead(tools.chunks(f)[0].payload).fields;
+    same('a file that is given another map names it with the hash of its bytes', [String.fromCharCode(...headOf(named).find((f) => f.id === 3).bytes), headOf(named).find((f) => f.id === 4).bytes], ['Dune.lvl', tools.hashBytes(tools.fnv64(dune))]);
+    same('... and the rest of the file is the real one', Array.from(named.subarray(tools.chunks(named)[1].at)), Array.from(FIXTURE.subarray(tools.chunks(FIXTURE)[1].at)));
+    same('a file that carries its map has a tmap chunk right after the head, with the map in it', [tools.chunks(carried)[1].tag, tools.chunks(carried)[1].payload.length, tools.chunks(carried)[2].tag], ['tmap', dune.length, 'CMDS']);
+    same('every file made by hand passes the page\'s check of its head', [accepted(named), accepted(carried), accepted(older)], [true, true, true]);
+    same('the rules number of a file is changed in its head and nowhere else', [headOf(older).find((f) => f.id === 16).bytes, headOf(older).length], [[4, 0], headOf(FIXTURE).length]);
+}
 
 // ---- the size, asked from File.size before a byte is read
 for (const [size, want] of [[0, false], [1, true], [3180, true], [1048576, true], [2097163, true], [2097164, true], [2097165, false], [14900000, false], [-1, false], [NaN, false], [Infinity, false], ['3000', false], [null, false], [undefined, false]]) {
