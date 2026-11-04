@@ -1,4 +1,4 @@
-# Throwaway probe, never merged: stands in for CI on one pull request to see whether GitHub treats a required check that a job-level `if` skipped as passing.
+# Throwaway probe, never merged: stands in for CI on one pull request to see what GitHub does with the five required checks of main.
 name: CI
 
 on:
@@ -13,14 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo ok
+
   macos:
     name: macOS (Apple clang)
-    if: ${{ github.event_name == 'pull_request' && 1 == 2 }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo never
+      - run: echo ok
+
   windows:
     name: Windows (${{ matrix.name }})
+    if: ${{ 1 == 2 }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -30,8 +32,10 @@ jobs:
           - name: MSVC 2026
     steps:
       - run: echo ok
+
   web:
     name: Web (Emscripten, Docker image)
     runs-on: ubuntu-latest
     steps:
       - run: echo ok
+
