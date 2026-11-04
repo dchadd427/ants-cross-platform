@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """tools/ci_light.sh, which decides in the first job of the CI whether a pull request needs all of CI or only the light checks (run by ./run_tests.sh --fast and by the CI).
 
-It is run on real git repositories made here (a base commit, a pull request's commits, a base that moved on): the decision, the file list it prints, the line it appends to GITHUB_OUTPUT.
+It is run on real git repositories made here (a base commit, a pull request's commits, a base that moved on), made with git's plumbing and no working tree, so that a file system that folds
+the case of names (macOS, Windows) cannot make `Web/a.js` and `web/a.js` one file: the decision, the file list it prints, the line it appends to GITHUB_OUTPUT.
 The rules are the ones that docs/WORKFLOW.md states; what these tests hold:
   - every changed file must be a page, a document, a list of mutants or a page test for `light`; one other file makes it `full`, whatever else changes with it, and an unknown path is full;
   - what is compared is the pull request's own change (against the MERGE BASE: a base that moved on, with a change of its own, does not make the pull request full), a renamed file counts under
@@ -48,32 +49,36 @@ class Decision(unittest.TestCase):
         self.root = os.path.join(tmp.name, "repo")
         os.makedirs(self.root)
         self.out_file = os.path.join(tmp.name, "github_output")
+        self.index_file = os.path.join(tmp.name, "index")
         self.git("init", "-q", "-b", "main")
-        self.base = self.commit({"README.md": "x\n", "src/a.cpp": "int a;\n", "docs/a.md": "a\n", "web/a.js": "a\n", "tools/t.py": "t\n", "old name.cpp": "o\n"}, "base")
+        self.git("config", "core.ignorecase", "false")
+        self.base = self.commit(None, {"README.md": "x\n", "src/a.cpp": "int a;\n", "docs/a.md": "a\n", "web/a.js": "a\n", "tools/t.py": "t\n", "old name.cpp": "o\n"}, "base")
 
-    def git(self, *args):
-        done = run(["git", *args], self.root)
+    def git(self, *args, **kwargs):
+        env = dict(GIT_ENV, GIT_INDEX_FILE=self.index_file)
+        done = subprocess.run(["git", *args], cwd=self.root, env=env, capture_output=True, text=True, **kwargs)
         self.assertEqual(done.returncode, 0, (args, done.stdout, done.stderr))
         return done.stdout.strip()
 
-    def commit(self, changes, message="change"):
-        """writes (text) or deletes (None) the files and commits; returns the commit id"""
+    def commit(self, parent, changes, message="change"):
+        """A commit made without a working tree: the files of the tree of `parent` (None: an empty root) with `changes` applied (a text writes or replaces a file, None deletes it). Returns its id."""
+        if os.path.exists(self.index_file):
+            os.remove(self.index_file)
+        if parent:
+            self.git("read-tree", parent)
+        lines = []
         for path, text in changes.items():
-            full = os.path.join(self.root, path)
             if text is None:
-                os.remove(full)
+                lines.append("0 %s\t%s\0" % ("0" * 40, path))
             else:
-                os.makedirs(os.path.dirname(full), exist_ok=True)
-                with open(full, "w", encoding="utf-8") as f:
-                    f.write(text)
-        self.git("add", "-A")
-        self.git("commit", "-q", "--allow-empty", "-m", message)
-        return self.git("rev-parse", "HEAD")
+                lines.append("100644 %s\t%s\0" % (self.git("hash-object", "-w", "--stdin", input=text), path))
+        self.git("update-index", "--add", "-z", "--index-info", input="".join(lines))
+        tree = self.git("write-tree")
+        return self.git("commit-tree", tree, *(["-p", parent] if parent else []), "-m", message)
 
     def pull_request(self, changes, base=None):
-        """a branch from the base commit with one commit of `changes`; returns its head"""
-        self.git("checkout", "-q", "--detach", base or self.base)
-        return self.commit(changes)
+        """the head of a pull request: one commit of `changes` on the base commit"""
+        return self.commit(base or self.base, changes)
 
     def decide(self, head, base=None, **env):
         """(light?, the output, the lines of GITHUB_OUTPUT) of the script run for a pull request from `base` (default: the first commit) to `head`"""
@@ -127,20 +132,12 @@ class Decision(unittest.TestCase):
             self.assertFalse(self.decide(self.pull_request({path: "x\n", "docs/a.md": "b\n"}))[0], path)
 
     def test_a_rename_counts_under_both_names(self):
-        self.git("checkout", "-q", "--detach", self.base)
-        self.git("mv", "src/a.cpp", "docs/a_code.md")
-        self.git("commit", "-q", "-m", "rename into docs")
-        light, out, _ = self.decide(self.git("rev-parse", "HEAD"))
+        head = self.commit(self.base, {"src/a.cpp": None, "docs/a_code.md": "int a;\n"})            # (the same bytes: git would see a rename and name only the new file)
+        light, out, _ = self.decide(head)
         self.assertFalse(light, "a source file that becomes a document is full:\n" + out)
         self.assertEqual(self.classes(out), {"src/a.cpp": "FULL", "docs/a_code.md": "light"})
-        self.git("checkout", "-q", "--detach", self.base)
-        self.git("mv", "docs/a.md", "src/a_doc.cpp")
-        self.git("commit", "-q", "-m", "rename out of docs")
-        self.assertFalse(self.decide(self.git("rev-parse", "HEAD"))[0])
-        self.git("checkout", "-q", "--detach", self.base)
-        self.git("mv", "docs/a.md", "docs/b.md")
-        self.git("commit", "-q", "-m", "rename inside docs")
-        light, out, _ = self.decide(self.git("rev-parse", "HEAD"))
+        self.assertFalse(self.decide(self.commit(self.base, {"docs/a.md": None, "src/a_doc.cpp": "a\n"}))[0])
+        light, out, _ = self.decide(self.commit(self.base, {"docs/a.md": None, "docs/b.md": "a\n"}))
         self.assertTrue(light, out)
         self.assertEqual(self.classes(out), {"docs/a.md": "light", "docs/b.md": "light"})
 
@@ -150,25 +147,21 @@ class Decision(unittest.TestCase):
 
     def test_it_compares_with_the_merge_base_so_a_base_that_moved_on_changes_nothing(self):
         moved = self.pull_request({"src/a.cpp": "int moved;\n", "VERSION": "9.9.9\n"})        # the base branch got a change of code while the pull request was open
-        self.git("checkout", "-q", "--detach", self.base)
-        head = self.commit({"docs/a.md": "mine\n"})
+        head = self.pull_request({"docs/a.md": "mine\n"})
         light, out, _ = self.decide(head, base=moved)
         self.assertTrue(light, out)
         self.assertEqual(self.classes(out), {"docs/a.md": "light"})
         self.assertIn(self.base[:12] + " (merge base)", out)
         # the other way round: a pull request that changes code is full whatever the base did
-        self.git("checkout", "-q", "--detach", self.base)
-        self.assertFalse(self.decide(self.commit({"src/a.cpp": "int mine;\n"}), base=moved)[0])
+        self.assertFalse(self.decide(self.pull_request({"src/a.cpp": "int mine;\n"}), base=moved)[0])
 
     def test_a_pull_request_of_several_commits_is_judged_as_a_whole(self):
-        self.git("checkout", "-q", "--detach", self.base)
-        self.commit({"src/a.cpp": "int b;\n"})
-        head = self.commit({"src/a.cpp": "int a;\n", "docs/a.md": "c\n"})        # the code is changed and changed back: what remains is a document
+        first = self.pull_request({"src/a.cpp": "int b;\n"})
+        head = self.commit(first, {"src/a.cpp": "int a;\n", "docs/a.md": "c\n"})        # the code is changed and changed back: what remains is a document
         light, out, _ = self.decide(head)
         self.assertTrue(light, out)
-        self.git("checkout", "-q", "--detach", self.base)
-        self.commit({"src/a.cpp": "int c;\n"})
-        self.assertFalse(self.decide(self.commit({"docs/a.md": "d\n"}))[0])
+        first = self.pull_request({"src/a.cpp": "int c;\n"})
+        self.assertFalse(self.decide(self.commit(first, {"docs/a.md": "d\n"}))[0])
 
     def test_what_is_not_a_pull_request_with_a_change_is_full(self):
         head = self.pull_request({"docs/a.md": "x\n"})
@@ -189,15 +182,7 @@ class Decision(unittest.TestCase):
 
     def test_a_pull_request_with_no_common_history_or_outside_a_repository_is_full(self):
         head = self.pull_request({"docs/a.md": "x\n"})
-        other = os.path.join(os.path.dirname(self.root), "other")
-        os.makedirs(other)
-        self.assertEqual(run(["git", "init", "-q", "-b", "main"], other).returncode, 0)
-        with open(os.path.join(other, "f"), "w") as f:
-            f.write("1\n")
-        self.assertEqual(run(["git", "add", "-A"], other).returncode, 0)
-        self.assertEqual(run(["git", "commit", "-q", "-m", "unrelated"], other).returncode, 0)
-        unrelated = run(["git", "rev-parse", "HEAD"], other).stdout.strip()
-        self.assertEqual(run(["git", "fetch", "-q", other, "HEAD"], self.root).returncode, 0)
+        unrelated = self.commit(None, {"f": "1\n"}, "unrelated")                           # (a root commit: no merge base with the base)
         light, out, _ = self.decide(head, base=unrelated)
         self.assertFalse(light)
         self.assertIn("no merge base", out)
