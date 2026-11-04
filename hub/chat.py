@@ -2,8 +2,8 @@
 (hub/server.py has the real one), so the tests drive this with plain fakes. `charge()` is a refusal that is not counted as a mistake: it costs the socket a frame more.
 
 Messages (JSON, "v":1; docs/HUB.md has the table):
-  up    {"t":"say","text":"..."}   {"t":"ping"}
-  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"err","code":"login|rate|muted|banned|long|empty|young|bad"}
+  up    {"t":"say","text":"..."}   {"t":"ping"}   {"t":"who"}   {"t":"here",...}      (the last two: hub/presence.py)
+  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|muted|banned|long|empty|young|bad"}
 An `err` and every message that cannot be read count as a mistake of the socket (peer.strike()): twenty in a minute close it. A line is kept only if the account's own limit, the limit of
 all accounts together and the size of the database allow it (`rate` otherwise); a moderator's command is never refused for those.
 """
@@ -11,7 +11,7 @@ import collections
 import json
 import re
 
-from . import PROTOCOL, text as textrules
+from . import PROTOCOL, presence as presencemod, text as textrules
 from .limits import AccountLimits, TokenBucket
 from .store import StoreError
 
@@ -33,6 +33,7 @@ class Chat:
         self.account_limits = AccountLimits(limits)
         self.global_limit = TokenBucket(limits.global_burst, limits.global_refill_seconds, clock())      # all accounts together: what the database is asked to keep
         self.peers = set()
+        self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
         self.ring = collections.deque(maxlen=limits.history_lines)
         for line in store.recent_lines(limits.history_lines):
@@ -50,7 +51,7 @@ class Chat:
 
     def welcome(self, peer):
         you = peer.identity
-        return {"t": "welcome", "v": PROTOCOL, "you": {"name": you.name, "mod": you.account_id in self.mods} if you else None, "login": bool(self.login), "online": len(self.peers),
+        return {"t": "welcome", "v": PROTOCOL, "you": {"name": you.name, "mod": you.account_id in self.mods} if you else None, "login": bool(self.login), "presence": True, "online": self.presence.people(),
                 "history": [self.line_of(l) for l in self.recent()]}
 
     @staticmethod
@@ -63,7 +64,7 @@ class Chat:
             peer.send_text(data)
 
     def online(self):
-        self.broadcast({"t": "online", "n": len(self.peers)})
+        self.broadcast({"t": "online", "n": self.presence.people()})
 
     # ---- messages from a peer -------------------------------------------------------------------------------------------------------------
 
@@ -77,9 +78,13 @@ class Chat:
             return self.mistake(peer, "bad")
         kind = msg.get("t")
         if kind == "ping":
-            peer.send_text(dumps({"t": "online", "n": len(self.peers)}))      # the answer to a ping is the online count: the page learns that the hub is alive
+            peer.send_text(dumps({"t": "online", "n": self.presence.people()}))      # the answer to a ping is the online count: the page learns that the hub is alive
         elif kind == "say":
             self.on_say(peer, msg.get("text"))
+        elif kind == "who":
+            self.presence.on_who(peer)
+        elif kind == "here":
+            self.presence.on_here(peer, msg)
         else:
             self.mistake(peer, "bad")
 

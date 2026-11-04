@@ -274,10 +274,11 @@ class Hub:
             elif now - peer.last_ping >= self.limits.ping_seconds:
                 peer.last_ping = now
                 peer.write(ws.encode_frame(ws.PING))
-        count = len(self.chat.peers)
+        count = self.chat.presence.people()
         if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
             self.online_shown, self.online_at = count, now
             self.chat.online()
+        self.chat.presence.flush(now)
         if now >= self.next_deletions:
             self.next_deletions = now + self.limits.deletions_seconds
             self.chat.sync_deletions()
