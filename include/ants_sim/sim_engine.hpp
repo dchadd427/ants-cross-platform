@@ -501,7 +501,7 @@ public:
     /// the original's game (mode 0) never reads it. A match that is played now never sets it: only the player of an old recording does.
     void set_hill_open_187(bool open);
     /// 187 only, the rules number of the recording that is being played (replay::kSimRulesMode187BeforeEndFix): with `on` (the default, the rules of a match played now) an egg keeps a team standing only while it could
-    /// be hatched (the team has a hill to hatch at), and the match ends by "one side is left" only when two teams began with an ant, an egg or a hatch;
+    /// be hatched (the team has a hill to hatch at), and the match ends by "one side is left" only when two teams began with an ant, an egg that could hatch or a hatch;
     /// with `on` unset any egg keeps its team standing and the seats of the roster are counted, as a recording of 6, 7 or 10 was played (docs/GAMEPLAY.md, "187"). Chosen after set_game_mode (which sets it back to the rule
     /// of a match played now) and before init(), which keeps it; the original's game never reads it. The state hash does not carry it (the end of the match, which it does, shows the difference).
     void set_end_fix_187(bool on);

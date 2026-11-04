@@ -743,7 +743,7 @@ int main() {
         ASSERT_EQ(old.get_world_state().match_result.standing, PLAYER_NEUTRAL);
         old.set_player_eggs(1, 0);
         run_ticks(old, 40);
-        ASSERT_TRUE(old.is_match_over());                                  // (it ended the moment the egg was gone, as the reviewer saw)
+        ASSERT_TRUE(old.is_match_over());                                  // (it ended the moment the egg was gone)
         ASSERT_EQ(old.get_world_state().match_result.standing, 0);
     } TEST_END();
 

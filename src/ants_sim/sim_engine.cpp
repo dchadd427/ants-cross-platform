@@ -252,7 +252,7 @@ void SimulationEngine::tick() {
         return;
     }
 
-    // 187: a team that has no ant, egg or hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
+    // 187: a team that has no ant, no egg that can hatch and no hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
     if (impl_->game_mode_ == GameMode::Kills187) impl_->announce_out_of_ants_187();
 
     // 1. CHECKGO (Ants.exe 0x1024839, period 200 ms, first run at once): the time warnings and the end of the match

@@ -7,7 +7,7 @@ namespace ants::sim {
 /// The rules a match is played by, chosen with the room (the lobby's "Game type") and the same on every machine.
 /// HighestScore is the original's game and every match that existed before the mode did. Kills187 ("187") is the remake's own mode (docs/GAMEPLAY.md,
 /// "187"): the map as it is, without food and power-ups; the score of a team is the number of enemy ants it has killed, and the match ends when one side
-/// is left with ants or eggs (the last one standing wins outright) or when the clock runs out (the most kills wins).
+/// is left with ants, a hatch in progress or eggs that can hatch (the last one standing wins outright) or when the clock runs out (the most kills wins).
 enum class GameMode : uint8_t {
     HighestScore = 0,
     Kills187     = 1

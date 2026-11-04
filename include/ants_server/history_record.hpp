@@ -6,7 +6,7 @@
 // WHO WON depends on the room's game mode (every record says which: `mode`, "highest-score" or "187", the names of sim::game_mode_name and of network protocol 17):
 //   highest-score (the original's game): the score decides; equal scores go to the KILLS (enemy ants killed); equal kills too is a DRAW. Losses and hatched ants never break a tie. Rules number 8: when one side was left and no
 //        food could score, the same ranking holds (the highest score wins, even with no ant left) and that side (MatchResult::tie_standing) wins a tie for the top instead of a draw.
-//   187: the last side with ants or eggs wins outright (the engine's own end rule, MatchResult::standing); when nobody is left alone (the clock ran out, or all went at once) the most kills wins, and equal kills
+//   187: the last side with ants, a hatch or eggs that can hatch wins outright (the engine's own end rule, MatchResult::standing); when nobody is left alone (the clock ran out, or all went at once) the most kills wins, and equal kills
 //        is a DRAW. 187 has no food and no score: the engine's score IS the kills, and a record keeps that number as `score` (the ranking value, the same as `killed`) and never shows it as a score.
 // A side that quit (the quit ended the match) is last; a row of allied seats is one side whose numbers are added up. The engine's own row order is NOT the rule: it breaks a tie in score by the seat (for the
 // seat of the screen, and no seat is "local" here) and knows nothing of kills, so the rows are ranked here (rank_history_rows) and the engine's order only supplies which seats make a row.
