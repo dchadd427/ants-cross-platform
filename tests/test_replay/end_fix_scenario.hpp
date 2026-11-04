@@ -22,12 +22,13 @@ namespace ants::end_fix_scenario {
 
 inline constexpr uint32_t kSeed = 9;
 
-inline uint8_t roster(bool ghost) { return ghost ? 0x07 : 0x03; }
+inline uint8_t roster(bool ghost) { return ghost ? uint8_t{0x07} : uint8_t{0x03}; }
 
 inline assets::LevelData level(bool ghost) {
     assets::LevelData map = assets::blank_level(40, 40, std::vector<std::string>{});
     map.default_minutes = 1;
-    map.boundary_param = ghost ? 2 : 0;                        // (eggs for every seat of the roster)
+    if (ghost) map.boundary_param = 2;                         // (two eggs for every seat of the roster; the lone match has none)
+    else map.boundary_param = 0;
     const auto marker = [&](uint8_t team, uint16_t x, uint16_t y) {
         assets::AnthillSpawn m;
         m.tile_id = static_cast<uint16_t>(152 + team);         // (the start marker of the team)
