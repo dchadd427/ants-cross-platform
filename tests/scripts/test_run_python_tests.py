@@ -3,7 +3,9 @@
 
 It runs on made-up test folders (tmp/tests/scripts/test_*.py) and checks: the result is that of unittest (a failing test makes the exit status 1 and its output is shown, the
 others still run), the classes run at the same time (two tests that wait for each other pass only when they overlap), a file that cannot be imported fails and says why, and
-on the REAL tests/scripts the classes that it runs are exactly the classes that unittest's own loader finds (so that no test is left out).
+on the REAL tests/scripts the classes that it runs are exactly the classes that unittest's own loader finds (so that no test is left out). The two ways in which the CI splits the work are
+checked here too: --shard K/N (the slices are every group once and cost about the same) and --skip-linux-only (the macOS job's list names page tests only and keeps the groups that the macOS runners
+taught the tests).
 """
 import contextlib
 import io
@@ -131,6 +133,81 @@ class Wrapper(unittest.TestCase):
         self.assertLess(began["test_a.py"], began["test_b.py"], "the others keep the order of the files")
         self.assertEqual([line.split()[0] for line in out.getvalue().splitlines() if line.startswith("test_")], ["test_a.First", "test_b.Second", "test_c.Long"])
 
+    def many(self, count=7):
+        for i in range(count):
+            self.add("test_f%d.py" % i, PASSING.replace("Good", "Class%d" % i))
+
+    def listing(self, *args):
+        result = self.run_tool("--list", *args)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return [line.split("\t")[0] for line in result.stdout.splitlines()]
+
+    def test_the_slices_are_every_group_once_in_the_order_of_the_files(self):
+        self.many(7)
+        everything = self.listing()
+        for n in (1, 2, 3, 7):
+            slices = [self.listing("--shard", "%d/%d" % (k, n)) for k in range(1, n + 1)]
+            self.assertEqual(sorted(sum(slices, [])), sorted(everything), n)             # every group, none twice
+            for one in slices:
+                self.assertTrue(one, "a slice without a group would pass without running anything")
+                self.assertEqual(one, [g for g in everything if g in one], "the order of the files")
+
+    def test_a_slice_runs_its_groups_only_and_says_which_slice_it_is(self):
+        self.many(4)
+        seen = []
+        for k in (1, 2):
+            result = self.run_tool("--shard", "%d/2" % k, "--jobs", "2")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("Ran 4 tests in 2 groups of slice %d/2" % k, result.stdout)
+            seen += [line.split()[0] for line in result.stdout.splitlines() if line.startswith("test_f")]
+        self.assertEqual(sorted(seen), ["test_f0.Class0", "test_f1.Class1", "test_f2.Class2", "test_f3.Class3"])
+
+    def test_a_failing_group_fails_its_slice_and_only_its_slice(self):
+        self.add("test_bad.py", FAILING)
+        self.many(3)
+        codes = [self.run_tool("--shard", "%d/2" % k).returncode for k in (1, 2)]
+        self.assertEqual(sorted(codes), [0, 1])
+
+    def test_the_slices_share_the_groups_by_their_costs(self):
+        work = [("test_%s.C" % name, "tests.scripts.test_%s.C" % name) for name in "abcde"]
+        saved = dict(rpt.COSTS)
+        try:
+            rpt.COSTS.clear()
+            rpt.COSTS.update({"test_a.C": 100, "test_b.C": 60, "test_c.C": 50, "test_d.C": 40, "test_e.C": 10})
+            self.assertEqual([w[0] for w in rpt.shard_of(work, 1, 2)], ["test_a.C", "test_d.C"])           # (100, then 140 against 60 + 50 + 10)
+            self.assertEqual([w[0] for w in rpt.shard_of(work, 2, 2)], ["test_b.C", "test_c.C", "test_e.C"])
+            rpt.COSTS.clear()
+            self.assertEqual([w[0] for w in rpt.shard_of(work, 1, 2)], ["test_a.C", "test_c.C", "test_e.C"])      # (no cost: a group counts 1, so the slices have the same number)
+            self.assertEqual([w[0] for w in rpt.shard_of(work, 2, 2)], ["test_b.C", "test_d.C"])
+        finally:
+            rpt.COSTS.clear()
+            rpt.COSTS.update(saved)
+
+    def test_a_slice_that_is_not_one_is_refused(self):
+        self.many(3)
+        for bad in ("0/2", "3/2", "1/0", "1/4", "x", "1", "1/2/3", "-1/2", ""):
+            result = self.run_tool("--shard", bad)
+            self.assertEqual(result.returncode, 2, bad)
+            self.assertIn("--shard", result.stderr, bad)
+
+    def test_skip_linux_only_leaves_out_the_named_groups_and_nothing_else(self):
+        self.many(5)
+        saved = set(rpt.LINUX_ONLY)
+        try:
+            rpt.LINUX_ONLY.clear()
+            rpt.LINUX_ONLY.update({"test_f1.Class1", "test_f3.Class3"})
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(rpt.main(["run_python_tests.py", "--dir", self.scripts, "--list", "--skip-linux-only"]), 0)
+            self.assertEqual([line.split("\t")[0] for line in out.getvalue().splitlines()], ["test_f0.Class0", "test_f2.Class2", "test_f4.Class4"])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(rpt.main(["run_python_tests.py", "--dir", self.scripts, "--list", "--skip-linux-only", "--shard", "2/2"]), 0)
+            self.assertEqual([line.split("\t")[0] for line in out.getvalue().splitlines()], ["test_f2.Class2"])       # (the slices are of what is left)
+        finally:
+            rpt.LINUX_ONLY.clear()
+            rpt.LINUX_ONLY.update(saved)
+
     @unittest.skipUnless(shutil.which("node") and os.name != "nt", "node is not installed (or this is Windows, where the suites do not run)")
     def test_the_node_of_the_tests_is_started_single_threaded(self):
         """a node 24 that exits while a background thread compiles with Maglev can hang for ever (see node_shim in run_python_tests.py): the tests get a node that starts with --single-threaded, so that V8 has no background thread to wait for the main one"""
@@ -173,6 +250,38 @@ class TheRealTests(unittest.TestCase):
         grouped = {label for label, _ in rpt.units(HERE, "tests.scripts")}
         self.assertEqual(set(rpt.COSTS) - grouped, set(), "a cost for a class that is not there")
         self.assertTrue(all(isinstance(v, int) and v >= 1 for v in rpt.COSTS.values()))
+
+    def test_the_slices_of_the_real_tests_are_every_group_once_and_cost_about_the_same(self):
+        work = rpt.units(HERE, "tests.scripts")
+        every = [label for label, _ in work]
+        for n in (2, 3, 4):
+            slices = [[label for label, _ in rpt.shard_of(work, k, n)] for k in range(1, n + 1)]
+            self.assertEqual(sorted(sum(slices, [])), sorted(every), n)
+            costs = [sum(rpt.COSTS.get(label, 1) for label in one) for one in slices]
+            self.assertLessEqual(max(costs) - min(costs), max(rpt.COSTS.values()), "slices of %d: %s" % (n, costs))
+            self.assertLessEqual(max(costs), 1.05 * sum(costs) / n, "slices of %d: %s" % (n, costs))
+        # the biggest groups are in different slices (one of them alone takes more than a fair share of the time of a fourth)
+        biggest = sorted(rpt.COSTS, key=lambda label: -rpt.COSTS[label])[:2]
+        slices = [{label for label, _ in rpt.shard_of(work, k, 2)} for k in (1, 2)]
+        self.assertNotEqual(biggest[0] in slices[0], biggest[1] in slices[0])
+
+    def test_the_linux_only_groups_exist_and_are_page_tests(self):
+        grouped = {label for label, _ in rpt.units(HERE, "tests.scripts")}
+        self.assertEqual(rpt.LINUX_ONLY - grouped, set(), "a Linux-only name that is not a class")
+        for label in rpt.LINUX_ONLY:
+            self.assertIn(".", label, "a class, not a whole file: " + label)
+            self.assertTrue(label.startswith(("test_web_", "test_bot_names.")), "only page tests may stay off the macOS job: " + label)
+        self.assertGreaterEqual(len(rpt.LINUX_ONLY), 10)
+
+    def test_the_macos_job_keeps_what_the_macos_runners_taught_the_tests(self):
+        left = {label for label, _ in rpt.units(HERE, "tests.scripts")} - rpt.LINUX_ONLY
+        for prefix in ("test_hub_", "test_e2e_deadlines.", "test_deploy_wait.", "test_deploy_webhook.", "test_measure_tick_rate.", "test_quick_http.", "test_run_tests.", "test_run_python_tests.",
+                       "test_library_guard.", "test_community_maps.", "test_repair_maps.", "test_cmake_", "test_mutate_tool.", "test_release_tool.", "test_version_tools.", "test_source_portability.",
+                       "test_hygiene.", "test_ci_workflow.", "test_staging_stack.", "test_nginx_", "test_pbkdf2_vectors.", "test_web_without_docker.",
+                       "test_web_mapmaker.TheCodeRuns", "test_web_mapmaker.TheTimeAndTheBail", "test_web_mapmaker_play.ThePlayChecks", "test_web_home_chat.TheCodeRuns",
+                       "test_web_lobby_net.TheChecksThatNodeRuns", "test_web_lobby_chat.TheChecksThatNodeRuns", "test_web_rematch.TheChecksThatNodeRuns"):
+            self.assertTrue([label for label in left if label.startswith(prefix)], "the macOS job would run nothing of " + prefix)
+            self.assertFalse([label for label in rpt.LINUX_ONLY if label.startswith(prefix)], prefix + " is a lesson of the macOS runners: it stays on both")
 
     def test_the_real_files_are_named_as_the_runner_expects(self):
         names = [f for f in os.listdir(HERE) if f.startswith("test_") and f.endswith(".py")]
