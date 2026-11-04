@@ -5,7 +5,7 @@
    "id": "reserved_name_not_looked_for",
    "file": "src/ants_server/control.cpp",
    "old": "return same_name_ignoring_case(name, SiteStats::kFileName) ? code + \".room.json\" : name;",
-   "new": "return name;",
+   "new": "(void)same_name_ignoring_case(name, SiteStats::kFileName); return name;",
    "build": [
     "test_server"
    ],
@@ -15,7 +15,7 @@
    "id": "reserved_name_compared_with_case",
    "file": "src/ants_server/control.cpp",
    "old": "same_name_ignoring_case(name, SiteStats::kFileName)",
-   "new": "name == SiteStats::kFileName",
+   "new": "(name == SiteStats::kFileName || (same_name_ignoring_case(name, \"\") && false))",
    "build": [
     "test_server"
    ],
