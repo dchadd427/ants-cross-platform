@@ -1,6 +1,6 @@
 // The tests of the site statistics (ants_server/site_stats.hpp): the counting rules, the window of 24 hours with a clock that the test moves, the cap on single-player reports, the file
-// (kept, atomic, put aside when it is no usable file), the JSON of GET /stats, a real room manager (a match that ran and ended counts once, a room that never began counts nothing) and the
-// door over real sockets. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, Client); test_server.cpp calls run_site_stats_tests().
+// (kept, atomic, put aside when it is no usable file), the JSON of GET /stats, a real room manager (a match that ran and ended counts once, a room that never began counts nothing), the
+// door over real sockets, and the result file of an ended room that shares the results folder with the statistics file (S3.243: no room code gives the statistics file's name). Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, Client); test_server.cpp calls run_site_stats_tests().
 #pragma once
 
 namespace {
@@ -829,6 +829,58 @@ void run_site_stats_tests() {
         ASSERT_TRUE(mode_022 == 0644 && mode_077 == 0600);
     } TEST_END();
 #endif
+
+    TEST_CASE("S3.243 The result file of an ended room is <code>.json in the results folder, and no code gives the name of the statistics file: the room named site-stats (in any letter case) writes <code>.room.json, the statistics file stays as it was and the log gets one line; a file of an earlier room is replaced whole; a code that is no room code writes nothing") {
+        const fs::path dir = temp_dir_for("result-file");
+        stats_write(dir / SiteStats::kFileName, stats_file_text());
+        const std::string statistics = stats_slurp(dir / SiteStats::kFileName);
+        const auto result_of = [](const RoomStatus& room) { return ctl::to_json(status_to_json(room)) + "\n"; };
+        const auto folded = [](std::string text) {
+            for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return text;
+        };
+        // an ordinary room: its file holds the status as JSON, replaces the file of an earlier room with the same code whole, and the log gets nothing
+        stats_write(dir / "ROOM-1.json", std::string(5000, 'x'));
+        const RoomStatus plain = ended_room("ROOM-1", RoomState::Finished, 700);
+        ASSERT_EQ(result_file_name("ROOM-1"), std::string("ROOM-1.json"));
+        ASSERT_EQ(write_result_file(dir, plain), std::string());
+        ASSERT_EQ(stats_slurp(dir / "ROOM-1.json"), result_of(plain));
+        ASSERT_EQ(stats_slurp(dir / SiteStats::kFileName), statistics);
+        // a code that starts like the statistics file's name, or ends like its rename, is an ordinary one
+        for (const char* code : {"site-stat", "site-statss", "site", "stats", "site_stats", "room", "site-stats-room"}) ASSERT_EQ(result_file_name(code), std::string(code) + ".json");
+        // the room named like the statistics file, in every letter case: a file of its own, the statistics as they were, one line that says where the result is
+        for (const char* code : {"site-stats", "Site-Stats", "SITE-STATS", "sItE-sTaTs"}) {
+            const RoomStatus room = ended_room(code, RoomState::Failed, 0);
+            ASSERT_EQ(result_file_name(code), std::string(code) + ".room.json");
+            const std::string line = write_result_file(dir, room);
+            ASSERT_MSG(line.find(std::string(code) + ".room.json") != std::string::npos && line.find("statistics file") != std::string::npos, line);
+            ASSERT_EQ(stats_slurp(dir / SiteStats::kFileName), statistics);
+            ASSERT_EQ(stats_slurp(dir / (std::string(code) + ".room.json")), result_of(room));
+        }
+        // the law: no room has the name of the statistics file (a file system may fold the case), and two codes never share a name
+        std::set<std::string> names;
+        const std::vector<std::string> codes = {"site-stats", "Site-stats", "site-stats-room", "site-stats_room", "site-stats.room", "a", "A", "0", "_", "-", "ROOM-1", "room-1", "x-y_z"};
+        for (const std::string& code : codes) {
+            const std::string name = result_file_name(code);
+            if (!net::valid_room_code(code)) {                                                   // ("site-stats.room" has a dot: no room has such a code)
+                ASSERT_EQ(name, std::string());
+                continue;
+            }
+            ASSERT_TRUE(!name.empty() && folded(name) != SiteStats::kFileName);
+            ASSERT_TRUE(names.insert(name).second);
+        }
+        // a code that is no room code (empty, a path, a space, a dot, longer than a code can be) writes nothing, in the folder or above it, and the log says so
+        const auto count_files = [&]() { size_t n = 0; for (const auto& entry : fs::directory_iterator(dir)) { (void)entry; ++n; } return n; };
+        const size_t before = count_files();
+        for (const char* code : {"", "../evil", "a/b", "a\\b", "a b", "a.b", ".."}) {
+            const std::string line = write_result_file(dir, ended_room(code, RoomState::Finished, 700));
+            ASSERT_MSG(result_file_name(code).empty() && line.find("not a room code") != std::string::npos, std::string("code '") + code + "': " + line);
+        }
+        ASSERT_TRUE(write_result_file(dir, ended_room(std::string(net::kMaxRoomCodeChars + 1, 'a'), RoomState::Finished, 700)).find("not a room code") != std::string::npos);
+        ASSERT_EQ(count_files(), before);
+        ASSERT_FALSE(fs::exists(dir.parent_path() / "evil.json"));
+        ASSERT_EQ(stats_slurp(dir / SiteStats::kFileName), statistics);
+    } TEST_END();
 
     TEST_CASE("S3.148 A real room manager: a public room that played 30 s and ended counts once (also when its code is asked for again before anybody looked), a match that was quit sooner, a room closed during the dialog and one closed while it waited count nothing, a match that played 30 s and was closed by the owner counts, and nothing counts twice") {
         ServerLimits limits;

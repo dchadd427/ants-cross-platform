@@ -1,0 +1,135 @@
+{
+ "note": "Mutants of the result file of an ended room (result_file_name and write_result_file in src/ants_server/control.cpp: `<code>.json` in the results folder, and the room whose code is the name of the statistics file written as `<code>.room.json`), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/result_file_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught by test_server S3.243 (tests/test_server/site_stats_tests.hpp); each breaks one rule of docs/SERVER.md ('--results-dir'). Not listed on purpose: the call in main.cpp (the program is run by the script suites).",
+ "mutants": [
+  {
+   "id": "reserved_name_not_looked_for",
+   "file": "src/ants_server/control.cpp",
+   "old": "return same_name_ignoring_case(name, SiteStats::kFileName) ? code + \".room.json\" : name;",
+   "new": "return name;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "reserved_name_compared_with_case",
+   "file": "src/ants_server/control.cpp",
+   "old": "same_name_ignoring_case(name, SiteStats::kFileName)",
+   "new": "name == SiteStats::kFileName",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "reserved_name_compared_by_its_start",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (a.size() != b.size()) return false;\n    for (size_t i = 0; i < a.size(); ++i) {",
+   "new": "for (size_t i = 0; i < 4 && i < a.size() && i < b.size(); ++i) {",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "reserved_name_is_the_wrong_file",
+   "file": "src/ants_server/control.cpp",
+   "old": "same_name_ignoring_case(name, SiteStats::kFileName)",
+   "new": "same_name_ignoring_case(name, \"site-statistics.json\")",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "renamed_with_a_suffix_that_a_code_can_have",
+   "file": "src/ants_server/control.cpp",
+   "old": "code + \".room.json\"",
+   "new": "code + \"-room.json\"",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "renamed_to_the_same_name",
+   "file": "src/ants_server/control.cpp",
+   "old": "code + \".room.json\"",
+   "new": "code + \".json\"",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "a_code_that_is_no_room_code_has_a_name",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (code.empty() || !net::valid_room_code(code)) return std::string();",
+   "new": "if (code.empty()) return std::string();",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "an_empty_code_has_a_name",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (code.empty() || !net::valid_room_code(code)) return std::string();",
+   "new": "if (!net::valid_room_code(code)) return std::string();",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "file_written_under_the_plain_name",
+   "file": "src/ants_server/control.cpp",
+   "old": "std::ofstream out(dir / name, std::ios::binary | std::ios::trunc);",
+   "new": "std::ofstream out(dir / (status.code + \".json\"), std::ios::binary | std::ios::trunc);",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "file_of_an_earlier_room_is_added_to",
+   "file": "src/ants_server/control.cpp",
+   "old": "std::ios::binary | std::ios::trunc);\n    out << ctl::to_json(status_to_json(status)) << \"\\n\";",
+   "new": "std::ios::binary | std::ios::app);\n    out << ctl::to_json(status_to_json(status)) << \"\\n\";",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "no_line_for_the_renamed_room",
+   "file": "src/ants_server/control.cpp",
+   "old": "return \"room \" + status.code + \": its result is in \" + name + \" (\" + SiteStats::kFileName + \" is the statistics file)\";",
+   "new": "return std::string();",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "a_line_for_every_room",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (name == status.code + \".json\") return std::string();",
+   "new": "if (false) return std::string();",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "a_code_that_is_no_room_code_is_written_anyway",
+   "file": "src/ants_server/control.cpp",
+   "old": "if (name.empty()) return \"a room's result was not written: its code is not a room code\";",
+   "new": "if (false) return \"a room's result was not written: its code is not a room code\";",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.243 timeout 900 ./build/tests/test_server/test_server"
+  }
+ ]
+}

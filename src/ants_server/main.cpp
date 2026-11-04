@@ -930,8 +930,8 @@ int main(int argc, char** argv) {
             if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its file name is the map and the end time, no code and no name of a person)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
-                std::ofstream out(std::filesystem::path(o.results_dir) / (s.code + ".json"), std::ios::binary | std::ios::trunc);
-                out << ants::ctl::to_json(ants::server::status_to_json(s)) << "\n";
+                const std::string note = ants::server::write_result_file(o.results_dir, s);
+                if (!note.empty()) log(note);                      // (only the room named like the statistics file has its result under another name than <code>.json)
             }
         }
         for (const std::string& line : rooms.take_notices()) log(line);          // (a record that the disk refused, ...)
