@@ -165,7 +165,7 @@ The address is the real client address: `X-Client-Address`, which the site's ngi
 - **Possible later work** if the 0.36 s pause of a sign-in ever matters: the processor's SHA instructions with a check at run time, or a lower cap of checks per 10 seconds.
 - **A restart clears the budget** of password checks (it is in memory) but not the locks (they are in the database).
 - **Passwords are not normalized** (the bytes are compared as typed, after UTF-8 is checked), so a password typed with a different keyboard layout of the same letters may not match.
-- **Nginx's error log** names the request line (query included) when the game server's door is down, so that log can still hold a note. The paths that carry a player's text in their address (`/submissions`, `/submissions/<id>`, `/admin/api/`) are logged by the format `ants_noquery`: the method, the path, the status and the size, never the query, so a note is not copied into the log of the container.
+- **Nginx's error log** names the request line (query included) when the game server's door is down, so that log can still hold a note. Every path, those that carry a player's text in their address (`/submissions`, `/submissions/<id>`, `/admin/api/`) among them, is logged by the format `ants_noquery`: the method, the path, the status and the size, never the query ([`BUILD_AND_RUN.md`](BUILD_AND_RUN.md#what-the-images-nginx-sends-checks-and-logs)), so a note is not copied into the log of the container.
 
 ## Deploying: what to set, and what is not live until then
 
