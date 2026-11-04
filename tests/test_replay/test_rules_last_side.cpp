@@ -1,5 +1,5 @@
 // Tests of the rules numbers of the original's game (ants_replay/replay.hpp, docs/REPLAYS.md "Which files play: sim_rules", docs/GAMEPLAY.md "The last side standing"): the original's game was 5 (CHECKGO alone) and is
-// 8 since a match also ends when one side is left and no food can score (9 since the loader's fire wall, test_rules_fire_wall, has that rule too). This build plays 5, 8 and 9, 187 plays 6, 7 and 10, and every number belongs to one mode.
+// 8 since a match also ends when one side is left and no food can score (9 since the loader's fire wall, test_rules_fire_wall, has that rule too). This build plays 5, 8 and 9, 187 plays 6, 7, 10 and 11, and every number belongs to one mode.
 //   RP13.1  the numbers: what a build plays, what a head may say, what a match is recorded under, what a refusal says
 //   RP13.2  a recording under the number 5 that hits the state (one side left, no food) and plays on to the clock plays to every hash and to the final hash that the build before the rule made of it
 //   RP13.3  the same match recorded under the number 8 ends where the rule ends it, with the survivor first; each file is another match under the other number
@@ -117,16 +117,16 @@ int main() {
     std::cout << "=== Rules numbers of the original's game: 5 and 8 ===\n";
     const assets::LevelData level = scenario::level();
 
-    TEST_CASE("RP13.1 This build plays 5, 8 and 9 for the original's game and 6, 7 and 10 for 187, nothing else; a match of the original's game is recorded under 9, a 187 match under 10; every number names its one mode; a refusal names all six") {
-        ASSERT_TRUE(kSimRules == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187 == 10);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 10 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+    TEST_CASE("RP13.1 This build plays 5, 8 and 9 for the original's game and 6, 7, 10 and 11 for 187, nothing else; a match of the original's game is recorded under 9, a 187 match under 11; every number names its one mode; a refusal names all seven") {
+        ASSERT_TRUE(kSimRules == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187 == 11);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 11 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         for (uint16_t rules = 0; rules < 14; ++rules) {
             ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9);
-            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10);
+            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9 and 10"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10 and 11"));
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
@@ -163,7 +163,7 @@ int main() {
         {
             Header h = head;
             h.set_mode(k187);
-            h.sim_rules = 11;
+            h.sim_rules = 12;
             Replay r;
             r.head = h;
             std::string error;
@@ -173,12 +173,12 @@ int main() {
             ASSERT_FALSE(plays_here(h));
         }
         // a match that a Recorder starts: the original's game keeps the number its head names (5 and 8 are both ones it writes), a mode that is not 0 gets the number of that mode whatever the head said
-        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}}) {
+        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}, uint16_t{11}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = said;
             Recorder rec(h);
-            ASSERT_EQ(rec.replay().head.sim_rules, 10);
+            ASSERT_EQ(rec.replay().head.sim_rules, 11);
         }
         Header plain = head;
         Recorder fresh(plain);
@@ -186,12 +186,12 @@ int main() {
         plain.sim_rules = 5;
         Recorder old(plain);
         ASSERT_EQ(old.replay().head.sim_rules, 5);
-        // the refusal of a number nobody plays names the four that this build does
+        // the refusal of a number nobody plays names the seven that this build does
         Header foreign = head;
-        foreign.sim_rules = 11;
-        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7, 8, 9 and 10") != std::string::npos);
+        foreign.sim_rules = 12;
+        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7, 8, 9, 10 and 11") != std::string::npos);
         foreign.sim_rules = 4;
-        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7, 8, 9 and 10") != std::string::npos);
+        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7, 8, 9, 10 and 11") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP13.2 A recording under the number 5 that hits the state (one side left, no food) and goes on to the clock plays to every hash it holds and to the final hash that the build before the rule made of it") {

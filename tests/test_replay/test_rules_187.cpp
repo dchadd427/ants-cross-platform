@@ -1,5 +1,5 @@
 // Tests of the three rules numbers of the game mode 187 (ants_replay/replay.hpp, docs/REPLAYS.md "Which files play: sim_rules", docs/GAMEPLAY.md "187"): the hill used to work in 187 (rules number 6)
-// and is closed since (rules number 7, 10 with the loader of the original: test_rules_fire_wall), and this build plays all three.
+// and is closed since (rules number 7, 10 with the loader of the original: test_rules_fire_wall, 11 with the end-rule fixes: test_rules_end_fix), and this build plays all four.
 //   RP12.1  the numbers: what a build plays, what a head may say, what a match is recorded under, what a refusal says
 //   RP12.2  an old 187 recording (tests/data/replay_187_rules6.antsrep, made by the build before the closed hill, two Hard computer players on TINY) plays to the hashes it holds, byte for byte,
 //           and its play really uses the hill (ants enter it and are healed); the same file under the number 7 is another match
@@ -105,21 +105,21 @@ int main() {
     const Tiny tiny;
     if (!tiny.ok) std::cout << "  (cannot load TINY)\n";
 
-    TEST_CASE("RP12.1 This build plays 5, 8 and 9 for the original's game and 6, 7 and 10 for 187, nothing else; a 187 match is recorded under 10; a head may name 6, 7 or 10 only with the mode, and a refusal names all six numbers") {
-        ASSERT_TRUE(kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesBeforeFireWall == 8 && kSimRules == 9 && kSimRulesMode187 == 10);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 10 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+    TEST_CASE("RP12.1 This build plays 5, 8 and 9 for the original's game and 6, 7, 10 and 11 for 187, nothing else; a 187 match is recorded under 11; a head may name 6, 7, 10 or 11 only with the mode, and a refusal names all seven numbers") {
+        ASSERT_TRUE(kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesBeforeFireWall == 8 && kSimRules == 9 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187 == 11);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 11 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         for (uint16_t rules = 0; rules < 12; ++rules) {
             ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9);
-            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10);
+            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10 || rules == 11);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9 and 10"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9, 10 and 11"));
         // heads: the mode and the number go together
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
-        for (const uint16_t rules : {uint16_t{6}, uint16_t{7}, uint16_t{10}}) {
+        for (const uint16_t rules : {uint16_t{6}, uint16_t{7}, uint16_t{10}, uint16_t{11}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = rules;
@@ -147,25 +147,25 @@ int main() {
             h.sim_rules = 9;
             r.head = h;
             ASSERT_TRUE(encode(r, error).empty() && !plays_here(h));                         // (and 9)
-            h.sim_rules = 11;
+            h.sim_rules = 12;
             r.head = h;
             ASSERT_FALSE(encode(r, error).empty());                                          // (a number from a newer build is a file; it is just not played here)
             ASSERT_FALSE(plays_here(h));
             h.sim_rules = 4;
             ASSERT_FALSE(plays_here(h));
         }
-        // a match that a Recorder starts is recorded under the number of the rules it is played by: a head that says 5, 6, 7, 8, 9 or 10 for 187 gets 10
-        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}}) {
+        // a match that a Recorder starts is recorded under the number of the rules it is played by: a head that says 5, 6, 7, 8, 9, 10 or 11 for 187 gets 11
+        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}, uint16_t{11}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = said;
             Recorder rec(h);
-            ASSERT_EQ(rec.replay().head.sim_rules, 10);
+            ASSERT_EQ(rec.replay().head.sim_rules, 11);
         }
         Header refused = head;
         refused.set_mode(k187);
-        refused.sim_rules = 11;
-        ASSERT_TRUE(rules_refusal(refused).find("simulation rules 5, 6, 7, 8, 9 and 10") != std::string::npos);
+        refused.sim_rules = 12;
+        ASSERT_TRUE(rules_refusal(refused).find("simulation rules 5, 6, 7, 8, 9, 10 and 11") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP12.2 An old 187 recording (rules number 6, made by the build before the closed hill) plays to every hash it holds and to its final hash, byte for byte, and its play uses the hill; the same file under the number 7 is another match") {
@@ -203,7 +203,7 @@ int main() {
         ASSERT_FALSE(play(as_original, tiny.level).ok);
     } TEST_END();
 
-    TEST_CASE("RP12.3 A 187 match that is played and recorded now has the number 10, plays to its hashes and its final hash, and no ant enters a hill in it; the same match under the number 6 is another match") {
+    TEST_CASE("RP12.3 A 187 match that is played and recorded now has the number 11, plays to its hashes and its final hash, and no ant enters a hill in it; the same match under the number 6 is another match") {
         ASSERT_TRUE(tiny.ok);
         // two Hard computer players on TINY for 6000 turns in 187, recorded as a game on one machine records it: the arena's log of commands is fed to a recorder and an engine, step by step
         ai::ArenaSpec spec;
@@ -224,7 +224,7 @@ int main() {
         head.roster = 0x03;
         head.set_mode(k187);
         Recorder rec(head);
-        ASSERT_EQ(rec.replay().head.sim_rules, 10);
+        ASSERT_EQ(rec.replay().head.sim_rules, 11);
         sim::SimulationEngine engine;
         engine.set_game_mode(sim::GameMode::Kills187);
         ASSERT_FALSE(engine.own_hill_enterable());                                           // (a match that is played now has the hill closed without anybody saying so)
@@ -246,7 +246,7 @@ int main() {
         ASSERT_FALSE(file.empty());
         Replay r;
         ASSERT_TRUE(decode(file.data(), file.size(), r, error));
-        ASSERT_TRUE(r.head.sim_rules == 10 && plays_here(r.head));
+        ASSERT_TRUE(r.head.sim_rules == 11 && plays_here(r.head));
         Seen seen;
         const Outcome o = play_watching(r, tiny.level, seen);
         ASSERT_TRUE(o.ran && o.ok);
@@ -264,7 +264,7 @@ int main() {
         ASSERT_EQ(rec.replay().head.sim_rules, 9);
         ASSERT_EQ(rec.replay().head.mode, 0);
         ASSERT_TRUE(plays_here(rec.replay().head));
-        for (const uint16_t rules : {uint16_t{6}, uint16_t{7}, uint16_t{10}}) {
+        for (const uint16_t rules : {uint16_t{6}, uint16_t{7}, uint16_t{10}, uint16_t{11}}) {
             Header h = head;
             h.sim_rules = rules;
             ASSERT_FALSE(plays_here(h));

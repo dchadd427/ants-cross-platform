@@ -500,6 +500,12 @@ public:
     /// its hill at all. An order to enter is refused with "Can't go there.", the 1 hp retreat and the waiting ring are off, and nothing heals. It is chosen after set_game_mode (which sets it back to the rule of 187 now, so that a program that played an old recording and then starts a match plays by the rules of a match) and before init(), which keeps it;
     /// the original's game (mode 0) never reads it. A match that is played now never sets it: only the player of an old recording does.
     void set_hill_open_187(bool open);
+    /// 187 only, the rules number of the recording that is being played (replay::kSimRulesMode187BeforeEndFix): with `on` (the default, the rules of a match played now) an egg keeps a team standing only while it could
+    /// be hatched (the team has a hill to hatch at), and the match ends by "one side is left" only when two teams began with an ant, an egg or a hatch;
+    /// with `on` unset any egg keeps its team standing and the seats of the roster are counted, as a recording of 6, 7 or 10 was played (docs/GAMEPLAY.md, "187"). Chosen after set_game_mode (which sets it back to the rule
+    /// of a match played now) and before init(), which keeps it; the original's game never reads it. The state hash does not carry it (the end of the match, which it does, shows the difference).
+    void set_end_fix_187(bool on);
+    bool end_fix_187() const noexcept;
     /// The original's game only, the rules number of the recording that is being played (replay::kSimRulesBeforeLastSide): with `on` (the default, the rules of a match played now) a match ends when exactly one side
     /// still has an ant, an egg or a hatch in progress and no food is left that could score, and the results rank by score as always, a tie for the top going to that side (docs/GAMEPLAY.md, "The last side standing"); with `on` unset the match ends
     /// by the original's CHECKGO alone, as a recording of the rules number 5 was played. It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it;

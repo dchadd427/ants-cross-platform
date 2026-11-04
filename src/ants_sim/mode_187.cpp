@@ -31,11 +31,35 @@ bool SimulationEngineImpl::hill_goal_refused(AntUnit& a, TileCoord t) {
     return false;
 }
 
-bool SimulationEngineImpl::end_rule_187() const {
-    uint32_t in_match = 0;
+// The end-rule fixes (the rules number 11; set_end_fix_187 turns them off for a recording of 6, 7 or 10). A team stands while it has an ant, a hatch in progress or an egg that could still be hatched. An egg
+// can be hatched when its team has a hill: the newborn appears at the hill's entrance (hatch_run spends the egg and makes no ant without one, and the free hatch of a last ant that is removed, combat_system.cpp,
+// is the same hatch). That is the rule of the game type ("the match ends once nobody can hatch any more ants and they have no ants left; the last team standing wins") for the team that holds eggs and nothing else on the map (no hill, no ant): it
+// is not a team at all. A team that has a hill keeps counting for its eggs as it always did. The test reads state only, so every machine decides the same.
+bool SimulationEngineImpl::egg_can_hatch(uint8_t team) const {
+    return stats_.get_egg_count(team) > 0 && team_entrance(team).x >= 0;
+}
+
+// The seats of the roster, or (187 with the fixes) the teams that began: two teams that really had an ant, an egg that could hatch or a hatch when the match started (started_mask_), as the original's game counts them (last_side.cpp).
+uint32_t SimulationEngineImpl::teams_in_match() const {
+    const uint8_t mask = end_fixed_187() ? static_cast<uint8_t>(started_mask_ & roster_mask_) : roster_mask_;
+    uint32_t n = 0;
     for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
-        if ((roster_mask_ & (1u << k)) != 0) ++in_match;
+        if ((mask & (1u << k)) != 0) ++n;
     }
+    return n;
+}
+
+void SimulationEngine::set_end_fix_187(bool on) {
+    impl_->end_fix_187_ = on;
+    impl_->world_state_dirty_ = true;
+}
+
+bool SimulationEngine::end_fix_187() const noexcept {
+    return impl_->end_fix_187_;
+}
+
+bool SimulationEngineImpl::end_rule_187() const {
+    const uint32_t in_match = teams_in_match();
     const uint32_t sides = alive_sides();
     if (sides == 0) return true;                                // nobody has anything left (the original's rule too)
     return in_match >= 2 && sides == 1;                         // the last side standing wins at once, whatever its score (a match of one team has no one to beat)
