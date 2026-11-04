@@ -394,8 +394,75 @@
         return api;
     }
 
+    // ---- a replay file of the visitor's own (docs/REPLAYS.md "A file of your own") ----
+    // The page reads the file on this device and sends it nowhere. Before the game is loaded for it, the page asks the cheap questions that the game's own reader asks first (src/ants_replay/replay.cpp, decode):
+    // how big it is, the 8 bytes that open every replay, a HEAD chunk right after them that is not longer than a head can be and whose checksum is right. A file that fails them is no replay of ours and
+    // costs nothing (the game, 15 MB, is not even asked for). The rest (the rules that made it, the map, every other chunk) is the game's to judge: it reads the whole file again with its strict reader and
+    // says what it finds in a card.
+    var LOCAL_MAX_BYTES = 2097164;                                       // replay::kMaxFileBytesWithMap: 1 MiB for the match, 1 MiB for the map that it may carry, 12 bytes for the frame of the map's chunk
+    var HEAD_MAX_BYTES = 4096;                                           // replay::kMaxHeadBytes
+    var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];        // 89 "ARPL" 0D 0A 1A: a transfer that changes line ends spoils it, and a file of another kind never begins so
+    var HEAD_AT = 8;                                                     // the HEAD chunk follows the magic at once
+    var crcTable = null;
+
+    // CRC-32 (the one of zlib and PNG) of bytes[from, to), going on from `crc` (0 to start): the same function as replay::crc32, so crc32(crc32(tag), payload) is a chunk's checksum
+    function crc32(bytes, from, to, crc) {
+        if (!crcTable) {
+            crcTable = [];
+            for (var n = 0; n < 256; n++) {
+                var c = n;
+                for (var k = 0; k < 8; k++) c = c & 1 ? (0xedb88320 ^ (c >>> 1)) >>> 0 : c >>> 1;
+                crcTable.push(c);
+            }
+        }
+        var x = ~(crc || 0) >>> 0;
+        for (var i = from; i < to; i++) x = (crcTable[(x ^ bytes[i]) & 0xff] ^ (x >>> 8)) >>> 0;
+        return ~x >>> 0;
+    }
+    function u32(bytes, at) { return (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0; }
+
+    // May a file of this size (a File's own `size`: asked before one byte of it is read) be a replay? 0 is no replay, and nothing past the longest file there can be is one
+    function localSizeOk(size) { return typeof size === 'number' && isFinite(size) && size > 0 && size <= LOCAL_MAX_BYTES; }
+    // The verdict on the bytes of a file: { ok: true }, or { ok: false, kind: 'big' } (longer than a replay can be: asked again here, whatever the caller did) or { ok: false, kind: 'bad', why } (it does not
+    // start as a replay does, or its head is damaged, or it was cut inside its head; `why` is for a test and for nobody else: the card says one thing for all of them). A file that was cut LATER still plays up
+    // to the cut, as in the game, and passes. Nothing in the head's fields is read here.
+    function localCheck(bytes) {
+        function bad(why) { return { ok: false, kind: 'bad', why: why }; }
+        if (!bytes || typeof bytes.length !== 'number') return bad('nothing');
+        if (bytes.length > LOCAL_MAX_BYTES) return { ok: false, kind: 'big' };
+        if (bytes.length < HEAD_AT + 12) return bad('short');
+        for (var i = 0; i < MAGIC.length; i++) if (bytes[i] !== MAGIC[i]) return bad('magic');
+        if (bytes[HEAD_AT] !== 0x48 || bytes[HEAD_AT + 1] !== 0x45 || bytes[HEAD_AT + 2] !== 0x41 || bytes[HEAD_AT + 3] !== 0x44) return bad('first chunk');          // "HEAD"
+        var length = u32(bytes, HEAD_AT + 4), end = HEAD_AT + 8 + length;
+        if (length > HEAD_MAX_BYTES) return bad('head length');
+        if (end + 4 > bytes.length) return bad('head cut');
+        if (crc32(bytes, HEAD_AT + 8, end, crc32(bytes, HEAD_AT, HEAD_AT + 4, 0)) !== u32(bytes, end)) return bad('head checksum');          // (the checksum covers the tag and the payload, not the length between them)
+        return { ok: true };
+    }
+
+    // The name of a file as the page shows it: text, with what could hide or reorder the words around it taken out (controls, the zero-width and the bidirectional marks, the line and paragraph
+    // separators, the byte order mark), the ends trimmed and at most 100 characters; '' when nothing is left. It is only ever put in with textContent.
+    function ownName(name) {
+        var s = '';
+        for (var i = 0; typeof name === 'string' && i < name.length; i++) {
+            var c = name.charCodeAt(i);
+            if (c < 0x20 || (c >= 0x7f && c <= 0x9f) || (c >= 0x200b && c <= 0x200f) || (c >= 0x2028 && c <= 0x202e) || (c >= 0x2060 && c <= 0x206f) || c === 0xfeff) continue;
+            s += name.charAt(i);
+        }
+        s = s.replace(/^\s+|\s+$/g, '');
+        return s.length > 100 ? s.slice(0, 99) + String.fromCharCode(0x2026) : s;
+    }
+    // "14.2 MB" (binary megabytes, as the limit "2 MB" is)
+    function sizeText(bytes) {
+        var n = typeof bytes === 'number' && isFinite(bytes) && bytes > 0 ? bytes : 0;
+        if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
+        if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+        return Math.max(1, Math.round(n / 1024)) + ' KB';
+    }
+
     var api = { barPointer: barPointer, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
-                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf };
+                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
+                LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText };
     if (typeof module === 'object' && module && module.exports) module.exports = api;
     else root.AntsReplay = api;
 })(typeof window !== 'undefined' ? window : this);
