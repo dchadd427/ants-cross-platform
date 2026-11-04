@@ -1,0 +1,35 @@
+# A probe of the first job of the CI (never merged): the same job, alone, with MAIN_REF on the branch that stands for main here.
+name: Probe
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  changes:
+    name: Which checks does this change need?
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      light: ${{ steps.decide.outputs.light }}
+    steps:
+      # The whole history, for the merge base of a pull request and its base. Nothing is pushed from here: the checkout keeps no credentials.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The decision and every changed file are printed. The commit ids come through the environment; no text of the pull request (title, branch, body) is read by this job. The change is judged
+      # against the base of the pull request and against main (MAIN_REF, a literal): a pull request that is retargeted starts no new run, so the verdict must not depend on the base.
+      - name: Light checks or all of them?
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MAIN_REF: refs/remotes/origin/probe/base
+        run: bash tools/ci_light.sh
+
+      - name: What the first job says
+        env:
+          LIGHT: ${{ steps.decide.outputs.light }}
+        run: echo "output light=$LIGHT"
