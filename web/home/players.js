@@ -91,7 +91,7 @@
         return [row.mapName, row.n >= 0 ? row.n + (row.n === 1 ? TEXT.player : TEXT.players) : ''].filter(Boolean).join(' · ') || TEXT.inGame;
     }
     // What this page tells the hub it is doing, from its own room (client: the page's LobbyClient or null; count: Home's { people, size } of the room or null; handing: the page is on its way to a game).
-    // Looking: no room. Waiting: a room that has not started. Playing: it has (or the page is on its way to it). A public room adds its map, seats and code; a private one adds nothing.
+    // Looking: no room. Waiting: a room that has not started. Playing: it has (or the page is on its way to it). A public room adds its map and seats, and its code if the visitor is its host; a private one adds nothing.
     function announceOf(client, count, handing) {
         var room = client && client.room;
         if (!room) return { at: 'look' };
@@ -100,7 +100,7 @@
             say.pub = true;
             if (typeof room.map === 'string' && room.map) say.map = room.map;
             if (count && count.size >= 1 && count.people <= count.size) { say.n = count.people; say.of = count.size; }
-            if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code)) say.code = client.code;
+            if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code) && client.isLeader && client.isLeader()) say.code = client.code;      // (the host's row has the Join, not each guest's)
         }
         return say;
     }
@@ -229,6 +229,7 @@
         }
         function paint() {
             var shown = phase !== 'none', on = phase === 'on';
+            if (!shown) hide(false);                                     // (a list that goes away takes its sheet with it)
             root.hidden = !shown; barBtn.hidden = !shown;
             try { if (host.classList) { if (shown) host.classList.add('pl-on'); else host.classList.remove('pl-on'); } } catch (e) { /* the style needs it */ }
             panel.setAttribute('data-state', on ? 'on' : 'off');

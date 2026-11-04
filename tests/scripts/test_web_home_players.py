@@ -274,7 +274,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_players_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
     FILES = (["web/lobby.html", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
-              "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
+              "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 

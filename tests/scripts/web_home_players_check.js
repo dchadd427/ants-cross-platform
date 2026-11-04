@@ -77,7 +77,7 @@ const FULL = (rows, o) => Object.assign({ t: 'who', full: true, n: rows.length +
 const MAP_OF = { 'TREASURE.LVL': 'Treasure' };
 // the page's room, as the page's LobbyClient has it (client.room: a Room message of the server, decoded), and Home's count of it
 const ROOM = (o) => Object.assign({ lobby: true, starting: false, isPublic: false, map: 'TREASURE.LVL', slots: [] }, o);
-const CLIENT = (room, code) => ({ room, code: code || 'c1v3rr' });
+const CLIENT = (room, code, guest) => ({ room, code: code || 'c1v3rr', isLeader: () => !guest });
 
 // one list on a fake page: o.width and o.height (the window), o.wide (the window is a wide one: the panel is docked), o.client, o.count (Home's count of the room), o.handing, o.noMedia, o.noQuick, o.popover
 function rig(o) {
@@ -176,11 +176,13 @@ function rig(o) {
     same('no room: looking', [say(null, null, false), say({}, null, false), say({ room: null }, null, false)], [{ at: 'look' }, { at: 'look' }, { at: 'look' }]);
     same('a private room that waits says only that: no map, no seats, no code', say(CLIENT(ROOM({ isPublic: false })), { people: 2, size: 4 }, false), { at: 'wait' });
     same('a public room that waits says its map, seats and code', say(CLIENT(ROOM({ isPublic: true })), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' });
+    same('a guest of a public room says its map and seats and not the code (the host\'s row has the Join)', say(CLIENT(ROOM({ isPublic: true }), 'c1v3rr', true), { people: 2, size: 4 }, false), { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4 });
+    same('a client that cannot say whether it leads says no code', say({ room: ROOM({ isPublic: true }), code: 'c1v3rr' }, null, false), { at: 'wait', pub: true, map: 'TREASURE.LVL' });
     same('a public room whose seats are not known yet (or are more than the room) says the rest', [say(CLIENT(ROOM({ isPublic: true })), null, false), say(CLIENT(ROOM({ isPublic: true })), { people: 5, size: 4 }, false)], [{ at: 'wait', pub: true, map: 'TREASURE.LVL', code: 'c1v3rr' }, { at: 'wait', pub: true, map: 'TREASURE.LVL', code: 'c1v3rr' }]);
     same('a match that is starting, a page on its way to a game, a room that a game made: playing; a match has no code, a private one says nothing', [
         say(CLIENT(ROOM({ isPublic: true, starting: true })), { people: 3, size: 4 }, false), say(CLIENT(ROOM({ isPublic: true })), { people: 3, size: 4 }, true), say(CLIENT(ROOM({ lobby: false })), null, false), say(CLIENT(ROOM({ starting: true })), { people: 3, size: 4 }, false)],
         [{ at: 'play', pub: true, map: 'TREASURE.LVL', n: 3, of: 4 }, { at: 'play', pub: true, map: 'TREASURE.LVL', n: 3, of: 4 }, { at: 'play' }, { at: 'play' }]);
-    same('a code that is not the shape of one is not said', say({ room: ROOM({ isPublic: true }), code: 'ABC DEF' }, null, false), { at: 'wait', pub: true, map: 'TREASURE.LVL' });
+    same('a code that is not the shape of one is not said', say({ room: ROOM({ isPublic: true }), code: 'ABC DEF', isLeader: () => true }, null, false), { at: 'wait', pub: true, map: 'TREASURE.LVL' });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -435,6 +437,8 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     r.state.wide = false;
     r.corner().click(); r.lost();
     check('a hub that goes while the sheet is open: the sheet stays, and says "off"', r.sheetOpen() && r.list.state() === 'off');
+    r.live(W({ presence: undefined }));
+    check('... and a hub that comes back with no list takes the sheet away with the rest', !r.sheetOpen() && r.list.state() === 'none' && r.root.hidden === true);
 }
 {
     const r = rig({ wide: true });

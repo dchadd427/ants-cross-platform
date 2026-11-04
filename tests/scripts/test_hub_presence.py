@@ -20,6 +20,7 @@ import json
 import os
 import random
 import signal
+import socket
 import sqlite3
 import sys
 import tempfile
@@ -183,6 +184,44 @@ class TheCount(WorldTest):
         self.w.chat.online()
         for peer in (a1, a2, g):
             self.assertEqual(peer.kinds("online")[-1], {"t": "online", "n": 2})
+
+    def test_the_hubs_clock_sends_the_online_count_when_the_people_change_not_when_a_second_tab_opens(self):
+        from hub import config as configmod, log as logmod, server
+        import io
+
+        class Transport:
+            def abort(self):
+                pass
+
+        class Writer:
+            transport = Transport()
+
+        class TickPeer(FakePeer):
+            def __init__(self, identity=None):
+                super().__init__(identity)
+                self.writer, self.last_rx, self.last_ping, self.closed_at = Writer(), float("inf"), float("inf"), None          # (never silent, never due a ping)
+
+            def write(self, frame):
+                pass
+
+        now = [100.0]
+        hub = server.Hub(configmod.Config(db=self.w.db), self.w.store, session.NoLogin(), logmod.Log(io.StringIO()), limitmod.Limits(), clock=lambda: now[0])
+        watcher, first = TickPeer(None), TickPeer(person(1))
+        hub.chat.peers.update([watcher, first])
+        hub.on_tick(now[0])
+        self.assertEqual(watcher.kinds("online"), [{"t": "online", "n": 2}])
+        now[0] += 10
+        hub.on_tick(now[0])
+        self.assertEqual(len(watcher.kinds("online")), 1, "nothing changed")
+        hub.chat.peers.add(TickPeer(person(1)))                        # (a second tab of the same account: three sockets, still two people)
+        now[0] += 10
+        hub.on_tick(now[0])
+        self.assertEqual(len(watcher.kinds("online")), 1, "a second tab is not another person: the clock has nothing to say")
+        hub.chat.peers.add(TickPeer(None))
+        now[0] += 10
+        hub.on_tick(now[0])
+        self.assertEqual(watcher.kinds("online")[-1], {"t": "online", "n": 3})
+        self.assertEqual(len(watcher.kinds("online")), 2)
 
     def test_the_welcome_says_that_this_hub_has_the_list(self):
         self.assertIs(self.w.chat.welcome(self.w.join(None))["presence"], True)
@@ -395,7 +434,7 @@ class WhatIsSent(WorldTest):
             self.w.advance(2.5)
         self.assertEqual(len(asker.peer.frames()), 1)
 
-    def test_changes_in_one_interval_are_one_frame_and_a_person_who_flaps_is_one_change(self):
+    def test_changes_that_come_together_are_one_frame_and_a_person_who_flaps_is_one_change(self):
         a = self.w.join(person(1, "alice"))
         asker = self.w.watch(self.w.join(None))
         self.w.advance(2.5)
@@ -403,14 +442,28 @@ class WhatIsSent(WorldTest):
             self.w.here(a, "wait" if n % 2 else "look")
         self.w.join(person(2, "bob"))
         self.w.join(None)
-        self.w.advance(1.0)
-        self.assertEqual(len(asker.peer.frames()), 1, "the interval is not over")
-        self.w.advance(1.5)
+        self.w.advance(0.5)
         frames = asker.peer.frames()
-        self.assertEqual(len(frames), 2)
+        self.assertEqual(len(frames), 2, "a change after a quiet time goes out at the next look: one frame for all of it")
         self.assertIs(frames[1]["full"], False)
         self.assertEqual(sorted(r["name"] for r in frames[1]["rows"]), ["alice", "bob"])
         self.assertEqual((frames[1]["n"], frames[1]["g"]), (4, 2))
+
+    def test_a_change_that_comes_while_the_last_send_is_young_waits_for_it_to_be_two_seconds_old(self):
+        self.w.join(person(1, "alice"))
+        asker = self.w.watch(self.w.join(None))
+        self.w.advance(2.5)
+        self.w.join(person(2, "bob"))
+        self.w.advance(0.5)
+        self.assertEqual(len(asker.peer.frames()), 2)
+        self.w.join(person(3, "carol"))
+        self.w.advance(1.0)
+        self.assertEqual(len(asker.peer.frames()), 2, "the last send is a second old")
+        self.w.advance(0.9)
+        self.assertEqual(len(asker.peer.frames()), 2, "and 1.9 seconds old")
+        self.w.advance(0.2)
+        self.assertEqual([r["name"] for r in asker.peer.frames()[2]["rows"]], ["carol"])
+        self.assertEqual(len(asker.peer.frames()), 3)
 
     def test_a_change_is_the_rows_that_changed_and_the_numbers_of_those_that_went(self):
         a, b = self.w.join(person(1, "alice")), self.w.join(person(2, "bob"))
@@ -491,6 +544,14 @@ class WhatIsSent(WorldTest):
         self.w.advance(2.5)
         self.assertEqual(len(a.update().rows), 3)
         self.assertEqual(len(b.update().rows), 3)
+
+    def test_a_page_that_asks_half_a_second_after_the_last_send_gets_the_list_as_it_is_now(self):
+        first = self.w.watch(self.w.join(person(1, "alice")))
+        self.w.join(person(2, "bob"))
+        self.w.advance(0.5)
+        late = self.w.watch(self.w.join(person(3, "carol")))
+        self.assertEqual(sorted(r["name"] for r in late.update().rows.values()), ["alice", "bob", "carol"], "a quarter of a second is the least between two sends that an ask may bring forward")
+        self.assertEqual(sorted(r["name"] for r in first.update().rows.values()), ["alice", "bob", "carol"], "and the others are sent the change at that moment")
 
     def test_the_count_in_the_list_is_the_number_of_people_too(self):
         asker = self.w.watch(self.w.join(person(1)))
@@ -606,8 +667,37 @@ class MemoryOnly(WorldTest):
 # on real sockets
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+def frames_within(client, seconds):
+    """Every text message that arrives within `seconds` of this call: a bound of time, so that a hub that never stops talking (a mutant) cannot hold a test for ever (Client.drain waits for silence)."""
+    end = time.monotonic() + seconds
+    out = []
+    while time.monotonic() < end:
+        try:
+            out.append(client.recv_json(max(0.02, end - time.monotonic())))
+        except (socket.timeout, BlockingIOError, EOFError):
+            break
+    return out
+
+
+class Model:
+    """What a page does with the frames that came over the wire (as Page does with those of a fake peer)."""
+
+    def __init__(self):
+        self.rows, self.n, self.g, self.more = {}, None, None, None
+
+    def take(self, frames):
+        for frame in frames:
+            if frame["full"]:
+                self.rows = {}
+            for row in frame["rows"]:
+                self.rows[row["i"]] = row
+            for ident in frame.get("gone", []):
+                self.rows.pop(ident, None)
+            self.n, self.g, self.more = frame["n"], frame["g"], frame["more"]
+
+
 def who_frames(client, timeout=0.5):
-    return [m for m in client.drain(timeout) if m["t"] == "who"]
+    return [m for m in frames_within(client, timeout) if m["t"] == "who"]
 
 
 def send_json(client, **message):
@@ -615,7 +705,7 @@ def send_json(client, **message):
 
 
 class OnTheWire(ths.RigTest):
-    rig_args = dict(tick_seconds=0.05, online_seconds=0.2, who_seconds=0.2, who_soon_seconds=0.05, who_resend_seconds=0.6, mods="1002", frame_burst=1000, frame_refill_seconds=0.001)
+    rig_args = dict(tick_seconds=0.05, online_seconds=0.2, who_seconds=0.2, who_soon_seconds=0.05, who_resend_seconds=1.0, mods="1002", frame_burst=1000, frame_refill_seconds=0.001)
 
     def login(self, login):
         c = hc.Client(self.rig.port, login=login)
@@ -630,40 +720,25 @@ class OnTheWire(ths.RigTest):
         self.assertIs(welcome["presence"], True)
         send_json(alice, t="here", at="wait", pub=True, map="TREASURE.LVL", n=2, of=4, code="c1v3rr")
         send_json(alice, t="who")
-        (first,) = who_frames(alice)
-        self.assertEqual((first["full"], first["n"], first["g"], [(r["name"], r["at"], r.get("code")) for r in first["rows"]]), (True, 1, 0, [("alice", "wait", "c1v3rr")]))
+        alice_sees = Model()
+        alice_sees.take(who_frames(alice))
+        self.assertEqual((alice_sees.n, alice_sees.g, [(r["name"], r["at"], r.get("code")) for r in alice_sees.rows.values()]), (1, 0, [("alice", "wait", "c1v3rr")]))
         guest = hc.Client(self.rig.port)
         self.clients.append(guest)
         guest.recv_json()
         send_json(guest, t="who")
-        (seen,) = who_frames(guest)
-        self.assertEqual((seen["n"], seen["g"], [r["name"] for r in seen["rows"]]), (2, 1, ["alice"]))
-        (change,) = [m for m in who_frames(alice, 1.0)]
-        self.assertEqual((change["full"], change["n"], change["g"], change["rows"], change["gone"]), (False, 2, 1, [], []))
+        guest_sees = Model()
+        guest_sees.take(who_frames(guest, 1.0))
+        self.assertEqual((guest_sees.n, guest_sees.g, [r["name"] for r in guest_sees.rows.values()]), (2, 1, ["alice"]), "the list that the guest has, and what was sent after it")
+        alice_sees.take(who_frames(alice, 0.5))
+        self.assertEqual((alice_sees.n, alice_sees.g), (2, 1), "the member hears that a guest came")
         bob, _ = self.login("1002:bob")
         send_json(bob, t="here", at="look")
-        (bob_list,) = who_frames(guest, 1.0) or [None]
-        self.assertEqual([(r["name"], r.get("mod")) for r in bob_list["rows"]], [("bob", True)])
-        self.assertEqual((bob_list["n"], bob_list["g"]), (3, 1))
+        guest_sees.take(who_frames(guest, 1.0))
+        self.assertEqual((guest_sees.n, guest_sees.g, sorted((r["name"], r.get("mod")) for r in guest_sees.rows.values())), (3, 1, [("alice", None), ("bob", True)]), "bob is a moderator of this rig")
         bob.close()
-        (gone,) = who_frames(guest, 1.0)
-        self.assertEqual((len(gone["gone"]), gone["n"], gone["rows"]), (1, 2, []))
-
-    def test_the_online_count_is_the_number_of_people_two_tabs_of_one_account_are_one(self):
-        self.login("1001:alice")
-        self.login("1001:alice")
-        c = hc.Client(self.rig.port)
-        self.clients.append(c)
-        self.assertEqual(c.recv_json()["online"], 2)
-
-    def test_the_online_count_that_the_clock_sends_is_the_number_of_people_too(self):
-        self.login("1001:alice")
-        self.login("1001:alice")
-        guest = hc.Client(self.rig.port)
-        self.clients.append(guest)
-        guest.recv_json()
-        counts = [m["n"] for m in guest.drain(0.8) if m["t"] == "online"]
-        self.assertEqual(counts[-1:], [2], counts)
+        guest_sees.take(who_frames(guest, 1.0))
+        self.assertEqual((guest_sees.n, sorted(r["name"] for r in guest_sees.rows.values())), (2, ["alice"]), "a person who goes is out of the list")
 
     def test_a_name_that_is_not_a_username_is_a_guest_not_a_row(self):
         c = hc.Client(self.rig.port, login="1001:Eve!")
@@ -689,7 +764,7 @@ class OnTheWire(ths.RigTest):
         send_json(alice, t="who")
         send_json(alice, t="who")
         self.assertEqual(len(who_frames(alice, 0.3)), 1)
-        time.sleep(0.5)
+        time.sleep(1.0)
         send_json(alice, t="who")
         self.assertEqual(len(who_frames(alice, 0.3)), 1)
 
@@ -734,7 +809,7 @@ class TheProcessLogHoldsNothingOfTheList(unittest.TestCase):
             send_json(moddy, t="who")
             self.assertEqual(len(who_frames(moddy)), 1)
             send_json(alice, t="here", at="wait", pub=True, map="not a map")
-            self.assertEqual(alice.drain(0.3)[-1], {"t": "err", "code": "bad"})
+            self.assertEqual(frames_within(alice, 0.5)[-1], {"t": "err", "code": "bad"})
             time.sleep(0.2)
             proc.send_signal(signal.SIGTERM)
             proc.wait(10)

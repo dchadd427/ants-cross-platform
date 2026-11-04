@@ -83,7 +83,7 @@ class Presence:
         self.seq = 0                    # the order in which pages said what they do (the newer one wins between two sockets of one account that do the same)
         self.sent = None                # the list as it was last sent: {"n", "g", "more", "rows": {id: row}}
         self.sent_bytes = None          # ... as one frame, for the next page that asks
-        self.refreshed = float("-inf")
+        self.sent_at = float("-inf")             # when the list was last sent: the sends are held to `who_seconds` from that (`who_soon_seconds` for a page that asks)
 
     def alive(self, peer):
         return peer in self.chat.peers and not getattr(peer, "closed", False)
@@ -140,13 +140,14 @@ class Presence:
         return dict({"t": "who", "full": True}, **numbers, rows=list(view["rows"].values()))
 
     def refresh(self, now, soon):
-        """Look at the list, and send the change to the pages that watch it: at most every `who_seconds` (`who_soon_seconds` for a page that asks for it for the first time)."""
-        if now - self.refreshed < (self.limits.who_soon_seconds if soon else self.limits.who_seconds):
+        """Look at the list, and send the change to the pages that watch it: at most every `who_seconds` after the last send (`who_soon_seconds` for a page that asks for it for the first time). A change after a
+        quiet time goes out at the next look; changes that come while the last send is young wait for it to be old, and are one send."""
+        if now - self.sent_at < (self.limits.who_soon_seconds if soon else self.limits.who_seconds):
             return
-        self.refreshed = now
         view = self.view()
         if view == self.sent:
             return
+        self.sent_at = now
         previous, self.sent, self.sent_bytes = self.sent, view, None
         self.watchers = {p for p in self.watchers if self.alive(p)}
         if self.watchers:

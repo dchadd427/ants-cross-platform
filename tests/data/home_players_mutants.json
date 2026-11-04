@@ -605,6 +605,13 @@
    "old": "function ask() { if (live && supported && !asked",
    "new": "function ask() { if (live && !asked",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_guest_says_the_code_of_the_room",
+   "file": "web/home/players.js",
+   "old": " && client.isLeader && client.isLeader()) say.code = client.code;",
+   "new": ") say.code = client.code;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }
