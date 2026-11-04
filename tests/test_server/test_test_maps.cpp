@@ -436,23 +436,23 @@ int main() {
         ASSERT_TRUE(std::string(ants::net::kNoticeMapTooBig).size() <= ants::net::kMaxChatChars);
     } TEST_END();
 
-    TEST_CASE("TM1.7b A map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts = 8,000, the four colors added up) is refused as a test map with one plain sentence (422 map_too_many_ants_online) before it is kept; 8,000 is kept and the store counts its ants from the canonical file; a 40,000-ant map is refused the same way") {
+    TEST_CASE("TM1.7b A map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts = 1,000, the four colors added up) is refused as a test map with one plain sentence (422 map_too_many_ants_online) before it is kept; 1,000 is kept and the store counts its ants from the canonical file; a 40,000-ant map is refused the same way") {
         Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
         const auto step = [&]() { t.now_ms += 20000; };
-        const std::string at_cap = tiny_with_ants({2000, 2000, 2000, 2000});
+        const std::string at_cap = tiny_with_ants({250, 250, 250, 250});
         ASSERT_TRUE(!at_cap.empty());
         HttpResponse r = t.upload(at_cap, "At Cap", "203.0.113.30", "classic");
         ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
         ASSERT_EQ(t.store->maps(t.now).size(), size_t{1});
-        ASSERT_EQ(t.store->maps(t.now)[0].start_ants, uint64_t{8000});                           // (counted by the store from the file it keeps, never from the sender)
+        ASSERT_EQ(t.store->maps(t.now)[0].start_ants, uint64_t{1000});                           // (counted by the store from the file it keeps, never from the sender)
         step();
-        for (const std::array<uint32_t, 4>& per_color : {std::array<uint32_t, 4>{2000, 2000, 2000, 2001}, std::array<uint32_t, 4>{2001, 2000, 2000, 2000}, std::array<uint32_t, 4>{1, 8001, 1, 1}, std::array<uint32_t, 4>{10000, 10000, 10000, 10000}}) {
+        for (const std::array<uint32_t, 4>& per_color : {std::array<uint32_t, 4>{250, 250, 250, 251}, std::array<uint32_t, 4>{251, 250, 250, 250}, std::array<uint32_t, 4>{1, 1001, 1, 1}, std::array<uint32_t, 4>{10000, 10000, 10000, 10000}}) {
             const std::string over = tiny_with_ants(per_color);
             ASSERT_TRUE(!over.empty());
             r = t.upload(over, "Over Cap", "203.0.113.31", "classic");
             ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_ants_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
             const std::string said = parse_text(r.body).get("message").str();
-            ASSERT_TRUE(said.find("8,000") != std::string::npos && said.find("against bots") != std::string::npos);
+            ASSERT_TRUE(said.find("1,000") != std::string::npos && said.find("against bots") != std::string::npos);
             step();
         }
         ASSERT_EQ(t.store->maps(t.now).size(), size_t{1});                                       // (nothing of a refused map is kept: only the one at the cap)

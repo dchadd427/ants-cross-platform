@@ -3,7 +3,7 @@
 // How big a map an ONLINE match may have, and what a big map costs the server (docs/SERVER.md, "Online size limit"). Until the server's load with big maps is measured, a room plays a map only up to
 // kMaxCells cells (256 x 256 is the largest Classic map and the largest Extended map that is played online) and only up to kMaxStartAnts starting ants (all four colors together); a bigger approved or test map
 // stays on the lists, can be opened and edited in the Map Maker and played against bots on the player's own computer or in the browser's test game, but a room refuses it with one sentence
-// (net::kNoticeMapTooBig, net::kNoticeMapTooManyAnts). Above kHeavyStartAnts (and up to the cap) a map is only marked heavy, and the pages warn that a game may run slowly. The numbers are here and nowhere else.
+// (net::kNoticeMapTooBig, net::kNoticeMapTooManyAnts). Above kHeavyStartAnts a map is also marked heavy, and the Map Maker warns that a game on a small device may run slowly (a room refuses such a map first, it is over the cap). The numbers are here and nowhere else.
 
 #include <cstdint>
 
@@ -18,15 +18,15 @@ struct OnlineLimits {
     /// roughly 17 times a tick of the TREASURE map, a 512 x 512 map about 100 times), so a match takes one place for every started 10,000 cells of its map: every shipped map one place, the largest online map seven.
     static constexpr uint32_t kCellsPerPlace = 10000u;
 
-    /// Above this many starting ants (the start markers of the four colors added up: 600 a color on a map of four) a map is heavy: a game on it may run slowly on some devices. Only a warning (the map picker's row and the
-    /// Map Maker's Play this map dialog, which keeps a copy of the number, `HEAVY_START_ANTS` in mapmaker_play.js); no map is refused for its ants, and single-player games, test rooms and public rooms are as they were.
+    /// Above this many starting ants (the start markers of the four colors added up: 600 a color on a map of four) a map is heavy: a game on it may run slowly on some devices. Only a warning, for a game on the player's own
+    /// device (the Map Maker's Play this map dialog, which keeps a copy of the number, `HEAVY_START_ANTS` in mapmaker_play.js); a single-player game is never refused for its ants. Such a map is over kMaxStartAnts, so a room refuses it.
     static constexpr uint32_t kHeavyStartAnts = 2400;
 
-    /// The most starting ants (the start markers of the four colors added up, as start_ants counts them) of a map that a room plays. Setting the ants up grows with the square of their number (measured natively:
-    /// 6,000 ants about 50 ms, 10,000 about 0.5 s, 40,000 about 9 s, during which the one thread serves nobody), so a map above this is refused before its match is made. 8,000 is above every map of the library
-    /// (at most 248) and of the players (the largest, 6,000).
-    static constexpr uint32_t kMaxStartAnts = 8000;
-    /// A match takes one more place for every started kAntsPerPlace starting ants (see weight): 2,400 ants six places, 6,000 fifteen, 8,000 twenty
+    /// The most starting ants (the start markers of the four colors added up, as start_ants counts them) of a map that a room plays. A match costs the one thread that serves every room more the more ants it has
+    /// (setting the ants up grows with the square of their number, measured natively: 6,000 ants about 50 ms, 10,000 about 0.5 s, 40,000 about 9 s), so a map above this is refused before its match is made. 1,000 is
+    /// above every map of the library (at most 248); a bigger map of the players stays on the lists and is played on the player's own device.
+    static constexpr uint32_t kMaxStartAnts = 1000;
+    /// A match takes one more place for every started kAntsPerPlace starting ants (see weight): 400 ants one place, 1,000 ants three
     static constexpr uint32_t kAntsPerPlace = 400u;
 
     static constexpr bool allows(uint64_t cells) noexcept { return cells <= kMaxCells; }

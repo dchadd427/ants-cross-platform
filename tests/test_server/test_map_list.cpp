@@ -566,7 +566,7 @@ int main() {
         ASSERT_TRUE(std::string(net::kNoticeMapTooBig).find("65,536 cells") != std::string::npos && std::string(net::kNoticeMapTooBig).size() <= net::kMaxChatChars);
     } TEST_END();
 
-    TEST_CASE("ML4.5 The start ants of a map: counted from the file (the start markers of the four colors added up), 2,400 is not heavy and 2,401 is; the 540 maps of the library start at most 248, so none is marked; the list says \"ants\" and \"heavy\" of a heavy map only (the newest list); and nothing is refused for them: the lobby may choose a map of 6,000 ants") {
+    TEST_CASE("ML4.5 The start ants of a map: counted from the file (the start markers of the four colors added up), 2,400 is not heavy and 2,401 is; the 540 maps of the library start at most 248, so none is marked; the list says \"ants\" and \"heavy\" of a heavy map only (the newest list); a map above the cap of 1,000 is refused online (the lobby does not choose it, the list says \"online\": false), one at the cap is not") {
         MapStore store(maps_dir(), community_dir());
         store.scan();
         uint64_t most = 0;
@@ -611,7 +611,7 @@ int main() {
             return a;
         };
         store.set_approved({keep("Ants 2400.lvl", {600, 600, 600, 600}), keep("Ants 2401.lvl", {600, 600, 600, 601}), keep("Ext 2400.lvl", {600, 600, 600, 600}, "extended"), keep("Ext 2401.lvl", {600, 600, 600, 601}, "extended"),
-                            keep("Uneven 6000.lvl", {1, 1, 1, 5997}), keep("Huge 6000.lvl", {1500, 1500, 1500, 1500}, "extended")});
+                            keep("Uneven 6000.lvl", {1, 1, 1, 5997}), keep("Huge 6000.lvl", {1500, 1500, 1500, 1500}, "extended"), keep("Cap 1000.lvl", {250, 250, 250, 250}), keep("Cap 1001.lvl", {250, 250, 250, 251}, "extended")});
         const ctl::JsonValue newest = parse_text(store.list_json(nullptr, true));
         for (const auto& [file, ants] : std::vector<std::pair<const char*, int64_t>>{{"Ants 2401.lvl", 2401}, {"Ext 2401.lvl", 2401}, {"Uneven 6000.lvl", 6000}, {"Huge 6000.lvl", 6000}}) {
             const ctl::JsonValue* e = entry_of(newest, file);
@@ -622,15 +622,20 @@ int main() {
             const ctl::JsonValue* e = entry_of(newest, fine);
             ASSERT_TRUE(e != nullptr && e->get("heavy").is_null() && e->get("ants").is_null());
         }
-        ASSERT_TRUE(entry_of(newest, "Ants 2401.lvl")->get("online").is_null() && entry_of(newest, "Huge 6000.lvl")->get("online").is_null());       // (no refusal: "online" is about the size of the grid only)
+        for (const char* over : {"Ants 2400.lvl", "Ants 2401.lvl", "Ext 2401.lvl", "Uneven 6000.lvl", "Huge 6000.lvl", "Cap 1001.lvl"}) {        // (over the cap of 1,000: the list says so, and why)
+            ASSERT_TRUE(entry_of(newest, over)->get("online").as_bool_or(true) == false && entry_of(newest, over)->get("online_why").str() == "ants");
+        }
+        for (const char* fine : {"Cap 1000.lvl", "TINY.LVL", "TREASURE.LVL"}) ASSERT_TRUE(entry_of(newest, fine)->get("online").is_null() && entry_of(newest, fine)->get("online_why").is_null() && entry_of(newest, fine)->get("heavy").is_null());       // (at the cap and under it: no mark)
+        ASSERT_TRUE(entry_of(newest, "Cap 1001.lvl")->get("heavy").is_null() && entry_of(newest, "Cap 1001.lvl")->get("ants").is_null());           // (over the cap but not heavy: the refusal, no count)
         ASSERT_TRUE(store.list_json(nullptr, false).find("heavy") == std::string::npos);      // (the old list has the same maps and no new keys)
-        // nothing is refused: every one of them is chosen as any other, in any letter case
-        for (const char* name : {"Ants 2400.lvl", "Ants 2401.lvl", "Ext 2401.lvl", "ext 2401.LVL", "Uneven 6000.lvl", "Huge 6000.lvl", "huge 6000.LVL"}) {
-            ASSERT_TRUE(!store.listed_name(name).empty());
+        // a map over the cap is not chosen, in any letter case, and is not too big in cells; one at the cap is chosen as any other; the file of every one is still found
+        for (const char* name : {"Ants 2400.lvl", "Ants 2401.lvl", "Ext 2401.lvl", "ext 2401.LVL", "Uneven 6000.lvl", "Huge 6000.lvl", "huge 6000.LVL", "Cap 1001.lvl", "cap 1001.LVL"}) {
+            ASSERT_TRUE(store.listed_name(name).empty() && store.too_many_ants_online(name));
             ASSERT_FALSE(store.too_big_online(name));
         }
+        for (const char* name : {"Cap 1000.lvl", "cap 1000.LVL", "TINY.LVL"}) ASSERT_TRUE(!store.listed_name(name).empty() && !store.too_many_ants_online(name));
         MapEntry entry;
-        ASSERT_TRUE(store.find("Huge 6000.lvl", entry));
+        ASSERT_TRUE(store.find("Huge 6000.lvl", entry) && store.find("Cap 1001.lvl", entry));
         // a take-down: the map that is gone is not listed
         store.set_approved({keep("Ants 2400.lvl", {600, 600, 600, 600})});
         ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, true)), "Ants 2401.lvl") == nullptr);
@@ -646,8 +651,7 @@ int main() {
             const ctl::JsonValue shown = parse_text(own.list_json(nullptr, true));
             ASSERT_TRUE(entry_of(shown, "TINY.LVL")->get("heavy").as_bool_or(false) && entry_of(shown, "TINY.LVL")->get("ants").as_int_or(0) == 2800);        // (an original is counted like any map: the list says what the file holds)
             ASSERT_TRUE(entry_of(shown, "Plain.lvl")->get("heavy").as_bool_or(false) && entry_of(shown, "Plain.lvl")->get("ants").as_int_or(0) == 2800);
-            ASSERT_EQ(own.listed_name("Plain.lvl"), std::string("Plain.lvl"));
-            ASSERT_EQ(own.listed_name("TINY.LVL"), std::string("TINY.LVL"));
+            ASSERT_TRUE(own.listed_name("Plain.lvl").empty() && own.listed_name("TINY.LVL").empty());      // (over the cap whichever folder the file is in: a room does not play it)
         }
     } TEST_END();
 

@@ -693,27 +693,27 @@ void run_rematch_tests() {
         ASSERT_FALSE(fs::exists(held));
 #endif
     } TEST_END();
-    TEST_CASE("S3.230 The Match That Gave Its Code To Its Rematch (Retired) Keeps The Places Of Its Ants As Well As Of Its Cells Until It Is Forgotten: A 2,400-Ant Match Holds Six Of Seven Places, So One Small Public Room Fits Beside It And A Second Does Not; When It Is Forgotten They Are Free") {
+    TEST_CASE("S3.230 The Match That Gave Its Code To Its Rematch (Retired) Keeps The Places Of Its Ants As Well As Of Its Cells Until It Is Forgotten: A 1,000-Ant Match Holds Three Of Four Places, So One Small Public Room Fits Beside It And A Second Does Not; When It Is Forgotten They Are Free") {
         const fs::path dir = fs::temp_directory_path() / (std::string("ants_rematch_ants_") + std::to_string(static_cast<long long>(std::hash<std::string>()(maps_dir()) % 100000)));
         fs::remove_all(dir);
         fs::create_directories(dir);
         fs::copy_file(maps_dir() + "/TINY.LVL", dir / "TINY.LVL", fs::copy_options::overwrite_existing);
-        { std::ofstream out(dir / "MANY.LVL", std::ios::binary); out << tiny_with_ants({600, 600, 600, 600}); }       // (2,400 ants on TINY's 31 x 31 cells: one place by its cells, six by its ants)
+        { std::ofstream out(dir / "MANY.LVL", std::ios::binary); out << tiny_with_ants({250, 250, 250, 250}); }       // (1,000 ants on TINY's 31 x 31 cells: one place by its cells, three by its ants)
         ServerLimits l = rematch_limits();
-        l.demo_rooms = 7;
+        l.demo_rooms = 4;
         l.demo_maps = {"TINY.LVL", "MANY.LVL"};
         World w(l, dir.string());
         Played p;
         play_and_quit(w, "rmt00030", plan_of({K::Open, K::Open, K::Nobody, K::Nobody}, net::kNoTeam, net::kNoTeam, "MANY.LVL"), p, true, 0, dir.string());
         ASSERT_EQ(w.mgr.retired_count(), 1u);
         Client& ann = w.connect_creating("Ann", "pub00031", block_of("TINY.LVL", 2));
-        ASSERT_EQ(door_answer_of(w, ann), static_cast<net::RejectReason>(0));                          // (6 + 1 = 7)
+        ASSERT_EQ(door_answer_of(w, ann), static_cast<net::RejectReason>(0));                          // (3 + 1 = 4)
         Client& bob = w.connect_creating("Bob", "pub00032", block_of("TINY.LVL", 2));
-        ASSERT_EQ(door_answer_of(w, bob), net::RejectReason::NoSuchRoom);                              // (6 + 1 + 1 = 8; weighed by its cells alone the match would hold one and Bob would be in)
+        ASSERT_EQ(door_answer_of(w, bob), net::RejectReason::NoSuchRoom);                              // (3 + 1 + 1 = 5; weighed by its cells alone the match would hold one and Bob would be in)
         w.run(31000);                                                                                  // the match's keep time is over: it is forgotten
         ASSERT_EQ(w.mgr.retired_count(), 0u);
         Client& cat = w.connect_creating("Cat", "pub00033", block_of("TINY.LVL", 2));
-        ASSERT_EQ(door_answer_of(w, cat), static_cast<net::RejectReason>(0));                          // (1 + 1: the six are free again)
+        ASSERT_EQ(door_answer_of(w, cat), static_cast<net::RejectReason>(0));                          // (1 + 1: the three are free again)
         std::error_code ignore;
         fs::remove_all(dir, ignore);
     } TEST_END();

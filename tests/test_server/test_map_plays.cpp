@@ -333,7 +333,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("MP2.3 A recording on a map that starts more ants than a room plays (8,000, the four colors added up) is not played by the feeder (one piece on the one thread, seconds for 40,000 ants): it is left out; one at the cap is counted as ever") {
+    TEST_CASE("MP2.3 A recording on a map that starts more ants than a room plays (1,000, the four colors added up) is not played by the feeder (one piece on the one thread, seconds for 40,000 ants): it is left out; one at the cap is counted as ever") {
         TempDir maps;
         const auto keep_map = [&](const char* name, uint32_t per_color) {
             const std::string bytes = tiny_with_ants({per_color, per_color, per_color, per_color});
@@ -341,7 +341,7 @@ int main() {
             out << bytes;
             return !bytes.empty() && static_cast<bool>(out);
         };
-        ASSERT_TRUE(keep_map("AT CAP.LVL", 2000) && keep_map("OVER CAP.LVL", 2001));                // (8,000 and 8,004)
+        ASSERT_TRUE(keep_map("AT CAP.LVL", 250) && keep_map("OVER CAP.LVL", 251));                  // (1,000 and 1,004)
         for (const bool over : {false, true}) {
             MatchSpec spec;
             spec.dir = maps.path.string();
