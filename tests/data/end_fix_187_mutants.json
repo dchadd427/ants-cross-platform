@@ -177,6 +177,15 @@
    "build": "test_rules_end_fix",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
    "expect": "RP15.1"
+  },
+  {
+   "id": "nobody_left_does_not_end",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "    if (sides == 0) return true;",
+   "new": "    if (sides == 0) return false;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "3.5"
   }
  ]
 }

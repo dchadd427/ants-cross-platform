@@ -18,6 +18,7 @@
 #include "ants_server/history_record.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/match_stats.hpp"
+#include "ants_sim/sim_engine.hpp"
 #include "ants_sim/start_teams.hpp"
 
 using namespace ants;
@@ -238,6 +239,47 @@ int main() {
         Fake none;                                            // all went at once (nobody has anything left): kills decide, here nothing
         none.mode = 1;
         ASSERT_TRUE(record_of(none).draw);
+    } TEST_END();
+
+    TEST_CASE("HR2.4 Mode 187, the last ants of both final teams die within one check of the end rule (200 ms): a real engine's result has nobody standing, the record ranks by the kills, and equal kills are a DRAW (the end-rule fixes of the rules number 11 keep this as it was)") {
+        const auto record_of_engine = [](uint32_t kills_of_seat_0) {
+            sim::SimulationEngine e;
+            e.set_game_mode(sim::GameMode::Kills187);
+            e.init_test_world(40, 40, 11, 720000);
+            for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) e.set_player_eggs(p, 0);
+            for (uint8_t team = 0; team < 2; ++team) {
+                for (int32_t i = 0; i < 2; ++i) e.spawn_unit(team, sim::AntType::Combat, sim::TileCoord{4 + 10 * team + 2 * i, 6});
+            }
+            for (uint32_t k = 0; k < kills_of_seat_0; ++k) {                       // seat 0 kills an ant of seat 1 in melee: a fresh pair side by side, the victim with one hit point left
+                const int32_t row = 15 + 3 * static_cast<int32_t>(k);
+                const uint32_t killer = e.spawn_unit(0, sim::AntType::Combat, sim::TileCoord{30, row});
+                const uint32_t victim = e.spawn_unit(1, sim::AntType::Combat, sim::TileCoord{31, row});
+                e.get_unit(victim).hp = 1;
+                e.execute_melee_attack(killer, victim);
+                for (int t = 0; t < 80; ++t) e.tick();
+            }
+            for (const sim::AntSnapshot& a : e.get_world_state().ants) {          // everything that is left dies before the rule looks again
+                if (a.hp > 0) e.kill_unit(a.id);
+            }
+            for (int t = 0; t < 10 && !e.is_match_over(); ++t) e.tick();
+            replay::Replay rep;
+            rep.head.map_name = "TINY.LVL";
+            rep.head.roster = 0x0F;                                              // (the test world seats all four teams, two of them with nothing)
+            rep.head.set_mode(1);
+            replay::Outcome out;
+            out.ran = true;
+            out.ok = true;
+            out.turns = 100;
+            out.match_over = e.is_match_over();
+            out.result = e.get_world_state().match_result;
+            return std::make_pair(make_history_record(kId, kT0, rep, out), out.result);
+        };
+        const auto ahead = record_of_engine(1);                  // seat 0 has a kill, both teams are wiped out together
+        ASSERT_TRUE(ahead.second.is_over && ahead.second.standing == sim::PLAYER_NEUTRAL);
+        ASSERT_TRUE(!ahead.first.draw && winners_of(ahead.first) == "0" && row_order(ahead.first).substr(0, 2) == "0 ");
+        const auto level = record_of_engine(0);                  // nobody has a kill: the same, and equal kills are a draw
+        ASSERT_TRUE(level.second.is_over && level.second.standing == sim::PLAYER_NEUTRAL);
+        ASSERT_TRUE(level.first.draw && winners_of(level.first).empty() && std::string(level.first.result()) == "draw");
     } TEST_END();
 
     TEST_CASE("HR2.3 Mode 187 stores the kills as the ranking value: a seat's and a row's `score` is its kills, whatever the engine's score was; highest-score keeps the score") {
