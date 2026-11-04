@@ -57,8 +57,8 @@ struct Pinned {
 constexpr Pinned kBefore8 = {1205, 0xdadc93dc74a9e5acull, 0x5e2750e0, 0xb46daa00, 0x923e306f};
 constexpr Pinned kBefore7 = {1205, 0x0e0dda130e3870daull, 0x48b2b1af, 0xc491acd5, 0xea2f0425};
 // What this build makes of the same match under the numbers 9 and 10 (the loader of the original): another match from tick 0
-constexpr Pinned kNow9 = {0, 0ull, 0, 0, 0};
-constexpr Pinned kNow10 = {0, 0ull, 0, 0, 0};
+constexpr Pinned kNow9 = {1205, 0x6d2adac92357f732ull, 0x331c22ff, 0xda5ce6cf, 0xf7b9b881};
+constexpr Pinned kNow10 = {1205, 0xe15502716c4e668cull, 0xb7c8a1d0, 0xd2f6a272, 0xbb816833};
 
 struct Made {
     std::vector<uint8_t> file;
@@ -137,6 +137,10 @@ Replay with_rules(Replay r, uint16_t rules) {
 }
 
 void expect_plays_to(const Made& m, const Pinned& pinned, const assets::LevelData& level, uint16_t rules, uint8_t mode, bool& ok) {
+    if (m.replay.hashes.size() >= 12 && (m.turns != pinned.turns || m.hash != pinned.final_hash || m.replay.hashes[0] != pinned.hash100 || m.replay.hashes[3] != pinned.hash400 || m.replay.hashes[11] != pinned.hash1200)) {
+        std::cout << "\n    rules " << rules << " mode " << int(mode) << ": the match ran " << m.turns << " turns and ends in " << std::hex << m.hash << ", hashes after turns 100, 400, 1200: " << m.replay.hashes[0] << " " << m.replay.hashes[3] << " "
+                  << m.replay.hashes[11] << std::dec << "\n";
+    }
     ok = m.error.empty() && !m.file.empty() && m.replay.complete && m.replay.head.sim_rules == rules && m.replay.head.mode == mode && plays_here(m.replay.head);
     ok = ok && m.turns == pinned.turns && m.hash == pinned.final_hash && m.replay.total_turns == pinned.turns && m.replay.final_hash == pinned.final_hash;
     ok = ok && m.replay.hashes.size() >= 12 && m.replay.hashes[0] == pinned.hash100 && m.replay.hashes[3] == pinned.hash400 && m.replay.hashes[11] == pinned.hash1200;
@@ -251,12 +255,12 @@ int main() {
         const Made eight = make(0, 8, level);
         const Made nine = make(0, 9, level);
         const Outcome nine_as_eight = play(with_rules(nine.replay, 8), level);
-        ASSERT_TRUE(nine_as_eight.ran && !nine_as_eight.ok);
+        ASSERT_TRUE(!nine_as_eight.ok && nine_as_eight.first_bad_turn > 0u && nine_as_eight.first_bad_turn <= 100u);       // (the first hash that the file holds, after turn 100, is not reached: the loader is another)
         const Outcome eight_as_nine = play(with_rules(eight.replay, 9), level);
-        ASSERT_TRUE(eight_as_nine.ran && !eight_as_nine.ok);
+        ASSERT_TRUE(!eight_as_nine.ok && eight_as_nine.first_bad_turn > 0u && eight_as_nine.first_bad_turn <= 100u);       // (the first hash that the file holds, after turn 100, is not reached: the loader is another)
         const Made ten = make(k187, 10, level);
         const Outcome ten_as_seven = play(with_rules(ten.replay, 7), level);
-        ASSERT_TRUE(ten_as_seven.ran && !ten_as_seven.ok);
+        ASSERT_TRUE(!ten_as_seven.ok && ten_as_seven.first_bad_turn > 0u && ten_as_seven.first_bad_turn <= 100u);       // (the first hash that the file holds, after turn 100, is not reached: the loader is another)
         // a number from a newer build: not played, and the refusal says what this build plays
         const Outcome newer = play(with_rules(nine.replay, 11), level);
         ASSERT_FALSE(newer.ran);

@@ -2021,7 +2021,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(original.hash != p.hash);
         // a match of mode 0: no field 17, rules 1, whatever else; and its engine is the original's
         const std::vector<HeadField> plain = fields_of(chunks_of(original.file)[0].payload);
-        ASSERT_TRUE(find_field(plain, 17) == nullptr && plain.back().id == 16 && plain.back().bytes == std::vector<uint8_t>({8, 0}));
+        ASSERT_TRUE(find_field(plain, 17) == nullptr && plain.back().id == 16 && plain.back().bytes == std::vector<uint8_t>({9, 0}));
         ASSERT_TRUE(original.replay.head.mode == 0 && original.replay.head.sim_rules == kSimRules && plays_here(original.replay.head));
         // the recorder stamps the rules number that goes with the mode on a head that only named the mode (a head made by hand, a caller that forgot)
         Header unstamped = head_for(tiny, "TINY", 1, 0x03);

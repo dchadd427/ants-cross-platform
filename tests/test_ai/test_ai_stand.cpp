@@ -11,6 +11,7 @@
 //   AI25.6  the mines at home: a Bomber lays them five to nine tiles from the own hill, plan.mine_home_apart tiles apart, off the carriers' way, at most plan.mine_home; none without the plan, none before plan.mine_home_after, none while no enemy is seen to play
 //   AI25.7  the rush: a bot far behind sends its typed ants without food at the leader's hill (gather, then assault; Workers only with plan.rush_workers), not before its time, not while it leads or with the plan off, and it ends
 //   AI25.8  whole matches: nobody rushes on ISLANDS (no walk joins the hills); the shipped plans fire and mine on TREASURE and bank within a tenth of the bots without the batch
+//   AI25.10 the mines at the gate where a map's fire wall was put out: laid on a loader of the original (rules numbers 9 and 10), not on the tiles that the old loader (5 to 8) keeps blocked
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -20,6 +21,7 @@
 
 #include "ai_test.hpp"
 #include "ants_ai/arena.hpp"
+#include "ants_assets/lvl_writer.hpp"
 #include "b41_helpers.hpp"
 #include "contest_helpers.hpp"
 

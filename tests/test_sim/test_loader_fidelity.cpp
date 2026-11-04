@@ -1176,6 +1176,8 @@ int main() {
                 for (uint32_t x = 0; x < now.width(); ++x)
                     differing += cell_at(now, TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)}).is_obstacle_overlay != cell_at(before, TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)}).is_obstacle_overlay ? 1 : 0;
             CHECK(differing == (named ? 1 : 0));                                                                                // (no other cell moves)
+            SimulationEngine plain;
+            CHECK(plain.fire_wall_as_original());                                                                               // (a new engine is the rules of now)
             // the state hash carries the flag: it differs from tick 0 when the flag does, in either game mode (the loader knows no mode)
             for (const GameMode mode : {GameMode::HighestScore, GameMode::Kills187}) {
                 SimulationEngine sim_now;
@@ -1239,15 +1241,16 @@ int main() {
         }
     });
 
-    run_case("LF8.5 The Community Library: The Two Loaders Differ In The Obstacle Overlay Of Exactly 480 Cells In Exactly 5 Maps (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2), All Fire Walls Named wallup04; The Six Originals Not At All", [] {
+    run_case("LF8.5 The Community Library: The Two Loaders Differ In The Obstacle Overlay Of Exactly 451 Cells In Exactly 5 Maps (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2), All Of Them Fire Walls Named wallup04 (Of Their 480; The Other 29 Lie Where The Hill's Own Set-Up Clears The Flag); The Six Originals Not At All", [] {
         std::set<std::string> maps;
-        long cells = 0, other_differences = 0;
+        long cells = 0, other_differences = 0, named_walls = 0;
         const auto compare = [&](const std::string& name, const LevelData& level) {
             Grid now;
             Grid before;
             if (!now.init_from_level(level) || !before.init_from_level(level, false)) return;
             for (uint32_t y = 0; y < now.height(); ++y) {
                 for (uint32_t x = 0; x < now.width(); ++x) {
+                    if (level.get_cell_layer2(x, y).tile_index == TILE_FIREWALL && level.get_tile_name(TILE_FIREWALL) == "wallup04") ++named_walls;
                     const TileCell& a = now.get_cell(x, y);
                     const TileCell& b = before.get_cell(x, y);
                     if (a.is_obstacle_overlay == b.is_obstacle_overlay) continue;
@@ -1265,8 +1268,8 @@ int main() {
             LevelData level;
             if (level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + original)) compare(original, level);
         }
-        std::cout << "\n    cells that the two loaders mark differently: " << cells << " in " << maps.size() << " maps, other differences: " << other_differences << "\n";
-        CHECK(cells == 480 && maps.size() == 5 && other_differences == 0);
+        std::cout << "\n    cells that the two loaders mark differently: " << cells << " in " << maps.size() << " maps (of " << named_walls << " fire wall cells with the entry wallup04), other differences: " << other_differences << "\n";
+        CHECK(cells == 451 && named_walls == 480 && maps.size() == 5 && other_differences == 0);
         CHECK(maps.count("ANTS_PARTY-V.3.0.5.lvl") == 1 && maps.count("A_Coaster_Mix_Turnament_Map.lvl") == 1 && maps.count("Welcome_from_chaos.lvl") == 1 && maps.count("thief craker2.0.lvl") == 1 && maps.count("~~PlAyEr'S_rEvEnGe2.lvl") == 1);
     });
 
