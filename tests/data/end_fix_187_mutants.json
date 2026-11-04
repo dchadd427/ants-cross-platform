@@ -1,0 +1,182 @@
+{
+ "note": "Mutants of the end-rule fixes of game mode 187 (the rules number 11) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the egg that can hatch (the hill, the hatch in progress), the switch that keeps the earlier end rule for the recordings of 6, 7 and 10, the teams that began against the seats of the roster, and the rules numbers (the player, the table of what plays, the head check, the refusal's sentence) against test_game_mode (2.9.2), test_last_side (2.9.10) and test_rules_end_fix (2.29.5). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/end_fix_187_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "egg_hatch_without_a_hill",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "return stats_.get_egg_count(team) > 0 && team_entrance(team).x >= 0;",
+   "new": "return stats_.get_egg_count(team) > 0;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "4.1c"
+  },
+  {
+   "id": "egg_always_hatches",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "return stats_.get_egg_count(team) > 0 && team_entrance(team).x >= 0;",
+   "new": "return team < MAX_PLAYERS;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "4.1c"
+  },
+  {
+   "id": "hatch_in_progress_not_standing",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "if (hatch_[team].active || (stats_.get_egg_count(team) > 0",
+   "new": "if ((stats_.get_egg_count(team) > 0",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "4.1"
+  },
+  {
+   "id": "fix_reaches_the_original_game",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "(!end_fixed_187() || egg_can_hatch(team))",
+   "new": "egg_can_hatch(team)",
+   "build": "test_last_side",
+   "test": "timeout 900 ./build/tests/test_sim/test_last_side"
+  },
+  {
+   "id": "fix_ignores_its_switch",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 && end_fix_187_; }",
+   "new": "return game_mode_ == GameMode::Kills187; }",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.2"
+  },
+  {
+   "id": "fix_is_on_for_every_mode",
+   "file": "src/ants_sim/sim_engine_impl.hpp",
+   "old": "return game_mode_ == GameMode::Kills187 && end_fix_187_; }",
+   "new": "return end_fix_187_; }",
+   "build": "test_last_side",
+   "test": "timeout 900 ./build/tests/test_sim/test_last_side"
+  },
+  {
+   "id": "seats_not_teams_that_began",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "const uint8_t mask = end_fixed_187() ? static_cast<uint8_t>(started_mask_ & roster_mask_) : roster_mask_;",
+   "new": "const uint8_t mask = roster_mask_;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "3.13"
+  },
+  {
+   "id": "one_team_match_ends",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "return in_match >= 2 && sides == 1;",
+   "new": "return in_match >= 1 && sides == 1;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "3.5"
+  },
+  {
+   "id": "lone_team_stands_at_the_clock",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "if (teams_in_match() < 2 || alive_sides() != 1) return PLAYER_NEUTRAL;",
+   "new": "if (teams_in_match() < 1 || alive_sides() != 1) return PLAYER_NEUTRAL;",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.3"
+  },
+  {
+   "id": "game_mode_does_not_reset_the_fix",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "impl_->hill_open_187_ = false; impl_->end_fix_187_ = true;",
+   "new": "impl_->hill_open_187_ = false;",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "3.13"
+  },
+  {
+   "id": "test_world_starts_with_alive_teams",
+   "file": "src/ants_sim/sim_engine.cpp",
+   "old": "impl_->started_mask_ = 0x0Fu;                       // (every team of a test world",
+   "new": "impl_->started_mask_ = impl_->alive_mask();                       // (every team of a test world",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode"
+  },
+  {
+   "id": "player_plays_11_without_the_fix",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "sim_rules_of(replay.head) <= kSimRulesMode187));",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.3"
+  },
+  {
+   "id": "player_plays_10_with_the_fix",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "sim_rules_of(replay.head) < kSimRulesMode187BeforeEndFix));",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.2"
+  },
+  {
+   "id": "player_plays_6_with_the_fix",
+   "file": "src/ants_replay/player.cpp",
+   "old": "sim_rules_of(replay.head) < kSimRulesMode187));",
+   "new": "sim_rules_of(replay.head) < kSimRulesMode187Heal));",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.2"
+  },
+  {
+   "id": "rules_11_not_played",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix ||",
+   "new": "(rules == kSimRulesMode187BeforeEndFix ||",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.1"
+  },
+  {
+   "id": "rules_10_not_played",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix ||",
+   "new": "(rules == kSimRulesMode187 ||",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.1"
+  },
+  {
+   "id": "head_10_without_the_mode_ok",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix ||",
+   "new": "h.sim_rules == kSimRulesMode187 ||",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.1"
+  },
+  {
+   "id": "played_text_lacks_10",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "std::to_string(kSimRules) + \", \" +\n           std::to_string(kSimRulesMode187BeforeEndFix) + \" and \"",
+   "new": "std::to_string(kSimRules) +\n           \" and \"",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.1"
+  },
+  {
+   "id": "end_rule_counts_seats",
+   "file": "src/ants_sim/mode_187.cpp",
+   "old": "    const uint32_t in_match = teams_in_match();\n    const uint32_t sides",
+   "new": "    uint32_t in_match = 0;\n    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) in_match += (roster_mask_ >> k) & 1u;\n    const uint32_t sides",
+   "build": "test_game_mode",
+   "test": "timeout 900 ./build/tests/test_sim/test_game_mode",
+   "expect": "3.13"
+  },
+  {
+   "id": "head_11_without_the_mode_ok",
+   "file": "src/ants_replay/replay.cpp",
+   "old": "h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix ||",
+   "new": "h.sim_rules == kSimRulesMode187BeforeEndFix ||",
+   "build": "test_rules_end_fix",
+   "test": "timeout 900 ./build/tests/test_replay/test_rules_end_fix",
+   "expect": "RP15.1"
+  }
+ ]
+}

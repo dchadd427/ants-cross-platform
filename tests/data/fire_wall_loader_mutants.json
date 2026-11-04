@@ -148,16 +148,16 @@
   {
    "id": "number_7_not_played",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
-   "new": "(rules == kSimRulesMode187 || rules == kSimRulesMode187Heal)",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
+   "new": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187Heal)",
    "build": "test_rules_fire_wall",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_fire_wall"
   },
   {
    "id": "number_10_not_played",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
-   "new": "(rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
+   "new": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
    "build": "test_rules_fire_wall",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_fire_wall"
   },
@@ -172,8 +172,8 @@
   {
    "id": "number_9_plays_for_187",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
-   "new": "(rules == kSimRulesMode187 || rules == kSimRules || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
+   "old": "(rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
+   "new": "(rules == kSimRulesMode187 || rules == kSimRules || rules == kSimRulesMode187BeforeEndFix || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)",
    "build": "test_rules_fire_wall",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_fire_wall"
   },
@@ -188,16 +188,16 @@
   {
    "id": "head_lets_mode_0_name_number_10",
    "file": "src/ants_replay/replay.cpp",
-   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode",
-   "new": "(h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode",
+   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix || h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode",
+   "new": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode",
    "build": "test_rules_fire_wall",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_fire_wall"
   },
   {
    "id": "head_lets_mode_0_name_number_7",
    "file": "src/ants_replay/replay.cpp",
-   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode",
-   "new": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187Heal) && h.mode",
+   "old": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix || h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode",
+   "new": "(h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix || h.sim_rules == kSimRulesMode187Heal) && h.mode",
    "build": "test_rules_fire_wall",
    "test": "timeout 900 ./build/tests/test_replay/test_rules_fire_wall"
   },

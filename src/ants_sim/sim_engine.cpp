@@ -242,7 +242,7 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, 10);
     }
-    impl_->started_mask_ = impl_->alive_mask();
+    impl_->started_mask_ = 0x0Fu;                       // (every team of a test world has its eggs and is in the match, whether a hill could hatch them or not)
 
     impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
     if (impl_->fog_of_war_enabled_) {
@@ -412,7 +412,7 @@ void SimulationEngineImpl::checkgo_poll() {
 
 bool SimulationEngineImpl::team_alive(uint8_t team) const {
     if (team >= MAX_PLAYERS) return false;
-    if (stats_.get_egg_count(team) > 0 || hatch_[team].active) return true;
+    if (hatch_[team].active || (stats_.get_egg_count(team) > 0 && (!end_fixed_187() || egg_can_hatch(team)))) return true;       // (187 now: an egg that cannot hatch is no life, mode_187.cpp)
     for (const auto& a : ants_) {
         if (a != nullptr && !a->removed && a->player_id == team) return true;
     }
@@ -928,7 +928,7 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
 
 void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->game_mode_ = mode;
-    impl_->hill_open_187_ = false; impl_->last_side_rule_ = true; impl_->fire_wall_as_original_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_last_side_rule, set_fire_wall_as_original)
+    impl_->hill_open_187_ = false; impl_->end_fix_187_ = true; impl_->last_side_rule_ = true; impl_->fire_wall_as_original_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_end_fix_187, set_last_side_rule, set_fire_wall_as_original)
     impl_->world_state_dirty_ = true;
 }
 
