@@ -61,7 +61,8 @@ fi
 merge_base=$(git merge-base "$base" "$head" 2> /dev/null) || finish false "no merge base of the pull request and its base (is the history complete?)"
 list=$(mktemp) || finish false "no temporary file"
 trap 'rm -f "$list"' EXIT
-git diff --name-only --no-renames -z "$merge_base" "$head" -- > "$list" 2> /dev/null || finish false "git could not list the changed files"
+# --ignore-submodules=none: git diff obeys diff.ignoreSubmodules and `ignore = all` in .gitmodules, which would leave a bumped submodule out of the list (a document and a submodule bump came out light)
+git diff --name-only --no-renames --ignore-submodules=none -z "$merge_base" "$head" -- > "$list" 2> /dev/null || finish false "git could not list the changed files"
 
 echo "pull request: ${merge_base:0:12} (merge base) .. ${head:0:12} (head)"
 light=0

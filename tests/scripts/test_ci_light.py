@@ -37,6 +37,13 @@ FULL = ["VERSION", "CMakeLists.txt", "cmake/x.cmake", "src/ants_sim/a.cpp", "inc
         "CHANGELOG.md/x", "x/web/a.js", "x/docs/a.md", "Web/a.js", "DOCS/a.md", "asset_catalog/x.png", "tools/web/x.js"]
 
 
+class Gitlink:
+    """The entry of a submodule: the commit that the superproject records (it need not exist here)."""
+
+    def __init__(self, commit):
+        self.commit = commit
+
+
 def run(cmd, cwd, **kwargs):
     return subprocess.run(cmd, cwd=cwd, env=kwargs.pop("env", GIT_ENV), capture_output=True, text=True, **kwargs)
 
@@ -61,7 +68,8 @@ class Decision(unittest.TestCase):
         return done.stdout.strip()
 
     def commit(self, parent, changes, message="change"):
-        """A commit made without a working tree: the files of the tree of `parent` (None: an empty root) with `changes` applied (a text writes or replaces a file, None deletes it). Returns its id."""
+        """A commit made without a working tree: the files of the tree of `parent` (None: an empty root) with `changes` applied (a text writes or replaces a file, None deletes it, a Gitlink sets a
+        submodule). Returns its id."""
         if os.path.exists(self.index_file):
             os.remove(self.index_file)
         if parent:
@@ -70,6 +78,8 @@ class Decision(unittest.TestCase):
         for path, text in changes.items():
             if text is None:
                 lines.append("0 %s\t%s\0" % ("0" * 40, path))
+            elif isinstance(text, Gitlink):
+                lines.append("160000 %s\t%s\0" % (text.commit, path))
             else:
                 lines.append("100644 %s\t%s\0" % (self.git("hash-object", "-w", "--stdin", input=text), path))
         self.git("update-index", "--add", "-z", "--index-info", input="".join(lines))
@@ -144,6 +154,28 @@ class Decision(unittest.TestCase):
     def test_a_deleted_file_counts(self):
         self.assertFalse(self.decide(self.pull_request({"src/a.cpp": None, "docs/a.md": "z\n"}))[0])
         self.assertTrue(self.decide(self.pull_request({"docs/a.md": None}))[0])
+
+    def test_a_bumped_submodule_counts_although_git_is_told_to_ignore_submodules(self):
+        """`git diff` obeys diff.ignoreSubmodules and `ignore = all` in .gitmodules, and then leaves a bumped submodule out of the list: a document and a bump of third_party/ came out light."""
+        link = "third_party/sub"
+        before = self.commit(self.base, {link: Gitlink("1" * 40)})
+        head = self.commit(before, {link: Gitlink("2" * 40), "docs/a.md": "a bump and a document\n"})
+        config = os.path.join(os.path.dirname(self.root), "global_config")
+        with open(config, "w", encoding="utf-8") as f:
+            f.write("[diff]\n\tignoreSubmodules = all\n")
+        gitmodules = os.path.join(self.root, ".gitmodules")
+        for how in ("git as it is", "diff.ignoreSubmodules = all", "ignore = all in .gitmodules"):
+            with self.subTest(how):
+                if how.endswith(".gitmodules"):
+                    with open(gitmodules, "w", encoding="utf-8") as f:
+                        f.write('[submodule "sub"]\n\tpath = %s\n\turl = https://example.org/sub.git\n\tignore = all\n' % link)
+                light, out, _ = self.decide(head, base=before, **({"GIT_CONFIG_GLOBAL": config} if how.startswith("diff.") else {}))
+                self.assertFalse(light, out)
+                self.assertEqual(self.classes(out), {link: "FULL", "docs/a.md": "light"}, out)
+        os.remove(gitmodules)
+        # the same pull request without the bump is a document
+        light, out, _ = self.decide(self.commit(before, {"docs/a.md": "a document\n"}), base=before, GIT_CONFIG_GLOBAL=config)
+        self.assertTrue(light, out)
 
     def test_it_compares_with_the_merge_base_so_a_base_that_moved_on_changes_nothing(self):
         moved = self.pull_request({"src/a.cpp": "int moved;\n", "VERSION": "9.9.9\n"})        # the base branch got a change of code while the pull request was open
