@@ -3,7 +3,8 @@
 //   RP16.1  TINY grown to 512 x 512 (rules 2): an ant sent 450 tiles along its row gets a path (at rules 1 it gets none), the match is recorded under kSimRules, plays to its hashes, and
 //           ends in the hash that is pinned (the reference match of a map of rules 2)
 //   RP16.2  a reader that does not know the word 2 (modelled by the word 3) refuses the map that a file carries, with the reader's sentence; this build reads the 2
-//   RP16.3  the word takes no rules number of its own: the same match plays to the same hashes under every number that this build plays (5, 8 and 9 for the original's game, 6, 7, 10 and 11 for 187), and the number after the newest is refused
+//   RP16.3  the word takes no rules number of its own: the same match plays to the same hashes under 5, 8 and 9 (the original's game) and under 7, 10 and 11 (187); a 187 match recorded under 6 (the hill
+//           that works) plays to its own hashes under 6; the number after the newest is refused in both modes
 #include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_replay/replay.hpp"
