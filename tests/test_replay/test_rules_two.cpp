@@ -182,20 +182,20 @@ int main() {
         // 187 (150 turns): the same orders are another match (the mode is hashed). The numbers 7, 10 and 11 (the hill is closed; the loader and the end rule differ only where there is a named fire wall, a seat without a team or eggs
         // that cannot hatch) play it alike; the number 6 has the hill that works, which the state hash carries, so a match recorded under 6 is another match, and plays to its own hashes under 6.
         constexpr uint8_t k187 = static_cast<uint8_t>(sim::GameMode::Kills187);
-        const Played closed = play_recorded(two, map_hash, k187);
-        ASSERT_TRUE(closed.verified);
-        ASSERT_EQ(closed.replay.head.sim_rules, kSimRulesMode187);
+        const Played with_hill_closed = play_recorded(two, map_hash, k187);
+        ASSERT_TRUE(with_hill_closed.verified);
+        ASSERT_EQ(with_hill_closed.replay.head.sim_rules, kSimRulesMode187);
         for (const uint16_t number : {kSimRulesMode187BeforeFireWall, kSimRulesMode187BeforeEndFix, kSimRulesMode187}) {
             ASSERT_TRUE(plays_mode_rules(k187, number));
-            Replay copy = closed.replay;
+            Replay copy = with_hill_closed.replay;
             copy.head.sim_rules = number;
             const Outcome o = play(copy, two, Hooks{});
-            ASSERT_TRUE(o.ran && o.ok && o.complete && o.hash == closed.hash);
+            ASSERT_TRUE(o.ran && o.ok && o.complete && o.hash == with_hill_closed.hash);
         }
         ASSERT_TRUE(plays_mode_rules(k187, kSimRulesMode187Heal));
-        const Played open = play_recorded(two, map_hash, k187, kSimRulesMode187Heal);
-        ASSERT_TRUE(open.verified && open.hash != closed.hash);
-        ASSERT_EQ(open.replay.head.sim_rules, kSimRulesMode187Heal);
+        const Played with_hill_open = play_recorded(two, map_hash, k187, kSimRulesMode187Heal);
+        ASSERT_TRUE(with_hill_open.verified && with_hill_open.hash != with_hill_closed.hash);
+        ASSERT_EQ(with_hill_open.replay.head.sim_rules, kSimRulesMode187Heal);
         ASSERT_FALSE(plays_mode_rules(0, static_cast<uint16_t>(kSimRulesNewest + 1)));
         ASSERT_FALSE(plays_mode_rules(k187, static_cast<uint16_t>(kSimRulesNewest + 1)));
         Replay unknown = wide.replay;
