@@ -66,11 +66,7 @@ void SimulationEngineImpl::mark_side_left(MatchResult& result) const {
 }
 
 uint8_t SimulationEngineImpl::last_standing() const {
-    uint32_t in_match = 0;
-    for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
-        if ((roster_mask_ & (1u << k)) != 0) ++in_match;
-    }
-    if (in_match < 2 || alive_sides() != 1) return PLAYER_NEUTRAL;
+    if (teams_in_match() < 2 || alive_sides() != 1) return PLAYER_NEUTRAL;
     for (uint8_t k = 0; k < MAX_PLAYERS; ++k) {
         if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;
     }

@@ -98,8 +98,15 @@ public:
     GameMode game_mode_{GameMode::HighestScore};   // the rules of the match (set before init, kept by it)
     uint8_t started_mask_{0x0F};            // bit p: team p had an ant, an egg or a hatch when the match began (set by init and init_test_world): the teams that were really in the match; the last-side rule needs two of them
     bool last_side_rule_{true};             // the original's game only: the end rule of the rules number 8 (a recording of 5 plays without it: set_last_side_rule); 187 has its own end rule
-    bool fire_wall_as_original_{true};      // both modes: the loader of the rules number 9 and 10 (a recording of 5 to 8 plays with the remake's overlay on a named fire wall: set_fire_wall_as_original)
+    bool fire_wall_as_original_{true};      // both modes: the loader of the rules numbers 9 and later (a recording of 5 to 8 plays with the remake's overlay on a named fire wall: set_fire_wall_as_original)
     bool hill_open_187_{false};             // 187 only: the rules of the recordings before the closed hill (set_hill_open_187); the original's game never reads it
+    bool end_fix_187_{true};                // 187 only: the end rule of the rules number 11 (a recording of 6, 7 or 10 plays without it: set_end_fix_187); the original's game never reads it
+    /// 187 with the end-rule fixes (mode_187.cpp): an egg that cannot hatch keeps no team alive, and the match counts the teams that began, not the seats of the roster
+    bool end_fixed_187() const noexcept { return game_mode_ == GameMode::Kills187 && end_fix_187_; }
+    /// 187 with the end-rule fixes: whether an egg of `team` could still be hatched, that is whether it has an egg and a hill to hatch it at (mode_187.cpp)
+    bool egg_can_hatch(uint8_t team) const;
+    /// The number of teams that count as in the match: the seats of the roster, or in 187 with the end-rule fixes the teams that began (started_mask_); mode_187.cpp
+    uint32_t teams_in_match() const;
     /// 187 with the hill closed (the rule of 187 now): no ant enters its hill, so nothing heals, an ant at 1 hp does not retreat and the waiting ring is idle
     bool hill_closed() const noexcept { return game_mode_ == GameMode::Kills187 && !hill_open_187_; }
     uint16_t quitter_{NO_QUITTER};          // the team whose quit (FUN_0101453f, one other side left) ended the match: the word of the game-over message
@@ -121,16 +128,16 @@ public:
     /// Every machine of the original decides for its own team; the first that decides ends the match for all, so the shared simulation asks for each
     /// team in the match that has not dropped out.
     bool checkgo_end_rules() const;
-    /// A team is alive while it has an egg, a hatch running or an ant that is not yet removed (0x1024934 - 0x10249bb)
+    /// A team is alive while it has an egg, a hatch running or an ant that is not yet removed (0x1024934 - 0x10249bb); in 187 with the end-rule fixes the egg counts only while it could be hatched (egg_can_hatch)
     bool team_alive(uint8_t team) const;
     /// The drop-out win test (0x100d172, docs 5.47): after a drop, the team `local` has no live enemy when every other team that has not dropped is its ally
     bool drop_leaves_winner() const;
     /// FUN_0100c5b1: how many sides remain when `team` leaves: every other team that has not dropped, an alliance counted once, the team's own ally counted
     uint32_t other_sides(uint8_t team) const;
     MatchResult make_match_result() const;
-    /// 187: the sides that are still alive (a team that has an ant, an egg or a hatch and has not dropped; two allied teams that are both alive are one side)
+    /// 187: the sides that are still alive (a team that has an ant, an egg that can hatch or a hatch and has not dropped; two allied teams that are both alive are one side)
     uint32_t alive_sides() const;
-    /// 187: the end rule of the mode, for every team in the match: nobody has anything left, or (with two or more teams in the match) one side is left
+    /// 187: the end rule of the mode, for every team in the match: nobody has anything left, or (with two or more teams in the match, teams_in_match) one side is left
     bool end_rule_187() const;
     /// The team that is the last one standing (the lowest-numbered alive team of the one side that is left), else PLAYER_NEUTRAL (last_side.cpp; 187's result, and the original's game under the last-side rule)
     uint8_t last_standing() const;

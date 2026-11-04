@@ -78,3 +78,23 @@ target_include_directories(test_rules_fire_wall PRIVATE
 )
 
 add_test(NAME test_rules_fire_wall COMMAND test_rules_fire_wall)
+
+# The rules number 11 of game mode 187 (run_tests.sh suite 2.29.5): 10, 7 and 6 still play from a recording with the end rule of the seats and of any egg, 11 is what a match records now.
+add_executable(test_rules_end_fix
+    test_rules_end_fix.cpp
+)
+
+target_link_libraries(test_rules_end_fix PRIVATE
+    ants_replay
+    ants_net
+    ants_sim
+    ants_assets
+    ants_test_paths
+)
+
+target_include_directories(test_rules_end_fix PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME test_rules_end_fix COMMAND test_rules_end_fix)

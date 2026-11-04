@@ -210,6 +210,16 @@ int main() {
         ASSERT_GT(ticks_to_end(sim, 200), 0);
     } TEST_END();
 
+    TEST_CASE("2.4b an egg counts in the original's game whether its team has a hill or not (the end-rule fixes of 187, the rules number 11, are 187's alone): seat 2 has no hill here, an egg and no ant, and keeps the match going") {
+        SimulationEngine sim;
+        make_world(sim);
+        only_alive(sim, {0});
+        sim.set_player_eggs(2, 1);
+        ASSERT_TRUE(survives(sim));
+        sim.set_player_eggs(2, 0);
+        ASSERT_GT(ticks_to_end(sim, 200), 0);
+    } TEST_END();
+
     TEST_CASE("2.5 an enemy egg that is hatching keeps the match going, and so does the ant that it becomes") {
         SimulationEngine sim;
         make_world(sim);

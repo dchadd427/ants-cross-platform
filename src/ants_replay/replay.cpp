@@ -116,7 +116,7 @@ bool valid_head(const Header& h, std::string& error) {
         error = "the head's game mode is not one that this build knows (the file may be of a newer build)";
     } else if (h.mode != 0 && h.sim_rules < kSimRulesMode187Heal) {
         error = "the head names a game mode but not the simulation rules that go with it (a build that does not know the mode would play the match as another game)";
-    } else if ((h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode != static_cast<uint8_t>(sim::GameMode::Kills187)) {
+    } else if ((h.sim_rules == kSimRulesMode187 || h.sim_rules == kSimRulesMode187BeforeEndFix || h.sim_rules == kSimRulesMode187BeforeFireWall || h.sim_rules == kSimRulesMode187Heal) && h.mode != static_cast<uint8_t>(sim::GameMode::Kills187)) {
         error = "the head names the simulation rules of a game mode but not the mode";
     } else if ((h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0) {
         error = "the head names the simulation rules of the original's game but another game mode";
@@ -365,8 +365,8 @@ bool plays_here(const Header& head) noexcept {
 }
 
 std::string played_rules_text() {
-    return std::to_string(kSimRulesBeforeLastSide) + ", " + std::to_string(kSimRulesMode187Heal) + ", " + std::to_string(kSimRulesMode187BeforeFireWall) + ", " + std::to_string(kSimRulesBeforeFireWall) + ", " + std::to_string(kSimRules) +
-           " and " + std::to_string(kSimRulesMode187);       // (in ascending order: the static_asserts of replay.hpp keep kSimRulesNewest the newest and the numbers distinct)
+    return std::to_string(kSimRulesBeforeLastSide) + ", " + std::to_string(kSimRulesMode187Heal) + ", " + std::to_string(kSimRulesMode187BeforeFireWall) + ", " + std::to_string(kSimRulesBeforeFireWall) + ", " + std::to_string(kSimRules) + ", " +
+           std::to_string(kSimRulesMode187BeforeEndFix) + " and " + std::to_string(kSimRulesMode187);       // (in ascending order: the static_asserts of replay.hpp keep kSimRulesNewest the newest and the numbers distinct)
 }
 
 uint32_t crc32(const uint8_t* data, size_t size, uint32_t crc) noexcept {
