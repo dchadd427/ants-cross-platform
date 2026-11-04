@@ -35,6 +35,7 @@ sys.path.insert(0, REPO)
 sys.path.insert(0, HERE)
 import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
+from hub import limits as limitmod  # noqa: E402
 import test_nginx_submissions as sub  # noqa: E402
 
 read = sub.maps.read
@@ -235,6 +236,18 @@ class TheListRuns(unittest.TestCase):
                                 (["198.51.100.5, 10.0.0.2, 172.20.0.3"], "198.51.100.5"), (["198.51.100.5, 10.0.0.2", "172.20.0.3"], "198.51.100.5"), (["198.51.100.5", "10.9.9.9"], "198.51.100.5"),
                                 (["6.6.6.6, 198.51.100.5:51000"], "198.51.100.5"), (["6.6.6.6, 2001:db8::5"], "2001:db8::5"), (["6.6.6.6, [2001:db8::5]:4000"], "2001:db8::5")):
             self.assertEqual(get_from(self.rig, "127.0.0.2", lines), expected, lines)
+
+    def test_a_visitor_on_a_private_address_is_skipped_like_a_proxy_and_the_entry_before_him_is_taken(self):
+        """What trusting the private ranges means (docs/SERVER.md, the first assumption): it matters on a local network only, where a visitor can name any address."""
+        self.assertEqual(get_from(self.rig, "127.0.0.2", ["6.6.6.6, 192.168.1.50"]), "6.6.6.6")
+        self.assertEqual(get_from(self.rig, "127.0.0.2", ["192.168.1.50"]), "192.168.1.50", "and a visitor who names nobody before him is himself")
+
+    def test_the_text_that_nginx_gives_is_the_address_that_the_hub_folds(self):
+        """The hub counts an IPv6 visitor by his /64 and an IPv4-mapped one as the IPv4 address (hub/limits.py); the game server does the same (src/ants_server/upload_common.cpp): nginx hands both the text of the address."""
+        for visitor, key in (("2001:db8:1234:5678:9abc:def0:1234:5678", "2001:db8:1234:5678::/64"), ("2001:db8:1234:5678::1", "2001:db8:1234:5678::/64"), ("::ffff:198.51.100.5", "198.51.100.5"), ("198.51.100.5", "198.51.100.5")):
+            told = get_from(self.rig, "127.0.0.2", [visitor])
+            self.assertEqual(limitmod.address_key(told, "127.0.0.1"), key, (visitor, told))
+        self.assertNotEqual(limitmod.address_key(get_from(self.rig, "127.0.0.2", ["198.51.100.5"]), "127.0.0.1"), limitmod.address_key(get_from(self.rig, "127.0.0.2", ["198.51.100.6"]), "127.0.0.1"))
 
     def test_a_header_of_another_name_is_no_address_at_all(self):
         extra = {"X-Client-Address": "9.9.9.9", "X-Real-IP": "8.8.8.8", "Forwarded": "for=7.7.7.7", "X-Forwarded-Host": "evil.example", "Client-IP": "6.6.6.6", "CF-Connecting-IP": "5.5.5.5", "True-Client-IP": "4.4.4.4"}
