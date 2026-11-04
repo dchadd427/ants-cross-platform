@@ -1229,8 +1229,8 @@
     {
       "id": "play_cap_refusal_missing",
       "file": "web/front/mapmaker_play.js",
-      "old": "if (!v.online) {                                             // (a heavy map is over the cap too: the refusal is the only word here)",
-      "new": "if (false) {                                             // (a heavy map is over the cap too: the refusal is the only word here)",
+      "old": "if (!v.online) {                                             // (a heavy map is over the cap too: its only word)",
+      "new": "if (false) {                                             // (a heavy map is over the cap too: its only word)",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {

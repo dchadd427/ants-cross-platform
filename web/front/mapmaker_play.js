@@ -24,7 +24,7 @@
     var MAX_ONLINE_ANTS = 1000;                                                         // a room plays no map above this many start ants: the server's OnlineLimits::kMaxStartAnts (a test keeps them equal)
 
     function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-    // The one warning for a heavy map, in the Against bots tab: a warning only, nothing is refused and no button is turned off (an online room does not play a map this heavy: With other players has the refusal below)
+    // The one warning for a heavy map, in the Against bots tab: a warning only, nothing is refused and no button is turned off
     function heavyText(ants) { return 'This map starts with ' + commas(ants) + ' ants, so a game may run slowly, especially on phones and older computers.'; }
     // The refusal of a map that no online room plays, in the With other players tab (shown first, so that nothing is sent)
     function onlineText(ants) { return 'This map starts ' + commas(ants) + ' ants. An online room plays at most ' + commas(MAX_ONLINE_ANTS) + ', so it cannot host this map. You can still play it against bots on this device.'; }
@@ -316,7 +316,7 @@
                 fcard.appendChild(el('p', 'play-ftext', 'Opens a room in a new tab with the map as it is right now (' + kbText(m.bytes.length) + '). Anyone with your room link or 6-character room code receives the map automatically when they join.'));
                 fcard.appendChild(el('p', 'play-fnote', 'Not added to the public map list and not submitted for approval. Your editor tab stays open as you left it.'));
                 friendsPanel.appendChild(fcard);
-                if (!v.online) {                                             // (a heavy map is over the cap too: the refusal is the only word here)
+                if (!v.online) {                                             // (a heavy map is over the cap too: its only word)
                     var no = el('p', 'play-status no', onlineText(v.ants));
                     no.setAttribute('role', 'status');
                     friendsPanel.appendChild(no);

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the online size limit, the count of the start ants and the heavy-map flag of the list (nothing is refused for ants), the weight of a big map, the words for a game that cannot load a map, the public door's map files, the history of approved maps and the arena's play limits, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_limit_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'The leader's START') or docs/MAP_SUBMISSIONS.md ('Older games and big maps'); the test maps' own rules (the canonical file and its limits) are tests/data/test_maps_mutants.json. Not listed on purpose: the weight of a retired match (no test has a rematch on a big map), the wiring of main.cpp (the program is run by the script suites), and three second locks: the name of the person who left (the room looks at the seat as well), the hash check of load_map_file (the replay's own checkpoints refuse another map) and the cap of the weight when places are counted (a match heavier than all the places only makes the server full).",
+ "note": "Mutants of the online size limit, the count of the start ants and the heavy-map flag of the list (a heavy map is over the cap of ants too: the cap's own mutants are online_ants_cap_mutants.json), the weight of a big map, the words for a game that cannot load a map, the public door's map files, the history of approved maps and the arena's play limits, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_limit_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'The leader's START') or docs/MAP_SUBMISSIONS.md ('Older games and big maps'); the test maps' own rules (the canonical file and its limits) are tests/data/test_maps_mutants.json. Not listed on purpose: the weight of a retired match (no test has a rematch on a big map), the wiring of main.cpp (the program is run by the script suites), and three second locks: the name of the person who left (the room looks at the seat as well), the hash check of load_map_file (the replay's own checkpoints refuse another map) and the cap of the weight when places are counted (a match heavier than all the places only makes the server full).",
  "mutants": [
   {
    "id": "door_file_flag_ignored",
@@ -775,17 +775,6 @@
    "file": "src/ants_server/map_store.cpp",
    "old": "o.set(\"ants\", ctl::JsonValue::make_int(static_cast<int64_t>(m.start_ants)));",
    "new": "",
-   "build": [
-    "test_map_list",
-    "test_server"
-   ],
-   "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
-  },
-  {
-   "id": "list_marks_heavy_as_offline",
-   "file": "src/ants_server/map_store.cpp",
-   "old": "o.set(\"heavy\", ctl::JsonValue::make_bool(true));",
-   "new": "o.set(\"heavy\", ctl::JsonValue::make_bool(true));\n            o.set(\"online\", ctl::JsonValue::make_bool(false));",
    "build": [
     "test_map_list",
     "test_server"
