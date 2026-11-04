@@ -3,9 +3,10 @@
 // /live, /maps/all, /maps/files/<name>, and nothing else: POST and PUT are refused and counted) and puts a stand-in for the game's program (tests/scripts/web_live_stub.js: Module._ants_replay_get /
 // _ants_replay_do and the report that the game makes) in the place of index.js, so what it shows is the pages' own part: the strip, the drop, the cards, the hand-off and the player's header. It does not show
 // that the real game plays a file (the C++ tests and tests/scripts/web_replay_open_real.sh do). Every request is counted: none carries a body, none asks the site for the file, none asks for its stats.
+// With --web URL (or ANTS_WEB_URL: a running site, the web image or tools/web_without_docker.py) the part REAL runs the same pages with the REAL game against that site (no stand-in: the game says what a file is).
 // Parts (--only): strip (the Matches page: the strip, the chooser, a dropped file, a refused file and its card, the page with the site down, a phone), hand (the hand-off: the bytes that the game gets are the
 // file's, a reload, a record that is gone, the header of the player, a library map), cards (a file of an older or newer version, a map that the site does not have, an unreadable file, and the way out of each).
-// usage: node web_replay_open_browser.js [--only strip|hand|cards] [--shots DIR]     (exit 0: every check holds, or the browser is not there; every failure is printed)
+// usage: node web_replay_open_browser.js [--only strip|hand|cards|real] [--shots DIR] [--web URL]     (exit 0: every check holds, or the browser is not there; every failure is printed)
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -15,8 +16,8 @@ const tools = require('./replay_file_tools.js');
 
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i === -1 ? null : args[i + 1]; };
-const only = opt('--only'), shotsDir = opt('--shots');
-const PARTS = ['strip', 'hand', 'cards'];
+const only = opt('--only'), shotsDir = opt('--shots'), webUrl = opt('--web') || process.env.ANTS_WEB_URL || '';
+const PARTS = ['strip', 'hand', 'cards', 'real'];
 if (only && PARTS.indexOf(only) === -1) { console.log('--only is one of: ' + PARTS.join(', ')); process.exit(2); }
 let playwright;
 try { playwright = require('playwright'); } catch (e) { console.log('SKIP: Playwright is not installed: the real browser was NOT run (tests/scripts/web_replay_open_browser.js)'); process.exit(0); }
@@ -116,8 +117,11 @@ async function main() {
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the pages were NOT run in a browser'); return; }
     const shot = async (page, name) => { if (shotsDir) { fs.mkdirSync(shotsDir, { recursive: true }); await page.screenshot({ path: path.join(shotsDir, name + '.png') }); } };
     try {
-        const parts = { strip: partStrip, hand: partHand, cards: partCards };
-        for (const name of PARTS) if ((!only || only === name) && parts[name]) await parts[name](browser, shot);
+        const parts = { strip: partStrip, hand: partHand, cards: partCards, real: partReal };
+        for (const name of PARTS) {
+            if (name === 'real' && !webUrl) { if (only === 'real') console.log('SKIP: no site to run the real game against (--web URL or ANTS_WEB_URL): the real game was NOT run (tests/scripts/web_replay_open_browser.js, part real)'); continue; }
+            if (!only || only === name) await parts[name](browser, shot);
+        }
     } finally { await browser.close(); }
 }
 
@@ -505,6 +509,88 @@ async function partCards(browser, shot) {
         await ctx.close();
     }
     site.server.close();
+}
+
+// ---- part real: the same pages and the REAL game, against a running site (the web image, or tools/web_without_docker.py): the game, not a stand-in, says what each file is
+async function partReal(browser, shot) {
+    const base = webUrl.replace(/\/+$/, '');
+    const probe = await fetch(base + '/index.wasm', { method: 'HEAD' }).then((r) => r.ok, () => false);
+    if (!probe) { console.log('SKIP: the site at ' + base + ' has no game (index.wasm): the real game was NOT run'); return; }
+    const state = (page) => page.evaluate(() => (typeof Module !== 'undefined' && Module._ants_replay_get ? { state: Module._ants_replay_get(0), turn: Module._ants_replay_get(1), total: Module._ants_replay_get(2), failure: Module._ants_replay_get(5) } : null));
+    const up = async (page) => { await page.waitForFunction(() => typeof Module !== 'undefined' && Module._ants_replay_get && Module._ants_replay_get(0) >= 2 && Module._ants_replay_get(2) > 0, null, { timeout: 120000 }); return state(page); };
+    const openOn = async (page, file) => {
+        await page.goto(base + '/matches.html');
+        await page.waitForSelector('#opener:not([hidden])');
+        await chooseFile(page, '#open-btn', file);
+        await page.waitForURL(LOCAL_URL);
+    };
+    const anyCard = (page) => page.waitForSelector('#rm:not([hidden])', { timeout: 120000 }).then(() => cardOf(page));
+    const ctxOf = () => browser.newContext(Object.assign({}, DESKTOP, { baseURL: base }));
+    // 1. a real recording: the game starts, plays and answers the bar
+    {
+        const ctx = await ctxOf(), page = await ctx.newPage();
+        const hits = [];
+        page.on('request', (r) => hits.push({ method: r.method(), url: new URL(r.url()).pathname, body: r.postData() }));
+        await openOn(page, asFile(NAME, FIXTURE));
+        const s1 = await up(page);
+        check('the real game plays the file: its state is playing, and it holds the 7,205 turns of the match', (s1.state === 2 || s1.state === 3) && s1.total === 7205, JSON.stringify(s1));
+        await page.waitForSelector('#rtag:not([hidden])', { timeout: 60000 });
+        check('the header says what the game says of the file: Tiny, Your file, the name, 6:00, the four players', /^Tiny/.test(await text(page, '#r-title')) && /Your file/.test(await text(page, '#r-title')) && /6:00/.test(await text(page, '#r-title'))
+              && (await page.$$eval('#r-meta .chip .nm', (n) => n.map((x) => x.textContent))).join('|') === 'Bot (Medium)|Bot (Medium)|Bot (Medium)|Bot (Medium)', await text(page, '#r-title'));
+        check('no card is up', !(await page.isVisible('#rm')));
+        await sleep(2500);
+        const s2 = await state(page);
+        check('the match runs (the game\'s turn goes on)', s2.turn > s1.turn, JSON.stringify([s1, s2]));
+        const rail = await page.$('#rail'), box = await rail.boundingBox();
+        await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
+        await page.waitForFunction(() => Module._ants_replay_get(1) > 3000 && Module._ants_replay_get(0) !== 4, null, { timeout: 60000 });
+        check('a click on the middle of the timeline jumps there (the game plays the match again up to it)', (await state(page)).turn > 3000);
+        await shot(page, 'built_real_player');
+        check('no request of the visit carries a body, none is a POST, none asked the site for a recording, its stats or the file', hits.every((h) => h.method === 'GET' && !h.body) && !hits.some((h) => /^\/(replays|history\/|stats)/.test(h.url)));
+        await page.reload();
+        const s3 = await up(page);
+        check('a reload plays it again (the record stays)', s3.total === 7205 && (s3.state === 2 || s3.state === 3));
+        await ctx.close();
+    }
+    // 2. the game decides the version: a rules number of an older or a newer game
+    for (const [rules, title, words] of [[4, 'Recorded by an older version', /played on v0\.13\.1\. The rules of the game have changed since/], [99, 'Recorded by a newer version', /played on v0\.13\.1, and this page is /]]) {
+        const ctx = await ctxOf(), page = await ctx.newPage();
+        await openOn(page, asFile(NAME, tools.withRules(FIXTURE, rules)));
+        const card = await anyCard(page);
+        check('rules number ' + rules + ': the real game says "' + title + '" and the card has no download', card.title === title && words.test(card.body.replace(/\s+/g, ' ')) && card.downloads === 0 && card.buttons[0].text === 'Open another file', JSON.stringify(card));
+        await ctx.close();
+    }
+    // 3. maps: one that the site has not; one that the file carries; one that the file carries and that is damaged in ways that a stranger could choose
+    const DUNE = TINY_MAP;
+    {
+        const ctx = await ctxOf(), page = await ctx.newPage();
+        await openOn(page, asFile('dune.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', DUNE, false)));
+        const card = await anyCard(page);
+        check('a map of the library that the site has not: the card, from the real site\'s 404', card.title === 'This site doesn’t have the map' && /Dune\.lvl/.test(card.body), JSON.stringify(card));
+        await ctx.close();
+    }
+    {
+        const ctx = await ctxOf(), page = await ctx.newPage();
+        await openOn(page, asFile('dune.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', DUNE, true)));
+        const s1 = await up(page);
+        check('a file that carries its map: the real game reads it and plays the match (nothing fetched for it)', (s1.state === 2 || s1.state === 3) && s1.total === 7205 && !(await page.isVisible('#rm')), JSON.stringify(s1));
+        await ctx.close();
+    }
+    const flip = (bytes, at, v) => { const b = Uint8Array.from(bytes); b[at] = v; return b; };
+    const set32 = (bytes, at, v) => { const b = Uint8Array.from(bytes); for (let i = 0; i < 4; i++) b[at + i] = (v >>> (8 * i)) & 255; return b; };
+    const hostile = [['a map of nothing but zeros', new Uint8Array(1000)], ['a map cut after 100 bytes', DUNE.slice(0, 100)], ['a map cut in its middle', DUNE.slice(0, DUNE.length >> 1)], ['a map of random bytes of the longest size', Uint8Array.from({ length: 1 << 20 }, (_, i) => (i * 2654435761 >>> 7) & 255)],
+                     ['a map whose header says the grid is huge', set32(DUNE, 8, 0xffffffff)], ['a map with a changed first byte', flip(DUNE, 0, DUNE[0] ^ 255)], ['a map with a changed byte in its tiles', flip(DUNE, 5000, DUNE[5000] ^ 255)],
+                     ['a map with 65,535 in its second word', set32(DUNE, 4, 0xffff)], ['a map with its middle zeroed', (() => { const b = Uint8Array.from(DUNE); b.fill(0, 2000, 9000); return b; })()]];
+    for (const [label, map] of hostile) {
+        const ctx = await ctxOf(), page = await ctx.newPage();
+        const errors = [];
+        page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 100)));
+        await openOn(page, asFile('hostile.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', map, true)));
+        const verdict = await Promise.race([up(page).then((s1) => 'plays ' + s1.state), anyCard(page).then((c) => 'card: ' + c.title), sleep(110000).then(() => 'neither')]);
+        check(label + ': the real game plays it or the page says it cannot, within the start watchdog (' + verdict + ')', verdict !== 'neither');
+        check(label + ': the page is still there (the way to the list answers)', await page.isVisible('#all-btn') || await page.isVisible('#rm'));
+        await ctx.close();
+    }
 }
 
 main().then(() => {

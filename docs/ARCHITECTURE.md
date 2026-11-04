@@ -146,6 +146,7 @@ ants-cross-platform/
 │   │   ├── test_web_hidden.sh          # The game in a hidden browser tab
 │   │   ├── test_web_home.sh            # The front page: the lobby, START, the Menu, the old addresses
 │   │   ├── test_web_live.sh            # Watching a live match: the list's box, the player, its cards (a fake door)
+│   │   ├── test_web_replay_open.sh     # A replay file of your own: the Matches strip, the player, its cards (a stand-in game)
 │   │   ├── test_web_prediction.sh      # The prediction of one's own orders, on and off, in two windows of a real
 │   │   │                               # browser
 │   │   ├── test_web_rejoin.sh          # The way back to a running match in two browsers: a reload, a server restart,

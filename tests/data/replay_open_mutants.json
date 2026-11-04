@@ -1,0 +1,333 @@
+{
+ "note": "Mutants of the page that opens a replay file of your own (docs/REPLAYS.md \"A file of your own\") for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/replay_page.js (the size, the checksum, the hand-off, the strip), web/matches.html, web/shell.html and web/map_files.js against tests/scripts/web_replay_open_check.js (node: the code on the real file, on every cut and every flipped bit of its head, on a fake IndexedDB and a fake page) and the static checks of tests/scripts/test_web_replay_open.py. Run from the checkout: python3 tools/mutate.py tests/data/replay_open_mutants.json --keep-going --jobs 1 --timeout 300. Every mutant must be caught; the same test file runs the list in the quick tier on a copy. Each `why` names what the mutant loses.",
+ "mutants": [
+  {
+   "id": "size_is_not_asked_before_the_file_is_read",
+   "file": "web/replay_page.js",
+   "old": "        if (!localSizeOk(size)) return Promise.resolve(no(size > LOCAL_MAX_BYTES ? 'big' : 'bad'));\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file of 14 MB would be read into memory before it is refused"
+  },
+  {
+   "id": "size_is_not_asked_again_on_the_bytes",
+   "file": "web/replay_page.js",
+   "old": "        if (bytes.length > LOCAL_MAX_BYTES) return { ok: false, kind: 'big' };\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a File that says 3,000 bytes and holds more is believed"
+  },
+  {
+   "id": "the_limit_is_one_byte_too_many",
+   "file": "web/replay_page.js",
+   "old": "var LOCAL_MAX_BYTES = 2097164;",
+   "new": "var LOCAL_MAX_BYTES = 2097165;",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "the longest file there can be is not the game's"
+  },
+  {
+   "id": "the_checksum_of_the_head_is_not_asked",
+   "file": "web/replay_page.js",
+   "old": "        if (crc32(bytes, HEAD_AT + 8, end, crc32(bytes, HEAD_AT, HEAD_AT + 4, 0)) !== u32(bytes, end)) return bad('head checksum');          // (the checksum covers the tag and the payload, not the length between them)\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a damaged head passes"
+  },
+  {
+   "id": "the_checksum_counts_the_length_field",
+   "file": "web/replay_page.js",
+   "old": "crc32(bytes, HEAD_AT + 8, end, crc32(bytes, HEAD_AT, HEAD_AT + 4, 0))",
+   "new": "crc32(bytes, HEAD_AT + 8, end, crc32(bytes, HEAD_AT, HEAD_AT + 8, 0))",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a real file is refused"
+  },
+  {
+   "id": "the_magic_is_not_looked_at",
+   "file": "web/replay_page.js",
+   "old": "        for (var i = 0; i < MAGIC.length; i++) if (bytes[i] !== MAGIC[i]) return bad('magic');\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a text with a head-looking part passes"
+  },
+  {
+   "id": "any_first_chunk_is_a_head",
+   "file": "web/replay_page.js",
+   "old": "        if (bytes[HEAD_AT] !== 0x48 || bytes[HEAD_AT + 1] !== 0x45 || bytes[HEAD_AT + 2] !== 0x41 || bytes[HEAD_AT + 3] !== 0x44) return bad('first chunk');          // \"HEAD\"\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file that starts with another chunk passes"
+  },
+  {
+   "id": "a_head_of_any_length_is_taken",
+   "file": "web/replay_page.js",
+   "old": "        if (length > HEAD_MAX_BYTES) return bad('head length');\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a head longer than a head can be passes"
+  },
+  {
+   "id": "a_cut_head_is_taken",
+   "file": "web/replay_page.js",
+   "old": "        if (end + 4 > bytes.length) return bad('head cut');\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a download that stopped inside the head passes"
+  },
+  {
+   "id": "the_purge_takes_nothing_away",
+   "file": "web/replay_page.js",
+   "old": "got.onsuccess = function () { var rec = got.result; if (rec !== undefined && !(ownRecord(rec) && ownFresh(rec, env.now()))) store.delete(OWN_KEY); };",
+   "new": "got.onsuccess = function () {};",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "records pile up for ever"
+  },
+  {
+   "id": "a_record_is_kept_for_ever",
+   "file": "web/replay_page.js",
+   "old": "var OWN_KEEP_MS = 24 * 60 * 60 * 1000;",
+   "new": "var OWN_KEEP_MS = 1e15;",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file of a month ago is still there"
+  },
+  {
+   "id": "a_record_of_another_id_is_given",
+   "file": "web/replay_page.js",
+   "old": "return ownRecord(rec) && rec.id === id && ownFresh(rec, env.now()) ? rec : null;",
+   "new": "return ownRecord(rec) && ownFresh(rec, env.now()) ? rec : null;",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "an old link plays another file"
+  },
+  {
+   "id": "an_old_record_is_given",
+   "file": "web/replay_page.js",
+   "old": "return ownRecord(rec) && rec.id === id && ownFresh(rec, env.now()) ? rec : null;",
+   "new": "return ownRecord(rec) && rec.id === id ? rec : null;",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a record of a month ago is played"
+  },
+  {
+   "id": "every_file_gets_a_slot",
+   "file": "web/replay_page.js",
+   "old": "return run('readwrite', function (store) { return store.put(rec, OWN_KEY); })",
+   "new": "return run('readwrite', function (store) { return store.put(rec, rec.id); })",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "the storage fills up with 2 MB files"
+  },
+  {
+   "id": "a_refused_file_is_kept_anyway",
+   "file": "web/replay_page.js",
+   "old": "            if (!verdict.ok) return no(verdict.kind);\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file that is no replay replaces the record of the one that is"
+  },
+  {
+   "id": "the_strip_does_not_look_for_old_records",
+   "file": "web/replay_page.js",
+   "old": "                env.store.purge();\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "the Matches page leaves the old file there"
+  },
+  {
+   "id": "a_drop_is_not_taken_over",
+   "file": "web/replay_page.js",
+   "old": "                doc.addEventListener('drop', function (ev) {\n                    if (!hasFiles(ev)) return;\n                    ev.preventDefault();\n",
+   "new": "                doc.addEventListener('drop', function (ev) {\n                    if (!hasFiles(ev)) return;\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "the browser leaves the page for the dropped file"
+  },
+  {
+   "id": "a_dragover_is_not_taken_over",
+   "file": "web/replay_page.js",
+   "old": "                doc.addEventListener('dragover', function (ev) {\n                    if (!hasFiles(ev)) return;\n                    ev.preventDefault();\n",
+   "new": "                doc.addEventListener('dragover', function (ev) {\n                    if (!hasFiles(ev)) return;\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "the browser does not allow the drop"
+  },
+  {
+   "id": "a_drag_of_text_is_taken_over",
+   "file": "web/replay_page.js",
+   "old": "                doc.addEventListener('drop', function (ev) {\n                    if (!hasFiles(ev)) return;\n",
+   "new": "                doc.addEventListener('drop', function (ev) {\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a text dropped on the search box is taken from it"
+  },
+  {
+   "id": "the_last_file_is_taken",
+   "file": "web/replay_page.js",
+   "old": "take(ev.dataTransfer.files && ev.dataTransfer.files[0]);",
+   "new": "take(ev.dataTransfer.files && ev.dataTransfer.files[ev.dataTransfer.files.length - 1]);",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "of several files the last one wins"
+  },
+  {
+   "id": "the_veil_stays_when_the_drag_leaves",
+   "file": "web/replay_page.js",
+   "old": "            veil.hidden = !on;\n",
+   "new": "            veil.hidden = false;\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "the page stays dark"
+  },
+  {
+   "id": "a_page_that_comes_back_stays_busy",
+   "file": "web/replay_page.js",
+   "old": "                win.addEventListener('pageshow', function (ev) { if (ev && ev.persisted) { busy = false; veilOn(false); } });\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "after Back the strip takes no file"
+  },
+  {
+   "id": "the_name_of_a_file_is_markup",
+   "file": "web/replay_page.js",
+   "old": "            if (r && r.name) card.appendChild(make('p', 'fn', r.name));",
+   "new": "            if (r && r.name) { var fn = make('p', 'fn'); fn.innerHTML = r.name; card.appendChild(fn); }",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep && python3 tests/scripts/test_web_replay_open.py TheStrip",
+   "why": "a name with markup runs"
+  },
+  {
+   "id": "the_file_is_sent_to_the_site",
+   "file": "web/replay_page.js",
+   "old": "            return env.store.put(name, bytes).then(function (id) { return { ok: true, id: id, name: name, size: size }; }, function () { return no('nostore'); });",
+   "new": "            try { fetch('/replays/upload', { method: 'POST', body: bytes }); } catch (e) { /* none */ }\n            return env.store.put(name, bytes).then(function (id) { return { ok: true, id: id, name: name, size: size }; }, function () { return no('nostore'); });",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "the file leaves the device"
+  },
+  {
+   "id": "a_card_offers_the_file_for_download",
+   "file": "web/replay_page.js",
+   "old": "                    open('Open another file'); all();\n                } else if (kind === 'newer') {",
+   "new": "                    open('Open another file'); var dl = mk(doc, 'a', 'btn', 'Download the file'); dl.setAttribute('download', 'x.antsrep'); buttons.push(dl); all();\n                } else if (kind === 'newer') {",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file of your own offered back for download"
+  },
+  {
+   "id": "no_record_is_a_file_of_nothing",
+   "file": "web/replay_page.js",
+   "old": "                if (!id) return Promise.resolve({ error: 'again' });\n",
+   "new": "                if (!id) return Promise.resolve({ bytes: new Uint8Array(0), name: '' });\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "an address with no record starts the game"
+  },
+  {
+   "id": "a_missing_record_is_a_file_of_nothing",
+   "file": "web/replay_page.js",
+   "old": "                    if (!rec) return { error: 'again' };\n",
+   "new": "                    if (!rec) return { bytes: new Uint8Array(0), name: '' };\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a record that is gone starts the game"
+  },
+  {
+   "id": "the_record_is_not_checked_again",
+   "file": "web/replay_page.js",
+   "old": "                    if (!localCheck(bytes).ok) return fail('the file that this page kept is damaged');\n",
+   "new": "",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "bytes that were changed in the storage reach the game"
+  },
+  {
+   "id": "the_chooser_has_an_accept_filter",
+   "file": "web/matches.html",
+   "old": "<input type=\"file\" id=\"open-file\" class=\"sr\" tabindex=\"-1\" aria-hidden=\"true\">",
+   "new": "<input type=\"file\" id=\"open-file\" accept=\".antsrep\" class=\"sr\" tabindex=\"-1\" aria-hidden=\"true\">",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "a phone greys out the file"
+  },
+  {
+   "id": "the_strip_is_not_wired",
+   "file": "web/matches.html",
+   "old": "setTimeout: window.setTimeout, clearTimeout: window.clearTimeout }).wire();",
+   "new": "setTimeout: window.setTimeout, clearTimeout: window.clearTimeout });",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "the strip does nothing"
+  },
+  {
+   "id": "the_player_opens_in_a_new_tab",
+   "file": "web/matches.html",
+   "old": "go: function (url) { window.location.assign(url); }",
+   "new": "go: function (url) { window.open(url); }",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "a popup that a browser blocks"
+  },
+  {
+   "id": "the_page_fetches_the_file_for_a_local_address",
+   "file": "web/shell.html",
+   "old": "fetched = OWN ? OWN.read() : Promise.resolve({ error: 'gone' });",
+   "new": "fetched = OWN ? fetch('/replays/' + window.location.search).then(function (r) { return r.arrayBuffer(); }).then(function (b) { return { bytes: new Uint8Array(b) }; }) : Promise.resolve({ error: 'gone' });",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "the file is fetched from the site"
+  },
+  {
+   "id": "download_is_shown_for_a_file_of_your_own",
+   "file": "web/shell.html",
+   "old": "body.ownfile [data-dl], body.ownfile #copy-btn,",
+   "new": "body.ownfile #copy-btn,",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "Download of a file that is on the device already"
+  },
+  {
+   "id": "copy_link_is_shown_for_a_file_of_your_own",
+   "file": "web/shell.html",
+   "old": "body.ownfile #copy-btn, body.ownfile #copy-more,",
+   "new": "body.ownfile #copy-more,",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "a link that nobody else can open"
+  },
+  {
+   "id": "stats_are_shown_for_a_file_of_your_own",
+   "file": "web/shell.html",
+   "old": ", body.ownfile #stats-btn { display: none !important; }",
+   "new": " { display: none !important; }",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "stats of a record that the server does not have"
+  },
+  {
+   "id": "no_record_starts_the_game_anyway",
+   "file": "web/shell.html",
+   "old": "                    if (got.error) return;                    // (its card is up already)",
+   "new": "                    if (got.error && !OWN) return;                    // (its card is up already)",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "a game on a file that is not there"
+  },
+  {
+   "id": "a_local_address_is_a_live_match",
+   "file": "web/shell.html",
+   "old": "var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !ANTS_OWN_MODE && !/(^|[?&])replay=/.test(window.location.search);",
+   "new": "var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "the page follows a match that is not there"
+  },
+  {
+   "id": "a_local_address_can_be_a_match_page_frame",
+   "file": "web/shell.html",
+   "old": "&& !ANTS_OWN_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);",
+   "new": "&& /(^|[?&])embed=1(&|$)/.test(window.location.search);",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "a frame of a match page for a file that it has not"
+  },
+  {
+   "id": "a_replay_does_not_win_over_a_local_address",
+   "file": "web/shell.html",
+   "old": "ANTS_OWN_MODE = ANTS_REPLAY_MODE && /(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search);",
+   "new": "ANTS_OWN_MODE = ANTS_REPLAY_MODE && /(^|[?&])local=/.test(window.location.search);",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "an address with both is read as a file of your own"
+  },
+  {
+   "id": "the_stats_of_a_local_file_are_asked_for",
+   "file": "web/shell.html",
+   "old": "ANTS_REPLAY_FILE && typeof fetch === 'function') window.AntsHistory.replayStats",
+   "new": "(ANTS_REPLAY_FILE || ANTS_OWN_MODE) && typeof fetch === 'function') window.AntsHistory.replayStats",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheStrip ThePlayer",
+   "why": "the site is asked about a match that it never saw"
+  },
+  {
+   "id": "the_map_card_keeps_the_hosts_words_for_a_recording",
+   "file": "web/map_files.js",
+   "old": "return { ok: false, mismatch: true, text: replay ? 'The map ' + name + ' on this site is not the file that this match was played on (the files differ).'",
+   "new": "return { ok: false, mismatch: true, text: false ? 'The map ' + name + ' on this site is not the file that this match was played on (the files differ).'",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a recording says the host's copy"
+  }
+ ]
+}
