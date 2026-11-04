@@ -567,10 +567,104 @@
         }, function () { return no('bad'); });
     }
 
+    // ---- the strip "Got a replay file?" of the Matches page (web/matches.html) ----
+    // A button that opens the browser's file chooser, a drop of a file anywhere on the page (a computer; a veil shows while a file is dragged over the page, and the strip lights up), and under the strip a
+    // card for a file that is refused. A file that passes goes to the player at once, in this tab. Nothing is sent: the file goes from the chooser or the drop into the browser's storage (ownOpen) and
+    // to the player. The words of the cards are the ones of the approved pictures.
+    var VEIL_MS = 900;                                                   // a drag that has said nothing for this long (a drag that was cancelled can leave without a word) takes the veil down
+    // The title and the sentence of the card for a refused file `r` ({ kind, size } as ownOpen answers)
+    function refusalWords(r) {
+        if (r && r.kind === 'big') return { title: 'That file is too big', text: 'A replay file is at most ' + Math.floor(LOCAL_MAX_BYTES / 1048576) + ' MB. This one is ' + sizeText(r.size) + ', so it is not a replay of a match.' };
+        if (r && r.kind === 'nostore') return { title: 'This browser will not keep the file for the player', text: 'The page hands the file to the player through the storage that the browser keeps for this site, and this browser does not let the site use it (private or blocked site data). Allow site data for this site and choose the file again.' };
+        return { title: 'That file is not a readable replay', text: 'It does not start like an Ants replay, or it is damaged (a download that stopped halfway, or a file that was changed).' };
+    }
+    function hasFiles(ev) {
+        var types = ev && ev.dataTransfer && ev.dataTransfer.types;
+        for (var i = 0; types && i < types.length; i++) if (types[i] === 'Files') return true;
+        return false;
+    }
+    // env: doc, win, store (ownStore), FileReader, go(url) (the page goes there), setTimeout / clearTimeout (the window's). The page's pieces (by id): opener (the strip), open-btn, open-file (the
+    // chooser, an <input type="file"> with no `accept`: a phone's chooser greys out a file of an ending that it does not know), dropveil, open-note.
+    function opener(env) {
+        var doc = env.doc, win = env.win;
+        function el(id) { return doc.getElementById(id); }
+        var strip = el('opener'), button = el('open-btn'), input = el('open-file'), veil = el('dropveil'), note = el('open-note');
+        var busy = false, depth = 0, timer = null;
+        function make(tag, className, text) {
+            var node = doc.createElement(tag);
+            if (className) node.className = className;
+            if (text !== undefined) node.textContent = text;
+            return node;
+        }
+        function hideNote() { note.textContent = ''; note.hidden = true; }
+        function choose() { hideNote(); input.click(); }
+        function showNote(r) {
+            var words = refusalWords(r), card = make('div', 'card bad'), row = make('div', 'row'), again = make('button', 'btn sm'), icon = make('span', 'ic');
+            card.setAttribute('role', 'alert');
+            card.appendChild(make('h3', '', words.title));
+            card.appendChild(make('p', '', words.text));
+            if (r && r.name) card.appendChild(make('p', 'fn', r.name));
+            icon.setAttribute('aria-hidden', 'true');
+            again.type = 'button'; again.appendChild(icon); again.appendChild(doc.createTextNode('Choose another file'));
+            again.addEventListener('click', choose);
+            row.appendChild(again); row.appendChild(make('span', 'lab', 'Nothing was sent anywhere'));
+            card.appendChild(row);
+            note.textContent = '';
+            note.appendChild(card);
+            note.hidden = false;
+        }
+        function veilOn(on) {
+            if (!on) { depth = 0; if (timer !== null) { env.clearTimeout.call(undefined, timer); timer = null; } }
+            veil.hidden = !on;
+            strip.classList.toggle('drag', !!on);
+        }
+        // a file that was chosen or dropped: the first one only; a second one while the first is on its way is ignored
+        function take(file) {
+            if (busy || !file) return;
+            busy = true;
+            hideNote();
+            ownOpen(env, file).then(function (r) {
+                if (r.ok) { env.go('/play.html?local=' + r.id); return; }                  // (the page is leaving: busy stays until it is shown again from the browser's memory, pageshow)
+                busy = false;
+                showNote(r);
+            });
+        }
+        return {
+            take: take,
+            wire: function () {
+                if (typeof win.File !== 'function' || typeof Promise !== 'function') return false;                  // (a browser that cannot read a file has no strip)
+                strip.hidden = false;
+                env.store.purge();
+                button.addEventListener('click', choose);
+                input.addEventListener('change', function () { var file = input.files && input.files[0]; input.value = ''; take(file); });
+                // a drag of a FILE over the page: the drop is the page's (preventDefault: else the browser leaves for the file), a drag of anything else is none of its business
+                doc.addEventListener('dragenter', function (ev) { if (!hasFiles(ev)) return; ev.preventDefault(); depth++; veilOn(true); });
+                doc.addEventListener('dragover', function (ev) {
+                    if (!hasFiles(ev)) return;
+                    ev.preventDefault();
+                    try { ev.dataTransfer.dropEffect = 'copy'; } catch (e) { /* a drag that cannot say */ }
+                    veilOn(true);
+                    if (timer !== null) env.clearTimeout.call(undefined, timer);
+                    timer = env.setTimeout.call(undefined, function () { timer = null; veilOn(false); }, VEIL_MS);
+                });
+                doc.addEventListener('dragleave', function (ev) { if (!hasFiles(ev)) return; depth = Math.max(0, depth - 1); if (!depth) veilOn(false); });
+                doc.addEventListener('drop', function (ev) {
+                    if (!hasFiles(ev)) return;
+                    ev.preventDefault();
+                    veilOn(false);
+                    take(ev.dataTransfer.files && ev.dataTransfer.files[0]);
+                });
+                win.addEventListener('pageshow', function (ev) { if (ev && ev.persisted) { busy = false; veilOn(false); } });
+                return true;
+            }
+        };
+    }
+
     var api = { barPointer: barPointer, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
                 LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
-                OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen };
+                OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,
+                refusalWords: refusalWords, opener: opener };
     if (typeof module === 'object' && module && module.exports) module.exports = api;
     else root.AntsReplay = api;
 })(typeof window !== 'undefined' ? window : this);

@@ -123,6 +123,33 @@ button { font: inherit; color: inherit; }
 .fchip .x { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: #0a1511; font-size: 13px; line-height: 1; }
 .clear { font-size: 14px; color: var(--cream); background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 4px 6px; }
 
+/* ---- the strip "Got a replay file?" above the tools (docs/REPLAYS.md "A file of your own"): a dashed drop zone and a button, the card for a file that is refused under it, and the veil that a file dragged over
+   the page raises (a computer: a phone has no drag). The folder is one drawing, used as a mask so that it takes the color of its place ---- */
+.ic, .fold { flex: none; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 30'%3E%3Cpath d='M2 0h9l4 5h17a2 2 0 0 1 2 2v21a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z'/%3E%3C/svg%3E") no-repeat center / contain; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 30'%3E%3Cpath d='M2 0h9l4 5h17a2 2 0 0 1 2 2v21a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2z'/%3E%3C/svg%3E") no-repeat center / contain; }
+.ic { display: inline-block; width: 14px; height: 12px; }
+.panel.opener { padding: 6px; }
+.opener .drop { display: flex; align-items: center; justify-content: space-between; gap: 12px 22px; padding: 6px 10px 4px; border: 2px dashed rgba(143, 179, 166, .45); border-radius: 4px; }
+.opener .txt { min-width: 0; display: grid; gap: 3px; }
+.opener h2 { font-size: 17px; line-height: 21px; color: #fff; }
+.opener p { font-size: 14px; line-height: 21px; color: var(--muted); }
+.opener.drag { border-color: var(--gold); }
+.opener.drag .drop { border-color: var(--gold); background: rgba(246, 208, 88, .07); }
+#open-note .card { margin-top: 22px; padding: 16px 18px 14px; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--bad-edge); border-radius: 4px; }
+#open-note h3 { font-size: 18px; font-weight: 500; line-height: 1.25; color: #fff; }
+#open-note p { max-width: 700px; margin-top: 11px; font-size: 16px; line-height: 1.45; }
+#open-note .fn { margin-top: 11px; font: 14px/1.3 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+#open-note .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; }
+#open-note .btn, .opener .btn { gap: 10px; }
+#open-note + .panel { margin-top: 22px; }
+#open-note:not([hidden]) + .panel { margin-top: 14px; }
+.dropveil { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(12, 8, 5, .8); pointer-events: none; }
+.dropcard { width: min(410px, 100%); padding: 8px; }
+.dropcard .in { display: grid; justify-items: center; padding: 35px 20px 27px; text-align: center; border: 3px dashed var(--gold); }
+.dropcard .fold { width: 34px; height: 30px; margin-bottom: 16px; color: var(--gold); }
+.dropcard .big { font-size: 24px; line-height: 1.2; color: #fff; }
+.dropcard .small { margin-top: 8px; font-size: 15px; line-height: 1.4; color: var(--cream); }
+@media (hover: none) and (pointer: coarse) { .dropveil { display: none; } }
+
 /* ---- the cards of the list and of the live page ---- */
 .list { list-style: none; display: grid; gap: 12px; }
 .m { position: relative; display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; grid-template-areas: "pic info side" "pic sides side"; gap: 8px 22px; align-items: center; padding: 12px 18px 12px 12px; background: linear-gradient(180deg, #0f1820, #080c11); border: 2px solid var(--edge); border-radius: 6px; box-shadow: 0 0 0 1px #14352b; }
@@ -222,6 +249,10 @@ button { font: inherit; color: inherit; }
     .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
+    .opener .drop { flex-direction: column; align-items: stretch; gap: 16px; padding: 6px 6px 4px; }
+    .opener .txt { gap: 2px; }
+    .opener h2 { font-size: 16px; line-height: 20px; }
+    .opener .btn { width: 100%; }
     .mast .acts { grid-area: btn; justify-self: end; }
     .mast .acts .btn.hide-s { display: none; }
     .discord { min-width: 44px; justify-content: center; padding: 6px 11px; }                 /* a phone: the mark alone (the word stays for a screen reader) */
