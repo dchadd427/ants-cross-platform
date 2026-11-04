@@ -507,6 +507,11 @@ public:
     void set_last_side_rule(bool on);
     /// Whether this match ends by the last-side rule: the original's game with the rule on
     bool last_side_rule() const noexcept;
+    /// The loader of the recording that is being played (replay::kSimRulesBeforeFireWall, kSimRulesMode187BeforeFireWall and the numbers before them): with `on` (the default, the rules of a match played now) a fire wall of the map file
+    /// loads as the original loads it (Grid::init_from_level: solid by its file bit only); with `on` unset a fire wall whose dictionary entry has a name also gets the remake's obstacle overlay, as it did until v0.14.
+    /// The same for both game modes (the loader knows no mode). It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it. The state hash carries the overlay.
+    void set_fire_wall_as_original(bool on);
+    bool fire_wall_as_original() const noexcept;
     /// Whether an ant of this match can enter its own hill: always in the original's game, in 187 only while the rule of the old recordings is set (set_hill_open_187)
     bool own_hill_enterable() const noexcept;
 

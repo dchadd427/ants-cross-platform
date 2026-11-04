@@ -7,7 +7,7 @@ namespace ants::sim {
 
 static_assert(TILE_PIXELS == 32, "Tile pixels must be 32");
 
-bool Grid::init_from_level(const ants::assets::LevelData& level) {
+bool Grid::init_from_level(const ants::assets::LevelData& level, bool fire_wall_as_original) {
     width_ = level.width;
     height_ = level.height;
     if (width_ == 0 || height_ == 0) return false;
@@ -136,6 +136,10 @@ bool Grid::init_from_level(const ants::assets::LevelData& level) {
                 // Food is the tile flag 0x02 of the id (FUN_010071dd: 87 ids), never the dictionary's name ("fd..." or "food..."): an id with the flag is food whatever the entry says ("." included),
                 // and an entry named fd... of an id without the flag (fdpez2b1 at 344, fdfrl7 at 287) is an ordinary object. Food is a removable object: no obstacle overlay.
                 cell.is_food = true;
+            } else if (fire_wall_as_original && c2.tile_index == TILE_FIREWALL) {
+                // A fire wall is a tile id (134, one of the 62 forced graphics), never a dictionary name: the original's loader stores the file's layer-2 word as it is and the name decides only whether a graphic
+                // is loaded (docs/reverse_engineering/map_loader_fidelity.md, sections 6 to 8), so a fire wall named `wallup04` (the map maker's entry) loads as one called "." always did: no obstacle overlay,
+                // solid by its file bit alone. (Rules numbers 5 to 8 keep the overlay of a named entry: Grid::init_from_level's second parameter.)
             } else if (c2.tile_index != TILE_EMPTY && c2.tile_index != 0xFFFF && c2.tile_index != 0x7FFE) {
                 const std::string& tname = level.get_tile_name(c2.tile_index);
                 if (!tname.empty() && tname != ".") {

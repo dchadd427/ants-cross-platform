@@ -166,8 +166,8 @@
   {
    "id": "the_original_plays_only_number_8",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRules || rules == kSimRulesBeforeLastSide)",
-   "new": "(rules == kSimRules)",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
+   "new": "(rules == kSimRules || rules == kSimRulesBeforeFireWall)",
    "build": "test_rules_last_side",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
    "expect": "RP13.1"
@@ -175,7 +175,7 @@
   {
    "id": "the_original_plays_every_number_from_5",
    "file": "include/ants_replay/replay.hpp",
-   "old": "(rules == kSimRules || rules == kSimRulesBeforeLastSide)",
+   "old": "(rules == kSimRules || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)",
    "new": "(rules >= kSimRulesBeforeLastSide)",
    "build": "test_rules_last_side",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
@@ -193,8 +193,8 @@
   {
    "id": "the_refusal_names_three_numbers",
    "file": "src/ants_replay/replay.cpp",
-   "old": "std::to_string(kSimRulesBeforeLastSide) + \", \" + std::to_string(kSimRulesMode187Heal) + \", \" + std::to_string(kSimRulesMode187) + \" and \" + std::to_string(kSimRules);",
-   "new": "std::to_string(kSimRulesBeforeLastSide) + \", \" + std::to_string(kSimRulesMode187Heal) + \" and \" + std::to_string(kSimRulesMode187);",
+   "old": "std::to_string(kSimRulesBeforeFireWall) + \", \" + std::to_string(kSimRules) +",
+   "new": "std::to_string(kSimRules) +",
    "build": "test_rules_last_side",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
    "expect": "RP13.1"
@@ -202,8 +202,8 @@
   {
    "id": "a_187_head_may_name_the_number_8",
    "file": "src/ants_replay/replay.cpp",
-   "old": "    } else if (h.sim_rules == kSimRules && h.mode != 0) {",
-   "new": "    } else if (false) {",
+   "old": "} else if ((h.sim_rules == kSimRules || h.sim_rules == kSimRulesBeforeFireWall) && h.mode != 0) {",
+   "new": "} else if (false) {",
    "build": "test_rules_last_side",
    "test": "timeout 600 ./build/tests/test_replay/test_rules_last_side",
    "expect": "RP13.1"

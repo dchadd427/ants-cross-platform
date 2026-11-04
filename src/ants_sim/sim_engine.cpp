@@ -109,7 +109,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     impl_->active_effects_.clear();
     impl_->battle_clouds_.clear();
     impl_->score_bubbles_.clear();
-    impl_->grid_.init_from_level(level);
+    impl_->grid_.init_from_level(level, impl_->fire_wall_as_original_);
     const bool mode187 = impl_->game_mode_ == GameMode::Kills187;
     if (mode187) {
         // 187: no food and no power-ups on any map; everything else (the start markers, the starting ants, the eggs, the ant types) is the map's own
@@ -924,7 +924,7 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
 
 void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->game_mode_ = mode;
-    impl_->hill_open_187_ = false; impl_->last_side_rule_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_last_side_rule)
+    impl_->hill_open_187_ = false; impl_->last_side_rule_ = true; impl_->fire_wall_as_original_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_last_side_rule, set_fire_wall_as_original)
     impl_->world_state_dirty_ = true;
 }
 

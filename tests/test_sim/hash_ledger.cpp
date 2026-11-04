@@ -2,7 +2,10 @@
 // tests/common/map_library.hpp) at tick 0, tick 200 and tick 2,400, written to a file that two builds can be compared with (`diff`): a change that must not move any play of
 // any map (docs/TESTING.md, "The hash ledger") leaves the file byte for byte as it was on main.
 //
-//   hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--only TEXT] [--ticks A,B,...]
+//   hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--fire-wall-named] [--only TEXT] [--ticks A,B,...]
+//
+// --fire-wall-named plays every map by the loader of the rules numbers 5 to 8 (a fire wall with a named dictionary entry also gets the remake's obstacle overlay,
+// Grid::init_from_level): that ledger is the one of the build before the rules number 9, and its 540 lines are the base ledger of main before the rules number 9, byte for byte; without it the ledger is the one of the rules number 9.
 //
 // By default the maps are played as the library has them (version 8). With --extended every map goes up to an Extended map of rules 0 (convert_to_extended) and the simulation
 // plays that one: its ledger must equal the other (the simulation reads the Extended map as it reads the Classic one). A line is `NAME TAB hash@t0 TAB hash@t1 ...` (16 hex
@@ -64,6 +67,7 @@ int main(int argc, char* argv[]) {
     bool extended = false;
     bool rules_one = false;
     bool rules_two = false;
+    bool fire_wall_named = false;
     std::vector<uint32_t> ticks{0, 200, 2400};
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -77,18 +81,20 @@ int main(int argc, char* argv[]) {
             rules_one = true;
         } else if (arg == "--rules2") {
             rules_two = true;
+        } else if (arg == "--fire-wall-named") {
+            fire_wall_named = true;
         } else if (arg == "--ticks" && i + 1 < argc) {
             if (!parse_ticks(argv[++i], ticks)) {
                 std::cerr << "--ticks wants whole game seconds in ticks (multiples of 20), comma separated\n";
                 return 2;
             }
         } else {
-            std::cerr << "usage: hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--only TEXT] [--ticks A,B,...]\n";
+            std::cerr << "usage: hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--fire-wall-named] [--only TEXT] [--ticks A,B,...]\n";
             return 2;
         }
     }
     if (out_path.empty() || (rules_one && rules_two)) {
-        std::cerr << "usage: hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--only TEXT] [--ticks A,B,...]\n";
+        std::cerr << "usage: hash_ledger --out FILE [--extended] [--rules1 | --rules2] [--fire-wall-named] [--only TEXT] [--ticks A,B,...]\n";
         return 2;
     }
     const uint32_t last = *std::max_element(ticks.begin(), ticks.end());
@@ -117,7 +123,7 @@ int main(int argc, char* argv[]) {
         std::vector<ants::sim::StateHash> hashes;
         if (rules_one || rules_two) {
             const uint16_t forced = rules_two ? 2 : 1;
-            const ants_test::RulesOneComparison c = ants_test::play_hashes_rules_one(level, last, forced);
+            const ants_test::RulesOneComparison c = ants_test::play_hashes_rules_one(level, last, forced, !fire_wall_named);
             checkpoints += c.checkpoints;
             if (!c.difference.empty()) {
                 std::cerr << m.name << ": rules " << forced << " plays differently from rules 0: " << c.difference << "\n";
@@ -125,7 +131,7 @@ int main(int argc, char* argv[]) {
             }
             hashes = c.hashes;
         } else {
-            hashes = ants_test::play_hashes(level, last);
+            hashes = ants_test::play_hashes(level, last, !fire_wall_named);
         }
         text += m.name;
         for (const uint32_t t : ticks) {

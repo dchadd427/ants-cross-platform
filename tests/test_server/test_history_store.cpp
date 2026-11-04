@@ -976,7 +976,7 @@ int main() {
         std::string why;
         ASSERT_TRUE(replay::decode(old_file.data(), old_file.size(), decoded, why));
         ASSERT_TRUE(decoded.head.mode == 1 && decoded.head.sim_rules == replay::kSimRulesMode187Heal);
-        decoded.head.sim_rules = static_cast<uint16_t>(replay::kSimRules + 1);
+        decoded.head.sim_rules = static_cast<uint16_t>(replay::kSimRulesNewest + 1);
         const std::vector<uint8_t> future = replay::encode(decoded, why);
         ASSERT_FALSE(future.empty());
         Rig rig;
@@ -993,17 +993,23 @@ int main() {
         entry.mode = 1;
         entry.sim_rules = replay::kSimRulesMode187Heal;
         ASSERT_TRUE(entry_plays_here(entry));
+        entry.sim_rules = replay::kSimRulesMode187BeforeFireWall;
+        ASSERT_TRUE(entry_plays_here(entry));
         entry.sim_rules = replay::kSimRulesMode187;
         ASSERT_TRUE(entry_plays_here(entry));
-        entry.sim_rules = static_cast<uint16_t>(replay::kSimRulesMode187 + 1);
+        entry.sim_rules = static_cast<uint16_t>(replay::kSimRulesNewest + 1);
         ASSERT_FALSE(entry_plays_here(entry));
         entry.sim_rules = replay::kSimRules;
         ASSERT_FALSE(entry_plays_here(entry));                                                              // (the original's number with the mode of 187)
         entry.mode = 0;
-        ASSERT_TRUE(entry_plays_here(entry));                                                               // (the original's game now, rules 8)
+        ASSERT_TRUE(entry_plays_here(entry));                                                               // (the original's game now, rules 9)
+        entry.sim_rules = replay::kSimRulesBeforeFireWall;
+        ASSERT_TRUE(entry_plays_here(entry));                                                               // (and as it was before the loader's fire wall, rules 8)
         entry.sim_rules = replay::kSimRulesBeforeLastSide;
         ASSERT_TRUE(entry_plays_here(entry));                                                               // (and as it was, rules 5)
-        entry.sim_rules = static_cast<uint16_t>(replay::kSimRules + 1);
+        entry.sim_rules = replay::kSimRulesMode187;
+        ASSERT_FALSE(entry_plays_here(entry));                                                              // (the number of 187 now with the original's mode)
+        entry.sim_rules = static_cast<uint16_t>(replay::kSimRulesNewest + 1);
         ASSERT_FALSE(entry_plays_here(entry));
         entry.sim_rules = replay::kSimRulesMode187Heal;
         ASSERT_FALSE(entry_plays_here(entry));                                                              // (and the number of 187 with the original's mode)
