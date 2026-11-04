@@ -993,8 +993,8 @@ static void run_suite_8_rules_two() {
     } TEST_END();
 
     TEST_CASE("8.3 The budget grows only after the original's limit: eight 200-tile orders on a 512 x 512 world are delivered at rules 2 exactly when they are at rules 1 (the original's 1,000 a run); eight 450-tile orders, which the original refuses, are delivered at rules 2 and the run grows to 4,096 after the limit") {
-        // (The first part is the rule that a search that the original can finish takes the original's 1,000 expansions a 50 ms run, whatever the map. Before, rules 2 took 8,192 a
-        // run on this map from the first run on and delivered the 200-tile orders by tick 40 instead of at tick 100 and 200: the same path, earlier.)
+        // (The first part is the rule that a search that the original can finish takes the original's 1,000 expansions a 50 ms run, whatever the map. Before, rules 2 took the budget
+        // of the map a run from the first run on and delivered the 200-tile orders by tick 40 instead of at tick 100 and 200: the same path, earlier.)
         const auto paths_at = [](uint16_t rules, int ticks, int dist) {
             SimulationEngine sim;
             sim.init_test_world(512, 512, 7, 600000, rules);

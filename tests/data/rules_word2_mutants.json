@@ -208,6 +208,15 @@
    "test": "./build/lvl_tool --selftest"
   },
   {
+   "id": "tool_grown_copy_ignores_the_size_rule",
+   "file": "tools/lvl_tool.cpp",
+   "old": "grown.rules = std::max(grown.rules, c.level.rules);",
+   "new": "grown.rules = c.level.rules;",
+   "build": "lvl_tool",
+   "test": "./build/lvl_tool --selftest",
+   "expect": "a side above 256 gets rules 2 by itself"
+  },
+  {
    "id": "tool_info_calls_rules_two_extended",
    "file": "tools/lvl_tool.cpp",
    "old": "level.rules == LVL_RULES_LONG_ORDERS ? \" (extended rules, long orders)\"",
