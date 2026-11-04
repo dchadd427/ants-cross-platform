@@ -63,9 +63,8 @@ def read(*parts):
 
 
 # The page names nothing private (AGENTS.md, rule 3), and this file is public too, so the words are kept as SHA-256 digests of their exact bytes (case counts) with their length, never spelled.
-# private_hits() slides a window of each length over a text and reports the offsets whose digest is on the list. The last entry is a harmless decoy that only the self-test uses.
+# private_hits() slides a window of each length over a text and reports the offsets whose digest is on the list. An entry has 9 characters or more (the digest of a short word is easy to find again). DECOY_DIGEST is a harmless decoy that only the self-test uses.
 PRIVATE_DIGESTS = (
-    ("ee589f9ec0de40164a3c3bd6baf5ce74b776dc814f450c1c9b6049dd6a059663", 3),
     ("7a7bd3f4b15b42e706bdee964a4f6b9bd2088bb079a9f9e564e6166c35935e93", 9),
     ("41109810504e65405ce6c19dfe205f908b333cc4fd6fc4dc75edfefbc3d6d7e7", 9),
     ("d3e1947934b34a8026f3672c86f0c8caea2578ac1eed19c71a1c91d067449501", 11),
@@ -1097,6 +1096,7 @@ class ThePage(unittest.TestCase):
             self.assertIn(part, canvas, part)
 
     def test_the_page_names_nothing_private(self):
+        self.assertTrue(all(length >= 9 for _, length in PRIVATE_DIGESTS), "a short entry could be found again from its digest")
         for name in ("mapmaker.html",) + tuple("front/" + n for n in SCRIPTS) + ("front/mapmaker.css",):
             hits = private_hits(read("web", name))
             self.assertEqual(hits, [], "%s names a private word at offset(s) %s" % (name, hits))

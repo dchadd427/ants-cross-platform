@@ -46,9 +46,8 @@ tests/artifacts/
 # Agent scratch directory
 .agents/
 
-# Per-user tool folders and a private working file (never committed)
+# Per-user tool folders (never committed)
 .claude/
-implementation_plan.md
 
 # Process-id files of a local server or tool run
 *.pid

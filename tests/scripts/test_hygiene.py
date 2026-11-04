@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests of tools/check_hygiene.py: each check on small synthetic trees, and the real repository (which must pass)."""
+import hashlib
 import os
 import re
 import shutil
@@ -90,32 +91,56 @@ class Reachable(Tree):
 
 
 class Forbidden(Tree):
+    DECOY = (hashlib.sha256(b"decoy-notes.md").hexdigest(), 14)      # (a made-up name: the real ones are on PRIVATE_NAME_DIGESTS and are spelled nowhere)
+
     def test_each_string_is_found(self):
-        for i, s in enumerate(["implementation_plan", "ants-plans", "DECISIONS.md", "claude.ai/code", "Co-Authored-By", "Claude-Session", "Project Thread", "THE OTHER THREAD"]):
+        for i, s in enumerate(["claude.ai/code", "Co-Authored-By", "Claude-Session", "Project Thread", "THE OTHER THREAD"]):
             self.put("src/f%d.cpp" % i, "// see %s here\n" % s)
         out = ch.check_forbidden(self.root, self.files(), allowed=set())
-        self.assertEqual(len(out), 8)
+        self.assertEqual(len(out), 5)
         self.assertTrue(out[0].startswith("src/f0.cpp:1:"))
 
+    def test_a_private_name_is_found_by_its_digest_in_any_case_and_inside_a_longer_run(self):
+        self.put("src/a.cpp", "int x;\n// see Decoy-Notes.md here\n")
+        self.put("docs/b.md", "[x](DECOY-NOTES.MD) and mydecoy-notes.mdx\n")
+        self.put("src/c.cpp", "// decoy notes.md, decoy_notes.md, decoy-notes.m, ecoy-notes.md, a decoy\n")        # near misses
+        out = ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))
+        self.assertEqual([o.split(" ")[0] for o in out], ["docs/b.md:1:", "src/a.cpp:2:"])
+
+    def test_a_finding_about_a_private_name_does_not_repeat_the_name(self):
+        self.put("src/a.cpp", "// decoy-notes.md\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))
+        self.assertEqual(len(out), 1)
+        self.assertNotIn("decoy", out[0].lower())
+
+    def test_the_names_on_the_list_are_digests_of_ten_characters_or_more(self):
+        self.assertEqual(len(ch.PRIVATE_NAME_DIGESTS), len(set(ch.PRIVATE_NAME_DIGESTS)))
+        for digest, length in ch.PRIVATE_NAME_DIGESTS:
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+            self.assertGreaterEqual(length, 10)
+
     def test_allowlist_binary_maps_and_previews_are_skipped(self):
-        self.put("AGENTS.md", "DECISIONS.md\n")
-        self.put("Community-Maps/m.lvl", "implementation_plan\n")
-        self.put("previews/p.txt", "ants-plans\n")
+        self.put("AGENTS.md", "Claude-Session\n")
+        self.put("Community-Maps/m.lvl", "Co-Authored-By decoy-notes.md\n")
+        self.put("previews/p.txt", "claude.ai/code decoy-notes.md\n")
         self.put("third_party/sqlite/sqlite3.c", "/* the other thread */\n")
         self.put("third_party/sqlite/sqlite3.h", "/* the other thread */\n")
         with open(os.path.join(self.root, "b.bin"), "wb") as f:
-            f.write(b"\0\0claude.ai/code")
+            f.write(b"\0\0claude.ai/code decoy-notes.md")
         self.put("docs/ok.md", "plain words\n")
-        self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}), [])
+        self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}, digests=(self.DECOY,)), [])
+        self.put("AGENTS.md", "decoy-notes.md\n")
+        self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}, digests=(self.DECOY,)), [])
+        self.assertEqual(len(ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))), 1)
 
     def test_our_own_files_in_third_party_are_checked(self):
-        self.put("third_party/sqlite/README.md", "see implementation_plan\n")
-        self.put("third_party/sqlite/CMakeLists.txt", "# DECISIONS.md\n")
+        self.put("third_party/sqlite/README.md", "see Claude-Session\n")
+        self.put("third_party/sqlite/CMakeLists.txt", "# Co-Authored-By\n")
         out = ch.check_forbidden(self.root, self.files(), allowed=set())
         self.assertEqual(len(out), 2)
 
 
-class Lines(Tree):
+
     def test_limits_by_kind(self):
         self.put("tests/a/test_ok.cpp", lines=ch.TEST_LINES)
         self.put("tests/a/test_big.cpp", lines=ch.TEST_LINES + 1)
@@ -228,7 +253,7 @@ class Cli(Tree):
     def test_findings_are_one_line_each_with_exit_1(self):
         self.put("README.md", "hello\n")
         self.put("docs/A.md", "orphan\n")
-        self.put("src/x.cpp", "// ants-plans\n")
+        self.put("src/x.cpp", "// Claude-Session\n")
         done = self.run_tool("--root", self.root)
         self.assertEqual(done.returncode, 1)
         lines = done.stdout.splitlines()
