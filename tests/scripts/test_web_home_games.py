@@ -33,7 +33,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 71 * 1000, 20000      # bytes, raw and gzipped, both files together (about 70,300 and 19,700, with Quick join, its cards and the question before Leave room): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 71 * 1000, 20000      # bytes, raw and gzipped, both files together (about 69,950 and 19,980, with Quick join, its cards and the question before Leave room): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -191,7 +191,8 @@ class TheStyle(unittest.TestCase):
 
     def test_the_popover_is_over_the_page_under_the_menu_and_the_card_is_over_the_popover(self):
         z = {sel.strip(): int(re.search(r"z-index: (\d+)", body).group(1)) for sel, body in self.rules if re.search(r"z-index: (\d+)", body)}
-        self.assertEqual(sorted(z), [".gpop", ".gshade"])
+        self.assertEqual(sorted(z), [".gdock", ".gpop", ".gshade"])          # (.gdock: the list docked in the Yard on a site with no label, under the chat panel's 6 where they meet)
+        self.assertLess(z[".gdock"], 6)
         self.assertLess(z[".gpop"], 60, "the Menu (home.css) is 60")
         self.assertGreater(z[".gshade"], z[".gpop"])
         self.assertIn("position: fixed;", next(body for sel, body in self.rules if sel.strip() == ".gpop"))
@@ -212,6 +213,47 @@ class TheStyle(unittest.TestCase):
         theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr"}      # (the page's: web/lobby.html, "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
         for name in sorted(made - theirs):
             self.assertRegex(self.css, r"\." + re.escape(name) + r"\b", "the class %s has no style" % name)
+
+
+class TheListIsTheYardsOnAUnlabelledSite(unittest.TestCase):
+    """A site with no site label (production: docs/HOME_SCREEN.md, "The Yard") shows the Games list as the page under the bar, docked in the Yard (home.js hands it #yard as `dock`), always there, the same rows and Join as the
+    popover's (one code); a site with the label (the test site) keeps the popover and the stand-in. The list sits right of the chat panel on a wide window and above its strip on a phone, so that no Join is covered."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.js = read("web", "home", "games.js")
+        cls.css = read("web", "home", "games.css")
+        cls.home = read("web", "home", "home.js")
+        cls.chat = read("web", "home", "chat.css")
+
+    def test_home_docks_the_list_in_the_yard_only_where_there_is_no_label(self):
+        self.assertEqual(self.home.count("dock: standIn ? null : yard,"), 1)
+        self.assertEqual(self.js.count("env.dock"), 2)
+        self.assertIn("(env.dock || host).appendChild(pop);", self.js)
+
+    def test_the_docked_list_is_the_popover_s_code_with_a_few_switches(self):
+        js = self.js
+        self.assertEqual(js.count("function rowNode("), 1, "one place paints a row")
+        self.assertEqual(js.count("function paintList("), 1)
+        self.assertEqual(js.count("function joinRow("), 1)
+        self.assertEqual(js.count("function look("), 1, "one GET /lobbies")
+        for part in ("isOpen = docked,", "pop.hidden = !docked;", "docked ? 'region' : 'dialog'", "if (docked) return;", "if (!isOpen || docked) return;", "if (docked) focusList(); else if (isOpen) closeList(true); else openList();",
+                     "if (docked) pop.className += ' gdock';"):
+            self.assertEqual(js.count(part), 1, part)
+
+    def test_the_docked_list_keeps_clear_of_the_chat_dock_and_its_strip(self):
+        rules = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        wide = re.search(r"\.gdock \{ position: absolute; z-index: (\d+); top: 12px; left: (\d+)px; right: 12px; width: min\((\d+)px, calc\(100% - (\d+)px\)\); max-height: calc\(100% - 24px\); margin: 0 auto; \}", rules)
+        self.assertIsNotNone(wide)
+        z, left, cap, taken = (int(g) for g in wide.groups())
+        chat = re.search(r"\.gc \{ position: absolute; left: (\d+)px; bottom: 22px; z-index: (\d+);[^}]*width: (\d+)px;", self.chat)
+        self.assertLess(z, int(chat.group(2)), "the chat panel is over the list where they meet")
+        self.assertGreaterEqual(left, int(chat.group(1)) + int(chat.group(3)), "on a wide window the list is right of the chat panel (24 + 380 px)")
+        self.assertEqual(left + 12, taken)
+        self.assertLess(z, 55, "under the Menu and the cards")
+        self.assertIn("@media (max-width: 720px), (max-height: 500px) { .gdock { top: 8px; left: 8px; right: 8px; width: auto; max-height: calc(100% - 90px); } }", rules)
+        self.assertIn("(max-width: 720px), (max-height: 500px) {", self.chat, "the strip's own breakpoint is the one that the list uses")
+        self.assertIn("@media (min-width: 721px) and (max-width: 760px) and (min-height: 501px) { .gdock { left: 12px; right: 12px; width: auto; max-height: calc(100% - 428px); } }", rules)
 
 
 class TheWayIntoTheImage(unittest.TestCase):

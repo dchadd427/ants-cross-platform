@@ -527,7 +527,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const sockets = [];
         class ToTheServer extends WS { constructor() { super(wsUrl); sockets.push(this); } }
         const realList = (url) => (url === '/lobbies' ? fetch(listBase + '/lobbies', { cache: 'no-store' }) : Promise.reject(new Error('no ' + url + ' here')));
-        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: realList });
+        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: realList, label: 'staging' });
         const listed = async () => (await (await fetch(listBase + '/lobbies')).json());
         const text = (env, cls) => { const e = env.$('home').findAll((n) => String(n.className).split(/\s+/).indexOf(cls) !== -1)[0]; return e ? e.textContent : null; };
         const A = onPage('Quinn');
@@ -581,7 +581,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
             return { status: 200, headers: { get: () => null }, text: () => Promise.resolve(JSON.stringify(data)) };
         };
         const realRows = async () => (await (await fetch(listBase + '/lobbies', { cache: 'no-store' })).json()).lobbies.filter((x) => /^Qj/.test(x.host));
-        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: aList });
+        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: aList, label: 'staging' });
         const hostOf = (name, room) => { const c = page(name, room); c.connect(); return c; };
         const publicHost = async (name, room) => { const c = hostOf(name, room); await step(name + ' makes a room', () => online(c), 5000); c.setPublic(true); await stepLater(name + '\'s room is in the real list', async () => (await realRows()).some((x) => x.code === room), 5000); return c; };
         const cardOf = (env) => env.body.findAll((n) => String(n.className).split(/\s+/).indexOf('gconfirm') !== -1)[0] || null;

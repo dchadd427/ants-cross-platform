@@ -910,7 +910,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 {   // START comes before the script of the list does, and the 15 s are over before it comes: it mounts into a page that waits for the game, and says so at once
     const SLOW = 'The game is slow to open. Reload this page to get your seat back.';
     const site = fakeSite();
-    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, label: 'staging' });
     env.advance(0);
     const parts = () => env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css'));
     check('(the script and the style of the list were asked for, and have not come)', parts().length === 2 && env.home('host').disabled === true);
@@ -930,7 +930,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 }
 {   // a script that comes while START is on its way (not slow yet) waits as well
     const site = fakeSite();
-    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, label: 'staging' });
     env.advance(0);
     env.home('mine').click();
     const sock = env.arrive({ key: KEY, seats: seatsOf(OTHERS), room: { flags: PRIVATE } });
@@ -946,7 +946,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 }
 {   // a script that comes while a dialog of the page is open is under it as well
     const site = fakeSite();
-    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch });
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, label: 'staging' });
     env.advance(0);
     env.home('mine').click();
     env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PUBLIC } });
