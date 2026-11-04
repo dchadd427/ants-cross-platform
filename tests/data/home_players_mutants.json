@@ -147,15 +147,15 @@
   {
    "id": "a_match_says_its_code",
    "file": "web/home/players.js",
-   "old": "if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code)) say.code = client.code;",
-   "new": "if (typeof client.code === 'string' && ROOM.test(client.code)) say.code = client.code;",
+   "old": "if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code) && client.isLeader && client.isLeader()) say.code = client.code;",
+   "new": "if (typeof client.code === 'string' && ROOM.test(client.code) && client.isLeader && client.isLeader()) say.code = client.code;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "a_code_that_is_no_code_is_said",
    "file": "web/home/players.js",
-   "old": "if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code)) say.code = client.code;",
-   "new": "if (say.at === 'wait' && typeof client.code === 'string') say.code = client.code;",
+   "old": "if (say.at === 'wait' && typeof client.code === 'string' && ROOM.test(client.code) && client.isLeader && client.isLeader()) say.code = client.code;",
+   "new": "if (say.at === 'wait' && typeof client.code === 'string' && client.isLeader && client.isLeader()) say.code = client.code;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -168,8 +168,8 @@
   {
    "id": "a_guest_says_where_it_is",
    "file": "web/home/players.js",
-   "old": "if (!live || !you) return;\n            var said = look()",
-   "new": "if (!live) return;\n            var said = look()",
+   "old": "if (!live || !supported || !you) return;\n            var said = look()",
+   "new": "if (!live || !supported) return;\n            var said = look()",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -196,8 +196,8 @@
   {
    "id": "the_list_is_asked_for_every_second",
    "file": "web/home/players.js",
-   "old": "if (live && !asked && dock.send({ t: 'who' })) asked = true;",
-   "new": "if (live && dock.send({ t: 'who' })) asked = true;",
+   "old": "if (live && supported && !asked && dock.send({ t: 'who' })) asked = true;",
+   "new": "if (live && supported && dock.send({ t: 'who' })) asked = true;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

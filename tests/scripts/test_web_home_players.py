@@ -32,7 +32,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_players_check.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 FILES = ("players.js", "players.css")
-PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 42 * 1000, 12600       # bytes, raw and gzipped, both files together (about 39,300 and 11,800: the panel, the sheet and the drawer, the groups and the rows, Join, the guests, the empty and the off notes, the phone's bar button); they load after the first paint, after the chat dock, so they cost the first look nothing
+PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 42 * 1000, 12600       # bytes, raw and gzipped, both files together (about 39,600 and 11,900: the panel, the sheet and the drawer, the groups and the rows, Join, the guests, the empty and the off notes, the phone's bar button); they load after the first paint, after the chat dock, so they cost the first look nothing
 
 
 def read(*parts):

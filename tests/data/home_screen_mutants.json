@@ -109,7 +109,7 @@
   {
    "id": "opening_card_has_other_words",
    "file": "web/home/home.js",
-   "old": "opening: 'Opening the game…',",
+   "old": "opening: 'Opening the game\u2026',",
    "new": "opening: 'Please wait',",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
