@@ -8,8 +8,15 @@ permissions:
   contents: read
 
 jobs:
+  linux_leg:
+    name: Linux leg that fails
+    runs-on: ubuntu-latest
+    steps:
+      - run: exit 1
+
   linux:
     name: Linux (GCC)
+    needs: linux_leg
     runs-on: ubuntu-latest
     steps:
       - run: echo ok
@@ -22,7 +29,6 @@ jobs:
 
   windows:
     name: Windows (${{ matrix.name }})
-    if: ${{ 1 == 2 }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
