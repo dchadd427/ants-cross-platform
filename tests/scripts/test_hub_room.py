@@ -25,7 +25,7 @@ from hub import config as configmod, limits as limitmod, log as logmod, server, 
 from test_hub_core import Clock, FakePeer  # noqa: E402  (the fake peer and the clock that every chat test of the hub uses)
 
 SITE = "https://chat.example.org"
-SMALL = dict(db_max_bytes=1_000_000, purge_chunk=100)           # (a store of 1 MB and a tick that deletes 100 lines at most, so that a test fills it in no time; the proportions are the default's)
+SMALL = dict(db_max_bytes=1_000_000, purge_chunk=300)           # (a store of 1 MB and a tick that deletes 300 lines at most, so that a test fills it in no time; the proportions are the default's)
 
 FILL = """WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
           INSERT INTO lines (at, account, name, text, mod)
@@ -63,6 +63,8 @@ class Room:
         self.wall, self.mono = Clock(1_800_000_000.0), Clock(1000.0)
         self.limits = dataclasses.replace(limitmod.Limits(), **limits)
         self.store = storemod.Store(self.path, clock=self.wall, busy_ms=busy_ms)
+        if self.limits.db_max_bytes < 16 * 1024 * 1024:
+            self.store.db.execute("PRAGMA wal_autocheckpoint=20")           # (the log file is folded into the database every 20 pages, as it is every 1000 at the default size: the proportions of a small store are the default's)
         self.log = io.StringIO()
         self.hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": SITE, "ANTS_HUB_MODS": ",".join(mods)}), self.store, session.NoLogin(), logmod.Log(self.log), self.limits, clock=self.mono)
         self.chat = self.hub.chat
@@ -105,10 +107,8 @@ class TheStoreAtItsLimit(unittest.TestCase):
         self.assertGreaterEqual(room.store.size(), limit)
         newest = [row[0] for row in room.store.lines(100)]
         # the hub's clock makes room
-        for second in range(1, ticks_to_resume + 1):
+        for second in range(ticks_to_resume):
             room.tick()
-            if room.store.size() < limit:
-                break
         self.assertLess(room.store.size(), limit, "the store is still full after %d seconds" % ticks_to_resume)
         for n, person in enumerate(people):
             room.say(person, "hello again from %d" % n)
