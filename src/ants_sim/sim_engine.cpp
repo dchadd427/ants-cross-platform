@@ -932,15 +932,6 @@ void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->world_state_dirty_ = true;
 }
 
-void SimulationEngine::set_fire_wall_as_original(bool on) {
-    impl_->fire_wall_as_original_ = on;
-    impl_->world_state_dirty_ = true;
-}
-
-bool SimulationEngine::fire_wall_as_original() const noexcept {
-    return impl_->fire_wall_as_original_;
-}
-
 GameMode SimulationEngine::game_mode() const noexcept {
     return impl_->game_mode_;
 }

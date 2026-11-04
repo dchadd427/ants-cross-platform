@@ -1,5 +1,5 @@
 // Tests of the rules numbers of the original's game (ants_replay/replay.hpp, docs/REPLAYS.md "Which files play: sim_rules", docs/GAMEPLAY.md "The last side standing"): the original's game was 5 (CHECKGO alone) and is
-// 8 since a match also ends when one side is left and no food can score. This build plays both, 187 plays 6 and 7, and every number belongs to one mode.
+// 8 since a match also ends when one side is left and no food can score (9 since the loader's fire wall, test_rules_fire_wall, has that rule too). This build plays 5, 8 and 9, 187 plays 6, 7 and 10, and every number belongs to one mode.
 //   RP13.1  the numbers: what a build plays, what a head may say, what a match is recorded under, what a refusal says
 //   RP13.2  a recording under the number 5 that hits the state (one side left, no food) and plays on to the clock plays to every hash and to the final hash that the build before the rule made of it
 //   RP13.3  the same match recorded under the number 8 ends where the rule ends it, with the survivor first; each file is another match under the other number
@@ -80,7 +80,7 @@ Made make(uint16_t rules) {
     const assets::LevelData level = scenario::level();
     sim::SimulationEngine engine;
     engine.set_game_mode(sim::GameMode::HighestScore);
-    engine.set_last_side_rule(rules == kSimRules);
+    engine.set_last_side_rule(rules != kSimRulesBeforeLastSide);
     engine.init(level, scenario::kSeed, scenario::kRoster);
     Recorder rec(scenario_head(rules));
     uint32_t turn = 0;
@@ -117,21 +117,21 @@ int main() {
     std::cout << "=== Rules numbers of the original's game: 5 and 8 ===\n";
     const assets::LevelData level = scenario::level();
 
-    TEST_CASE("RP13.1 This build plays 5 and 8 for the original's game and 6 and 7 for 187, nothing else; a match of the original's game is recorded under 8, a 187 match under 7; every number names its one mode; a refusal names all four") {
-        ASSERT_TRUE(kSimRules == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187 == 7);
-        ASSERT_TRUE(sim_rules_for_mode(0) == 8 && sim_rules_for_mode(1) == 7 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+    TEST_CASE("RP13.1 This build plays 5, 8 and 9 for the original's game and 6, 7 and 10 for 187, nothing else; a match of the original's game is recorded under 9, a 187 match under 10; every number names its one mode; a refusal names all six") {
+        ASSERT_TRUE(kSimRules == 9 && kSimRulesBeforeFireWall == 8 && kSimRulesBeforeLastSide == 5 && kSimRulesMode187Heal == 6 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187 == 10);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 10 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         for (uint16_t rules = 0; rules < 14; ++rules) {
-            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8);
-            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7);
+            ASSERT_EQ(plays_mode_rules(0, rules), rules == 5 || rules == 8 || rules == 9);
+            ASSERT_EQ(plays_mode_rules(k187, rules), rules == 6 || rules == 7 || rules == 10);
             ASSERT_FALSE(plays_mode_rules(2, rules));
             ASSERT_FALSE(plays_mode_rules(255, rules));
         }
-        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7 and 8"));
+        ASSERT_EQ(played_rules_text(), std::string("5, 6, 7, 8, 9 and 10"));
         Header head;
         head.map_name = "TINY.LVL";
         head.roster = 0x0F;
-        ASSERT_EQ(head.sim_rules, 8);                                                        // (a head that nobody changed is a head of the original's game now)
-        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}}) {
+        ASSERT_EQ(head.sim_rules, 9);                                                        // (a head that nobody changed is a head of the original's game now)
+        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}, uint16_t{9}}) {
             Header h = head;
             h.sim_rules = rules;
             Replay r;
@@ -143,7 +143,7 @@ int main() {
             Replay back;
             ASSERT_TRUE(decode(bytes.data(), bytes.size(), back, error) && back.head.sim_rules == rules && back.head.mode == 0);
         }
-        for (const uint16_t rules : {uint16_t{6}, uint16_t{7}}) {
+        for (const uint16_t rules : {uint16_t{6}, uint16_t{7}, uint16_t{10}}) {
             Header h = head;
             h.sim_rules = rules;
             Replay r;
@@ -151,7 +151,7 @@ int main() {
             std::string error;
             ASSERT_TRUE(encode(r, error).empty() && !plays_here(h));                         // (the rules of 187 without the mode are no file)
         }
-        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}}) {
+        for (const uint16_t rules : {uint16_t{5}, uint16_t{8}, uint16_t{9}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = rules;
@@ -163,7 +163,7 @@ int main() {
         {
             Header h = head;
             h.set_mode(k187);
-            h.sim_rules = 9;
+            h.sim_rules = 11;
             Replay r;
             r.head = h;
             std::string error;
@@ -173,25 +173,25 @@ int main() {
             ASSERT_FALSE(plays_here(h));
         }
         // a match that a Recorder starts: the original's game keeps the number its head names (5 and 8 are both ones it writes), a mode that is not 0 gets the number of that mode whatever the head said
-        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}}) {
+        for (const uint16_t said : {uint16_t{5}, uint16_t{6}, uint16_t{7}, uint16_t{8}, uint16_t{9}, uint16_t{10}}) {
             Header h = head;
             h.set_mode(k187);
             h.sim_rules = said;
             Recorder rec(h);
-            ASSERT_EQ(rec.replay().head.sim_rules, 7);
+            ASSERT_EQ(rec.replay().head.sim_rules, 10);
         }
         Header plain = head;
         Recorder fresh(plain);
-        ASSERT_TRUE(fresh.replay().head.sim_rules == 8 && fresh.replay().head.mode == 0);
+        ASSERT_TRUE(fresh.replay().head.sim_rules == 9 && fresh.replay().head.mode == 0);
         plain.sim_rules = 5;
         Recorder old(plain);
         ASSERT_EQ(old.replay().head.sim_rules, 5);
         // the refusal of a number nobody plays names the four that this build does
         Header foreign = head;
-        foreign.sim_rules = 9;
-        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7 and 8") != std::string::npos);
+        foreign.sim_rules = 11;
+        ASSERT_TRUE(rules_refusal(foreign).find("simulation rules 5, 6, 7, 8, 9 and 10") != std::string::npos);
         foreign.sim_rules = 4;
-        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7 and 8") != std::string::npos);
+        ASSERT_TRUE(rules_refusal(foreign).find("with simulation rules 4; this build plays simulation rules 5, 6, 7, 8, 9 and 10") != std::string::npos);
     } TEST_END();
 
     TEST_CASE("RP13.2 A recording under the number 5 that hits the state (one side left, no food) and goes on to the clock plays to every hash it holds and to the final hash that the build before the rule made of it") {
@@ -218,7 +218,7 @@ int main() {
 
     TEST_CASE("RP13.3 The same match recorded under the number 8 ends where the rule ends it, with the survivor first; each file is another match under the other number") {
         const Made five = make(kSimRulesBeforeLastSide);
-        const Made eight = make(kSimRules);
+        const Made eight = make(kSimRulesBeforeFireWall);
         ASSERT_TRUE(eight.error.empty() && !eight.file.empty() && five.error.empty());
         ASSERT_TRUE(eight.replay.complete && eight.replay.head.sim_rules == 8 && plays_here(eight.replay.head));
         ASSERT_TRUE(eight.over && eight.turns > 100 && eight.turns < 600);                   // (the Worker dies after about 17 s; the rule ends the match within a second of that, long before the minute)
@@ -246,15 +246,15 @@ int main() {
         const Outcome eight_as_five = play(with_rules(eight.replay, 5), level);
         ASSERT_FALSE(eight_as_five.ok);
         // and a number nobody plays is not played at all
-        ASSERT_FALSE(play(with_rules(eight.replay, 9), level).ran);
+        ASSERT_FALSE(play(with_rules(eight.replay, 11), level).ran);
         ASSERT_FALSE(play(with_rules(eight.replay, 6), level).ran);
     } TEST_END();
 
     TEST_CASE("RP13.4 A copy of the engine in the middle of the match ends at the same turn with the same hash, under 8 and under 5 (a client's predicted engine is such a copy)") {
-        for (const uint16_t rules : {kSimRules, kSimRulesBeforeLastSide}) {
+        for (const uint16_t rules : {kSimRulesBeforeFireWall, kSimRulesBeforeLastSide}) {
             sim::SimulationEngine engine;
             engine.set_game_mode(sim::GameMode::HighestScore);
-            engine.set_last_side_rule(rules == kSimRules);
+            engine.set_last_side_rule(rules == kSimRulesBeforeFireWall);
             engine.init(level, scenario::kSeed, scenario::kRoster);
             uint32_t turn = 0;
             const auto step = [&](sim::SimulationEngine& e) {
@@ -277,10 +277,10 @@ int main() {
                 ASSERT_TRUE(engine.state_hash() == copy.state_hash());
             }
             ASSERT_TRUE(engine.is_match_over() && copy.is_match_over());
-            ASSERT_EQ(turn < kBeforeTurns, rules == kSimRules);
+            ASSERT_EQ(turn < kBeforeTurns, rules == kSimRulesBeforeFireWall);
             ASSERT_TRUE(engine.get_world_state().match_result.tie_standing == copy.get_world_state().match_result.tie_standing);
             ASSERT_EQ(engine.last_side_rule(), copy.last_side_rule());
-            ASSERT_EQ(engine.last_side_rule(), rules == kSimRules);
+            ASSERT_EQ(engine.last_side_rule(), rules == kSimRulesBeforeFireWall);
         }
     } TEST_END();
 

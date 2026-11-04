@@ -816,5 +816,72 @@ void run_stand_tests() {
             }
         }
     } TEST_END();
+    TEST_CASE("AI25.10 The Mines At The Gate Where A Fire Wall Of The Map File Was Put Out (The Loader Of The Original, Rules Numbers 9 And 10, Leaves The Cells Free; The Old Loader Of The Rules Numbers 5 To 8 Keeps The Overlay Of A Named Entry On Them): The Bomber Mines The Ring Round The Gate Of The Leader In One And Not In The Other")
+    {
+        LevelPlan gate_plan = plan_for(Level::Hard);
+        gate_plan.assault = gate_plan.raider_hunt = gate_plan.sabotage = gate_plan.rush = false;
+        gate_plan.war_bombers = 1;
+        gate_plan.mine_per_pile = 0;
+        gate_plan.mine_home = 0;
+        gate_plan.mine_gate = 1;
+        gate_plan.behind_mine_gate = 3;
+        gate_plan.behind_mine_tier = 1;
+        HillInfo leader_hill;                                                                                // (the hill of team 1: its ring is the one SabotageTask lights and MineTask mines)
+        leader_hill.origin = kFightHills[1];
+        const std::array<TileCoord, 8> ring = SabotageTask::ring_of(leader_hill);
+        // the two ring tiles on the queue column of the hill (x - 1, y - 1 and y) are cleared by the loader for the hill's own sake, whatever a cell held: the other six are the test
+        const auto on_queue_column = [&](const TileCoord& t) { return t.x == leader_hill.origin.x - 1 && t.y >= leader_hill.origin.y - 1; };
+        for (const bool as_original : {true, false}) {
+            assets::LevelData level = assets::blank_level(60, 60, std::vector<std::string>{});
+            level.default_minutes = 12;
+            if (level.tile_dictionary.size() <= 134) level.tile_dictionary.resize(135, ".");
+            level.tile_dictionary[134] = "wallup04";                                                          // (the map maker's entry)
+            const auto cell_of = [&](const TileCoord& t) { return static_cast<size_t>(t.y) * level.width + static_cast<size_t>(t.x); };
+            for (uint8_t team = 0; team < 4; ++team) {
+                auto& hill = level.layer2_interactive[cell_of(kFightHills[team])];
+                hill.tile_index = static_cast<uint16_t>(248 - team);                                         // (the hill of each color is a layer-2 id)
+                hill.properties = static_cast<uint16_t>((kFightHills[team].x << 8) | kFightHills[team].y);
+            }
+            for (const TileCoord& t : ring) {                                                                // a fire wall of the file on every ring tile, solid by its bit, as the map maker writes one
+                auto& fire = level.layer2_interactive[cell_of(t)];
+                fire.tile_index = 134;
+                fire.flags = 1;
+                fire.properties = static_cast<uint16_t>((t.x << 8) | t.y);
+                level.layer1_terrain[cell_of(t)].flags = static_cast<uint16_t>(level.layer1_terrain[cell_of(t)].flags | 1u);
+            }
+            sim::SimulationEngine sim;
+            sim.set_fire_wall_as_original(as_original);
+            sim.init(level, 95, 0x0F);
+            for (const TileCoord& t : ring) {
+                ASSERT_TRUE(sim.has_fire_at(t));
+                sim.grid_mut().clear_firewall(static_cast<uint32_t>(t.x), static_cast<uint32_t>(t.y));       // (put out, as a Fire Ant does)
+                ASSERT_FALSE(sim.has_fire_at(t));
+                const sim::TileCell& c = sim.grid().get_cell(t);
+                ASSERT_EQ(c.is_obstacle_overlay, !as_original && !on_queue_column(t));                       // (the old loader's overlay stays on the cell after the fire is out)
+                ASSERT_EQ(c.can_place_bomb(), as_original || on_queue_column(t));
+            }
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{kFightHills[1].x - 3, kFightHills[1].y + 6});
+            for (int i = 0; i < 2; ++i) sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{14 + i, 10});
+            for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(gate_plan), 4, 4);
+            for (uint32_t t = 0; t < 4000; t += 100) {                                                       // (a leader 1,400 points ahead: the bot is at its war tier and mines the gate)
+                sim.set_player_score(0, 100);
+                sim.set_player_score(1, 1500);
+                rig.run(100);
+            }
+            size_t on_open_ring = 0;
+            size_t on_ring = 0;
+            for (const TileCoord& m : mines_at(sim, rig.map(), 0)) {
+                for (const TileCoord& r : ring) {
+                    on_ring += m == r ? 1u : 0u;
+                    on_open_ring += m == r && !on_queue_column(r) ? 1u : 0u;
+                }
+            }
+            if (as_original) {
+                ASSERT_TRUE(on_open_ring >= 2u && on_ring <= 3u);                                            // (the ring is mined, as on a map without those fire walls: AI25.5 (d))
+            } else {
+                ASSERT_EQ(on_open_ring, 0u);                                                                 // (six of the eight tiles refuse a bomb; the bot lays none on them)
+            }
+        }
+    } TEST_END();
 }
-

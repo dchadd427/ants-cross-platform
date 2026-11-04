@@ -1139,6 +1139,137 @@ int main() {
         CHECK(dotted_maps > 0 && dotted_cells > 5000);
     });
 
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+    // Fix 8, the loader: a fire wall of the file is solid by its file bit only, as the original loads it (no obstacle overlay from its dictionary entry); the rules numbers 5 to 8 keep the overlay of
+    // a named entry (Grid::init_from_level's second parameter, SimulationEngine::set_fire_wall_as_original, replay::kSimRulesFireWallFirst = 9)
+    // ---------------------------------------------------------------------------------------------------------------------------------------------
+
+    run_case("LF8.3 The Loader: A Fire Wall Whose Entry Has A Name (wallup04, Any Name) Is Not An Obstacle Overlay By The Rules Of Now And Is One By The Rules Numbers 5 To 8; An Entry \".\" Or Empty Is None Under Either; A Named Rock Is One Under Either; Nothing Else Of The Cell Differs", [] {
+        for (const char* naming : {"wallup04", "firewall", ".", ""}) {
+            LevelData level = open_ground();
+            const std::vector<TileCoord> at = open_tiles(level, 2);
+            CHECK(at.size() == 2);
+            if (at.size() < 2) return;
+            const TileCoord wall = at[0];
+            const TileCoord rock = at[1];
+            set_layer2(level, wall, TILE_FIREWALL, 1, static_cast<uint16_t>((wall.x << 8) | wall.y));
+            set_solid_bit(level, wall, true);
+            name_tile(level, TILE_FIREWALL, naming);
+            set_layer2(level, rock, 300, 1, static_cast<uint16_t>((rock.x << 8) | rock.y));
+            set_solid_bit(level, rock, true);
+            name_tile(level, 300, "rock1");
+            Grid now;
+            Grid before;
+            CHECK(now.init_from_level(level) && before.init_from_level(level, false));
+            Grid explicit_now;
+            CHECK(explicit_now.init_from_level(level, true));
+            const bool named = std::string(naming) != "." && std::string(naming).size() > 0;
+            const TileCell& a = cell_at(now, wall);
+            const TileCell& b = cell_at(before, wall);
+            CHECK(!a.is_obstacle_overlay && cell_at(explicit_now, wall).is_obstacle_overlay == a.is_obstacle_overlay);          // (the default is the rules of now)
+            CHECK(b.is_obstacle_overlay == named);
+            CHECK(a.interactive_id == TILE_FIREWALL && b.interactive_id == TILE_FIREWALL && a.static_solid && b.static_solid && a.timer_ticks == 0 && b.timer_ticks == 0);
+            CHECK(a.terrain_type == b.terrain_type && a.anchor_x == b.anchor_x && a.anchor_y == b.anchor_y && a.flags == b.flags && a.interactive_owner == b.interactive_owner);
+            CHECK(cell_at(now, rock).is_obstacle_overlay && cell_at(before, rock).is_obstacle_overlay);                        // (a rock keeps the remake's name-based overlay under both)
+            long differing = 0;
+            for (uint32_t y = 0; y < now.height(); ++y)
+                for (uint32_t x = 0; x < now.width(); ++x)
+                    differing += cell_at(now, TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)}).is_obstacle_overlay != cell_at(before, TileCoord{static_cast<int32_t>(x), static_cast<int32_t>(y)}).is_obstacle_overlay ? 1 : 0;
+            CHECK(differing == (named ? 1 : 0));                                                                                // (no other cell moves)
+            // the state hash carries the flag: it differs from tick 0 when the flag does, in either game mode (the loader knows no mode)
+            for (const GameMode mode : {GameMode::HighestScore, GameMode::Kills187}) {
+                SimulationEngine sim_now;
+                SimulationEngine sim_before;
+                sim_now.set_game_mode(mode);
+                sim_before.set_game_mode(mode);
+                CHECK(sim_now.fire_wall_as_original());
+                sim_before.set_fire_wall_as_original(false);
+                CHECK(!sim_before.fire_wall_as_original());
+                sim_now.init(level, 5, 0x03);
+                sim_before.init(level, 5, 0x03);
+                CHECK((sim_now.state_hash().total != sim_before.state_hash().total) == named);
+                CHECK(cell_at(sim_now.grid(), wall).is_obstacle_overlay == false && cell_at(sim_before.grid(), wall).is_obstacle_overlay == named);
+                sim_before.set_game_mode(mode);                                                                                 // (a match played now: the rules of now again)
+                CHECK(sim_before.fire_wall_as_original());
+            }
+        }
+    });
+
+    run_case("LF8.4 Played: A Dying Ant's Power-Up Lands On The Tile Of A Put-Out Fire Wall Of The File (Its Only Free Neighbor) By The Rules Of Now, And Is Lost (The Silent Cue) By The Rules Numbers 5 To 8 When The Entry Is Named; An Entry \".\" Drops It Under Both", [] {
+        for (const char* naming : {"wallup04", "."}) {
+            for (const bool as_original : {true, false}) {
+                LevelData level = open_ground();
+                const std::vector<TileCoord> at = open_tiles(level, 1);
+                CHECK(at.size() == 1);
+                if (at.empty()) return;
+                const TileCoord wall = at[0];
+                const TileCoord victim_tile{wall.x - 1, wall.y};
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const TileCoord n{victim_tile.x + dx, victim_tile.y + dy};
+                        if ((dx != 0 || dy != 0) && !(n == wall)) set_solid_bit(level, n, true);                                // (the six other neighbors of the dying ant: solid)
+                    }
+                set_layer2(level, wall, TILE_FIREWALL, 1, static_cast<uint16_t>((wall.x << 8) | wall.y));
+                set_solid_bit(level, wall, true);
+                name_tile(level, TILE_FIREWALL, naming);
+                SimulationEngine sim;
+                sim.set_fire_wall_as_original(as_original);
+                sim.init(level, 5, 0x03);
+                CHECK(cell_at(sim.grid(), wall).is_obstacle_overlay == (!as_original && std::string(naming) != "."));
+                const uint32_t fire = sim.spawn_unit(0, AntType::Fire, TileCoord{wall.x + 1, wall.y});
+                AntOrder put_out{};
+                put_out.ant_id = fire;
+                put_out.type = OrderType::IgniteFire;
+                put_out.target_x = wall.x;
+                put_out.target_y = wall.y;
+                sim.issue_order(put_out);
+                for (int t = 0; t < 100 && sim.has_fire_at(wall); ++t) sim.tick();
+                CHECK(!sim.has_fire_at(wall));
+                const uint32_t victim = sim.spawn_unit(1, AntType::Bomber, victim_tile);
+                sim.clear_audio_events();
+                sim.kill_unit(victim);
+                int dropped = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) dropped += sim.grid().has_powerup_at(TileCoord{victim_tile.x + dx, victim_tile.y + dy}) ? 1 : 0;
+                const bool lands = as_original || std::string(naming) == ".";
+                CHECK(sim.grid().has_powerup_at(wall) == lands && dropped == (lands ? 1 : 0));
+                if (lands) CHECK(sim.grid().get_powerup_type(wall) == 1);                                                       // (the bomber's power-up)
+                CHECK(sim.has_audio_event(40) == !lands);                                                                                    // (nothing free: only the powerupd cue, sound 40)
+            }
+        }
+    });
+
+    run_case("LF8.5 The Community Library: The Two Loaders Differ In The Obstacle Overlay Of Exactly 480 Cells In Exactly 5 Maps (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2), All Fire Walls Named wallup04; The Six Originals Not At All", [] {
+        std::set<std::string> maps;
+        long cells = 0, other_differences = 0;
+        const auto compare = [&](const std::string& name, const LevelData& level) {
+            Grid now;
+            Grid before;
+            if (!now.init_from_level(level) || !before.init_from_level(level, false)) return;
+            for (uint32_t y = 0; y < now.height(); ++y) {
+                for (uint32_t x = 0; x < now.width(); ++x) {
+                    const TileCell& a = now.get_cell(x, y);
+                    const TileCell& b = before.get_cell(x, y);
+                    if (a.is_obstacle_overlay == b.is_obstacle_overlay) continue;
+                    if (a.interactive_id == TILE_FIREWALL && !a.is_obstacle_overlay && b.is_obstacle_overlay && level.get_tile_name(TILE_FIREWALL) == "wallup04") {
+                        ++cells;
+                        maps.insert(name);
+                    } else {
+                        ++other_differences;
+                    }
+                }
+            }
+        };
+        for_each_community_map(compare);
+        for (const char* original : {"GAUNTLET.LVL", "ISLANDS.LVL", "MEDIUM.LVL", "SMALL.LVL", "TINY.LVL", "TREASURE.LVL"}) {
+            LevelData level;
+            if (level.load_from_file(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + original)) compare(original, level);
+        }
+        std::cout << "\n    cells that the two loaders mark differently: " << cells << " in " << maps.size() << " maps, other differences: " << other_differences << "\n";
+        CHECK(cells == 480 && maps.size() == 5 && other_differences == 0);
+        CHECK(maps.count("ANTS_PARTY-V.3.0.5.lvl") == 1 && maps.count("A_Coaster_Mix_Turnament_Map.lvl") == 1 && maps.count("Welcome_from_chaos.lvl") == 1 && maps.count("thief craker2.0.lvl") == 1 && maps.count("~~PlAyEr'S_rEvEnGe2.lvl") == 1);
+    });
+
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }
