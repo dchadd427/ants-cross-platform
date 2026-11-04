@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""tools/ci_light.sh, which decides in the first job of the CI whether a pull request needs all of CI or only the light checks (run by ./run_tests.sh --fast and by the CI).
+
+It is run on real git repositories made here (a base commit, a pull request's commits, a base that moved on): the decision, the file list it prints, the line it appends to GITHUB_OUTPUT.
+The rules are the ones that docs/WORKFLOW.md states; what these tests hold:
+  - every changed file must be a page, a document, a list of mutants or a page test for `light`; one other file makes it `full`, whatever else changes with it, and an unknown path is full;
+  - what is compared is the pull request's own change (against the MERGE BASE: a base that moved on, with a change of its own, does not make the pull request full), a renamed file counts under
+    both names (a source file renamed into docs/ is full), a deleted file counts;
+  - anything that is not a pull request with two full commit ids and at least one changed file is full, and the script never fails (a failing git is full);
+  - the log cannot be made to carry a workflow command (a path is printed quoted, after a word), and the commit ids are only taken from the environment.
+"""
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+SCRIPT = os.path.join(REPO, "tools", "ci_light.sh")
+GIT_ENV = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.org", GIT_COMMITTER_NAME="t",
+               GIT_COMMITTER_EMAIL="t@example.org")
+
+LIGHT = ["web/index.js", "web/front/x.css", "web/a/b/c/d.html", "docs/WORKFLOW.md", "docs/legacy/x.c", "docs/img/p.png", "CHANGELOG.md", "README.md", "tests/data/home_chat_mutants.json",
+         "tests/data/x_mutants.json", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_web_aspect.sh", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_routes_check.py",
+         "tests/scripts/web_page_harness.js"]
+FULL = ["VERSION", "CMakeLists.txt", "cmake/x.cmake", "src/ants_sim/a.cpp", "include/ants_sim/a.hpp", "tools/ci_light.sh", "tools/mutate.py", "hub/server.py", "Dockerfile", "Dockerfile.server",
+        "Dockerfile.hub", "docker/nginx.conf", "docker-compose.stack.yml", ".github/workflows/ci.yml", ".github/FUNDING.yml", "third_party/sqlite/x.c", "Community-Maps/Map.lvl",
+        "Original-Ants/Maps/TINY.LVL", "run_tests.sh", "run_tests.bat", "build_web.sh", "start_game.sh", "AGENTS.md", "LICENSE", "THIRD_PARTY_NOTICES.md", ".gitignore", ".dockerignore", "a_new_file",
+        "tests/test_sim/test_x.cpp", "tests/common/x.hpp", "tests/e2e/x.cpp", "tests/CMakeLists.txt",
+        "tests/scripts/test_hub_login.py", "tests/scripts/test_ants_server.sh", "tests/scripts/test_start_game.sh", "tests/scripts/e2e_deadlines.sh", "tests/scripts/quick_http.py",
+        "tests/scripts/run_python_tests.py", "tests/scripts/test_ci_workflow.py", "tests/scripts/fake_hub.js", "tests/scripts/lvl_core_check.js", "tests/scripts/sub/web_x.js",
+        "tests/scripts/sub/test_web_x.py", "tests/scripts/README", "tests/scripts/test_web_x.txt.orig/y", "tests/data/pbkdf2_vectors.json", "tests/data/game_menu_match.json", "tests/data/x.csv",
+        "tests/data/lvl_core/x_mutants.json", "tests/data/sub/x_mutants.json", "tests/data/mutants.json", "tests/data/x_mutants.json.bak", "webx/a.js", "docsx/a.md", "README.md.old",
+        "CHANGELOG.md/x", "x/web/a.js", "x/docs/a.md", "Web/a.js", "DOCS/a.md", "asset_catalog/x.png", "tools/web/x.js"]
+
+
+def run(cmd, cwd, **kwargs):
+    return subprocess.run(cmd, cwd=cwd, env=kwargs.pop("env", GIT_ENV), capture_output=True, text=True, **kwargs)
+
+
+@unittest.skipUnless(shutil.which("bash") and shutil.which("git"), "bash and git are needed")
+class Decision(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = os.path.join(tmp.name, "repo")
+        os.makedirs(self.root)
+        self.out_file = os.path.join(tmp.name, "github_output")
+        self.git("init", "-q", "-b", "main")
+        self.base = self.commit({"README.md": "x\n", "src/a.cpp": "int a;\n", "docs/a.md": "a\n", "web/a.js": "a\n", "tools/t.py": "t\n", "old name.cpp": "o\n"}, "base")
+
+    def git(self, *args):
+        done = run(["git", *args], self.root)
+        self.assertEqual(done.returncode, 0, (args, done.stdout, done.stderr))
+        return done.stdout.strip()
+
+    def commit(self, changes, message="change"):
+        """writes (text) or deletes (None) the files and commits; returns the commit id"""
+        for path, text in changes.items():
+            full = os.path.join(self.root, path)
+            if text is None:
+                os.remove(full)
+            else:
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                with open(full, "w", encoding="utf-8") as f:
+                    f.write(text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "--allow-empty", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def pull_request(self, changes, base=None):
+        """a branch from the base commit with one commit of `changes`; returns its head"""
+        self.git("checkout", "-q", "--detach", base or self.base)
+        return self.commit(changes)
+
+    def decide(self, head, base=None, **env):
+        """(light?, the output, the lines of GITHUB_OUTPUT) of the script run for a pull request from `base` (default: the first commit) to `head`"""
+        environment = dict(GIT_ENV, EVENT="pull_request", BASE_SHA=base or self.base, HEAD_SHA=head, GITHUB_OUTPUT=self.out_file)
+        environment.update(env)
+        for name in [n for n, v in environment.items() if v is None]:
+            del environment[name]
+        if os.path.exists(self.out_file):
+            os.remove(self.out_file)
+        done = subprocess.run(["bash", SCRIPT], cwd=self.root, env=environment, capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, "the script never fails: " + done.stdout + done.stderr)
+        lines = []
+        if os.path.exists(self.out_file):
+            with open(self.out_file, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        self.assertEqual(len(lines), 1, "exactly one line for the output: %r" % lines)
+        self.assertIn(lines[0], ("light=true", "light=false"))
+        return lines[0] == "light=true", done.stdout, lines
+
+    def classes(self, out):
+        return {m.group(2): m.group(1) for m in re.finditer(r"(?m)^  (light|FULL) +(\S+)$", out)}
+
+    def test_the_light_kinds_are_light_together(self):
+        head = self.pull_request({path: "pr change of %s\n" % path for path in LIGHT})
+        light, out, _ = self.decide(head)
+        self.assertTrue(light, out)
+        self.assertEqual(self.classes(out), {path: "light" for path in LIGHT})
+        self.assertIn("decision: LIGHT", out)
+
+    def test_every_other_path_is_full(self):
+        head = self.pull_request({path: "pr change of %s\n" % path for path in FULL})   # (a .gitignore that says `x` would hide the files named x)
+        light, out, _ = self.decide(head)
+        self.assertFalse(light)
+        self.assertEqual(self.classes(out), {path: "FULL" for path in FULL}, out)
+
+    def test_a_pull_request_of_one_file_that_is_not_light_is_full(self):
+        for path in ("VERSION", "CMakeLists.txt", "src/ants_sim/a.cpp", "tools/mutate.py", ".github/workflows/ci.yml", "tests/scripts/test_hub_login.py", "tests/test_sim/test_x.cpp", "Dockerfile"):
+            light, out, _ = self.decide(self.pull_request({path: "x\n"}))
+            self.assertFalse(light, path)
+            self.assertEqual(self.classes(out), {path: "FULL"}, out)
+
+    def test_one_full_file_among_light_ones_makes_it_full_and_is_named(self):
+        head = self.pull_request({"docs/a.md": "b\n", "web/a.js": "b\n", "src/a.cpp": "int b;\n", "README.md": "y\n"})
+        light, out, _ = self.decide(head)
+        self.assertFalse(light)
+        self.assertEqual(self.classes(out), {"docs/a.md": "light", "web/a.js": "light", "src/a.cpp": "FULL", "README.md": "light"})
+        self.assertIn("decision: full checks (1 changed file(s) need the full checks)", out)
+
+    def test_a_change_to_the_decision_script_or_the_workflow_is_full(self):
+        for path in ("tools/ci_light.sh", ".github/workflows/ci.yml"):
+            self.assertFalse(self.decide(self.pull_request({path: "x\n", "docs/a.md": "b\n"}))[0], path)
+
+    def test_a_rename_counts_under_both_names(self):
+        self.git("checkout", "-q", "--detach", self.base)
+        self.git("mv", "src/a.cpp", "docs/a_code.md")
+        self.git("commit", "-q", "-m", "rename into docs")
+        light, out, _ = self.decide(self.git("rev-parse", "HEAD"))
+        self.assertFalse(light, "a source file that becomes a document is full:\n" + out)
+        self.assertEqual(self.classes(out), {"src/a.cpp": "FULL", "docs/a_code.md": "light"})
+        self.git("checkout", "-q", "--detach", self.base)
+        self.git("mv", "docs/a.md", "src/a_doc.cpp")
+        self.git("commit", "-q", "-m", "rename out of docs")
+        self.assertFalse(self.decide(self.git("rev-parse", "HEAD"))[0])
+        self.git("checkout", "-q", "--detach", self.base)
+        self.git("mv", "docs/a.md", "docs/b.md")
+        self.git("commit", "-q", "-m", "rename inside docs")
+        light, out, _ = self.decide(self.git("rev-parse", "HEAD"))
+        self.assertTrue(light, out)
+        self.assertEqual(self.classes(out), {"docs/a.md": "light", "docs/b.md": "light"})
+
+    def test_a_deleted_file_counts(self):
+        self.assertFalse(self.decide(self.pull_request({"src/a.cpp": None, "docs/a.md": "z\n"}))[0])
+        self.assertTrue(self.decide(self.pull_request({"docs/a.md": None}))[0])
+
+    def test_it_compares_with_the_merge_base_so_a_base_that_moved_on_changes_nothing(self):
+        moved = self.pull_request({"src/a.cpp": "int moved;\n", "VERSION": "9.9.9\n"})        # the base branch got a change of code while the pull request was open
+        self.git("checkout", "-q", "--detach", self.base)
+        head = self.commit({"docs/a.md": "mine\n"})
+        light, out, _ = self.decide(head, base=moved)
+        self.assertTrue(light, out)
+        self.assertEqual(self.classes(out), {"docs/a.md": "light"})
+        self.assertIn(self.base[:12] + " (merge base)", out)
+        # the other way round: a pull request that changes code is full whatever the base did
+        self.git("checkout", "-q", "--detach", self.base)
+        self.assertFalse(self.decide(self.commit({"src/a.cpp": "int mine;\n"}), base=moved)[0])
+
+    def test_a_pull_request_of_several_commits_is_judged_as_a_whole(self):
+        self.git("checkout", "-q", "--detach", self.base)
+        self.commit({"src/a.cpp": "int b;\n"})
+        head = self.commit({"src/a.cpp": "int a;\n", "docs/a.md": "c\n"})        # the code is changed and changed back: what remains is a document
+        light, out, _ = self.decide(head)
+        self.assertTrue(light, out)
+        self.git("checkout", "-q", "--detach", self.base)
+        self.commit({"src/a.cpp": "int c;\n"})
+        self.assertFalse(self.decide(self.commit({"docs/a.md": "d\n"}))[0])
+
+    def test_what_is_not_a_pull_request_with_a_change_is_full(self):
+        head = self.pull_request({"docs/a.md": "x\n"})
+        self.assertTrue(self.decide(head)[0])
+        for name in ("push", "workflow_dispatch", "schedule", "", None):
+            light, out, _ = self.decide(head, EVENT=name)
+            self.assertFalse(light, name)
+            self.assertIn("not a pull request", out)
+        for bad in (None, "", "main", "HEAD", head[:12], head.upper(), head + "0", "--output=x", "-h", head[:39] + "g", "@", "HEAD~1", "refs/heads/main"):
+            self.assertFalse(self.decide(head, BASE_SHA=bad)[0], "base %r" % bad)
+            self.assertFalse(self.decide(head, HEAD_SHA=bad)[0], "head %r" % bad)
+        self.assertFalse(self.decide(head, HEAD_SHA="0" * 40)[0], "a commit that is not there")
+        self.assertFalse(self.decide(head, BASE_SHA="1" * 40)[0])
+        empty = self.pull_request({})
+        light, out, _ = self.decide(empty)
+        self.assertFalse(light, "no changed file")
+        self.assertIn("no changed file was found", out)
+
+    def test_a_pull_request_with_no_common_history_or_outside_a_repository_is_full(self):
+        head = self.pull_request({"docs/a.md": "x\n"})
+        other = os.path.join(os.path.dirname(self.root), "other")
+        os.makedirs(other)
+        self.assertEqual(run(["git", "init", "-q", "-b", "main"], other).returncode, 0)
+        with open(os.path.join(other, "f"), "w") as f:
+            f.write("1\n")
+        self.assertEqual(run(["git", "add", "-A"], other).returncode, 0)
+        self.assertEqual(run(["git", "commit", "-q", "-m", "unrelated"], other).returncode, 0)
+        unrelated = run(["git", "rev-parse", "HEAD"], other).stdout.strip()
+        self.assertEqual(run(["git", "fetch", "-q", other, "HEAD"], self.root).returncode, 0)
+        light, out, _ = self.decide(head, base=unrelated)
+        self.assertFalse(light)
+        self.assertIn("no merge base", out)
+        elsewhere = tempfile.mkdtemp(prefix="ci_light_norepo.")
+        self.addCleanup(shutil.rmtree, elsewhere, ignore_errors=True)
+        environment = dict(GIT_ENV, EVENT="pull_request", BASE_SHA=self.base, HEAD_SHA=head, GITHUB_OUTPUT=self.out_file, GIT_CEILING_DIRECTORIES=os.path.dirname(elsewhere))
+        done = subprocess.run(["bash", SCRIPT], cwd=elsewhere, env=environment, capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        with open(self.out_file, encoding="utf-8") as f:
+            self.assertEqual(f.read().splitlines()[-1], "light=false")
+
+    def test_a_path_cannot_put_a_workflow_command_or_a_control_character_in_the_log(self):
+        names = ["::error::pwned", "::set-output name=light::true", "docs/a b.md", "docs/quote'.md", "docs/dollar$x.md", "docs/new\nline.md", "docs/esc\x1b[31m.md", "docs/äö.md", "docs/tab\t.md"]
+        head = self.pull_request({name: "x\n" for name in names})
+        light, out, _ = self.decide(head)
+        self.assertFalse(light, "the two names at the root are not light")
+        for line in out.splitlines():
+            self.assertFalse(line.startswith("::"), "a line of the log begins with a workflow command: " + line)
+            self.assertNotIn("\x1b", line)
+        self.assertEqual(sum(1 for line in out.splitlines() if re.match(r"  (light|FULL) ", line)), len(names), out)
+        only_docs = self.pull_request({name: "x\n" for name in names if name.startswith("docs/")})
+        self.assertTrue(self.decide(only_docs)[0], "odd names under docs/ are documents")
+
+    def test_it_runs_without_a_github_output_file_and_a_big_pull_request_is_summarized(self):
+        head = self.pull_request(dict({"docs/f%03d.md" % i: "x\n" for i in range(220)}, **{"src/s%03d.cpp" % i: "x\n" for i in range(160)}))
+        light, out, _ = self.decide(head)
+        self.assertFalse(light)
+        self.assertIn("changed files: 380 (220 light, 160 that need the full checks)", out)
+        self.assertIn("... and 70 more light files (not shown)", out)
+        self.assertIn("... and 10 more files that need the full checks (not shown)", out)
+        done = subprocess.run(["bash", SCRIPT], cwd=self.root, env=dict(GIT_ENV, EVENT="pull_request", BASE_SHA=self.base, HEAD_SHA=head), capture_output=True, text=True, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("decision: full checks", done.stdout)
+
+
+class TheRulesAreWritten(unittest.TestCase):
+    def test_the_script_names_what_the_documents_name(self):
+        with open(SCRIPT, encoding="utf-8") as f:
+            header = "\n".join(line for line in f.read().splitlines()[:20] if line.startswith("#"))
+        for needle in ("web/**", "docs/**", "CHANGELOG.md, README.md", "tests/data/*_mutants.json", "tests/scripts/test_web_*", "tests/scripts/web_*", "merge base", "Unknown is full"):
+            self.assertIn(needle, header)
+
+    def test_the_script_is_executable_and_text(self):
+        self.assertTrue(os.access(SCRIPT, os.X_OK))
+        with open(SCRIPT, "rb") as f:
+            data = f.read()
+        self.assertNotIn(b"\r", data)
+        self.assertTrue(data.startswith(b"#!/usr/bin/env bash\n"))
+
+
+if __name__ == "__main__":
+    unittest.main()
