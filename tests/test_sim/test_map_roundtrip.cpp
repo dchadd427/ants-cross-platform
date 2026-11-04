@@ -220,6 +220,7 @@ void the_rules_word_is_in_the_hash(uint32_t ticks) {
     e1.init(rules_one, ants_test::kLibrarySeed, 0x0F);
     e2.init(rules_two, ants_test::kLibrarySeed, 0x0F);
     check(e1.state_hash().grid != e2.state_hash().grid && e2.grid().rules() == 2, "a rules word of 2 is played as 2 and hashes otherwise than a rules word of 1");
+    check(e2.state_hash().grid != zero_play[0].grid, "a rules word of 2 hashes otherwise than the rules word 0 (the word is mixed in for every word but 0)");
     for (const uint16_t word : {uint16_t{3}, uint16_t{200}, uint16_t{0xFFFF}}) {                       // (no reader accepts these; the Grid does not trust the reader)
         LevelData asked = up.level;
         asked.rules = word;

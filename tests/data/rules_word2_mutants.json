@@ -96,7 +96,7 @@
    "new": "word <= 1u ? word",
    "build": "test_map_roundtrip",
    "test": "./build/tests/test_sim/test_map_roundtrip",
-   "expect": "plays as rules 2 and hashes otherwise"
+   "expect": "TINY at rules 2 plays"
   },
   {
    "id": "grid_plays_the_word_three_as_three",
@@ -136,7 +136,8 @@
    "old": "if (e.grid_.rules() != 0) h.u16(e.grid_.rules());",
    "new": "if (e.grid_.rules() == 1) h.u16(e.grid_.rules());",
    "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip"
+   "test": "./build/tests/test_sim/test_map_roundtrip",
+   "expect": "hashes otherwise than the rules word 0"
   },
   {
    "id": "ant_hash_marks_the_order_tile_only_for_rules_one",
@@ -151,8 +152,8 @@
    "file": "include/ants_sim/ant_unit.hpp",
    "old": "        if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y)",
    "new": "        if (rules != 1) return static_cast<uint16_t>(orig_order_tile.y)",
-   "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip"
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden"
   },
   {
    "id": "bots_plan_rules_two_with_the_original_limit",
@@ -160,7 +161,7 @@
    "old": "grid.rules() == 2 ? kWidePathCostLimit : kPathCostLimit",
    "new": "grid.rules() == 3 ? kWidePathCostLimit : kPathCostLimit",
    "build": "test_ai",
-   "test": "./build/tests/test_ai/test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
    "expect": "AI1.19b"
   },
   {
@@ -169,7 +170,7 @@
    "old": "grid.rules() == 2 ? kWidePathCostLimit : kPathCostLimit",
    "new": "grid.rules() >= 1 ? kWidePathCostLimit : kPathCostLimit",
    "build": "test_ai",
-   "test": "./build/tests/test_ai/test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
    "expect": "AI1.19b"
   },
   {
@@ -178,7 +179,7 @@
    "old": "kWidePathCostLimit = 1 << 24;",
    "new": "kWidePathCostLimit = 1 << 23;",
    "build": "test_ai",
-   "test": "./build/tests/test_ai/test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
    "expect": "AI1.19b"
   },
   {
@@ -187,7 +188,7 @@
    "old": "if (total >= path_cost_limit(grid)) continue;",
    "new": "if (total >= MapInfo::kPathCostLimit) continue;",
    "build": "test_ai",
-   "test": "./build/tests/test_ai/test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
    "expect": "AI1.19b"
   },
   {

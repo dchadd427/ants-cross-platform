@@ -881,18 +881,24 @@ static void run_suite_7_rules_one() {
         ASSERT_TRUE(end.y > 92 && end.y < 97);
         ASSERT_FALSE(stop_midwalk(0, 92, &walking, &end));                              // at rules 0 the order tile of row 97 reads as "none": nothing happens
         ASSERT_TRUE(walking && end.y == 97);
+        ASSERT_TRUE(stop_midwalk(2, 92, &walking, &end) && walking);                    // rules 2 reads the order tile as rules 1 does (the wide search changes nothing here)
+        ASSERT_TRUE(end.y > 92 && end.y < 97);
         // the marker (-1, -1) is outside every grid: (column 120, row 90) and tiles around it are all real targets on a 130 x 100 world
         const struct { TileCoord from; TileCoord to; } near_marker[] = {{TileCoord{120, 82}, TileCoord{120, 90}}, {TileCoord{110, 90}, TileCoord{120, 90}}, {TileCoord{120, 92}, TileCoord{120, 98}}, {TileCoord{110, 90}, TileCoord{125, 90}}, {TileCoord{110, 85}, TileCoord{125, 90}}};
         AntUnit probe(1, TeamId::Green, AntType::Worker, 5, 5);
         ASSERT_FALSE(probe.has_order_tile(1));
+        ASSERT_FALSE(probe.has_order_tile(2));
         probe.orig_order_tile = TileCoord{AntUnit::kNoOrderTileX, 0};
         ASSERT_TRUE(probe.has_order_tile(1));
+        ASSERT_TRUE(probe.has_order_tile(2));
         probe.orig_order_tile = TileCoord{0, AntUnit::kNoOrderTileY};
         ASSERT_TRUE(probe.has_order_tile(1));
         probe.orig_order_tile = TileCoord{AntUnit::kClassicNoOrderTileX, AntUnit::kNoOrderTileY};
         ASSERT_TRUE(probe.has_order_tile(1));
+        ASSERT_TRUE(probe.has_order_tile(2));
         probe.orig_order_tile = TileCoord{AntUnit::kNoOrderTileX, AntUnit::kClassicNoOrderTileY};
         ASSERT_TRUE(probe.has_order_tile(1));
+        ASSERT_TRUE(probe.has_order_tile(2));
         for (const auto& w : near_marker) {
             SimulationEngine sim;
             sim.init_test_world(130, 100, 7, 600000, 1);
