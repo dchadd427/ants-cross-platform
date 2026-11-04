@@ -180,6 +180,13 @@ int main() {
         only_alive(sim, {0});
         ASSERT_TRUE(survives(sim));
         ASSERT_TRUE(result_of(sim).standing == PLAYER_NEUTRAL && !sim.is_match_over());
+        // and when the clock ends such a match, the results rank by score as they always did: a dead team with the best score is first, nobody is put first for being the one left
+        SimulationEngine clock;
+        make_world(clock, GameMode::HighestScore, false, 4000);
+        only_alive(clock, {0});
+        clock.set_player_score(1, 90);
+        ASSERT_GT(ticks_to_end(clock, 400), 0);
+        ASSERT_TRUE(result_of(clock).standing == PLAYER_NEUTRAL && top_row(result_of(clock), 0) == Seats({1}));
     } TEST_END();
 
     TEST_CASE("2.3 the survivor can be any seat; it needs no score and no egg of its own") {
@@ -355,11 +362,16 @@ int main() {
         }
         ASSERT_TRUE(in_clip);
         take_units(sim, pile, 1);                                                            // (another ant took the last unit: the bite in progress still gives food at the end of the clip)
-        sim.clear_news_events();
-        sim.clear_audio_events();
-        ASSERT_FALSE(sim.is_match_over());
-        sim.tick();
-        ASSERT_FALSE(sim.is_match_over());
+        int ticks_in_clip = 0;
+        for (int t = 0; t < 60 && sim.get_unit(ant).loco_action == AntUnit::kActionHarvest; ++t) {       // (the clip lasts several checks of CHECKGO)
+            sim.tick();
+            sim.clear_news_events();
+            sim.clear_audio_events();
+            ++ticks_in_clip;
+            ASSERT_FALSE(sim.is_match_over());
+        }
+        ASSERT_GE(ticks_in_clip, 4);
+        ASSERT_TRUE(sim.get_unit(ant).is_holding());                                         // (the bite gave food from the pile that read empty)
     } TEST_END();
 
     TEST_CASE("4.1 allies: one live team of an alliance is its side; the dead ally is on the same row, and the row wins") {
@@ -464,6 +476,15 @@ int main() {
         two.init(level, 5, 0x03);
         for (int32_t i = 0; i < static_cast<int32_t>(two.grid().food_objects().size()); ++i) take_units(two, i, 1000);
         ASSERT_TRUE(survives(two, 200));
+        SimulationEngine ends;                                                              // (two teams in the match, one wiped out, no food: the lone survivor wins)
+        ends.init(level, 5, 0x03);
+        for (int32_t i = 0; i < static_cast<int32_t>(ends.grid().food_objects().size()); ++i) take_units(ends, i, 1000);
+        ends.set_player_eggs(1, 0);
+        for (const AntSnapshot& a : ends.get_world_state().ants) {
+            if (a.player_id == 1) ends.kill_unit(a.id);
+        }
+        ASSERT_GT(ticks_to_end(ends, 400), 0);
+        ASSERT_TRUE(result_of(ends).standing == 0);
     } TEST_END();
 
     TEST_CASE("6.2 187 is unchanged: it ends at one side left with food on the map, whichever way the switch is set, and the other rule does not change its result") {
