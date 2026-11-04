@@ -345,6 +345,13 @@ void run_hash_tests() {
             r.seq.on_referee_hash(39, r.state[0]);
             r.seq.set_active(2, true);                                               // back, level with the sequencer
             ASSERT_TRUE(r.seq.judge_hashes(7).kind == Kind::Nothing);                // what it said before it left is not held against it
+            JudgeRig s;                                                              // the same when the seat is back before anybody has looked
+            s.report(2, 19, 1);
+            s.report(0, 19, 0);
+            s.seq.set_active(2, false);
+            s.seq.on_referee_hash(19, s.state[0]);
+            s.seq.set_active(2, true);
+            ASSERT_TRUE(s.seq.judge_hashes(7).kind == Kind::Nothing);
             JudgeRig q;
             q.report(1, 19, 1);                                                      // a wrong report and nobody has said which state is right ...
             q.seq.on_referee_hash(19, q.state[0]);

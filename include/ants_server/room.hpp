@@ -21,7 +21,7 @@
 //            (RoomSpec::reconnect, protocol 10) keeps the seat of a player whose connection is lost and PAUSES the match for everybody (see "Reconnect" below)
 //   Finished the result (rows as the results screen shows them) is kept; the room goes on answering its players (pings, acknowledgements: the session is frozen, it seals nothing)
 //            and the connections close after a grace period, later when a player is still catching up (kGraceMs, kEndWaitMs)
-//   Failed   nobody came, too many failed starts, a desync of every seat at the table, the owner closed it: the reason is kept
+//   Failed   nobody came, too many failed starts, a desync of every seat at the table, the operator closed it: the reason is kept
 //
 // Reconnect (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A room made with `reconnect` gives every player a KEY in its Welcome (the operating system's random bytes: the lobby's
 // make_key) and passes the keys of the seats, the Start message and its limits to the match's session (HostSession::Config::hold_seats). From then on a connection that is lost

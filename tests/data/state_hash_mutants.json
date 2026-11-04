@@ -42,7 +42,7 @@
    "id": "seat_not_at_the_table_judged",
    "file": "src/ants_net/sequencer.cpp",
    "old": "if ((seated & bit(p)) == 0 || !active_[p]) continue;",
-   "new": "if (!active_[p]) continue;",
+   "new": "if (((seated | 0xFF) & bit(p)) == 0 || !active_[p]) continue;",
    "build": [
     "test_lockstep"
    ],
