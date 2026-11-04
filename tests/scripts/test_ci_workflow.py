@@ -640,6 +640,16 @@ class LightChecks(unittest.TestCase):
             self.assertTrue("needs.changes.outputs.light != 'true'" in condition or "steps.build.conclusion == 'success'" in condition or "steps.build_e2e.conclusion == 'success'" in condition
                             or condition == "failure()", "a Windows step that would run (and fail on a Linux machine) in the light checks: " + name)
 
+    def test_the_skipped_jobs_run_only_the_scripts_that_the_light_decision_knows(self):
+        """tools/ci_light.sh calls full the pages that the two macOS script suites read, and tests/scripts/test_ci_light.py scans these (and the C++ of ctest) for the reads: another script of tests/scripts
+        in a step of the macOS or Windows jobs would read files that nobody has listed."""
+        macos = "\n".join(l for l in job_block("macos_tests") if not l.lstrip().startswith("#"))
+        self.assertEqual(sorted(set(re.findall(r"tests/scripts/[A-Za-z0-9_]+\.(?:sh|py|js)", macos))),
+                         ["tests/scripts/run_python_tests.py", "tests/scripts/test_ants_server.sh", "tests/scripts/test_start_game.sh"])
+        self.assertEqual(sorted(set(re.findall(r"\btools/[A-Za-z0-9_]+\.(?:sh|py)", macos))), ["tools/check_version_consistency.py", "tools/community_maps.py"])
+        windows = "\n".join(l for l in job_block("windows") if not l.lstrip().startswith("#"))
+        self.assertEqual(re.findall(r"tests/scripts/|\btools/[A-Za-z0-9_]+\.(?:sh|py)", windows), [], "the Windows jobs run ctest, the tool self-tests and the E2E runner")
+
     def test_a_push_and_a_manual_run_are_never_light(self):
         script = read(os.path.join(REPO, "tools", "ci_light.sh"))
         self.assertIn('if [ "${EVENT:-}" != pull_request ]; then', script)

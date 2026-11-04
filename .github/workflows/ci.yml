@@ -9,9 +9,10 @@
 #     groups that depend on the system on macOS: tests/scripts/run_python_tests.py). Every leg builds what it needs from the compiler cache (about a minute).
 #   - `linux` and `macos` are small jobs that carry the required names. They look at the result of the legs and pass only when every leg passed. `linux` runs whatever the legs did
 #     (`if: always()`), because a job whose needs failed would otherwise be skipped, and a skipped job counts as passing for a required check: the explicit test is what keeps a failed leg from passing.
-#   - `changes`, the first job, decides for a pull request (never for a push or a manual run) whether the change is of web pages, documents and page tests only (tools/ci_light.sh; the rules are in
-#     docs/WORKFLOW.md). Then `macos` and its legs are skipped, and the Windows jobs run but skip their steps: a matrix job that a job-level `if` skips is reported once, under the unexpanded template
-#     of its name, so the required names "Windows (MSVC 2022)" and "Windows (MSVC 2026)" would never appear. Linux and the web job run in full for every change. If `changes` itself fails, everything runs.
+#   - `changes`, the first job, decides for a pull request (never for a push or a manual run) whether the change is of documents, web pages and page tests only, apart from the few files that the C++ tests
+#     and the macOS script suite read (tools/ci_light.sh; the rules are in docs/WORKFLOW.md). Then `macos` and its legs are skipped, and the Windows jobs run but skip their steps: a matrix job that a
+#     job-level `if` skips is reported once, under the unexpanded template of its name, so the required names "Windows (MSVC 2022)" and "Windows (MSVC 2026)" would never appear. Linux and the web job
+#     run in full for every change. If `changes` itself fails, everything runs.
 #
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
 # application), then the self-tests of the four tools (map_sweep, bot_arena, replay_tool, lvl_tool; bot_watch and gen_food_footprints are only built, so that no change breaks them unseen; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites

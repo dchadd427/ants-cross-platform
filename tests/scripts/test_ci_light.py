@@ -5,6 +5,8 @@ It is run on real git repositories made here (a base commit, a pull request's co
 the case of names (macOS, Windows) cannot make `Web/a.js` and `web/a.js` one file: the decision, the file list it prints, the line it appends to GITHUB_OUTPUT.
 The rules are the ones that docs/WORKFLOW.md states; what these tests hold:
   - every changed file must be a page, a document, a list of mutants or a page test for `light`; one other file makes it `full`, whatever else changes with it, and an unknown path is full;
+  - of those kinds, the files that the jobs a light pull request skips read or run are full (the C++ tests of ctest, the E2E runner and the macOS script suites read a few pages: they are
+    listed here with who reads them, and a scan of the sources finds a read that is not listed);
   - what is compared is the pull request's own change (against the MERGE BASE: a base that moved on, with a change of its own, does not make the pull request full), a renamed file counts under
     both names (a source file renamed into docs/ is full), a deleted file counts;
   - anything that is not a pull request with two full commit ids and at least one changed file is full, and the script never fails (a failing git is full);
@@ -25,7 +27,31 @@ GIT_ENV = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull
 
 LIGHT = ["web/index.js", "web/front/x.css", "web/a/b/c/d.html", "docs/WORKFLOW.md", "docs/legacy/x.c", "docs/img/p.png", "CHANGELOG.md", "README.md", "tests/data/home_chat_mutants.json",
          "tests/data/x_mutants.json", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_web_aspect.sh", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_routes_check.py",
-         "tests/scripts/web_page_harness.js"]
+         "tests/scripts/web_home_screen_check.js", "tests/scripts/test_web_lobby_net.py", "web/home/chat.js", "web/home/home.css", "web/home/games.css", "web/front/lobby_chat.css",
+         "web/front/mapmaker_app.js", "web/front/bot_names.js", "web/front/preview_notes.txt", "web/matches.html", "web/history_page.js"]
+# Of the light kinds and nevertheless full, with who reads them (the jobs that a light pull request skips: ctest on all three systems, and the script suites of the macOS job). The scan in
+# TheSkippedJobsReadNoLightFile finds the reads in the sources; this table is what it compares them with, and each file here must be full in tools/ci_light.sh.
+RULES_JS, LOBBY_NET_JS = "web/front/lobby_rules.js", "web/front/lobby_net.js"
+NATIVE_READS = {
+    RULES_JS: "ctest: test_ai_names, test_start_menu_hosting; test_ants_server.sh (a grep, and the page harness)",
+    "web/front/preview_tiny.png": "ctest: test_map_list (the six original maps: tiny, small, medium, gauntlet, treasure, islands)",
+    "web/front/preview_islands.png": "ctest: test_map_list",
+    "web/lobby.html": "test_ants_server.sh (a grep, web_fill_check.js, the page harness)",
+    "web/shell.html": "test_ants_server.sh (a grep, web_fill_check.js)",
+    "web/shapes.js": "test_ants_server.sh: web_lobby_server_check.js",
+    LOBBY_NET_JS: "test_ants_server.sh: web_lobby_server_check.js, web_lobby_handoff_check.js, the page harness",
+    "web/front/lobby_chat.js": "test_ants_server.sh: the page harness",
+    "web/front/rematch.js": "test_ants_server.sh: the page harness",
+    "web/front/game_modes.js": "test_ants_server.sh: the page harness",
+    "web/front/game_type.js": "test_ants_server.sh: the page harness",
+    "web/front/map_picker.js": "test_ants_server.sh: the page harness (the checks that ask for the picker)",
+    "web/home/home.js": "test_ants_server.sh: the page harness",
+    "web/home/games.js": "test_ants_server.sh: the page harness (the Games list)",
+    "tests/scripts/web_fill_check.js": "test_ants_server.sh",
+    "tests/scripts/web_lobby_server_check.js": "test_ants_server.sh",
+    "tests/scripts/web_lobby_handoff_check.js": "test_ants_server.sh",
+    "tests/scripts/web_page_harness.js": "test_ants_server.sh: web_lobby_server_check.js",
+}
 FULL = ["VERSION", "CMakeLists.txt", "cmake/x.cmake", "src/ants_sim/a.cpp", "include/ants_sim/a.hpp", "tools/ci_light.sh", "tools/mutate.py", "hub/server.py", "Dockerfile", "Dockerfile.server",
         "Dockerfile.hub", "docker/nginx.conf", "docker-compose.stack.yml", ".github/workflows/ci.yml", ".github/FUNDING.yml", "third_party/sqlite/x.c", "Community-Maps/Map.lvl",
         "Original-Ants/Maps/TINY.LVL", "run_tests.sh", "run_tests.bat", "build_web.sh", "start_game.sh", "AGENTS.md", "LICENSE", "THIRD_PARTY_NOTICES.md", ".gitignore", ".dockerignore", "a_new_file",
@@ -34,7 +60,7 @@ FULL = ["VERSION", "CMakeLists.txt", "cmake/x.cmake", "src/ants_sim/a.cpp", "inc
         "tests/scripts/run_python_tests.py", "tests/scripts/test_ci_workflow.py", "tests/scripts/fake_hub.js", "tests/scripts/lvl_core_check.js", "tests/scripts/sub/web_x.js",
         "tests/scripts/sub/test_web_x.py", "tests/scripts/README", "tests/scripts/test_web_x.txt.orig/y", "tests/data/pbkdf2_vectors.json", "tests/data/game_menu_match.json", "tests/data/x.csv",
         "tests/data/lvl_core/x_mutants.json", "tests/data/sub/x_mutants.json", "tests/data/mutants.json", "tests/data/x_mutants.json.bak", "webx/a.js", "docsx/a.md", "README.md.old",
-        "CHANGELOG.md/x", "x/web/a.js", "x/docs/a.md", "Web/a.js", "DOCS/a.md", "asset_catalog/x.png", "tools/web/x.js"]
+        "CHANGELOG.md/x", "x/web/a.js", "x/docs/a.md", "Web/a.js", "DOCS/a.md", "asset_catalog/x.png", "tools/web/x.js", "tests/scripts/mini_websocket.js"] + sorted(NATIVE_READS)
 
 
 class Gitlink:
@@ -129,6 +155,15 @@ class Decision(unittest.TestCase):
             light, out, _ = self.decide(self.pull_request({path: "x\n"}))
             self.assertFalse(light, path)
             self.assertEqual(self.classes(out), {path: "FULL"}, out)
+
+    def test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes(self):
+        for path, readers in sorted(NATIVE_READS.items()):
+            with self.subTest(path):
+                light, out, _ = self.decide(self.pull_request({"docs/a.md": "b\n", "README.md": "y\n", path: "changed\n"}))
+                self.assertFalse(light, "%s is read by %s, and a light pull request skips those jobs:\n%s" % (path, readers, out))
+                self.assertEqual(self.classes(out), {"docs/a.md": "light", "README.md": "light", path: "FULL"}, out)
+        light, out, _ = self.decide(self.pull_request({"web/home/chat.js": "b\n", "web/front/preview_new.txt": "y\n", "web/matches.html": "z\n"}))
+        self.assertTrue(light, "the pages that no skipped job reads stay light:\n" + out)
 
     def test_one_full_file_among_light_ones_makes_it_full_and_is_named(self):
         head = self.pull_request({"docs/a.md": "b\n", "web/a.js": "b\n", "src/a.cpp": "int b;\n", "README.md": "y\n"})
@@ -259,11 +294,110 @@ class Decision(unittest.TestCase):
         self.assertIn("decision: full checks", done.stdout)
 
 
+LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"')
+# the files of the light kinds (web/, docs/, the two top documents, the lists of mutants, the page tests), as a literal of C++ or a path of a script
+LIGHT_KIND = re.compile(r"^/?(web|docs)(/|$)|^/?(CHANGELOG|README)\.md$|^/?tests/data/[^/]*_mutants\.json$|^/?tests/scripts/(test_web_|web_)")
+BASES = ("ANTS_SOURCE_DIR", "TEST_DATA_DIR", "ORIGINAL_ASSETS_DIR", "source_dir()")      # (what a test of C++ finds the checkout with: tests/common/ants_test_paths.hpp)
+# The C++ that reads a file of a light kind: (the source, the literals of the line after the base folder) -> a file to try the decision on
+CPP_READS = {
+    ("tests/test_ai/test_ai_names.cpp", "/web/front/lobby_rules.js"): RULES_JS,
+    ("tests/test_app/test_start_menu_hosting.cpp", "/web/front/lobby_rules.js"): RULES_JS,
+    ("tests/test_server/test_map_list.cpp", "web|front|preview_|.png"): "web/front/preview_tiny.png",
+}
+
+
+def code_of_cpp(line):
+    """the line of C++ without its // comment (a // inside a string is none)"""
+    in_string, i = False, 0
+    while i < len(line):
+        c = line[i]
+        if in_string:
+            if c == "\\":
+                i += 1
+            elif c == '"':
+                in_string = False
+        elif c == '"':
+            in_string = True
+        elif line.startswith("//", i):
+            return line[:i]
+        i += 1
+    return line
+
+
+def cpp_reads():
+    """{(source, literals): line} for every line of C++ in src/, include/, tests/ and tools/ that names a file of a light kind: after the folder of the checkout (ANTS_SOURCE_DIR and the like), or as a
+    literal that begins with web/ or docs/. A path that is built over several lines, or by a function, is not found: the review of a test that reads a page must look for it."""
+    found = {}
+    for folder in ("src", "include", "tests", "tools"):
+        for base, _, names in os.walk(os.path.join(REPO, folder)):
+            for name in names:
+                if not name.endswith((".cpp", ".hpp", ".h", ".inc")):
+                    continue
+                path = os.path.join(base, name)
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    for number, line in enumerate(f, 1):
+                        code = code_of_cpp(line)
+                        starts = [code.index(b) for b in BASES if b in code]
+                        after = LITERAL.findall(code[min(starts):]) if starts else []
+                        if after and LIGHT_KIND.match(after[0]):
+                            found[(os.path.relpath(path, REPO).replace(os.sep, "/"), "|".join(after))] = number
+                        elif not starts:
+                            for literal in LITERAL.findall(code):
+                                if re.match(r"^/?(web|docs)/\S|^/?(CHANGELOG|README)\.md$", literal):
+                                    found[(os.path.relpath(path, REPO).replace(os.sep, "/"), "(no folder) " + literal)] = number
+    return found
+
+
+class TheSkippedJobsReadNoLightFile(unittest.TestCase):
+    """A light pull request skips the macOS job and the Windows jobs. What these build and run: the game, the server and the test programs, ctest (all of it, on all three systems), the tool
+    self-tests, the E2E runner and, on macOS, the two script suites (tests/scripts/test_start_game.sh, test_ants_server.sh with the node checks it runs). The files of the light kinds that any of
+    these reads are full in tools/ci_light.sh (NATIVE_READS at the top says which, and by whom); these tests find the reads in the sources, so that a test that starts to read another page fails
+    here until the file is in that list. (The python tests that macOS runs read pages and documents too, as its document, version and spec checks do; Linux runs the same ones.)"""
+
+    def test_the_c_plus_plus_of_ctest_the_tools_and_the_e2e_runner_read_these_pages_and_no_others(self):
+        found = cpp_reads()
+        self.assertEqual(sorted(found), sorted(CPP_READS), "a C++ source names a file of web/ or docs/ (or the like) that is not listed: make the file full in is_light of tools/ci_light.sh, "
+                         "add it to NATIVE_READS and CPP_READS in this test, and say so in docs/WORKFLOW.md")
+        for (source, _), representative in CPP_READS.items():
+            self.assertIn(representative, NATIVE_READS, source)
+
+    def test_the_shell_suites_the_node_checks_and_the_page_harness_read_these_files_and_no_others(self):
+        found = set()
+        shell = re.compile(r'(?:\$ROOT|\$\{ROOT\})/((?:web|docs)/[A-Za-z0-9_./*-]+|CHANGELOG\.md|README\.md|tests/data/[a-z_]+_mutants\.json|tests/scripts/(?:test_web_|web_)[A-Za-z0-9_.]+)')
+        for name in ("test_ants_server.sh", "test_start_game.sh", "e2e_deadlines.sh"):
+            with open(os.path.join(HERE, name), encoding="utf-8") as f:
+                for line in f:
+                    if not line.lstrip().startswith("#"):
+                        found |= set(shell.findall(line))
+        with open(os.path.join(HERE, "web_page_harness.js"), encoding="utf-8") as f:
+            harness = f.read()
+        found |= {"web/front/" + n for n in re.findall(r"loadFront\('([a-z_]+\.js)'", harness)}
+        found |= {"web/" + n for n in re.findall(r"loadFile\('((?:home|front)/[a-z_]+\.js)'", harness)}
+        found |= {"web/" + n for n in re.findall(r"'(home/[a-z_]+\.js)'", harness)}
+        for name in ("web_lobby_server_check.js", "web_lobby_handoff_check.js", "web_fill_check.js"):         # (the node checks that the script suite runs, and what they load)
+            with open(os.path.join(HERE, name), encoding="utf-8") as f:
+                text = f.read()
+            found |= {"web/" + n for n in re.findall(r"path\.join\(webDir, '([^']+)'\)", text)}
+            found |= {"tests/scripts/" + n for n in re.findall(r"require\('\./(web_[a-z_]+\.js)'\)", text)}
+        self.assertEqual(sorted(found), sorted(k for k in NATIVE_READS if not k.startswith("web/front/preview_")),
+                         "a script of the macOS job (or the page harness that it runs) reads a file of a light kind that is not listed, or a listed one is not read any more: tools/ci_light.sh, NATIVE_READS here")
+
+    def test_every_listed_file_is_of_a_light_kind_and_says_who_reads_it(self):
+        self.assertGreater(len(NATIVE_READS), 15)
+        for path, readers in NATIVE_READS.items():
+            self.assertTrue(LIGHT_KIND.match(path), "%s is not of a light kind: it needs no entry" % path)
+            self.assertTrue(readers)
+        for path in NATIVE_READS:                                    # (the decision itself is tried on each of them in Decision)
+            self.assertTrue(os.path.exists(os.path.join(REPO, path)), "%s is listed and not in the repository any more" % path)
+
+
 class TheRulesAreWritten(unittest.TestCase):
     def test_the_script_names_what_the_documents_name(self):
         with open(SCRIPT, encoding="utf-8") as f:
-            header = "\n".join(line for line in f.read().splitlines()[:20] if line.startswith("#"))
-        for needle in ("web/**", "docs/**", "CHANGELOG.md, README.md", "tests/data/*_mutants.json", "tests/scripts/test_web_*", "tests/scripts/web_*", "merge base", "Unknown is full"):
+            lines = f.read().splitlines()
+        header = "\n".join(line for line in lines[:next(i for i, line in enumerate(lines) if not line.startswith("#"))])
+        for needle in ("web/**", "docs/**", "CHANGELOG.md, README.md", "tests/data/*_mutants.json", "tests/scripts/test_web_*", "tests/scripts/web_*", "merge base", "Unknown is full", "ctest",
+                       "the two shell suites", "python tests"):
             self.assertIn(needle, header)
 
     def test_the_script_is_executable_and_text(self):
