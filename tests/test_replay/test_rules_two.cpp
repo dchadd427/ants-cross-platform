@@ -3,6 +3,7 @@
 //   RP13.1  TINY grown to 512 x 512 (rules 2): an ant sent 450 tiles along its row gets a path (at rules 1 it gets none), the match is recorded under kSimRules, plays to its hashes, and
 //           ends in the hash that is pinned (the reference match of a map of rules 2)
 //   RP13.2  a reader that does not know the word 2 (modelled by the word 3) refuses the map that a file carries, with the reader's sentence; this build reads the 2
+//   RP13.3  the word takes no rules number of its own: the same match plays to the same hashes under 5, 8 and 9 (the numbers of the original's game), and the number after the newest is refused
 #include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_replay/replay.hpp"
@@ -153,6 +154,24 @@ int main() {
         file.head.map_hash = net::hash_bytes(file.embedded_map.data(), file.embedded_map.size());
         ASSERT_FALSE(load_embedded_map(file, read, error));
         ASSERT_TRUE(error == "the map in the replay cannot be loaded: the rules word is 3: only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders) are known, the file is not read");
+    } TEST_END();
+
+    TEST_CASE("RP13.3 The Word 2 Takes No Rules Number: The Same Match Plays To The Same Hashes Under Every Number Of The Original's Game (5, 8 And 9), And A Number That No Build Plays (11) Is Refused") {
+        ASSERT_TRUE(loaded);
+        const uint64_t map_hash = net::hash_bytes(reinterpret_cast<const uint8_t*>(big.data()), big.size());
+        const Played wide = play_recorded(two, map_hash);
+        ASSERT_TRUE(wide.verified);
+        for (const uint16_t number : {kSimRulesBeforeLastSide, kSimRulesBeforeFireWall, kSimRules}) {       // (TINY has no fire wall and all four seats stay: the three loaders and end rules play this match alike)
+            ASSERT_TRUE(plays_mode_rules(0, number));
+            Replay copy = wide.replay;
+            copy.head.sim_rules = number;
+            const Outcome o = play(copy, two, Hooks{});
+            ASSERT_TRUE(o.ran && o.ok && o.complete && o.hash == wide.hash);
+        }
+        ASSERT_FALSE(plays_mode_rules(0, static_cast<uint16_t>(kSimRulesNewest + 1)));
+        Replay unknown = wide.replay;
+        unknown.head.sim_rules = static_cast<uint16_t>(kSimRulesNewest + 1);
+        ASSERT_FALSE(plays_here(unknown.head));
     } TEST_END();
 
     std::cout << "\n=======================================================\n"
