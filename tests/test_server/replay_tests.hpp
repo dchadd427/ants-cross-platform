@@ -1,6 +1,6 @@
 // The tests of the replays that the server keeps (ants_server/replay_store.hpp, Room, RoomManager::enable_replays and the control calls GET /replays, GET and DELETE /replays/<file>): a whole match
 // through the door is kept and plays out to the same state on a fresh engine, the people's typed names are in it (and a seat that was given none is the color), a bot has its name, no address or
-// room code is, short and unrecorded matches are not kept (and the status says why),
+// room code is, short and unrecorded matches are not kept (and the status says why, a recording that failed in its own words: S3.244, with one line in the log),
 // a server that is stopped keeps the match that runs, a room that came back from a restart record does not record, the limits show in the status and the log, and the two doors (the secret's and the
 // public one) answer as they should. The live door (S3.176 - S3.178: GET /live and GET /live/<id> in front of real rooms: a match that runs is listed after 30 seconds, its snapshot grows and plays on the real map,
 // the id says where the file is when the match ends, no room code is anywhere). The store's own rules (names, ages, sizes, a folder with other things in it) are test_replay_store.cpp, the board's (ids, the list,
@@ -276,6 +276,69 @@ void run_replay_tests() {
         ASSERT_TRUE(s.state == RoomState::Running && s.ticks >= 600 && s.ticks < 610);
         ASSERT_TRUE(w.mgr.close_room("EDGE-B", w.now));
         ASSERT_TRUE(w.status("EDGE-B").replay_kept);
+        ASSERT_EQ(w.mgr.replay_store()->count(), size_t{1});
+    } TEST_END();
+
+    TEST_CASE("S3.244 The Note Of A Match That Was Not Kept Names The Real Reason: A Recording That Passed Its Size Limit (1 MiB) While The Match Went On Past 30 Seconds Says So (Not \"Ran Less Than 30 Seconds\") And The Server's Log Has One Line; A Match That Really Ran Less Than 30 Seconds Still Says That, Whatever Became Of Its Recording, With No Line; The Same Orders In A Longer Match Are Not Kept Either, And A Match Without Them Is Kept As Before") {
+        ReplayClock clock;
+        World w;
+        std::string why;
+        ASSERT_TRUE(w.mgr.enable_replays(replay_config("replay-limit", &clock), false, why));
+        // 40 group orders of 32 ants in every turn (800 messages a second: a client may send 1,000), about 5.5 KB of recording a turn: the 1 MiB of a match is passed in about 190 turns
+        const auto orders = [&](Client& who, int turns) {
+            sim::Command order;
+            order.type = sim::CommandType::GroupMove;
+            order.tile_x = 5;
+            order.tile_y = 5;
+            for (uint32_t ant = 1; ant <= sim::kMaxCommandAnts; ++ant) order.ants.push_back(ant);
+            for (int i = 0; i < turns; ++i) {
+                for (int k = 0; k < 40; ++k) who.session->submit(order);
+                w.run(50);
+            }
+        };
+        const auto lines_about = [&](const std::string& code) {
+            std::vector<std::string> out;
+            for (const std::string& line : w.mgr.take_notices()) {
+                if (line.find(code) != std::string::npos) out.push_back(line);
+            }
+            return out;
+        };
+        // the recording is over its limit, then the match goes on to 30 seconds and past them
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LIMIT-1", 2), w.now).ok);
+        Client& ann = w.connect("Ann", "LIMIT-1");
+        w.connect("Bob", "LIMIT-1");
+        w.run(1500 + kPre);
+        orders(ann, 260);
+        w.run(30000);
+        RoomStatus s = w.status("LIMIT-1");
+        ASSERT_MSG(s.state == RoomState::Running && s.ticks >= 650, "state " + std::string(room_state_name(s.state)) + " ticks " + std::to_string(s.ticks));
+        ASSERT_TRUE(w.mgr.close_room("LIMIT-1", w.now));
+        s = w.status("LIMIT-1");
+        ASSERT_TRUE(!s.replay_kept && s.replay_file.empty());
+        ASSERT_MSG(s.replay_note.find("size limit") != std::string::npos && s.replay_note.find("1 MiB") != std::string::npos && s.replay_note.find("less than 30 seconds") == std::string::npos, s.replay_note);
+        ASSERT_TRUE(status_to_json(s).get("replay").get("note").str() == s.replay_note);
+        const std::vector<std::string> logged = lines_about("LIMIT-1");
+        ASSERT_MSG(logged.size() == 1 && logged[0].find("size limit") != std::string::npos && logged[0].find("could not be written as a replay") != std::string::npos, logged.empty() ? std::string("no line") : logged[0]);
+        ASSERT_EQ(w.mgr.replay_store()->count(), size_t{0});
+        // the same orders, and the match is over before 30 seconds: it ran less than that, whatever became of its recording; nothing to tell the log
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LIMIT-2", 2), w.now).ok);
+        Client& cy = w.connect("Cy", "LIMIT-2");
+        w.connect("Di", "LIMIT-2");
+        w.run(1500 + kPre);
+        orders(cy, 260);
+        s = w.status("LIMIT-2");
+        ASSERT_MSG(s.state == RoomState::Running && s.ticks > 220 && s.ticks < 600, "state " + std::string(room_state_name(s.state)) + " ticks " + std::to_string(s.ticks));
+        ASSERT_TRUE(w.mgr.close_room("LIMIT-2", w.now));
+        s = w.status("LIMIT-2");
+        ASSERT_TRUE(!s.replay_kept && s.replay_note.find("ran less than 30 seconds") != std::string::npos && s.replay_note.find("size limit") == std::string::npos);
+        ASSERT_TRUE(lines_about("LIMIT-2").empty());
+        // a match with ordinary orders is kept, as ever
+        ASSERT_TRUE(w.mgr.create_room(spec_of("LIMIT-3", 2), w.now).ok);
+        start_pair(w, "LIMIT-3", 38000, "Ed", "Fay");
+        ASSERT_TRUE(w.mgr.close_room("LIMIT-3", w.now));
+        s = w.status("LIMIT-3");
+        ASSERT_TRUE(s.replay_kept && s.replay_note.empty());
+        ASSERT_TRUE(lines_about("LIMIT-3").empty());
         ASSERT_EQ(w.mgr.replay_store()->count(), size_t{1});
     } TEST_END();
 
