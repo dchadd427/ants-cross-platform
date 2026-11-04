@@ -194,6 +194,15 @@ class Decision(unittest.TestCase):
         with open(self.out_file, encoding="utf-8") as f:
             self.assertEqual(f.read().splitlines()[-1], "light=false")
 
+    def test_a_git_that_cannot_list_the_files_is_full(self):
+        head = self.pull_request({"docs/a.md": "x\n"})
+        tree = self.git("rev-parse", head + "^{tree}")
+        os.chmod(os.path.join(self.root, ".git", "objects", tree[:2]), 0o755)
+        os.remove(os.path.join(self.root, ".git", "objects", tree[:2], tree[2:]))            # (the commit is there, so there is a merge base, but its tree is not)
+        light, out, _ = self.decide(head)
+        self.assertFalse(light)
+        self.assertIn("git could not list the changed files", out)
+
     def test_a_path_cannot_put_a_workflow_command_or_a_control_character_in_the_log(self):
         names = ["::error::pwned", "::set-output name=light::true", "docs/a b.md", "docs/quote'.md", "docs/dollar$x.md", "docs/new\nline.md", "docs/esc\x1b[31m.md", "docs/äö.md", "docs/tab\t.md"]
         head = self.pull_request({name: "x\n" for name in names})

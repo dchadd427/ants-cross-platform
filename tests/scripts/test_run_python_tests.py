@@ -179,6 +179,9 @@ class Wrapper(unittest.TestCase):
             rpt.COSTS.clear()
             self.assertEqual([w[0] for w in rpt.shard_of(work, 1, 2)], ["test_a.C", "test_c.C", "test_e.C"])      # (no cost: a group counts 1, so the slices have the same number)
             self.assertEqual([w[0] for w in rpt.shard_of(work, 2, 2)], ["test_b.C", "test_d.C"])
+            rpt.COSTS.update({"test_c.C": 50, "test_d.C": 40, "test_e.C": 30})
+            self.assertEqual([w[0] for w in rpt.shard_of(work, 1, 2)], ["test_a.C", "test_b.C", "test_c.C"])      # (c is placed first, a and b after it: the slice keeps the order of the files)
+            self.assertEqual([w[0] for w in rpt.shard_of(work, 2, 2)], ["test_d.C", "test_e.C"])
         finally:
             rpt.COSTS.clear()
             rpt.COSTS.update(saved)
