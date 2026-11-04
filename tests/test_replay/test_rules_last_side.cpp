@@ -203,14 +203,14 @@ int main() {
         ASSERT_EQ(five.replay.total_turns, kBeforeTurns);
         ASSERT_EQ(five.replay.final_hash, kBeforeFinalHash);
         ASSERT_TRUE(five.replay.hashes.size() == 12 && five.replay.hashes[0] == kBeforeHash100 && five.replay.hashes[3] == kBeforeHash400 && five.replay.hashes[11] == kBeforeHash1200);
-        ASSERT_TRUE(five.result.standing == sim::PLAYER_NEUTRAL && five.result.stats[0].score == 0 && five.result.stats[1].score == 0);
+        ASSERT_TRUE(five.result.tie_standing == sim::PLAYER_NEUTRAL && five.result.stats[0].score == 0 && five.result.stats[1].score == 0);
         const Outcome o = play(five.replay, level);
         ASSERT_TRUE(o.ran && o.ok && o.complete && o.match_over);
         ASSERT_EQ(o.turns, kBeforeTurns);
         ASSERT_EQ(o.hash, kBeforeFinalHash);
         ASSERT_EQ(o.hashes_checked, 12u);
         ASSERT_EQ(o.first_bad_turn, 0u);
-        ASSERT_TRUE(o.result.standing == sim::PLAYER_NEUTRAL);                               // (a tie at 0 and the clock: nobody is put first, the screen's order decides as it always did)
+        ASSERT_TRUE(o.result.tie_standing == sim::PLAYER_NEUTRAL);                               // (a tie at 0 and the clock: nobody is put first, the screen's order decides as it always did)
         // written again, the file is the same bytes
         std::string error;
         ASSERT_EQ(encode(five.replay, error), five.file);
@@ -223,7 +223,7 @@ int main() {
         ASSERT_TRUE(eight.replay.complete && eight.replay.head.sim_rules == 8 && plays_here(eight.replay.head));
         ASSERT_TRUE(eight.over && eight.turns > 100 && eight.turns < 600);                   // (the Worker dies after about 17 s; the rule ends the match within a second of that, long before the minute)
         ASSERT_LT(eight.turns, kBeforeTurns);
-        ASSERT_TRUE(eight.result.standing == 0 && eight.result.winning_players == std::vector<uint8_t>({0}) && eight.result.losing_players == std::vector<uint8_t>({1}));
+        ASSERT_TRUE(eight.result.tie_standing == 0 && eight.result.standing == sim::PLAYER_NEUTRAL && eight.result.winning_players == std::vector<uint8_t>({0}) && eight.result.losing_players == std::vector<uint8_t>({1}));
         ASSERT_TRUE(eight.result.stats[0].score == 0 && eight.result.stats[1].score == 0);   // (a tie at 0: the original's rule would never have let it win)
         ASSERT_TRUE(eight.result.rows(1)[0].first == 0);                                     // (not even the screen of the loser puts itself first)
         const Outcome o = play(eight.replay, level);
@@ -231,7 +231,7 @@ int main() {
         ASSERT_EQ(o.turns, eight.turns);
         ASSERT_EQ(o.hash, eight.hash);
         ASSERT_EQ(o.first_bad_turn, 0u);
-        ASSERT_TRUE(o.result.standing == 0 && o.result.winning_players == std::vector<uint8_t>({0}));
+        ASSERT_TRUE(o.result.tie_standing == 0 && o.result.winning_players == std::vector<uint8_t>({0}));
         // the two files hold the same commands up to the end of the short one
         ASSERT_TRUE(!five.replay.commands.empty() && eight.replay.commands.size() <= five.replay.commands.size());
         for (size_t i = 0; i < eight.replay.commands.size(); ++i) {
@@ -278,7 +278,7 @@ int main() {
             }
             ASSERT_TRUE(engine.is_match_over() && copy.is_match_over());
             ASSERT_EQ(turn < kBeforeTurns, rules == kSimRules);
-            ASSERT_TRUE(engine.get_world_state().match_result.standing == copy.get_world_state().match_result.standing);
+            ASSERT_TRUE(engine.get_world_state().match_result.tie_standing == copy.get_world_state().match_result.tie_standing);
             ASSERT_EQ(engine.last_side_rule(), copy.last_side_rule());
             ASSERT_EQ(engine.last_side_rule(), rules == kSimRules);
         }

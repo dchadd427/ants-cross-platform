@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the last side standing of the original's game (rules number 8) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the end rule (when it holds: the sides, one team, what counts as food and what does not), who is put first in the results (the clock and the original's rule ranking as they were), the switch (the rule is not 187's, set_game_mode sets it back, the state hash does not carry it) against test_last_side (2.9.10), the rules numbers of a replay (the player's choice of rule from the head, what a build plays, what a match is recorded under, the head check and the refusal) against test_rules_last_side (2.29.2), and the history's list of recordings that play against test_history_store. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/last_side_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
+ "note": "Mutants of the last side standing of the original's game (rules number 8) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the end rule (when it holds: the sides, one team, what counts as food and what does not), how the results rank (the highest score wins even with no ant; only a tie for the top goes to the side left, on the screen and in the history; the clock and the original's rule rank as they were), the switch (the rule is not 187's, set_game_mode sets it back, the state hash does not carry it) against test_last_side (2.9.10), the rules numbers of a replay (the player's choice of rule from the head, what a build plays, what a match is recorded under, the head check and the refusal) against test_rules_last_side (2.29.2), the history's ranking against test_history_record, and its list of recordings that play against test_history_store. Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/last_side_mutants.json --keep-going --jobs 1. Every mutant must be caught.",
  "mutants": [
   {
    "id": "rule_never_ends_a_match",
@@ -99,33 +99,6 @@
    "build": "test_last_side",
    "test": "timeout 600 ./build/tests/test_sim/test_last_side",
    "expect": "6.1"
-  },
-  {
-   "id": "no_survivor_is_put_first",
-   "file": "src/ants_sim/sim_engine_impl.hpp",
-   "old": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && last_side_decides());",
-   "new": "return game_mode_ == GameMode::Kills187;",
-   "build": "test_last_side",
-   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
-   "expect": "2.1"
-  },
-  {
-   "id": "survivor_is_put_first_at_the_clock",
-   "file": "src/ants_sim/sim_engine_impl.hpp",
-   "old": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && last_side_decides());",
-   "new": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && alive_sides() == 1);",
-   "build": "test_last_side",
-   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
-   "expect": "5.2"
-  },
-  {
-   "id": "survivor_is_put_first_with_the_original_rule_off",
-   "file": "src/ants_sim/sim_engine_impl.hpp",
-   "old": "return game_mode_ == GameMode::Kills187 || (last_side_ends() && last_side_decides());",
-   "new": "return game_mode_ == GameMode::Kills187 || last_side_decides();",
-   "build": "test_last_side",
-   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
-   "expect": "2.2"
   },
   {
    "id": "the_rule_is_on_in_187",
@@ -252,6 +225,87 @@
    "build": "test_history_store",
    "test": "timeout 900 ./build/tests/test_server/test_history_store",
    "expect": "HS5.3"
+  },
+  {
+   "id": "no_survivor_wins_a_tie",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "result.tie_standing = last_standing();",
+   "new": "result.tie_standing = PLAYER_NEUTRAL;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "2.1"
+  },
+  {
+   "id": "survivor_wins_a_tie_at_the_clock",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "} else if (last_side_ends() && last_side_decides()) {",
+   "new": "} else if (last_side_ends() && alive_sides() == 1) {",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "5.2"
+  },
+  {
+   "id": "survivor_wins_a_tie_with_the_original_rule_off",
+   "file": "src/ants_sim/last_side.cpp",
+   "old": "} else if (last_side_ends() && last_side_decides()) {",
+   "new": "} else if (last_side_decides()) {",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "2.2"
+  },
+  {
+   "id": "survivor_is_put_ahead_of_the_score",
+   "file": "include/ants_sim/match_stats.hpp",
+   "old": "                else if (out[i].score != out[j].score) move_up = out[i].score > out[j].score;\n                else if (wins_tie(out[i]) != wins_tie(out[j])) move_up = wins_tie(out[i]);",
+   "new": "                else if (wins_tie(out[i]) != wins_tie(out[j])) move_up = wins_tie(out[i]);\n                else if (out[i].score != out[j].score) move_up = out[i].score > out[j].score;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "5.1"
+  },
+  {
+   "id": "survivor_is_put_after_the_local_tie_break",
+   "file": "include/ants_sim/match_stats.hpp",
+   "old": "                else if (wins_tie(out[i]) != wins_tie(out[j])) move_up = wins_tie(out[i]);\n                else move_up = out[i].first == local;",
+   "new": "                else if (out[i].first == local || out[j].first == local) move_up = out[i].first == local;\n                else if (wins_tie(out[i]) != wins_tie(out[j])) move_up = wins_tie(out[i]);\n                else move_up = false;",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "5.1"
+  },
+  {
+   "id": "the_survivors_alliance_is_its_first_seat_only",
+   "file": "include/ants_sim/match_stats.hpp",
+   "old": "(r.first == tie_standing || r.second == tie_standing); };\n        for",
+   "new": "(r.first == tie_standing); };\n        for",
+   "build": "test_last_side",
+   "test": "timeout 600 ./build/tests/test_sim/test_last_side",
+   "expect": "4.1"
+  },
+  {
+   "id": "history_puts_the_survivor_after_the_kills",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "        if (row_has(a, tie_standing) != row_has(b, tie_standing)) return row_has(a, tie_standing);       // (a tie for the top score: the side that was left standing goes first, before the kills are looked at)\n        return secondary(a) > secondary(b);",
+   "new": "        if (secondary(a) != secondary(b)) return secondary(a) > secondary(b);\n        return row_has(a, tie_standing) && !row_has(b, tie_standing);",
+   "build": "test_history_record",
+   "test": "timeout 600 ./build/tests/test_server/test_history_record",
+   "expect": "HR7.2"
+  },
+  {
+   "id": "history_calls_a_decided_tie_a_draw",
+   "file": "src/ants_server/history_record.cpp",
+   "old": " && !row_has(rows[0], tie_standing) && !row_has(rows[1], tie_standing);",
+   "new": ";",
+   "build": "test_history_record",
+   "test": "timeout 600 ./build/tests/test_server/test_history_record",
+   "expect": "HR7.2"
+  },
+  {
+   "id": "history_ignores_the_side_left",
+   "file": "src/ants_server/history_record.cpp",
+   "old": "outcome.result.standing, rec.rows, outcome.result.tie_standing);",
+   "new": "outcome.result.standing, rec.rows);",
+   "build": "test_history_record",
+   "test": "timeout 600 ./build/tests/test_server/test_history_record",
+   "expect": "HR7.3"
   }
  ]
 }

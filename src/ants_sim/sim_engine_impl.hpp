@@ -136,8 +136,9 @@ public:
     bool last_side_ends() const noexcept { return game_mode_ == GameMode::HighestScore && last_side_rule_; }
     /// Whether anything could still score: a food object with units left that are worth points (a pile or a lunchbox), an ant that carries food or loot, an ant that is taking a bite (last_side.cpp)
     bool scoring_food_left() const;
-    /// Whether the side that is left wins the results: always in 187 (a match that ends with one side left), in the original's game when the last-side rule holds (last_side.cpp)
-    bool side_left_wins() const { return game_mode_ == GameMode::Kills187 || (last_side_ends() && last_side_decides()); }
+    /// The results of a match that is over: in 187 the side that is left goes first (`standing`); in the original's game, when the last-side rule holds, it only wins a tie for the top score (`tie_standing`);
+    /// the cues (winning_players) follow the rows (last_side.cpp)
+    void mark_side_left(MatchResult& result) const;
     /// The last-side rule holds now: exactly one side has an ant, an egg or a hatch (two or more teams in the match) and nothing is left to score (last_side.cpp)
     bool last_side_decides() const;
     /// 187: at the start of a tick (before CHECKGO, which may end the match), says once, to every player, that a team of the match has no ant, no egg and no hatch left, and plays the drop-out cue (not once the match is over).

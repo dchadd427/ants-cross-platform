@@ -96,6 +96,9 @@ struct MatchResult {
     /// 187 only: the team that is the last one standing when the match ends (every other side has no ant left, no egg and no hatch). Its row, or the row of the
     /// alliance it belongs to, goes first whatever the scores are (a kill count only ranks the sides that are not the last ones standing). PLAYER_NEUTRAL otherwise.
     uint8_t standing{PLAYER_NEUTRAL};
+    /// The original's game under the last-side rule (rules number 8): the team that is the last one standing when the match ends with nothing left to score. It only decides a TIE: among rows with the
+    /// same score its row (or its alliance's) goes first, so the highest score still wins, even for a team with no ant left. PLAYER_NEUTRAL otherwise (and in 187, which uses `standing`).
+    uint8_t tie_standing{PLAYER_NEUTRAL};
     std::array<uint32_t, MAX_PLAYERS> ants_left{};   // the living ants of each team at the end (filled in 187; 0 in the other modes)
 
     /// The alliances that both sides confirm: before the rows are built the screen clears every alliance that the other side does not return,
@@ -113,7 +116,7 @@ struct MatchResult {
 
     /// The rows of the results screen of team `local` (FUN_01015136): one row per present team, an alliance (both sides confirmed) in one row that the
     /// lower-numbered team makes; then the exchange sort of 0x1015316: a row moves in front of an earlier row when the earlier one belongs to the quitter,
-    /// or (187 only) the moving row is the one of the last team standing, or has a lower score, or an equal score while the moving row is made by the local team (a row the quitter made never moves forward).
+    /// or (187 only) the moving row is the one of the last team standing, or has a lower score, or an equal score while the moving row is the one of `tie_standing` or, failing that, is made by the local team (a row the quitter made never moves forward).
     std::vector<ResultRow> rows(uint8_t local) const {
         const std::array<uint8_t, MAX_PLAYERS> al = mutual_allies();
         std::vector<ResultRow> out;
@@ -137,6 +140,7 @@ struct MatchResult {
             row->ants_left += static_cast<int32_t>(ants_left[k]);
         }
         auto stands = [this](const ResultRow& r) { return standing != PLAYER_NEUTRAL && (r.first == standing || r.second == standing); };
+        auto wins_tie = [this](const ResultRow& r) { return tie_standing != PLAYER_NEUTRAL && (r.first == tie_standing || r.second == tie_standing); };
         for (size_t i = 0; i < out.size(); ++i) {
             for (size_t j = 0; j < i; ++j) {
                 bool move_up;
@@ -144,6 +148,7 @@ struct MatchResult {
                 else if (out[j].first == quitter) move_up = true;
                 else if (stands(out[i]) != stands(out[j])) move_up = stands(out[i]);
                 else if (out[i].score != out[j].score) move_up = out[i].score > out[j].score;
+                else if (wins_tie(out[i]) != wins_tie(out[j])) move_up = wins_tie(out[i]);
                 else move_up = out[i].first == local;
                 if (move_up) std::swap(out[i], out[j]);
             }

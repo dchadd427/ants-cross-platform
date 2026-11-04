@@ -166,7 +166,7 @@ int main() {
         ASSERT_GT(end, 0);
         ASSERT_LE(end, 12);                                                                  // (the first poll of CHECKGO: not a minute of waiting)
         const MatchResult& r = result_of(sim);
-        ASSERT_TRUE(r.is_over && r.standing == 0);
+        ASSERT_TRUE(r.is_over && r.tie_standing == 0);
         ASSERT_TRUE(r.stats[0].score == 0 && r.stats[1].score == 0);
         for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(r, seat) == Seats({0}));     // (no tie goes to the local team)
         ASSERT_TRUE(r.winning_players == Seats({0}));
@@ -179,14 +179,14 @@ int main() {
         make_world(sim, GameMode::HighestScore, false);
         only_alive(sim, {0});
         ASSERT_TRUE(survives(sim));
-        ASSERT_TRUE(result_of(sim).standing == PLAYER_NEUTRAL && !sim.is_match_over());
+        ASSERT_TRUE(result_of(sim).tie_standing == PLAYER_NEUTRAL && !sim.is_match_over());
         // and when the clock ends such a match, the results rank by score as they always did: a dead team with the best score is first, nobody is put first for being the one left
         SimulationEngine clock;
         make_world(clock, GameMode::HighestScore, false, 4000);
         only_alive(clock, {0});
         clock.set_player_score(1, 90);
         ASSERT_GT(ticks_to_end(clock, 400), 0);
-        ASSERT_TRUE(result_of(clock).standing == PLAYER_NEUTRAL && top_row(result_of(clock), 0) == Seats({1}));
+        ASSERT_TRUE(result_of(clock).tie_standing == PLAYER_NEUTRAL && top_row(result_of(clock), 0) == Seats({1}));
     } TEST_END();
 
     TEST_CASE("2.3 the survivor can be any seat; it needs no score and no egg of its own") {
@@ -195,7 +195,7 @@ int main() {
             make_world(sim);
             only_alive(sim, {seat});
             ASSERT_GT(ticks_to_end(sim, 200), 0);
-            ASSERT_TRUE(result_of(sim).standing == seat && result_of(sim).winning_players == Seats({seat}));
+            ASSERT_TRUE(result_of(sim).tie_standing == seat && result_of(sim).winning_players == Seats({seat}));
         }
     } TEST_END();
 
@@ -225,7 +225,7 @@ int main() {
         make_world(sim);
         only_alive(sim, {});
         ASSERT_GT(ticks_to_end(sim, 200), 0);
-        ASSERT_TRUE(result_of(sim).standing == PLAYER_NEUTRAL);
+        ASSERT_TRUE(result_of(sim).tie_standing == PLAYER_NEUTRAL);
         SimulationEngine off;
         make_world(off, GameMode::HighestScore, false);
         only_alive(off, {});
@@ -322,7 +322,7 @@ int main() {
         sim.grid_mut().place_bomb(42, 40, 1);
         sim.grid_mut().place_firewall(43, 40, 0);
         ASSERT_GT(ticks_to_end(sim, 200), 0);
-        ASSERT_TRUE(result_of(sim).standing == 0);
+        ASSERT_TRUE(result_of(sim).tie_standing == 0);
     } TEST_END();
 
     TEST_CASE("3.8 a whole harvest: the pile, the bite, the walk home and the deposit keep the match going; it ends when the food is in the hill") {
@@ -346,7 +346,7 @@ int main() {
         ASSERT_TRUE(sim.is_match_over());
         ASSERT_FALSE(over_while_carrying);
         ASSERT_EQ(sim.get_player_score(0), 25);                                              // (the deposit scored: the match did not end with the food in the ant's hands)
-        ASSERT_TRUE(result_of(sim).standing == 0 && top_row(result_of(sim), 1) == Seats({0}));
+        ASSERT_TRUE(result_of(sim).tie_standing == 0 && top_row(result_of(sim), 1) == Seats({0}));
     } TEST_END();
 
     TEST_CASE("3.9 an ant in the middle of a bite keeps the match going even when its pile already reads empty") {
@@ -382,7 +382,7 @@ int main() {
         sim.set_player_score(0, 400);                                                       // (the dead ally has the best score)
         ASSERT_GT(ticks_to_end(sim, 200), 0);
         const MatchResult& r = result_of(sim);
-        ASSERT_TRUE(r.standing == 1);
+        ASSERT_TRUE(r.tie_standing == 1);
         ASSERT_TRUE(top_row(r, 2) == Seats({0, 1}));
         ASSERT_TRUE(r.is_winner(0) && r.is_winner(1) && !r.is_winner(2) && !r.is_winner(3));
     } TEST_END();
@@ -415,7 +415,7 @@ int main() {
         only_alive(sim, {0, 1});
         sim.drop_player(1);
         ASSERT_GT(ticks_to_end(sim, 200), 0);
-        ASSERT_TRUE(result_of(sim).standing == 0);
+        ASSERT_TRUE(result_of(sim).tie_standing == 0);
         SimulationEngine off;
         make_world(off, GameMode::HighestScore, false);
         only_alive(off, {0, 1});
@@ -423,22 +423,88 @@ int main() {
         ASSERT_TRUE(survives(off));
     } TEST_END();
 
-    TEST_CASE("5.1 the survivor wins with a lower score than a dead team, and with a higher one") {
-        SimulationEngine low;
+    TEST_CASE("5.1 the highest score wins even for a team with no ant: a dead team ahead wins, the survivor ahead wins, a tie for the top goes to the survivor, all zero goes to the survivor") {
+        SimulationEngine low;                                                               // a dead team leads: it wins, the survivor does not
         make_world(low);
         only_alive(low, {0});
         low.set_player_score(1, 150);
         low.set_player_score(0, 20);
-        ASSERT_GT(ticks_to_end(low, 200), 0);
-        ASSERT_TRUE(result_of(low).standing == 0 && top_row(result_of(low), 1) == Seats({0}));
-        ASSERT_TRUE(result_of(low).winning_players == Seats({0}));
-        SimulationEngine high;
+        ASSERT_GT(ticks_to_end(low, 200), 0);                                               // (the rule ends the match: nothing can change the scores, so this is what the clock would give)
+        ASSERT_TRUE(result_of(low).tie_standing == 0 && result_of(low).standing == PLAYER_NEUTRAL);
+        for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(result_of(low), seat) == Seats({1}));
+        ASSERT_TRUE(result_of(low).winning_players == Seats({1}) && result_of(low).losing_players == Seats({0, 2, 3}));
+        SimulationEngine high;                                                              // the survivor leads
         make_world(high);
         only_alive(high, {0});
         high.set_player_score(0, 150);
         high.set_player_score(1, 20);
         ASSERT_GT(ticks_to_end(high, 200), 0);
-        ASSERT_TRUE(top_row(result_of(high), 1) == Seats({0}));
+        for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(result_of(high), seat) == Seats({0}));
+        SimulationEngine tie;                                                               // a tie for the top: the survivor is first on every machine's screen, the dead team's own included
+        make_world(tie);
+        only_alive(tie, {2});
+        tie.set_player_score(1, 100);
+        tie.set_player_score(2, 100);
+        tie.set_player_score(0, 40);
+        ASSERT_GT(ticks_to_end(tie, 200), 0);
+        for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(result_of(tie), seat) == Seats({2}));
+        ASSERT_TRUE(result_of(tie).winning_players == Seats({2}));
+        SimulationEngine zero;                                                              // all zero is a tie at 0
+        make_world(zero);
+        only_alive(zero, {3});
+        ASSERT_GT(ticks_to_end(zero, 200), 0);
+        for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(result_of(zero), seat) == Seats({3}));
+    } TEST_END();
+
+    TEST_CASE("5.1b two dead teams tied above the survivor are not the survivor's tie: the original's tie-break (the local team) decides between them; the survivor tied below them is last") {
+        SimulationEngine sim;
+        make_world(sim);
+        only_alive(sim, {0});
+        sim.set_player_score(1, 100);
+        sim.set_player_score(2, 100);
+        sim.set_player_score(0, 20);
+        ASSERT_GT(ticks_to_end(sim, 200), 0);
+        const MatchResult& r = result_of(sim);
+        ASSERT_TRUE(top_row(r, 1) == Seats({1}) && top_row(r, 2) == Seats({2}));
+        ASSERT_TRUE(r.rows(1)[2].first == 0 && r.rows(3)[2].first == 0);                 // (the survivor, at 20, is third: not first anywhere)
+        SimulationEngine three;                                                             // the survivor ties with one of two dead teams at the top: it goes first of the tied rows, the other keeps the local tie-break
+        make_world(three);
+        only_alive(three, {0});
+        three.set_player_score(0, 100);
+        three.set_player_score(1, 100);
+        three.set_player_score(2, 100);
+        ASSERT_GT(ticks_to_end(three, 200), 0);
+        for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(result_of(three), seat) == Seats({0}));
+        ASSERT_TRUE(result_of(three).rows(2)[1].first == 2 && result_of(three).rows(1)[1].first == 1);
+    } TEST_END();
+
+    TEST_CASE("5.1c an alliance is one row: a survivor whose dead ally has the best score wins with the row, an alliance below a dead team's score loses, a tie of the row's sum goes to the alliance") {
+        SimulationEngine best;
+        make_world(best);
+        best.form_alliance(0, 1);
+        only_alive(best, {1});
+        best.set_player_score(0, 200);
+        best.set_player_score(2, 150);
+        ASSERT_GT(ticks_to_end(best, 200), 0);
+        for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(result_of(best), seat) == Seats({0, 1}));
+        SimulationEngine below;
+        make_world(below);
+        below.form_alliance(0, 1);
+        only_alive(below, {1});
+        below.set_player_score(0, 30);
+        below.set_player_score(1, 30);
+        below.set_player_score(2, 100);
+        ASSERT_GT(ticks_to_end(below, 200), 0);
+        ASSERT_TRUE(top_row(result_of(below), 3) == Seats({2}) && result_of(below).winning_players == Seats({2}));
+        SimulationEngine tied;
+        make_world(tied);
+        tied.form_alliance(0, 1);
+        only_alive(tied, {1});
+        tied.set_player_score(0, 30);
+        tied.set_player_score(1, 30);
+        tied.set_player_score(2, 60);
+        ASSERT_GT(ticks_to_end(tied, 200), 0);
+        for (uint8_t seat = 0; seat < MAX_PLAYERS; ++seat) ASSERT_TRUE(top_row(result_of(tied), seat) == Seats({0, 1}));
     } TEST_END();
 
     TEST_CASE("5.2 the clock ends a match with a survivor and food left by the scores alone: a dead team with the best score wins, as it always did") {
@@ -450,7 +516,7 @@ int main() {
         sim.set_player_score(0, 10);
         ASSERT_GT(ticks_to_end(sim, 400), 0);                                               // (4 s)
         const MatchResult& r = result_of(sim);
-        ASSERT_TRUE(r.standing == PLAYER_NEUTRAL);
+        ASSERT_TRUE(r.tie_standing == PLAYER_NEUTRAL);
         ASSERT_TRUE(top_row(r, 2) == Seats({1}));
         ASSERT_TRUE(r.winning_players == Seats({1}));
     } TEST_END();
@@ -462,7 +528,7 @@ int main() {
         place_pile(sim, 40, 40, 2, 25);
         sim.set_player_score(0, 60);
         ASSERT_GT(ticks_to_end(sim, 200), 0);
-        ASSERT_TRUE(result_of(sim).standing == PLAYER_NEUTRAL && top_row(result_of(sim), 3) == Seats({0}));
+        ASSERT_TRUE(result_of(sim).tie_standing == PLAYER_NEUTRAL && top_row(result_of(sim), 3) == Seats({0}));
     } TEST_END();
 
     TEST_CASE("6.1 a match of one team has nobody to beat: it does not end because its team is the only side") {
@@ -484,7 +550,7 @@ int main() {
             if (a.player_id == 1) ends.kill_unit(a.id);
         }
         ASSERT_GT(ticks_to_end(ends, 400), 0);
-        ASSERT_TRUE(result_of(ends).standing == 0);
+        ASSERT_TRUE(result_of(ends).tie_standing == 0);
     } TEST_END();
 
     TEST_CASE("6.2 187 is unchanged: it ends at one side left with food on the map, whichever way the switch is set, and the other rule does not change its result") {
@@ -495,7 +561,7 @@ int main() {
             only_alive(sim, {0});
             place_pile(sim, 40, 40, 3, 25);
             ASSERT_GT(ticks_to_end(sim, 200), 0);
-            ASSERT_TRUE(result_of(sim).standing == 0);
+            ASSERT_TRUE(result_of(sim).standing == 0 && result_of(sim).tie_standing == PLAYER_NEUTRAL);        // (187's own field, unconditional; the tie field is the original's game's)
             ASSERT_EQ(result_of(sim).ants_left[0], 1u);
         }
     } TEST_END();
@@ -528,7 +594,7 @@ int main() {
         ASSERT_GT(end_a, 0);
         ASSERT_TRUE(end_a == end_b && end_a == end_c);
         ASSERT_TRUE(a.state_hash() == b.state_hash() && a.state_hash() == copy.state_hash());
-        ASSERT_TRUE(result_of(a).standing == 0 && result_of(copy).standing == 0);
+        ASSERT_TRUE(result_of(a).tie_standing == 0 && result_of(copy).tie_standing == 0);
         SimulationEngine off;
         make_world(off, GameMode::HighestScore, false);
         only_alive(off, {0});

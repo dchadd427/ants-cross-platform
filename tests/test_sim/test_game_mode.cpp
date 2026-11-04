@@ -398,7 +398,7 @@ int main() {
         for (const AntSnapshot& a : ants_of(last_side, 1)) last_side.kill_unit(a.id);
         run_ticks(last_side, 200);
         ASSERT_TRUE(last_side.is_match_over());
-        ASSERT_EQ(last_side.get_world_state().match_result.standing, 0);
+        ASSERT_EQ(last_side.get_world_state().match_result.tie_standing, 0);       // (the original's game: the side that is left wins a tie, here all 0)
         SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2, 3});
         for (int t : {1, 2}) for (const AntSnapshot& a : ants_of(e, static_cast<uint8_t>(t))) e.kill_unit(a.id);
         run_ticks(e, 40);

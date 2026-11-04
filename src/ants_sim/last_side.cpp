@@ -1,7 +1,7 @@
 // The last side standing (docs/GAMEPLAY.md, "The last side standing"): the end rule that the rules number 8 of the original's game adds to the original's CHECKGO. The original ends a match early
 // only when every live team is the local team or its ally and that alliance has the strictly best score, so a tie for the top, or a score of 0, never wins and a match with no food on the map
 // (or none left) played on to the clock with one side alive. Now, when exactly ONE side still has an ant, an egg or a hatch in progress and nothing is left that could score, the match ends and that side
-// wins, whatever the scores are. Game type 187 has an end rule of its own (mode_187.cpp) and never reads this one. set_last_side_rule(false) is the way to play a recording of the rules number 5.
+// wins a tie. The match ends early because nothing can change the scores after that, so the results are what the clock would give: the highest score wins even with no ant left, and only a tie for the top (or all scores 0) goes to the side that is left (MatchResult::tie_standing). Game type 187 has an end rule of its own (mode_187.cpp) and never reads this one. set_last_side_rule(false) is the way to play a recording of the rules number 5.
 #include "sim_engine_impl.hpp"
 
 namespace ants::sim {
@@ -36,6 +36,17 @@ bool SimulationEngineImpl::last_side_decides() const {
         if ((roster_mask_ & (1u << k)) != 0) ++in_match;
     }
     return in_match >= 2 && alive_sides() == 1 && !scoring_food_left();         // (a match of one team has nobody to beat; nobody left at all is the original's rule, checkgo_ends_for)
+}
+
+void SimulationEngineImpl::mark_side_left(MatchResult& result) const {
+    if (game_mode_ == GameMode::Kills187) {
+        result.standing = last_standing();
+    } else if (last_side_ends() && last_side_decides()) {
+        result.tie_standing = last_standing();
+    } else {
+        return;
+    }
+    result.decide_winners();
 }
 
 uint8_t SimulationEngineImpl::last_standing() const {

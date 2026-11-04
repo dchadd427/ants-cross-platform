@@ -486,10 +486,7 @@ MatchResult SimulationEngineImpl::make_match_result() const {
             if (a != nullptr && !a->removed && a->player_id < MAX_PLAYERS) ++result.ants_left[a->player_id];
         }
     }
-    if (match_state_ == MatchState::GameOver && side_left_wins()) {
-        result.standing = last_standing();               // the side that is left goes first, whatever the scores are (187; the original's game under the rules number 8, last_side.cpp)
-        result.decide_winners();                         // the cues follow the rows, which follow the team that is left
-    }
+    if (match_state_ == MatchState::GameOver) mark_side_left(result);       // (187: the side that is left goes first; the original's game under the rules number 8: it wins a tie; last_side.cpp)
     return result;
 }
 

@@ -5,7 +5,7 @@
 //
 // WHO WON depends on the room's game mode (every record says which: `mode`, "highest-score" or "187", the names of sim::game_mode_name and of network protocol 17):
 //   highest-score (the original's game): the score decides; equal scores go to the KILLS (enemy ants killed); equal kills too is a DRAW. Losses and hatched ants never break a tie. Rules number 8: when one side was left and no
-//        food could score, that side (MatchResult::standing) wins outright, as in 187.
+//        food could score, the same ranking holds (the highest score wins, even with no ant left) and that side (MatchResult::tie_standing) wins a tie for the top instead of a draw.
 //   187: the last side with ants or eggs wins outright (the engine's own end rule, MatchResult::standing); when nobody is left alone (the clock ran out, or all went at once) the most kills wins, and equal kills
 //        is a DRAW. 187 has no food and no score: the engine's score IS the kills, and a record keeps that number as `score` (the ranking value, the same as `killed`) and never shows it as a score.
 // A side that quit (the quit ended the match) is last; a row of allied seats is one side whose numbers are added up. The engine's own row order is NOT the rule: it breaks a tie in score by the seat (for the
@@ -83,10 +83,11 @@ struct HistoryRecord {
     const char* result() const noexcept { return draw ? "draw" : (!finished || quitter >= 0) ? "cut" : "decided"; }
 };
 
-/// Ranks `rows` (any order, as the engine builds them) by the rule of `mode` and marks the winner: the quitter's row last (`quitter` is a seat or -1), the row of `standing` (a seat or 255: 187, and the original's game under the rules number 8) first, then
+/// Ranks `rows` (any order, as the engine builds them) by the rule of `mode` and marks the winner: the quitter's row last (`quitter` is a seat or -1), the row of `standing` (a seat or 255: 187) first, then
 /// by score and kills (highest-score) or by kills (187), the rest in the order they came in. Returns true when the first two rows are equal on the rule's numbers and neither is the quitter's or the one left
 /// standing: a draw, in which case no row is marked. Pure; the rows' `winner` is set here.
-bool rank_history_rows(const std::string& mode, int quitter, uint8_t standing, std::vector<HistoryRow>& rows);
+/// `tie_standing` (a seat or 255: the original's game under the rules number 8, MatchResult::tie_standing) only decides a tie: when the row of that seat has the best score together with another row, it goes first (before the kills are looked at) and the match is no draw.
+bool rank_history_rows(const std::string& mode, int quitter, uint8_t standing, std::vector<HistoryRow>& rows, uint8_t tie_standing = sim::PLAYER_NEUTRAL);
 
 /// What the engine said about a match that was played again: the record of it. `id` and `ended_s` come from the file's name. Pure: no clock, no disk.
 HistoryRecord make_history_record(const std::string& id, int64_t ended_s, const replay::Replay& replay, const replay::Outcome& outcome);

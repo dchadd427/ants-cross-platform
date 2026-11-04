@@ -80,7 +80,7 @@ JsonValue row_json(const HistoryRow& r) {
     return o;
 }
 
-// 0 the row of the side left standing (187, and the original's game when one side was left and no food could score), 1 any other, 2 the quitter's
+// 0 the row of the side left standing (187), 1 any other, 2 the quitter's
 int rank_class(const HistoryRow& r, int quitter, uint8_t standing) {
     if (row_has(r, quitter)) return 2;
     if (standing < sim::MAX_PLAYERS && row_has(r, standing)) return 0;
@@ -93,8 +93,10 @@ bool valid_history_id(const std::string& id) { return ReplayStore::valid_file_na
 
 std::string history_recording_file(const std::string& id) { return id + ReplayStore::kExtension; }
 
-bool rank_history_rows(const std::string& mode, int quitter, uint8_t standing, std::vector<HistoryRow>& rows) {
+bool rank_history_rows(const std::string& mode, int quitter, uint8_t standing, std::vector<HistoryRow>& rows, uint8_t tie_standing) {
     const bool kills_only = mode == kHistoryMode187;
+    if (kills_only) tie_standing = sim::PLAYER_NEUTRAL;                // (the tie field is the original's game's; 187 has the unconditional `standing`)
+    else standing = sim::PLAYER_NEUTRAL;
     for (HistoryRow& r : rows) r.winner = false;
     // the numbers that the rule ranks by: highest-score the score and then the kills, 187 the kills alone
     const auto primary = [kills_only](const HistoryRow& r) { return kills_only ? r.killed : r.score; };
@@ -104,11 +106,12 @@ bool rank_history_rows(const std::string& mode, int quitter, uint8_t standing, s
         const int cb = rank_class(b, quitter, standing);
         if (ca != cb) return ca < cb;
         if (primary(a) != primary(b)) return primary(a) > primary(b);
+        if (row_has(a, tie_standing) != row_has(b, tie_standing)) return row_has(a, tie_standing);       // (a tie for the top score: the side that was left standing goes first, before the kills are looked at)
         return secondary(a) > secondary(b);
     });
     if (rows.empty()) return false;
     const bool draw = rows.size() >= 2 && rank_class(rows[0], quitter, standing) == 1 && rank_class(rows[1], quitter, standing) == 1 && primary(rows[0]) == primary(rows[1]) &&
-                      secondary(rows[0]) == secondary(rows[1]);
+                      secondary(rows[0]) == secondary(rows[1]) && !row_has(rows[0], tie_standing) && !row_has(rows[1], tie_standing);
     if (!draw && rank_class(rows[0], quitter, standing) != 2) rows[0].winner = true;
     return draw;
 }
@@ -174,7 +177,7 @@ HistoryRecord make_history_record(const std::string& id, int64_t ended_s, const 
         row.hatched = r.new_hatched;
         rec.rows.push_back(std::move(row));
     }
-    rec.draw = rank_history_rows(rec.mode, rec.quitter, outcome.result.standing, rec.rows);
+    rec.draw = rank_history_rows(rec.mode, rec.quitter, outcome.result.standing, rec.rows, outcome.result.tie_standing);
     if (n < 2) {                                                                           // (a match of one team has nobody to beat)
         rec.draw = false;
         for (HistoryRow& row : rec.rows) row.winner = false;
