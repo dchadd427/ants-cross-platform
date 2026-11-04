@@ -202,6 +202,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
         }
     }
 
+    impl_->started_mask_ = impl_->alive_mask();
     impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
     if (impl_->fog_of_war_enabled_) {
         impl_->update_fog_of_war();
@@ -241,6 +242,7 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, 10);
     }
+    impl_->started_mask_ = impl_->alive_mask();
 
     impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
     if (impl_->fog_of_war_enabled_) {

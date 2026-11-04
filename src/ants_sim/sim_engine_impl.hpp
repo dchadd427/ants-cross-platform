@@ -96,6 +96,7 @@ public:
     /// the engine.
     uint8_t out_of_ants_told_{0};
     GameMode game_mode_{GameMode::HighestScore};   // the rules of the match (set before init, kept by it)
+    uint8_t started_mask_{0x0F};            // bit p: team p had an ant, an egg or a hatch when the match began (set by init and init_test_world): the teams that were really in the match; the last-side rule needs two of them
     bool last_side_rule_{true};             // the original's game only: the end rule of the rules number 8 (a recording of 5 plays without it: set_last_side_rule); 187 has its own end rule
     bool hill_open_187_{false};             // 187 only: the rules of the recordings before the closed hill (set_hill_open_187); the original's game never reads it
     /// 187 with the hill closed (the rule of 187 now): no ant enters its hill, so nothing heals, an ant at 1 hp does not retreat and the waiting ring is idle
@@ -141,6 +142,8 @@ public:
     void mark_side_left(MatchResult& result) const;
     /// The last-side rule holds now: exactly one side has an ant, an egg or a hatch (two or more teams in the match) and nothing is left to score (last_side.cpp)
     bool last_side_decides() const;
+    /// The teams of the roster that are alive now (an ant, an egg or a hatch, not dropped): what started_mask_ takes at the start of a match (last_side.cpp)
+    uint8_t alive_mask() const;
     /// 187: at the start of a tick (before CHECKGO, which may end the match), says once, to every player, that a team of the match has no ant, no egg and no hatch left, and plays the drop-out cue (not once the match is over).
     /// A team that dropped out has its own line and gets none.
     void announce_out_of_ants_187();

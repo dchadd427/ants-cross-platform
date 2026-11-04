@@ -8,6 +8,7 @@
 //   5.x  who wins and what the results say: ties, a score of 0, a dead team ahead, the clock
 //   6.x  one team in the match, 187 unchanged, the same match twice and a copy of the engine
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_assets/lvl_writer.hpp"
 #include "ants_sim/command.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/sim_engine.hpp"
@@ -374,6 +375,22 @@ int main() {
         ASSERT_TRUE(sim.get_unit(ant).is_holding());                                         // (the bite gave food from the pile that read empty)
     } TEST_END();
 
+    TEST_CASE("3.10 a Thief of the survivor keeps the match going while a hill that is not its own belongs to a team with a score to take; with nothing to take it ends") {
+        SimulationEngine sim;
+        make_world(sim);
+        only_alive(sim, {});
+        sim.spawn_unit(0, AntType::Thief, TileCoord{20, 20});
+        sim.set_player_score(1, 50);                                                         // (team 1 is dead, its hill stands)
+        ASSERT_TRUE(survives(sim, 200));
+        sim.set_player_score(1, 0);
+        ASSERT_GT(ticks_to_end(sim, 200), 0);
+        SimulationEngine worker;                                                             // a Worker cannot raid: the same score keeps nothing alive
+        make_world(worker);
+        only_alive(worker, {0});
+        worker.set_player_score(1, 50);
+        ASSERT_GT(ticks_to_end(worker, 200), 0);
+    } TEST_END();
+
     TEST_CASE("4.1 allies: one live team of an alliance is its side; the dead ally is on the same row, and the row wins") {
         SimulationEngine sim;
         make_world(sim);
@@ -551,6 +568,28 @@ int main() {
         }
         ASSERT_GT(ticks_to_end(ends, 400), 0);
         ASSERT_TRUE(result_of(ends).tie_standing == 0);
+    } TEST_END();
+
+    TEST_CASE("6.1b a roster of two or more with only ONE team on the map is a match of one team: it does not end for lack of an enemy, with food or without, and ends once a second team has been and gone") {
+        LevelData level = ants::assets::blank_level(30, 30, std::vector<std::string>{});
+        level.boundary_param = 0;                                                            // (no egg)
+        ants::assets::AnthillSpawn marker;
+        marker.tile_id = 152;
+        marker.team_id = 0;
+        marker.x = 10;
+        marker.y = 10;
+        level.anthill_spawns.push_back(marker);                                              // (team 1 is in the roster and has no marker, no egg, no hill)
+        for (const bool rule : {true, false}) {
+            SimulationEngine sim;
+            sim.set_game_mode(GameMode::HighestScore);
+            sim.set_last_side_rule(rule);
+            sim.init(level, 3, 0x03);
+            ASSERT_TRUE(survives(sim, 400));
+        }
+        SimulationEngine began;                                                              // team 1 did have an egg at the start and lost it: that is a match of two
+        began.init_test_world(30, 30, 3, 60000);
+        only_alive(began, {0});
+        ASSERT_GT(ticks_to_end(began, 200), 0);
     } TEST_END();
 
     TEST_CASE("6.2 187 is unchanged: it ends at one side left with food on the map, whichever way the switch is set, and the other rule does not change its result") {

@@ -93,13 +93,13 @@ struct MatchResult {
     uint8_t present_mask{0x0F};               // the teams that have a row: in the match and not dropped (the builder skips NULL and dropped teams)
     std::array<uint8_t, MAX_PLAYERS> ally{ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE, ALLIANCE_NONE};   // each team's ally field (team +0x68)
     uint16_t quitter{NO_QUITTER};             // the team whose quit ended the match: its row goes last; NO_QUITTER when the clock or the rules ended it
-    /// 187 only: the team that is the last one standing when the match ends (every other side has no ant left, no egg and no hatch). Its row, or the row of the
+    /// 187 only (the original's game under the rules number 8 has `tie_standing` below): the team that is the last one standing when the match ends (every other side has no ant left, no egg and no hatch). Its row, or the row of the
     /// alliance it belongs to, goes first whatever the scores are (a kill count only ranks the sides that are not the last ones standing). PLAYER_NEUTRAL otherwise.
     uint8_t standing{PLAYER_NEUTRAL};
     /// The original's game under the last-side rule (rules number 8): the team that is the last one standing when the match ends with nothing left to score. It only decides a TIE: among rows with the
     /// same score its row (or its alliance's) goes first, so the highest score still wins, even for a team with no ant left. PLAYER_NEUTRAL otherwise (and in 187, which uses `standing`).
     uint8_t tie_standing{PLAYER_NEUTRAL};
-    std::array<uint32_t, MAX_PLAYERS> ants_left{};   // the living ants of each team at the end (filled in 187; 0 in the other modes)
+    std::array<uint32_t, MAX_PLAYERS> ants_left{};   // the living ants of each team at the end (filled in 187 only; 0 in the original's game, whatever the rule)
 
     /// The alliances that both sides confirm: before the rows are built the screen clears every alliance that the other side does not return,
     /// team by team (FUN_010155ac, 0x1015609 - 0x1015645)
