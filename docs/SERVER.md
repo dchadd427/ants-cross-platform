@@ -226,7 +226,7 @@ Besides the upgrade to a WebSocket, the WebSocket port answers `GET /busy`, `GET
 - `matches` is the number of rooms whose match is loading or running with a person in it. A room that only waits for players is not a match. A room that a restart of the server brought back counts for its first five minutes, whether or not its players are back.
 - `players` is the number of people in rooms that wait or load, and who are there in a match. Bots are no people. Somebody who has not yet said Hello is in no room and is not counted. A room that a restart brought back also counts its held seats for its first five minutes.
 - `docker/nginx.conf` forwards `https://<site>/busy` to it like `/ws`: an exact location, GET only, no query, one request a second per address with a burst of 5, a 3-second connect timeout and 5-second read and send timeouts.
-- The deploy job of CI polls it and restarts the site when no match runs (after three hours at the most by default, `DEPLOY_MAX_WAIT_MINUTES`), so that a deploy does not end games that people are playing: [`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site), "Deploy from CI and the staging site".
+- The deploy job of CI polls it and restarts the site when no match runs (after three hours at the most by default), so that a deploy does not end games that people are playing: [`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site), "Deploy from CI and the staging site".
 
 ### The site statistics, `GET /stats` and `POST /stats/local`
 
@@ -368,11 +368,11 @@ docker compose -f docker-compose.server.yml up -d --build
 
 The service joins the external network `proxy-network`, which must exist: for a server alone, create it first with `docker network create proxy-network`. Keep that network private to the stack: its services trust each other.
 
-### One stack for the site and the server (Portainer)
+### One stack for the site and the server
 
-`docker-compose.stack.yml` holds both services, `ants-beta` (the web game) and `ants-server`, on the network `proxy-network`, which must already exist on the host (it is declared `external`). `docker-compose.staging.yml` is a second copy of it that runs next to it for trying finished work ([`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site)).
+`docker-compose.stack.yml` holds both services, `ants-beta` (the web game) and `ants-server`, on the network `proxy-network`, which must already exist on the host (it is declared `external`). `docker-compose.staging.yml` is a second copy of it with its own names, ports, volumes and network, for trying finished work ([`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site)).
 
-In Portainer: Stacks, Add stack, Repository, this repository, reference `refs/heads/main`, compose path `docker-compose.stack.yml`. Let the stack's webhook do the updates and leave the stack's own Git polling off, or it deploys by itself: the deploy job of CI calls the webhook after the tests pass and the server is idle ([`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site), "Deploy from CI and the staging site"). The first deployment builds both images and takes several minutes.
+Create the stack from this repository with the compose file `docker-compose.stack.yml` (any tool that builds a stack from a Git repository will do, or `docker compose -f docker-compose.stack.yml up -d --build` on the host). How CI redeploys it after the tests pass and the server is idle: [`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site), "Deploy from CI and the staging site". The first deployment builds both images and takes several minutes.
 
 Nothing else has to be set. The server uses the maps of the image (a volume `ants-maps`, filled the first time, for the six; the players' maps are read from the image itself), makes its control secret, and allows the demo rooms of `web/lobby.html`: 48 at a time, each waiting up to ten minutes for its players and each with a turn log of at most 4 MiB (`--log-mb 4`, so that the rooms cannot use up the 256 MiB that all the logs share). The page chooses the map among the six of the original, and every match that its card starts takes a demo room, a game against bots only too (since v0.8.0). The server also keeps the matches that ran 30 seconds or more, the demo rooms' too, for 30 days and 100 MiB together, and the site lists them and gives them out: `/replays` is public and read only, and the names that the players typed are in it ("Replays").
 

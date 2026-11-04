@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Calls the deploy webhook that the environment variable WEBHOOK_URL holds (a Portainer stack's webhook; the deploy job of .github/workflows/ci.yml takes it from a repository
+# Calls the deploy webhook that the environment variable WEBHOOK_URL holds (the webhook of a stack; the deploy job of .github/workflows/ci.yml takes it from a repository
 # secret). Tested by tests/scripts/test_deploy_webhook.py.
 #
 #   WEBHOOK_URL=<address> tools/deploy_webhook.sh [LABEL]       LABEL (production, staging) only names the site in the messages

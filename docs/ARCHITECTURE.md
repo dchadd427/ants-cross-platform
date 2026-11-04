@@ -186,7 +186,7 @@ ants-cross-platform/
 │   │                                   # restarts the site
 │   ├── web_without_docker.py           # The web image without Docker (Linux): the Dockerfile's commands on
 │   │                                   # this machine, the pages served with nginx, for the browser checks
-│   ├── deploy_webhook.sh               # Calls the Portainer deploy webhook without ever printing its address
+│   ├── deploy_webhook.sh               # Calls the deploy hook without ever printing its address
 │   └── front_page_art/                 # Makes the front page's pictures in web/front/ from the game's own assets
 │                                       # (needs Pillow; a developer's tool, in no build or test)
 ├── web/                                # The web build's page files
@@ -216,7 +216,7 @@ ants-cross-platform/
 │                                       # docker-compose.stack.yml
 ├── docker-compose.server.yml           # Example service of the dedicated game server
 ├── docker-compose.stack.yml            # The web game, the game server and the chat hub together as one stack
-│                                       # (Portainer, auto-deploy)
+│                                       # (the stack that the deploy job redeploys)
 ├── docker-compose.staging.yml          # The same three services as a second stack with its own names, ports, volumes
 │                                       # and network, for trying finished work
 ├── Dockerfile                          # Multi-stage Emscripten + Nginx build

@@ -1,5 +1,5 @@
-# The whole site in one stack: the web game (ants-beta) and the dedicated game server (ants-server). For Portainer: Stacks -> Add stack -> Repository,
-# compose path "docker-compose.stack.yml"; the values below are set in the stack's "Environment variables" (they are NOT part of the repository):
+# The whole site in one stack: the web game (ants-beta) and the dedicated game server (ants-server). The values below are set
+# in the stack's "Environment variables" (they are NOT part of the repository):
 #
 #   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (optional: without it the server makes one the first time it
 #                                                   starts, prints it once in its log and keeps it in the file /results/control-secret of the volume
@@ -47,7 +47,7 @@
 #   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from, and the base of the Discord login's way back
 #                                                   (<this address>/hub/callback; optional; this is the default). Empty or wrong: the hub refuses every socket and the page says "Chat is offline"
 #   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB.md, "Login": the site's operator makes the application, adds the redirect
-#                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment (Portainer) and never from a file of
+#                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment and never from a file of
 #                                                   the repository; without them the chat is read-only for everybody and says so. The secret is read by the hub and printed nowhere
 #   ANTS_HUB_MIN_ACCOUNT_DAYS=7                     a Discord account younger than this many days cannot write in the chat (0 lets every account write; optional; this is the default)
 #   ANTS_HUB_MODS=<account id>,<account id>         the accounts that may type /mute name minutes and /del id in the chat (optional; digits only, comma separated; none by default; the account

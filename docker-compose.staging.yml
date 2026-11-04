@@ -1,6 +1,5 @@
-# The staging site: a second copy of the whole site (docker-compose.stack.yml) that runs on the same machine next to the first one, for the owner to try finished work before it
-# is released. For Portainer: Stacks -> Add stack -> Repository, reference "refs/heads/staging", compose path "docker-compose.staging.yml" (docs/WORKFLOW.md: the whole set-up,
-# with the reverse proxy and the DNS record). Nothing is shared with the production stack: its container names, host ports, volumes and network are its own, so both run at once.
+# The staging site: a second copy of the whole site (docker-compose.stack.yml), for the maintainer to try finished work before it
+# is released. Nothing is shared with the production stack: its container names, host ports, volumes and network are its own.
 # The web page says "staging" in its title and footer (the build argument ANTS_SITE_LABEL); nothing else of the images differs.
 #
 # Host ports (production: 19980, 4001, 4002, 4010): 19981 the web page, 4003 the public TCP game port, 4004 the WebSocket port and 4011 the control interface (both on the
