@@ -256,6 +256,10 @@ class Decision(unittest.TestCase):
             light, out, _ = self.decide(head, base=base)
             self.assertTrue(light, out)
             self.assertEqual(self.classes(out), {"docs/a.md": "light"})
+        self.git("update-ref", "refs/remotes/origin/main", self.commit(None, {"f": "1\n"}, "unrelated"))        # (a root commit: no merge base with the head)
+        light, out, _ = self.decide(head)
+        self.assertFalse(light)
+        self.assertIn("no merge base of the pull request and main", out)
         self.git("update-ref", "-d", "refs/remotes/origin/main")
         light, out, _ = self.decide(head)
         self.assertFalse(light)
@@ -329,10 +333,11 @@ class Decision(unittest.TestCase):
         self.assertIn("git could not list the changed files", out)
 
     def test_a_path_cannot_put_a_workflow_command_or_a_control_character_in_the_log(self):
-        names = ["::error::pwned", "::set-output name=light::true", "docs/a b.md", "docs/quote'.md", "docs/dollar$x.md", "docs/new\nline.md", "docs/esc\x1b[31m.md", "docs/äö.md", "docs/tab\t.md"]
+        names = ["::error::pwned", "::set-output name=light::true", "docs/a b.md", "docs/quote'.md", "docs/dollar$x.md", "docs/new\nline.md", "docs/esc\x1b[31m.md", "docs/äö.md", "docs/tab\t.md",
+                 "full\n::error::a line of its own", "src/full\n::set-output name=light::true", "src/esc\x1b[31m.cpp"]          # (the last three are full: a path that needs the full checks is printed quoted too)
         head = self.pull_request({name: "x\n" for name in names})
         light, out, _ = self.decide(head)
-        self.assertFalse(light, "the two names at the root are not light")
+        self.assertFalse(light, "the names at the root are not light")
         for line in out.splitlines():
             self.assertFalse(line.startswith("::"), "a line of the log begins with a workflow command: " + line)
             self.assertNotIn("\x1b", line)

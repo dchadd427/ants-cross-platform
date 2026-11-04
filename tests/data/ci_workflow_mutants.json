@@ -1,0 +1,448 @@
+{
+ "note": "Mutants of .github/workflows/ci.yml: slips of the pen that a reader of the file could make (a typo in the part or the conclusion that a step asks for, a name used twice, a renamed check, a small job that does not always run, a ctest that may find no test, the light checks), each of which the tests of tests/scripts/test_ci_workflow.py must notice. No build: python3 tools/mutate.py tests/data/ci_workflow_mutants.json --keep-going --jobs 1, from the repository folder (a few seconds for each mutant). Every mutant must be caught; the first ones are the four that used to pass unnoticed.",
+ "mutants": [
+  {
+   "id": "typo_part_of_ctest_long",
+   "file": ".github/workflows/ci.yml",
+   "old": "steps.build.conclusion == 'success' && matrix.part == 'ctest-long' }}",
+   "new": "steps.build.conclusion == 'success' && matrix.part == 'ctest-longg' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_ctest_lookups",
+   "file": ".github/workflows/ci.yml",
+   "old": "matrix.part == 'ctest-lookups' }}",
+   "new": "matrix.part == 'ctest-lookup' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_ctest_rest",
+   "file": ".github/workflows/ci.yml",
+   "old": "matrix.part == 'ctest-rest' }}",
+   "new": "matrix.part == 'ctest-rst' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_self_tests_on_linux",
+   "file": ".github/workflows/ci.yml",
+   "old": "steps.build.conclusion == 'success' && matrix.part == 'scripts' }}\n        run: |\n          status=0\n          build/map_sweep --selftest",
+   "new": "steps.build.conclusion == 'success' && matrix.part == 'script' }}\n        run: |\n          status=0\n          build/map_sweep --selftest",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_e2e_build_on_linux",
+   "file": ".github/workflows/ci.yml",
+   "old": "        id: build_e2e\n        if: ${{ matrix.part == 'scripts' }}",
+   "new": "        id: build_e2e\n        if: ${{ matrix.part == 'script' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_e2e_runner_on_linux",
+   "file": ".github/workflows/ci.yml",
+   "old": "steps.build_e2e.conclusion == 'success' && matrix.part == 'scripts' }}",
+   "new": "steps.build_e2e.conclusion == 'success' && matrix.part == 'scrips' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_script_suites_on_linux",
+   "file": ".github/workflows/ci.yml",
+   "old": "steps.build.conclusion == 'success' && matrix.part == 'scripts' }}\n        run: |\n          status=0\n          bash tests/scripts/test_start_game.sh",
+   "new": "steps.build.conclusion == 'success' && matrix.part == 'scripts ' }}\n        run: |\n          status=0\n          bash tests/scripts/test_start_game.sh",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_python_tests",
+   "file": ".github/workflows/ci.yml",
+   "old": "!cancelled() && matrix.part == 'python' }}",
+   "new": "!cancelled() && matrix.part == 'pyhton' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_ctest_on_macos",
+   "file": ".github/workflows/ci.yml",
+   "old": "matrix.part == 'ctest' }}",
+   "new": "matrix.part == 'ctset' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_self_tests_on_macos",
+   "file": ".github/workflows/ci.yml",
+   "old": "steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}\n        run: |\n          status=0\n          build/map_sweep --selftest",
+   "new": "steps.build.conclusion == 'success' && matrix.part == 'scripts_python' }}\n        run: |\n          status=0\n          build/map_sweep --selftest",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_part_of_the_python_tests_on_macos",
+   "file": ".github/workflows/ci.yml",
+   "old": "!cancelled() && matrix.part == 'scripts-python' }}",
+   "new": "!cancelled() && matrix.part == 'scripts-pyton' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_conclusion_of_the_build_on_linux",
+   "file": ".github/workflows/ci.yml",
+   "old": "steps.build.conclusion == 'success' && matrix.part == 'ctest-rest' }}",
+   "new": "steps.build.conclusion == 'sucess' && matrix.part == 'ctest-rest' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "typo_conclusion_of_the_build_on_windows",
+   "file": ".github/workflows/ci.yml",
+   "old": "steps.build.conclusion == 'success' }}\n        run: ctest",
+   "new": "steps.build.conclusion == 'sucess' }}\n        run: ctest",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "the_build_of_linux_has_another_id",
+   "file": ".github/workflows/ci.yml",
+   "old": "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache\n\n      - name: Build the game, the server and the test programs\n        id: build\n",
+   "new": "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache\n\n      - name: Build the game, the server and the test programs\n        id: building\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "the_build_of_macos_has_another_id",
+   "file": ".github/workflows/ci.yml",
+   "old": "-DCMAKE_PREFIX_PATH=\"$HOME/sdl2\"\n\n      - name: Build the game, the server and the test programs\n        id: build\n",
+   "new": "-DCMAKE_PREFIX_PATH=\"$HOME/sdl2\"\n\n      - name: Build the game, the server and the test programs\n        id: building\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "a_step_of_the_wrong_leg_uses_a_value_it_does_not_have",
+   "file": ".github/workflows/ci.yml",
+   "old": "SLICE: ${{ matrix.slice }}",
+   "new": "SLICE: ${{ matrix.slise }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "two_legs_of_linux_keep_their_logs_under_one_name",
+   "file": ".github/workflows/ci.yml",
+   "old": "name: linux-test-logs-${{ matrix.id }}",
+   "new": "name: linux-test-logs-${{ matrix.part }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
+  },
+  {
+   "id": "two_legs_of_macos_keep_their_logs_under_one_name",
+   "file": ".github/workflows/ci.yml",
+   "old": "name: macos-test-logs-${{ matrix.id }}",
+   "new": "name: macos-test-logs",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
+  },
+  {
+   "id": "two_legs_of_windows_keep_their_logs_under_one_name",
+   "file": ".github/workflows/ci.yml",
+   "old": "name: windows-${{ matrix.os }}-test-logs",
+   "new": "name: windows-test-logs",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
+  },
+  {
+   "id": "two_legs_have_one_id",
+   "file": ".github/workflows/ci.yml",
+   "old": "- id: python-3\n",
+   "new": "- id: python-2\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "two_legs_have_one_name",
+   "file": ".github/workflows/ci.yml",
+   "old": "name: \"python tests, slice 3 of 3\"",
+   "new": "name: \"python tests, slice 2 of 3\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test"
+  },
+  {
+   "id": "two_slices_are_the_same_slice",
+   "file": ".github/workflows/ci.yml",
+   "old": "            slice: 3/3\n",
+   "new": "            slice: 2/3\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "linux_check_renamed",
+   "file": ".github/workflows/ci.yml",
+   "old": "    name: Linux (GCC)\n",
+   "new": "    name: Linux (GCC 13)\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
+  },
+  {
+   "id": "macos_check_renamed",
+   "file": ".github/workflows/ci.yml",
+   "old": "    name: macOS (Apple clang)\n",
+   "new": "    name: macOS (clang)\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
+  },
+  {
+   "id": "windows_checks_named_by_the_os",
+   "file": ".github/workflows/ci.yml",
+   "old": "    name: Windows (${{ matrix.name }})\n",
+   "new": "    name: Windows (${{ matrix.os }})\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
+  },
+  {
+   "id": "web_check_renamed",
+   "file": ".github/workflows/ci.yml",
+   "old": "    name: Web (Emscripten, Docker image)\n",
+   "new": "    name: Web (Emscripten)\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once"
+  },
+  {
+   "id": "linux_check_needs_none_of_its_legs",
+   "file": ".github/workflows/ci.yml",
+   "old": "    needs: linux_tests\n",
+   "new": "    needs: changes\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_small_jobs_need_every_job_of_their_system_and_run_whatever_the_legs_did"
+  },
+  {
+   "id": "linux_check_runs_only_after_success",
+   "file": ".github/workflows/ci.yml",
+   "old": "    if: ${{ always() }}\n",
+   "new": "    if: ${{ success() }}\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "macos_check_runs_only_after_success",
+   "file": ".github/workflows/ci.yml",
+   "old": "    if: ${{ always() && needs.changes.outputs.light != 'true' }}",
+   "new": "    if: ${{ needs.changes.outputs.light != 'true' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_small_jobs_need_every_job_of_their_system_and_run_whatever_the_legs_did"
+  },
+  {
+   "id": "macos_check_looks_at_the_wrong_result",
+   "file": ".github/workflows/ci.yml",
+   "old": "RESULT: ${{ needs.macos_tests.result }}",
+   "new": "RESULT: ${{ needs.changes.result }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_small_jobs_need_every_job_of_their_system_and_run_whatever_the_legs_did"
+  },
+  {
+   "id": "linux_check_passes_without_a_failure",
+   "file": ".github/workflows/ci.yml",
+   "old": "[ \"$RESULT\" = success ] || { echo \"a Linux test job failed",
+   "new": "[ \"$RESULT\" != failure ] || { echo \"a Linux test job failed",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "macos_check_passes_without_a_failure",
+   "file": ".github/workflows/ci.yml",
+   "old": "[ \"$RESULT\" = success ] || { echo \"a macOS test job failed",
+   "new": "[ \"$RESULT\" != failure ] || { echo \"a macOS test job failed",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "ctest_of_the_longest_tests_may_find_none",
+   "file": ".github/workflows/ci.yml",
+   "old": "--parallel 4 --no-tests=error -R \"$CTEST_ALONE\"",
+   "new": "--parallel 4 -R \"$CTEST_ALONE\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "ctest_of_the_rest_may_find_none",
+   "file": ".github/workflows/ci.yml",
+   "old": "--parallel 4 --no-tests=error -E \"${CTEST_ALONE}|${CTEST_LONG}\"",
+   "new": "--parallel 4 -E \"${CTEST_ALONE}|${CTEST_LONG}\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "ctest_on_macos_may_find_none",
+   "file": ".github/workflows/ci.yml",
+   "old": "run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps\n        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}",
+   "new": "run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps\n        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_ctest_passes_with_no_test_run"
+  },
+  {
+   "id": "ctest_on_windows_may_find_none",
+   "file": ".github/workflows/ci.yml",
+   "old": "run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n",
+   "new": "run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_ctest_passes_with_no_test_run"
+  },
+  {
+   "id": "a_part_of_ctest_matches_no_test",
+   "file": ".github/workflows/ci.yml",
+   "old": "CTEST_LONG: \"^(test_ai|test_lockstep|test_ai_worker|test_engine_copy)$\"",
+   "new": "CTEST_LONG: \"^(test_ai|test_lockstep|test_ai_worker|test_engine_copies)$\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "a_slice_runs_a_fixed_part",
+   "file": ".github/workflows/ci.yml",
+   "old": "run_python_tests.py --shard \"$SLICE\"",
+   "new": "run_python_tests.py --shard 1/3",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "linux_skips_python_groups",
+   "file": ".github/workflows/ci.yml",
+   "old": "python3 tests/scripts/run_python_tests.py --shard \"$SLICE\"",
+   "new": "python3 tests/scripts/run_python_tests.py --skip-linux-only --shard \"$SLICE\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "macos_runs_all_python_groups",
+   "file": ".github/workflows/ci.yml",
+   "old": "run_python_tests.py --skip-linux-only || status=1",
+   "new": "run_python_tests.py || status=1",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "linux_legs_stop_at_the_first_failure",
+   "file": ".github/workflows/ci.yml",
+   "old": "      fail-fast: false\n      matrix:\n        # The legs are chosen",
+   "new": "      fail-fast: true\n      matrix:\n        # The legs are chosen",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "linux_legs_have_no_time_limit",
+   "file": ".github/workflows/ci.yml",
+   "old": "    name: Linux tests (${{ matrix.name }})\n    runs-on: ubuntu-latest\n    timeout-minutes: 40\n",
+   "new": "    name: Linux tests (${{ matrix.name }})\n    runs-on: ubuntu-latest\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "a_push_does_not_cancel_the_older_run",
+   "file": ".github/workflows/ci.yml",
+   "old": "cancel-in-progress: true\n\npermissions:",
+   "new": "cancel-in-progress: false\n\npermissions:",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "the_token_may_write",
+   "file": ".github/workflows/ci.yml",
+   "old": "permissions:\n  contents: read\n\nenv:",
+   "new": "permissions:\n  contents: write\n\nenv:",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "macos_runs_for_a_light_change",
+   "file": ".github/workflows/ci.yml",
+   "old": "    needs: changes\n    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.\n    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}",
+   "new": "    needs: changes\n    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.\n    if: ${{ !cancelled() }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "macos_is_skipped_when_the_first_job_fails",
+   "file": ".github/workflows/ci.yml",
+   "old": "    needs: changes\n    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.\n    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}",
+   "new": "    needs: changes\n    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.\n    if: ${{ success() && needs.changes.outputs.light != 'true' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "windows_is_skipped_when_the_first_job_fails",
+   "file": ".github/workflows/ci.yml",
+   "old": "    if: ${{ !cancelled() }}\n    runs-on: ${{ needs.changes",
+   "new": "    if: ${{ success() }}\n    runs-on: ${{ needs.changes",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "macos_check_is_skipped_when_the_first_job_fails",
+   "file": ".github/workflows/ci.yml",
+   "old": "    if: ${{ always() && needs.changes.outputs.light != 'true' }}",
+   "new": "    if: ${{ success() && needs.changes.outputs.light != 'true' }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "windows_is_skipped_as_a_whole",
+   "file": ".github/workflows/ci.yml",
+   "old": "    if: ${{ !cancelled() }}\n    runs-on: ${{ needs.changes",
+   "new": "    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}\n    runs-on: ${{ needs.changes",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "windows_builds_on_a_light_change",
+   "file": ".github/workflows/ci.yml",
+   "old": "      - uses: actions/checkout@v7\n        if: ${{ needs.changes.outputs.light != 'true' }}\n",
+   "new": "      - uses: actions/checkout@v7\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "windows_runs_on_windows_for_a_light_change",
+   "file": ".github/workflows/ci.yml",
+   "old": "    runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}",
+   "new": "    runs-on: ${{ matrix.os }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else"
+  },
+  {
+   "id": "the_first_job_does_not_run_the_script",
+   "file": ".github/workflows/ci.yml",
+   "old": "        run: bash tools/ci_light.sh\n",
+   "new": "        run: echo light\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "the_first_job_has_no_history",
+   "file": ".github/workflows/ci.yml",
+   "old": "          fetch-depth: 0\n          persist-credentials: false\n",
+   "new": "          persist-credentials: false\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "the_first_job_is_not_told_which_branch_is_main",
+   "file": ".github/workflows/ci.yml",
+   "old": "          MAIN_REF: refs/remotes/origin/main\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "a_retarget_is_a_trigger",
+   "file": ".github/workflows/ci.yml",
+   "old": "on:\n  pull_request:\n  push:",
+   "new": "on:\n  pull_request:\n    types: [opened, synchronize, reopened, edited]\n  push:",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "the_title_of_the_pull_request_reaches_the_script",
+   "file": ".github/workflows/ci.yml",
+   "old": "        run: bash tools/ci_light.sh\n",
+   "new": "        run: echo \"${{ github.event.pull_request.title }}\" && bash tools/ci_light.sh\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "the_workflow_runs_with_the_secrets_of_the_base",
+   "file": ".github/workflows/ci.yml",
+   "old": "on:\n  pull_request:\n",
+   "new": "on:\n  pull_request_target:\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "the_deploy_runs_after_a_failure",
+   "file": ".github/workflows/ci.yml",
+   "old": "    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}",
+   "new": "    if: ${{ always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}",
+   "test": "python3 tests/scripts/test_ci_workflow.py"
+  }
+ ]
+}

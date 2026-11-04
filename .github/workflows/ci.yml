@@ -122,10 +122,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install SDL2, SDL2_ttf, ccache, Ninja
+      # python3-yaml: tests/scripts/test_ci_workflow.py reads this file with PyYAML (its checks of the legs are skipped without it, and a test fails on these machines when it is missing)
+      - name: Install SDL2, SDL2_ttf, ccache, Ninja, PyYAML
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build
+          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build python3-yaml
 
       - name: Restore the compiler cache
         uses: actions/cache@v6

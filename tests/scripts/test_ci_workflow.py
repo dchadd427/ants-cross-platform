@@ -18,8 +18,13 @@ is checked too):
   - the players' maps: the Linux and macOS step that sweeps Community-Maps and runs `tools/community_maps.py verify` (and suite 2.18.1 of the runner) is run here against made-up
     programs: a sweep or a check that fails fails the step or the suite, every finding of a failed sweep is shown, and the other tools of the step still run
   - every action is a first-party `actions/` one at a major version or a commit-pinned one; the sccache download is pinned and checked by its SHA-256
+  - with PyYAML, the workflow is read as a document and each leg of the test jobs is RUN in the head, as GitHub would (the conditions of its steps are evaluated with every step succeeding): no
+    leg can pass without running a test, no condition names a part or a step that is not there, every test step is run by the legs of one part, every name of a check and of a log
+    artifact exists once, the five required names are each reported once, the two small jobs need every job of their system, and every ctest has --no-tests=error. A copy of the
+    workflow with each of these breakages is judged too (TheChecksCanFail), and tests/data/ci_workflow_mutants.json breaks the real file the same ways for tools/mutate.py
 """
 import glob
+import json
 import os
 import re
 import shutil
@@ -218,7 +223,6 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         windows = "\n".join(job_block("windows"))
         for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "replay_tool.exe --selftest", "lvl_tool.exe --selftest", "e2e_runner.exe --all"):
             self.assertIn(needle, windows)
-        self.assertIn("ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n", windows)
 
     def test_every_optional_tool_of_cmake_is_built_by_the_three_build_jobs_and_the_image_check_lists_the_map_makers_files(self):
         tools = re.findall(r"add_executable\((\w+) EXCLUDE_FROM_ALL tools/", read(os.path.join(REPO, "CMakeLists.txt")))
@@ -573,7 +577,7 @@ class TheJobsBehindTheRequiredNames(unittest.TestCase):
         self.assertEqual(sorted(re.findall(r"(?m)^            part: (\S+)$", text)), ["ctest", "scripts-python"])
         self.assertIn("python3 tests/scripts/run_python_tests.py --skip-linux-only", text)
         self.assertNotIn("--shard", text)
-        self.assertIn("ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n", text)       # (a ctest that finds no test must fail, as on Linux)
+        self.assertIn("ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n", text)
 
     def test_every_leg_builds_and_every_step_of_a_leg_says_which_legs_run_it(self):
         for job in ("linux_tests", "macos_tests"):
@@ -750,6 +754,443 @@ class Structure(unittest.TestCase):
         self.assertNotIn("if", steps[0])
         for step in steps[1:]:
             self.assertIn("steps.secret.outputs.present == 'true'", step.get("if", ""), step.get("name", step.get("uses")))
+
+
+# ---- the legs of the test jobs, run in the head ---------------------------------------------------------------------------------------------------------------------------------------------
+# What a typo does: a step of a leg that asks for `matrix.part == 'ctest-longg'` never runs, and the leg passes with no test run; two legs that name their log artifact alike make the upload
+# of the second fail; a renamed step id makes every test step wait for a build that "is not there". None of that fails a job, so it is found here, in the file, before a run shows it (or not).
+
+REQUIRED_NAMES = ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)")
+TEST_COMMAND = re.compile(r"\bctest\b|--selftest|\be2e_runner|test_start_game\.sh|test_ants_server\.sh|run_python_tests\.py|check_version_consistency\.py")
+EXPRESSION_TOKEN = re.compile(r"&&|\|\||==|!=|!|\(|\)|'(?:[^']|'')*'|[A-Za-z_][\w.\-]*\(\)|[A-Za-z_][\w.\-]*|\S")
+
+
+def truthy(value):
+    return value not in (False, None, "", 0)
+
+
+def evaluate(expression, lookup, status="success"):
+    """The value of an expression of the workflow, in the part of GitHub's language that ci.yml uses: ||, &&, !, ==, != (strings are equal without regard to case), strings, the status functions
+    (`status` is that of the job so far) and the contexts, which `lookup(path)` gives (it raises for a reference that is nothing). `${{ }}` around the expression is taken off."""
+    text = expression.strip()
+    if text.startswith("${{") and text.endswith("}}"):
+        text = text[3:-2]
+    tokens = EXPRESSION_TOKEN.findall(text)
+    at = [0]
+
+    def peek():
+        return tokens[at[0]] if at[0] < len(tokens) else None
+
+    def take():
+        at[0] += 1
+        return tokens[at[0] - 1]
+
+    def primary():
+        token = take()
+        if token == "(":
+            value = disjunction()
+            if take() != ")":
+                raise ValueError("a bracket is not closed: " + expression)
+            return value
+        if token.startswith("'"):
+            return token[1:-1].replace("''", "'")
+        if token.endswith("()"):
+            return {"always": True, "success": status == "success", "failure": status == "failure", "cancelled": status == "cancelled"}[token[:-2]]
+        return lookup(token)
+
+    def unary():
+        if peek() == "!":
+            take()
+            return not truthy(unary())
+        return primary()
+
+    def comparison():
+        left = unary()
+        if peek() in ("==", "!="):
+            operator = take()
+            equal = str(left).lower() == str(unary()).lower()
+            return equal if operator == "==" else not equal
+        return left
+
+    def conjunction():
+        value = comparison()
+        while peek() == "&&":
+            take()
+            right = comparison()
+            value = right if truthy(value) else value
+        return value
+
+    def disjunction():
+        value = conjunction()
+        while peek() == "||":
+            take()
+            right = conjunction()
+            value = value if truthy(value) else right
+        return value
+
+    value = disjunction()
+    if peek() is not None:
+        raise ValueError("something is left over: " + expression)
+    return value
+
+
+def expand(template, leg):
+    """A name with `${{ matrix.KEY }}` in it, for one leg (a reference to anything else is an error)"""
+    def one(match):
+        path = match.group(1)
+        if not path.startswith("matrix.") or path[len("matrix."):] not in leg:
+            raise KeyError("%s: no such value in the leg %s" % (path, sorted(leg)))
+        return str(leg[path[len("matrix."):]])
+    return re.sub(r"\$\{\{\s*([^}]*?)\s*\}\}", one, str(template))
+
+
+def legs_of(job, event="pull_request"):
+    """The legs of a job: the dictionaries of its matrix, [{}] for a job without one (the Windows jobs choose the list in an expression: the list of a pull request, or of a push to staging)."""
+    include = (job.get("strategy") or {}).get("matrix", {}).get("include")
+    if include is None:
+        return [{}]
+    if isinstance(include, str):
+        lists = re.findall(r"'(\[\{.*?\}\])'", include)
+        return json.loads(lists[0] if event == "push to staging" else lists[1])
+    return include
+
+
+def steps_that_run(job, leg, light="", status="success"):
+    """[the steps of the job that run for this leg], as GitHub decides it when every step that runs succeeds: the condition of a step is evaluated with the conclusions of the steps before it
+    (a step that is skipped has the conclusion `skipped`); `light` is what the first job said (needs.changes.outputs.light)."""
+    conclusions, ran = {}, []
+
+    def lookup(path):
+        parts = path.split(".")
+        if parts[0] == "matrix" and len(parts) == 2 and parts[1] in leg:
+            return leg[parts[1]]
+        if parts[0] == "steps" and len(parts) == 3 and parts[2] == "conclusion" and parts[1] in conclusions:
+            return conclusions[parts[1]]
+        if parts[0] == "steps" and len(parts) >= 4 and parts[2] == "outputs" and parts[1] in conclusions:
+            return ""                                                                          # (an output that the step did not set)
+        if path == "needs.changes.outputs.light":
+            return light
+        raise KeyError("%s: nothing of this leg or of the steps before this one" % path)
+
+    for step in job["steps"]:
+        does = truthy(evaluate(str(step.get("if", "success()")), lookup, status))
+        if "id" in step:
+            conclusions[step["id"]] = "success" if does else "skipped"
+        if does:
+            ran.append(step)
+    return ran
+
+
+def is_test_step(step):
+    return bool(TEST_COMMAND.search(str(step.get("run", ""))))
+
+
+def title(step):
+    return step.get("name") or step.get("uses")
+
+
+def problems_of_the_legs(doc):
+    """What is wrong with the legs of linux_tests and macos_tests, as a list of sentences (none: nothing)."""
+    problems = []
+    for job_id in ("linux_tests", "macos_tests"):
+        job = doc["jobs"][job_id]
+        legs = legs_of(job)
+        parts = {leg["part"] for leg in legs}
+        for key in ("id", "name"):
+            values = [leg.get(key) for leg in legs]
+            if None in values or len(set(values)) != len(values):
+                problems.append("%s: the legs do not each have their own %s: %s" % (job_id, key, values))
+        before = set()
+        for step in job["steps"]:
+            condition = str(step.get("if", ""))
+            for part in re.findall(r"matrix\.part\s*[=!]=\s*'([^']*)'", condition):
+                if part not in parts:
+                    problems.append("%s: %r asks for the part %r, which no leg has (%s)" % (job_id, title(step), part, sorted(parts)))
+            for other in re.findall(r"\bsteps\.([A-Za-z0-9_-]+)\.", condition):
+                if other not in before:
+                    problems.append("%s: %r asks for the step %r, which is not before it" % (job_id, title(step), other))
+            before.add(step.get("id"))
+        running = {}
+        for leg in legs:
+            try:
+                running[leg["id"]] = steps_that_run(job, leg)
+            except (KeyError, ValueError) as error:
+                problems.append("%s: the leg %s: %s" % (job_id, leg["id"], error))
+                continue
+            tests = [step for step in running[leg["id"]] if is_test_step(step)]
+            if not tests:
+                problems.append("%s: the leg %s runs no test, so it passes with nothing tested" % (job_id, leg["id"]))
+            if len([step for step in tests if re.search(r"\bctest\b", step["run"])]) > 1:
+                problems.append("%s: the leg %s runs ctest twice" % (job_id, leg["id"]))
+            for step in running[leg["id"]]:
+                for key in re.findall(r"matrix\.(\w+)", json.dumps(step)):
+                    if key not in leg:
+                        problems.append("%s: %r uses matrix.%s, which the leg %s does not have" % (job_id, title(step), key, leg["id"]))
+        for step in job["steps"]:
+            if not is_test_step(step):
+                continue
+            where = [leg for leg in legs if any(step is s for s in running.get(leg["id"], []))]
+            if not where:
+                problems.append("%s: the test step %r runs in no leg" % (job_id, title(step)))
+            elif len({leg["part"] for leg in where}) != 1:
+                problems.append("%s: the test step %r runs in the legs of more than one part" % (job_id, title(step)))
+            elif re.search(r"\bctest\b", step["run"]) and len(where) != 1:
+                problems.append("%s: the ctest step %r runs in %d legs (each part of ctest is one leg)" % (job_id, title(step), len(where)))
+        selected = {leg["part"] for leg in legs if any(is_test_step(step) for step in running.get(leg["id"], []))}
+        if selected != parts:
+            problems.append("%s: no test step is selected by the part(s) %s" % (job_id, sorted(parts - selected)))
+    return problems
+
+
+def problems_of_the_names(doc):
+    """What is wrong with the names of the checks and of the log artifacts: each exists once, and the five required names are each reported once (for a pull request)."""
+    problems, checks, artifacts = [], [], []
+    for job_id, job in doc["jobs"].items():
+        for leg in legs_of(job):
+            try:
+                checks.append(expand(job.get("name", job_id), leg))
+            except KeyError as error:
+                problems.append("%s: %s" % (job_id, error))
+            for step in job.get("steps", []):
+                if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+                    try:
+                        artifacts.append(expand(step["with"]["name"], leg))
+                    except KeyError as error:
+                        problems.append("%s: %s" % (job_id, error))
+    for name in sorted(set(n for n in checks if checks.count(n) > 1)):
+        problems.append("two checks are named %r" % name)
+    for name in REQUIRED_NAMES:
+        if checks.count(name) != 1:
+            problems.append("the required check %r is reported %d times" % (name, checks.count(name)))
+    for name in sorted(set(n for n in artifacts if artifacts.count(n) > 1)):
+        problems.append("two legs upload the artifact %r (the second upload fails)" % name)
+    if not artifacts:
+        problems.append("no artifact of logs")
+    return problems
+
+
+def problems_of_the_aggregates(doc):
+    """The small jobs that carry the required names look at every job of their system, and run whatever the legs did."""
+    problems = []
+    for system in ("linux", "macos"):
+        jobs = [j for j in doc["jobs"] if j.startswith(system + "_")]
+        needs = doc["jobs"][system].get("needs", [])
+        needs = [needs] if isinstance(needs, str) else list(needs)
+        if sorted(set(needs) - {"changes"}) != sorted(jobs) or not jobs:
+            problems.append("%s: needs %s, but the jobs of its system are %s" % (system, needs, jobs))
+        text = json.dumps(doc["jobs"][system]["steps"])
+        for job in jobs:
+            if "needs.%s.result" % job not in text:
+                problems.append("%s: the result of %s is not looked at" % (system, job))
+        if "always()" not in str(doc["jobs"][system].get("if", "")):
+            problems.append("%s: runs only when its needs passed (a skipped job counts as passing)" % system)
+    return problems
+
+
+def problems_of_ctest(doc):
+    """A ctest that finds no test passes: every call has --no-tests=error (a renamed test, a filter that matches nothing)."""
+    problems = []
+    for job_id, job in doc["jobs"].items():
+        for step in job.get("steps", []):
+            for line in str(step.get("run", "")).splitlines():
+                if re.search(r"\bctest\b", line) and "--no-tests=error" not in line:
+                    problems.append("%s: %r: a ctest without --no-tests=error: %s" % (job_id, title(step), line.strip()))
+    return problems
+
+
+def problems_of_the_light_checks(doc):
+    """What the first job's answer does, for the three things it can say: light (macOS skipped, Windows reports and builds nothing), not light, and nothing (the job failed: it has no output, and a job
+    that needs it has `success()` false, `failure()` true; everything must run)."""
+    problems = []
+    jobs = doc["jobs"]
+
+    def runs(job_id, light, failed):
+        needs = jobs[job_id].get("needs", [])
+        needs = [needs] if isinstance(needs, str) else needs
+        status = "failure" if failed and "changes" in needs else "success"          # (the job-level `if` of a job whose need failed)
+
+        def lookup(path):
+            if path == "needs.changes.outputs.light":
+                return light
+            raise KeyError(path)
+        return truthy(evaluate(str(jobs[job_id].get("if", "success()")), lookup, status))
+
+    for light, failed, skipped in (("true", False, True), ("false", False, False), ("", True, False)):
+        said = "failed" if failed else repr(light)
+        for job_id in ("macos_tests", "macos"):
+            if runs(job_id, light, failed) == skipped:
+                problems.append("%s %s when the first job %s%s" % (job_id, "runs" if skipped else "is skipped", "says " if not failed else "", said))
+        for job_id in ("changes", "linux_tests", "linux", "web", "windows"):
+            if not runs(job_id, light, failed):
+                problems.append("%s is skipped when the first job %s%s (a skipped matrix job reports the wrong names)" % (job_id, "says " if not failed else "", said))
+        for leg in legs_of(jobs["windows"]):
+            ran = steps_that_run(jobs["windows"], leg, light)
+            machine = evaluate(str(jobs["windows"]["runs-on"]), lambda path: {"needs.changes.outputs.light": light, "matrix.os": leg["os"]}[path])
+            if skipped:
+                if machine != "ubuntu-latest" or any(is_test_step(step) or "uses" in step or "cmake" in str(step.get("run", "")) for step in ran) or not ran:
+                    problems.append("windows %s: for a light change it must run on a small Linux machine and build and test nothing: %s on %s" % (leg["name"], [title(s) for s in ran], machine))
+            else:
+                tests = [step for step in ran if is_test_step(step)]
+                if machine != leg["os"] or len(tests) != 3:
+                    problems.append("windows %s: for a change that is not light it must run its three kinds of test on %s: %s on %s" % (leg["name"], leg["os"], [title(s) for s in tests], machine))
+    return problems
+
+
+CHECKS_OF_THE_WORKFLOW = (problems_of_the_legs, problems_of_the_names, problems_of_the_aggregates, problems_of_ctest, problems_of_the_light_checks)
+
+
+@unittest.skipUnless(yaml, "PyYAML is needed")
+class TheLegsRunTheirTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.doc = yaml.safe_load(TEXT)
+
+    def test_the_expressions_are_read_as_github_reads_them(self):
+        names = {"a": "x", "b": "", "c": "Y"}
+        lookup = names.__getitem__
+        for expression, value in (("a == 'x'", True), ("a == 'X'", True), ("a != 'x'", False), ("!b", True), ("!a", False), ("b || a", "x"), ("a && c", "Y"), ("b && c", ""), ("a == 'x' && c == 'y'", True),
+                                  ("a == 'z' && 'p' || 'q'", "q"), ("a == 'x' && 'p' || 'q'", "p"), ("!(a == 'x')", False), ("${{ a != 'x' || c == 'y' }}", True), ("a == 'it''s'", False)):
+            self.assertEqual(evaluate(expression, lookup), value, expression)
+        self.assertTrue(evaluate("always()", lookup, "failure") and evaluate("failure()", lookup, "failure") and evaluate("!cancelled()", lookup, "failure"))
+        self.assertFalse(evaluate("success()", lookup, "failure") or evaluate("failure()", lookup) or evaluate("!cancelled()", lookup, "cancelled"))
+        with self.assertRaises(KeyError):
+            evaluate("nothing == 'x'", lookup)
+        with self.assertRaises(ValueError):
+            evaluate("a == 'x' b", lookup)
+
+    def test_the_legs_are_every_part_run_by_steps_that_exist_and_every_leg_runs_a_test(self):
+        self.assertEqual(problems_of_the_legs(self.doc), [])
+        # and the legs really are what the file says (a simulation that ran nothing would find nothing wrong)
+        linux = self.doc["jobs"]["linux_tests"]
+        ran = {leg["id"]: [title(s) for s in steps_that_run(linux, leg) if is_test_step(s)] for leg in legs_of(linux)}
+        self.assertEqual(sorted(ran), ["ctest-long", "ctest-lookups", "ctest-rest", "python-1", "python-2", "python-3", "scripts"])
+        self.assertEqual(len(ran["scripts"]), 3, ran["scripts"])
+        self.assertEqual(len(ran["python-1"]), 1)
+        macos = self.doc["jobs"]["macos_tests"]
+        self.assertEqual({leg["id"]: len([s for s in steps_that_run(macos, leg) if is_test_step(s)]) for leg in legs_of(macos)}, {"ctest": 1, "scripts-python": 4})
+
+    def test_every_check_and_every_artifact_of_the_logs_has_a_name_of_its_own_and_the_five_required_names_are_reported_once(self):
+        self.assertEqual(problems_of_the_names(self.doc), [])
+
+    def test_the_small_jobs_need_every_job_of_their_system_and_run_whatever_the_legs_did(self):
+        self.assertEqual(problems_of_the_aggregates(self.doc), [])
+
+    def test_no_ctest_passes_with_no_test_run(self):
+        self.assertEqual(problems_of_ctest(self.doc), [])
+        calls = sum(len(re.findall(r"\bctest\b", str(step.get("run", "")))) for job in self.doc["jobs"].values() for step in job.get("steps", []))
+        self.assertEqual(calls, 5, "three Linux parts, macOS, Windows: where is the other one?")
+
+    def test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else(self):
+        self.assertEqual(problems_of_the_light_checks(self.doc), [])
+
+
+@unittest.skipUnless(yaml, "PyYAML is needed")
+class TheChecksCanFail(unittest.TestCase):
+    """The checks above are not vacuous: a copy of ci.yml with one breakage in it is judged (the breakages are the ones a reader of the file could make by a slip of the pen)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.doc = yaml.safe_load(TEXT)
+
+    def judged(self, old, new, check):
+        self.assertEqual(TEXT.count(old), 1, "the text to break is not there exactly once: " + old)
+        return check(yaml.safe_load(TEXT.replace(old, new)))
+
+    def test_a_typo_in_the_part_of_a_step_leaves_a_leg_with_nothing_to_run(self):
+        for old, new, word in (
+                ("steps.build.conclusion == 'success' && matrix.part == 'ctest-long' }}", "steps.build.conclusion == 'success' && matrix.part == 'ctest-longg' }}", "ctest-longg"),
+                ("steps.build.conclusion == 'success' && matrix.part == 'scripts' }}\n        run: |\n          status=0\n          build/map_sweep --selftest", "steps.build.conclusion == 'success' && matrix.part == 'script' }}\n        run: |\n          status=0\n          build/map_sweep --selftest", "script"),
+                ("!cancelled() && matrix.part == 'python' }}", "!cancelled() && matrix.part == 'pyhton' }}", "pyhton"),
+                ("matrix.part == 'ctest-lookups' }}", "matrix.part == 'ctest-lookup' }}", "ctest-lookup"),
+                ("matrix.part == 'scripts-python' }}\n        run: |\n          status=0\n          python3 tools/check", "matrix.part == 'scripts_python' }}\n        run: |\n          status=0\n          python3 tools/check", "scripts_python")):
+            with self.subTest(word):
+                problems = self.judged(old, new, problems_of_the_legs)
+                self.assertTrue(any("which no leg has" in p and word in p for p in problems), problems)
+                self.assertTrue(any("runs no test" in p or "runs in no leg" in p or "no test step is selected" in p for p in problems), problems)
+
+    def test_a_step_that_waits_for_a_build_that_is_not_there_never_runs(self):
+        for job, configure in (("linux_tests", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"), ("macos_tests", '-DCMAKE_PREFIX_PATH="$HOME/sdl2"')):
+            with self.subTest(job):
+                build = "\n\n      - name: Build the game, the server and the test programs\n        id: build\n"
+                problems = self.judged(configure + build, configure + build.replace("id: build", "id: building"), problems_of_the_legs)
+                self.assertTrue(any(p.startswith(job) and "asks for the step 'build', which is not before it" in p for p in problems), problems)
+        problems = self.judged("steps.build_e2e.conclusion == 'success' && matrix.part == 'scripts' }}", "steps.build_e2e.conclusion == 'succeeded' && matrix.part == 'scripts' }}", problems_of_the_legs)
+        self.assertTrue(any("linux_tests: the test step 'Opaque-box E2E runner' runs in no leg" in p for p in problems), problems)
+        problems = self.judged("        id: build_e2e\n        if: ${{ matrix.part == 'scripts' }}\n", "        id: build_e2e\n        if: ${{ matrix.part == 'script' }}\n", problems_of_the_legs)
+        self.assertTrue(any("runs in no leg" in p for p in problems), problems)
+
+    def test_a_test_step_for_two_parts_or_none_is_found(self):
+        problems = self.judged("!cancelled() && matrix.part == 'python' }}", "!cancelled() && matrix.part != 'ctest-rest' }}", problems_of_the_legs)
+        self.assertTrue(any("more than one part" in p for p in problems), problems)
+
+    def test_two_legs_with_one_name_or_one_artifact_are_found(self):
+        problems = self.judged("name: linux-test-logs-${{ matrix.id }}", "name: linux-test-logs-${{ matrix.part }}", problems_of_the_names)
+        self.assertTrue(any("two legs upload the artifact 'linux-test-logs-python'" in p for p in problems), problems)
+        problems = self.judged("name: macos-test-logs-${{ matrix.id }}", "name: macos-test-logs", problems_of_the_names)
+        self.assertTrue(any("two legs upload the artifact 'macos-test-logs'" in p for p in problems), problems)
+        problems = self.judged("name: windows-${{ matrix.os }}-test-logs", "name: windows-test-logs", problems_of_the_names)
+        self.assertTrue(any("two legs upload the artifact 'windows-test-logs'" in p for p in problems), problems)
+        problems = self.judged('- id: ctest-rest\n            name: "ctest: all the other tests"', '- id: ctest-rest\n            name: "ctest: the next longest tests"', problems_of_the_legs)
+        self.assertTrue(any("own name" in p for p in problems), problems)
+        problems = self.judged("- id: python-3\n", "- id: python-2\n", problems_of_the_legs)
+        self.assertTrue(any("own id" in p for p in problems), problems)
+
+    def test_a_required_name_that_is_missing_twice_or_renamed_is_found(self):
+        problems = self.judged("    name: Linux (GCC)\n", "    name: Linux (GCC 13)\n", problems_of_the_names)
+        self.assertTrue(any("'Linux (GCC)' is reported 0 times" in p for p in problems), problems)
+        problems = self.judged("    name: Web (Emscripten, Docker image)\n", "    name: Linux (GCC)\n", problems_of_the_names)
+        self.assertTrue(any("two checks are named 'Linux (GCC)'" in p for p in problems), problems)
+        problems = self.judged("    name: Windows (${{ matrix.name }})\n", "    name: Windows (${{ matrix.os }})\n", problems_of_the_names)
+        self.assertTrue(any("'Windows (MSVC 2022)' is reported 0 times" in p for p in problems), problems)
+
+    def test_a_small_job_that_misses_a_job_of_its_system_or_does_not_always_run_is_found(self):
+        problems = self.judged("    needs: linux_tests\n", "    needs: changes\n", problems_of_the_aggregates)
+        self.assertTrue(any(p.startswith("linux: needs") for p in problems), problems)
+        problems = self.judged("    needs: [changes, macos_tests]\n    if: ${{ always() && needs.changes.outputs.light != 'true' }}", "    needs: [changes, macos_tests]\n    if: ${{ needs.changes.outputs.light != 'true' }}", problems_of_the_aggregates)
+        self.assertTrue(any("runs only when its needs passed" in p for p in problems), problems)
+        problems = self.judged("          RESULT: ${{ needs.macos_tests.result }}", "          RESULT: ${{ needs.macos.result }}", problems_of_the_aggregates)
+        self.assertTrue(any("the result of macos_tests is not looked at" in p for p in problems), problems)
+
+    def test_a_ctest_that_may_find_nothing_is_found(self):
+        flag = " --no-tests=error"
+        for where, old in (("linux_tests", '--parallel 4 --no-tests=error -R "$CTEST_ALONE"'), ("linux_tests", '--parallel 4 --no-tests=error -E "${CTEST_ALONE}|${CTEST_LONG}"'),
+                           ("macos_tests", "--parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps\n        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}"),
+                           ("windows", "--parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n")):
+            with self.subTest(where):
+                problems = self.judged(old, old.replace(flag, "", 1), problems_of_ctest)
+                self.assertTrue(any(p.startswith(where) and "a ctest without --no-tests=error" in p for p in problems), problems)
+        problems = problems_of_ctest(self.doc)
+        self.assertEqual(problems, [])
+
+    def test_a_light_answer_that_skips_the_wrong_jobs_is_found(self):
+        job_if = "    needs: changes\n    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.\n    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}"
+        problems = self.judged(job_if, job_if.replace(" && needs.changes.outputs.light != 'true'", ""), problems_of_the_light_checks)
+        self.assertTrue(any("macos_tests runs when the first job says 'true'" in p for p in problems), problems)
+        problems = self.judged(job_if, job_if.replace("!cancelled() && needs.changes.outputs.light != 'true'", "needs.changes.outputs.light == 'false'"), problems_of_the_light_checks)
+        self.assertTrue(any("macos_tests is skipped when the first job failed" in p for p in problems), problems)
+        problems = self.judged(job_if, job_if.replace("!cancelled() &&", "success() &&"), problems_of_the_light_checks)       # (a job whose need failed is skipped)
+        self.assertTrue(any("macos_tests is skipped when the first job failed" in p for p in problems), problems)
+        problems = self.judged("    if: ${{ always() && needs.changes.outputs.light != 'true' }}", "    if: ${{ always() }}", problems_of_the_light_checks)
+        self.assertTrue(any("macos runs when the first job says 'true'" in p for p in problems), problems)
+        problems = self.judged("    if: ${{ always() && needs.changes.outputs.light != 'true' }}", "    if: ${{ success() && needs.changes.outputs.light != 'true' }}", problems_of_the_light_checks)
+        self.assertTrue(any("macos is skipped when the first job failed" in p for p in problems), problems)
+        problems = self.judged("    if: ${{ !cancelled() }}\n    runs-on: ${{ needs.changes", "    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}\n    runs-on: ${{ needs.changes", problems_of_the_light_checks)
+        self.assertTrue(any("windows is skipped when the first job says 'true'" in p for p in problems), problems)
+        problems = self.judged("    if: ${{ !cancelled() }}\n    runs-on: ${{ needs.changes", "    if: ${{ success() }}\n    runs-on: ${{ needs.changes", problems_of_the_light_checks)
+        self.assertTrue(any("windows is skipped when the first job failed" in p for p in problems), problems)
+        problems = self.judged("        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}\n        run: ctest", "        if: ${{ needs.changes.outputs.light == 'true' }}\n        run: ctest", problems_of_the_light_checks)
+        self.assertTrue(any(p.startswith("windows") for p in problems), problems)
+        problems = self.judged("    runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}", "    runs-on: ${{ matrix.os }}", problems_of_the_light_checks)
+        self.assertTrue(any("small Linux machine" in p for p in problems), problems)
+        problems = self.judged("      - uses: actions/checkout@v7\n        if: ${{ needs.changes.outputs.light != 'true' }}\n", "      - uses: actions/checkout@v7\n", problems_of_the_light_checks)
+        self.assertTrue(any("small Linux machine" in p for p in problems), problems)
+
+
+class TheCiMachinesHavePyYAML(unittest.TestCase):
+    def test_the_linux_jobs_of_the_ci_check_the_structure_of_the_workflow(self):
+        """The checks above are skipped without PyYAML, which would leave the legs unchecked without a word: on the Linux machines of the CI it must be there (the job installs python3-yaml)."""
+        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_OS") == "Linux":
+            self.assertIsNotNone(yaml, "PyYAML is missing on a Linux machine of the CI: the structure of ci.yml is not checked")
 
 
 if __name__ == "__main__":
