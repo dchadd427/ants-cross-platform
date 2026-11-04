@@ -202,6 +202,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
         }
     }
 
+    impl_->started_mask_ = impl_->alive_mask();
     impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
     if (impl_->fog_of_war_enabled_) {
         impl_->update_fog_of_war();
@@ -241,6 +242,7 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, 10);
     }
+    impl_->started_mask_ = impl_->alive_mask();
 
     impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
     if (impl_->fog_of_war_enabled_) {
@@ -453,7 +455,7 @@ bool SimulationEngineImpl::checkgo_end_rules() const {
         if ((roster_mask_ & (1u << local)) == 0 || team_dropped(local)) continue;     // a dropped team's machine is gone
         if (checkgo_ends_for(local)) return true;
     }
-    return false;
+    return last_side_ends() && last_side_decides();         // (the rules number 8: the one side that is left wins when nothing is left to score; last_side.cpp)
 }
 
 bool SimulationEngineImpl::drop_leaves_winner() const {
@@ -485,11 +487,8 @@ MatchResult SimulationEngineImpl::make_match_result() const {
         for (const auto& a : ants_) {
             if (a != nullptr && !a->removed && a->player_id < MAX_PLAYERS) ++result.ants_left[a->player_id];
         }
-        if (match_state_ == MatchState::GameOver) {
-            result.standing = last_standing_187();
-            result.decide_winners();                     // the cues follow the rows, which follow the team that is left
-        }
     }
+    if (match_state_ == MatchState::GameOver) mark_side_left(result);       // (187: the side that is left goes first; the original's game under the rules number 8: it wins a tie; last_side.cpp)
     return result;
 }
 
@@ -929,7 +928,7 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
 
 void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->game_mode_ = mode;
-    impl_->hill_open_187_ = false;                  // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187)
+    impl_->hill_open_187_ = false; impl_->last_side_rule_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_last_side_rule)
     impl_->world_state_dirty_ = true;
 }
 

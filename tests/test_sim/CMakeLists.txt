@@ -449,6 +449,23 @@ target_include_directories(test_closed_hill_187 PRIVATE
 
 add_test(NAME test_closed_hill_187 COMMAND test_closed_hill_187)
 
+# The last side standing of the original's game (rules number 8): one side left and no food left to score ends the match; the rules number 5 and 187 are as they were
+add_executable(test_last_side
+    test_last_side.cpp
+)
+
+target_link_libraries(test_last_side PRIVATE
+    ants_sim
+    ants_assets
+    ants_test_paths
+)
+
+target_include_directories(test_last_side PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_last_side COMMAND test_last_side)
+
 # The line "<Name> (<Color>) is out of ants!" and its cue (187), the engine copy and the state hash
 add_executable(test_out_of_ants
     test_out_of_ants.cpp
