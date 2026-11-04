@@ -180,7 +180,7 @@ class Store(StoreBase):
 
     def make_room(self, target, chunk=2000, keep=1000):
         """The oldest lines go first, so that the pages they leave are whole and the lines that follow use them: the lines are in the order of their numbers, and so are their time and their
-        pages. The moderators' lines go last, and the newest `keep` never (the screens and the hub's memory hold fewer). The log file is cut at once, so that the lines are in neither file (a reader
+        pages. The moderators' lines and the lines that a moderator deleted (they are kept for moderation) go last, and the newest `keep` never (the screens and the hub's memory hold fewer). The log file is cut at once, so that the lines are in neither file (a reader
         that holds it up leaves them there until a later look: `unsettled`)."""
         chunk, keep = max(1, int(chunk)), max(0, int(keep))
         if self.size() <= target:
@@ -193,8 +193,8 @@ class Store(StoreBase):
             return 0
         gone = 0
         with self.transaction():
-            for staff in (0, 1):
-                gone += self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= ? AND mod = ? ORDER BY id LIMIT ?)", (edge[0], staff, chunk - gone)).rowcount
+            for kept in (0, 1):                      # (first the lines that nobody had a reason to keep, then the moderators' and the ones that a moderator deleted)
+                gone += self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= ? AND (mod OR deleted) = ? ORDER BY id LIMIT ?)", (edge[0], kept, chunk - gone)).rowcount
                 if gone >= chunk:
                     break
         if gone:

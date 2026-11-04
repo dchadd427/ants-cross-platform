@@ -10,7 +10,7 @@
 
 ACCOUNT is an account id (digits, no leading zero), or a name that has said something in the last 7 days (written @name when the name is all digits). It works on hub.db directly (ANTS_HUB_DB or
 --db), so the running hub needs no network door for it: a mute or a ban counts from the next line the account says, and a deleted line is taken off every screen within two seconds.
-`status` says how full the database is. `purge` frees space at once: it deletes the oldest lines (the moderators' last, the newest 1,000 never) until the database is at 80% of its limit, which is
+`status` says how full the database is. `purge` frees space at once: it deletes the oldest lines (the moderators' and the deleted ones last, the newest 1,000 never) until the database is at 80% of its limit, which is
 what the hub does by itself from 90%, or with --keep-lines N all but the newest N (100 or more); the pages they leave are free for the lines that follow.
 Exit status: 0 done, 1 nothing to do (no such account, line or ban, nothing to purge), 2 wrong use.
 """

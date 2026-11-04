@@ -7,8 +7,8 @@
   {
    "id": "room_the_newest_lines_go_first",
    "file": "hub/store/sqlite.py",
-   "old": "ORDER BY id LIMIT ?)\", (edge[0], staff",
-   "new": "ORDER BY id DESC LIMIT ?)\", (edge[0], staff",
+   "old": "ORDER BY id LIMIT ?)\", (edge[0], kept",
+   "new": "ORDER BY id DESC LIMIT ?)\", (edge[0], kept",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
   },
   {
@@ -33,24 +33,38 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
   },
   {
-   "id": "room_the_moderators_lines_never_go",
+   "id": "room_the_lines_that_are_kept_longer_never_go",
    "file": "hub/store/sqlite.py",
-   "old": "for staff in (0, 1):",
-   "new": "for staff in (0,):",
+   "old": "for kept in (0, 1):",
+   "new": "for kept in (0,):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
   },
   {
-   "id": "room_the_moderators_lines_go_first",
+   "id": "room_the_lines_that_are_kept_longer_go_first",
    "file": "hub/store/sqlite.py",
-   "old": "for staff in (0, 1):",
-   "new": "for staff in (1, 0):",
+   "old": "for kept in (0, 1):",
+   "new": "for kept in (1, 0):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_lines_a_moderator_deleted_are_not_kept_longer",
+   "file": "hub/store/sqlite.py",
+   "old": "(mod OR deleted) = ?",
+   "new": "mod = ?",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_lines_a_moderator_deleted_go_first",
+   "file": "hub/store/sqlite.py",
+   "old": "(mod OR deleted) = ?",
+   "new": "(mod OR NOT deleted) = ?",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
   },
   {
    "id": "room_a_chunk_is_for_each_kind_of_line",
    "file": "hub/store/sqlite.py",
-   "old": "(edge[0], staff, chunk - gone)",
-   "new": "(edge[0], staff, chunk)",
+   "old": "(edge[0], kept, chunk - gone)",
+   "new": "(edge[0], kept, chunk)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
   },
   {

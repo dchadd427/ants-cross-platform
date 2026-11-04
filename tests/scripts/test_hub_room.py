@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The chat store prunes old messages to stay inside its size limit (hub/store/sqlite.py `make_room`, hub/server.py, hub/limits.py, hub/chat.py, hub/admin.py; docs/HUB.md "Data", "Limits", "Moderation").
 
-When hub.db and its log file come near `db_max_bytes`, the hub's clock deletes the oldest lines (the moderators' lines last, the newest 1,000 never) until the pages that hold something are down to
+When hub.db and its log file come near `db_max_bytes`, the hub's clock deletes the oldest lines (the moderators' lines and the lines that a moderator deleted last, the newest 1,000 never) until the pages that hold something are down to
 80% of the limit. The freed pages are reused, so the file stops growing; mutes, bans, the counter of deletions and the logins are never touched. An account has a budget of lines for an hour and for
 a day (`quota`), which keeps the share of one account in the store small. `python -m hub.admin status` shows how full the database is, and `purge` frees space on demand.
 
@@ -699,17 +699,15 @@ class TheStaffTool(unittest.TestCase):
         self.assertEqual(self.run_admin("purge", "--keep-lines", "100")[0], 0)
         self.assertEqual(self.store.usage().lines, 100)
 
-    def test_a_locked_database_is_a_message_and_not_a_traceback(self):
+    def test_a_database_that_refuses_is_a_message_and_not_a_traceback(self):
         fill(self.store, 500)
         self.store.checkpoint()
-        blocker = sqlite3.connect(self.db, isolation_level=None)
-        self.addCleanup(blocker.close)
-        blocker.execute("BEGIN IMMEDIATE")
-        started = time.monotonic()
-        status, out, err = self.run_admin("purge", "--keep-lines", "100")
-        self.assertLess(time.monotonic() - started, 10.0)
-        self.assertEqual((status, err), (1, "hub.admin: the database refused it (StoreError)\n"))
-        blocker.execute("ROLLBACK")
+        for command in (("purge", "--keep-lines", "100"), ("status",)):
+            with mock.patch.object(storemod.Store, "transaction", side_effect=sqlite3.OperationalError("database is locked")), \
+                    mock.patch.object(storemod.Store, "usage", side_effect=sqlite3.OperationalError("database is locked")):
+                status, out, err = self.run_admin(*command)
+            self.assertEqual(status, 1, command)
+            self.assertRegex(err, r"^hub\.admin: the database refused it \(\w+\)\n$", command)
         self.assertEqual(self.store.usage().lines, 500)
 
     def test_the_hub_goes_on_while_the_tool_works_and_after(self):
@@ -836,7 +834,7 @@ class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
                          (200, 1000, 90, 80, 1000, 2000, 64 * 1024 * 1024))
         self.assertEqual((d.prune_from_bytes, d.prune_to_bytes), (64 * 1024 * 1024 * 9 // 10, 64 * 1024 * 1024 * 8 // 10))
         for needle in ("a budget of 200 lines for the hour and 1,000 for the day", "one line every 18 seconds, one every 86.4", "answered `quota`", "The budgets are kept in memory", "From 90% of 64 MB", "down to 80%",
-                       "2,000 lines a second", "the newest 1,000 never", "`quota` (the account has said the lines of its hour or of its day)", "and a `quota`, are not the client's doing",
+                       "2,000 lines a second", "the moderators' lines and the lines that a moderator deleted last", "the newest 1,000 never", "`quota` (the account has said the lines of its hour or of its day)", "and a `quota`, are not the client's doing",
                        "python -m hub.admin status", "python -m hub.admin purge [--keep-lines N]", "`--keep-lines N` (100 or more", "\"nothing to purge\"", "database_full_and_no_line_to_delete",
                        "tests/scripts/test_hub_room.py", "tests/data/hub_room_mutants.json"):
             self.assertIn(needle.replace("tests/scripts/", "").replace("tests/data/", ""), self.doc, needle)

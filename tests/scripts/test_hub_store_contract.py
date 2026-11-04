@@ -210,6 +210,16 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.store.make_room(0, 5, 0), 5)                  # (a chunk that is smaller than the lines that may go: the moderator's stays)
         self.assertIn(again[1], [r[0] for r in self.store.lines(1000)])
 
+    def test_make_room_takes_the_lines_that_a_moderator_deleted_after_the_others_too(self):
+        ids = [self.say(n).id for n in range(30)]
+        self.store.delete_line(ids[2], "me")
+        self.store.delete_line(ids[7], "me")
+        self.assertEqual(self.store.make_room(0, 23, 5), 23)                        # (all but the newest 5 and the two that were deleted: they are kept for moderation)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], [ids[2], ids[7]] + ids[25:])
+        self.assertEqual(self.store.make_room(0, 100, 5), 2)                        # (and now they go)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], ids[25:])
+        self.assertEqual(self.store.last_deletion(), 2)                             # (the counter of deletions stays)
+
     def test_make_rooms_chunk_is_for_all_the_lines_of_the_call_whoever_said_them(self):
         ids = [self.say(n, mod=n in (1, 2, 3, 4, 5)).id for n in range(8)]          # (three lines of anybody may go, and five of a moderator)
         self.assertEqual(self.store.make_room(0, 5, 0), 5)                          # (the three, and the two oldest of the moderator's: not the three and the five)

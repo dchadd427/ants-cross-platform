@@ -71,7 +71,7 @@ class StoreBase:
 
     def make_room(self, target, chunk=2000, keep=1000):
         """Delete up to `chunk` of the oldest lines to bring the bytes in use down to `target` (the log file of a backend that has one is cut afterwards, so that size() is no more than that). Never the
-        newest `keep` lines (a page shows 100 at most), and the moderators' lines only when no other line may go. Mutes, bans, the counter of deletions and the logins are not touched. Returns how many
+        newest `keep` lines (a page shows 100 at most), and the moderators' lines and the lines that a moderator deleted only when no other line may go. Mutes, bans, the counter of deletions and the logins are not touched. Returns how many
         lines went: 0 when the store is at or under `target` already, or when no line may go."""
         raise NotImplementedError
 
