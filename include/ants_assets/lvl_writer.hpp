@@ -84,7 +84,7 @@ LevelConversion convert_to_extended(const LevelData& level);
 LevelConversion convert_to_long_orders(const LevelData& level);
 
 /// The level as a Classic map (version 8), when it fits: both sides at most 256, the dictionary at most 1,344 names, the description at most 30 bytes (the file's field), no
-/// format flags, rules 0 or 1 (rules 1 is dropped, with a note), every object anchor inside a byte (0 .. 255), and, for an Extended map, at most 90 rows: the conversion makes a NEW
+/// format flags, rules 0, 1 or 2 (rules 1 and 2 are dropped, each with a note), every object anchor inside a byte (0 .. 255), and, for an Extended map, at most 90 rows: the conversion makes a NEW
 /// Classic map, and a new Classic map has at most 90 rows (the original's path finder never enters tile row 90; `rows_beyond_wall` tells the person to crop first). Else `reasons`
 /// list every way in which it does not. A level that is already Classic is copied as it is, whatever its rows (a map of the library, read and written again, is not made now).
 LevelConversion convert_to_classic(const LevelData& level);

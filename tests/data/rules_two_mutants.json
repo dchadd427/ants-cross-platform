@@ -245,19 +245,19 @@
    "expect": "7.2"
   },
   {
-   "id": "budget_divisor_31",
+   "id": "budget_divisor_63",
    "file": "include/ants_sim/path_planner.hpp",
-   "old": "kWideBudgetCellsPerStep = 32u;",
-   "new": "kWideBudgetCellsPerStep = 31u;",
+   "old": "kWideBudgetCellsPerStep = 64u;",
+   "new": "kWideBudgetCellsPerStep = 63u;",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "9.9"
   },
   {
-   "id": "budget_divisor_33",
+   "id": "budget_divisor_65",
    "file": "include/ants_sim/path_planner.hpp",
-   "old": "kWideBudgetCellsPerStep = 32u;",
-   "new": "kWideBudgetCellsPerStep = 33u;",
+   "old": "kWideBudgetCellsPerStep = 64u;",
+   "new": "kWideBudgetCellsPerStep = 65u;",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "9.9"

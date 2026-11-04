@@ -137,7 +137,7 @@ public:
     static constexpr uint32_t kFailF = 8000u;              ///< popped f >= 8000 -> no path (0x1019ae0)
     static constexpr uint16_t kDefaultBudget = 1000u;      ///< expansions per PATHMGR run (0x10247ac)
     static constexpr uint32_t kWideBudgetFloor = 1000u;    ///< the wide search's budget never goes below the original's
-    static constexpr uint32_t kWideBudgetCellsPerStep = 32u; ///< ... and grows with the map: one step per 32 cells (512 x 512 = 8,192 steps)
+    static constexpr uint32_t kWideBudgetCellsPerStep = 64u; ///< ... and grows with the map: one step per 64 cells (512 x 512 = 4,096 steps)
     static constexpr int32_t kSentinelRow = 0x5a;          ///< invalid-neighbour marker (0x1019cbd)
     static constexpr int32_t kNoSentinelRow = -1;          ///< the marker when the wall is down (rules 1): never a real row
 
@@ -242,7 +242,7 @@ public:
 
     using CostProvider = std::function<uint32_t(uint32_t ant_id, TileCoord from, TileCoord to)>;
 
-    /** @brief The budget of a wide search that has passed the original's limit (limit_hit()), for a map of @p rows x @p cols: max(1000, cells / 32), at most 65,535 (exactly 1,000 up to 32,031 cells). Before that a wide search gets the original's 1,000. */
+    /** @brief The budget of a wide search that has passed the original's limit (limit_hit()), for a map of @p rows x @p cols: max(1000, cells / 64), at most 65,535 (exactly 1,000 up to 64,063 cells). Before that a wide search gets the original's 1,000. */
     static constexpr uint16_t wide_budget(uint32_t rows, uint32_t cols) noexcept {
         const uint64_t steps = static_cast<uint64_t>(rows) * cols / PathSearch::kWideBudgetCellsPerStep;
         return static_cast<uint16_t>(steps < PathSearch::kWideBudgetFloor ? PathSearch::kWideBudgetFloor : (steps > 65535u ? 65535u : steps));
