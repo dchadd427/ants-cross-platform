@@ -1,0 +1,344 @@
+{
+ "note": "Mutants of the chat store that makes room for new lines, the budgets of an account and the status and purge commands (hub/store/sqlite.py make_room and usage, hub/server.py on_tick, hub/limits.py, hub/chat.py, hub/admin.py, web/home/chat.js): each breaks one rule on purpose, and some test of tests/scripts/test_hub_room.py, test_hub_store_contract.py or the page's check must notice (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'). Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_room_mutants.json --keep-going --jobs 1 --baseline-every 25.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_room tests.scripts.test_hub_store_contract tests.scripts.test_hub_core && node tests/scripts/web_home_chat_check.js web/lobby.html"
+ },
+ "mutants": [
+  {
+   "id": "room_the_newest_lines_go_first",
+   "file": "hub/store/sqlite.py",
+   "old": "ORDER BY id LIMIT ?)\", (edge[0], staff",
+   "new": "ORDER BY id DESC LIMIT ?)\", (edge[0], staff",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_keeps_one_line_too_many",
+   "file": "hub/store/sqlite.py",
+   "old": "LIMIT 1 OFFSET ?\", (keep,))",
+   "new": "LIMIT 1 OFFSET ?\", (keep + 1,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_keeps_one_line_too_few",
+   "file": "hub/store/sqlite.py",
+   "old": "LIMIT 1 OFFSET ?\", (keep,))",
+   "new": "LIMIT 1 OFFSET ?\", (max(keep - 1, 0),))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_floor_of_the_newest_lines_is_ignored",
+   "file": "hub/store/sqlite.py",
+   "old": "LIMIT 1 OFFSET ?\", (keep,))",
+   "new": "LIMIT 1 OFFSET ?\", (0,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_moderators_lines_never_go",
+   "file": "hub/store/sqlite.py",
+   "old": "for staff in (0, 1):",
+   "new": "for staff in (0,):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_moderators_lines_go_first",
+   "file": "hub/store/sqlite.py",
+   "old": "for staff in (0, 1):",
+   "new": "for staff in (1, 0):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_a_chunk_is_for_each_kind_of_line",
+   "file": "hub/store/sqlite.py",
+   "old": "(edge[0], staff, chunk - gone)",
+   "new": "(edge[0], staff, chunk)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_target_is_ignored",
+   "file": "hub/store/sqlite.py",
+   "old": "        if self.size() <= target:\n            return 0\n",
+   "new": "        if False:\n            return 0\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_log_file_is_taken_for_lines_to_delete",
+   "file": "hub/store/sqlite.py",
+   "old": "        if self.used_bytes() <= target:\n            return 0\n",
+   "new": "        if False:\n            return 0\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_log_file_is_not_cut_after_the_lines_went",
+   "file": "hub/store/sqlite.py",
+   "old": "        if gone:\n            try:\n                self.checkpoint()",
+   "new": "        if False:\n            try:\n                self.checkpoint()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_a_cut_that_fails_after_the_lines_went_is_an_error",
+   "file": "hub/store/sqlite.py",
+   "old": "            except StoreError:            # (the lines are gone and are told",
+   "new": "            except KeyError:            # (the lines are gone and are told",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_the_log_file_is_not_cut_before_the_pages_are_looked_at",
+   "file": "hub/store/sqlite.py",
+   "old": "        self.checkpoint()                          # (what is left of the log file",
+   "new": "        pass                          # (what is left of the log file",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "room_a_free_page_counts_as_in_use",
+   "file": "hub/store/sqlite.py",
+   "old": "return (pages - free) * page_size",
+   "new": "return pages * page_size",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "usage_says_nothing_is_free",
+   "file": "hub/store/sqlite.py",
+   "old": "free = self.db.execute(\"PRAGMA freelist_count\").fetchone()[0] * self.db.execute(\"PRAGMA page_size\").fetchone()[0]",
+   "new": "free = 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheRoomInTheFile tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "clock_never_makes_room",
+   "file": "hub/server.py",
+   "old": "if self.pruning or self.store.size() >= self.limits.prune_from_bytes:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_waits_for_the_guard",
+   "file": "hub/server.py",
+   "old": "if self.pruning or self.store.size() >= self.limits.prune_from_bytes:",
+   "new": "if self.pruning or self.store.size() >= self.limits.db_max_bytes:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_stops_after_one_chunk",
+   "file": "hub/server.py",
+   "old": "self.pruning = gone > 0 ",
+   "new": "self.pruning = False ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_goes_down_to_the_guard_only",
+   "file": "hub/server.py",
+   "old": "make_room(self.limits.prune_to_bytes, ",
+   "new": "make_room(self.limits.db_max_bytes, ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_asks_a_refusing_database_at_every_tick",
+   "file": "hub/server.py",
+   "old": "self.next_room = now + self.limits.purge_failure_seconds         # (set first, as for the purge",
+   "new": "self.next_room = now + self.limits.tick_seconds         # (set first, as for the purge",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_asks_at_every_tick_when_no_line_may_go",
+   "file": "hub/server.py",
+   "old": "                    self.next_room = now + self.limits.purge_failure_seconds\n                    if self.store.size() >= self.limits.db_max_bytes:",
+   "new": "                    self.next_room = now + self.limits.tick_seconds\n                    if self.store.size() >= self.limits.db_max_bytes:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_does_not_say_that_no_line_may_go",
+   "file": "hub/server.py",
+   "old": "                        self.log.event(\"warning\", what=\"database_full_and_no_line_to_delete\")",
+   "new": "                        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_takes_more_than_a_chunk",
+   "file": "hub/server.py",
+   "old": "self.limits.purge_chunk, self.limits.keep_lines)",
+   "new": "10 ** 9, self.limits.keep_lines)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "clock_takes_the_newest_lines",
+   "file": "hub/server.py",
+   "old": "self.limits.purge_chunk, self.limits.keep_lines)",
+   "new": "self.limits.purge_chunk, 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit tests.scripts.test_hub_room.TheGuardAtItsEdges"
+  },
+  {
+   "id": "limits_the_clock_starts_at_the_guard",
+   "file": "hub/limits.py",
+   "old": "prune_from_percent: int = 90 ",
+   "new": "prune_from_percent: int = 100",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "limits_the_clock_stops_at_the_mark_it_started_at",
+   "file": "hub/limits.py",
+   "old": "prune_to_percent: int = 80 ",
+   "new": "prune_to_percent: int = 90 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "limits_the_floor_is_a_few_lines",
+   "file": "hub/limits.py",
+   "old": "keep_lines: int = 1000 ",
+   "new": "keep_lines: int = 10   ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "limits_the_hour_is_a_lot_of_lines",
+   "file": "hub/limits.py",
+   "old": "account_hour_lines: int = 200 ",
+   "new": "account_hour_lines: int = 2000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "limits_the_day_is_a_lot_of_lines",
+   "file": "hub/limits.py",
+   "old": "account_day_lines: int = 1000 ",
+   "new": "account_day_lines: int = 100000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "limits_the_upper_mark_is_taken_from_the_lower_percent",
+   "file": "hub/limits.py",
+   "old": "return self.db_max_bytes * self.prune_from_percent // 100",
+   "new": "return self.db_max_bytes * self.prune_to_percent // 100",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheDocumentsSayWhatTheCodeDoes tests.scripts.test_hub_room.TheHubsClock tests.scripts.test_hub_room.TheStoreAtItsLimit"
+  },
+  {
+   "id": "budget_the_hour_is_not_looked_at",
+   "file": "hub/limits.py",
+   "old": "if not (hour.ready(now) and day.ready(now)):",
+   "new": "if not day.ready(now):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_the_day_is_not_looked_at",
+   "file": "hub/limits.py",
+   "old": "if not (hour.ready(now) and day.ready(now)):",
+   "new": "if not hour.ready(now):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_is_spent_by_a_line_that_the_pace_refused",
+   "file": "hub/limits.py",
+   "old": "        if not bucket.take(now):\n            return \"rate\"\n        hour.take(now)\n        day.take(now)\n",
+   "new": "        hour.take(now)\n        day.take(now)\n        if not bucket.take(now):\n            return \"rate\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_is_not_spent_by_a_line_that_is_said",
+   "file": "hub/limits.py",
+   "old": "        hour.take(now)\n        day.take(now)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_is_not_given_back_for_a_line_the_database_refused",
+   "file": "hub/limits.py",
+   "old": "for bucket in self.budgets.get(account, ()):",
+   "new": "for bucket in ():",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_is_told_before_the_same_text_twice",
+   "file": "hub/limits.py",
+   "old": "        if text in said:\n            return \"dup\"\n        hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):\n            return \"quota\"\n",
+   "new": "        hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):\n            return \"quota\"\n        if text in said:\n            return \"dup\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_is_forgotten_when_it_is_spent",
+   "file": "hub/limits.py",
+   "old": "if all(b.ready(now) and b.tokens >= b.burst for b in budget)]:",
+   "new": "if True]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_is_never_forgotten",
+   "file": "hub/limits.py",
+   "old": "for account in [a for a, budget in self.budgets.items() if all(b.ready(now) and b.tokens >= b.burst for b in budget)]:",
+   "new": "for account in []:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_of_the_hour_fills_up_ten_times_too_fast",
+   "file": "hub/limits.py",
+   "old": "TokenBucket(hour, 3600.0 / hour, now)",
+   "new": "TokenBucket(hour, 360.0 / hour, now)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "budget_of_the_day_fills_up_ten_times_too_fast",
+   "file": "hub/limits.py",
+   "old": "TokenBucket(day, 86400.0 / day, now)",
+   "new": "TokenBucket(day, 8640.0 / day, now)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheBudgetsOfAnAccount tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheBusiestChat"
+  },
+  {
+   "id": "chat_a_line_over_the_budget_is_a_mistake_of_the_socket",
+   "file": "hub/chat.py",
+   "old": "            return self.mistake(peer, \"quota\", count=False)",
+   "new": "            return self.mistake(peer, \"quota\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheHubOnRealSockets"
+  },
+  {
+   "id": "chat_a_line_over_the_budget_is_told_as_rate",
+   "file": "hub/chat.py",
+   "old": "            return self.mistake(peer, \"quota\", count=False)",
+   "new": "            return self.mistake(peer, \"rate\", count=False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheChatTellsQuota tests.scripts.test_hub_room.TheHubOnRealSockets"
+  },
+  {
+   "id": "page_has_no_words_for_quota",
+   "file": "web/home/chat.js",
+   "old": "quota: 'You have chatted a lot, try again later', ",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "admin_purge_may_take_a_line_that_is_on_a_screen",
+   "file": "hub/admin.py",
+   "old": "MIN_KEEP_LINES = 100 ",
+   "new": "MIN_KEEP_LINES = 0   ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "admin_purge_stops_at_the_guard",
+   "file": "hub/admin.py",
+   "old": "(limits.prune_to_bytes, limits.keep_lines) if keep_lines is None",
+   "new": "(limits.db_max_bytes, limits.keep_lines) if keep_lines is None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "admin_purge_with_a_number_of_lines_stops_at_the_mark",
+   "file": "hub/admin.py",
+   "old": "else (0, keep_lines)",
+   "new": "else (limits.prune_to_bytes, keep_lines)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "admin_purge_deleting_nothing_is_a_success",
+   "file": "hub/admin.py",
+   "old": "    if not gone:\n        err.write(\"hub.admin: nothing to purge\\n\")\n        return 1\n",
+   "new": "    if gone < 0:\n        err.write(\"hub.admin: nothing to purge\\n\")\n        return 1\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "admin_status_has_a_wrong_percent",
+   "file": "hub/admin.py",
+   "old": "used.bytes * 100 // limit",
+   "new": "used.bytes * 10 // limit",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "admin_status_has_a_wrong_limit",
+   "file": "hub/admin.py",
+   "old": "show_usage(store, limitmod.Limits().db_max_bytes, out)",
+   "new": "show_usage(store, 100 * 1048576, out)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  }
+ ]
+}

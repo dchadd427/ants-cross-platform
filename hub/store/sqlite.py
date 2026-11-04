@@ -183,6 +183,9 @@ class Store(StoreBase):
         pages. The moderators' lines go last, and the newest `keep` never (the screens and the hub's memory hold fewer). The log file is cut at once, so that the lines are in neither file (a reader
         that holds it up leaves them there until a later look: `unsettled`)."""
         chunk, keep = max(1, int(chunk)), max(0, int(keep))
+        if self.size() <= target:
+            return 0
+        self.checkpoint()                          # (what is left of the log file is not lines to delete: cut it, and look at the pages that hold something)
         if self.used_bytes() <= target:
             return 0
         edge = self.db.execute("SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?", (keep,)).fetchone()

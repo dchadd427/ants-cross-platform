@@ -9,22 +9,31 @@ The classes below are listed here because docs/TESTING.md has no room for them. 
   TheStoreAtItsLimit              the store filled up to its size guard, at a small limit and at the default 64 MB: the guard answers `rate` as documented, then the hub's clock makes room and
                                   the chat takes lines again at the next tick; the newest lines, the mutes, the bans, the deletion counter and the logins stay.
 """
+import collections
 import dataclasses
 import io
 import json
 import os
+import re
+import sqlite3
 import sys
 import tempfile
+import time
 import unittest
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, REPO)
 sys.path.insert(0, HERE)
-from hub import config as configmod, limits as limitmod, log as logmod, server, session, store as storemod  # noqa: E402
+import hub_client as hc  # noqa: E402
+import hub_rig  # noqa: E402
+from hub import admin, config as configmod, limits as limitmod, log as logmod, server, session, store as storemod  # noqa: E402
 from test_hub_core import Clock, FakePeer  # noqa: E402  (the fake peer and the clock that every chat test of the hub uses)
 
 SITE = "https://chat.example.org"
+LOOSE = dict(burst=1000, refill_seconds=0.001, frame_burst=1000, frame_refill_seconds=0.001, global_burst=1000, global_refill_seconds=0.001)       # (the pace of the sockets and of the lines out of the way)
+CLI = dict(db_max_bytes=2 * 1024 * 1024, purge_chunk=300)       # (the limits that the tool's tests give to the command line: a store of 2 MB, so that they do not fill 64 MB)
 SMALL = dict(db_max_bytes=1_000_000, purge_chunk=300)           # (a store of 1 MB and a tick that deletes 300 lines at most, so that a test fills it in no time; the proportions are the default's)
 
 FILL = """WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
@@ -44,14 +53,22 @@ def fill(store, lines, accounts=10, per_second=5, length=150, serial=0):
 def fill_to(store, limit, batch=50, **kw):
     """Add lines until the store holds `limit` bytes with its log file cut (that is what the guard sees once the hub has cut it): big steps while it is far from it, steps of `batch` lines near it,
     so that it ends just over it. Returns how many lines were added."""
-    serial = 0
+    serial, per_line = 0, kw.get("length", 150) + 100
     while True:
-        n = max(batch, min(20000, (limit - store.size()) // 400))
+        n = max(batch, min(20000, (limit - store.size()) // (2 * per_line)))
         fill(store, n, serial=serial, **kw)
         serial += n
         store.checkpoint()
         if store.size() >= limit:
             return serial
+
+
+def answer(client):
+    """What the hub says to a line: its `line` or its `err` (the online count and the pings are not an answer)."""
+    while True:
+        message = client.recv_json(5)
+        if message["t"] in ("line", "err"):
+            return message
 
 
 class Room:
@@ -63,8 +80,9 @@ class Room:
         self.wall, self.mono = Clock(1_800_000_000.0), Clock(1000.0)
         self.limits = dataclasses.replace(limitmod.Limits(), **limits)
         self.store = storemod.Store(self.path, clock=self.wall, busy_ms=busy_ms)
+        self.store.db.execute("PRAGMA synchronous=OFF")                         # (a test has no use for the disk's promise, and a machine that is busy takes milliseconds for each)
         if self.limits.db_max_bytes < 16 * 1024 * 1024:
-            self.store.db.execute("PRAGMA wal_autocheckpoint=20")           # (the log file is folded into the database every 20 pages, as it is every 1000 at the default size: the proportions of a small store are the default's)
+            self.store.db.execute("PRAGMA wal_autocheckpoint=4")            # (the log file is folded into the database every 4 pages, as it is every 1000 at the default size: next to a small store it stays as small as the default's is next to 64 MB)
         self.log = io.StringIO()
         self.hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": SITE, "ANTS_HUB_MODS": ",".join(mods)}), self.store, session.NoLogin(), logmod.Log(self.log), self.limits, clock=self.mono)
         self.chat = self.hub.chat
@@ -112,7 +130,7 @@ class TheStoreAtItsLimit(unittest.TestCase):
         self.assertLess(room.store.size(), limit, "the store is still full after %d seconds" % ticks_to_resume)
         for n, person in enumerate(people):
             room.say(person, "hello again from %d" % n)
-        self.assertEqual([p.codes() for p in people], [["rate"]] * 5, "one refusal each, from before: the second try was taken")
+        self.assertEqual([p.codes() for p in people], [["rate"]] * 5, "one refusal each, from before the clock made room; the second try was taken")
         self.assertEqual([l.text for l in room.store.recent_lines(5)], ["hello again from %d" % n for n in range(5)])
         for second in range(ticks_to_settle):
             room.tick()
@@ -134,6 +152,645 @@ class TheStoreAtItsLimit(unittest.TestCase):
         self.addCleanup(room.close)
         self.assertEqual(room.limits.db_max_bytes, 64 * 1024 * 1024)
         self.check_the_store_makes_room(room, batch=50, ticks_to_resume=3, ticks_to_settle=40)
+
+
+class StoreTest(unittest.TestCase):
+    """A store in a temporary folder, with a clock that the test moves."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = os.path.join(self.folder.name, "hub.db")
+        self.wall = Clock(1_800_000_000.0)
+        self.store = storemod.Store(self.path, clock=self.wall, busy_ms=50)
+        self.store.db.execute("PRAGMA synchronous=OFF")
+        self.addCleanup(self.store.close)
+
+    def in_files(self, text):
+        """The files of the database's folder (the database and its log file) that hold `text`."""
+        found = []
+        for name in sorted(os.listdir(self.folder.name)):
+            with open(os.path.join(self.folder.name, name), "rb") as f:
+                if text.encode() in f.read():
+                    found.append(name)
+        return found
+
+
+class TheRoomInTheFile(StoreTest):
+    def test_the_pages_that_the_oldest_lines_leave_are_whole_and_free_to_reuse(self):
+        self.store.checkpoint()
+        empty = self.store.size()
+        fill(self.store, 4000)
+        self.store.checkpoint()
+        before = self.store.usage()
+        self.assertEqual(before.free, 0)
+        self.assertEqual(self.store.make_room(0, 2000, 100), 2000)
+        after = self.store.usage()
+        half = (before.bytes - empty) / 2                                              # (what half of the lines took)
+        self.assertGreater(before.bytes - after.bytes, 0.8 * half)                     # almost all of it is free now ...
+        self.assertGreater(after.free, 0.8 * half)                                     # ... and is told as room to reuse
+        page_size = self.store.db.execute("PRAGMA page_size").fetchone()[0]
+        self.assertEqual(after.free, self.store.db.execute("PRAGMA freelist_count").fetchone()[0] * page_size)
+
+    def test_the_file_stops_growing_when_the_oldest_lines_go_as_new_ones_come(self):
+        high, low = 540_000, 480_000
+        sizes = []
+        for cycle in range(100):
+            fill(self.store, 100)                                                      # (24 KB a time, 10,000 lines in all)
+            self.store.checkpoint()
+            while self.store.size() >= high:
+                self.assertGreater(self.store.make_room(low, 100, 100), 0)
+            sizes.append(os.path.getsize(self.path))
+        self.assertLessEqual(max(sizes[40:]), max(sizes[:40]) + 4 * 4096)              # it stays where it had reached
+        self.assertLess(max(sizes), 600_000)
+        self.assertLess(self.store.usage().lines, 3000)
+
+    def test_the_target_ends_the_deletion_within_a_chunk(self):
+        fill(self.store, 3000)
+        self.store.checkpoint()
+        target = int(self.store.used_bytes() * 0.7)
+        calls = 0
+        while self.store.make_room(target, 100, 10):
+            calls += 1
+        self.assertLessEqual(self.store.used_bytes(), target)
+        self.assertGreater(self.store.used_bytes(), target - 100 * 400)                # (at most a chunk of lines below it)
+        self.assertGreaterEqual(calls, 5)
+
+    def test_the_bytes_decide_and_not_the_number_of_lines(self):
+        other = storemod.Store(os.path.join(self.folder.name, "long.db"), clock=self.wall)
+        self.addCleanup(other.close)
+        fill(self.store, 2000, length=20)                                              # (200 KB)
+        fill(other, 2000, length=700)                                                  # (1.7 MB)
+        for store in (self.store, other):
+            store.checkpoint()
+            while store.make_room(400_000, 100, 10):
+                pass
+        self.assertEqual(self.store.usage().lines, 2000)
+        self.assertLessEqual(other.used_bytes(), 400_000)
+        self.assertTrue(250 < other.usage().lines < 450, other.usage().lines)
+
+    def test_the_text_of_a_line_that_went_is_in_neither_file(self):
+        for cut_first in (False, True):                                                # (the text is in the log file only, or in the database too)
+            canary = "canary-line-3c9e41-do-not-keep-%s" % cut_first
+            self.store.add_line("1", "ann", canary, False)
+            fill(self.store, 300)
+            if cut_first:
+                self.store.checkpoint()
+            self.assertEqual(self.in_files(canary), ["hub.db"] if cut_first else ["hub.db-wal"])
+            self.assertGreater(self.store.make_room(0, 1000, 10), 0)                  # (all but the newest 10, the line with the text among them)
+            self.assertEqual(self.in_files(canary), [])
+            self.assertFalse(self.store.unsettled)
+
+    def test_a_reader_that_holds_the_log_file_keeps_the_text_there_until_it_lets_go(self):
+        canary = "canary-line-77ab05-held-by-a-reader"
+        self.store.add_line("1", "ann", canary, False)
+        fill(self.store, 300)
+        self.store.checkpoint()
+        reader = sqlite3.connect(self.path, isolation_level=None)                      # (`hub.admin list` or a backup: a read that is open)
+        reader.execute("BEGIN")
+        self.assertEqual(reader.execute("SELECT COUNT(*) FROM lines").fetchone()[0], 301)
+        started = time.monotonic()
+        self.assertEqual(self.store.make_room(0, 100, 10), 100)
+        self.assertLess(time.monotonic() - started, 1.0)                               # (the hub's one thread does not wait for a reader)
+        self.assertTrue(self.store.unsettled)
+        reader.execute("COMMIT")
+        reader.close()
+        self.assertTrue(self.store.checkpoint())
+        self.assertEqual(self.in_files(canary), [])
+
+    def test_a_cut_of_the_log_file_that_fails_after_the_lines_went_is_no_error(self):
+        fill(self.store, 300)
+        real, calls = self.store.checkpoint, []
+
+        def cut():
+            calls.append(1)
+            if len(calls) > 1:
+                raise storemod.StoreError("refused")
+            return real()
+
+        self.store.checkpoint = cut
+        self.assertEqual(self.store.make_room(0, 50, 10), 50)                          # (the lines are gone, and are told)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(self.store.unsettled)
+
+    def test_a_locked_database_refuses_and_deletes_nothing(self):
+        fill(self.store, 300)
+        self.store.checkpoint()
+        blocker = sqlite3.connect(self.path, isolation_level=None)                     # (another process that holds the write lock)
+        blocker.execute("BEGIN IMMEDIATE")
+        started = time.monotonic()
+        with self.assertRaises(storemod.StoreError):
+            self.store.make_room(0, 100, 10)
+        self.assertLess(time.monotonic() - started, 2.0)
+        blocker.execute("ROLLBACK")
+        blocker.close()
+        self.assertEqual(self.store.usage().lines, 300)
+        self.assertEqual(self.store.make_room(0, 100, 10), 100)
+
+    def test_a_log_file_that_cannot_be_cut_does_not_make_the_store_delete_lines_that_are_not_over(self):
+        fill(self.store, 300)
+        self.store.checkpoint()
+        reader = sqlite3.connect(self.path, isolation_level=None)
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM lines").fetchone()
+        for n in range(100):
+            self.store.add_line("1", "ann", "x" * 150, False)                          # (the log file grows, and a reader holds it: it cannot be cut)
+        self.assertGreater(self.store.size(), self.store.used_bytes() + 100_000)
+        target = self.store.used_bytes() + 1000
+        self.assertEqual(self.store.make_room(target, 100, 10), 0)                     # (the pages are under the target: lines are not what is over)
+        self.assertEqual(self.store.usage().lines, 400)
+        reader.execute("COMMIT")
+        reader.close()
+
+    def test_a_store_with_no_lines_or_with_the_newest_ones_only_does_nothing_and_takes_no_lock(self):
+        blocker = sqlite3.connect(self.path, isolation_level=None)
+        blocker.execute("BEGIN IMMEDIATE")
+        self.assertEqual(self.store.make_room(0, 100, 10), 0)                          # (no line: nothing to ask the lock for)
+        blocker.execute("ROLLBACK")
+        blocker.close()
+        fill(self.store, 50)
+        blocker = sqlite3.connect(self.path, isolation_level=None)
+        blocker.execute("BEGIN IMMEDIATE")
+        self.assertEqual(self.store.make_room(0, 100, 50), 0)                          # (the 50 lines are the newest 50: none may go)
+        blocker.execute("ROLLBACK")
+        blocker.close()
+
+
+class TheBudgetsOfAnAccount(unittest.TestCase):
+    def budgets(self, **kw):
+        """The limits of one account, with the pace of its lines out of the way (a burst of 1000), and the budgets as asked."""
+        return limitmod.AccountLimits(dataclasses.replace(limitmod.Limits(), burst=1000, refill_seconds=0.001, **kw))
+
+    def said(self, al, count, now, account="1001", prefix="line"):
+        return [al.check(account, "%s %d at %d" % (prefix, n, now), now) for n in range(count)]
+
+    def test_the_defaults_are_200_lines_an_hour_and_1000_a_day(self):
+        defaults = limitmod.Limits()
+        self.assertEqual((defaults.account_hour_lines, defaults.account_day_lines), (200, 1000))
+
+    def test_the_budget_of_the_hour_fills_up_again_steadily(self):
+        al = self.budgets(account_hour_lines=10, account_day_lines=1000)
+        self.assertEqual(self.said(al, 12, 0.0), [None] * 10 + ["quota"] * 2)
+        self.assertEqual(al.check("1001", "again", 359.0), "quota")                    # (one more line every 3600 / 10 = 360 seconds)
+        self.assertIsNone(al.check("1001", "again", 360.0))
+        self.assertEqual(al.check("1001", "and again", 360.0), "quota")
+        self.assertIsNone(al.check("1001", "much later", 360.0 + 3600.0))
+
+    def test_the_budget_of_the_day_holds_when_the_hour_has_lines_left(self):
+        al = self.budgets(account_hour_lines=10, account_day_lines=25)
+        self.assertEqual(self.said(al, 10, 0.0), [None] * 10)                          # (the hour is spent, the day has 15 left)
+        self.assertEqual(self.said(al, 10, 3600.0, prefix="hour two"), [None] * 10)    # (the hour is full again; the day has 6 and a bit)
+        self.assertEqual(self.said(al, 10, 7200.0, prefix="hour three"), [None] * 7 + ["quota"] * 3)      # (a bit more than 7: 25 / 24 a hour came back)
+
+    def test_each_account_has_its_own_budget(self):
+        al = self.budgets(account_hour_lines=3, account_day_lines=100)
+        self.assertEqual(self.said(al, 4, 0.0, account="1001"), [None] * 3 + ["quota"])
+        self.assertEqual(self.said(al, 4, 0.0, account="1002"), [None] * 3 + ["quota"])
+
+    def test_a_line_over_the_budget_costs_nothing(self):
+        al = self.budgets(account_hour_lines=10, account_day_lines=1000)
+        self.said(al, 10, 0.0)
+        self.assertEqual(self.said(al, 200, 100.0, prefix="over"), ["quota"] * 200)    # (200 tries, none of them is counted)
+        self.assertEqual(self.said(al, 3, 360.0, prefix="later"), [None, "quota", "quota"])      # (so the line that is owed at 360 seconds is there)
+
+    def test_the_same_text_twice_is_told_before_the_budget(self):
+        al = self.budgets(account_hour_lines=2, account_day_lines=100)
+        self.assertIsNone(al.check("1001", "first", 0.0))
+        self.assertIsNone(al.check("1001", "second", 0.0))
+        self.assertEqual(al.check("1001", "second", 1.0), "dup")
+        self.assertEqual(al.check("1001", "third", 1.0), "quota")
+
+    def test_a_refused_line_for_the_pace_costs_no_budget_and_the_budget_is_what_is_said(self):
+        al = limitmod.AccountLimits(dataclasses.replace(limitmod.Limits(), burst=3, refill_seconds=2.0, account_hour_lines=5, account_day_lines=100))
+        self.assertEqual([al.check("1001", "line %d" % n, 0.0) for n in range(5)], [None, None, None, "rate", "rate"])
+        self.assertIsNone(al.check("1001", "line 5", 2.0))
+        self.assertIsNone(al.check("1001", "line 6", 4.0))
+        self.assertEqual(al.check("1001", "line 7", 6.0), "quota")                     # (five lines are said; the two tries that the pace refused used none of the five)
+
+    def test_a_line_that_the_database_refused_gives_back_the_budget_too(self):
+        al = self.budgets(account_hour_lines=3, account_day_lines=3)
+        for n in range(20):
+            self.assertIsNone(al.check("1001", "try %d" % n, 0.0))
+            al.refund("1001", "try %d" % n)
+        self.assertEqual(self.said(al, 4, 0.0, prefix="kept"), [None] * 3 + ["quota"])
+
+    def test_a_budget_that_is_spent_is_remembered_and_one_that_is_full_again_is_forgotten(self):
+        al = self.budgets(account_hour_lines=10, account_day_lines=1000)
+        self.said(al, 10, 0.0)
+        self.said(al, 1, 0.0, account="1002")
+        al.forget_idle(400.0)
+        self.assertEqual(sorted(al.budgets), ["1001"])                                 # (1002 has used one of 1000 and 10: it is full again by now ... 1001 has used all ten)
+        self.assertEqual(al.check("1001", "still spent", 400.0), None)                 # (the hour has given 1 line back in 360 seconds)
+        self.assertEqual(al.check("1001", "and now", 401.0), "quota")
+        al.forget_idle(100000.0)
+        self.assertEqual(al.budgets, {})
+
+    def test_the_memory_of_the_budgets_stays_small_when_many_accounts_say_a_line_each(self):
+        al = limitmod.AccountLimits(limitmod.Limits())
+        biggest = 0
+        for second in range(1200):                                                     # (20 minutes, 5 new accounts a second, one line each)
+            for n in range(5):
+                al.check(str(10 ** 6 + second * 5 + n), "hello", float(second))
+            if second % 60 == 59:
+                al.forget_idle(float(second))
+                biggest = max(biggest, len(al.budgets))
+        self.assertLess(biggest, 800)                                                  # (not the 6,000 accounts: the ones that spoke in the last two minutes)
+        al.forget_idle(1200.0 + 400.0)
+        self.assertEqual((len(al.budgets), len(al.accounts)), (0, 0))
+
+
+class TheChatTellsQuota(unittest.TestCase):
+    def setUp(self):
+        self.room = Room(account_hour_lines=5, account_day_lines=100, **{k: v for k, v in LOOSE.items() if k in ("burst", "refill_seconds", "global_burst", "global_refill_seconds")})
+        self.addCleanup(self.room.close)
+
+    def test_the_line_over_the_budget_is_not_kept_and_is_no_mistake_of_the_socket(self):
+        who = self.room.person(1)
+        for n in range(5):
+            self.room.say(who, "line %d" % n)
+        self.assertEqual(who.codes(), [])
+        self.room.say(who, "one too many")
+        self.assertEqual(who.codes(), ["quota"])
+        self.assertEqual((who.strikes, who.charges), (0, 1))                           # (no mistake; it costs the socket a frame of its budget, as a full database does)
+        self.assertEqual(who.sent[-1], {"t": "err", "code": "quota"})
+        self.assertEqual([r[4] for r in self.room.store.lines(10)][0], "line 4")
+        self.room.mono.now += 3600 / 5 - 1
+        self.room.say(who, "too early")
+        self.assertEqual(who.codes(), ["quota", "quota"])
+        self.room.mono.now += 1
+        self.room.say(who, "after a while")
+        self.assertEqual(who.codes(), ["quota", "quota"])
+        self.assertEqual(self.room.store.lines(1)[0][4], "after a while")
+
+    def test_a_moderators_command_is_not_held_back_by_the_budget_and_the_moderator_is_held_to_it_for_lines(self):
+        mod = FakePeer(session.Identity("9001", "moddy", False))
+        who = self.room.person(1)
+        self.room.say(who, "something to mute for")
+        for n in range(5):
+            self.room.say(mod, "announcement %d" % n)
+        self.room.say(mod, "a sixth")
+        self.assertEqual(mod.codes(), ["quota"])
+        self.room.say(mod, "/mute visitor1 5")
+        self.assertEqual(mod.codes(), ["quota"])                                       # (the command is no line: it was done)
+        self.assertGreater(self.room.store.muted_until("2001"), 0)
+
+    def test_the_other_refusals_keep_their_codes(self):
+        who = self.room.person(1)
+        self.room.say(who, "same")
+        self.room.say(who, "same")
+        self.assertEqual(who.codes(), ["rate"])
+        self.assertEqual(who.strikes, 1)                                               # (a repeated line is a mistake, as before)
+
+
+class TheBusiestChat(unittest.TestCase):
+    """Busy accounts say a line every 2 seconds for an hour, and quiet ones a line now and then: the store stays inside its limit, the quiet ones are never refused, the busy ones say what their budget allows."""
+
+    def test_twelve_accounts_that_never_stop_do_not_fill_the_store_or_hold_up_the_others(self):
+        room = Room(**SMALL)
+        self.addCleanup(room.close)
+        accepted = collections.Counter()
+        real = room.store.add_line
+        room.store.add_line = lambda account, name, text, mod: accepted.update([account]) or real(account, name, text, mod)
+        busy = [room.person(n) for n in range(1, 13)]
+        quiet = [room.person(100 + n) for n in range(20)]
+        biggest = 0
+        for step in range(1800):                                                       # (an hour)
+            room.tick(2.0)
+            for who in busy:
+                room.say(who, "line %d from %s %s" % (step, who.identity.name, "and some more words " * 6))
+            if step % 300 == 0:
+                for who in quiet:
+                    room.say(who, "a quiet word at %d" % step)
+            biggest = max(biggest, room.store.size())
+        self.assertLess(biggest, room.limits.db_max_bytes)                             # (the guard never had to refuse a line)
+        self.assertEqual([who.codes() for who in quiet], [[]] * 20)
+        for who in busy:
+            lines = accepted[who.identity.account_id]
+            self.assertTrue(370 <= lines <= 410, lines)                                # (the hour's 200 and a line every 18 seconds for an hour: 400, less what the limit of all accounts took)
+            self.assertGreater(who.codes().count("quota"), 1000)
+        self.assertEqual(sum(accepted.values()), sum(accepted[w.identity.account_id] for w in busy + quiet))
+        self.assertIn("prune lines=", room.log.getvalue())                             # (more than the store holds: the oldest were deleted, not 21,600 lines kept)
+        self.assertLess(room.store.usage().lines, sum(accepted.values()))
+
+
+class TheGuardAtItsEdges(unittest.TestCase):
+    def setUp(self):
+        self.room = Room(**SMALL)
+        self.addCleanup(self.room.close)
+
+    def limit_at(self, bytes_):
+        self.room.chat.limits = dataclasses.replace(self.room.limits, db_max_bytes=bytes_)
+
+    def test_exactly_at_the_limit_is_full_and_one_byte_under_it_is_not(self):
+        fill(self.room.store, 500)
+        self.room.store.checkpoint()
+        size = self.room.store.size()
+        who = self.room.person(1)
+        self.limit_at(size)
+        self.room.say(who, "at the limit")
+        self.assertEqual(who.codes(), ["rate"])
+        self.limit_at(size + 1)
+        self.room.say(who, "one byte under")
+        self.assertEqual(who.codes(), ["rate"])                                        # (no new refusal)
+        self.assertEqual(self.room.store.lines(1)[0][4], "one byte under")
+
+    def test_a_line_of_the_largest_size_may_take_the_store_over_the_limit_and_the_next_waits_for_the_clock(self):
+        fill(self.room.store, 500)
+        self.room.store.checkpoint()
+        who, other = self.room.person(1), self.room.person(2)
+        largest = "\U0001F600" * 200                                                  # (200 code points, 800 bytes: what the text rules allow)
+        self.assertEqual(len(largest.encode("utf-8")), 800)
+        self.limit_at(self.room.store.size() + 1)
+        self.room.say(who, largest)
+        self.assertEqual(who.codes(), [])
+        self.assertEqual(self.room.store.lines(1)[0][4], largest)
+        self.assertLess(self.room.store.size() - self.room.chat.limits.db_max_bytes, 6 * 4096)       # (over by a few pages at the most)
+        self.room.say(other, "the next one")
+        self.assertEqual(other.codes(), ["rate"])
+        self.room.chat.limits = self.room.limits
+        fill(self.room.store, 2000)
+        self.room.store.checkpoint()
+        for second in range(20):
+            self.room.tick()
+        self.room.say(other, "and after the clock")
+        self.assertEqual(other.codes(), ["rate"])
+        self.assertEqual(self.room.store.lines(1)[0][4], "and after the clock")
+
+    def test_lines_of_the_largest_size_fill_the_store_faster_and_are_deleted_by_the_bytes(self):
+        room = Room(keep_lines=100, **SMALL)                                           # (1,000 lines of this size are the whole of a store of 1 MB)
+        self.addCleanup(room.close)
+        count = fill_to(room.store, room.limits.db_max_bytes, length=700)
+        self.assertLess(count, 1500)                                                   # (a store of 1 MB holds about 1,200 lines of 700 characters, 4,500 of 150)
+        for second in range(30):
+            room.tick()
+        self.assertLessEqual(room.store.size(), room.limits.prune_to_bytes)
+        left = room.store.usage().lines
+        self.assertTrue(700 < left < 1100, left)
+        who = room.person(1)
+        room.say(who, "hello")
+        self.assertEqual(who.codes(), [])
+
+
+class TheHubsClock(unittest.TestCase):
+    def setUp(self):
+        self.room = Room(**SMALL)
+        self.addCleanup(self.room.close)
+        self.calls = []
+        real = self.room.store.make_room
+        self.room.store.make_room = lambda *args: self.calls.append(args) or real(*args)
+
+    def prune_lines(self):
+        return [int(m) for m in re.findall(r"prune lines=(\d+)", self.room.log.getvalue())]
+
+    def test_nothing_is_asked_of_a_store_below_the_mark(self):
+        fill(self.room.store, 1000)
+        for second in range(200):
+            self.room.tick()
+        self.assertEqual(self.calls, [])
+
+    def test_from_the_mark_a_chunk_a_second_down_to_the_lower_mark_and_then_nothing_until_the_mark_again(self):
+        limits = self.room.limits
+        fill_to(self.room.store, limits.prune_from_bytes, batch=20)
+        self.assertLess(self.room.store.size(), limits.db_max_bytes)
+        self.room.tick()
+        self.assertEqual(self.calls, [(limits.prune_to_bytes, 300, 1000)])
+        for second in range(30):
+            self.room.tick()
+        self.assertLessEqual(self.room.store.used_bytes(), limits.prune_to_bytes)
+        self.assertTrue(len(self.calls) < 12, len(self.calls))                         # (a chunk a tick, and then it stops)
+        done = len(self.calls)
+        fill_to(self.room.store, limits.prune_to_bytes + (limits.prune_from_bytes - limits.prune_to_bytes) // 2, batch=20)       # (half way between the marks)
+        for second in range(20):
+            self.room.tick()
+        self.assertEqual(len(self.calls), done)                                        # (no new run: the mark is 90%)
+        fill_to(self.room.store, limits.prune_from_bytes, batch=20)
+        self.room.tick()
+        self.assertEqual(len(self.calls), done + 1)
+        self.assertTrue(all(0 < n <= 300 for n in self.prune_lines()), self.prune_lines())
+
+    def test_a_database_that_refuses_is_tried_again_after_a_minute_and_not_at_every_tick(self):
+        limits = self.room.limits
+        self.room.tick()                                                               # (the first look at the age of the lines is done)
+        fill_to(self.room.store, limits.prune_from_bytes, batch=20)
+        blocker = sqlite3.connect(self.room.path, isolation_level=None)               # (another process that holds the write lock)
+        self.addCleanup(blocker.close)
+        blocker.execute("BEGIN IMMEDIATE")
+        started = time.monotonic()
+        with self.assertRaises(storemod.StoreError):
+            self.room.tick()
+        self.assertLess(time.monotonic() - started, 2.0)
+        self.assertEqual(self.room.hub.next_room, self.room.mono.now + limits.purge_failure_seconds)
+        for second in range(59):
+            self.room.tick()
+        self.assertEqual(len(self.calls), 1)                                           # (no more tries, no more waiting)
+        blocker.execute("ROLLBACK")
+        self.room.tick()
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(len(self.prune_lines()), 1)
+
+    def test_a_store_that_is_full_and_has_no_line_to_delete_is_said_in_the_log_once_a_minute(self):
+        room = Room(keep_lines=10 ** 6, **SMALL)
+        self.addCleanup(room.close)
+        fill_to(room.store, room.limits.db_max_bytes, batch=20)
+        for second in range(130):
+            room.tick()
+        said = room.log.getvalue().count("warning what=database_full_and_no_line_to_delete")
+        self.assertTrue(2 <= said <= 3, said)                                          # (at the first tick and then every minute, not 130 times)
+        who = room.person(1)
+        room.say(who, "hello")
+        self.assertEqual(who.codes(), ["rate"])                                        # (the guard still holds: it is the last resort)
+
+    def test_a_tick_at_the_default_size_holds_the_loop_for_a_short_time(self):
+        room = Room()
+        self.addCleanup(room.close)
+        fill_to(room.store, room.limits.db_max_bytes, batch=50)
+        room.tick()
+        slowest = 0.0
+        for second in range(40):
+            started = time.perf_counter()
+            room.tick()
+            slowest = max(slowest, time.perf_counter() - started)
+        self.assertLess(slowest, 1.0)                                                  # (a chunk of 2,000 lines is some 20 milliseconds on a quiet machine)
+        self.assertLessEqual(room.store.size(), room.limits.prune_to_bytes)
+        self.assertTrue(all(0 < n <= 2000 for n in self.prune_lines()))
+
+
+class TheStaffTool(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.db = os.path.join(self.folder.name, "hub.db")
+        self.wall = Clock(1_800_000_000.0)
+        self.store = storemod.Store(self.db, clock=self.wall)
+        self.store.db.execute("PRAGMA synchronous=OFF")
+        self.addCleanup(self.store.close)
+
+    def run_admin(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        status = admin.run(["--db", self.db] + list(args), out, err)
+        return status, out.getvalue(), err.getvalue()
+
+    def test_status_says_how_full_the_database_is(self):
+        status, out, err = self.run_admin("status")
+        self.assertEqual((status, err), (0, ""))
+        self.assertRegex(out, r"^database: 0\.\d MB of 64\.0 MB used \(0%\); 0\.0 MB free to reuse; no lines\n$")
+        fill(self.store, 5000)
+        self.store.checkpoint()
+        status, out, err = self.run_admin("status")
+        self.assertEqual((status, err), (0, ""))
+        self.assertRegex(out, r"^database: 1\.\d MB of 64\.0 MB used \(1%\); 0\.0 MB free to reuse; 5,000 lines, the oldest from 2027-01-15 \d\d:\d\d:\d\dZ\n$")
+
+    def test_purge_frees_pages_down_to_the_hubs_lower_mark_and_says_so(self):
+        limits = dataclasses.replace(limitmod.Limits(), **CLI)
+        self.store.add_line("9001", "moddy", "an old word of a moderator", True)
+        fill_to(self.store, int(limits.db_max_bytes * 0.95), batch=50)
+        self.store.checkpoint()
+        before = self.store.usage()
+        with mock.patch.object(admin.limitmod, "Limits", lambda: limits):
+            status, out, err = self.run_admin("purge")
+        self.assertEqual((status, err), (0, ""))
+        lines = out.splitlines()
+        self.assertEqual(len(lines), 3)
+        self.assertRegex(lines[0], r"^database: 1\.[89] MB of 2\.0 MB used \(9\d%\); 0\.0 MB free to reuse; ")
+        self.assertRegex(lines[1], r"^[\d,]+ lines deleted$")
+        self.assertRegex(lines[2], r"^database: 1\.[56] MB of 2\.0 MB used \((7\d|80)%\); \d+\.\d MB free to reuse; ")
+        after = self.store.usage()
+        self.assertLessEqual(after.bytes, limits.prune_to_bytes)
+        self.assertGreater(after.bytes, limits.prune_to_bytes - 300 * 400)             # (it stops at the lower mark, within a chunk)
+        self.assertGreater(after.free, 0.9 * (before.bytes - after.bytes))             # (the pages are free, not only unused)
+        self.assertEqual(after.lines, before.lines - int(lines[1].split()[0].replace(",", "")))
+        self.assertIn("an old word of a moderator", [r[4] for r in self.store.lines(10 ** 6)])        # (the moderators' lines go last)
+        with mock.patch.object(admin.limitmod, "Limits", lambda: limits):
+            self.assertEqual(self.run_admin("purge")[::2], (1, "hub.admin: nothing to purge\n"))     # (and a second time it is at the mark already)
+
+    def test_purge_with_keep_lines_leaves_the_newest_lines_only(self):
+        self.store.add_line("9001", "moddy", "a moderator", True)
+        fill(self.store, 1000)
+        for n in range(5):
+            self.store.add_line("1001", "alice", "newest %d" % n, False)
+        status, out, err = self.run_admin("purge", "--keep-lines", "200")
+        self.assertEqual((status, err), (0, ""))
+        self.assertIn("806 lines deleted\n", out)
+        rows = self.store.lines(10 ** 6)
+        self.assertEqual(len(rows), 200)
+        self.assertEqual([r[4] for r in rows[:5]], ["newest 4", "newest 3", "newest 2", "newest 1", "newest 0"])
+        self.assertNotIn("a moderator", [r[4] for r in rows])                          # (the newest 200 only, whoever said them)
+        self.assertEqual(self.run_admin("purge", "--keep-lines", "200")[::2], (1, "hub.admin: nothing to purge\n"))
+
+    def test_purge_never_takes_what_a_screen_may_show(self):
+        fill(self.store, 500)
+        for keep in ("99", "0", "-5", "x"):
+            status, out, err = self.run_admin("purge", "--keep-lines", keep)
+            self.assertEqual(status, 2, keep)
+            self.assertEqual(out, "", keep)
+        self.assertEqual(self.run_admin("purge", "--keep-lines", "99")[2], "hub.admin: KEEP_LINES is 100 or more\n")
+        self.assertEqual(self.store.usage().lines, 500)
+        self.assertEqual(self.run_admin("purge", "--keep-lines", "100")[0], 0)
+        self.assertEqual(self.store.usage().lines, 100)
+
+    def test_a_locked_database_is_a_message_and_not_a_traceback(self):
+        fill(self.store, 500)
+        self.store.checkpoint()
+        blocker = sqlite3.connect(self.db, isolation_level=None)
+        self.addCleanup(blocker.close)
+        blocker.execute("BEGIN IMMEDIATE")
+        started = time.monotonic()
+        status, out, err = self.run_admin("purge", "--keep-lines", "100")
+        self.assertLess(time.monotonic() - started, 10.0)
+        self.assertEqual((status, err), (1, "hub.admin: the database refused it (StoreError)\n"))
+        blocker.execute("ROLLBACK")
+        self.assertEqual(self.store.usage().lines, 500)
+
+    def test_the_hub_goes_on_while_the_tool_works_and_after(self):
+        room = Room(**CLI)
+        self.addCleanup(room.close)
+        fill_to(room.store, int(room.limits.db_max_bytes * 0.95), batch=50)
+        who = room.person(1)
+        before = room.store.lines(1)[0][0]
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(admin.limitmod, "Limits", lambda: room.limits):
+            self.assertEqual(admin.run(["--db", room.path, "purge", "--keep-lines", "300"], out, err), 0, err.getvalue())
+        room.say(who, "after the tool")                                                # (the hub's own connection sees the lines gone and takes a new one)
+        self.assertEqual(who.codes(), [])
+        rows = room.store.lines(10 ** 6)
+        self.assertEqual(len(rows), 301)
+        self.assertEqual((rows[0][4], rows[1][0]), ("after the tool", before))         # (the newest 300 are the ones of before, and the new line has a number that was never used)
+        self.assertGreater(rows[0][0], before)
+        self.assertEqual([l.text for l in room.chat.ring][-1:], ["after the tool"])
+
+
+class TheHubOnRealSockets(unittest.TestCase):
+    def test_a_client_is_told_of_its_budget_with_a_calm_code_and_stays_connected(self):
+        with hub_rig.Rig(account_hour_lines=3, account_day_lines=100, **LOOSE) as rig:
+            client = hc.Client(rig.port, login="2001:visitor1")
+            self.addCleanup(client.close)
+            self.assertEqual(client.recv_json()["t"], "welcome")
+            for n in range(3):
+                client.say("line %d" % n)
+                self.assertEqual(client.recv_json()["t"], "line")
+            for n in range(25):                                                        # (more tries than the 20 mistakes that close a socket)
+                client.say("one too many %d" % n)
+            errors = [m for m in client.drain(0.5) if m["t"] == "err"]
+            self.assertEqual(errors, [{"t": "err", "code": "quota"}] * 25)
+            client.say("is the socket still there")
+            self.assertEqual(answer(client), {"t": "err", "code": "quota"})
+
+    def test_a_full_store_is_made_room_in_by_the_running_hub_and_the_chat_takes_a_line_again(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        db = os.path.join(folder.name, "hub.db")
+        before = storemod.Store(db, clock=Clock(time.time()))
+        fill_to(before, 1_000_000, batch=50)
+        before.close()
+        with hub_rig.Rig(db=db, db_max_bytes=1_000_000, purge_chunk=300, tick_seconds=0.05) as rig:
+            client = hc.Client(rig.port, login="2001:visitor1")
+            self.addCleanup(client.close)
+            welcome = client.recv_json()
+            self.assertEqual((welcome["t"], welcome["you"]["name"]), ("welcome", "visitor1"))
+            kept = None
+            for n in range(40):                                                        # (a try every 0.2 seconds: the first may be refused, one is kept within 8 seconds)
+                client.say("hello, try number %d" % n)
+                message = answer(client)
+                if message["t"] == "line":
+                    kept = message
+                    break
+                self.assertEqual(message, {"t": "err", "code": "rate"})
+                time.sleep(0.2)
+            self.assertIsNotNone(kept, "the chat did not take a line")
+            self.assertEqual(kept["who"], "visitor1")
+            self.assertRegex(rig.log_text.getvalue(), r"prune lines=\d+")
+            self.assertLessEqual(rig.call(rig.store.size), 1_000_000)
+
+class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
+    def setUp(self):
+        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
+            self.doc = f.read()
+
+    def test_the_numbers_of_the_document_are_the_limits_of_the_code(self):
+        d = limitmod.Limits()
+        self.assertEqual((d.account_hour_lines, d.account_day_lines, d.prune_from_percent, d.prune_to_percent, d.keep_lines, d.purge_chunk, d.db_max_bytes),
+                         (200, 1000, 90, 80, 1000, 2000, 64 * 1024 * 1024))
+        self.assertEqual((d.prune_from_bytes, d.prune_to_bytes), (64 * 1024 * 1024 * 9 // 10, 64 * 1024 * 1024 * 8 // 10))
+        for needle in ("a budget of 200 lines for the hour and 1,000 for the day", "one line every 18 seconds, one every 86.4", "answered `quota`", "From 90% of 64 MB", "down to 80%",
+                       "2,000 lines a second", "the newest 1,000 never", "`quota` (the account has said the lines of its hour or of its day)", "and a `quota`, are not the client's doing",
+                       "python -m hub.admin status", "python -m hub.admin purge [--keep-lines N]", "`--keep-lines N` (100 or more", "\"nothing to purge\"", "database_full_and_no_line_to_delete",
+                       "tests/scripts/test_hub_room.py", "tests/data/hub_room_mutants.json"):
+            self.assertIn(needle.replace("tests/scripts/", "").replace("tests/data/", ""), self.doc, needle)
+
+    def test_the_chat_sends_the_codes_that_the_document_lists(self):
+        with open(os.path.join(REPO, "hub", "chat.py"), encoding="utf-8") as f:
+            sent = set(re.findall(r'mistake\(peer, "([a-z]+)"', f.read())) | {"login", "young", "empty", "long"}
+        listed = set(re.findall(r"`([a-z]+)`", self.doc[self.doc.index("Error codes:"):self.doc.index("\n", self.doc.index("Error codes:"))]))
+        self.assertTrue(sent <= listed, sent - listed)
+        self.assertIn("quota", sent)
+
+    def test_the_wording_of_the_page_for_the_code_is_calm_and_the_page_has_it(self):
+        with open(os.path.join(REPO, "web", "home", "chat.js"), encoding="utf-8") as f:
+            self.assertIn("quota: 'You have chatted a lot, try again later'", f.read())
+
+    def test_the_command_line_says_what_it_does_at_its_top(self):
+        self.assertIn("python -m hub.admin status", admin.__doc__)
+        self.assertIn("python -m hub.admin purge [--keep-lines N]", admin.__doc__)
 
 
 if __name__ == "__main__":

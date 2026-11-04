@@ -1267,15 +1267,15 @@
   {
    "id": "size_is_the_size_of_the_file",
    "file": "hub/store/sqlite.py",
-   "old": "return (pages - free) * page_size + log_file",
-   "new": "return pages * page_size + log_file",
+   "old": "return (pages - free) * page_size",
+   "new": "return pages * page_size",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "size_without_the_log_file",
    "file": "hub/store/sqlite.py",
-   "old": "return (pages - free) * page_size + log_file",
-   "new": "return (pages - free) * page_size",
+   "old": "return self.used_bytes() + log_file",
+   "new": "return self.used_bytes()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1393,8 +1393,8 @@
   {
    "id": "account_counted_before_the_shared_limit",
    "file": "hub/chat.py",
-   "old": "        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)\n        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")                      # (this check is the last: it is the one that counts the line as said)\n",
-   "new": "        if self.account_limits.check(who.account_id, line, now):\n            return self.mistake(peer, \"rate\")\n        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)\n",
+   "old": "        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)\n        why = self.account_limits.check(who.account_id, line, now)         # (this check is the last: it is the one that counts the line as said)\n        if why == \"quota\":\n            return self.mistake(peer, \"quota\", count=False)        # (the hour's or the day's lines are said: not a mistake, and the page tells it calmly)\n        if why:\n            return self.mistake(peer, \"rate\")\n",
+   "new": "        why = self.account_limits.check(who.account_id, line, now)\n        if why == \"quota\":\n            return self.mistake(peer, \"quota\", count=False)\n        if why:\n            return self.mistake(peer, \"rate\")\n        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1708,8 +1708,8 @@
   {
    "id": "review_dup_checked_after_rate",
    "file": "hub/limits.py",
-   "old": "        if text in said:\n            return \"dup\"\n        if not bucket.take(now):\n            return \"rate\"",
-   "new": "        if not bucket.take(now):\n            return \"rate\"\n        if text in said:\n            return \"dup\"",
+   "old": "        if text in said:\n            return \"dup\"\n        hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):\n            return \"quota\"\n        if not bucket.take(now):\n            return \"rate\"",
+   "new": "        hour, day = self.budget(account, now)\n        if not (hour.ready(now) and day.ready(now)):\n            return \"quota\"\n        if not bucket.take(now):\n            return \"rate\"\n        if text in said:\n            return \"dup\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {

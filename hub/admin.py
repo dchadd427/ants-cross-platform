@@ -5,10 +5,14 @@
     docker exec ants-hub python -m hub.admin ban ACCOUNT
     docker exec ants-hub python -m hub.admin unban ACCOUNT
     docker exec ants-hub python -m hub.admin del LINE_ID
+    docker exec ants-hub python -m hub.admin status
+    docker exec ants-hub python -m hub.admin purge [--keep-lines N]
 
 ACCOUNT is an account id (digits, no leading zero), or a name that has said something in the last 7 days (written @name when the name is all digits). It works on hub.db directly (ANTS_HUB_DB or
 --db), so the running hub needs no network door for it: a mute or a ban counts from the next line the account says, and a deleted line is taken off every screen within two seconds.
-Exit status: 0 done, 1 nothing to do (no such account, line or ban), 2 wrong use.
+`status` says how full the database is. `purge` frees space at once: it deletes the oldest lines (the moderators' last, the newest 1,000 never) until the database is at 80% of its limit, which is
+what the hub does by itself from 90%, or with --keep-lines N all but the newest N (100 or more); the pages they leave are free for the lines that follow.
+Exit status: 0 done, 1 nothing to do (no such account, line or ban, nothing to purge), 2 wrong use.
 """
 import argparse
 import sqlite3
@@ -16,10 +20,11 @@ import os
 import sys
 import time
 
-from . import config, store as storemod, text
+from . import config, limits as limitmod, store as storemod, text
 
 BY = "command line"
 MAX_MINUTES = 525600                    # a year
+MIN_KEEP_LINES = 100                    # what a page shows: purge never takes a line that may be on a screen
 
 
 def when(epoch):
@@ -49,6 +54,35 @@ def show(store, count, out):
         out.write("  %d%s %s %s %s: %s\n" % (line_id, "x" if deleted else " ", when(at), account, name, line))
 
 
+def megabytes(count):
+    return "%.1f MB" % (count / 1048576.0)
+
+
+def show_usage(store, limit, out):
+    """The status line: what is in use of the limit, what deleted lines left free to reuse, and the lines that are kept."""
+    used = store.usage()
+    out.write("database: %s of %s used (%d%%); %s free to reuse; %s\n" % (megabytes(used.bytes), megabytes(limit), used.bytes * 100 // limit, megabytes(used.free),
+                                                                       "%s lines, the oldest from %s" % (format(used.lines, ","), when(used.oldest)) if used.lines else "no lines"))
+
+
+def purge(store, limits, keep_lines, out, err):
+    """Delete the oldest lines a chunk at a time (the hub keeps writing between the chunks): down to the hub's lower mark, or all but the newest `keep_lines`."""
+    target, keep = (limits.prune_to_bytes, limits.keep_lines) if keep_lines is None else (0, keep_lines)
+    show_usage(store, limits.db_max_bytes, out)
+    gone = 0
+    while True:
+        chunk = store.make_room(target, limits.purge_chunk, keep)
+        if not chunk:
+            break
+        gone += chunk
+    if not gone:
+        err.write("hub.admin: nothing to purge\n")
+        return 1
+    out.write("%s lines deleted\n" % format(gone, ","))
+    show_usage(store, limits.db_max_bytes, out)
+    return 0
+
+
 def run(argv, out=None, err=None, env=None):
     out, err = out or sys.stdout, err or sys.stderr
     env = os.environ if env is None else env
@@ -63,6 +97,9 @@ def run(argv, out=None, err=None, env=None):
     sub.add_parser("ban", help="ban an account until it is unbanned").add_argument("account")
     sub.add_parser("unban", help="lift a ban").add_argument("account")
     sub.add_parser("del", help="delete a chat line by its id").add_argument("line_id", type=int)
+    sub.add_parser("status", help="how full the database is")
+    p = sub.add_parser("purge", help="delete the oldest chat lines to free space")
+    p.add_argument("--keep-lines", type=int, default=None, help="keep the newest N lines only (%d or more); without it, delete down to 80%% of the limit" % MIN_KEEP_LINES)
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
@@ -72,6 +109,9 @@ def run(argv, out=None, err=None, env=None):
         return 2
     if args.command == "del" and not 0 < args.line_id < 2 ** 62:
         err.write("hub.admin: LINE_ID is a number from 1\n")
+        return 2
+    if args.command == "purge" and args.keep_lines is not None and not MIN_KEEP_LINES <= args.keep_lines < 2 ** 62:
+        err.write("hub.admin: KEEP_LINES is %d or more\n" % MIN_KEEP_LINES)
         return 2
     if not os.path.exists(args.db):
         err.write("hub.admin: no database at that path (is the hub's volume mounted?)\n")
@@ -85,6 +125,11 @@ def run(argv, out=None, err=None, env=None):
         if args.command == "list":
             show(store, max(0, min(args.lines, 500)), out)
             return 0
+        if args.command == "status":
+            show_usage(store, limitmod.Limits().db_max_bytes, out)
+            return 0
+        if args.command == "purge":
+            return purge(store, limitmod.Limits(), args.keep_lines, out, err)
         if args.command == "del":
             if not store.delete_line(args.line_id, BY):
                 err.write("hub.admin: no such line, or it is deleted already\n")

@@ -65,7 +65,7 @@ class Contract(unittest.TestCase):
         self.say(1)
         writes = (lambda: self.say(2), lambda: self.store.delete_line(1, "me"), lambda: self.store.purge(), lambda: self.store.forget("1001"),
                   lambda: self.store.mute("1001", 5, "me"), lambda: self.store.ban("1001", "me"), lambda: self.store.unban("1001"),
-                  lambda: self.store.add_session("k", "1001", "alice", 60, 10, 100), lambda: self.store.delete_session("k"))
+                  lambda: self.store.add_session("k", "1001", "alice", 60, 10, 100), lambda: self.store.delete_session("k"), lambda: self.store.make_room(0, 10, 0))
         with self.refusing_writes(self.store):
             for write in writes:
                 with self.assertRaises(base.StoreError):
@@ -176,6 +176,81 @@ class Contract(unittest.TestCase):
         for n in range(300):
             self.say(n)
         self.assertGreater(self.store.size(), empty)
+
+    def test_make_room_deletes_the_oldest_lines_first_a_chunk_at_a_time_and_never_the_newest(self):
+        ids = [self.say(n).id for n in range(100)]
+        self.assertEqual(self.store.make_room(0, 30, 10), 30)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], ids[30:])
+        self.assertEqual(self.store.make_room(0, 1000, 10), 60)             # (all but the newest 10)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], ids[90:])
+        self.assertEqual(self.store.make_room(0, 1000, 10), 0)              # (no line may go)
+        self.assertEqual(self.store.make_room(0, 1000, 11), 0)
+        self.assertEqual(len(self.store.lines(1000)), 10)
+        self.assertEqual(self.store.make_room(0, 1000, 0), 10)              # (keep=0: the newest may go too)
+        self.assertEqual(self.store.lines(10), [])
+
+    def test_make_room_does_nothing_for_a_store_that_is_at_or_under_the_size_it_is_asked_for(self):
+        for n in range(200):
+            self.say(n)
+        size = self.store.size()
+        self.assertEqual(self.store.make_room(size, 1000, 0), 0)
+        self.assertEqual(self.store.make_room(size * 2, 1000, 0), 0)
+        self.assertEqual(len(self.store.lines(1000)), 200)
+        self.assertGreater(self.store.make_room(1, 1000, 0), 0)                # (a size that a store with lines cannot be at: the lines go)
+        self.assertLess(self.store.size(), size)
+
+    def test_make_room_takes_the_moderators_lines_last_and_only_when_no_other_line_may_go(self):
+        ids = [self.say(n, mod=n in (4, 9)).id for n in range(50)]          # (lines number 4 and 9 are a moderator's)
+        self.assertEqual(self.store.make_room(0, 45, 3), 45)                # (the 47 oldest, but not the two of the moderator)
+        left = [r[0] for r in self.store.lines(1000)][::-1]
+        self.assertEqual(left, [ids[4], ids[9]] + ids[47:])
+        self.assertEqual(self.store.make_room(0, 10, 3), 2)                 # (and now they go)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], ids[47:])
+        again = [self.say(n, mod=n == 1).id for n in range(10)]
+        self.assertEqual(self.store.make_room(0, 5, 0), 5)                  # (a chunk that is smaller than the lines that may go: the moderator's stays)
+        self.assertIn(again[1], [r[0] for r in self.store.lines(1000)])
+
+    def test_make_rooms_chunk_is_for_all_the_lines_of_the_call_whoever_said_them(self):
+        ids = [self.say(n, mod=n in (1, 2, 3, 4, 5)).id for n in range(8)]          # (three lines of anybody may go, and five of a moderator)
+        self.assertEqual(self.store.make_room(0, 5, 0), 5)                          # (the three, and the two oldest of the moderator's: not the three and the five)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], ids[3:6])
+
+    def test_make_room_leaves_the_mutes_the_bans_the_deletion_counter_and_the_logins(self):
+        old = self.say(1)
+        for n in range(30):
+            self.say(n)
+        self.store.delete_line(old.id, "me")
+        self.store.mute("1001", 600, "me", "alice")
+        self.store.ban("1002", "me", "bob")
+        self.store.add_session("k1", "1001", "alice", 3600, 10, 100)
+        before = (self.store.mutes(), self.store.bans(), self.store.last_deletion(), self.store.session("k1"))
+        self.assertGreater(self.store.make_room(0, 1000, 5), 0)
+        self.assertEqual((self.store.mutes(), self.store.bans(), self.store.last_deletion(), self.store.session("k1")), before)
+        self.assertEqual(self.store.last_deletion(), 1)
+        self.assertEqual(len(self.store.lines(1000)), 5)
+
+    def test_a_line_that_is_said_after_every_line_went_has_a_number_that_was_never_used(self):
+        last = max(self.say(n).id for n in range(5))
+        self.assertEqual(self.store.make_room(0, 100, 0), 5)
+        self.assertGreater(self.say(9).id, last)                            # (the screens and the hub's memory go by the numbers: one is never used twice)
+
+    def test_usage_is_the_size_what_is_free_to_reuse_the_lines_and_the_oldest(self):
+        empty = self.store.usage()
+        self.assertEqual((empty.lines, empty.oldest), (0, 0))
+        self.assertEqual(empty.bytes, self.store.size())
+        first = self.say(1)
+        self.clock.now += 100
+        for n in range(300):
+            self.say(n)
+        used = self.store.usage()
+        self.assertEqual((used.lines, used.oldest), (301, first.at))
+        self.assertGreater(used.bytes, empty.bytes)
+        self.assertEqual(used.bytes, self.store.size())
+        self.store.make_room(0, 1000, 10)
+        after = self.store.usage()
+        self.assertEqual(after.lines, 10)
+        self.assertLess(after.bytes, used.bytes)
+        self.assertGreaterEqual(after.free, 0)
 
     # ---- mutes ----
 

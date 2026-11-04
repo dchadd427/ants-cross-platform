@@ -303,11 +303,13 @@ class Hub:
                 self.next_room = now + self.limits.purge_failure_seconds         # (set first, as for the purge: a database that refuses is tried again in a minute, not at every tick)
                 gone = self.store.make_room(self.limits.prune_to_bytes, self.limits.purge_chunk, self.limits.keep_lines)
                 self.pruning = gone > 0                                           # (a chunk a tick, until the store is down to prune_to_percent or no line may go)
-                self.next_room = now + (self.limits.tick_seconds if gone else self.limits.purge_failure_seconds)
+                self.next_room = now + self.limits.tick_seconds
                 if gone:
                     self.log.event("prune", lines=gone)
-                elif self.store.size() >= self.limits.db_max_bytes:
-                    self.log.event("warning", what="database_full_and_no_line_to_delete")
+                elif self.store.size() >= self.limits.prune_from_bytes:           # (nothing went and it is still over the mark: no line may go, and it is not asked again at every tick)
+                    self.next_room = now + self.limits.purge_failure_seconds
+                    if self.store.size() >= self.limits.db_max_bytes:
+                        self.log.event("warning", what="database_full_and_no_line_to_delete")
         if now >= self.next_crowded:
             self.next_crowded = now + self.limits.crowded_log_seconds
             biggest = max(self.per_address.counts.values(), default=0)
