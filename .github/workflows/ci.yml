@@ -70,13 +70,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # The decision and every changed file are printed. The commit ids come through the environment; no text of the pull request (title, branch, body) is read by this job.
+      # The decision and every changed file are printed. The commit ids come through the environment; no text of the pull request (title, branch, body) is read by this job. The change is judged
+      # against the base of the pull request and against main (MAIN_REF, a literal): a pull request that is retargeted starts no new run, so the verdict must not depend on the base.
       - name: Light checks or all of them?
         id: decide
         env:
           EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MAIN_REF: refs/remotes/origin/main
         run: bash tools/ci_light.sh
 
   linux_tests:

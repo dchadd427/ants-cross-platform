@@ -596,7 +596,8 @@ class LightChecks(unittest.TestCase):
         self.assertIn("      light: ${{ steps.decide.outputs.light }}", block)
         step = block[block.index("      - name: Light checks or all of them?"):]
         self.assertIn("        id: decide\n", step)
-        self.assertIn("          EVENT: ${{ github.event_name }}\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n          HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n", step)
+        self.assertIn("          EVENT: ${{ github.event_name }}\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n          HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n"
+                      "          MAIN_REF: refs/remotes/origin/main\n", step)       # (a literal: the change is judged against main too, because a retargeted pull request starts no new run)
         self.assertIn("        run: bash tools/ci_light.sh\n", step)
         self.assertTrue(os.path.isfile(os.path.join(REPO, "tools", "ci_light.sh")))
 

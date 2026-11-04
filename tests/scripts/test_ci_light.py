@@ -9,6 +9,8 @@ The rules are the ones that docs/WORKFLOW.md states; what these tests hold:
     listed here with who reads them, and a scan of the sources finds a read that is not listed);
   - what is compared is the pull request's own change (against the MERGE BASE: a base that moved on, with a change of its own, does not make the pull request full), a renamed file counts under
     both names (a source file renamed into docs/ is full), a deleted file counts;
+  - the change is also compared with the branch main (the remote branch origin/main), whatever the base is: a pull request that is retargeted starts no new run, so a pull request against another
+    branch that carries code which main lacks must not come out light; no main to compare with is full;
   - anything that is not a pull request with two full commit ids and at least one changed file is full, and the script never fails (a failing git is full);
   - the log cannot be made to carry a workflow command (a path is printed quoted, after a word), and the commit ids are only taken from the environment.
 """
@@ -86,6 +88,7 @@ class Decision(unittest.TestCase):
         self.git("init", "-q", "-b", "main")
         self.git("config", "core.ignorecase", "false")
         self.base = self.commit(None, {"README.md": "x\n", "src/a.cpp": "int a;\n", "docs/a.md": "a\n", "web/a.js": "a\n", "tools/t.py": "t\n", "old name.cpp": "o\n"}, "base")
+        self.git("update-ref", "refs/remotes/origin/main", self.base)                           # (what the checkout of the CI fetches: main is the base commit until a test moves it)
 
     def git(self, *args, **kwargs):
         env = dict(GIT_ENV, GIT_INDEX_FILE=self.index_file)
@@ -194,6 +197,7 @@ class Decision(unittest.TestCase):
         """`git diff` obeys diff.ignoreSubmodules and `ignore = all` in .gitmodules, and then leaves a bumped submodule out of the list: a document and a bump of third_party/ came out light."""
         link = "third_party/sub"
         before = self.commit(self.base, {link: Gitlink("1" * 40)})
+        self.git("update-ref", "refs/remotes/origin/main", before)                              # (main has the submodule, so that only the bump is a change)
         head = self.commit(before, {link: Gitlink("2" * 40), "docs/a.md": "a bump and a document\n"})
         config = os.path.join(os.path.dirname(self.root), "global_config")
         with open(config, "w", encoding="utf-8") as f:
@@ -221,6 +225,60 @@ class Decision(unittest.TestCase):
         self.assertIn(self.base[:12] + " (merge base)", out)
         # the other way round: a pull request that changes code is full whatever the base did
         self.assertFalse(self.decide(self.pull_request({"src/a.cpp": "int mine;\n"}), base=moved)[0])
+
+    def test_a_pull_request_against_another_branch_that_carries_code_main_lacks_is_full(self):
+        """A pull request against staging, which holds code that main does not, is light against its base and full against main. Retargeting it to main starts no run, so the verdict
+        must already hold for main."""
+        staging = self.pull_request({"src/a.cpp": "int staging;\n", "VERSION": "9.9.9\n"})
+        head = self.commit(staging, {"docs/a.md": "mine\n"})
+        light, out, _ = self.decide(head, base=staging)
+        self.assertFalse(light, out)
+        self.assertEqual(self.classes(out), {"docs/a.md": "light", "src/a.cpp": "FULL", "VERSION": "FULL"}, out)
+        self.assertIn("against main: " + self.base[:12] + " (merge base)", out)
+        self.assertIn("pull request: " + staging[:12] + " (merge base)", out)
+        # once main has taken what staging holds, only the document is left, and there is one comparison again
+        self.git("update-ref", "refs/remotes/origin/main", staging)
+        light, out, _ = self.decide(head, base=staging)
+        self.assertTrue(light, out)
+        self.assertNotIn("against main", out)
+        # a pull request against main itself, and one against a branch that main contains, are one comparison too
+        light, out, _ = self.decide(self.commit(self.base, {"docs/a.md": "x\n"}), base=self.base)
+        self.assertNotIn("against main", out)
+        # the other way round: a light pull request against staging stays light for main only if it is light there as well
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        self.assertFalse(self.decide(self.commit(staging, {}), base=staging)[0], "the same commit as staging: nothing against its base, code against main")
+
+    def test_a_main_that_moved_on_changes_nothing_and_a_main_that_is_not_there_is_full(self):
+        moved = self.pull_request({"src/a.cpp": "int moved;\n"})
+        head = self.pull_request({"docs/a.md": "mine\n"})
+        self.git("update-ref", "refs/remotes/origin/main", moved)                            # (a change of code that the pull request does not have)
+        for base in (self.base, moved):
+            light, out, _ = self.decide(head, base=base)
+            self.assertTrue(light, out)
+            self.assertEqual(self.classes(out), {"docs/a.md": "light"})
+        self.git("update-ref", "-d", "refs/remotes/origin/main")
+        light, out, _ = self.decide(head)
+        self.assertFalse(light)
+        self.assertIn("the branch main is not there", out)
+
+    def test_main_is_a_remote_branch_of_origin_of_plain_characters_and_nothing_else(self):
+        head = self.pull_request({"docs/a.md": "mine\n"})
+        self.git("update-ref", "refs/remotes/origin/probe-main", self.base)
+        self.git("update-ref", "refs/heads/main", self.pull_request({"src/a.cpp": "int local;\n"}))
+        light, out, _ = self.decide(head, MAIN_REF="refs/remotes/origin/probe-main")
+        self.assertTrue(light, out)
+        for bad in ("", "main", "origin/main", "refs/heads/main", "refs/remotes/upstream/main", "refs/remotes/origin/", "refs/remotes/origin/-x", "--output=x", "refs/remotes/origin/a b",
+                    "refs/remotes/origin/main;touch pwned", "refs/remotes/origin/$(touch pwned)", "refs/remotes/origin/main\nrefs/remotes/origin/probe-main", "refs/remotes/origin/ma*"):
+            light, out, _ = self.decide(head, MAIN_REF=bad)
+            if bad == "":
+                self.assertTrue(light, "an empty MAIN_REF is the default: " + out)
+                continue
+            self.assertFalse(light, bad)
+            self.assertIn("MAIN_REF is not a branch of origin", out, bad)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "pwned")))
+        light, out, _ = self.decide(head, MAIN_REF="refs/remotes/origin/nothing-here")
+        self.assertFalse(light)
+        self.assertIn("the branch main is not there", out)
 
     def test_a_pull_request_of_several_commits_is_judged_as_a_whole(self):
         first = self.pull_request({"src/a.cpp": "int b;\n"})
@@ -397,7 +455,7 @@ class TheRulesAreWritten(unittest.TestCase):
             lines = f.read().splitlines()
         header = "\n".join(line for line in lines[:next(i for i, line in enumerate(lines) if not line.startswith("#"))])
         for needle in ("web/**", "docs/**", "CHANGELOG.md, README.md", "tests/data/*_mutants.json", "tests/scripts/test_web_*", "tests/scripts/web_*", "merge base", "Unknown is full", "ctest",
-                       "the two shell suites", "python tests"):
+                       "the two shell suites", "python tests", "MAIN_REF", "retargeted"):
             self.assertIn(needle, header)
 
     def test_the_script_is_executable_and_text(self):
