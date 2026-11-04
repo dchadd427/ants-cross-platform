@@ -271,8 +271,12 @@ public:
 
     /**
      * @brief Initializes the grid from parsed LevelData.
+     * @param fire_wall_as_original true (the rules of a match played now, replay::kSimRules 9 and 10): a fire wall of the file (layer-2 id 134) loads as the original loads it, an object that is
+     *        solid by its file bit only. false (the rules numbers 5 to 8): the remake's name-based obstacle overlay is also set on a fire wall whose dictionary entry has a name (the map maker's
+     *        `wallup04`), as the loader did until v0.14 (docs/reverse_engineering/map_loader_fidelity.md, section 8). Nothing but the state hash from tick 0 and, in play, a dying ant's power-up
+     *        drop and the bots' bomb placement on such a cell depend on it.
      */
-    bool init_from_level(const ants::assets::LevelData& level);
+    bool init_from_level(const ants::assets::LevelData& level, bool fire_wall_as_original = true);
 
     /// True once the solid bits come from an LVL file (init_from_level); part of the state hash
     bool exact_solid_bits() const noexcept { return exact_solid_bits_; }

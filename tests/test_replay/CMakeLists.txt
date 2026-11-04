@@ -58,3 +58,23 @@ target_include_directories(test_rules_last_side PRIVATE
 )
 
 add_test(NAME test_rules_last_side COMMAND test_rules_last_side)
+
+# The rules numbers of the loader's fire wall (run_tests.sh suite 2.29.3): 8 and 7 still play from a recording with the old loader, 9 and 10 are what a match records now.
+add_executable(test_rules_fire_wall
+    test_rules_fire_wall.cpp
+)
+
+target_link_libraries(test_rules_fire_wall PRIVATE
+    ants_replay
+    ants_net
+    ants_sim
+    ants_assets
+    ants_test_paths
+)
+
+target_include_directories(test_rules_fire_wall PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME test_rules_fire_wall COMMAND test_rules_fire_wall)

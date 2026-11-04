@@ -138,6 +138,7 @@ A special order plays the original's action clip, with its frame sounds. A melee
 - Lights a fire wall (about 1.8 s) and puts it out (about 1.2 s).
 - A wall lives 180 s while more than 180 s of match time remain.
 - Other ants cannot walk into a fire wall, and one that is thrown onto it loses a hit point. A fire ant walks through it; thrown onto one, it is stunned instead.
+- A fire wall that a map file holds (the map maker's permanent Fire wall) burns until a fire ant puts it out, and is solid by the file's solid bit only, as in the original, whatever its dictionary entry is called. Since v0.14 (rules numbers 9 and 10) the cell is free ground when the fire is out, so a dying ant's power-up can land there and the computer players can lay a bomb on it; matches recorded before (rules numbers 5 to 8) keep the old loader, which also marked the cell of a fire wall whose entry has a name (`wallup04`, 5 maps of the library) as blocked for those two things ([`map_loader_fidelity.md`](reverse_engineering/map_loader_fidelity.md) section 8).
 
 ### Swimmer
 

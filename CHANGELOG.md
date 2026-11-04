@@ -28,8 +28,9 @@ Work that is not released yet is written in the same template under a heading th
 **For players:**
 - **The game type 187 has a closed hill.** In a 187 match no ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there."), an ant at 1 hit point no longer walks home, and the computer players send none of their hurt ants home. Old 187 recordings still play as they were.
 - **A match ends when one side is left and no food can score.** In the original's game, when all sides but one have no ant, egg or hatch left and no food is left on the ground or in an ant's grip, it ends (before, it played on to the clock). The highest score wins, even for a team with no ant left; a tie for the top, or all scores 0, goes to the side that is still standing. Power-ups and bombs are not food. Screens, 187 and old recordings are unchanged.
+- **A fire wall in a map file is free ground once it is out.** In the original a fire wall that a map places (the Map Maker's permanent Fire wall) is blocked by the map's own solid bit only; the game here also blocked its cell for a dying ant's power-up and the computer players' bombs after a fire ant put it out, on the 5 maps whose list names it `wallup04`. It no longer does. Old recordings of those maps still play as they were.
 
-**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match and the end of a match in the original's game play differently, so a v0.13 game cannot play with a game of this release. The rules number is 7 now for 187 (6 before) and 8 for the original's game (5 before): new matches record them and recordings of 5 and 6 still play as they were. Every state hash of the 540 maps of the library is unchanged.
+**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match, the end of a match in the original's game and a fire wall of a map file play differently, so a v0.13 game cannot play with a game of this release. The rules number is 10 now for 187 (7 and 6 before) and 9 for the original's game (8 and 5 before): new matches record them and recordings of the others still play as they were. The state hash of 5 library maps (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2) moves from tick 0 under the new numbers; the other 535 are unchanged.
 
 ## v0.13.0 - 2026-11-02 - Home, public rooms, the games list and the chat
 
@@ -507,17 +508,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...588c0067)
 
-## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
+## Older versions (v0.12.110 and before)
 
-**For players:**
-- **Pick up: a drag now ends when you let go.** Drag a hill, object, food pile, plant, ant, group or area in the Map Maker and let go: it is put down where the see-through copy is, in one step that one Undo takes back. Before, the copy followed the mouse until you pressed Enter or Done.
-- **A red place keeps it in your hand.** Let go where it cannot go (on a mushroom, over the edge, in the water) and nothing changes: the copy stays red, says why, and can be dragged on.
-- **Escape takes it back** (also a cancelled touch, or leaving the window). A plain click or tap still only places the copy; the arrow buttons, Enter and Done work as before.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.2.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea4ec07f...4c8c2434)
-
-## Older versions (v0.12.109 and before)
-
-Every release before v0.12.110, and the long notes of v0.12.109, v0.12.108, v0.12.107, v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.111, and the long notes of v0.12.110, v0.12.109, v0.12.108, v0.12.107, v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

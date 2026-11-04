@@ -788,12 +788,12 @@ int selftest() {
 
         // a recording of other rules: it reads, it is not played
         Replay other = sample;
-        other.head.sim_rules = static_cast<uint16_t>(kSimRules + 1);                      // (a number that no build plays: the one after the newest)
+        other.head.sim_rules = static_cast<uint16_t>(kSimRulesNewest + 1);                // (a number that no build plays: the one after the newest)
         t.check(write_bytes(dir.file("other.antsrep"), encode(other, error)), "a file of other rules is written");
         const Run rules_info = run_words({"info", dir.file("other.antsrep")});
         t.check(rules_info.status == 0 && has(rules_info.out, "this build plays simulation rules " + played_rules_text()), "info reads it and says which rules it needs");
         const Run rules_verify = run_words({"verify", dir.file("other.antsrep")});
-        t.check(rules_verify.status == 1 && has(rules_verify.err, "simulation rules " + std::to_string(kSimRules + 1)) && has(rules_verify.err, "simulation rules " + played_rules_text()), "verify does not play it, exit 1, and names both numbers");
+        t.check(rules_verify.status == 1 && has(rules_verify.err, "simulation rules " + std::to_string(kSimRulesNewest + 1)) && has(rules_verify.err, "simulation rules " + played_rules_text()), "verify does not play it, exit 1, and names both numbers");
 
         // a recording that is not what was played: the hashes say so
         Replay changed = sample;
