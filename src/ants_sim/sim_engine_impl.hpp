@@ -98,6 +98,7 @@ public:
     GameMode game_mode_{GameMode::HighestScore};   // the rules of the match (set before init, kept by it)
     uint8_t started_mask_{0x0F};            // bit p: team p had an ant, an egg or a hatch when the match began (set by init and init_test_world): the teams that were really in the match; the last-side rule needs two of them
     bool last_side_rule_{true};             // the original's game only: the end rule of the rules number 8 (a recording of 5 plays without it: set_last_side_rule); 187 has its own end rule
+    bool fire_wall_as_original_{true};      // both modes: the loader of the rules number 9 and 10 (a recording of 5 to 8 plays with the remake's overlay on a named fire wall: set_fire_wall_as_original)
     bool hill_open_187_{false};             // 187 only: the rules of the recordings before the closed hill (set_hill_open_187); the original's game never reads it
     /// 187 with the hill closed (the rule of 187 now): no ant enters its hill, so nothing heals, an ant at 1 hp does not retreat and the waiting ring is idle
     bool hill_closed() const noexcept { return game_mode_ == GameMode::Kills187 && !hill_open_187_; }

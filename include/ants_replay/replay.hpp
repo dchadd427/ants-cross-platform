@@ -59,33 +59,55 @@ inline constexpr uint8_t kNoSeat = 255;
 /// tests/test_replay (RP7.x) fail when the reference match's final hash changes and this number does not.
 /// History: 1 and 2 (game mode 187) were the numbers until the bombs of a map file (the layer-2 ids 129 .. 132) became the planted bombs of their colors (Grid::init_from_level, docs/reverse_engineering/map_file_bombs.md), which moves the plays of
 /// the community maps that hold them: the original's game was 3 then and game mode 187 (which plays on those maps too) 4. The loader as the original's (docs/reverse_engineering/map_loader_fidelity.md, v0.12.10) moved the plays of the community maps again: 5 and 6. A file of 1 to 4 is an earlier version's.
-/// The rules of the original's game and of game mode 187 are numbered in one row, each number belonging to ONE mode: the next change of either takes the next number of the row (9 now), whichever mode it changes.
-/// Since v0.14 the original's game (mode 0) is 8: a match also ends when one side is left and nothing is left to score (SimulationEngine::set_last_side_rule, docs/GAMEPLAY.md, "The last side standing"). The number 5, the original's game as
-/// released until v0.13 (ended by the original's CHECKGO alone), is played too, and a recording of 5 plays as it always did.
-inline constexpr uint16_t kSimRules = 8;
+/// The rules of the original's game and of game mode 187 are numbered in one row, each number belonging to ONE mode: the next change of either takes the next number of the row (11 now), whichever mode it changes.
+/// Since v0.14 the original's game (mode 0) is 9: a match also ends when one side is left and nothing is left to score (8, SimulationEngine::set_last_side_rule, docs/GAMEPLAY.md, "The last side standing"), and a fire wall
+/// of a map file loads as the original loads it (9, SimulationEngine::set_fire_wall_as_original, docs/reverse_engineering/map_loader_fidelity.md, section 8). The number 8 (the original's game with the last-side
+/// rule and the old loader) and the number 5, the original's game as released until v0.13 (ended by the original's CHECKGO alone, with the old loader), are played too, and a recording of either plays as it always did.
+inline constexpr uint16_t kSimRules = 9;
+inline constexpr uint16_t kSimRulesBeforeFireWall = 8;
 inline constexpr uint16_t kSimRulesBeforeLastSide = 5;
 /// The rules numbers of a match played by game mode 1, "187" (sim::GameMode::Kills187, docs/GAMEPLAY.md): the head carries the mode in field 17 (written only when it is not 0) and one of these numbers in field 16. A build that
 /// predates the mode skips field 17 and refuses the file for its rules number (it plays 5 only), so no older build plays a 187 match as the original's game; every file of mode 0 plays wherever it did. A change of the rules after
 /// this takes the next number that is none of these (the static_assert below stops the one that would collide).
-/// kSimRulesMode187Heal (6) is 187 as it was first released: the hill works, an ant that enters it is healed, an ant at 1 hp walks home and the waiting ring queues. kSimRulesMode187 (7) is 187 now: an ant cannot
-/// enter its hill (docs/GAMEPLAY.md, "187"). This build plays both: a file of 6 plays with the hill open (SimulationEngine::set_hill_open_187, replay::begin_match), a file of 7 and every match that is played
-/// now with the hill closed, and a match is recorded under kSimRulesMode187 (sim_rules_for_mode). The last-side rule (8) is the original's game's: 187 ends at one side left whatever is on the map, and never reads it.
+/// kSimRulesMode187Heal (6) is 187 as it was first released: the hill works, an ant that enters it is healed, an ant at 1 hp walks home and the waiting ring queues. kSimRulesMode187BeforeFireWall (7) is 187 with the hill
+/// closed: an ant cannot enter its hill (docs/GAMEPLAY.md, "187"). kSimRulesMode187 (10) is 187 now: the same, and a fire wall of a map file loads as the original loads it. This build plays all three: a file of 6 plays with the
+/// hill open (SimulationEngine::set_hill_open_187, replay::begin_match), a file of 6 or 7 with the old loader, and a match is recorded under kSimRulesMode187 (sim_rules_for_mode). The last-side rule (8) is the original's
+/// game's: 187 ends at one side left whatever is on the map, and never reads it. The loader knows no mode, so its change took one number of each mode (9 and 10), not one for both.
 inline constexpr uint16_t kSimRulesMode187Heal = 6;
-inline constexpr uint16_t kSimRulesMode187 = 7;
-static_assert(kSimRulesMode187Heal != kSimRules && kSimRulesMode187 != kSimRules && kSimRulesMode187 != kSimRulesMode187Heal, "a mode of its own has rules of its own");
-static_assert(kSimRulesBeforeLastSide != kSimRules && kSimRulesBeforeLastSide != kSimRulesMode187Heal && kSimRulesBeforeLastSide != kSimRulesMode187, "a number belongs to one mode");
-static_assert(kSimRules > kSimRulesMode187 && kSimRules > kSimRulesMode187Heal && kSimRules > kSimRulesBeforeLastSide, "kSimRules is the newest number (the app calls a file of a lower number older and a higher one newer)");
+inline constexpr uint16_t kSimRulesMode187BeforeFireWall = 7;
+inline constexpr uint16_t kSimRulesMode187 = 10;
+/// The first number whose loader reads a fire wall of a map file as the original does (Grid::init_from_level): every number from here on has it, because the numbers are issued in one row and each change keeps the ones
+/// before it; the numbers below it (5 to 8) keep the remake's name-based overlay on a named fire wall. replay::begin_match asks fire_wall_as_original_rules.
+inline constexpr uint16_t kSimRulesFireWallFirst = 9;
+/// The newest number of the row, whichever mode it belongs to: a file of a higher number is a newer build's, one of a lower number that this build does not play is an older one's
+inline constexpr uint16_t kSimRulesNewest = kSimRulesMode187 > kSimRules ? kSimRulesMode187 : kSimRules;
+static_assert(kSimRulesMode187Heal != kSimRules && kSimRulesMode187 != kSimRules && kSimRulesMode187 != kSimRulesMode187Heal && kSimRulesMode187BeforeFireWall != kSimRules
+                  && kSimRulesMode187BeforeFireWall != kSimRulesMode187 && kSimRulesMode187BeforeFireWall != kSimRulesMode187Heal && kSimRulesBeforeFireWall != kSimRules
+                  && kSimRulesBeforeFireWall != kSimRulesMode187 && kSimRulesBeforeFireWall != kSimRulesMode187Heal && kSimRulesBeforeFireWall != kSimRulesMode187BeforeFireWall,
+              "a mode of its own has rules of its own");
+static_assert(kSimRulesBeforeLastSide != kSimRules && kSimRulesBeforeLastSide != kSimRulesBeforeFireWall && kSimRulesBeforeLastSide != kSimRulesMode187Heal && kSimRulesBeforeLastSide != kSimRulesMode187BeforeFireWall
+                  && kSimRulesBeforeLastSide != kSimRulesMode187, "a number belongs to one mode");
+static_assert(kSimRulesNewest >= kSimRules && kSimRulesNewest >= kSimRulesMode187 && kSimRulesNewest > kSimRulesBeforeFireWall && kSimRulesNewest > kSimRulesMode187BeforeFireWall && kSimRulesNewest > kSimRulesMode187Heal && kSimRulesNewest > kSimRulesBeforeLastSide,
+              "kSimRulesNewest is the newest number (the app calls a file of a lower number older and a higher one newer)");
+static_assert(kSimRulesFireWallFirst > kSimRulesBeforeFireWall && kSimRulesFireWallFirst > kSimRulesMode187BeforeFireWall && kSimRules >= kSimRulesFireWallFirst && kSimRulesMode187 >= kSimRulesFireWallFirst,
+              "the numbers from kSimRulesFireWallFirst on have the loader of the original, the ones before it do not");
 
 /// The rules number that a match of game mode `mode` is recorded under (0: no mode of that number exists)
 constexpr uint16_t sim_rules_for_mode(uint8_t mode) noexcept {
     return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? kSimRules : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? kSimRulesMode187 : uint16_t{0};
 }
 
-/// Whether this build plays a match of game mode `mode` under the rules number `rules`: the original's game under kSimRules or kSimRulesBeforeLastSide, 187 under either of its two numbers (a mode that this build does not know: never)
+/// Whether this build plays a match of game mode `mode` under the rules number `rules`: the original's game under kSimRules, kSimRulesBeforeFireWall or kSimRulesBeforeLastSide, 187 under kSimRulesMode187,
+/// kSimRulesMode187BeforeFireWall or kSimRulesMode187Heal (a mode that this build does not know: never)
 constexpr bool plays_mode_rules(uint8_t mode, uint16_t rules) noexcept {
-    return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? (rules == kSimRules || rules == kSimRulesBeforeLastSide)
-         : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? (rules == kSimRulesMode187 || rules == kSimRulesMode187Heal)
+    return mode == static_cast<uint8_t>(sim::GameMode::HighestScore) ? (rules == kSimRules || rules == kSimRulesBeforeFireWall || rules == kSimRulesBeforeLastSide)
+         : mode == static_cast<uint8_t>(sim::GameMode::Kills187) ? (rules == kSimRulesMode187 || rules == kSimRulesMode187BeforeFireWall || rules == kSimRulesMode187Heal)
          : false;
+}
+
+/// Whether a match of the rules number `rules` loads a fire wall of its map file as the original does (SimulationEngine::set_fire_wall_as_original): every number from kSimRulesFireWallFirst on, in either mode
+constexpr bool fire_wall_as_original_rules(uint16_t rules) noexcept {
+    return rules >= kSimRulesFireWallFirst;
 }
 
 /// What the start of the match was: with the commands it is the whole match.
@@ -132,8 +154,8 @@ struct Replay {
 /// The rules number of the simulation that `head` needs: its own `sim_rules`, else (a file made before the field) the one that the table of protocol numbers gives, else 0 (unknown: no build claims
 /// it). The table (replay.cpp) holds the protocol numbers that are known to play a match out the same way, each proved with a reference file played under the newer engine.
 uint16_t sim_rules_of(const Header& head) noexcept;
-/// True when this build plays `head`'s match exactly as it was played: its rules number is one of its game mode (kSimRules or kSimRulesBeforeLastSide with mode 0, kSimRulesMode187Heal or kSimRulesMode187 with mode 1). The numbers that this build plays,
-/// as a sentence for a refusal: "5, 6, 7 and 8".
+/// True when this build plays `head`'s match exactly as it was played: its rules number is one of its game mode (kSimRules, kSimRulesBeforeFireWall or kSimRulesBeforeLastSide with mode 0, kSimRulesMode187, kSimRulesMode187BeforeFireWall or kSimRulesMode187Heal with mode 1). The numbers that this build plays,
+/// as a sentence for a refusal: "5, 6, 7, 8, 9 and 10".
 bool plays_here(const Header& head) noexcept;
 std::string played_rules_text();
 
