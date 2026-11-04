@@ -39,6 +39,26 @@ target_include_directories(test_rules_187 PRIVATE
 
 add_test(NAME test_rules_187 COMMAND test_rules_187)
 
+# The rules numbers of the original's game (run_tests.sh suite 2.29.2): 5 (the original's end rule alone) still plays from a recording, 8 (the last side standing) is what a match records now.
+add_executable(test_rules_last_side
+    test_rules_last_side.cpp
+)
+
+target_link_libraries(test_rules_last_side PRIVATE
+    ants_replay
+    ants_net
+    ants_sim
+    ants_assets
+    ants_test_paths
+)
+
+target_include_directories(test_rules_last_side PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_test(NAME test_rules_last_side COMMAND test_rules_last_side)
+
 # A match on a map of rules 2 (run_tests.sh suite 2.29.3): the wide search in a recording, and a reader that does not know the word 2.
 add_executable(test_rules_two
     test_rules_two.cpp

@@ -27,8 +27,9 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **The game type 187 has a closed hill.** In a 187 match no ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there."), an ant at 1 hit point no longer walks home, and the computer players send none of their hurt ants home. Old 187 recordings still play as they were.
+- **A match ends when one side is left and no food can score.** In the original's game, when all sides but one have no ant, egg or hatch left and no food is left on the ground or in an ant's grip, it ends (before, it played on to the clock). The highest score wins, even for a team with no ant left; a tie for the top, or all scores 0, goes to the side that is still standing. Power-ups and bombs are not food. Screens, 187 and old recordings are unchanged.
 
-**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match plays differently, so a v0.13 game cannot play with a game of this release. The rules number of the game type 187 is 7 now (6 before): new matches record 7 and a recording of 6 still plays. The original's game (mode 0) is as it was: every state hash of the 540 maps of the library is unchanged.
+**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match and the end of a match in the original's game play differently, so a v0.13 game cannot play with a game of this release. The rules number is 7 now for 187 (6 before) and 8 for the original's game (5 before): new matches record them and recordings of 5 and 6 still play as they were. Every state hash of the 540 maps of the library is unchanged.
 
 ## v0.13.0 - 2026-11-02 - Home, public rooms, the games list and the chat
 
@@ -353,12 +354,12 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
 
 **For players:**
-- **Three more picture shapes:** 3:2 (960 x 640, tablets and Surface-style laptops), 20:9 (1200 x 540, phones held sideways) and 32:9 (1920 x 540, super-ultrawide monitors). The list is now Classic 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9. A wider picture shows more of the map at the first zoom (32:9 shows about 2.3 times what 16:9 does) and less when zoomed all the way out; everybody picks their own shape and zooming out is free, so no match changes.
-- **One dropdown instead of the buttons:** the Picture control under the game, in the front page's Picture row, in the settings menu (Esc: on Windows and Linux the arrow keys change the picture of the running game at once and the menu stays open; on macOS the arrows open the list and Enter picks; Esc with the list open is the browser's own and has not been checked in each browser yet) and in a recording's bar is a dropdown that lists each shape with its size. A quiet line under it, "16:10 fills your screen", names the shape closest to your screen. On an upright phone the dropdown has a line of its own and the page no longer scrolls sideways.
+- **Three more picture shapes:** 3:2 (960 x 640, tablets and Surface-style laptops), 20:9 (1200 x 540, phones held sideways) and 32:9 (1920 x 540, super-ultrawide monitors). The list is now Classic 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9. A wider picture shows more of the map at the first zoom (32:9 shows about 2.3 times what 16:9 does) and less when zoomed all the way out; everybody picks their own shape, so no match changes.
+- **One dropdown instead of the buttons:** the Picture control under the game, in the front page's Picture row, in the settings menu (Esc: on Windows and Linux the arrow keys change the picture of the running game at once and the menu stays open; on macOS the arrows open the list and Enter picks; Esc with the list open is the browser's own and has not been checked in each browser yet) and in a recording's bar is a dropdown that lists each shape with its size. A quiet line under it ("16:10 fills your screen") names the shape closest to your screen. On an upright phone the dropdown has its own line and the page no longer scrolls sideways.
 - **The first visit** counts the new shapes too: a 3:2 tablet starts in 3:2, a 3840 x 1080 monitor in 32:9, a phone held sideways in 20:9. Anything you picked, and `?aspect=` in the address (which also takes `3:2`, `20:9` and `32:9`), still wins.
-- On a wide monitor the 32:9 picture is shown at its real size: the page's game area is no longer cut at 1280 pixels for it.
+- On a wide monitor the 32:9 picture is shown at its real size (the game area is no longer cut at 1280 pixels).
 
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees, not what the match is: nobody's shape is sent to the server or to the other players).
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees: nobody's shape is sent to the server or to the other players).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9a0ab04...c66cf43e)
 
@@ -462,13 +463,13 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.114 - 2026-10-23 - A settings menu on Esc and a Settings button
 
 **For players:**
-- **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so settle your settings quickly in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
-- **Where the button is:** in the page's header next to Menu, under the picture on a phone or a narrow window, over the picture (beside the cross that leaves fullscreen) while the page is fullscreen, and in the bar of a replay. Safari and Firefox keep Esc for themselves in fullscreen, and a phone has no Esc, so the button is the way in there.
-- **New: Master volume, Mute and remembered hit point numbers.** Master volume scales every sound and the music; Mute silences everything and keeps your sliders where they are; the white hit point numbers (Ctrl+L) now stay on or off from one game to the next. The menu also has the sound sliders, the picture shape, Fullscreen, the fullscreen mouse, the map scroll speed, chat, quick help and a list of the mouse, touch and keys. The original's Options window is unchanged.
+- **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so be quick in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
+- **Where the button is:** in the page's header next to Menu, under the picture on a phone or a narrow window, over the picture (beside the cross that leaves fullscreen) in fullscreen, and in the bar of a replay. Safari and Firefox keep Esc for themselves in fullscreen, and a phone has no Esc: use the button there.
+- **New: Master volume, Mute and remembered hit point numbers.** Master volume scales every sound and the music; Mute silences everything and keeps your sliders where they are; the white hit point numbers (Ctrl+L) now stay on or off from one game to the next. The menu also has the sound sliders, picture shape, Fullscreen, fullscreen mouse, map scroll speed, chat, quick help and a list of the mouse, touch and keys. The original's Options window is unchanged.
 - **Leave game says what will happen** before it does it: with one opponent left it is a forfeit that ends the match for everybody and counts as a loss; with more it drops you out and the others play on; at home it ends the game. There is no separate Surrender button.
 - **Replays and live watching** have the same panel without the Game section ("Back to the matches" leaves, asking nothing); the frame of a match page has none.
 
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens, and Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens; Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...feb90e21)
 
@@ -487,8 +488,8 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **The Hard computer players shove more enemies into water, bombs and fire.** An enemy ant next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over many maps they get a seventh to a quarter more kills.
-- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake, which the game used to answer with "Can't go there": about 31 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
-- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home. Where the food lies over water or behind a gate, the ants keep that work.
+- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake ("Can't go there"): about 31 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
+- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home. Food over water or behind a gate keeps them at work.
 - **The ring of fire round an enemy gate is lit only when that team has food to bank.** Hard builds and puts out its other fire walls as often as before.
 - **This is not a stronger player.** Against the old Hard player it wins as often (about 50 of 100, with four players or with two), and against Medium as often as before. An enemy beside the water within reach is still left alone about 7 times in 10 (a Hard ant only goes for one that has stood still for a second), ants stand idle a little more because they no longer run pointless trips, and on one map, Acid Blood, the new kill made it play worse until the last ants were told to stay at their work. Easy and Medium are unchanged.
 
@@ -499,7 +500,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.111 - 2026-10-23 - Map Maker: Start from a game map opens the six original maps
 
 **For players:**
-- **Map Maker (v1.5.3): "Start from a game map" now opens the six maps that came with the game.** Tiny, Small, Medium, Gauntlet, Treasure and Islands always said "The map file could not be downloaded. Check your connection and try again.", because the site had no copy of those six files to hand out (only the players' maps). It has them now. Pick one and the editor opens a copy of it under a free name, so you can edit and save it right away; the original is never changed.
+- **Map Maker (v1.5.3): "Start from a game map" now opens the six maps that came with the game.** Tiny, Small, Medium, Gauntlet, Treasure and Islands always said "The map file could not be downloaded. Check your connection and try again.", because the site had no copy of them (only the players' maps). It has them now: the editor opens a copy under a free name, to edit and save at once; the original is never changed.
 - **The message now tells the truth.** A map the site does not have says "This map is not available from the site right now." A site that answers badly says "The site could not send this map. Try again in a moment." "Check your connection" stays for a connection that really failed.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the site and the Map Maker page only).
@@ -509,9 +510,9 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
 
 **For players:**
-- **Pick up: a drag now ends when you let go.** Drag a hill, object, food pile, plant or ant (or a whole group or area) in the Map Maker and let go of the mouse or lift your finger: it is put down where the see-through copy is, in one step that one Undo takes back. Before, the copy kept following the mouse after you let go until you pressed Enter or Done.
-- **A red place keeps it in your hand.** If you let go where it cannot go (on a mushroom, over the edge, in the water), nothing is changed, the copy stays red and says why, and you can drag it on to a free place.
-- **Escape takes it back.** Escape while you drag, a touch that is cancelled, or leaving the window, puts the thing back where it was. A plain click or tap still only places the copy, and the arrow buttons, Enter and Done work as before.
+- **Pick up: a drag now ends when you let go.** Drag a hill, object, food pile, plant, ant, group or area in the Map Maker and let go: it is put down where the see-through copy is, in one step that one Undo takes back. Before, the copy followed the mouse until you pressed Enter or Done.
+- **A red place keeps it in your hand.** Let go where it cannot go (on a mushroom, over the edge, in the water) and nothing changes: the copy stays red, says why, and can be dragged on.
+- **Escape takes it back** (also a cancelled touch, or leaving the window). A plain click or tap still only places the copy; the arrow buttons, Enter and Done work as before.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.2.
 
