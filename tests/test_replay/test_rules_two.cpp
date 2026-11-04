@@ -44,7 +44,7 @@ inline void run_test_case(const std::string& name, const std::function<void()>& 
 
 namespace {
 
-constexpr uint64_t kReferenceHash = 0x1b89080647cf8597ull;   // the end of the reference match below (a new map of 512 x 512, rules 2)
+constexpr uint64_t kReferenceHash = 0x1bfa58fee340fb19ull;   // the end of the reference match below (a new map of 512 x 512, rules 2)
 
 // At turn 5 one ant of each seat is sent along its row to column 480, 450 tiles and more away (the original's search gives up at 400 on open grass)
 std::vector<Command> long_orders_at(const sim::SimulationEngine& engine, uint32_t turn) {

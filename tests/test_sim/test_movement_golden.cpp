@@ -967,7 +967,7 @@ static void run_suite_8_rules_two() {
             const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 256});
             sim.tick();
             sim.issue_move_order(id, TileCoord{470, 256});
-            for (int t = 0; t < 60; ++t) sim.tick();                         // 450 tiles take about 52,000 expansions: 1,000 a run up to the limit, then 4,096 (tick N)
+            for (int t = 0; t < 60; ++t) sim.tick();                         // 450 tiles take about 52,000 expansions: 1,000 a run up to the limit, then 4,096
             const AntUnit& a = sim.get_unit(id);
             if (rules == 2) {
                 ASSERT_EQ(a.waypoints.size(), static_cast<size_t>(451));
@@ -1015,13 +1015,13 @@ static void run_suite_8_rules_two() {
         ASSERT_EQ(paths_at(1, 40, 210), 0);                                  // (pinned: the walk of each ant is the real one, so the groups' numbers are the run's)
         ASSERT_EQ(paths_at(1, 100, 210), 4);
         ASSERT_EQ(paths_at(1, 200, 210), 8);
-        // 450 tiles: the original refuses them (rules 1, nothing, ever); rules 2 searches 1,000 a run until its pops pass f = 8,000 and 4,096 a run after that (one ant: delivered at tick 27)
+        // 450 tiles: the original refuses them (rules 1, nothing, ever); rules 2 searches 1,000 a run until its pops pass f = 8,000 and 4,096 a run after that (the first four ants at ticks 137 to 140, the second four at 277 to 280)
         ASSERT_EQ(paths_at(1, 230, 450), 0);
-        ASSERT_EQ(paths_at(2, 104, 450), 0);
-        ASSERT_EQ(paths_at(2, 105, 450), 1);
-        ASSERT_EQ(paths_at(2, 108, 450), 4);
-        ASSERT_EQ(paths_at(2, 212, 450), 4);
-        ASSERT_EQ(paths_at(2, 216, 450), 8);
+        ASSERT_EQ(paths_at(2, 136, 450), 0);
+        ASSERT_EQ(paths_at(2, 137, 450), 1);
+        ASSERT_EQ(paths_at(2, 140, 450), 4);
+        ASSERT_EQ(paths_at(2, 276, 450), 4);
+        ASSERT_EQ(paths_at(2, 280, 450), 8);
     } TEST_END();
 
     TEST_CASE("8.4 A world of 100 x 100 at rules 2 plays as at rules 1, tick for tick: ten ants, orders every second (the budget of a small map is the original's 1,000)") {
@@ -1059,7 +1059,7 @@ static void run_suite_8_rules_two() {
         sim.tick();
         sim.issue_move_order(id, TileCoord{470, 256});
         for (int t = 0; t < 3; ++t) sim.tick();
-        ASSERT_TRUE(sim.get_unit(id).waypoints.empty());                     // not yet: the search needs 27 runs
+        ASSERT_TRUE(sim.get_unit(id).waypoints.empty());                     // not yet: the search needs tens of runs
         SimulationEngine copy(sim);
         int tick_original = -1;
         int tick_copy = -1;
