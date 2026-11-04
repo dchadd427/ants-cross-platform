@@ -645,6 +645,65 @@ async function flows() {
             }
             check('with the system bar over the last 36 px (448 x 998, 390 x 880), 24 px (844 x 390) or nothing (390 x 844, 1280 x 800): Home, the Yard and the chat dock (strip and open panel) end at or above the visible bottom (the window less the inset), and Home fills the window when there is no inset', bad.length === 0, bad.join(' | '));
         }
+        // ---- 1j. the Room's Public | Private switch: the label sits in the middle of its button (docs/HOME_SCREEN.md, "The Room's switch"). The two words (the big "Private" / "Public" and the small "link only" / "listed") share a baseline; they were a flex row
+        // with align-items: baseline, which hangs at the TOP of a 44 px button (the capitals' middle was 7 px above the button's middle, more empty space below the text than above). The middle of the big word's capitals (its baseline less half
+        // the cap height of its font) is within 1 px of the middle of the button, with either button selected, at a phone's 448 x 962, 390 x 844, 360 x 640, 320 x 568 (a pixel ratio of 2.6), 844 x 390 and 1280 x 800; the button is 44 px high and the words are not cut.
+        // At 320 px (and 300 to 346) "link only" spilled past the button's right border (the label did not fit the box): at every width from 300 to 400 px, and at a few above, the small word is inside its button (not past the border, one line) ----
+        {
+            const SWITCH = () => {
+                const br0 = (el) => el.getBoundingClientRect();
+                const cv = document.createElement('canvas').getContext('2d'), out = [];
+                const baseline = (el) => { const m = document.createElement('span'); m.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline'; el.insertBefore(m, el.firstChild); const y = m.getBoundingClientRect().bottom; m.remove(); return y; };
+                for (const btn of document.querySelectorAll('.vbtn')) {
+                    const r = btn.getBoundingClientRect(), big = btn.querySelector('b'), small = btn.querySelector('small'), cs = getComputedStyle(big);
+                    cv.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+                    const base = baseline(big), cap = cv.measureText('P').actualBoundingBoxAscent;
+                    const sr = small.getBoundingClientRect();
+                    out.push({ word: big.textContent, pressed: btn.getAttribute('aria-pressed'), h: r.height, gap: r.right - sr.right, lgap: br0(big).left - r.left, lines: sr.height, off: (base - cap / 2) - (r.top + r.bottom) / 2, sub: Math.abs(baseline(small) - base), cut: btn.scrollWidth - btn.clientWidth, cap, fonts: document.fonts.check(cs.fontSize + ' "Libre Franklin"') });
+                }
+                return out;
+            };
+            const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2.6 });
+            await ctx.addInitScript(() => { try { window.localStorage.setItem('ants.name', 'Maple'); } catch (e) { /* none */ } });
+            const sw = await ctx.newPage(); sw.errors = [];
+            sw.on('pageerror', (e) => sw.errors.push(String(e)));
+            await sw.goto(live.url + '/'); await lit(sw);
+            await sw.click('.hchip.mine'); await sw.waitForSelector('#slots li'); await sw.waitForSelector('.vis:not([hidden])');
+            const bad = [], seen = [];
+            for (const state of ['Private', 'Public']) {
+                if (state === 'Public') {
+                    await sw.click('.vbtn[aria-pressed="false"]');
+                    await until('the room is public', async () => (await sw.evaluate(() => document.querySelector('.vbtn[aria-pressed="true"] b').textContent)) === 'Public', 10000);
+                }
+                for (const [w, h] of [[448, 962], [390, 844], [360, 640], [320, 568], [844, 390], [1280, 800]]) {
+                    await sw.setViewportSize({ width: w, height: h }); await sw.evaluate(() => document.fonts.ready); await sleep(120);
+                    const m = await sw.evaluate(SWITCH);
+                    seen.push(m.length);
+                    for (const b of m) if (m.length !== 2 || !b.fonts || b.cap < 8 || Math.abs(b.off) > 1 || Math.abs(b.h - 44) > 0.5 || b.sub > 0.6 || b.cut > 0.5 || b.gap < 0 || b.lgap < 0 || b.lines > 20 || (b.pressed === 'true') !== (b.word === state)) bad.push(state + ' selected, ' + w + 'x' + h + ', ' + b.word + (b.pressed === 'true' ? ' (selected)' : '') + ': the capitals\' middle is ' + b.off.toFixed(2) + ' px from the button\'s middle, ' + b.h + ' px high, the small word ' + b.sub.toFixed(2) + ' px off the baseline, cut ' + b.cut + ', ' + b.gap.toFixed(2) + ' px from the small word to the right border, cap ' + b.cap.toFixed(1));
+                }
+            }
+            check('the Room\'s Public | Private switch (448 x 962, 390 x 844, 360 x 640, 320 x 568 at a pixel ratio of 2.6, 844 x 390, 1280 x 800; Private selected, then Public selected): in each of the two buttons the capitals of the big word are within 1 px of the middle of the button (the label was 7 px too high), the button is 44 px high, the small word shares the baseline, is inside the button (at 320 px "link only" was 3.6 px past the border) and nothing is cut', bad.length === 0 && seen.length === 12, bad.slice(0, 4).join(' | ') + (bad.length > 4 ? ' ... ' + bad.length + ' more' : ''));
+            // every width from 300 to 400 px (a narrow phone, or a window): the small word of either button, selected or not, is inside the button and on one line, the capitals stay in the middle, the button stays 44 px high
+            const scan = [], wide = [];
+            for (let w = 300; w <= 400; w++) scan.push(w);
+            scan.push(420, 448, 520, 720, 721, 900, 1400);
+            let scanned = 0;
+            for (const state of ['Public', 'Private']) {                      // (Public is selected now; the second pass selects Private)
+                if (state === 'Private') {
+                    await sw.click('.vbtn[aria-pressed="false"]');
+                    await until('the room is private', async () => (await sw.evaluate(() => document.querySelector('.vbtn[aria-pressed="true"] b').textContent)) === 'Private', 10000);
+                }
+                for (const w of scan) {
+                    await sw.setViewportSize({ width: w, height: w < 500 ? 640 : 800 }); await sleep(15);
+                    const m = await sw.evaluate(SWITCH);
+                    scanned += m.length;
+                    for (const b of m) if (m.length !== 2 || b.gap < 0 || b.lgap < 0 || b.lines > 20 || b.cut > 0.5 || Math.abs(b.off) > 1 || Math.abs(b.h - 44) > 0.5) wide.push(state + ' selected, ' + w + ' px, ' + b.word + ': ' + b.gap.toFixed(2) + ' px from the small word to the right border, ' + b.lgap.toFixed(2) + ' px from the big word to the left, cut ' + b.cut + ', off ' + b.off.toFixed(2) + ', ' + b.h + ' px high');
+                }
+            }
+            check('the Room\'s switch at every width from 300 to 400 px and at 420, 448, 520, 720, 721, 900 and 1400 (either button selected): both words of each button are inside it (at least 0 px to the borders), on one line, nothing is cut, the capitals are within 1 px of the middle and the button is 44 px high (the small word spilled past the border from 300 to 327 px)', wide.length === 0 && scanned === 2 * 2 * scan.length, wide.slice(0, 4).join(' | ') + (wide.length > 4 ? ' ... ' + wide.length + ' more' : ''));
+            check('(no script error in the page)', sw.errors.length === 0, sw.errors.join(' | '));
+            await ctx.close();
+        }
     } finally {
         for (const s of [live, fake, emptySite, offSite]) s.close();
         await browser.close();
