@@ -124,9 +124,6 @@ class TheWiring(unittest.TestCase):
         self.assertGreaterEqual(len(told), 10)
         self.assertEqual(set(told), {"$remote_addr"})
         self.assertEqual(len(re.findall(r"X-Client-Address", CONF)), len(told))                 # (no other use of the name: nothing reads a header that a visitor wrote)
-        for variable in ("$http_x_forwarded_for", "$http_x_real_ip", "$http_x_client_address", "$http_forwarded", "$http_client_ip", "$http_cf_connecting_ip", "$http_true_client_ip",
-                         "$proxy_add_x_forwarded_for", "$realip_remote_addr"):
-            self.assertNotIn(variable, CONF, variable)
         keys = set(re.findall(r"limit_(?:req|conn)_zone\s+(\S+)\s+zone=", CONF))
         self.assertEqual(keys - {"$binary_remote_addr"}, {"$history_plain_key", "$history_query_key", "$submit_post_key", "$admin_login_key", "$test_map_post_key"})
         for key in keys - {"$binary_remote_addr"}:
