@@ -2021,7 +2021,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(original.hash != p.hash);
         // a match of mode 0: no field 17, rules 1, whatever else; and its engine is the original's
         const std::vector<HeadField> plain = fields_of(chunks_of(original.file)[0].payload);
-        ASSERT_TRUE(find_field(plain, 17) == nullptr && plain.back().id == 16 && plain.back().bytes == std::vector<uint8_t>({5, 0}));
+        ASSERT_TRUE(find_field(plain, 17) == nullptr && plain.back().id == 16 && plain.back().bytes == std::vector<uint8_t>({8, 0}));
         ASSERT_TRUE(original.replay.head.mode == 0 && original.replay.head.sim_rules == kSimRules && plays_here(original.replay.head));
         // the recorder stamps the rules number that goes with the mode on a head that only named the mode (a head made by hand, a caller that forgot)
         Header unstamped = head_for(tiny, "TINY", 1, 0x03);
@@ -2163,7 +2163,7 @@ int main(int argc, char* argv[]) {
         };
         const auto legacy_plays = [&](const std::vector<uint8_t>& file) { return legacy_rules(file) == 1; };       // (its kSimRules, and no mode to ask)
         ASSERT_TRUE(legacy_rules(p.file) == 7 && !legacy_plays(p.file));
-        ASSERT_TRUE(legacy_rules(original.file) == 5 && !legacy_plays(original.file));          // (a reader of the release before the bombs of a map file plays rules 1 only: it refuses this build's files too, and this build refuses its 1)
+        ASSERT_TRUE(legacy_rules(original.file) == 8 && !legacy_plays(original.file));          // (a reader of the release before the bombs of a map file plays rules 1 only: it refuses this build's files too, and this build refuses its 1)
         // so the file of a mode must not be made with rules 1 by any writer of this build: nothing in this build writes a mode with rules 1 (RP7.5), and a file that did not get its mode (field 17 lost) is refused
         // by this reader too, because rules 2 means "a mode" and the head does not say which
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);

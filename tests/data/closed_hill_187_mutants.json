@@ -244,8 +244,8 @@
   {
    "id": "set_game_mode_keeps_the_earlier_rule",
    "file": "src/ants_sim/sim_engine.cpp",
-   "old": "    impl_->hill_open_187_ = false;                  // (the rules of a match that is played now;",
-   "new": "    // (the rules of a match that is played now;",
+   "old": "    impl_->hill_open_187_ = false; impl_->last_side_rule_ = true;       // (the rules of a match that is played now;",
+   "new": "    impl_->last_side_rule_ = true;       // (the rules of a match that is played now;",
    "build": "test_closed_hill_187",
    "test": "timeout 600 ./build/tests/test_sim/test_closed_hill_187",
    "expect": "1.1"
