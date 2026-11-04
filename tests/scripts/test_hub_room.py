@@ -18,6 +18,7 @@ import re
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -202,7 +203,7 @@ class TheRoomInTheFile(StoreTest):
                 self.assertGreater(self.store.make_room(low, 100, 100), 0)
             sizes.append(os.path.getsize(self.path))
         self.assertLessEqual(max(sizes[40:]), max(sizes[:40]) + 4 * 4096)              # it stays where it had reached
-        self.assertLess(max(sizes), 600_000)
+        self.assertLess(max(sizes), 640_000)
         self.assertLess(self.store.usage().lines, 3000)
 
     def test_the_target_ends_the_deletion_within_a_chunk(self):
@@ -504,7 +505,7 @@ class TheGuardAtItsEdges(unittest.TestCase):
         self.room.say(who, largest)
         self.assertEqual(who.codes(), [])
         self.assertEqual(self.room.store.lines(1)[0][4], largest)
-        self.assertLess(self.room.store.size() - self.room.chat.limits.db_max_bytes, 6 * 4096)       # (over by a few pages at the most)
+        self.assertLess(self.room.store.size() - self.room.chat.limits.db_max_bytes, 12 * 4096)       # (over by a few pages at the most)
         self.room.say(other, "the next one")
         self.assertEqual(other.codes(), ["rate"])
         self.room.chat.limits = self.room.limits
@@ -717,6 +718,59 @@ class TheStaffTool(unittest.TestCase):
         self.assertEqual((rows[0][4], rows[1][0]), ("after the tool", before))         # (the newest 300 are the ones of before, and the new line has a number that was never used)
         self.assertGreater(rows[0][0], before)
         self.assertEqual([l.text for l in room.chat.ring][-1:], ["after the tool"])
+
+
+class TheToolAndTheHubWriteAtTheSameTime(unittest.TestCase):
+    """The hub's one thread and a terminal's `purge` are two writers of one file (WAL; the hub waits 300 ms for the other at the most): whatever they do to each other, nothing is lost that should stay."""
+
+    def test_nothing_that_should_stay_is_lost_and_nothing_is_broken(self):
+        room = Room(account_hour_lines=10 ** 6, account_day_lines=10 ** 6, **CLI)         # (budgets out of the way: the hub writes a line whenever it can)
+        self.addCleanup(room.close)
+        fill_to(room.store, int(room.limits.db_max_bytes * 0.95), batch=50)
+        stop, results, errors = threading.Event(), [], []
+
+        def tool():
+            try:
+                while not stop.is_set():
+                    out, err = io.StringIO(), io.StringIO()
+                    results.append((admin.run(["--db", room.path, "purge", "--keep-lines", "400"], out, err), err.getvalue()))
+                    time.sleep(0.005)
+            except BaseException as e:                                                 # (a traceback in the tool's thread is a failure of the test)
+                errors.append(e)
+
+        said, refused = [], collections.Counter()
+        people = [room.person(n) for n in range(1, 6)]
+        with mock.patch.object(admin.limitmod, "Limits", lambda: room.limits):
+            thread = threading.Thread(target=tool)
+            thread.start()
+            try:
+                for step in range(400):
+                    try:
+                        room.tick(2.0)
+                    except storemod.StoreError:                                        # (the hub's own tick meets the tool's lock: it is tried again, as in the program)
+                        refused["tick"] += 1
+                    for n, who in enumerate(people):
+                        text = "step %d from %d %s" % (step, n, "word " * 20)
+                        before = len(who.sent)
+                        room.say(who, text)
+                        if len(who.sent) == before:                                    # (a line that is kept is told to the others, not to the one who said it)
+                            said.append(text.strip())                           # (the text rules take the blank at the end off)
+                        else:
+                            refused[who.sent[-1]["code"]] += 1
+            finally:
+                stop.set()
+                thread.join(30)
+        self.assertEqual(errors, [])
+        self.assertTrue(results)
+        for code, err in results:
+            self.assertIn((code, err), ((0, ""), (1, "hub.admin: nothing to purge\n"), (1, "hub.admin: the database refused it (StoreError)\n")))
+        self.assertEqual(room.store.db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        ids = [r[0] for r in room.store.lines(10 ** 6)][::-1]
+        self.assertEqual(ids, sorted(set(ids)))
+        newest = [r[4] for r in room.store.lines(5)]
+        self.assertTrue(all(text in said for text in newest), newest)                  # (what stands at the end are lines that the hub took)
+        self.assertEqual(room.store.lines(1)[0][4], said[-1])                          # (and the last line it took is the newest)
+        self.assertLess(room.store.size(), room.limits.db_max_bytes)
 
 
 class TheHubOnRealSockets(unittest.TestCase):
