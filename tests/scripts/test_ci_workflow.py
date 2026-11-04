@@ -218,6 +218,7 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         windows = "\n".join(job_block("windows"))
         for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "replay_tool.exe --selftest", "lvl_tool.exe --selftest", "e2e_runner.exe --all"):
             self.assertIn(needle, windows)
+        self.assertIn("ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n", windows)
 
     def test_every_optional_tool_of_cmake_is_built_by_the_three_build_jobs_and_the_image_check_lists_the_map_makers_files(self):
         tools = re.findall(r"add_executable\((\w+) EXCLUDE_FROM_ALL tools/", read(os.path.join(REPO, "CMakeLists.txt")))
@@ -572,7 +573,7 @@ class TheJobsBehindTheRequiredNames(unittest.TestCase):
         self.assertEqual(sorted(re.findall(r"(?m)^            part: (\S+)$", text)), ["ctest", "scripts-python"])
         self.assertIn("python3 tests/scripts/run_python_tests.py --skip-linux-only", text)
         self.assertNotIn("--shard", text)
-        self.assertIn("ctest --test-dir build --output-on-failure --timeout 900 --parallel 4\n", text)
+        self.assertIn("ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error\n", text)       # (a ctest that finds no test must fail, as on Linux)
 
     def test_every_leg_builds_and_every_step_of_a_leg_says_which_legs_run_it(self):
         for job in ("linux_tests", "macos_tests"):

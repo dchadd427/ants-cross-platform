@@ -290,6 +290,7 @@ jobs:
       - name: Configure (Release, warnings are errors)
         run: |
           clang --version | head -1
+          cmake --version | head -1
           "$HOME/sdl2/bin/sdl2-config" --version
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_PREFIX_PATH="$HOME/sdl2"
 
@@ -309,7 +310,7 @@ jobs:
 
       - name: Test programs (ctest)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'ctest' }}
-        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error
 
       - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps
         if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}
@@ -462,7 +463,7 @@ jobs:
 
       - name: Test programs (ctest)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error
 
       - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
