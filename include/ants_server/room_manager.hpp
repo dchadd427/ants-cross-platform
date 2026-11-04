@@ -100,11 +100,15 @@ inline constexpr uint32_t kDemoMaxPauseMs = 10u * 60u * 1000u;
 /// restarts) from costing a match.
 inline constexpr uint32_t kDemoAbandonedMs = 60u * 1000u;
 
+/// A source of random bytes: fills out[0 .. n) and says whether it could (secret.hpp random_bytes, the operating system's generator, is the one that a server uses; a test passes its own)
+using RandomBytes = std::function<bool(uint8_t* out, size_t n)>;
+
 /// A room code as the control interface draws it when a room is made without one (RoomManager::new_code): kDrawnRoomCodeChars (six, as many as the game's own codes have) characters without the look-alikes
-/// (no 0 / O, 1 / I / L), the first an upper-case letter, so that a code of the control interface always has a capital and a visitor's block never takes its name (net::public_room_code). `rng` is the
-/// generator to draw from (the manager's own, seeded from the operating system; a test passes its own).
+/// (no 0 / O, 1 / I / L), the first an upper-case letter, so that a code of the control interface always has a capital and a visitor's block never takes its name (net::public_room_code). Every character is
+/// drawn from the bytes of `source` with no lean towards any of them (a byte that the alphabet does not divide evenly is thrown away). False, and `code` empty, when `source` fails or gives nothing but bytes that
+/// are thrown away (at most 2,048 of them are read).
 inline constexpr size_t kDrawnRoomCodeChars = 6;
-std::string draw_room_code(std::mt19937& rng);
+bool draw_room_code(std::string& code, const RandomBytes& source);
 
 /// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),
 /// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields (tools/deploy_wait.py accepts nothing else).
@@ -153,6 +157,9 @@ class RoomManager {
 public:
     RoomManager(MapStore store, ServerLimits limits = ServerLimits());
     ~RoomManager();
+
+    /// The bytes that the codes of the rooms of the control interface are drawn from (draw_room_code): the operating system's generator unless a test says otherwise (secret.hpp random_bytes)
+    void set_code_source(RandomBytes source) { code_source_ = std::move(source); }
 
     /// Starts to keep restart records (restart_record.hpp): every room that holds seats keeps one from the start of its match to its end, and restore_rooms() can bring the rooms of the records of the
     /// folder back. Call it before any room is made. False, with the reason, when the folder cannot be used (the server then keeps none). An empty `config.dir` keeps none and is true.
@@ -297,7 +304,7 @@ private:
     void park(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, const Restoring& job, uint32_t now_ms);
     void release_parked(const std::string& code, uint32_t now_ms);
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
-    std::string new_code();
+    std::string new_code();           // "" when the operating system's generator fails (create_room then refuses the room: a code that can be guessed is not drawn instead)
     /// Makes the public room that a Hello with a create block names, when public rooms are on, the code is a valid one, the block is valid and there is a free place (or one can be had:
     /// evict_abandoned_public); false otherwise
     bool make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
@@ -345,7 +352,7 @@ private:
     std::vector<RoomStatus> unreported_;     // the ends of rooms that were forgotten in the pass in which they ended
     uint64_t created_{0};
     uint64_t refused_{0};
-    uint64_t code_counter_{0};
+    RandomBytes code_source_;                    // (set in the constructor)
     uint32_t bot_every_ms_{0};                   // the server's own matches of computer players: how often (0: none)
     uint32_t next_bot_match_ms_{0};
     std::mt19937 bot_rng_;

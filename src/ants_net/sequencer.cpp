@@ -6,6 +6,8 @@ namespace ants::net {
 
 namespace {
 constexpr uint32_t kRefereeWindowTurns = turns_for_ms(6400);       // the referee's report of a turn is taken while the turn is at most 6.4 s old
+constexpr bool hashed_turn(uint32_t turn) noexcept { return (uint64_t{turn} + 1) % kHashEveryTurns == 0; }       // the turns whose state hash is reported (LockstepRunner)
+constexpr uint8_t bit(uint8_t seat) noexcept { return static_cast<uint8_t>(1u << seat); }
 }  // namespace
 
 Sequencer::Sequencer(Config config) : cfg_(config) {}
@@ -13,7 +15,12 @@ Sequencer::Sequencer(Config config) : cfg_(config) {}
 void Sequencer::set_active(uint8_t player, bool active) {
     if (player >= sim::MAX_PLAYERS) return;
     active_[player] = active;
-    if (!active) carry_[player].clear();               // a player that is gone has no commands waiting for a later turn
+    if (!active) {
+        carry_[player].clear();                        // a player that is gone has no commands waiting for a later turn
+        if (host_player_ >= sim::MAX_PLAYERS) {        // (a seat that leaves the table of a dedicated server takes its reports with it: they were made in a stay that is over)
+            for (auto& entry : have_report_) entry.second[player] = false;
+        }
+    }
     // a player that joins is level with the sequencer: it has "executed" everything before the current turn
     if (active) acked_[player] = next_turn_;
 }
@@ -66,8 +73,9 @@ void Sequencer::on_ack(uint8_t player, uint32_t turn) {
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         if (active_[p]) low = std::min(low, acked_[p]);
     }
+    // (a turn on which a report differs from the referee's is kept until judge_hashes has answered it: the acknowledgements that pass it may come in the same pass as the report)
     for (auto it = reports_.begin(); it != reports_.end();) {
-        if (it->first + 1 < low) {
+        if (it->first + 1 < low && suspect_.count(it->first) == 0) {
             have_report_.erase(it->first);
             it = reports_.erase(it);
         } else {
@@ -75,50 +83,36 @@ void Sequencer::on_ack(uint8_t player, uint32_t turn) {
         }
     }
     for (auto it = referee_.begin(); it != referee_.end();) {            // the referee's reports of turns that everybody has passed
-        if (it->first + 1 < low) it = referee_.erase(it);
+        if (it->first + 1 < low && suspect_.count(it->first) == 0) it = referee_.erase(it);
         else ++it;
     }
 }
 
-std::vector<DesyncMsg> Sequencer::on_referee_hash(uint32_t turn, const sim::StateHash& hash) {
-    std::vector<DesyncMsg> out;
-    if (host_player_ < sim::MAX_PLAYERS) return out;                      // a host with a seat reports through on_hash like everybody else
-    if (turn >= next_turn_) return out;                                   // the referee only executed turns that were sealed
-    if (turn + kRefereeWindowTurns < next_turn_) return out;              // (a turn that is long past: nothing is waiting for it)
+void Sequencer::on_referee_hash(uint32_t turn, const sim::StateHash& hash) {
+    if (host_player_ < sim::MAX_PLAYERS) return;                          // a host with a seat reports through on_hash like everybody else
+    if (turn >= next_turn_ || !hashed_turn(turn)) return;                 // the referee only executed turns that were sealed, and reports the hashed ones
+    if (turn + kRefereeWindowTurns < next_turn_) return;                  // (a turn that is long past: nothing is waiting for it)
     referee_[turn] = hash;
     const auto found = reports_.find(turn);
-    if (found == reports_.end()) return out;
     const auto have = have_report_.find(turn);
+    if (found == reports_.end() || have == have_report_.end()) return;
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
-        if (have == have_report_.end() || !have->second[p]) continue;
-        if (found->second[p] != hash) {
-            DesyncMsg d;
-            d.turn = turn;
-            d.player = p;
-            d.host = hash;
-            d.peer = found->second[p];
-            out.push_back(d);
-        }
+        if (have->second[p] && found->second[p] != hash) suspect_.insert(turn);
     }
-    return out;
 }
 
 std::vector<DesyncMsg> Sequencer::on_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash) {
     std::vector<DesyncMsg> out;
     if (player >= sim::MAX_PLAYERS || !active_[player]) return out;
     if (turn >= next_turn_) return out;                                   // only a turn that was sealed can be reported: a hostile client cannot make the maps grow with turns of the future
-    if (host_player_ >= sim::MAX_PLAYERS) {                               // a host without a seat: the referee's report is the reference
+    if (host_player_ >= sim::MAX_PLAYERS) {                               // a host without a seat: the referee's report is the reference, and judge_hashes() weighs the seats' against it
+        if (!hashed_turn(turn)) return out;                               // (nobody hashes any other turn: a report of one is not kept)
+        bool& have = have_report_[turn][player];
+        if (have) return out;                                             // the first report of a seat for a turn is its report: a repeat says nothing new
         reports_[turn][player] = hash;
-        have_report_[turn][player] = true;
+        have = true;
         const auto ref = referee_.find(turn);
-        if (ref != referee_.end() && ref->second != hash) {
-            DesyncMsg d;
-            d.turn = turn;
-            d.player = player;
-            d.host = ref->second;
-            d.peer = hash;
-            out.push_back(d);
-        }
+        if (ref != referee_.end() && ref->second != hash) suspect_.insert(turn);
         return out;
     }
     auto& reports = reports_[turn];
@@ -139,6 +133,53 @@ std::vector<DesyncMsg> Sequencer::on_hash(uint8_t player, uint32_t turn, const s
         }
     }
     return out;
+}
+
+HashVerdict Sequencer::judge_hashes(uint8_t seated) {
+    HashVerdict verdict;
+    for (auto it = suspect_.begin(); it != suspect_.end();) {
+        const uint32_t turn = *it;
+        const auto ref = referee_.find(turn);
+        const auto found = reports_.find(turn);
+        const auto have = have_report_.find(turn);
+        if (ref == referee_.end() || found == reports_.end() || have == have_report_.end()) {       // (cannot be: they are kept as long as the turn is a suspect)
+            it = suspect_.erase(it);
+            continue;
+        }
+        uint8_t agree = 0;                           // the seats at the table that report the referee's state, report another, or have not executed the turn yet
+        uint8_t differ = 0;
+        uint8_t waiting = 0;
+        for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+            if ((seated & bit(p)) == 0 || !active_[p]) continue;
+            if (have->second[p]) {
+                uint8_t& side = found->second[p] == ref->second ? agree : differ;
+                side = static_cast<uint8_t>(side | bit(p));
+            } else if (acked_[p] <= turn) {          // (a client sends its hash of a turn before its acknowledgement of it: one that has executed the turn and said nothing never will)
+                waiting = static_cast<uint8_t>(waiting | bit(p));
+            }
+        }
+        if (differ == 0) {                           // the seat that differed is gone (dropped, lost): nothing to judge
+            it = suspect_.erase(it);
+            continue;
+        }
+        if (agree == 0 && waiting != 0) {            // nobody has vouched for the referee yet and somebody still may: wait for the answer
+            ++it;
+            continue;
+        }
+        verdict.kind = agree != 0 ? HashVerdict::Kind::Drop : HashVerdict::Kind::Fail;
+        for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
+            if ((differ & bit(p)) == 0) continue;
+            DesyncMsg d;
+            d.turn = turn;
+            d.player = p;
+            d.host = ref->second;
+            d.peer = found->second[p];
+            verdict.seats.push_back(d);
+        }
+        suspect_.erase(it);
+        return verdict;
+    }
+    return verdict;
 }
 
 bool Sequencer::can_seal() const noexcept { return laggard() == 255; }

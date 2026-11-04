@@ -7,7 +7,7 @@
 //   host:   Sequencer::submit (issuer stamped) ... every 50 ms: seal a turn -> TurnMsg to every client and to its own runner
 //   both:   LockstepRunner executes the turns on the local SimulationEngine (one tick each), then reports TurnAck (once per frame, for the last turn it ran) and, every 20
 //           turns, HashMsg
-//   host:   compares the hashes; a mismatch is broadcast as DesyncMsg
+//   host:   compares the hashes; a host with a seat broadcasts a mismatch as DesyncMsg and stops sealing, a dedicated server judges it (below)
 //
 // The roster and the shared start state (map, seed, fog) are established before start() by the lobby; the sessions only run the match.
 //
@@ -38,6 +38,11 @@
 // machine that finds its link closed with half a minute of the match unplayed in its queue says so ("You were away too long and were dropped from the match.").
 // A command that does not fit into a turn (more than the 64 a player may have in one) waits for the next turns (up to 1,024 of them) in the sequencer instead of costing the
 // player a violation: a stuck uplink that is let go delivers 76 orders at once.
+//
+// A seat whose state differs from the referee's (docs/NETWORK_PORT.md "Sessions" and "Room"). Only a host without a seat has an independent referee: its own engine never takes a client's word, so when the hash that a seat
+// reports for a turn is not the referee's, the seat is the one that is wrong. The seat alone is told (a Desync) and is dropped as a seat that quits is (Sequencer::judge_hashes; a Quit in the turn stream, which ends a
+// match of two sides and ranks the seat last, else the seat's team drops out): its ants die, its alliance ends, its key is told "dropped", and the others go on. A match is only stopped when no seat at the table agrees with the
+// referee, and none can still say (it may be the referee that is wrong; every differing seat is told, nobody is dropped and the room fails). A host with a seat is itself the reference: it stops the match, as it always did.
 //
 // Coming back (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A dedicated server's room may HOLD the seat of a player whose connection is LOST instead of dropping it
 // (HostSession::Config::hold_seats, the server's `--reconnect`; every other host, a game on the local network above all, keeps the rules above). A connection is lost when its link
@@ -190,8 +195,8 @@ public:
 
     void update(uint32_t now_ms);
 
-    /// Stops sealing turns: the match is over, or two peers disagree (a desync freezes the match so that its state can be examined). Peers still
-    /// execute the turns they have. There is no un-freeze: a frozen match is finished.
+    /// Stops sealing turns: the match is over, or two peers disagree (a desync of a host with a seat, or of every seat at a dedicated server's table, freezes the match so that its state
+    /// can be examined). Peers still execute the turns they have. There is no un-freeze: a frozen match is finished.
     void freeze() noexcept { frozen_ = true; }
     bool frozen() const noexcept { return frozen_; }
 
@@ -209,7 +214,10 @@ public:
     /// True when `seat` is to hear a line that `sender` says: used by the relay, and public for the tests that pin the rule.
     bool hears_chat(uint8_t sender, bool team, uint8_t seat) const noexcept;
 
+    /// The desyncs that stopped the match (a host with a seat: a guest that differs; a dedicated server: every seat that differs, when no seat agrees with the referee)
     const std::vector<DesyncMsg>& desyncs() const noexcept { return desyncs_; }
+    /// The seats of a dedicated server that were dropped for a state that differs from the referee's (the others went on)
+    uint32_t diverged_drops() const noexcept { return diverged_drops_; }
     uint32_t turns_sealed() const noexcept { return sequencer_.next_turn(); }
     /// True while a host with a seat has stopped sealing because a peer is more than 3 s behind (a host without a seat never waits)
     bool waiting() const noexcept { return started_ && !seatless() && !sequencer_.can_seal(); }
@@ -310,8 +318,10 @@ private:
     void poll_clients();
     void handle_message(uint8_t player, const std::vector<uint8_t>& msg);
     void violation(uint8_t player);
-    void drop(uint8_t player);
-    void announce_drop(uint8_t player);
+    void drop(uint8_t player, bool as_quit = false);
+    void announce_drop(uint8_t player, bool as_quit = false);
+    void judge_hashes();                               // a host without a seat: the seats that Sequencer::judge_hashes finds wrong are dropped, or the match is stopped
+    void drop_diverged(const DesyncMsg& d);
     void broadcast(const std::vector<uint8_t>& msg, uint8_t except = 255);
     void relay_chat(const ChatMsg& m);                 // every client of the match hears an all line; a team line only the sender and its ally (hears_chat)
     void report_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash);
@@ -358,6 +368,7 @@ private:
     std::array<Client, sim::MAX_PLAYERS> clients_{};
     uint8_t bot_seats_{0};                  // bit s: seat s is a bot (no connection; acknowledged by this host). A new host after a migration has none: the bots leave with the old host
     std::vector<DesyncMsg> desyncs_;
+    uint32_t diverged_drops_{0};
     std::function<void(uint8_t)> on_left_;
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void(const TurnMsg&)> on_seal_;                       // the restart record's turn (set_on_seal)

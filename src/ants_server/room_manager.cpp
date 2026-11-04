@@ -10,12 +10,13 @@
 #include "ants_net/clock.hpp"
 #include "ants_net/protocol.hpp"
 #include "ants_server/online_limits.hpp"
+#include "ants_server/secret.hpp"
 
 namespace fs = std::filesystem;
 
 namespace ants::server {
 
-RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes) {
+RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes), code_source_(random_bytes) {
     if (!store_.scanned()) store_.scan();           // (the server's main has scanned it and logged the notes; a manager made by hand lists its folders here)
 }
 
@@ -33,24 +34,39 @@ RoomSpec RoomManager::default_spec() const {
     return spec;
 }
 
-std::string draw_room_code(std::mt19937& rng) {
+bool draw_room_code(std::string& code, const RandomBytes& source) {
     // six characters (as the game's own codes) without the look-alikes (no 0 / O, 1 / I / L): easy to read out and to type. The first is a letter, so that every code of the control interface has a capital and a visitor's
-    // block can never take its name (make_public_room: a visitor's room takes a code with no capital)
+    // block can never take its name (make_public_room: a visitor's room takes a code with no capital). A code can be found by guessing it, so it comes from the bytes of the operating system's generator (as the keys of
+    // the seats do), and from nothing that can be predicted. A byte at the top of its range, where the alphabet does not divide 256, is thrown away: no character is likelier than another.
     static const char kLetters[] = "ABCDEFGHJKMNPQRSTUVWXYZ";
     static const char kAlphabet[] = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-    std::string code;
-    code.push_back(kLetters[rng() % (sizeof(kLetters) - 1)]);
-    for (size_t i = 1; i < kDrawnRoomCodeChars; ++i) code.push_back(kAlphabet[rng() % (sizeof(kAlphabet) - 1)]);
-    return code;
+    code.clear();
+    uint8_t bytes[32];
+    size_t used = sizeof bytes;
+    int reads = 0;
+    while (code.size() < kDrawnRoomCodeChars) {
+        if (used == sizeof bytes) {
+            if (++reads > 64 || !source || !source(bytes, sizeof bytes)) {
+                code.clear();
+                return false;
+            }
+            used = 0;
+        }
+        const char* const alphabet = code.empty() ? kLetters : kAlphabet;
+        const size_t size = code.empty() ? sizeof(kLetters) - 1 : sizeof(kAlphabet) - 1;
+        const size_t byte = bytes[used++];
+        if (byte < 256 - 256 % size) code.push_back(alphabet[byte % size]);
+    }
+    return true;
 }
 
 std::string RoomManager::new_code() {
-    static std::mt19937 rng{std::random_device{}()};
     for (int attempt = 0; attempt < 64; ++attempt) {
-        std::string code = draw_room_code(rng);
+        std::string code;
+        if (!draw_room_code(code, code_source_)) return std::string();
         if (rooms_.find(code) == rooms_.end() && !restoring_has(code)) return code;
     }
-    return "R" + std::to_string(++code_counter_);
+    return std::string();                                  // (64 codes in a row that are taken: the places of the server are full of rooms, which max_rooms keeps from happening)
 }
 
 namespace {
@@ -110,7 +126,10 @@ CreateResult RoomManager::create_room(RoomSpec spec, uint32_t now_ms) {
             seats = static_cast<uint8_t>(seats | (1u << b.seat));
         }
     }
-    if (spec.code.empty()) spec.code = new_code();
+    if (spec.code.empty()) {
+        spec.code = new_code();
+        if (spec.code.empty()) return fail(503, "the server could not draw a room code just now");
+    }
     const std::string code = spec.code;
     std::unique_ptr<Room> room = build_room(std::move(spec), now_ms, r);
     if (room == nullptr) return r;
