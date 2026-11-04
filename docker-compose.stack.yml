@@ -11,7 +11,10 @@
 #   ANTS_PORT=19980                                 the host port of the web page (optional)
 #   ANTS_TRUSTED_PROXIES_FILE=/path/on/the/host/proxies.conf    a list of reverse proxies of your own (optional). Without it the web image's list is used, which trusts a reverse proxy that connects from a private
 #                                                   address (docs/SERVER.md "Behind a reverse proxy"); set this only for a proxy that connects from a PUBLIC address, or to name your proxy exactly. The file REPLACES the image's list: copy
-#                                                   docker/trusted-proxies.conf and change it. Give the FULL path of a file on the host: a relative path does not work in a Portainer repository stack, whose files are not on the host
+#                                                   docker/trusted-proxies.conf and change it. Give the FULL path of a file on the host: a relative path does not work in a Portainer repository stack, whose files are not on the host.
+#                                                   The path must name an existing FILE: for a path that does not exist Docker makes a directory there and nginx stops with "Is a directory"
+#   ANTS_WEB_BIND_PREFIX=127.0.0.1:                 put in front of the host port of the web page (optional; empty by default: the port is published as before). An address of this machine and a colon, such as 127.0.0.1:,
+#                                                   publishes it on that address only, so a reverse proxy on another machine, or one that reaches this machine by its public address, would no longer reach it (docs/SERVER.md "Behind a reverse proxy")
 #   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
 #   ANTS_BUILD_ID=<text>                            which build this is (the page's footer, the changelog pages, `ants_server --version`); optional: without it the images
 #                                                   take the commit that the clone's .git/HEAD and .git/refs name, and the UTC build time when the clone has no such files
@@ -71,12 +74,13 @@ services:
         ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-beta
     restart: unless-stopped
-    # A list of reverse proxies of your own (ANTS_TRUSTED_PROXIES_FILE, see the header), or nothing: /dev/null is an empty file, which changes nothing (the web image's list is used). Behind a reverse proxy that no list
-    # covers, every visitor has the proxy's address and every limit for one visitor (map sends, sign-in tries, chat sockets and logins) is one limit for the whole site; the image's list covers a proxy at a private address.
+    # A list of reverse proxies of your own (ANTS_TRUSTED_PROXIES_FILE, see the header), or nothing: /dev/null is an empty file, which changes nothing (the web image's list is used). The path must name an existing FILE:
+    # for a path that does not exist Docker makes a directory there and nginx stops with "Is a directory". The image's list names a reverse proxy at a private address, so that the limits per address (map sends,
+    # sign-in tries, map files) count each visitor's own address; a proxy at a public address goes in a list of your own.
     volumes:
       - ${ANTS_TRUSTED_PROXIES_FILE:-/dev/null}:/etc/nginx/ants-trusted-proxies.d/own.conf:ro
     ports:
-      - "${ANTS_PORT:-19980}:80"
+      - "${ANTS_WEB_BIND_PREFIX:-}${ANTS_PORT:-19980}:80"
     networks:
       - proxy-network
     security_opt: ["no-new-privileges:true"]

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """The list of reverse proxies that the web image ships (docker/trusted-proxies.conf), and the way docker/nginx.conf and the stack files use it (run by ./run_tests.sh --fast and by the CI; docs/SERVER.md "Behind a reverse proxy").
 
-Behind a reverse proxy the only address that nginx sees is the proxy's. Every limit for one visitor (the zones of docker/nginx.conf, which are keyed on the address, and the X-Client-Address that the
-chat hub and the game server count by) is then one limit for the whole site, unless the list names the proxy: the visitor is then the right-most entry of X-Forwarded-For that is not a proxy itself. What
-is tested here:
+The list tells nginx which addresses are reverse proxies: the visitor is the right-most entry of X-Forwarded-For that is not a proxy itself, and the limits for one visitor (the zones of docker/nginx.conf,
+which are keyed on the address, and the X-Client-Address that the chat hub and the game server count by) count that address. What is tested here:
 
   - the text of the shipped list: the six private and internal ranges and nothing else, X-Forwarded-For as the header, recursive; read with the ipaddress module against private, boundary and public
     addresses (no range of the Internet, nothing that matches everything). On every machine;
@@ -12,9 +11,12 @@ is tested here:
     /dev/null (a path of the repository does not work in a Portainer repository stack: its files are not on the host), into the folder that nginx includes;
   - where the program nginx is installed (a Linux machine has all of 127.0.0.0/8): the REAL file and the REAL docker/nginx.conf in front of stand-in doors and a real chat hub. Connections from different
     internal addresses, each with other X-Forwarded-For headers, are different visitors for the zones and for the X-Client-Address; a value that a visitor wrote himself, or in a header of another name, is
-    skipped; a connection from an address outside the list keeps its own whatever it sends; the operator's file replaces the list; and with the OLD list (a file of comments) the same requests are
-    one visitor (the "before" of the change). The ranges of IPv6 are read through the header, by nginx's own matching;
-  - opt-in (ANTS_TEST_ADDRESS_ALIASES=1; Linux, root, `ip`): the same through connections that really come from 10.x, 172.16-31.x, 192.168.x and public addresses (aliases on the loopback device, removed after).
+    skipped; a connection from an address outside the list keeps its own whatever it sends; the operator's file replaces the list; with an empty list (a file of comments) the address of the
+    connection counts. The ranges of IPv6 are read through the header, by nginx's own matching;
+  - opt-in (ANTS_TEST_ADDRESS_ALIASES=1; Linux, root, `ip`): the same through connections that really come from 10.x, 172.16-31.x, 192.168.x and public addresses (aliases on the loopback device, removed after);
+  - the web port of the stack files: ANTS_WEB_BIND_PREFIX stands in front of it (empty by default, and then `docker compose config` renders exactly what the port line rendered before; `127.0.0.1:` publishes
+    on the loopback address only), no other port line has it; the documents and the comments state what the list does and what the operator may set (who may reach the web container, a path that names an
+    existing FILE) and nothing else: no account of how a setting that is missing would fail, and no word of "the owner".
 
 The broken copies of tests/data/trusted_proxies_mutants.json (run them with tools/mutate.py) must each fail one of these tests.
 """
@@ -27,6 +29,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,18 +58,80 @@ OUTSIDE = ["0.0.0.0", "1.1.1.1", "8.8.8.8", "9.255.255.255", "11.0.0.0", "100.64
 PRIVATE = ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7")
 
 
+WEB_PORTS = (("docker-compose.stack.yml", "ANTS_PORT", "19980"), ("docker-compose.staging.yml", "ANTS_STAGING_PORT", "19981"), ("docker-compose.yml", "ANTS_PORT", "19980"))
+
+
+def server_section():
+    """The section "Behind a reverse proxy" of docs/SERVER.md (the last of the page), empty when it is gone."""
+    text = read("docs", "SERVER.md")
+    return text[text.index("### Behind a reverse proxy"):] if "### Behind a reverse proxy" in text else ""
+
+
+def comment_words(text):
+    """The comment lines of a file as one run of words (a comment broken over lines reads as one)."""
+    return " ".join(re.sub(r"(?m)^\s*#\s?", "", "\n".join(l for l in text.splitlines() if l.lstrip().startswith("#"))).split())
+
+
+def comment_above(text, service_name, key):
+    """The comment lines right above `key:` in a service, as words."""
+    lines = service_lines(text, service_name)
+    at = next(i for i, l in enumerate(lines) if l == "    %s:" % key)
+    block = []
+    for l in reversed(lines[:at]):
+        if not l.lstrip().startswith("#"):
+            break
+        block.append(l)
+    return comment_words("\n".join(reversed(block)))
+
+
+def header_entries(text, names):
+    """The entries of a stack file's header (the comment before `services:`) that name one of the variables, with their continuation lines, as words."""
+    lines = text.split("\nservices:")[0].splitlines()
+    found = []
+    for i, line in enumerate(lines):
+        if any(name in line for name in names) and re.match(r"#   [A-Z]", line):
+            found.append(line)
+            for more in lines[i + 1:]:
+                if not re.match(r"#\s{30,}\S", more):
+                    break
+                found.append(more)
+    return comment_words("\n".join(found))
+
+
+def what_this_change_wrote(name):
+    """The comments of a compose file that belong to ANTS_TRUSTED_PROXIES_FILE and ANTS_WEB_BIND_PREFIX, as words."""
+    text = read(name)
+    return " ".join([comment_above(text, "ants-beta", "volumes"), comment_above(text, "ants-beta", "ports"), header_entries(text, ("ANTS_TRUSTED_PROXIES_FILE", "ANTS_WEB_BIND_PREFIX"))])
+
+
+def render(path, env=None, project=None):
+    """`docker compose config` as JSON for a compose file, without ANTS_TRUSTED_PROXIES_FILE and ANTS_WEB_BIND_PREFIX in the environment unless `env` gives them; a skip where compose is not there."""
+    full = {k: v for k, v in os.environ.items() if k not in ("ANTS_TRUSTED_PROXIES_FILE", "ANTS_WEB_BIND_PREFIX")}
+    full.update(env or {})
+    command = ["docker", "compose", "-f", path] + (["--project-directory", project] if project else []) + ["config", "--format", "json"]
+    done = subprocess.run(command, capture_output=True, text=True, env=full)
+    if done.returncode != 0:
+        raise unittest.SkipTest("docker compose is not available: " + done.stderr[:200])
+    return json.loads(done.stdout)
+
+
 def in_list(address, ranges=None):
     """Whether an address is inside one of the ranges (the ipaddress module's reading of them)."""
     ip = ipaddress.ip_address(address)
     return any(ip in ipaddress.ip_network(r) for r in (RANGES if ranges is None else ranges))
 
 
-def service(text, name):
-    """The lines of one service of a compose file, comments dropped."""
+def service_lines(text, name):
+    """The lines of one service of a compose file, comments among them."""
     lines = text.splitlines()
     start = next(i for i, l in enumerate(lines) if l == "  %s:" % name)
     end = next((i for i in range(start + 1, len(lines)) if re.match(r"^  \S|^\S", lines[i])), len(lines))
-    return [l for l in lines[start:end] if not l.lstrip().startswith("#")]
+    return lines[start:end]
+
+
+def service(text, name):
+    """The lines of one service of a compose file, comments dropped."""
+    return [l for l in service_lines(text, name) if not l.lstrip().startswith("#")]
 
 
 def map_values(name):
@@ -98,10 +163,13 @@ class TheShippedList(unittest.TestCase):
         self.assertEqual([l for l in DIRECTIVES if l.startswith("real_ip_header")], ["real_ip_header X-Forwarded-For;"])
         self.assertEqual([l for l in DIRECTIVES if l.startswith("real_ip_recursive")], ["real_ip_recursive on;"])
 
-    def test_the_comment_says_what_it_assumes(self):
-        comment = "\n".join(l for l in LIST.splitlines() if l.lstrip().startswith("#"))
-        for words in ("X-Forwarded-For itself", "PUBLIC address", "Do not publish the port", "Every container on the network of the proxy", "ANTS_TRUSTED_PROXIES_FILE", "replaces this list"):
+    def test_the_comment_states_what_it_assumes_as_requirements_and_gives_no_way_round_them(self):
+        comment = comment_words(LIST)
+        for words in ("X-Forwarded-For itself", "Only the proxy can reach this container from an address in the list", "so that only the proxy can connect to it (ANTS_WEB_BIND_PREFIX in the stack files)",
+                      "keep no container that you do not trust on the network of the proxy", "PUBLIC address", "ANTS_TRUSTED_PROXIES_FILE in the stack files: the full path of an existing file", "replaces this list"):
             self.assertIn(words, comment, words)
+        for word in ("gateway", "above all", "IPv6 above", "owner", "userland"):
+            self.assertNotIn(word, comment, word)
         self.assertTrue(all(ord(c) < 128 for c in LIST))
 
 
@@ -158,18 +226,82 @@ class TheWiring(unittest.TestCase):
                 self.assertEqual([(m["type"], m["source"], m["target"], m.get("read_only")) for m in mounts], [("bind", source, "/etc/nginx/ants-trusted-proxies.d/own.conf", True)], name)
 
     def test_the_documents_and_the_comments_do_not_say_that_the_list_is_empty_or_has_to_be_mounted(self):
-        for path in (("docker", "nginx.conf"), ("Dockerfile",), ("docker-compose.stack.yml",), ("docker-compose.staging.yml",), ("docs", "HUB.md"), ("docs", "SERVER.md"), ("docs", "MAP_SUBMISSIONS.md"),
-                     ("docs", "WORKFLOW.md")):
+        for path in (("docker", "nginx.conf"), ("Dockerfile",), ("docker-compose.stack.yml",), ("docker-compose.staging.yml",), ("docs", "HUB.md"), ("docs", "SERVER.md"), ("docs", "MAP_SUBMISSIONS.md")):
             text = read(*path)
             for old in ("image's empty file", "image's one file is all comments", "the image's file is all comments", "mount a file over /etc/nginx/ants-trusted-proxies/proxies.conf",
                         "none: the address of the connection counts"):
                 self.assertNotIn(old, text, "/".join(path))
-        server = read("docs", "SERVER.md")
-        for words in ("### Behind a reverse proxy", "`ANTS_TRUSTED_PROXIES_FILE` | none |", "**full path of the copy on the host**", "no use in a Portainer repository stack", "**only for a connection from a private or internal address**",
-                      "Do not publish the web port on a public interface", "(`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`:"):
-            self.assertIn(words, server, words)
-        for name in ("HUB.md", "MAP_SUBMISSIONS.md", "WORKFLOW.md"):
+        for name in ("HUB.md", "MAP_SUBMISSIONS.md"):
             self.assertIn("SERVER.md#behind-a-reverse-proxy", read("docs", name), name)           # (the one home of the list, its assumptions and the override)
+
+    def test_server_md_states_the_requirements_and_what_the_operator_may_set(self):
+        for words in ("`ANTS_TRUSTED_PROXIES_FILE` | none |", "`ANTS_WEB_BIND_PREFIX` | empty |"):                 # (the table of the variables)
+            self.assertIn(words, read("docs", "SERVER.md"), words)
+        section = server_section()
+        for words in ("### Behind a reverse proxy", "**full path of the copy on the host**", "it must name an existing FILE", "nginx stops with \"Is a directory\"", "no use in a Portainer repository stack",
+                      "**only for a connection from a private or internal address**", "**Only the reverse proxy can reach the web container from an address in the list.**",
+                      "Publish the web port so that only the proxy can connect to it", "`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`",
+                      "an address of the machine and a colon, such as `127.0.0.1:`", "would no longer reach it", "once over IPv4 and once over IPv6 if the machine has both"):
+            self.assertIn(words, section, words)
+
+    def test_no_comment_or_paragraph_of_this_change_says_how_a_missing_setting_would_fail_or_how_to_get_round_a_requirement_or_names_the_owner(self):
+        texts = {"docs/SERVER.md, the section": server_section(), "docker/trusted-proxies.conf": comment_words(LIST)}
+        for name in COMPOSE_FILES:
+            texts[name] = what_this_change_wrote(name)
+            self.assertIn("ANTS_TRUSTED_PROXIES_FILE", texts[name], name)
+        for name, text in texts.items():
+            for hint in ("one limit for the whole site", "the whole site's", "count the proxy", "counts as that proxy", "counts as the proxy", "has the proxy's address", "choose his address", "name any address",
+                         "can use up", "gateway", "above all", "userland", "owner", "locks everybody"):
+                self.assertNotIn(hint, text, "%s: %s" % (name, hint))
+        for phrase in ("ONE allowance for the whole site", "shares these with the whole site"):
+            self.assertNotIn(phrase, read("docker", "nginx.conf"), phrase)
+        for name in ("MAP_SUBMISSIONS.md", "HUB.md"):
+            for line in read("docs", name).splitlines():
+                if "trusted-proxies" in line:
+                    self.assertNotIn("owner", line, name)
+
+    def test_the_compose_files_say_that_the_path_must_name_an_existing_file(self):
+        for name in COMPOSE_FILES:
+            text = read(name)
+            above = comment_above(text, "ants-beta", "volumes")
+            for words in ("ANTS_TRUSTED_PROXIES_FILE", "must name an existing FILE", "Docker makes a directory there", "nginx stops with \"Is a directory\""):
+                self.assertIn(words, above, "%s: %s" % (name, words))
+        header = comment_words(read("docker-compose.stack.yml").split("\nservices:")[0])
+        for words in ("Give the FULL path of a file on the host", "The path must name an existing FILE", "nginx stops with \"Is a directory\"", "ANTS_WEB_BIND_PREFIX=127.0.0.1:"):
+            self.assertIn(words, header, words)
+        self.assertIn("an existing FILE", comment_words(read("docker-compose.staging.yml").split("\nservices:")[0]))
+
+
+class ThePublishedWebPort(unittest.TestCase):
+    """ANTS_WEB_BIND_PREFIX stands in front of the host port of the web page: empty (the default) the port is published as it always was, `127.0.0.1:` publishes it on the loopback address only."""
+
+    def test_the_prefix_is_in_front_of_the_web_ports_own_variable_with_nothing_as_its_default_and_in_no_other_line(self):
+        for name, variable, default in WEB_PORTS:
+            text = read(name)
+            ports = [l.strip() for l in service(text, "ants-beta") if l.strip().startswith('- "')]
+            self.assertEqual(ports, ['- "${ANTS_WEB_BIND_PREFIX:-}${%s:-%s}:80"' % (variable, default)], name)        # (not "0.0.0.0:" as the default: that publishes on IPv4 addresses only)
+            code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+            self.assertEqual(code.count("ANTS_WEB_BIND_PREFIX"), 1, name)
+            self.assertNotIn("0.0.0.0", code, name)
+
+    @unittest.skipUnless(shutil.which("docker"), "docker is needed")
+    def test_compose_renders_the_old_port_when_the_prefix_is_empty_and_the_address_when_it_is_set(self):
+        for name, variable, default in WEB_PORTS:
+            text = read(name)
+            before = text.replace('"${ANTS_WEB_BIND_PREFIX:-}${%s:-%s}:80"' % (variable, default), '"${%s:-%s}:80"' % (variable, default))
+            self.assertNotEqual(before, text, name)
+            with tempfile.TemporaryDirectory() as tmp:
+                old_file = os.path.join(tmp, "compose.yml")
+                with open(old_file, "w", encoding="utf-8") as f:
+                    f.write(before)
+                old = render(old_file, project=REPO)["services"]["ants-beta"]["ports"]
+            unset = render(os.path.join(REPO, name))["services"]["ants-beta"]["ports"]
+            self.assertEqual(unset, old, name)                                                  # (the file that has the prefix, with none given, is the file that had not: byte for byte what compose makes of it)
+            self.assertNotIn("host_ip", unset[0])
+            loopback = render(os.path.join(REPO, name), {"ANTS_WEB_BIND_PREFIX": "127.0.0.1:"})["services"]["ants-beta"]["ports"]
+            self.assertEqual(loopback, [dict(old[0], host_ip="127.0.0.1")], name)
+            moved = render(os.path.join(REPO, name), {"ANTS_WEB_BIND_PREFIX": "172.17.0.1:", variable: "20000"})["services"]["ants-beta"]["ports"]
+            self.assertEqual((moved[0]["host_ip"], str(moved[0]["published"]), moved[0]["target"]), ("172.17.0.1", "20000", 80), name)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------ nginx, run
@@ -237,10 +369,10 @@ class TheListRuns(unittest.TestCase):
                                 (["6.6.6.6, 198.51.100.5:51000"], "198.51.100.5"), (["6.6.6.6, 2001:db8::5"], "2001:db8::5"), (["6.6.6.6, [2001:db8::5]:4000"], "2001:db8::5")):
             self.assertEqual(get_from(self.rig, "127.0.0.2", lines), expected, lines)
 
-    def test_a_visitor_on_a_private_address_is_skipped_like_a_proxy_and_the_entry_before_him_is_taken(self):
-        """What trusting the private ranges means (docs/SERVER.md, the first assumption): it matters on a local network only, where a visitor can name any address."""
+    def test_an_entry_in_the_list_is_skipped_and_the_entry_to_its_left_is_taken(self):
+        """The rule is the same for every entry of the header: one that is in the list is a proxy, whoever wrote it, and the visitor is the next one to its left (docs/SERVER.md, the first assumption)."""
         self.assertEqual(get_from(self.rig, "127.0.0.2", ["6.6.6.6, 192.168.1.50"]), "6.6.6.6")
-        self.assertEqual(get_from(self.rig, "127.0.0.2", ["192.168.1.50"]), "192.168.1.50", "and a visitor who names nobody before him is himself")
+        self.assertEqual(get_from(self.rig, "127.0.0.2", ["192.168.1.50"]), "192.168.1.50", "and the only entry is the visitor, whatever it is")
 
     def test_the_text_that_nginx_gives_is_the_address_that_the_hub_folds(self):
         """The hub counts an IPv6 visitor by his /64 and an IPv4-mapped one as the IPv4 address (hub/limits.py); the game server does the same (src/ants_server/upload_common.cpp): nginx hands both the text of the address."""
@@ -273,14 +405,14 @@ class TheListRuns(unittest.TestCase):
         for lines in (["198.51.100.5"], ["6.6.6.6, 198.51.100.5"], ["6.6.6.6", "198.51.100.5"], ["10.1.2.3"]):
             self.assertEqual(get_from(rig, "127.0.0.1", lines, {"X-Client-Address": "9.9.9.9", "X-Real-IP": "8.8.8.8"}), "127.0.0.1", lines)
 
-    def test_with_the_old_list_every_visitor_is_the_proxy(self):
-        rig = sub.Rig(trusted="")                                                  # (the file of the image before: all comments)
+    def test_an_empty_list_leaves_the_address_of_the_connection(self):
+        rig = sub.Rig(trusted="")                                                  # (an empty list: a file of comments)
         self.addCleanup(rig.stop)
         for visitor in ("198.51.100.5", "203.0.113.9", "2001:db8:1234::5"):
             self.assertEqual(get_from(rig, "127.0.0.2", [visitor]), "127.0.0.2", visitor)
 
-    def test_a_visitor_has_limits_of_his_own_and_cannot_use_up_those_of_the_others(self):
-        for trusted, expected in ((LIST, 201), ("", 503)):                          # (with the old list the second visitor is the first one: the limit of everybody)
+    def test_the_limits_count_each_visitor_apart(self):
+        for trusted, expected in ((LIST, 201), ("", 503)):                          # (an empty list: the two visitors are one address)
             rig = sub.Rig(trusted=trusted, relaxed=False)
             self.addCleanup(rig.stop)
             flood = [rig.ask("POST", "/admin/api/login", {"X-Forwarded-For": "198.51.100.10", "Content-Type": "application/json"}, b"{}")[0] for _ in range(9)]
@@ -358,7 +490,7 @@ class TheHubRuns(unittest.TestCase):
     def test_one_visitor_still_has_eight(self):
         self.assertEqual(self.sockets(LIST, ["198.51.100.200"] * 10), ["101"] * 8 + ["429"] * 2)
 
-    def test_with_the_old_list_the_eight_are_the_whole_sites(self):
+    def test_an_empty_list_counts_the_address_of_the_connection(self):
         self.assertEqual(self.sockets("", ["198.51.100.%d" % (100 + i) for i in range(10)]), ["101"] * 8 + ["429"] * 2)
 
 
@@ -399,7 +531,7 @@ class TheAddressesRun(unittest.TestCase):
                 self.assertEqual(get_from(self.rig, address, lines, {"X-Client-Address": "9.9.9.9"}), "198.51.100.5" if ALIASES[address] else address, (address, lines))
             self.assertEqual(in_list(address), ALIASES[address], address)           # (the table of this file agrees with what nginx did)
 
-    def test_the_old_list_believes_none_of_them(self):
+    def test_an_empty_list_believes_none_of_them(self):
         rig = sub.Rig(trusted="")
         self.addCleanup(rig.stop)
         for address in self.added:

@@ -1652,8 +1652,8 @@
   {
    "id": "docs_forget_the_trusted_proxies",
    "file": "docs/HUB.md",
-   "old": "(0) **Before the login goes live:** `docker/trusted-proxies.conf` must name",
-   "new": "(0) `docker/trusted-proxies.conf` should name",
+   "old": "(0) **Before the login goes live:** name the reverse proxy in front of the site in `docker/trusted-proxies.conf`",
+   "new": "(0) name the reverse proxy in front of the site in `docker/trusted-proxies.conf`",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
   },
   {

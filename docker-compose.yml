@@ -8,11 +8,13 @@ services:
         ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-beta
     restart: unless-stopped
-    # as in docker-compose.stack.yml: a list of reverse proxies of your own (ANTS_TRUSTED_PROXIES_FILE: the full path of a file on this machine), or nothing (/dev/null is an empty file: the web image's list is used)
+    # as in docker-compose.stack.yml: a list of reverse proxies of your own (ANTS_TRUSTED_PROXIES_FILE: the full path of a file on this machine), or nothing (/dev/null is an empty file: the web image's list is used).
+    # The path must name an existing FILE: for a path that does not exist Docker makes a directory there and nginx stops with "Is a directory"
     volumes:
       - ${ANTS_TRUSTED_PROXIES_FILE:-/dev/null}:/etc/nginx/ants-trusted-proxies.d/own.conf:ro
+    # ANTS_WEB_BIND_PREFIX (an address of this machine and a colon, such as 127.0.0.1:) goes in front of the host port to publish the page on that address only; empty: published as before
     ports:
-      - "${ANTS_PORT:-19980}:80"
+      - "${ANTS_WEB_BIND_PREFIX:-}${ANTS_PORT:-19980}:80"
     networks:
       - proxy-network
 
