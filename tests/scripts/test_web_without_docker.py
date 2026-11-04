@@ -22,6 +22,7 @@ The tool replays the Dockerfile on this machine and serves the result with nginx
   - the command line: a work folder that a shell would read apart is refused, --reuse takes a finished build only, a failure that is not the tool's own is a message
 """
 import contextlib
+import gzip
 import http.client
 import io
 import json
@@ -312,6 +313,9 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))
         with open(self.html("plain", "index.html"), "rb") as a, open(self.html("plain", "play.html"), "rb") as b:
             self.assertEqual(a.read(), b.read(), "play.html is a copy of index.html")
+        for name in ("index.data", "index.wasm", "index.js"):                                    # (the image build compresses the three big files once; nginx's gzip_static sends the copy: tests/scripts/test_nginx_headers.py)
+            with open(self.html("plain", name), "rb") as plain, open(self.html("plain", name + ".gz"), "rb") as packed:
+                self.assertEqual(gzip.decompress(packed.read()), plain.read(), name + ".gz is the file, compressed")
         with open(os.path.join(self.site["plain"], "etc", "nginx", "conf.d", "default.conf"), encoding="utf-8") as a:
             self.assertEqual(a.read(), read("docker", "nginx.conf"))
 
