@@ -41,7 +41,7 @@
 #                                                   to POST /test-maps, which docker/nginx.conf passes here; it works with the submissions door OFF (it has no database, no accounts and no other route). Leave it at
 #                                                   4031, the one that nginx passes to, or set 0, which switches test rooms off (the site then says so). Not published on the host. The maps live in the folder test-maps of the
 #                                                   volume ants-server-results (at most 64 MiB, 6 hours each) and are wiped at every start.
-#   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the sign-in cookie of the owner's page (a long random text: openssl rand -hex 32). Without it every /admin/api path answers 404.
+#   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the sign-in cookie of the admin page (a long random text: openssl rand -hex 32). Without it every /admin/api path answers 404.
 #                                                   The accounts are made on the server, not here: docs/MAP_SUBMISSIONS.md, "Deploying" (docker exec -it ants-server ants_server --admin-create <username> --db /results/ants.db)
 #
 #   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from, and the base of the Discord login's way back
@@ -101,7 +101,7 @@ services:
     command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
-      # the owner's page (docs/MAP_SUBMISSIONS.md): the secret that signs the sign-in cookie; without it every /admin/api path answers 404
+      # the admin page (docs/MAP_SUBMISSIONS.md): the secret that signs the sign-in cookie; without it every /admin/api path answers 404
       ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro
