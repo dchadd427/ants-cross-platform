@@ -345,6 +345,17 @@ class Spelling(Tree):
 
 
 class RealRepository(unittest.TestCase):
+    def test_the_policy_files_are_there_and_say_what_they_should(self):
+        with open(os.path.join(ROOT, "SECURITY.md"), encoding="utf-8") as f:
+            policy = f.read()
+        self.assertIn("Report a vulnerability", policy)
+        self.assertNotRegex(policy, r"[\w.+-]+@[\w-]+\.[\w.]+", "no address: a report goes through GitHub's private reporting")
+        with open(os.path.join(ROOT, ".github", "CODEOWNERS"), encoding="utf-8") as f:
+            rules = [line.split() for line in f.read().splitlines() if line.strip() and not line.startswith("#")]
+        self.assertTrue(rules and all(len(r) >= 2 and all(who.startswith("@") for who in r[1:]) for r in rules), "every rule names a reviewer")
+        for pattern in ("*", "/.github/", "/docker/", "/Dockerfile*", "/docker-compose*.yml", "/tools/"):
+            self.assertIn(pattern, [r[0] for r in rules])
+
     def test_repository_passes(self):
         done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", ROOT], capture_output=True, text=True)
         self.assertEqual((done.returncode, done.stdout), (0, ""), done.stdout + done.stderr)
