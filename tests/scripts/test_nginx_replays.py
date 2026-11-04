@@ -271,9 +271,9 @@ class TheLocations(unittest.TestCase):
         self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
         self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
 
-    def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_who_can_reach_the_door(self):
-        for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "the replay port (read only, no secret)", "do not put a container there that you do not trust")),
-                              ("docker-compose.server.yml", ("ran 30 seconds or more", "the replay port when it is switched on (read only, no secret", "do not put a container there that you do not trust")),
+    def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_that_the_network_is_private(self):
+        for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "is not published on the host at all", "private to the stack", "keep no other container on it")),
+                              ("docker-compose.server.yml", ("ran 30 seconds or more", "private to the stack")),
                               ("docker-compose.staging.yml", ("ANTS_REPLAY_PORT", "not published")),
                               ("Dockerfile.server", ("do not publish it either", "five-second cache"))):
             text = " ".join(re.sub(r"(?m)^\s*#\s?", "", read(name)).split())                    # (a comment broken over lines reads as one)
