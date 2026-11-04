@@ -5,7 +5,7 @@
    "id": "loader_ignores_the_flag",
    "file": "src/ants_sim/grid.cpp",
    "old": "            } else if (fire_wall_as_original && c2.tile_index == TILE_FIREWALL) {",
-   "new": "            } else if (c2.tile_index == TILE_FIREWALL) {",
+   "new": "            } else if ((fire_wall_as_original || true) && c2.tile_index == TILE_FIREWALL) {",
    "build": "test_loader_fidelity",
    "test": "timeout 900 ./build/tests/test_sim/test_loader_fidelity"
   },
@@ -85,7 +85,7 @@
    "id": "setter_ignores_its_argument",
    "file": "src/ants_sim/loader_rules.cpp",
    "old": "impl_->fire_wall_as_original_ = on;",
-   "new": "impl_->fire_wall_as_original_ = true;",
+   "new": "impl_->fire_wall_as_original_ = on || true;",
    "build": "test_loader_fidelity test_rules_fire_wall",
    "test": "./build/tests/test_sim/test_loader_fidelity && ./build/tests/test_replay/test_rules_fire_wall"
   },
