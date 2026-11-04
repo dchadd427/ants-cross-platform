@@ -305,13 +305,14 @@ class TheText(unittest.TestCase):
     def test_the_paths_that_carry_a_players_text_are_logged_without_their_query(self):
         head = CONF[:CONF.index("server {")]
         fmt = re.search(r"log_format\s+ants_noquery\s+(.+?);", head, re.S).group(1)
-        self.assertIn("$uri", fmt)
-        for query in ("$request ", "$request\"", "$request_uri", "$args", "$query_string", "$is_args"):
+        self.assertIn("$ants_path", fmt)                                                      # (the map above it cuts $request_uri at the ?)
+        self.assertRegex(head, r'map \$request_uri \$ants_path \{\s+default \$request_uri;\s+"~\^\(\?<ants_p>\[\^\?\]\*\)" \$ants_p;\s+\}')
+        for query in ("$request ", "$request\"", "$request_uri", "$args", "$query_string", "$is_args", "$uri", "$http_referer", "$http_cookie", "$http_authorization"):
             self.assertNotIn(query, fmt)
         for header in ("location = /submissions ", "location ^~ /submissions/ ", "location ^~ /admin/api/ "):
             self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, header), header)
         self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, "location = /test-maps "))          # (the name of a test map is in the query: tests/scripts/test_nginx_test_maps.py)
-        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 4)             # (no other block says it: the other paths keep the stock log)
+        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 5)             # (these four, and the server block, which gives every other path the same format: tests/scripts/test_nginx_headers.py)
 
     def test_the_stacks_the_image_and_the_documents_agree_with_the_file(self):
         for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
