@@ -167,8 +167,11 @@ class TheWiring(unittest.TestCase):
                         "none: the address of the connection counts"):
                 self.assertNotIn(old, text, "/".join(path))
         server = read("docs", "SERVER.md")
-        for words in ("ANTS_TRUSTED_PROXIES_FILE", "Behind a reverse proxy", "full path"):
+        for words in ("### Behind a reverse proxy", "`ANTS_TRUSTED_PROXIES_FILE` | none |", "**full path of the copy on the host**", "no use in a Portainer repository stack", "**only for a connection from a private or internal address**",
+                      "Do not publish the web port on a public interface", "(`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`:"):
             self.assertIn(words, server, words)
+        for name in ("HUB.md", "MAP_SUBMISSIONS.md", "WORKFLOW.md"):
+            self.assertIn("SERVER.md#behind-a-reverse-proxy", read("docs", name), name)           # (the one home of the list, its assumptions and the override)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------ nginx, run

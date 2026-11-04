@@ -72,7 +72,7 @@ services:
     container_name: ants-beta
     restart: unless-stopped
     # A list of reverse proxies of your own (ANTS_TRUSTED_PROXIES_FILE, see the header), or nothing: /dev/null is an empty file, which changes nothing (the web image's list is used). Behind a reverse proxy that no list
-    # covers every visitor has the proxy's address, and every limit for one visitor (map sends, sign-in tries, chat sockets and logins) is one limit for the whole site. The image's list covers a proxy at a private address.
+    # covers, every visitor has the proxy's address and every limit for one visitor (map sends, sign-in tries, chat sockets and logins) is one limit for the whole site; the image's list covers a proxy at a private address.
     volumes:
       - ${ANTS_TRUSTED_PROXIES_FILE:-/dev/null}:/etc/nginx/ants-trusted-proxies.d/own.conf:ro
     ports:

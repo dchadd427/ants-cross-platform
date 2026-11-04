@@ -1,0 +1,122 @@
+{
+ "note": "Mutants of the list of reverse proxies that the web image ships (docker/trusted-proxies.conf), of the places where docker/nginx.conf includes it and of the way the stack files and the image carry it, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/trusted_proxies_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_trusted_proxies.py: each breaks one rule - only the private and internal ranges are believed (not one of them missing, none widened, none for everybody), the header is X-Forwarded-For and it is read from the right, the list is the site's default and the operator's folder replaces it, a zone and a door get the address nginx settled on and never a header, the stacks mount the operator's file by a full path with /dev/null as the default, into the folder that nginx includes, and the image has the list. The mutants change one file each and put it back.",
+ "defaults": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 tests/scripts/test_nginx_trusted_proxies.py -f"
+ },
+ "mutants": [
+  {
+   "id": "list_172_range_widened",
+   "file": "docker/trusted-proxies.conf",
+   "old": "set_real_ip_from 172.16.0.0/12;\n",
+   "new": "set_real_ip_from 172.0.0.0/8;\n"
+  },
+  {
+   "id": "list_10_range_missing",
+   "file": "docker/trusted-proxies.conf",
+   "old": "set_real_ip_from 10.0.0.0/8;\n",
+   "new": ""
+  },
+  {
+   "id": "list_loopback_range_missing",
+   "file": "docker/trusted-proxies.conf",
+   "old": "set_real_ip_from 127.0.0.0/8;\n",
+   "new": ""
+  },
+  {
+   "id": "list_ipv6_unique_local_range_missing",
+   "file": "docker/trusted-proxies.conf",
+   "old": "set_real_ip_from fc00::/7;\n",
+   "new": ""
+  },
+  {
+   "id": "list_trusts_the_whole_internet",
+   "file": "docker/trusted-proxies.conf",
+   "old": "set_real_ip_from 127.0.0.0/8;\n",
+   "new": "set_real_ip_from 0.0.0.0/0;\nset_real_ip_from 127.0.0.0/8;\n"
+  },
+  {
+   "id": "list_header_is_x_real_ip",
+   "file": "docker/trusted-proxies.conf",
+   "old": "real_ip_header X-Forwarded-For;\n",
+   "new": "real_ip_header X-Real-IP;\n"
+  },
+  {
+   "id": "list_is_not_read_from_the_right",
+   "file": "docker/trusted-proxies.conf",
+   "old": "real_ip_recursive on;\n",
+   "new": "real_ip_recursive off;\n"
+  },
+  {
+   "id": "list_assumption_about_the_published_port_dropped",
+   "file": "docker/trusted-proxies.conf",
+   "old": "Do not publish the port of this container on a public interface",
+   "new": "Publish the port of this container on a public interface"
+  },
+  {
+   "id": "default_list_not_included_in_the_http_block",
+   "file": "docker/nginx.conf",
+   "old": "include /etc/nginx/ants-trusted-proxies/*.conf;\n",
+   "new": ""
+  },
+  {
+   "id": "default_list_included_in_the_server_block",
+   "file": "docker/nginx.conf",
+   "old": "server {\n    listen 80;\n",
+   "new": "server {\n    include /etc/nginx/ants-trusted-proxies/*.conf;\n    listen 80;\n"
+  },
+  {
+   "id": "operators_folder_not_included",
+   "file": "docker/nginx.conf",
+   "old": "    include /etc/nginx/ants-trusted-proxies.d/*.conf;\n",
+   "new": ""
+  },
+  {
+   "id": "operators_folder_is_the_default_folder",
+   "file": "docker/nginx.conf",
+   "old": "    include /etc/nginx/ants-trusted-proxies.d/*.conf;\n",
+   "new": "    include /etc/nginx/ants-trusted-proxies/*.conf;\n"
+  },
+  {
+   "id": "hub_door_told_the_visitors_own_header",
+   "file": "docker/nginx.conf",
+   "old": "proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $remote_addr;",
+   "new": "proxy_set_header Cookie $hub_cookie_session;              # (the login's cookie and no other)\n        proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;\n        proxy_set_header X-Client-Address $http_x_forwarded_for;"
+  },
+  {
+   "id": "zone_keyed_on_a_header",
+   "file": "docker/nginx.conf",
+   "old": "limit_req_zone $binary_remote_addr zone=ants_hub_login:1m rate=10r/m;",
+   "new": "limit_req_zone $http_x_forwarded_for zone=ants_hub_login:1m rate=10r/m;"
+  },
+  {
+   "id": "stack_default_is_a_path_of_the_repository",
+   "file": "docker-compose.stack.yml",
+   "old": "${ANTS_TRUSTED_PROXIES_FILE:-/dev/null}",
+   "new": "${ANTS_TRUSTED_PROXIES_FILE:-./docker/trusted-proxies.conf}"
+  },
+  {
+   "id": "staging_mount_blanks_the_images_list",
+   "file": "docker-compose.staging.yml",
+   "old": "/etc/nginx/ants-trusted-proxies.d/own.conf:ro",
+   "new": "/etc/nginx/ants-trusted-proxies/proxies.conf:ro"
+  },
+  {
+   "id": "legacy_mount_is_not_read_only",
+   "file": "docker-compose.yml",
+   "old": "/etc/nginx/ants-trusted-proxies.d/own.conf:ro",
+   "new": "/etc/nginx/ants-trusted-proxies.d/own.conf"
+  },
+  {
+   "id": "image_does_not_have_the_list",
+   "file": "Dockerfile",
+   "old": "COPY docker/trusted-proxies.conf /etc/nginx/ants-trusted-proxies/proxies.conf\n",
+   "new": ""
+  },
+  {
+   "id": "document_forgets_that_a_relative_path_does_not_work",
+   "file": "docs/SERVER.md",
+   "old": "(a relative path is no use in a Portainer repository stack: its files are not on the host)",
+   "new": "(a relative path does as well)"
+  }
+ ]
+}
