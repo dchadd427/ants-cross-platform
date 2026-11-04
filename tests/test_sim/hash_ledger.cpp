@@ -15,7 +15,7 @@
 // in: the other seven parts of the state hash, every cell, every hill. The file written is the ledger of the play at rules 0, so it is also `diff`ed with the ledger of main as usual.
 // A map for which the two differ is named on standard error, and the exit status is 1.
 //
-// --rules2 is the same with the rules word forced to 2 (the wide search of the path finder, through the engine's test hook for rules 2; its step budget is the original's 1,000 until a
+// --rules2 is the same with the rules word forced to 2 (the wide search of the path finder; its step budget is the original's 1,000 until a
 // search has passed the original's limit, and the library's biggest map has 10,449 cells, so it is 1,000 on all of them anyway): the wide search gives up where the original does and takes the same pops everywhere the original finishes, so the play must be
 // the same on all 540 maps, the ledger written is the ledger of the play at rules 0 and it is `diff`ed with main's as with --rules1.
 #include "ants_assets/lvl_parser.hpp"

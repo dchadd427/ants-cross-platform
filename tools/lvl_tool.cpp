@@ -667,8 +667,8 @@ int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostre
     } else if (ok && o.extended && command == "check" && (o.original || o.roster_given || o.new_map)) {
         why = "--extended takes no --original, --roster or --new-map (the checker per kind holds the map to all four teams, with the limits of an Extended map)";
         ok = false;
-    } else if (ok && (!o.to.empty() || !o.output.empty()) && command != "convert") {
-        why = "--to and -o go with convert only";
+    } else if (ok && (!o.to.empty() || !o.output.empty() || o.rules != 0) && command != "convert") {
+        why = "--to, -o and --rules go with convert only";
         ok = false;
     } else if (ok && o.original && command != "check") {
         why = "--original goes with check only";
@@ -1064,13 +1064,37 @@ int selftest() {
                     run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("half.lvl"), "--rows", "300"}).status == 2 &&
                     run_words({"convert", tiny_path, "--to", "classic", "-o", dir.file("cl.lvl"), "--rows", "300", "--columns", "300"}).status == 2,
                 "convert --rows --columns: a size smaller than the map is exit 1, one side alone or a Classic copy is exit 2");
+        // --rules 2: the copy asks for the long-order rules (docs/MAP_FORMAT.md "Orders on a big map"); a grown copy keeps it; the word needs --to extended and is 2 or nothing
+        {
+            const std::string two_path = dir.file("tiny_rules2.lvl");
+            const Run two = run_words({"convert", tiny_path, "--to", "extended", "-o", two_path, "--rules", "2"});
+            LevelData two_level;
+            std::vector<uint8_t> two_bytes;
+            t.check(two.status == 0 && has(two.out, ", rules 2, ") && read_whole(two_path, two_bytes) && two_level.load_from_memory(two_bytes.data(), two_bytes.size(), nullptr, LevelLimits::for_extended_maps()) &&
+                        two_level.version == 9u && two_level.rules == LVL_RULES_LONG_ORDERS,
+                    "convert --rules 2: the copy is a version 9 map of rules 2: " + two.out);
+            const Run two_info = run_words({"info", two_path});
+            t.check(two_info.status == 0 && has(two_info.out, "Rules:         2 (extended rules, long orders)\n"), "info of a map of rules 2: " + two_info.out);
+            const std::string two_grown = dir.file("tiny_rules2_grown.lvl");
+            LevelData grown_two;
+            std::vector<uint8_t> grown_two_bytes;
+            t.check(run_words({"convert", tiny_path, "--to", "extended", "-o", two_grown, "--rows", "40", "--columns", "40", "--rules", "2"}).status == 0 && read_whole(two_grown, grown_two_bytes) &&
+                        grown_two.load_from_memory(grown_two_bytes.data(), grown_two_bytes.size(), nullptr, LevelLimits::for_extended_maps()) && grown_two.rules == LVL_RULES_LONG_ORDERS && grown_two.height() == 40u,
+                    "convert --rules 2 --rows --columns: the grown copy keeps rules 2");
+            const Run back_down = run_words({"convert", two_path, "--to", "classic", "-o", dir.file("tiny_rules2_back.lvl")});
+            t.check(back_down.status == 0 && has(back_down.out, "note: the map asks for the long-order rules (rules 2)"), "convert a map of rules 2 --to classic: written, with the note that the rules are dropped: " + back_down.out);
+            t.check(run_words({"convert", tiny_path, "--to", "classic", "-o", dir.file("r2c.lvl"), "--rules", "2"}).status == 2 && run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r1.lvl"), "--rules", "1"}).status == 2 &&
+                        run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r3.lvl"), "--rules", "3"}).status == 2 && run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r0.lvl"), "--rules"}).status == 2 &&
+                        run_words({"check", tiny_path, "--rules", "2"}).status == 2,
+                    "convert --rules: only 2, only with --to extended, a number is needed, and only on convert: exit 2");
+        }
         const std::string wide = dir.file("wide_ext.lvl");
         const Run big = run_words({"blank", wide, "--extended", "--rows", "300", "--columns", "400"});
         t.check(big.status == 0 && has(big.out, "wide_ext.lvl: a blank Extended map of 300 rows x 400 columns, ") && fs::exists(wide), "blank --extended: 300 x 400 is an Extended map: " + big.out);
         const Run wide_info = run_words({"info", wide});
-        t.check(wide_info.status == 0 && has(wide_info.out, "Rules:         1 (extended rules)\n") && has(wide_info.out, "Classic map:   does not fit:\n") &&
+        t.check(wide_info.status == 0 && has(wide_info.out, "Rules:         2 (extended rules, long orders)\n") && has(wide_info.out, "Classic map:   does not fit:\n") &&
                     has(wide_info.out, "this map is 400 columns wide; a Classic map has at most 256 columns\n") && has(wide_info.out, "this map is 300 rows tall; a Classic map has at most 256 rows\n"),
-                "info of a wide Extended map: rules 1 and why it is not a Classic map: " + wide_info.out);
+                "info of a wide Extended map: rules 2 and why it is not a Classic map: " + wide_info.out);
         const Run no_fit = run_words({"convert", wide, "--to", "classic", "-o", dir.file("no_fit.lvl")});
         t.check(no_fit.status == 1 && has(no_fit.out, "wide_ext.lvl: cannot be a Classic map:\n  this map is 400 columns wide") && has(no_fit.out, "nothing written\n") && !fs::exists(dir.file("no_fit.lvl")),
                 "convert --to classic: a map that does not fit lists why and writes nothing: " + no_fit.out);
