@@ -952,7 +952,7 @@ static void run_suite_7_rules_one() {
     } TEST_END();
 }
 
-// Rules 2: the wide search of the path finder (path_planner.hpp). No file can carry rules 2 yet (docs/MAP_FORMAT.md), so these worlds are made by hand.
+// Rules 2: the wide search of the path finder (path_planner.hpp). A map file can carry rules 2 (docs/MAP_FORMAT.md); these worlds are made by hand, so that their sizes, orders and ticks are exact.
 static std::vector<TileCoord> walked_path(SimulationEngine& sim, uint32_t id) {
     return sim.get_unit(id).waypoints;
 }

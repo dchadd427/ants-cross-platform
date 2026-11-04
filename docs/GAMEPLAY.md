@@ -72,7 +72,7 @@ There are no speed constants. An ant moves by the displacement of its current wa
 A bridge, at any stage of its building, walks like mud.
 
 - Paths come from a port of the original's asynchronous `PATHMGR` A*: one 1000-expansion slice per 50 ms for each team, 8 directions.
-- On a big map that asks for it (the map's rules word 2, [`MAP_FORMAT.md`](MAP_FORMAT.md) "Orders on a big map") the search goes on where the original gives up: an order of 450 tiles along an open row finds its path. Every order the original finds gets the identical path at the identical time; every other map plays as before.
+- On a big map that asks for it (the map's rules word 2, [`MAP_FORMAT.md`](MAP_FORMAT.md) "Orders on a big map") the search goes on where the original gives up: an order of 450 tiles along an open row finds its path. Every order the original finds gets the identical path, at the identical time when no other order of the team is searched past the limit (the team's searches take turns, so a search that the original gives up on and this one goes on with can delay another order of the team); every other map plays as before.
 - An order snaps the ant to the centre of its tile, like the original's `GoTo`.
 - A walker waits 300 ms behind a moving ant, and re-plans around a standing one.
 

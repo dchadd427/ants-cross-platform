@@ -1568,7 +1568,7 @@ void run_suite_9_wide_search() {
         ASSERT_EQ(PathManager::wide_budget(2048, 2048), 65535u);             // (the manager's budget is 16 bits)
         ASSERT_EQ(static_cast<unsigned>(PathSearch::kDefaultBudget), 1000u);
         // a search of 5,400 expansions that stays below f = 8,000 (the original's limit is not passed) takes 1,000 a run whatever it is given: a search that the original
-        // can finish is delivered in the run in which the original delivers it (before, it took the big budget from the first run on: 6 runs of 1,000 became one of 4,096)
+        // can finish is delivered in the run in which the original delivers it (before, it took the big budget from the first run on: 6 runs of 1,000 became one of 8,192, the budget of 512 x 512 at cells / 32)
         const TerrainMap open = TerrainMap::filled(512, 512);
         const PathManager::CostProvider provider = open.provider();
         for (const uint16_t budget : {uint16_t{1000}, uint16_t{2048}, uint16_t{8192}}) {

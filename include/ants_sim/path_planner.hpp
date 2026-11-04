@@ -32,7 +32,7 @@
 // (a step of cost 8000 or more) ends the search exactly as the original's f >= 8000 test does, so every search the original finishes (a path, or no path before its limit)
 // runs here pop for pop the same; once a node has passed the limit, such a node is dropped and the search goes on. The same holds for TIME: a slice has the original's 1,000
 // expansions until the search has popped a node with f >= 8000 (the pop at which the original would have given up, limit_hit()); only the slices after that one get the larger
-// budget of a big map (PathManager::wide_budget), so a rules-2 map that the original can play delivers every path in the same 50 ms run as rules 1 does. A map asks for it with the rules
+// budget of a big map (PathManager::wide_budget), so a rules-2 map that the original can play delivers every path in the same 50 ms run as rules 1 does, when no other order of the team is searched past the limit (a team's searches take turns, and one that the original gives up on stays in the turns here: the paths are the same, a delivery that waits for its turn can come later). A map asks for it with the rules
 // word 2 of its file (docs/MAP_FORMAT.md); the engine takes this search only for a Grid of rules 2, and rules 0 and 1 run the search above unchanged.
 //
 // Coordinates: the original's tile is {int16 row, int16 col}. This port uses ants::sim::TileCoord with
