@@ -9,9 +9,8 @@
 #
 # Only the TCP game port is open to other machines. The WebSocket port (a reverse proxy that ends TLS passes browsers to it) and the control interface
 # (the lobby's backend calls it) are published on the host's loopback address only; a proxy or backend on another machine reaches them through a tunnel.
-# The service also joins the network of the site's container (docker-compose.yml): its nginx passes /ws to "ants-server:4002". Other containers of that
-# network can reach the control port too (it is behind the bearer secret), and the replay port when it is switched on (read only, no secret; docker-compose.stack.yml
-# starts the server with it): do not put a container there that you do not trust.
+# The service also joins the network of the site's container (docker-compose.yml): its nginx passes /ws to "ants-server:4002". Keep that network
+# private to the stack: its services trust each other.
 services:
   ants-server:
     build:
@@ -29,7 +28,7 @@ services:
     stop_grace_period: 15s
     # The page web/lobby.html (the front page) needs demo rooms, which are off by default: uncomment to allow them. The maps folder must hold the demo map and every map of
     # --demo-maps (the page offers the six maps of the original); the number of rooms is 1 to 255 (0, or 256 and more, stop the server at startup); a demo room waits
-    # ten minutes for its players; whoever reaches a game port can fill the rooms. Keep the number of rooms times --log-mb under the 256 MiB that all the turn logs share (see docker-compose.stack.yml).
+    # ten minutes for its players; demo rooms are open to anyone who can reach a game port, so their number is bounded. Keep the number of rooms times --log-mb under the 256 MiB that all the turn logs share (see docker-compose.stack.yml).
     # command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "48", "--demo-map", "TREASURE.LVL", "--demo-maps", "TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL", "--log-mb", "4"]
     # Reconnect (network protocol 10; ON by default since v0.6.0, when the game's own clients came back by themselves): rooms hold the seat of a player whose connection is lost and pause the match for
     # everybody; "--no-reconnect" turns that off (a lost player is dropped at once and no restart record is kept; the last of "--reconnect" and "--no-reconnect" wins). The others vote after 30 s: "--hold-vote-seconds" 5 - 3600; the match's
