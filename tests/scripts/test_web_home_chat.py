@@ -99,7 +99,7 @@ class TheLoaderInHome(unittest.TestCase):
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
         self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
-        self.assertIn("[bar, rbar, dock && dock.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
+        self.assertIn("[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
         self.assertIn("} catch (e) { /* no chat */ }", self.js)
@@ -132,6 +132,13 @@ class TheFolderAndTheScript(unittest.TestCase):
             self.assertIsNone(re.search(token, self.code), token)
         self.assertIn("'use strict';", self.js)
         self.assertNotRegex(self.code, r"\b(var|function)\s+(near|far)\b|\b(near|far)\s*=", "Windows has macros of these names")
+
+    def test_it_lets_the_players_list_listen_and_speak_through_its_socket_and_nothing_else_opens_one(self):
+        for part in ("tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },", "send: function (obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false;",
+                     "else if (m.t === 'who') tapped('who', m);", "tapped('live', m);", "tapped('lost');", "tapped('shown', !!on);",
+                     "function tell1(fn, kind, m) { try { fn(kind, m); } catch (e) { if (env.error) env.error(e); } }"):
+            self.assertIn(part, self.js, part)
+        self.assertEqual(self.code.count("new Socket("), 1, "one socket for the page, whoever speaks through it")
 
     def test_nothing_that_the_hub_says_becomes_markup_a_link_or_code(self):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")

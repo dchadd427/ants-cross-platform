@@ -104,7 +104,7 @@
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
         var tight = 0;                                                           // what Home leaves under its bar: 0 the room for the panel, 1 too little for the open panel (the strip shows), 2 too little for the strip (nothing shows)
-        var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who' or 'lost'; hello: the open socket's welcome
+        var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -411,7 +411,7 @@
             root: box, slot: slot, field: field, say: sendLine, state: function () { return state; },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: function (obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false; try { sock.send(JSON.stringify(obj)); return true; } catch (e) { lost(); return false; } },
-            shown: guard(function (on) { isHome = !!on; fit(); if (seen()) stale = true; render(); }), open: guard(setOpen)
+            shown: guard(function (on) { isHome = !!on; fit(); if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
         };
     }
 

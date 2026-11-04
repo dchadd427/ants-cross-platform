@@ -106,15 +106,15 @@
     }
 
     // ---- the list ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, win, host (Home's div), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), yard, bar, quickHost, now, error }) returns { root, state, model, open, sync }, or null
+    // mount({ doc, win, host (Home's div), yard, bar (the bar's right side), quickHost and games (the bar's buttons), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, state, model, open, sync }, or null
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, dock = env.dock, page = env.page || {};
         var Chat = win.AntsHomeChat, rules = win.AntsLobbyRules, Home = win.AntsHome;
         if (!dock || typeof dock.tap !== 'function' || !Chat || !rules || !doc.createElement) return null;
         var now = env.now || function () { return Date.now(); };
-        var yard = env.yard || (doc.getElementById && doc.getElementById('yard')) || host;
+        var yard = env.yard || host;
         var phase = 'none', supported = null, live = false, asked = false, you = null, model = fresh();      // phase: 'none' (nothing shows), 'off' (the hub is not there), 'on'
-        var open = false, opener = null, doing = null, sentSig = null, lastSent = 0, painted = '', joins = [], timers = { poll: 0, tell: 0, note: 0 };
+        var open = false, opener = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], timers = { poll: 0, note: 0 };
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -157,13 +157,12 @@
         var root = el('div', 'pl-root'); root.hidden = true;
         put(root, [panel, corner, scrim]);
         yard.appendChild(root);
-        var bar = env.bar || find('.hright');
         barBtn.hidden = true;
-        if (bar) bar.insertBefore(barBtn, bar.firstChild || null);
+        if (env.bar) env.bar.insertBefore(barBtn, env.bar.firstChild || null);
 
         // ---- what is drawn ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function ownCode() { var c = page.client ? page.client() : null; return c && c.code ? c.code : ''; }
-        function quick() { return env.quickHost || find('.quick.host'); }
+        function quick() { return env.quickHost; }
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
             var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label);
             li.setAttribute('data-s', row.at);
@@ -215,9 +214,9 @@
             }
             body.appendChild(status);
             if (empty) {
-                var n = el('div', 'pl-note'), mine2 = button('pl-host', TEXT.host, function () { var b = quick(); close2(false); if (b && !b.disabled) b.click(); });
-                mine2.disabled = !(q && !q.disabled);
-                list.appendChild(put(n, [el('p', '', TEXT.empty), el('p', 'small', TEXT.emptyNote), mine2]));
+                var n = el('div', 'pl-note'), hostBtn = button('pl-host', TEXT.host, function () { var b = quick(); hide(false); if (b && !b.disabled) b.click(); });
+                hostBtn.disabled = !(q && !q.disabled);
+                list.appendChild(put(n, [el('p', '', TEXT.empty), el('p', 'small', TEXT.emptyNote), hostBtn]));
             } else {
                 GROUPS.forEach(function (x) { if (shown[x[0]].length) list.appendChild(group(x[0], x[1], shown[x[0]], own)); });
                 if (model.more > 0) list.appendChild(el('p', 'pl-more', TEXT.and + model.more + TEXT.more));
@@ -231,12 +230,13 @@
         function paint() {
             var shown = phase !== 'none', on = phase === 'on';
             root.hidden = !shown; barBtn.hidden = !shown;
-            try { if (host.classList) { if (shown) host.classList.add('pl-on'); else host.classList.remove('pl-on'); } } catch (e) { /* the class is the style's */ }
+            try { if (host.classList) { if (shown) host.classList.add('pl-on'); else host.classList.remove('pl-on'); } } catch (e) { /* the style needs it */ }
             panel.setAttribute('data-state', on ? 'on' : 'off');
-            total.hidden = !on; dot.hidden = on; total.textContent = countText(model.n); total.setAttribute('aria-label', countText(model.n) + TEXT.here);
+            var counted = on && model.n > 1;                             // (just the visitor is no count)
+            total.hidden = !counted; dot.hidden = on; total.textContent = countText(model.n); total.setAttribute('aria-label', countText(model.n) + TEXT.here);
             [[cornerPill, corner], [barPill, barBtn]].forEach(function (p) {
-                p[0].hidden = !on; p[0].textContent = countText(model.n);
-                p[1].setAttribute('aria-label', on ? TEXT.title + ' (' + countText(model.n) + ')' : TEXT.title);
+                p[0].hidden = !counted; p[0].textContent = countText(model.n);
+                p[1].setAttribute('aria-label', counted ? TEXT.title + ' (' + countText(model.n) + ')' : TEXT.title);
             });
             if (shown) paintBody();
         }
@@ -255,7 +255,7 @@
             panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true');
             if (close.focus) close.focus();
         }
-        function close2(back) {                                          // back: the focus goes back to the button that opened it
+        function hide(back) {                                          // back: the focus goes back to the button that opened it
             if (!open) return;
             open = false;
             panel.setAttribute('data-sheet', 'false'); scrim.hidden = true;
@@ -271,27 +271,27 @@
         function press(code) {                                           // Join: the Games list's own button for that room does it (its questions, its notices); a list that is a popover is opened for it
             var sel = '.gjoin[data-code="' + code + '"]', b = find(sel), games;
             if (!b) {
-                games = find('.hchip.games');
+                games = env.games;
                 if (games && games.getAttribute('aria-haspopup') === 'dialog' && games.getAttribute('aria-expanded') !== 'true') { games.click(); b = find(sel); }
             }
-            close2(false);
+            hide(false);
             if (b) b.click(); else say(TEXT.gone);
         }
         function setFold(on) { panel.setAttribute('data-folded', on ? 'true' : 'false'); fold.setAttribute('aria-expanded', on ? 'false' : 'true'); fold.setAttribute('aria-label', on ? TEXT.unfold : TEXT.fold); }
         setFold(false);
         fold.addEventListener('click', guard(function () { setFold(panel.getAttribute('data-folded') !== 'true'); }));
-        close.addEventListener('click', guard(function () { close2(true); }));
-        scrim.addEventListener('click', guard(function () { close2(true); }));
+        close.addEventListener('click', guard(function () { hide(true); }));
+        scrim.addEventListener('click', guard(function () { hide(true); }));
         panel.addEventListener('keydown', guard(function (e) {
             if (!e) return;
-            if (e.key === 'Escape') { if (open) close2(true); else if (docked()) { setFold(true); if (fold.focus) fold.focus(); } return; }
+            if (e.key === 'Escape') { if (open) hide(true); else if (docked()) { setFold(true); if (fold.focus) fold.focus(); } return; }
             if (e.key !== 'Tab' || !open) return;                        // (a sheet is a dialog: the focus stays in it)
             var items = tabbable(), first = items[0], last = items[items.length - 1], active = doc.activeElement;
             if (e.shiftKey && active === first && last) { if (e.preventDefault) e.preventDefault(); last.focus(); }
             else if (!e.shiftKey && active === last && first) { if (e.preventDefault) e.preventDefault(); first.focus(); }
         }));
-        doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && open) close2(true); }));
-        win.addEventListener('resize', guard(function () { if (open && docked()) close2(false); }));
+        doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && open) hide(true); }));
+        win.addEventListener('resize', guard(function () { if (open && docked()) hide(false); }));
 
         // ---- what the page says, and what the hub says ----------------------------------------------------------------------------------------------------------------------------------------------
         function look() {
@@ -299,15 +299,15 @@
             return announceOf(client, client && Home && Home.countOf ? Home.countOf(info.model) : null, !!(page.handing && page.handing()));
         }
         function tell() {                                                // the hub is told what the page does, when it changed and not oftener than every 3 seconds
-            if (!live || !you) return;
-            var said = look(), sig = JSON.stringify(said), wait = lastSent + MS.tell - now();
+            if (!live || !supported || !you) return;
+            var said = look(), sig = JSON.stringify(said), wait = lastSent === null ? 0 : lastSent + MS.tell - now();
             if (sig === sentSig) return;
-            if (wait > 0) { if (!timers.tell) timers.tell = setTimeout(guard(function () { timers.tell = 0; tell(); }), wait); return; }
+            if (wait > 0) return;                                        // (the next look, a second later, says it when the 3 seconds are over)
             var frame = { t: 'here' };
             for (var k in said) frame[k] = said[k];
             if (dock.send(frame)) { sentSig = sig; lastSent = now(); }
         }
-        function ask() { if (live && !asked && dock.send({ t: 'who' })) asked = true; }
+        function ask() { if (live && supported && !asked && dock.send({ t: 'who' })) asked = true; }
         function sync() {                                                // once a second: the visitor's own row follows the page's room at once, the hub is told, the Host button follows Quick host
             doing = look();
             tell(); ask();
@@ -317,7 +317,7 @@
         dock.tap(guard(function (kind, m) {
             if (kind === 'live') {
                 var name = m && m.you && typeof m.you === 'object' && typeof m.you.name === 'string' ? Chat.clip(Chat.plain(m.you.name.slice(0, LIMIT.name * 4), true), LIMIT.name) : '';
-                supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = 0; stop('tell'); model = fresh();
+                supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh();
                 you = name ? { name: name, mod: m.you.mod === true } : null;
                 if (!supported) phase = 'none'; else { doing = look(); tell(); ask(); }
             } else if (kind === 'who') {
@@ -325,14 +325,15 @@
                 if (!next) return;
                 model = next; phase = 'on';
             } else if (kind === 'lost') {
-                live = false; asked = false; stop('tell'); model = fresh();
+                live = false; asked = false; model = fresh();
                 phase = supported === false ? 'none' : 'off';
-            } else return;
+            } else if (kind === 'shown') { if (!m) hide(false); return; }          // (the Room shows: a sheet that was open is closed)
+            else return;
             paint();
         }));
         doing = look();
         clock();
-        return { root: root, state: function () { return phase; }, model: function () { return model; }, open: function (on) { if (on) show(null); else close2(false); }, sheet: function () { return open; }, sync: guard(sync) };
+        return { root: root, state: function () { return phase; }, model: function () { return model; }, open: function (on) { if (on) show(null); else hide(false); }, sheet: function () { return open; }, sync: guard(sync) };
     }
 
     return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, WIDE: WIDE, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, seatsText: seatsText, announceOf: announceOf, possessive: possessive, mount: mount };

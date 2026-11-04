@@ -109,7 +109,7 @@
   {
    "id": "opening_card_has_other_words",
    "file": "web/home/home.js",
-   "old": "opening: 'Opening the game\u2026',",
+   "old": "opening: 'Opening the game…',",
    "new": "opening: 'Please wait',",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -466,7 +466,7 @@
   {
    "id": "inert_does_nothing",
    "file": "web/home/home.js",
-   "old": "[bar, rbar, dock && dock.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
+   "old": "[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
    "new": "[bar].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -935,8 +935,8 @@
   {
    "id": "hand_off_timer_missing",
    "file": "web/home/home.js",
-   "old": "            goingTimer = setTimeout(function () {                // it did not come yet:",
-   "new": "            goingTimer = setTimeout(function () { return;                // it did not come yet:",
+   "old": "            goingTimer = setTimeout(function () {                // not here yet:",
+   "new": "            goingTimer = setTimeout(function () { return;                // not here yet:",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

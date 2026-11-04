@@ -303,7 +303,7 @@
         function wantPlayers() {                            // the players list (players.js, players.css), after the dock: it uses its socket
             if (askedPlayers || !dock) return;
             askedPlayers = true;
-            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, dock: dock, page: page }); inert(held); });
+            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: yard, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); });
         }
 
         return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };

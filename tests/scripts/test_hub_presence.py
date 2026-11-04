@@ -141,6 +141,21 @@ class WorldTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# the limits (docs/HUB.md, "Limits")
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class TheLimits(unittest.TestCase):
+    def test_they_are_the_documented_ones(self):
+        limits = limitmod.Limits()
+        self.assertEqual((limits.who_rows_max, limits.who_seconds, limits.who_soon_seconds, limits.who_resend_seconds, limits.who_diff_max), (200, 2.0, 0.25, 10.0, 50))
+        self.assertEqual(presence.SEATS, 4)
+        self.assertEqual(presence.AT, ("look", "wait", "play"))
+
+    def test_a_frame_from_a_client_is_still_2_kb_so_what_a_page_says_is_never_big(self):
+        self.assertEqual(limitmod.Limits().frame_max, 2048)
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # the count
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -640,6 +655,15 @@ class OnTheWire(ths.RigTest):
         c = hc.Client(self.rig.port)
         self.clients.append(c)
         self.assertEqual(c.recv_json()["online"], 2)
+
+    def test_the_online_count_that_the_clock_sends_is_the_number_of_people_too(self):
+        self.login("1001:alice")
+        self.login("1001:alice")
+        guest = hc.Client(self.rig.port)
+        self.clients.append(guest)
+        guest.recv_json()
+        counts = [m["n"] for m in guest.drain(0.8) if m["t"] == "online"]
+        self.assertEqual(counts[-1:], [2], counts)
 
     def test_a_name_that_is_not_a_username_is_a_guest_not_a_row(self):
         c = hc.Client(self.rig.port, login="1001:Eve!")

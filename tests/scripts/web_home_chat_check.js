@@ -1116,5 +1116,55 @@ function bring(env) {                                     // the two files arriv
     check('chat.js never touches the cookie, a token or the address of Discord', !/document\.cookie|discord\.com|Authorization|access_token|\.href\b|location\.search|location\.hash/.test(chatSource.replace(/\/\/.*/g, '')));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. The players list speaks through this socket (web/home/players.js, docs/HOME_SCREEN.md "The players list"): tap(fn) hears the welcome, the list and the loss of the link, send(obj) writes a frame
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const r = rig({});
+    const heard = [];
+    const word = (m) => (m && typeof m === 'object' ? m.t : m);
+    r.dock.tap((kind, m) => heard.push([kind, word(m)]));
+    same('a piece that taps a dock whose socket is not open yet hears nothing', heard, []);
+    r.s().open().recv(W({ presence: true, you: YOU }));
+    same('the welcome is told, once, with the welcome itself', heard, [['live', 'welcome']]);
+    r.s().recv({ t: 'who', full: true, n: 1, g: 0, more: 0, rows: [] });
+    same('a frame of the list is told to it (and is not a line, not a mistake: the log stays as it was)', [heard.slice(1), r.rows().length, r.note()], [[['who', 'who']], 0, '']);
+    r.s().recv({ t: 'nonsense' });
+    same('a kind that nobody knows is not told to it', heard.length, 2);
+    r.dock.shown(false); r.dock.shown(true);
+    same('Home showing or not is told to it', heard.slice(2), [['shown', false], ['shown', true]]);
+    let late = [];
+    r.dock.tap((kind, m) => late.push([kind, word(m)]));
+    same('a piece that comes after the welcome is told it at once (the welcome that the socket has)', late, [['live', 'welcome']]);
+    r.s().fail();
+    same('a lost link is told to every piece', [heard.slice(-1), late.slice(-1)], [[['lost', undefined]], [['lost', undefined]]]);
+    late = [];
+    r.dock.tap((kind) => late.push(kind));
+    same('a piece that comes while the link is down is told that it is (no welcome is kept for a socket that is gone)', late, ['lost']);
+    r.clock.advance(60000);
+    r.live(W({ presence: true }));
+    check('a new socket tells the new welcome to all', heard.slice(-1)[0][0] === 'live' && late.slice(-1)[0] === 'live');
+}
+{
+    const r = rig({});
+    check('send says no before the socket has been welcomed and nothing is written', r.dock.send({ t: 'who' }) === false && r.s().sent.length === 0);
+    r.s().open();
+    check('... also when it is open and the welcome has not come', r.dock.send({ t: 'who' }) === false && r.s().sent.length === 0);
+    r.s().recv(W({ presence: true }));
+    check('welcomed: it writes the frame as JSON and says yes', r.dock.send({ t: 'here', at: 'look' }) === true && r.s().sent.pop() === '{"t":"here","at":"look"}');
+    const s = r.s();
+    s.readyState = 3;
+    check('a socket that is closing is no place to write', r.dock.send({ t: 'who' }) === false);
+    s.readyState = 1; s.send = () => { throw new Error('gone'); };
+    check('a socket that throws when written to: no, and the dock says that the link is lost (and tries again later)', r.dock.send({ t: 'who' }) === false && r.dock.state() === 'offline');
+    const t = rig({});
+    t.dock.tap(() => { throw new Error('a piece that breaks'); });
+    let after = 0; t.dock.tap(() => { after++; });
+    t.live();
+    check('a piece that throws does not stop the others, the dock or the page: the error is reported and the welcome still shows', t.errors.length === 1 && after === 1 && t.dock.state() === 'live' && t.on() === '7 here now');
+    t.s().recv({ t: 'who', full: true, n: 1, g: 0, more: 0, rows: [] });
+    check('... nor does it when the list comes', t.errors.length === 2 && after === 2 && t.dock.state() === 'live');
+}
+
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');
 process.exit(failures ? 1 : 0);
