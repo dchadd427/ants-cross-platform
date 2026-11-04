@@ -90,7 +90,7 @@
 
 /* ---- the Room's card: the switch (a leader), the chip (a guest), the line under them ---- */
 .vis { display: inline-flex; gap: 10px; margin: 0 auto 0 18px; align-self: center; }
-.vbtn { min-height: 44px; display: block; padding: 5px 14px 3px; font-size: 17px; }       /* (a block, not a baseline row: that hangs at the top) */
+.vbtn { min-height: 44px; display: block; padding: 5px 14px 3px; font-size: 17px; }
 .vbtn small { margin-left: 8px; font-size: 13px; opacity: .9; }
 .vbtn b { font-weight: 500; }
 .vbtn[aria-pressed="true"] { color: var(--gold); background-color: #0b1a17; box-shadow: inset 0 0 0 2px var(--frame-hi), 3px 4px 0 var(--shadow); cursor: default; }
@@ -105,6 +105,7 @@
     .vbtn { flex: 1 1 0; min-width: 0; padding: 5px 8px 3px; }
     .visnote { margin: 8px 0 0; }
 }
+@media (max-width: 359px) { .vbtn { padding: 5px 4px 3px; font-size: 4.7vw; } .vbtn small { margin-left: .47em; font-size: .765em; } }
 
 /* ---- a phone upright and a short window ---- */
 @media (max-width: 720px) { .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
