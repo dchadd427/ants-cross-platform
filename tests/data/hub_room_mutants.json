@@ -341,6 +341,13 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
   },
   {
+   "id": "admin_help_has_a_percent_sign_of_its_own",
+   "file": "hub/admin.py",
+   "old": "delete down to the hub's lower mark\" % MIN_KEEP_LINES)",
+   "new": "delete down to 80% of the limit\" % MIN_KEEP_LINES)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
    "id": "admin_status_has_a_wrong_percent",
    "file": "hub/admin.py",
    "old": "used.bytes * 100 // limit",

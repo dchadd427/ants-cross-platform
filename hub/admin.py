@@ -99,7 +99,7 @@ def run(argv, out=None, err=None, env=None):
     sub.add_parser("del", help="delete a chat line by its id").add_argument("line_id", type=int)
     sub.add_parser("status", help="how full the database is")
     p = sub.add_parser("purge", help="delete the oldest chat lines to free space")
-    p.add_argument("--keep-lines", type=int, default=None, help="keep the newest N lines only (%d or more); without it, delete down to 80%% of the limit" % MIN_KEEP_LINES)
+    p.add_argument("--keep-lines", type=int, default=None, help="keep the newest N lines only (%d or more); without it, delete down to the hub's lower mark" % MIN_KEEP_LINES)
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:

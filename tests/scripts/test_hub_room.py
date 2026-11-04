@@ -23,6 +23,7 @@ these tests must notice are tests/data/hub_room_mutants.json (`python3 tools/mut
   TheDocumentsSayWhatTheCodeDoes  docs/HUB.md and the page's word agree with the numbers of hub/limits.py.
 """
 import collections
+import contextlib
 import dataclasses
 import io
 import json
@@ -700,6 +701,17 @@ class TheStaffTool(unittest.TestCase):
         self.assertEqual([r[4] for r in rows[:5]], ["newest 4", "newest 3", "newest 2", "newest 1", "newest 0"])
         self.assertNotIn("a moderator", [r[4] for r in rows])                          # (the newest 200 only, whoever said them)
         self.assertEqual(self.run_admin("purge", "--keep-lines", "200")[::2], (1, "hub.admin: nothing to purge\n"))
+
+    def test_the_help_of_every_command_can_be_printed_on_any_python(self):
+        # (a "%" in a help string is a format of argparse's own: Python 3.14 and later look at it when the parser is made, the older ones when the help is printed)
+        for argv in (["--help"], ["list", "--help"], ["mute", "--help"], ["status", "--help"], ["purge", "--help"]):
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                status = admin.run(["--db", self.db] + argv, io.StringIO(), io.StringIO())
+            self.assertEqual(status, 0, argv)
+            self.assertIn("usage: ", printed.getvalue(), argv)
+        self.assertIn("100 or more", printed.getvalue())
+        self.assertNotIn("%", printed.getvalue())
 
     def test_purge_never_takes_what_a_screen_may_show(self):
         fill(self.store, 500)
