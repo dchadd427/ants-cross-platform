@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+exit 1   # probe: the first job fails
 # Decides whether a pull request needs all of CI or only the light checks (the first job of .github/workflows/ci.yml, `changes`). Tested by tests/scripts/test_ci_light.py.
 #
 #   EVENT=pull_request BASE_SHA=<commit> HEAD_SHA=<commit> tools/ci_light.sh
