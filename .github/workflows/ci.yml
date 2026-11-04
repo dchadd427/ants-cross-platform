@@ -17,9 +17,14 @@ jobs:
   linux:
     name: Linux (GCC)
     needs: linux_leg
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo ok
+      - env:
+          RESULT: ${{ needs.linux_leg.result }}
+        run: |
+          echo "leg: $RESULT"
+          [ "$RESULT" = success ]
 
   macos:
     name: macOS (Apple clang)
