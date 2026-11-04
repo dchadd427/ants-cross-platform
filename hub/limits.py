@@ -107,7 +107,7 @@ class AccountLimits:
     def budget(self, account, now):
         budget = self.budgets.get(account)
         if budget is None:
-            hour, day = self.limits.account_hour_lines, self.limits.account_day_lines
+            hour, day = max(1, self.limits.account_hour_lines), max(1, self.limits.account_day_lines)
             budget = self.budgets[account] = [TokenBucket(hour, 3600.0 / hour, now), TokenBucket(day, 86400.0 / day, now)]
         return budget
 

@@ -303,6 +303,16 @@ class TheRoomInTheFile(StoreTest):
         reader.execute("COMMIT")
         reader.close()
 
+    def test_a_store_that_is_at_the_size_it_is_asked_for_is_not_touched(self):
+        fill(self.store, 300)
+        log_file = os.path.getsize(self.path + "-wal")
+        self.assertGreater(log_file, 0)
+        self.assertEqual(self.store.make_room(self.store.size(), 100, 10), 0)
+        self.assertEqual(os.path.getsize(self.path + "-wal"), log_file)               # (nothing to do: the log file is not cut either)
+        self.assertEqual(self.store.make_room(self.store.size() - 1, 100, 10), 0)       # (a byte over, and it is the log file's: the file is cut, and no line goes)
+        self.assertEqual(os.path.getsize(self.path + "-wal"), 0)
+        self.assertEqual(self.store.usage().lines, 300)
+
     def test_a_store_with_no_lines_or_with_the_newest_ones_only_does_nothing_and_takes_no_lock(self):
         blocker = sqlite3.connect(self.path, isolation_level=None)
         blocker.execute("BEGIN IMMEDIATE")
@@ -825,7 +835,7 @@ class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
         self.assertEqual((d.account_hour_lines, d.account_day_lines, d.prune_from_percent, d.prune_to_percent, d.keep_lines, d.purge_chunk, d.db_max_bytes),
                          (200, 1000, 90, 80, 1000, 2000, 64 * 1024 * 1024))
         self.assertEqual((d.prune_from_bytes, d.prune_to_bytes), (64 * 1024 * 1024 * 9 // 10, 64 * 1024 * 1024 * 8 // 10))
-        for needle in ("a budget of 200 lines for the hour and 1,000 for the day", "one line every 18 seconds, one every 86.4", "answered `quota`", "From 90% of 64 MB", "down to 80%",
+        for needle in ("a budget of 200 lines for the hour and 1,000 for the day", "one line every 18 seconds, one every 86.4", "answered `quota`", "The budgets are kept in memory", "From 90% of 64 MB", "down to 80%",
                        "2,000 lines a second", "the newest 1,000 never", "`quota` (the account has said the lines of its hour or of its day)", "and a `quota`, are not the client's doing",
                        "python -m hub.admin status", "python -m hub.admin purge [--keep-lines N]", "`--keep-lines N` (100 or more", "\"nothing to purge\"", "database_full_and_no_line_to_delete",
                        "tests/scripts/test_hub_room.py", "tests/data/hub_room_mutants.json"):
