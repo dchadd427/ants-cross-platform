@@ -1,0 +1,112 @@
+/* The players list of Home (web/home/players.js, docs/HOME_SCREEN.md, "The players list"), loaded after the first paint. The colors, .btn, .pill and the frame are the page's own (web/lobby.html, home.css). Nothing here
+   changes Home until the list is there (players.js puts the class pl-on on Home's div). A wide window: a panel at the right of the Yard. A phone upright: a button in the bar's first row and a sheet over the page.
+   Any other window: a button in the Yard's corner and a drawer at the right. Every target is at least 44 px. */
+.pl, .pl * { box-sizing: border-box; }
+.pl-root { display: contents; }
+.pl-root[hidden], .pl-bar[hidden], .pl-btn[hidden], .pl-scrim[hidden], .pill[hidden], .pl-dot[hidden], .pl-status:empty { display: none; }
+
+/* ---- the panel: as a drawer (a window that is not wide), docked at the right on a wide one ---- */
+.pl { position: fixed; z-index: 70; top: 10px; right: 10px; display: none; flex-direction: column; width: min(320px, calc(100vw - 20px)); max-height: calc(100% - 20px); color: var(--cream); background: var(--inset);
+    border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+.pl[data-sheet="true"] { display: flex; }
+.pl[data-folded="true"] .pl-body { display: none; }
+.pl-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 4px 10px 4px 16px; }
+.pl-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
+.pl-count { flex: none; }
+.pl-dot { flex: none; width: 11px; height: 11px; border-radius: 50%; background: #7f9c92; box-shadow: 0 0 0 1px #000; }
+.pl[data-state="off"] .pl-title { color: #c9dcd4; }
+.pl-fold { flex: none; min-width: 46px; min-height: 46px; padding: 0; }
+.pl-mark { display: block; width: 18px; height: 3px; background: var(--cream); border-radius: 1px; }
+.pl[data-folded="true"] .pl-mark { width: 12px; height: 12px; margin-top: -4px; background: none; border: solid var(--cream); border-width: 0 3px 3px 0; border-radius: 0; transform: rotate(45deg); }
+.pl-x { position: relative; display: block; width: 20px; height: 20px; }
+.pl-x::before, .pl-x::after { content: ""; position: absolute; left: 0; top: 8px; width: 20px; height: 3px; background: var(--cream); border-radius: 1px; transform: rotate(45deg); }
+.pl-x::after { transform: rotate(-45deg); }
+.pl-fold:not(.pl-close) { display: none; }
+.pl-scrim { position: fixed; inset: 0; z-index: 69; background: rgba(5, 10, 8, .62); }
+
+.pl-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0 12px 12px; }
+.pl-div { flex: none; height: 0; margin: 10px 2px 4px; border: 0; border-top: 2px solid #1d3a31; }
+.pl-status { flex: none; margin: 4px 4px 0; font-size: 14px; line-height: 1.3; color: #f2c48c; }
+.pl-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px 4px; scrollbar-width: thin; scrollbar-color: #2b6b4f #0a1016; }
+.pl-group { margin: 0; padding: 0; }
+.pl-gh { display: flex; align-items: center; gap: 8px; margin: 9px 0 5px; font-size: 14px; font-weight: 500; line-height: 20px; letter-spacing: .09em; text-transform: uppercase; color: #a8cfc0; }
+.pl-group:first-child .pl-gh { margin-top: 6px; }
+.pl-gd { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #44e08a; box-shadow: 0 0 0 1px #000; }
+.pl-group[data-g="mod"] .pl-gh { color: var(--gold); }
+.pl-group[data-g="mod"] .pl-gd { background: var(--gold); border-radius: 2px; }
+.pl-group[data-g="wait"] .pl-gd { background: var(--gold); }
+.pl-group[data-g="play"] .pl-gd { background: #ff8a52; }
+.pl-gn { margin-left: auto; min-width: 22px; padding: 0 7px; font-size: 13px; line-height: 18px; text-align: center; letter-spacing: 0; color: var(--cream); background: #0b1a17; border: 1px solid #1f5a49; border-radius: 11px; }
+.pl-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pl-card { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 5px 6px 5px 8px; background: #0a1016; border: 1px solid #17382f; border-radius: 6px; }
+.pl-card.has-sub { min-height: 48px; }
+.pl-av { flex: none; position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; font-size: 17px; line-height: 1; color: var(--gold); background: #0b1a17; border: 2px solid #1c4a3b; border-radius: 50%; }
+.pl-av::after { content: ""; position: absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; background: #44e08a; box-shadow: 0 0 0 2px #0a1016; }
+.pl-card[data-s="wait"] .pl-av::after { background: var(--gold); }
+.pl-card[data-s="play"] .pl-av::after { background: #ff8a52; }
+.pl-who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.pl-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 1.25; color: #9fe0b8; }
+.pl-meta { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.25; color: #a8cfc0; }
+.pl-badge, .pl-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.pl-tag { margin: 0 0 0 6px; padding: 0 6px; }
+.pl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pl-join { flex: none; min-height: 44px; min-width: 60px; padding: 6px 12px; font-size: 15px; }
+.pl-you { flex: none; }
+.pl-you .pl-card { min-height: 50px; background: #0b1a17; border: 2px solid var(--gold); box-shadow: 2px 3px 0 var(--shadow); }
+.pl-you .pl-name { color: var(--cream); }
+.pl-guests { flex: none; display: flex; align-items: center; gap: 10px; min-height: 46px; margin-top: 8px; padding: 10px 8px 0; font-size: 16px; color: #a8cfc0; border-top: 2px solid #1d3a31; }
+.pl-gav { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; color: #7f9c92; border: 2px dashed #3a6a5a; border-radius: 50%; }
+.pl-gsub { display: block; font-size: 13px; color: #7f9c92; }
+.pl-guests.in-list { display: none; margin-top: 6px; padding-top: 0; border-top: 0; }
+.pl-more { margin: 10px 4px 0; font-size: 14px; color: #a8cfc0; }
+.pl-note { margin: 18px 6px 0; text-align: center; }
+.pl-note p { margin: 0 0 12px; font-size: 17px; line-height: 1.35; color: var(--cream); }
+.pl-note p.small { font-size: 14px; color: #a8cfc0; }
+.pl-host { min-height: 48px; }
+
+/* ---- the buttons that open it where it does not fit ---- */
+.pl-btn { position: absolute; z-index: 6; top: 10px; right: 10px; min-height: 46px; padding: 6px 16px; font-size: 16px; }
+.pl-bar { display: none; min-height: 46px; padding: 6px 14px; font-size: 16px; }
+.pl-ppl { flex: none; display: inline-block; width: 18px; height: 18px; background: var(--cream); -webkit-mask: var(--ppl) no-repeat center / contain; mask: var(--ppl) no-repeat center / contain; }
+:root { --ppl: url("data:image/svg+xml,%3Csvg xmlns='http:%2F%2Fwww.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Ccircle cx='6.5' cy='5.5' r='3'/%3E%3Cpath d='M1 15c0-3.3 2.4-5.4 5.5-5.4S12 11.7 12 15z'/%3E%3Ccircle cx='13' cy='6.5' r='2.3'/%3E%3Cpath d='M13 10c2.6 0 4.5 1.8 4.5 5H13.6c0-2-.5-3.6-1.4-4.6.2 0 .5-.4.8-.4z'/%3E%3C/svg%3E"); }
+.pl-btn .pill, .pl-bar .pill { margin-left: 2px; }
+
+/* ---- a wide window: the panel is docked at the right of the Yard; the Games list (docked in the Yard of the live site) keeps clear of it ---- */
+@media (min-width: 1180px) and (min-height: 501px) {
+    .pl { position: absolute; z-index: 6; display: flex; top: 14px; right: 14px; width: 260px; max-height: calc(100% - 26px); }
+    .pl-fold:not(.pl-close) { display: inline-flex; } .pl-close, .pl-btn, .pl-bar, .pl-scrim { display: none; }
+    .pl-on .gdock { right: 288px; width: min(560px, calc(100% - 716px)); }
+}
+@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; } .pl-on .gdock { right: 308px; width: min(560px, calc(100% - 736px)); } }
+
+/* ---- a phone upright, or any window under 640 px: the button is in the bar's first row (its picture goes first, then its word), the panel is a sheet over the bottom of the page ---- */
+@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {
+    .pl-btn { display: none; }
+    .pl-bar { display: inline-flex; padding: 6px 12px; }
+    .pl-on .hbar .hbrand { grid-column: 1; grid-row: 1; }
+    .pl-on .hbar .hright { grid-column: 1 / -1; min-width: 0; max-width: calc(100% - 102px); }
+    .pl { top: auto; left: 10px; right: 10px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: calc(100vh - 76px - env(safe-area-inset-bottom, 0px)); max-height: calc(100dvh - 76px - env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 410px) { .pl-bar .pl-ppl { display: none; } }
+@media (max-width: 369px) { .pl-bar { padding: 6px 10px; } .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }
+@media (max-width: 340px) { .pl-on .hbar .hlogo { width: 76px; } .pl-on .hbar .hright { max-width: calc(100% - 86px); } }
+
+/* ---- a window that is not wide and not a phone upright: the button is in the Yard's corner and the Games list moves out of its way, under it ---- */
+@media (min-width: 721px) and (max-width: 1179px) and (min-height: 501px), (min-width: 640px) and (max-width: 720px) and (orientation: landscape) and (min-height: 501px) {
+    .pl-btn { top: 14px; right: 14px; }
+    .pl-on .gdock { top: 68px; max-height: calc(100% - 80px); }
+}
+@media (min-width: 721px) and (max-width: 760px) and (min-height: 501px) { .pl-on .gdock { max-height: calc(100% - 484px); } }
+@media (min-width: 640px) and (max-width: 720px) and (orientation: landscape) and (min-height: 501px) { .pl-on .gdock { max-height: calc(100% - 150px); } }
+
+/* ---- a phone held sideways (a short window): the button is in the Yard's corner, the Games list is narrower by it, the panel is a drawer that is 320 px wide ---- */
+@media (max-height: 500px) and (orientation: landscape) {
+    .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; }
+    .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; }
+    .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; }
+    .pl-btn { display: inline-flex; top: 10px; right: 10px; } .pl-bar { display: none; }
+    .pl { top: 10px; left: auto; right: 10px; bottom: auto; width: min(320px, calc(100vw - 20px)); max-height: calc(100% - 20px); }
+    .pl-on .gdock { right: 186px; }
+}
+@media (max-height: 500px) and (orientation: landscape) and (max-width: 639px) { .pl-btn .pl-word { display: none; } .pl-btn { padding: 6px 12px; } .pl-on .gdock { right: 116px; } }
+@media (max-height: 500px) and (orientation: landscape) and (max-width: 479px) { .pl-on .gdock { right: 8px; top: 64px; max-height: calc(100% - 146px); } }
