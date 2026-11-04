@@ -460,9 +460,117 @@
         return Math.max(1, Math.round(n / 1024)) + ' KB';
     }
 
+    // ---- the hand-off from the page that took the file to the player ----
+    // The Matches page cannot give a file to another page by an address (2 MB), and sends it nowhere, so it leaves it in the browser's own storage (IndexedDB) under a new random id and goes to
+    // play.html?local=<id>; the player reads it from there. ONE record at most: a second file takes the place of the first. The record stays after it was read (a reload of the player must still
+    // work) and is thrown away when it is older than a day (every page that opens it looks first: purge). A record that is not there (an old link, another tab took the place, the browser's data was
+    // cleared) is a card with a way to choose the file again, never a game that starts on something else. Every call can fail (a browser that keeps no site data has no IndexedDB, or refuses it,
+    // or the file does not fit): a failed call rejects and the page says so.
+    var OWN_DB = 'ants-own-replay', OWN_STORE = 'slot', OWN_KEY = 'file';
+    var OWN_ID_RE = /^[0-9a-f]{32}$/;
+    var OWN_KEEP_MS = 24 * 60 * 60 * 1000;                               // a record is kept about a day
+    var OWN_SKEW_MS = 60 * 1000;                                         // ... and a clock that was put back by up to a minute since it was written does not lose it
+
+    // The record that an address asks for (?local=<id>): the id when it has the shape that the page makes (32 hex digits), else null
+    function ownIdOf(search) {
+        var q;
+        try { q = new URLSearchParams(search); } catch (e) { return null; }
+        var id = q.get('local');
+        return typeof id === 'string' && OWN_ID_RE.test(id) ? id : null;
+    }
+    function ownFresh(rec, now) {
+        var age = now - rec.at;
+        return typeof rec.at === 'number' && age >= -OWN_SKEW_MS && age < OWN_KEEP_MS;
+    }
+    function ownRecord(rec) {
+        return !!rec && typeof rec === 'object' && typeof rec.id === 'string' && OWN_ID_RE.test(rec.id) && typeof rec.name === 'string' && !!rec.bytes && typeof rec.bytes.length === 'number';
+    }
+    // A new id: 32 hex digits from the browser's random source (an id is a name that makes an old link find nothing, not a secret: only pages of this site can read the storage)
+    function ownRandomId(win) {
+        var bytes = new Uint8Array(16), hex = '', crypto = win && (win.crypto || win.msCrypto);
+        if (crypto && typeof crypto.getRandomValues === 'function') crypto.getRandomValues(bytes);
+        else for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+        for (var j = 0; j < 16; j++) hex += (bytes[j] < 16 ? '0' : '') + bytes[j].toString(16);
+        return hex;
+    }
+    // `env`: indexedDB (or nothing), now() (ms since 1970) and random() (a new id). Returns { put(name, bytes) -> id, read(id) -> the record or null, purge() -> true / false } (promises).
+    function ownStore(env) {
+        var opened = null;
+        function open() {
+            if (opened) return opened;
+            opened = new Promise(function (resolve, reject) {
+                var request;
+                try { request = env.indexedDB.open(OWN_DB, 1); } catch (e) { reject(e); return; }
+                request.onupgradeneeded = function () { try { request.result.createObjectStore(OWN_STORE); } catch (e) { /* made already */ } };
+                request.onsuccess = function () { resolve(request.result); };
+                request.onerror = function () { reject(request.error || new Error('the storage did not open')); };
+                request.onblocked = function () { reject(new Error('the storage is blocked')); };
+            });
+            opened.then(null, function () { opened = null; });                       // (a failed opening is tried again by the next call)
+            return opened;
+        }
+        // one transaction: `work(store)` makes the request that is wanted; the answer is its result once the transaction has completed
+        function run(mode, work) {
+            return open().then(function (db) {
+                return new Promise(function (resolve, reject) {
+                    var tx, request;
+                    try { tx = db.transaction(OWN_STORE, mode); request = work(tx.objectStore(OWN_STORE)); } catch (e) { reject(e); return; }
+                    tx.oncomplete = function () { resolve(request ? request.result : undefined); };
+                    tx.onerror = tx.onabort = function () { reject(tx.error || new Error('the storage refused')); };
+                });
+            });
+        }
+        return {
+            put: function (name, bytes) {
+                var rec = { id: env.random(), name: name, at: env.now(), bytes: bytes };
+                return run('readwrite', function (store) { return store.put(rec, OWN_KEY); }).then(function () { return rec.id; });
+            },
+            read: function (id) {
+                if (typeof id !== 'string' || !OWN_ID_RE.test(id)) return Promise.resolve(null);
+                return run('readonly', function (store) { return store.get(OWN_KEY); }).then(function (rec) { return ownRecord(rec) && rec.id === id && ownFresh(rec, env.now()) ? rec : null; });
+            },
+            purge: function () {
+                return run('readwrite', function (store) {
+                    var got = store.get(OWN_KEY);
+                    got.onsuccess = function () { var rec = got.result; if (rec !== undefined && !(ownRecord(rec) && ownFresh(rec, env.now()))) store.delete(OWN_KEY); };
+                    return got;
+                }).then(function () { return true; }, function () { return false; });
+            }
+        };
+    }
+    // The store of a page (its IndexedDB, its clock, its random source)
+    function ownStoreOf(win) { return ownStore({ indexedDB: win.indexedDB, now: function () { return Date.now(); }, random: function () { return ownRandomId(win); } }); }
+
+    // The bytes of a File (or Blob): its own arrayBuffer() where there is one, else a FileReader
+    function ownBytes(env, file) {
+        return new Promise(function (resolve, reject) {
+            if (typeof file.arrayBuffer === 'function') { file.arrayBuffer().then(function (buffer) { resolve(new Uint8Array(buffer)); }, reject); return; }
+            var reader = new env.FileReader();
+            reader.onload = function () { resolve(new Uint8Array(reader.result)); };
+            reader.onerror = function () { reject(reader.error || new Error('the file could not be read')); };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    // A file that the visitor chose or dropped, taken over: the size is asked from the File before a byte is read, the bytes are checked (localCheck), and only a file that passes is kept for the player.
+    // env: store (ownStore) and FileReader (when a File has no arrayBuffer()). Answers { ok: true, id, name, size } or { ok: false, kind, name, size } with kind 'big' (more than a replay can be),
+    // 'bad' (no replay of ours, empty or unreadable) or 'nostore' (the browser would not keep it for the player); `name` is the file's name as text (ownName). A file that fails leaves the record that
+    // was there as it was.
+    function ownOpen(env, file) {
+        var name = ownName(file && file.name), size = file && typeof file.size === 'number' ? file.size : 0;
+        function no(kind) { return { ok: false, kind: kind, name: name, size: size }; }
+        if (!file) return Promise.resolve(no('bad'));
+        if (!localSizeOk(size)) return Promise.resolve(no(size > LOCAL_MAX_BYTES ? 'big' : 'bad'));
+        return ownBytes(env, file).then(function (bytes) {
+            var verdict = localCheck(bytes);
+            if (!verdict.ok) return no(verdict.kind);
+            return env.store.put(name, bytes).then(function (id) { return { ok: true, id: id, name: name, size: size }; }, function () { return no('nostore'); });
+        }, function () { return no('bad'); });
+    }
+
     var api = { barPointer: barPointer, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
-                LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText };
+                LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
+                OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen };
     if (typeof module === 'object' && module && module.exports) module.exports = api;
     else root.AntsReplay = api;
 })(typeof window !== 'undefined' ? window : this);

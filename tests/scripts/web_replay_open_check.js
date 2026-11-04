@@ -151,5 +151,264 @@ for (const [n, want] of [[0, '1 KB'], [100, '1 KB'], [1024, '1 KB'], [3180, '3 K
     same('the size of ' + n, R.sizeText(n), want);
 }
 
-console.log('web_replay_open_check: ' + checks + ' checks, ' + failures + ' failures');
-process.exit(failures ? 1 : 0);
+
+// ---- the browser's storage, as far as the hand-off uses it: a fake IndexedDB that keeps what a real one keeps (a copy of the value, one key, requests that answer later, a transaction that completes
+// when its requests are done) and can fail the way a real one does (a refused open, an open that is blocked, a write that is aborted for want of room, a read that fails)
+function fakeIndexedDB(o) {
+    o = o || {};
+    const dbs = {};
+    const api = { opens: 0, writes: 0, deletes: 0, dbs };
+    api.open = (name, version) => {
+        api.opens++;
+        if (o.throwOnOpen) throw new Error('SecurityError');
+        const request = { result: null, error: null };
+        setTimeout(() => {
+            if (o.errorOnOpen) { request.error = new Error('open failed'); if (request.onerror) request.onerror(); return; }
+            if (o.blockedOnOpen) { if (request.onblocked) request.onblocked(); return; }
+            let d = dbs[name];
+            const fresh = !d;
+            if (fresh) d = dbs[name] = { stores: {}, version };
+            request.result = {
+                createObjectStore(store) { d.stores[store] = new Map(); return {}; },
+                transaction(store, mode) {
+                    const tx = { error: null, pending: 0, finished: false };
+                    const finish = () => setTimeout(() => { if (tx.pending === 0 && !tx.finished) { tx.finished = true; if (tx.oncomplete) tx.oncomplete(); } }, 0);
+                    const map = d.stores[store];
+                    if (!map) throw new Error('NotFoundError');
+                    const op = (fn, writes) => {
+                        const r = { result: undefined };
+                        tx.pending++;
+                        setTimeout(() => {
+                            if (writes && mode !== 'readwrite') throw new Error('ReadOnlyError');
+                            if ((writes && o.abortWrites) || (!writes && o.failReads)) {
+                                tx.finished = true; tx.error = new Error(writes ? o.abortWrites : 'read failed');
+                                if (tx.onabort) tx.onabort();
+                                return;
+                            }
+                            r.result = fn();
+                            if (r.onsuccess) r.onsuccess();
+                            tx.pending--;
+                            finish();
+                        }, 0);
+                        return r;
+                    };
+                    tx.objectStore = () => ({
+                        put: (value, key) => op(() => { api.writes++; map.set(key, structuredClone(value)); return key; }, true),
+                        get: (key) => op(() => (map.has(key) ? structuredClone(map.get(key)) : undefined), false),
+                        delete: (key) => op(() => { api.deletes++; map.delete(key); return undefined; }, true),
+                    });
+                    return tx;
+                },
+            };
+            if (fresh && request.onupgradeneeded) request.onupgradeneeded();
+            if (request.onsuccess) request.onsuccess();
+        }, 0);
+        return request;
+    };
+    api.slot = () => { const d = dbs['ants-own-replay']; return d && d.stores.slot ? d.stores.slot.get('file') : undefined; };
+    api.put = (rec) => { dbs['ants-own-replay'] = dbs['ants-own-replay'] || { stores: { slot: new Map() } }; dbs['ants-own-replay'].stores.slot.set('file', rec); };
+    return api;
+}
+function fakeFile(bytes, name, o) {
+    o = o || {};
+    const f = { name, size: o.size !== undefined ? o.size : bytes.length, reads: 0 };
+    f.arrayBuffer = () => { f.reads++; return o.failRead ? Promise.reject(new Error('read failed')) : Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)); };
+    return f;
+}
+const hex32 = (n) => n.toString(16).padStart(32, '0');
+function world(o) {
+    const w = { t: 1790000000000, n: 0 };
+    w.idb = fakeIndexedDB(o);
+    w.store = R.ownStore({ indexedDB: w.idb, now: () => w.t, random: () => hex32(++w.n) });
+    w.env = { store: w.store, FileReader: undefined };
+    return w;
+}
+const DAY = 24 * 60 * 60 * 1000;
+const sameBytes = (a, b) => a && b && a.length === b.length && a.every((x, i) => x === b[i]);
+
+async function main() {
+    // ---- an address asks for a record
+    const ID = '0123456789abcdef0123456789abcdef';
+    same('a record id', R.ownIdOf('?local=' + ID), ID);
+    same('a record id among other parameters', R.ownIdOf('?aspect=16:9&local=' + ID + '&x=1'), ID);
+    for (const bad of ['', '?', '?local=', '?local=x', '?local=' + ID.toUpperCase(), '?local=' + ID + '0', '?local=' + ID.slice(1), '?local=../' + ID, '?local=' + ID + '%0a', '?local=' + ID + '/', '?replay=' + ID, '?LOCAL=' + ID,
+                       '?local=0123456789abcdef0123456789abcdeg', '?local=%30123456789abcdef0123456789abcdef0']) {
+        same('refused ' + JSON.stringify(bad), R.ownIdOf(bad), null);
+    }
+    same('the first of two ids wins', R.ownIdOf('?local=' + ID + '&local=' + ID.replace(/0/g, '1')), ID);
+    same('no string for an id', R.ownIdOf(undefined), null);
+    {
+        const ids = new Set();
+        for (let i = 0; i < 50; i++) ids.add(R.ownRandomId({ crypto: { getRandomValues: (a) => { for (let k = 0; k < a.length; k++) a[k] = Math.floor(Math.random() * 256); return a; } } }));
+        check('a new id is 32 hex digits and they differ', [...ids].every((x) => /^[0-9a-f]{32}$/.test(x)) && ids.size === 50);
+        same('without a random source of the browser an id is still one (small bytes keep their leading 0)', /^[0-9a-f]{32}$/.test(R.ownRandomId({})), true);
+        same('the browser\'s source fills all 16 bytes', R.ownRandomId({ crypto: { getRandomValues: (a) => { a.fill(1); return a; } } }), '01'.repeat(16));
+    }
+
+    // ---- put and read: one record, the bytes as they were, an id that an old link does not find
+    {
+        const w = world();
+        const id = await w.store.put('a.antsrep', FIXTURE);
+        check('put gives the new id', /^[0-9a-f]{32}$/.test(id), id);
+        const rec = await w.store.read(id);
+        check('the record is read back: the same bytes, the same name', !!rec && sameBytes(rec.bytes, FIXTURE) && rec.name === 'a.antsrep' && rec.id === id, JSON.stringify(rec && rec.name));
+        check('what is read is a copy: the bytes the page passed are not the stored ones', rec.bytes !== FIXTURE);
+        const again = await w.store.read(id);
+        check('reading again works (a reload of the player must work: the record stays)', !!again && again.id === id);
+        same('another id finds nothing', await w.store.read(hex32(999)), null);
+        same('an id that is no id finds nothing and asks nothing of the storage', [await w.store.read('x'), await w.store.read(undefined), await w.store.read(ID.toUpperCase())], [null, null, null]);
+        const second = await w.store.put('b.antsrep', FIXTURE.slice(0, 200));
+        same('ONE record: the second file took the place of the first', [await w.store.read(id), (await w.store.read(second)).name], [null, 'b.antsrep']);
+        same('... and the storage holds one record', w.idb.dbs['ants-own-replay'].stores.slot.size, 1);
+    }
+
+    // ---- a record is kept about a day, and every page that opens looks for old ones
+    {
+        const w = world();
+        const id = await w.store.put('a.antsrep', FIXTURE);
+        w.t += DAY - 1;
+        check('a record of 23 h 59 min 59.999 s is still read', !!(await w.store.read(id)));
+        same('... and a purge then keeps it', [await w.store.purge(), !!w.idb.slot()], [true, true]);
+        w.t += 1;
+        same('a record of a whole day is not read', await w.store.read(id), null);
+        same('a purge takes the record of a whole day away', [await w.store.purge(), w.idb.slot()], [true, undefined]);
+        same('a purge of an empty storage is fine', await w.store.purge(), true);
+    }
+    {
+        const w = world();
+        const id = await w.store.put('a.antsrep', FIXTURE);
+        w.t += 30 * DAY;
+        const before = w.idb.deletes;
+        same('a record of a month is gone after the purge (it is not kept for ever)', [await w.store.purge(), w.idb.slot(), w.idb.deletes - before], [true, undefined, 1]);
+        same('and is not read in the meantime either', await w.store.read(id), null);
+    }
+    {
+        const w = world();
+        const id = await w.store.put('a.antsrep', FIXTURE);
+        w.t -= 30000;
+        check('a clock that was put back by 30 s does not lose the record', !!(await w.store.read(id)) && (await w.store.purge()) && !!w.idb.slot());
+        w.t -= DAY;
+        same('one that was put back by a day does: a record "from the future" is not kept for ever', [await w.store.read(id), await w.store.purge(), w.idb.slot()], [null, true, undefined]);
+    }
+    {
+        const w = world();
+        w.idb.put({ id: ID, name: 'x', at: 'yesterday', bytes: FIXTURE });
+        same('a record with no time is old', [await w.store.read(ID), await w.store.purge(), w.idb.slot()], [null, true, undefined]);
+        w.idb.put('junk');
+        same('a record that is not a record is thrown away and not read', [await w.store.read(ID), await w.store.purge(), w.idb.slot()], [null, true, undefined]);
+        w.idb.put({ id: ID, name: 7, at: w.t, bytes: FIXTURE });
+        same('a record with a name that is no text is not one', await w.store.read(ID), null);
+        w.idb.put({ id: ID, name: 'x', at: w.t });
+        same('a record with no bytes is not one', await w.store.read(ID), null);
+    }
+
+    // ---- a storage that fails: the calls reject (the page then says so), a purge never does
+    for (const [label, o] of [['an IndexedDB that throws when it is opened (a browser that blocks site data)', { throwOnOpen: true }], ['one that answers with an error', { errorOnOpen: true }], ['one that is blocked', { blockedOnOpen: true }]]) {
+        const w = world(o);
+        let put = 'resolved', read = 'resolved';
+        await w.store.put('a', FIXTURE).then(() => {}, () => { put = 'rejected'; });
+        await w.store.read(ID).then(() => {}, () => { read = 'rejected'; });
+        same(label + ': put rejects, read rejects', [put, read], ['rejected', 'rejected']);
+        same(label + ': a purge says no and does not reject', await w.store.purge(), false);
+    }
+    {
+        const w = world({ abortWrites: 'QuotaExceededError' });
+        let put = 'resolved';
+        await w.store.put('a', FIXTURE).then(() => {}, () => { put = 'rejected'; });
+        same('a write that is aborted for want of room rejects, and nothing is kept', [put, w.idb.slot()], ['rejected', undefined]);
+    }
+    {
+        const w = world({ failReads: true });
+        let read = 'resolved';
+        await w.store.read(ID).then(() => {}, () => { read = 'rejected'; });
+        same('a read that fails rejects', read, 'rejected');
+    }
+    {
+        const w = { t: 0 };
+        const store = R.ownStore({ indexedDB: undefined, now: () => w.t, random: () => ID });
+        let put = 'resolved';
+        await store.put('a', FIXTURE).then(() => {}, () => { put = 'rejected'; });
+        same('no IndexedDB at all: put rejects', put, 'rejected');
+    }
+    {
+        const w = world({ errorOnOpen: true });
+        await w.store.put('a', FIXTURE).then(() => {}, () => {});
+        w.idb.opens = 0;
+        w.store = null;
+        const w2 = world();
+        await w2.store.put('a', FIXTURE); await w2.store.read(ID); await w2.store.purge();
+        same('a storage that opened is opened once for all the calls', w2.idb.opens, 1);
+    }
+
+    // ---- taking a file over: the size is asked before a byte is read, a file that fails is no record, the record that was there stays
+    {
+        const w = world();
+        const file = fakeFile(FIXTURE, 'ants-TINY-20261106-110000.antsrep');
+        const r = await R.ownOpen(w.env, file);
+        check('a replay is taken over: ok with an id, its name and its size', r.ok === true && /^[0-9a-f]{32}$/.test(r.id) && r.name === 'ants-TINY-20261106-110000.antsrep' && r.size === FIXTURE.length, JSON.stringify(r));
+        const rec = await w.store.read(r.id);
+        check('... and the player finds exactly its bytes under that id', !!rec && sameBytes(rec.bytes, FIXTURE) && rec.name === r.name);
+        same('the file was read once', file.reads, 1);
+    }
+    {
+        const w = world();
+        const keep = await R.ownOpen(w.env, fakeFile(FIXTURE, 'keep.antsrep'));
+        const huge = fakeFile(new Uint8Array(10), 'holiday-video.mp4', { size: 14900000 });
+        const r = await R.ownOpen(w.env, huge);
+        same('a file that is too big by its size: kind big, with its size and name', [r.ok, r.kind, r.size, r.name], [false, 'big', 14900000, 'holiday-video.mp4']);
+        same('... and not one byte of it was read', huge.reads, 0);
+        same('... the record that was there is still there', (await w.store.read(keep.id)).name, 'keep.antsrep');
+        const edge = fakeFile(new Uint8Array(10), 'edge', { size: R.LOCAL_MAX_BYTES + 1 });
+        same('a file of one byte more than the limit is too big and unread', [(await R.ownOpen(w.env, edge)).kind, edge.reads], ['big', 0]);
+        const exact = fakeFile(padded(R.LOCAL_MAX_BYTES), 'exact.antsrep');
+        same('a file of exactly the limit is read', [(await R.ownOpen(w.env, exact)).ok, exact.reads], [true, 1]);
+    }
+    {
+        const w = world();
+        const liar = fakeFile(new Uint8Array(R.LOCAL_MAX_BYTES + 5000), 'liar.antsrep', { size: 3000 });
+        const r = await R.ownOpen(w.env, liar);
+        same('a file that says 3,000 bytes and holds more than the limit is too big on its bytes (the second line)', [r.ok, r.kind, w.idb.slot()], [false, 'big', undefined]);
+    }
+    {
+        const w = world();
+        const keep = await R.ownOpen(w.env, fakeFile(FIXTURE, 'keep.antsrep'));
+        for (const [label, file, kind] of [
+            ['an empty file', fakeFile(new Uint8Array(0), 'empty.antsrep'), 'bad'], ['a text', fakeFile(text('this is not a replay, though it is long enough to hold a head if it were one, and then some'), 'notes.txt'), 'bad'],
+            ['a replay with a damaged head', fakeFile(Uint8Array.from(Array.from(FIXTURE).map((b, i) => (i === 60 ? b ^ 255 : b))), 'damaged.antsrep'), 'bad'],
+            ['a replay cut inside its head', fakeFile(FIXTURE.slice(0, 120), 'cut.antsrep'), 'bad'], ['a file that cannot be read', fakeFile(FIXTURE, 'gone.antsrep', { failRead: true }), 'bad'],
+            ['no file at all', null, 'bad'], ['a size that is no number', { name: 'x', size: 'big', arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) }, 'bad'],
+        ]) {
+            const r = await R.ownOpen(w.env, file);
+            same(label + ': refused as ' + kind, [r.ok, r.kind], [false, kind]);
+        }
+        same('none of them touched the record that was there', [(await w.store.read(keep.id)).name, w.idb.writes], ['keep.antsrep', 1]);
+    }
+    {
+        const w = world({ abortWrites: 'QuotaExceededError' });
+        const r = await R.ownOpen(w.env, fakeFile(FIXTURE, 'a.antsrep'));
+        same('a browser that cannot keep the file: kind nostore, and the name is still there to show', [r.ok, r.kind, r.name], [false, 'nostore', 'a.antsrep']);
+        const w2 = world({ throwOnOpen: true });
+        same('and one with no usable storage the same', (await R.ownOpen(w2.env, fakeFile(FIXTURE, 'a.antsrep'))).kind, 'nostore');
+    }
+    {
+        const w = world();
+        const r = await R.ownOpen(w.env, fakeFile(FIXTURE, 'ants-' + bidi + 'perstna' + zw + '.antsrep'));
+        same('the name that comes back is text that is safe to show', r.name, 'ants-perstna.antsrep');
+        let reader = 0;
+        function FakeReader() { this.readAsArrayBuffer = (f) => { reader++; this.result = f.buf; setTimeout(() => this.onload(), 0); }; }
+        const noPromise = { name: 'old.antsrep', size: FIXTURE.length, buf: FIXTURE.buffer.slice(0) };
+        const r2 = await R.ownOpen({ store: w.store, FileReader }, noPromise);
+        function FileReader() { return new FakeReader(); }
+        same('a File with no arrayBuffer() is read with a FileReader', [r2.ok, reader], [true, 1]);
+    }
+
+    return;
+}
+
+main().then(() => {
+    console.log('web_replay_open_check: ' + checks + ' checks, ' + failures + ' failures');
+    process.exit(failures ? 1 : 0);
+}, (e) => {
+    console.log('FAIL the check itself broke: ' + (e && e.stack || e));
+    process.exit(1);
+});
