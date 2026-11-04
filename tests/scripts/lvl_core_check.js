@@ -135,7 +135,7 @@ function hostileExtendedCases(tinyUp) {
     const cases = [];
     const add = (id, b) => cases.push({ id: 'hostile_ext_' + id, bytes: b });
     const flags = tinyUp.slice(); flags[10] = 1; add('format_flag', flags);
-    const rules = tinyUp.slice(); rules[14] = 2; add('rules_2', rules);
+    const rules = tinyUp.slice(); rules[14] = 3; add('rules_3', rules);
     const grid = tinyUp.slice(); put32(grid, 7412 + shift, 0xFFFFFFFF); put32(grid, 7416 + shift, 0xFFFFFFFF); add('huge_grid', grid);
     const grid2 = tinyUp.slice(); put32(grid2, 7412 + shift, 65535); put32(grid2, 7416 + shift, 65535); add('grid_65535', grid2);
     add('cut_in_header', tinyUp.slice(0, 12));

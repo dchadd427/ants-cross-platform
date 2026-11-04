@@ -814,7 +814,7 @@ void c10_blank_extended() {
         LevelValidation report;
         CHECK_MSG(level.load_from_memory(bytes.data(), bytes.size(), &report, LevelLimits::for_extended_maps()), id);
         CHECK(level.version == 9 && level.height() == c.rows && level.width() == c.columns && level.boundary_param == c.eggs && level.default_minutes == c.minutes && level.format_flags == 0);
-        CHECK_MSG(level.rules == (c.rows > 90 || c.columns > 256 ? 1u : 0u), id + ": the extended rules from 91 rows or 257 columns on");
+        CHECK_MSG(level.rules == (c.rows > 256 || c.columns > 256 ? 2u : c.rows > 90 ? 1u : 0u), id + ": the extended rules from 91 rows on, the long-order rules when a side is beyond 256");
         CHECK(!level.layer1_terrain.empty() && level.layer1_terrain.front().tile_index == c.ground);
         const LevelWriteResult w = write_level(blank_extended_level(c.rows, c.columns, lvl_core::tile_names(), LevelLimits::for_extended_maps()), LevelLimits::for_extended_maps());
         if (c.ground == 485 && c.eggs == 6 && c.minutes == 10) CHECK_MSG(w.ok && w.bytes == bytes, id + ": blank_extended_level's bytes");
@@ -852,8 +852,8 @@ std::vector<FileCase> hostile_extended_cases() {
     flags[10] = 1;
     add("format_flag", flags);
     Bytes rules = up;
-    rules[14] = 2;
-    add("rules_2", rules);
+    rules[14] = 3;
+    add("rules_3", rules);
     Bytes grid = up;
     put32(grid, 7412 + shift, 0xFFFFFFFFu);
     put32(grid, 7416 + shift, 0xFFFFFFFFu);

@@ -957,7 +957,6 @@ static void run_suite_8_rules_two() {
     TEST_CASE("8.1 A 450-tile order on an open 512 x 512 world: refused at rules 1 (the original's limit), walked at rules 2; rules 0 and 1 are as they were") {
         for (const uint16_t rules : {uint16_t{0}, uint16_t{1}, uint16_t{2}}) {
             SimulationEngine sim;
-            if (rules == 2) sim.allow_rules_two_for_tests();
             sim.init_test_world(512, 512, 7, 600000, rules);
             const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 256});
             sim.tick();
@@ -977,7 +976,6 @@ static void run_suite_8_rules_two() {
 
     TEST_CASE("8.2 Rules 2 takes the wall at row 90 down, as rules 1 does: a walk across row 90 on a 100-row world") {
         SimulationEngine sim;
-        sim.allow_rules_two_for_tests();
         sim.init_test_world(20, 100, 7, 600000, 2);
         const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{5, 80});
         sim.tick();
@@ -993,7 +991,6 @@ static void run_suite_8_rules_two() {
         // run on this map from the first run on and delivered the 200-tile orders by tick 40 instead of at tick 100 and 200: the same path, earlier.)
         const auto paths_at = [](uint16_t rules, int ticks, int dist) {
             SimulationEngine sim;
-            if (rules == 2) sim.allow_rules_two_for_tests();
             sim.init_test_world(512, 512, 7, 600000, rules);
             std::vector<uint32_t> ids;
             for (int i = 0; i < 8; ++i) ids.push_back(sim.spawn_unit(0, AntType::Worker, TileCoord{20 + (i % 4) * 2, 250 + (i / 4) * 2}));
@@ -1025,7 +1022,6 @@ static void run_suite_8_rules_two() {
         SimulationEngine one;
         SimulationEngine two;
         one.init_test_world(100, 100, 11, 600000, 1);
-        two.allow_rules_two_for_tests();
         two.init_test_world(100, 100, 11, 600000, 2);
         std::vector<uint32_t> ids_one, ids_two;
         for (int i = 0; i < 10; ++i) {
@@ -1052,7 +1048,6 @@ static void run_suite_8_rules_two() {
 
     TEST_CASE("8.5 A copy of the engine made while a wide search is half done delivers the same path in the same tick") {
         SimulationEngine sim;
-        sim.allow_rules_two_for_tests();
         sim.init_test_world(512, 512, 7, 600000, 2);
         const uint32_t id = sim.spawn_unit(0, AntType::Worker, TileCoord{20, 256});
         sim.tick();
@@ -1079,7 +1074,6 @@ static void run_suite_8_rules_two() {
         for (int dist = 40; dist <= 90; ++dist) {
             SimulationEngine one;
             SimulationEngine two;
-            two.allow_rules_two_for_tests();
             one.init_test_world(190, 190, 5, 600000, 1);
             two.init_test_world(190, 190, 5, 600000, 2);
             const uint32_t a = one.spawn_unit(0, AntType::Worker, TileCoord{20, 95});
