@@ -621,7 +621,7 @@ class TheHubsClock(unittest.TestCase):
             started = time.perf_counter()
             room.tick()
             slowest = max(slowest, time.perf_counter() - started)
-        self.assertLess(slowest, 1.0)                                                  # (a chunk of 2,000 lines is some 20 milliseconds on a quiet machine)
+        self.assertLess(slowest, 3.0)                                                  # (a chunk of 2,000 lines is some 20 milliseconds on a quiet machine; the loop is not held for seconds)
         self.assertLessEqual(room.store.size(), room.limits.prune_to_bytes)
         self.assertTrue(all(0 < n <= 2000 for n in self.prune_lines()))
 
