@@ -135,6 +135,38 @@ same('a head of 40 zeros with the right checksum passes this gate too', kindOf(f
 same('a head that ends exactly at the end of the file (nothing after it)', kindOf(file(chunk('HEAD', zeros(40)))), 'ok');
 same('a head that is one byte short of its checksum', kindOf(file(chunk('HEAD', zeros(40))).slice(0, -1)), 'bad');
 
+// ---- the page's check against a second reader written from the format's own words (the layout in include/ants_replay/replay.hpp), on thousands of damaged files: they must never differ, and the page's must never throw
+{
+    const reference = (b) => {                                   // (the same questions, asked the long way round)
+        if (b.length > 2097164) return 'big';
+        const head = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a, 0x48, 0x45, 0x41, 0x44];
+        if (b.length < 20 || head.some((v, i) => b[i] !== v)) return 'bad';
+        const len = tools.read32(b, 12);
+        if (len > 4096 || 20 + len > b.length) return 'bad';
+        const tag = Array.from(b.subarray(8, 12)), payload = Array.from(b.subarray(16, 16 + len));
+        return tools.crc32(Uint8Array.from(payload), tools.crc32(Uint8Array.from(tag))) === tools.read32(b, 16 + len) ? 'ok' : 'bad';
+    };
+    let seed = 20261104;
+    const rnd = (n) => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed % n; };
+    let differ = 0, threw = 0, okCount = 0, cases = 0;
+    for (let i = 0; i < 4000; i++) {
+        let b;
+        const kind = rnd(5);
+        if (kind === 0) { b = FIXTURE.slice(0, 1 + rnd(FIXTURE.length)); }                                                        // (cut anywhere)
+        else if (kind === 1) { b = FIXTURE.slice(); for (let k = 0, n = 1 + rnd(4); k < n; k++) b[rnd(Math.min(b.length, 200))] ^= 1 << rnd(8); }          // (bits flipped near the front)
+        else if (kind === 2) { b = FIXTURE.slice(); for (let k = 0, n = 1 + rnd(4); k < n; k++) b[rnd(b.length)] = rnd(256); }                     // (bytes set anywhere)
+        else if (kind === 3) { b = Uint8Array.from({ length: rnd(64) }, () => rnd(256)); if (rnd(2)) b.set(MAGIC.concat([0x48, 0x45, 0x41, 0x44]).slice(0, b.length)); }  // (almost nothing, sometimes with the beginning of a replay)
+        else { const body = Array.from({ length: rnd(300) }, () => rnd(256)); b = file(chunk('HEAD', body, { length: rnd(3) === 0 ? rnd(6000) : body.length, crc: rnd(4) === 0 ? rnd(0x7fffffff) : undefined })); }  // (a head with a claim and a checksum that are right or wrong)
+        let got;
+        try { const v = R.localCheck(b); got = v.ok ? 'ok' : v.kind; } catch (e) { threw++; continue; }
+        cases++;
+        if (got === 'ok') okCount++;
+        if (got !== reference(b)) differ++;
+    }
+    same('thousands of damaged files: the page\'s check never throws and never differs from the second reader', [threw, differ], [0, 0]);
+    check('... and the cases reach both answers (a real file now and then: ' + okCount + ' accepted of ' + cases + ')', okCount > 100 && okCount < cases - 1000, okCount + ' of ' + cases);
+}
+
 // ---- what is not bytes at all
 for (const [label, v] of [['null', null], ['undefined', undefined], ['a string', 'ants'], ['a number', 42], ['an object', {}], ['an object with a huge length', { length: 1e12 }]]) {
     same('not bytes: ' + label, R.localCheck(v).ok, false);
@@ -335,6 +367,15 @@ async function main() {
         let read = 'resolved';
         await w.store.read(ID).then(() => {}, () => { read = 'rejected'; });
         same('a read that fails rejects', read, 'rejected');
+    }
+    {
+        const blocked = { get indexedDB() { throw new Error('SecurityError: the operation is insecure'); }, crypto: undefined };
+        let made = 'made', put = 'resolved';
+        try { const store = R.ownStoreOf(blocked); await store.put('a', FIXTURE).then(() => {}, () => { put = 'rejected'; }); same('a browser that throws at the mention of indexedDB: a store that fails, and a purge that says no', [put, await store.purge()], ['rejected', false]); } catch (e) { made = 'threw'; }
+        same('... and making the store does not throw', made, 'made');
+        const fine = R.ownStoreOf({ indexedDB: fakeIndexedDB(), crypto: undefined });
+        const id = await fine.put('a.antsrep', FIXTURE);
+        same('the store of a page with an IndexedDB keeps and gives the record', [/^[0-9a-f]{32}$/.test(id), (await fine.read(id)).name], [true, 'a.antsrep']);
     }
     {
         const w = { t: 0 };
@@ -610,6 +651,9 @@ async function settle() {
     {
         const w = ownWorld({ id: '' });
         same('an address with no id has no record: the card to choose the file again', await w.page.read(), { error: 'again' });
+        w.page.header(null, 0, false);
+        same('and its header names no file (there is none): the title alone', [w.doc.getElementById('r-title').children.length, w.doc.getElementById('r-title').children[0].data, w.doc.getElementById('r-meta').children.length], [1, 'A match to watch', 0]);
+        same('a reason that is no text is left out of the card, not a crash', w.page.card('cant', { why: 7 }).body.length, 1);
     }
     {
         const w = ownWorld({ id: '0'.repeat(32) });

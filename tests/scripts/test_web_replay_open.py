@@ -100,7 +100,7 @@ class TheStrip(unittest.TestCase):
 
     def test_the_style_has_the_veil_that_never_catches_the_pointer_the_phone_button_and_the_light_of_the_strip(self):
         for rule in (".dropveil { position: fixed; inset: 0; z-index: 60;", "pointer-events: none; }", ".opener.drag { border-color: var(--gold); }", ".opener.drag .drop { border-color: var(--gold);",
-                     "@media (hover: none) and (pointer: coarse) { .dropveil { display: none; } }", "    .opener .btn { width: 100%; }", "#open-note:not([hidden]) + .panel { margin-top: 14px; }", "#open-note + .panel { margin-top: 22px; }"):
+                     "@media (hover: none) and (pointer: coarse) { .dropveil { display: none; } }", "    .opener .btn { width: 100%; margin-bottom: 0; }", "#open-note .btn .ic, .opener .btn .ic { margin-left: 2px; }", ".opener .btn { margin-bottom: 4px; }", "#open-note:not([hidden]) + .panel { margin-top: 14px; }", "#open-note + .panel { margin-top: 22px; }"):
             has(self, rule, self.css)
         veil = self.css[self.css.index(".dropveil {"):]
         self.assertIn("pointer-events: none", veil[:veil.index("}")])

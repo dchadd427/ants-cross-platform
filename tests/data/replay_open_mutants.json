@@ -328,6 +328,54 @@
    "new": "return { ok: false, mismatch: true, text: false ? 'The map ' + name + ' on this site is not the file that this match was played on (the files differ).'",
    "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
    "why": "a recording says the host's copy"
+  },
+  {
+   "id": "the_store_is_made_from_a_getter_that_throws",
+   "file": "web/replay_page.js",
+   "old": "        try { idb = win.indexedDB; } catch (e) { idb = null; }\n",
+   "new": "        idb = win.indexedDB;\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a browser that blocks site data leaves the Matches page with no strip"
+  },
+  {
+   "id": "the_header_of_no_file_says_your_file",
+   "file": "web/replay_page.js",
+   "old": "                if (name || head) {                                                   // (no file, no \"Your file\": the card that asks for the file again has none to name)\n",
+   "new": "                if (true) {\n",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "the card that asks for the file again names a file that is not there"
+  },
+  {
+   "id": "the_player_does_not_look_for_old_records",
+   "file": "web/replay_page.js",
+   "old": "return env.store.purge().then(function () { return env.store.read(id); }).then(function (rec) {",
+   "new": "return env.store.read(id).then(function (rec) {",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "an old record stays in the browser for ever when only the player is opened"
+  },
+  {
+   "id": "a_drag_of_text_lights_the_strip",
+   "file": "web/replay_page.js",
+   "old": "                doc.addEventListener('dragenter', function (ev) { if (!hasFiles(ev)) return; ev.preventDefault(); depth++; veilOn(true); });",
+   "new": "                doc.addEventListener('dragenter', function (ev) { ev.preventDefault(); depth++; veilOn(true); });",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "dragging a word to the search box darkens the page"
+  },
+  {
+   "id": "the_head_gives_no_roster",
+   "file": "web/map_files.js",
+   "old": "            else if (id === 6 && len === 1) roster = bytes[pos];                                                             // (the seats that play: bit 0 green ... bit 3 black)\n",
+   "new": "",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the header of a file that the game never reads has no players"
+  },
+  {
+   "id": "a_name_of_the_head_may_hold_controls",
+   "file": "web/map_files.js",
+   "old": "        for (var i = 0; i < len; i++) { if (bytes[at + i] < 0x20 || bytes[at + i] > 0x7E) return ''; text += String.fromCharCode(bytes[at + i]); }",
+   "new": "        for (var i = 0; i < len; i++) { text += String.fromCharCode(bytes[at + i]); }",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a name with a control character reaches the header"
   }
  ]
 }

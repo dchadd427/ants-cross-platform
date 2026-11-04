@@ -2,11 +2,12 @@
 // No Docker image, no game server, no game: this serves the pages of web/ itself (the Matches page, the game page as play.html, their scripts and pictures) behind a small stand-in for the site (GET /history,
 // /live, /maps/all, /maps/files/<name>, and nothing else: POST and PUT are refused and counted) and puts a stand-in for the game's program (tests/scripts/web_live_stub.js: Module._ants_replay_get /
 // _ants_replay_do and the report that the game makes) in the place of index.js, so what it shows is the pages' own part: the strip, the drop, the cards, the hand-off and the player's header. It does not show
-// that the real game plays a file (the C++ tests and tests/scripts/web_replay_open_real.sh do). Every request is counted: none carries a body, none asks the site for the file, none asks for its stats.
+// that the real game plays a file (the C++ tests and the part REAL below do). Every request is counted: none carries a body, none asks the site for the file, none asks for its stats.
 // With --web URL (or ANTS_WEB_URL: a running site, the web image or tools/web_without_docker.py) the part REAL runs the same pages with the REAL game against that site (no stand-in: the game says what a file is).
 // Parts (--only): strip (the Matches page: the strip, the chooser, a dropped file, a refused file and its card, the page with the site down, a phone), hand (the hand-off: the bytes that the game gets are the
 // file's, a reload, a record that is gone, the header of the player, a library map), cards (a file of an older or newer version, a map that the site does not have, an unreadable file, and the way out of each).
-// usage: node web_replay_open_browser.js [--only strip|hand|cards|real] [--shots DIR] [--web URL]     (exit 0: every check holds, or the browser is not there; every failure is printed)
+// usage: node web_replay_open_browser.js [--only strip|hand|cards|real] [--shots DIR] [--web URL] [--require]     (exit 0: every check holds, or the browser is not there; every failure is printed;
+// with --require a check that could not be made, for want of Playwright, a browser or a site, is a failure: the CI asks for it)
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -16,11 +17,12 @@ const tools = require('./replay_file_tools.js');
 
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i === -1 ? null : args[i + 1]; };
-const only = opt('--only'), shotsDir = opt('--shots'), webUrl = opt('--web') || process.env.ANTS_WEB_URL || '';
+const only = opt('--only'), shotsDir = opt('--shots'), webUrl = opt('--web') || process.env.ANTS_WEB_URL || '', required = args.indexOf('--require') !== -1;
 const PARTS = ['strip', 'hand', 'cards', 'real'];
 if (only && PARTS.indexOf(only) === -1) { console.log('--only is one of: ' + PARTS.join(', ')); process.exit(2); }
 let playwright;
-try { playwright = require('playwright'); } catch (e) { console.log('SKIP: Playwright is not installed: the real browser was NOT run (tests/scripts/web_replay_open_browser.js)'); process.exit(0); }
+for (const name of ['playwright', 'playwright-core']) { try { playwright = require(name); break; } catch (e) { /* the next one */ } }
+if (!playwright) { console.log((required ? 'FAIL' : 'SKIP') + ': Playwright is not installed: the real browser was NOT run (tests/scripts/web_replay_open_browser.js)'); process.exit(required ? 1 : 0); }
 const WEB = path.resolve(__dirname, '..', '..', 'web');
 const FIXTURE = fs.readFileSync(path.resolve(__dirname, '..', 'data', 'replay_bots_tiny.antsrep'));
 const TINY_MAP = fs.readFileSync(path.resolve(__dirname, '..', '..', 'Original-Ants', 'Maps', 'TINY.LVL'));
@@ -114,12 +116,12 @@ async function main() {
     const launch = { args: ['--no-sandbox'] };
     if (process.env.CHROME) launch.executablePath = process.env.CHROME;
     let browser;
-    try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the pages were NOT run in a browser'); return; }
+    try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log((required ? 'FAIL' : 'SKIP') + ': no browser could be started (' + String(e.message).split('\n')[0] + '): the pages were NOT run in a browser'); if (required) failures++; return; }
     const shot = async (page, name) => { if (shotsDir) { fs.mkdirSync(shotsDir, { recursive: true }); await page.screenshot({ path: path.join(shotsDir, name + '.png') }); } };
     try {
         const parts = { strip: partStrip, hand: partHand, cards: partCards, real: partReal };
         for (const name of PARTS) {
-            if (name === 'real' && !webUrl) { if (only === 'real') console.log('SKIP: no site to run the real game against (--web URL or ANTS_WEB_URL): the real game was NOT run (tests/scripts/web_replay_open_browser.js, part real)'); continue; }
+            if (name === 'real' && !webUrl) { if (only === 'real') { console.log((required ? 'FAIL' : 'SKIP') + ': no site to run the real game against (--web URL or ANTS_WEB_URL): the real game was NOT run (tests/scripts/web_replay_open_browser.js, part real)'); if (required) failures++; } continue; }
             if (!only || only === name) await parts[name](browser, shot);
         }
     } finally { await browser.close(); }
@@ -132,7 +134,7 @@ const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isM
 // a drag of a file over the page, as the browser makes it: the events carry a DataTransfer that lists Files; the answer is whether the page took the event over (preventDefault)
 const drag = (page, type, names, selector) => page.evaluate(({ type, names, selector }) => {
     const dt = new DataTransfer();
-    (names || []).forEach((n) => dt.items.add(new File(['x'], n)));
+    (names || []).forEach((n) => { if (n === 'Files') dt.items.add(new File(['x'], 'x.antsrep')); else if (n.indexOf('/') !== -1) dt.setData(n, 'x'); else dt.items.add(new File(['x'], n)); });
     const ev = new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true });
     (selector ? document.querySelector(selector) : document.body).dispatchEvent(ev);
     return ev.defaultPrevented;
@@ -146,11 +148,20 @@ async function partStrip(browser, shot) {
         const page = await open(ctx);
         await shot(page, 'built_b_' + kind + '_list');
         if (kind === 'desktop') {
-            await drag(page, 'dragenter', ['a.antsrep']);
-            await drag(page, 'dragover', ['a.antsrep']);
+            check('the veil is not there before a drag', !(await page.isVisible('#dropveil')));
+            const entered = await drag(page, 'dragenter', ['Files']);
+            const moved = await drag(page, 'dragover', ['Files']);
             await sleep(150);
+            check('a file dragged over the page: the page takes the drag over, the veil shows its card and the strip lights up', entered && moved && await page.isVisible('#dropveil') && /Drop the replay file to watch it/.test(await text(page, '#dropveil .big'))
+                  && (await page.getAttribute('#opener', 'class')).split(' ').indexOf('drag') !== -1);
+            check('the veil lets the pointer through (a click on the page goes to what is under it)', await page.evaluate(() => getComputedStyle(document.getElementById('dropveil')).pointerEvents === 'none'));
             await shot(page, 'built_b_desktop_hover');
-            await drag(page, 'dragleave', ['a.antsrep']);
+            await drag(page, 'dragleave', ['Files']);
+            check('the drag leaves: the veil and the light go', !(await page.isVisible('#dropveil')) && (await page.getAttribute('#opener', 'class')).split(' ').indexOf('drag') === -1);
+            const text1 = await drag(page, 'dragenter', ['text/plain']);
+            const text2 = await drag(page, 'dragover', ['text/plain']);
+            const text3 = await drag(page, 'drop', ['text/plain']);
+            check('a drag of text is not taken over and shows no veil', !text1 && !text2 && !text3 && !(await page.isVisible('#dropveil')));
         }
         // a file that is refused: a video (too big by its size) and a damaged replay
         const chooser = async (file) => { const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('#open-btn')]); await fc.setFiles(file); };
@@ -177,7 +188,7 @@ const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const asFile = (name, buffer) => ({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(buffer) });
 const NAME = 'ants-TREASURE-20261006-143209.antsrep';                      // (a name that the desktop game gives: the local time, no Z)
 // the game is up (the stand-in has read the file) and has reported it: the tag over the picture is shown
-const stubStarted = (page) => page.waitForFunction(() => window.__stub && window.__stub.total > 0 && !document.getElementById('rtag').hidden, null, { timeout: 15000 });
+const stubStarted = (page) => page.waitForFunction(() => window.__stub && window.__stub.total > 0 && !document.getElementById('rtag').hidden, null, { timeout: 15000, polling: 100 });
 const stubSha = (page, file) => page.evaluate(async (p) => {
     const b = window.__stub && window.__stub.files[p];
     if (!b) return null;
@@ -226,7 +237,7 @@ async function partHand(browser, shot) {
         await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
         await page.waitForURL(LOCAL_URL);
         await stubStarted(page);
-        const url = page.url();
+        let url = page.url();
         check('the player gets exactly the bytes of the file (SHA-256)', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
         const args = await page.evaluate(() => window.__stub.args);
         check('the game is started with --replay and the file, and not as a live match', args.join(' ').indexOf('--replay /replay.antsrep') !== -1 && args.indexOf('--replay-live') === -1, args.join(' '));
@@ -242,6 +253,22 @@ async function partHand(browser, shot) {
         const all = site.hits.slice();
         check('no request of the whole visit carries a body, none is a POST, none asks the site for a recording or its stats', bodiless(all) && askedFor(all, /^\/(replays|history\/|stats)/).length === 0, JSON.stringify(askedFor(all, /^\/(replays|history\/|stats)/)));
         check('no request names the file or its bytes', all.every((h) => (h.path + h.query).indexOf(NAME) === -1));
+        // 1b. a drop of the file anywhere on the Matches page (a computer): the same bytes arrive
+        await page.goto(site.url('/matches.html'));
+        await page.waitForSelector('#opener:not([hidden])');
+        const dropped = await page.evaluate(({ name, bytes }) => {
+            const first = new File([new Uint8Array(bytes)], name), second = new File([new Uint8Array(bytes.slice(0, 500))], 'second.antsrep');
+            const dt = new DataTransfer();
+            dt.items.add(first); dt.items.add(second);
+            const ev = new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true });
+            document.getElementById('q').dispatchEvent(ev);                      // (on the search box: the drop is the page's wherever it lands)
+            return ev.defaultPrevented;
+        }, { name: NAME, bytes: Array.from(FIXTURE) });
+        await page.waitForURL(LOCAL_URL);
+        await stubStarted(page);
+        check('a dropped file (two were dropped: the first is taken) is taken over by the page and the game gets exactly its bytes', dropped === true && (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE) && (await text(page, '#r-title')).indexOf(NAME) !== -1);
+        check('the drop made no request with a body either', bodiless(site.hits.slice()) && askedFor(site.hits, /^\/(replays|history\/|stats)/).length === 0);
+        url = page.url();                                                        // (the record of the drop is the one that a reload must find)
         // 2. the player is reloaded: the record is still there
         await page.reload();
         await stubStarted(page);
@@ -515,9 +542,12 @@ async function partCards(browser, shot) {
 async function partReal(browser, shot) {
     const base = webUrl.replace(/\/+$/, '');
     const probe = await fetch(base + '/index.wasm', { method: 'HEAD' }).then((r) => r.ok, () => false);
-    if (!probe) { console.log('SKIP: the site at ' + base + ' has no game (index.wasm): the real game was NOT run'); return; }
-    const state = (page) => page.evaluate(() => (typeof Module !== 'undefined' && Module._ants_replay_get ? { state: Module._ants_replay_get(0), turn: Module._ants_replay_get(1), total: Module._ants_replay_get(2), failure: Module._ants_replay_get(5) } : null));
-    const up = async (page) => { await page.waitForFunction(() => typeof Module !== 'undefined' && Module._ants_replay_get && Module._ants_replay_get(0) >= 2 && Module._ants_replay_get(2) > 0, null, { timeout: 120000 }); return state(page); };
+    if (!probe) { console.log((required ? 'FAIL' : 'SKIP') + ': the site at ' + base + ' has no game (index.wasm): the real game was NOT run'); if (required) failures++; return; }
+    // (the game's exports are stubs that replace themselves at the first call: one made before the program runs leaves Module._ants_replay_get undefined for good. So nothing here asks before the page says that the
+    // game is ready (isReadyToPlay), as the page's own glue does; and every look is in a try)
+    const state = (page) => page.evaluate(() => { try { return typeof isReadyToPlay !== 'undefined' && isReadyToPlay && Module._ants_replay_get ? { state: Module._ants_replay_get(0), turn: Module._ants_replay_get(1), total: Module._ants_replay_get(2), failure: Module._ants_replay_get(5) } : null; } catch (e) { return null; } });
+    // the game is up and holds a match: playing (2), paused (3), jumping (4), ended (5) or cut short (6) with its turns; a game that failed to read the file (7) is a card and not this
+    const up = async (page) => { await page.waitForFunction(() => { try { return typeof isReadyToPlay !== 'undefined' && isReadyToPlay && !!Module._ants_replay_get && Module._ants_replay_get(0) >= 2 && Module._ants_replay_get(0) <= 6 && Module._ants_replay_get(2) > 0; } catch (e) { return false; } }, null, { timeout: 120000, polling: 250 }); return state(page); };
     const openOn = async (page, file) => {
         await page.goto(base + '/matches.html');
         await page.waitForSelector('#opener:not([hidden])');
@@ -543,7 +573,7 @@ async function partReal(browser, shot) {
         check('the match runs (the game\'s turn goes on)', s2.turn > s1.turn, JSON.stringify([s1, s2]));
         const rail = await page.$('#rail'), box = await rail.boundingBox();
         await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
-        await page.waitForFunction(() => Module._ants_replay_get(1) > 3000 && Module._ants_replay_get(0) !== 4, null, { timeout: 60000 });
+        await page.waitForFunction(() => { try { return Module._ants_replay_get(1) > 3000 && Module._ants_replay_get(0) !== 4; } catch (e) { return false; } }, null, { timeout: 60000, polling: 250 });
         check('a click on the middle of the timeline jumps there (the game plays the match again up to it)', (await state(page)).turn > 3000);
         await shot(page, 'built_real_player');
         check('no request of the visit carries a body, none is a POST, none asked the site for a recording, its stats or the file', hits.every((h) => h.method === 'GET' && !h.body) && !hits.some((h) => /^\/(replays|history\/|stats)/.test(h.url)));
@@ -563,10 +593,13 @@ async function partReal(browser, shot) {
     // 3. maps: one that the site has not; one that the file carries; one that the file carries and that is damaged in ways that a stranger could choose
     const DUNE = TINY_MAP;
     {
+        // (a site with its game server answers 404 for a map that it has not; nginx alone, with no server behind it as in tools/web_without_docker.py, answers 502, and then the 404 is made here)
+        const answer = await fetch(base + '/maps/files/Dune.lvl').then((r) => r.status, () => 0);
         const ctx = await ctxOf(), page = await ctx.newPage();
+        if (answer !== 404) await page.route('**/maps/files/Dune.lvl', (route) => route.fulfill({ status: 404, body: 'not found' }));
         await openOn(page, asFile('dune.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', DUNE, false)));
         const card = await anyCard(page);
-        check('a map of the library that the site has not: the card, from the real site\'s 404', card.title === 'This site doesn’t have the map' && /Dune\.lvl/.test(card.body), JSON.stringify(card));
+        check('a map of the library that the site has not: the card, from ' + (answer === 404 ? 'the real site\'s 404' : 'a 404 made here (the site answered ' + answer + ')'), card.title === 'This site doesn’t have the map' && /Dune\.lvl/.test(card.body), JSON.stringify(card));
         await ctx.close();
     }
     {

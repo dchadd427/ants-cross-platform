@@ -538,8 +538,13 @@
             }
         };
     }
-    // The store of a page (its IndexedDB, its clock, its random source)
-    function ownStoreOf(win) { return ownStore({ indexedDB: win.indexedDB, now: function () { return Date.now(); }, random: function () { return ownRandomId(win); } }); }
+    // The store of a page (its IndexedDB, its clock, its random source). A browser that blocks site data can throw at the mere mention of window.indexedDB: the store is then one that fails every call, and the
+    // page says so when it is used.
+    function ownStoreOf(win) {
+        var idb = null;
+        try { idb = win.indexedDB; } catch (e) { idb = null; }
+        return ownStore({ indexedDB: idb, now: function () { return Date.now(); }, random: function () { return ownRandomId(win); } });
+    }
 
     // The bytes of a File (or Blob): its own arrayBuffer() where there is one, else a FileReader
     function ownBytes(env, file) {
@@ -733,10 +738,12 @@
                 title.textContent = '';
                 meta.textContent = '';
                 title.appendChild(doc.createTextNode(mapTitle(from && from.map) || 'A match to watch'));
-                small.appendChild(mk(doc, 'span', 'pill own', 'Your file'));
-                small.appendChild(doc.createTextNode(' ' + [name, seconds ? lengthText(seconds) : ''].filter(Boolean).join(' · ')));
-                if (cut) { small.appendChild(doc.createTextNode(' ')); small.appendChild(mk(doc, 'span', 'pill cut', 'Cut short')); }
-                title.appendChild(small);
+                if (name || head) {                                                   // (no file, no "Your file": the card that asks for the file again has none to name)
+                    small.appendChild(mk(doc, 'span', 'pill own', 'Your file'));
+                    small.appendChild(doc.createTextNode(' ' + [name, seconds ? lengthText(seconds) : ''].filter(Boolean).join(' · ')));
+                    if (cut) { small.appendChild(doc.createTextNode(' ')); small.appendChild(mk(doc, 'span', 'pill cut', 'Cut short')); }
+                    title.appendChild(small);
+                }
                 if (from && typeof from.roster === 'number') meta.appendChild(chipsOf(doc, playersOf(from.roster, from.names)));
             },
             // the header's buttons: the way back is "Matches" here, and a narrow window's More has a way to open another file
@@ -780,7 +787,7 @@
                 } else if (kind === 'cant') {
                     title = 'This replay can’t be played here';
                     para(['The match could not be set up on this page.']);
-                    if (ctx.why) para([ctx.why.charAt(0).toUpperCase() + ctx.why.slice(1) + (/[.!?]$/.test(ctx.why) ? '' : '.')], 'rm-why');
+                    if (typeof ctx.why === 'string' && ctx.why) para([ctx.why.charAt(0).toUpperCase() + ctx.why.slice(1) + (/[.!?]$/.test(ctx.why) ? '' : '.')], 'rm-why');
                     open('Open another file'); all();
                 } else return null;
                 return { title: title, body: body, buttons: buttons };

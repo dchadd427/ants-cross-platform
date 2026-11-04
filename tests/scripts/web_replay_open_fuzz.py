@@ -182,11 +182,13 @@ def make_files(rng, fixture_chunks, maps):
 
 def run(tool, args, timeout, limit_bytes):
     def limits():
-        resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+        if limit_bytes:                                                                      # (a sanitizer needs the whole address space: --memory-mb 0)
+            resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     started = time.time()
     try:
-        done = subprocess.run([tool] + args, capture_output=True, timeout=timeout, preexec_fn=limits)
+        env = dict(os.environ, ASAN_OPTIONS="detect_leaks=0:abort_on_error=0:handle_abort=0", UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1")
+        done = subprocess.run([tool] + args, capture_output=True, timeout=timeout, preexec_fn=limits, env=env)
         return done.returncode, done.stdout + done.stderr, time.time() - started
     except subprocess.TimeoutExpired:
         return "hang", b"", time.time() - started
@@ -199,7 +201,7 @@ def main():
     ap.add_argument("--runs", type=int, default=300, help="how many files (default 300)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--timeout", type=float, default=30.0, help="seconds for one run of the tool")
-    ap.add_argument("--memory-mb", type=int, default=3072, help="the address space that one run may take (a file that makes the reader ask for more is an abort, not an out of memory machine)")
+    ap.add_argument("--memory-mb", type=int, default=3072, help="the address space that one run may take (a file that makes the reader ask for more is an abort, not an out of memory machine); 0: no limit (a sanitizer build)")
     ap.add_argument("--keep", default="", help="a folder for the files that crashed, aborted or hung")
     args = ap.parse_args()
     tool = args.tool or os.path.join(REPO, "build", "replay_tool")
@@ -226,10 +228,10 @@ def main():
         return 3
     rng = random.Random(args.seed)
     gen = make_files(rng, fixture, maps)
-    limit = args.memory_mb * 1024 * 1024
+    limit = args.memory_mb * 1024 * 1024 if args.memory_mb > 0 else 0
     folder = tempfile.mkdtemp(prefix="ants_fuzz.")
     counts, bad, slowest = {}, [], (0.0, "")
-    print("[web replay open fuzz] %d files through %s (seed %d, %d maps as the base, %d MB and %.0f s for a run)" % (args.runs, os.path.basename(tool), args.seed, len(maps), args.memory_mb, args.timeout))
+    print("[web replay open fuzz] %d files through %s (seed %d, %d maps as the base, %s and %.0f s for a run)" % (args.runs, os.path.basename(tool), args.seed, len(maps), ("%d MB" % args.memory_mb) if limit else "no memory limit", args.timeout))
     try:
         for i in range(args.runs):
             strategy, data = next(gen)

@@ -140,6 +140,8 @@ button { font: inherit; color: inherit; }
 #open-note .fn { margin-top: 11px; font: 14px/1.3 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
 #open-note .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; }
 #open-note .btn, .opener .btn { gap: 10px; }
+#open-note .btn .ic, .opener .btn .ic { margin-left: 2px; }
+.opener .btn { margin-bottom: 4px; }
 #open-note + .panel { margin-top: 22px; }
 #open-note:not([hidden]) + .panel { margin-top: 14px; }
 .dropveil { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(12, 8, 5, .8); pointer-events: none; }
@@ -252,7 +254,7 @@ button { font: inherit; color: inherit; }
     .opener .drop { flex-direction: column; align-items: stretch; gap: 16px; padding: 6px 6px 4px; }
     .opener .txt { gap: 2px; }
     .opener h2 { font-size: 16px; line-height: 20px; }
-    .opener .btn { width: 100%; }
+    .opener .btn { width: 100%; margin-bottom: 0; }
     .mast .acts { grid-area: btn; justify-self: end; }
     .mast .acts .btn.hide-s { display: none; }
     .discord { min-width: 44px; justify-content: center; padding: 6px 11px; }                 /* a phone: the mark alone (the word stays for a screen reader) */
