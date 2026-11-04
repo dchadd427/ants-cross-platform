@@ -1105,6 +1105,28 @@ static void run_suite_8_rules_two() {
         }
         ASSERT_GE(delivery_ticks.size(), static_cast<size_t>(2));              // (the orders take one run and more than one: the budget is used)
     } TEST_END();
+
+    TEST_CASE("8.7 The budget after the limit is made of the rows and the columns of a map that is not square: a 450-tile order on a world of 512 x 200 and on one of 200 x 512 (1,600 a run after the limit) is delivered at the pinned tick") {
+        // (wide_budget(rows, columns) is the same for either order of its arguments, so only a map that is not square can tell a call that gives one side twice, which 8.1 to 8.6 cannot: on 512 x 200 the rows twice
+        // are 625, under the floor of 1,000, and the columns twice 4,096; on 200 x 512 the other way round. Until the original's limit is passed the run is the original's 1,000 on either, so the ticks differ only in the last runs.)
+        const auto delivered_at = [](uint32_t width, uint32_t height, TileCoord from, TileCoord to) {
+            SimulationEngine sim;
+            sim.init_test_world(width, height, 7, 600000, 2);
+            const uint32_t id = sim.spawn_unit(0, AntType::Worker, from);
+            sim.tick();
+            sim.issue_move_order(id, to);
+            for (int t = 1; t <= 150; ++t) {
+                sim.tick();
+                if (!walked_path(sim, id).empty()) return t;
+            }
+            return -1;
+        };
+        const int along_the_row = delivered_at(512, 200, TileCoord{20, 100}, TileCoord{470, 100});
+        const int along_the_column = delivered_at(200, 512, TileCoord{100, 20}, TileCoord{100, 470});
+        if (along_the_row != 53 || along_the_column != 53) std::cout << "\n    delivered at ticks " << along_the_row << " (512 x 200) and " << along_the_column << " (200 x 512)\n";
+        ASSERT_EQ(along_the_row, 53);
+        ASSERT_EQ(along_the_column, 53);
+    } TEST_END();
 }
 
 int main() {

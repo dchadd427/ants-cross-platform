@@ -1,9 +1,9 @@
 // Tests of a match on a map of rules 2 (the long-order rules: the wide search of the path finder, docs/MAP_FORMAT.md "Orders on a big map") as a recording, and of the file's word for a
 // reader that does not know the word (docs/REPLAYS.md "Which files play: sim_rules"). The map carries the word, so the recording needs no rules number of its own.
-//   RP13.1  TINY grown to 512 x 512 (rules 2): an ant sent 450 tiles along its row gets a path (at rules 1 it gets none), the match is recorded under kSimRules, plays to its hashes, and
+//   RP16.1  TINY grown to 512 x 512 (rules 2): an ant sent 450 tiles along its row gets a path (at rules 1 it gets none), the match is recorded under kSimRules, plays to its hashes, and
 //           ends in the hash that is pinned (the reference match of a map of rules 2)
-//   RP13.2  a reader that does not know the word 2 (modelled by the word 3) refuses the map that a file carries, with the reader's sentence; this build reads the 2
-//   RP13.3  the word takes no rules number of its own: the same match plays to the same hashes under 5, 8 and 9 (the numbers of the original's game), and the number after the newest is refused
+//   RP16.2  a reader that does not know the word 2 (modelled by the word 3) refuses the map that a file carries, with the reader's sentence; this build reads the 2
+//   RP16.3  the word takes no rules number of its own: the same match plays to the same hashes under every number that this build plays (5, 8 and 9 for the original's game, 6, 7, 10 and 11 for 187), and the number after the newest is refused
 #include "ants_replay/player.hpp"
 #include "ants_replay/recorder.hpp"
 #include "ants_replay/replay.hpp"
@@ -74,12 +74,15 @@ struct Played {
     bool verified{false};
 };
 
-// The match on `level` for 400 turns with the orders above, recorded as a game on one machine records it, and played again by the player
-Played play_recorded(const assets::LevelData& level, uint64_t map_hash) {
+// The match on `level` with the orders above, recorded as a game on one machine records it, and played again by the player: 400 turns in the original's game (under the number of now), 150 in 187 (mode 1: the path
+// of the 450-tile order is found at about turn 55, and the hash of the state holds it). For 187 `number` is the rules number to record under: the engine is set up as the player of a file of that number sets it up
+// (begin_match), and the file says that number, as a build of it wrote it (the recorder stamps the number of now).
+Played play_recorded(const assets::LevelData& level, uint64_t map_hash, uint8_t mode = 0, uint16_t number = 0) {
     Played p;
     sim::SimulationEngine engine;
-    engine.init(level, 31, 0x0F);
     Header head;
+    if (mode != 0) head.set_mode(mode);
+    if (mode != 0 && number != 0) head.sim_rules = number;
     head.game_version = "v0.0.0";
     head.build_id = "test";
     head.venue = "local game";
@@ -87,8 +90,15 @@ Played play_recorded(const assets::LevelData& level, uint64_t map_hash) {
     head.map_hash = map_hash;
     head.seed = 31;
     head.roster = 0x0F;
+    if (mode == 0) {
+        engine.init(level, 31, 0x0F);
+    } else {
+        Replay shell;
+        shell.head = head;
+        begin_match(engine, shell, level, false);
+    }
     Recorder rec(head);
-    for (uint32_t turn = 0; turn < 400; ++turn) {
+    for (uint32_t turn = 0; turn < (mode == 0 ? 400u : 150u); ++turn) {
         std::vector<Command> commands = long_orders_at(engine, turn);
         sim::canonical_order(commands);
         for (const Command& c : commands) {
@@ -106,6 +116,7 @@ Played play_recorded(const assets::LevelData& level, uint64_t map_hash) {
     Replay decoded;
     if (file.empty() || !decode(file.data(), file.size(), decoded, error)) return p;
     p.replay = std::move(decoded);
+    if (mode != 0 && number != 0) p.replay.head.sim_rules = number;
     Hooks hooks;
     hooks.after_tick = [&](uint32_t, sim::SimulationEngine& e) {
         for (const sim::AntSnapshot& a : e.get_world_state().ants) p.longest_path = std::max(p.longest_path, e.get_unit(a.id).waypoints.size());
@@ -124,7 +135,7 @@ int main() {
     const bool loaded = !big.empty() && two.load_from_memory(reinterpret_cast<const uint8_t*>(big.data()), big.size(), nullptr, assets::LevelLimits::for_play_extended());
     if (!loaded) std::cout << "  (cannot make the map)\n";
 
-    TEST_CASE("RP13.1 TINY Grown To 512 x 512 Is A Map Of Rules 2: An Ant Sent 450 Tiles Along Its Row Gets A Path (At Rules 1 It Gets None), The Match Is Recorded Under kSimRules, Plays To Its Hashes And Ends In The Pinned Hash") {
+    TEST_CASE("RP16.1 TINY Grown To 512 x 512 Is A Map Of Rules 2: An Ant Sent 450 Tiles Along Its Row Gets A Path (At Rules 1 It Gets None), The Match Is Recorded Under kSimRules, Plays To Its Hashes And Ends In The Pinned Hash") {
         ASSERT_TRUE(loaded && two.rules == assets::LVL_RULES_LONG_ORDERS);
         const uint64_t map_hash = net::hash_bytes(reinterpret_cast<const uint8_t*>(big.data()), big.size());
         assets::LevelData one = two;
@@ -140,7 +151,7 @@ int main() {
         ASSERT_EQ(wide.hash, kReferenceHash);                                   // the reference match of a map of rules 2: the wide search cannot change without this number
     } TEST_END();
 
-    TEST_CASE("RP13.2 A Reader That Does Not Know The Word 2 (The Word 3 Stands For It) Refuses The Map That A File Carries With The Reader's Sentence; This Build Reads The Word 2 From The File") {
+    TEST_CASE("RP16.2 A Reader That Does Not Know The Word 2 (The Word 3 Stands For It) Refuses The Map That A File Carries With The Reader's Sentence; This Build Reads The Word 2 From The File") {
         const std::string small = grown_tiny(257, 257);                         // (a map that a file can carry: 66,049 cells, rules 2 as made)
         ASSERT_FALSE(small.empty());
         ASSERT_TRUE(static_cast<uint8_t>(small[14]) == 2);
@@ -156,7 +167,7 @@ int main() {
         ASSERT_TRUE(error == "the map in the replay cannot be loaded: the rules word is 3: only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders) are known, the file is not read");
     } TEST_END();
 
-    TEST_CASE("RP13.3 The Word 2 Takes No Rules Number: The Same Match Plays To The Same Hashes Under Every Number Of The Original's Game (5, 8 And 9), And A Number That No Build Plays (11) Is Refused") {
+    TEST_CASE("RP16.3 The Word 2 Takes No Rules Number: The Same Match Plays To The Same Hashes Under Every Number That This Build Plays (5, 8 And 9 Of The Original's Game; 7, 10 And 11 Of 187, And 6, Whose Hill Works, Has Its Own), And The Number After The Newest Is Refused") {
         ASSERT_TRUE(loaded);
         const uint64_t map_hash = net::hash_bytes(reinterpret_cast<const uint8_t*>(big.data()), big.size());
         const Played wide = play_recorded(two, map_hash);
@@ -168,7 +179,25 @@ int main() {
             const Outcome o = play(copy, two, Hooks{});
             ASSERT_TRUE(o.ran && o.ok && o.complete && o.hash == wide.hash);
         }
+        // 187 (150 turns): the same orders are another match (the mode is hashed). The numbers 7, 10 and 11 (the hill is closed; the loader and the end rule differ only where there is a named fire wall, a seat without a team or eggs
+        // that cannot hatch) play it alike; the number 6 has the hill that works, which the state hash carries, so a match recorded under 6 is another match, and plays to its own hashes under 6.
+        constexpr uint8_t k187 = static_cast<uint8_t>(sim::GameMode::Kills187);
+        const Played closed = play_recorded(two, map_hash, k187);
+        ASSERT_TRUE(closed.verified);
+        ASSERT_EQ(closed.replay.head.sim_rules, kSimRulesMode187);
+        for (const uint16_t number : {kSimRulesMode187BeforeFireWall, kSimRulesMode187BeforeEndFix, kSimRulesMode187}) {
+            ASSERT_TRUE(plays_mode_rules(k187, number));
+            Replay copy = closed.replay;
+            copy.head.sim_rules = number;
+            const Outcome o = play(copy, two, Hooks{});
+            ASSERT_TRUE(o.ran && o.ok && o.complete && o.hash == closed.hash);
+        }
+        ASSERT_TRUE(plays_mode_rules(k187, kSimRulesMode187Heal));
+        const Played open = play_recorded(two, map_hash, k187, kSimRulesMode187Heal);
+        ASSERT_TRUE(open.verified && open.hash != closed.hash);
+        ASSERT_EQ(open.replay.head.sim_rules, kSimRulesMode187Heal);
         ASSERT_FALSE(plays_mode_rules(0, static_cast<uint16_t>(kSimRulesNewest + 1)));
+        ASSERT_FALSE(plays_mode_rules(k187, static_cast<uint16_t>(kSimRulesNewest + 1)));
         Replay unknown = wide.replay;
         unknown.head.sim_rules = static_cast<uint16_t>(kSimRulesNewest + 1);
         ASSERT_FALSE(plays_here(unknown.head));

@@ -344,6 +344,24 @@
    "expect": "8.3"
   },
   {
+   "id": "budget_of_the_rows_twice",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "PathManager::wide_budget(grid_.height(), grid_.width())",
+   "new": "PathManager::wide_budget(grid_.height(), grid_.height())",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "8.7"
+  },
+  {
+   "id": "budget_of_the_columns_twice",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "PathManager::wide_budget(grid_.height(), grid_.width())",
+   "new": "PathManager::wide_budget(grid_.width(), grid_.width())",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "8.7"
+  },
+  {
    "id": "gate_wall_at_row_90_up_for_rules_two",
    "file": "src/ants_sim/movement_system.cpp",
    "old": "static_cast<uint16_t>(grid_.width()), grid_.rules() == 0, grid_.rules() == 2);",
