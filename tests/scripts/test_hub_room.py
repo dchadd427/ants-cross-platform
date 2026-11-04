@@ -5,9 +5,22 @@ When hub.db and its log file come near `db_max_bytes`, the hub's clock deletes t
 80% of the limit. The freed pages are reused, so the file stops growing; mutes, bans, the counter of deletions and the logins are never touched. An account has a budget of lines for an hour and for
 a day (`quota`), which keeps the share of one account in the store small. `python -m hub.admin status` shows how full the database is, and `purge` frees space on demand.
 
-The classes below are listed here because docs/TESTING.md has no room for them. The hub is driven without sockets (fake peers, two clocks that the test moves), except where a class says so.
+The classes below are listed here because docs/TESTING.md has no room for them. The hub is driven without sockets (fake peers, two clocks that the test moves), except where a class says so. What every
+backend of the store must do (order, chunk, the newest lines, the moderators' and the deleted lines, what is not touched, `usage`) is in tests/scripts/test_hub_store_contract.py. The broken copies that
+these tests must notice are tests/data/hub_room_mutants.json (`python3 tools/mutate.py tests/data/hub_room_mutants.json --keep-going --jobs 1`).
   TheStoreAtItsLimit              the store filled up to its size guard, at a small limit and at the default 64 MB: the guard answers `rate` as documented, then the hub's clock makes room and
                                   the chat takes lines again at the next tick; the newest lines, the mutes, the bans, the deletion counter and the logins stay.
+  TheRoomInTheFile                what only the SQLite file has: the pages that the oldest lines leave are free and whole, the file stops growing, the target ends a call within a chunk, the bytes
+                                  decide and not the number of lines, the text of a deleted line is in neither file (also when a reader holds the log file), a locked database, a store at its target.
+  TheBudgetsOfAnAccount           the hour's and the day's budget of an account (fills up steadily, a refused line costs nothing, a refund, the memory that stays small).
+  TheChatTellsQuota               the code `quota`: the line is not kept, it is no mistake of the socket and costs it a frame; a moderator's command is not held back; the other codes stay as they were.
+  TheBusiestChat                  twelve accounts that say a line every 2 seconds for an hour and twenty quiet ones: the store stays inside its limit, nobody quiet is refused.
+  TheGuardAtItsEdges              exactly at the limit and one byte under it, a line of the largest size, lines that are deleted by the bytes.
+  TheHubsClock                    the marks (90% and 80%), a chunk a second, a database that refuses (a minute, not every tick), a store where no line may go (said once a minute), the time of a tick.
+  TheStaffTool                    `hub.admin status` and `purge` (the lower mark, --keep-lines, what a screen may show, a refusal, the hub going on during and after).
+  TheToolAndTheHubWriteAtTheSameTime   the command line's purge in a thread and the hub's clock and chat in this one: the file stays whole, the numbers of the lines go up, what stands is what the hub took.
+  TheHubOnRealSockets             `quota` on the wire (the socket stays), and a running hub on a full store takes a line again.
+  TheDocumentsSayWhatTheCodeDoes  docs/HUB.md and the page's word agree with the numbers of hub/limits.py.
 """
 import collections
 import dataclasses
