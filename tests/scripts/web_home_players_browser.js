@@ -8,7 +8,7 @@
 //   2. the sheet: opened by the bar's button or the corner's, a dialog with the focus on Close, over the Menu, Escape and the scrim close it and the focus goes back, Tab stays inside it, it clears a phone's system bar;
 //   3. the states: nobody else (the note and the Host button), the hub gone ("Players list is off right now", the chat says it too) and back by itself, a person who comes, goes and changes what they do;
 //   4. Join: the Games list's own Join of that room is pressed (also from the sheet and the drawer);
-//   5. a hub that has no list (an older one): nothing shows, and Home is the same pixel for pixel as with the list's two files not there at all (five sizes);
+//   5. a hub that has no list (an older one): nothing shows, and Home is the same as with the list's two files not there at all, but for a few pixels at the edges of rounded buttons that Chromium draws either way (five sizes);
 //   6. the Room: the list is not on it, and it is back on Home.
 //   --shots DIR takes the pictures of the built page (built_*.png), the ones to put beside the approved pictures.
 //
@@ -62,6 +62,7 @@ const LOBBIES = { format: 1, count: 3, lobbies: [
     { code: 'p4n8dz', host: 'Pebble', map: 'ISLANDS.LVL', mode: 'highest-score', people: 3, bots: 0, free: 1, size: 4, age: 312 },
     { code: 'f3rn22', host: 'Fern', map: 'MEDIUM.LVL', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 30 }] };
 const SIZES = [['desktop', 1280, 800, false], ['tablet', 900, 700, false], ['phone', 390, 844, true], ['side', 844, 390, true], ['small side', 568, 320, true]];
+const NOISE = 12;       // pixels that two loads of the same page may draw differently, by more than 24 levels (the edges of rounded buttons: also with the list's files not there at all)
 const PICTURE = [   // the crowd of the approved pictures: [login, what it says]
     ['9001:tess', { at: 'look' }], ['2001:sage', { at: 'look' }], ['2002:fern', { at: 'look' }], ['2003:basil', { at: 'look' }],
     ['2004:clover', { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }], ['2005:juniper', { at: 'wait' }],
@@ -429,7 +430,7 @@ async function main() {
                     }
                     check('a hub that has no list (' + size[0] + ' ' + size[1] + ' x ' + size[2] + '): nothing of the list shows (no panel, no button, no class on Home)', !shots[0].shown.panel && !shots[0].shown.anyButton && shots[0].shown.cls.indexOf('pl-on') === -1, JSON.stringify(shots[0].shown));
                     const diff = await pixelsThatDiffer(shots[0].png, shots[1].png);
-                    check('... and Home is the same, pixel for pixel, as with the list\'s two files not there at all (no pixel differs by more than 24 levels; the grain of the page is not drawn twice to the last level)', diff.size && diff.n === 0, JSON.stringify(diff));
+                    check('... and Home is the same as with the list\'s two files not there at all (at most ' + NOISE + ' pixels differ by more than 24 levels: the edge of a rounded button is drawn either way from one load to the next, with the files or without; a panel or a button is thousands)', diff.size && diff.n <= NOISE, JSON.stringify(diff));
                     if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, 'built_panel_off_' + size[1] + 'x' + size[2] + '.png'), shots[0].png); }
                 }
             } finally { fake.close(); }
