@@ -204,6 +204,11 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".vbtn[aria-pressed=\"true\"] {", self.css)
         self.assertIn(".vwide { display: none; }", self.css)
 
+    def test_the_switch_label_is_centered_by_the_browser_not_hung_at_the_top_by_a_baseline_row(self):
+        vbtn = next(body for selector, body in self.rules if selector.strip() == ".vbtn")
+        self.assertIn("display: block;", vbtn, "a flex row with align-items: baseline hangs the label at the top of the 44 px button (tests/scripts/web_home_games_browser.js, part 1j, measures it)")
+        self.assertNotRegex(self.css, r"\.vbtn[^{]*\{[^}]*(baseline|inline-flex)")
+
     def test_the_classes_that_the_script_makes_are_the_styles_and_the_page_s_own(self):
         made = set()
         for m in re.finditer(r"el\('[a-z0-9]+', '([\w -]+)'", read("web", "home", "games.js")):
