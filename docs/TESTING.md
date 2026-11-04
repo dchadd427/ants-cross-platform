@@ -239,7 +239,7 @@ The rule covers the game, the server and every test program, with three exceptio
 
 ### The deploy job
 
-The sixth job, the **deploy job**, is not a required check. It runs only for a push to `main` (a merged pull request) or to `staging`, after the build and test jobs of that run passed, and deploys only when the push changed something that an image contains (`tools/deploy_filter.py`). Before it calls the deploy hook (a repository secret) it waits until the site's `/busy` shows no match running (a longest wait applies). How it works and the staging site: [`WORKFLOW.md`](WORKFLOW.md) ("Deploy from CI and the staging site").
+The sixth job, the **deploy job**, is not a required check. It runs only for a push to `main` (a merged pull request) or to `staging`, after the build and test jobs of that run passed, and deploys only when the push changed something that an image contains (`tools/deploy_filter.py`). Before it calls the deploy hook (a repository secret) it waits until the site's `/busy` shows no match running (up to a longest wait). How it works and the staging site: [`WORKFLOW.md`](WORKFLOW.md) ("Deploy from CI and the staging site").
 
 ### What CI does not cover
 

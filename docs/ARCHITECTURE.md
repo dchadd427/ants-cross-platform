@@ -201,6 +201,8 @@ ants-cross-platform/
 │   ├── favicon.ico                     # Site icon
 │   └── favicon.png                     # Site icon (PNG)
 ├── .github/
+│   ├── CODEOWNERS                      # Who reviews a change; the build, container, deployment and automation
+│   │                                   # files have lines of their own
 │   └── workflows/ci.yml                # Continuous integration (see TESTING.md)
 ├── .dockerignore                       # What stays out of the Docker build context
 ├── .editorconfig                       # Editor settings (UTF-8, LF, four spaces, no trailing blanks)
@@ -234,6 +236,7 @@ ants-cross-platform/
 │                                       # covered)
 ├── THIRD_PARTY_NOTICES.md              # Third-party code and fonts in the repository or linked by the build, with
 │                                       # their licences
+├── SECURITY.md                         # How to report a problem privately, what is in scope and what to expect
 ├── VERSION                             # The one place the version is written (one line, MAJOR.MINOR.PATCH); the
 │                                       # build generates the C++ header from it
 └── AGENTS.md                           # Project rules for contributors and coding agents
