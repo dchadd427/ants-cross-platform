@@ -25,13 +25,11 @@ import gzip
 import hashlib
 import http.client
 import http.server
-import json
 import os
 import re
 import shutil
 import signal
 import socket
-import socketserver
 import subprocess
 import sys
 import tempfile
@@ -39,9 +37,8 @@ import threading
 import time
 import unittest
 
-REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import quick_http  # noqa: E402  (the stdlib server asks the network for a name when it binds)
 import test_nginx_stats as stats  # noqa: E402  (the helpers that read the file)
 
 RAW = stats.read("docker", "nginx.conf")
@@ -222,8 +219,7 @@ class StandHandler(http.server.BaseHTTPRequestHandler):
     do_GET = do_POST = do_HEAD = answer
 
 
-class Stand(socketserver.ThreadingMixIn, http.server.HTTPServer):
-    daemon_threads = True
+class Stand(quick_http.QuickThreadingHTTPServer):
     allow_reuse_address = True
 
     def __init__(self):
