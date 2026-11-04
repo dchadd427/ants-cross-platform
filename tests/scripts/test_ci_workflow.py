@@ -627,7 +627,9 @@ class LightChecks(unittest.TestCase):
 
     def test_the_windows_jobs_always_run_so_that_the_required_names_are_reported_and_only_their_steps_are_skipped(self):
         block = job_block("windows")
-        self.assertEqual([l for l in block if l.startswith("    if:")], [], "a matrix job that a job-level `if` skips is reported under the unexpanded name: the two required names would never appear")
+        # (the one job-level `if` has no test of the light checks: a matrix job that it skips is reported under the unexpanded name and the two required names would never appear; and it has
+        # no `success()`, so that a first job that failed does not skip the Windows jobs either, which a plain `needs` would do)
+        self.assertEqual([l for l in block if l.startswith("    if:")], ["    if: ${{ !cancelled() }}"])
         self.assertIn("    needs: changes", block)
         self.assertIn("    runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}", block)
         steps = steps_of("windows")

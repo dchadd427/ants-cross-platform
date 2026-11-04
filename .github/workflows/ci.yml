@@ -371,7 +371,9 @@ jobs:
     needs: changes
     # For a change of web pages, documents and page tests only (the job `changes`) there is nothing to build: the job then runs on a small Linux machine and every step below is skipped. (It is not
     # skipped as a whole: a matrix job that is skipped by its `if` is reported once, under the unexpanded template of its name, so that "Windows (MSVC 2022)" and "Windows (MSVC 2026)", the names
-    # that main requires, would never be reported and the pull request could not be merged.) If `changes` failed, everything runs.
+    # that main requires, would never be reported and the pull request could not be merged.) If `changes` failed, everything runs: the `if` below (no `success()`) keeps the job from being skipped
+    # with it, which a plain `needs` would do.
+    if: ${{ !cancelled() }}
     runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}
     timeout-minutes: 40
     strategy:
