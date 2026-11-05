@@ -136,8 +136,8 @@ class TheRules(unittest.TestCase):
         self.assertEqual(len(cpp.check([b"docs/aux.md", b"docs/aux.md", b"docs/b.md"])), 1)
 
 
-def run_tool(*args, cwd=None):
-    return subprocess.run([sys.executable, TOOL] + list(args), capture_output=True, text=True, env=GIT_ENV, cwd=cwd, timeout=120)
+def run_tool(*args, cwd=None, env=GIT_ENV):
+    return subprocess.run([sys.executable, TOOL] + list(args), capture_output=True, text=True, env=env, cwd=cwd, timeout=120)
 
 
 @unittest.skipUnless(shutil.which("git"), "git is needed")
@@ -168,10 +168,10 @@ class TheTool(unittest.TestCase):
 
     @unittest.skipUnless(os.path.exists(os.path.join(REPO, ".git")), "this is not a checkout")
     def test_this_repository_has_only_portable_paths(self):
-        tracked = subprocess.run(["git", "-C", REPO, "ls-files", "-z"], capture_output=True, env=GIT_ENV).stdout.split(b"\0")[:-1]
+        tracked = subprocess.run(["git", "-C", REPO, "ls-files", "-z"], capture_output=True).stdout.split(b"\0")[:-1]       # (git as it is configured here: a checkout that its owner does not own needs safe.directory)
         self.assertGreater(len(tracked), 0)
         for args, cwd in (((), REPO), (("--root", REPO), HERE)):
-            done = run_tool(*args, cwd=cwd)
+            done = run_tool(*args, cwd=cwd, env=os.environ)
             self.assertEqual((done.returncode, done.stderr), (0, ""), done.stdout)
             self.assertEqual(done.stdout, "portable paths: all %d tracked paths can be held by Windows and macOS\n" % len(set(tracked)))
 
