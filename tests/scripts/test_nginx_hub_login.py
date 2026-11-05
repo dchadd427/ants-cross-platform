@@ -234,6 +234,8 @@ def mini_conf(tmp, port, hub_port, stand_port, dead_port, error_level="error"):
     """The real text of the zones, the maps and the blocks in a small server: the hub's name is this machine's port, the game server's is a stand-in's, and the logs are real files."""
     zones = "\n  ".join(re.findall(r"limit_req_zone \$binary_remote_addr zone=ants_hub_(?:login|callback|session|req):[^;]+;", HEAD) + re.findall(r"limit_conn_zone \$binary_remote_addr zone=ants_hub_conn:[^;]+;", HEAD))
     zones += "\n  " + re.search(r"log_format ants_noquery [^;]+;", HEAD).group(0)
+    zones += "\n  map $request_uri $ants_path {%s}" % stats.block_of(HEAD, "map $request_uri $ants_path ")                              # (the format writes the path that was asked for)
+    zones += "\n  map \"$http_origin|$host\" $ants_ws_origin_ok {%s}" % stats.block_of(HEAD, "map \"$http_origin|$host\" $ants_ws_origin_ok ")      # (the game door refuses the origin of another site)
     maps = "\n  ".join("map $http_cookie $%s {%s}" % (name, stats.block_of(HEAD, "map $http_cookie $%s " % name)) for name in ("hub_cookie_session", "hub_cookie_state", "admin_cookie"))
 
     def block(header, where):
