@@ -200,12 +200,12 @@ void puppet_cases() {
     }
     {
         PuppetRig r;                                                                // places and frames that are off the map or the clip are brought in, not refused
-        yard::AntRecord far = make_ant(1, 0, 100, 100, walk_clip_of(3));
-        far.px = 65535;
-        far.py = 65535;
-        far.frame = 255;
-        far.left_ms = 65535;
-        r.puppet->apply({far});
+        yard::AntRecord outside = make_ant(1, 0, 100, 100, walk_clip_of(3));        // (not "far": a Windows header makes that word a macro)
+        outside.px = 65535;
+        outside.py = 65535;
+        outside.frame = 255;
+        outside.left_ms = 65535;
+        r.puppet->apply({outside});
         const sim::AntSnapshot* a = find_ant(r.engine.get_world_state(), r.puppet->slot_id(1));
         check(a != nullptr && a->px == kTilesW * 32 - 1 && a->py == kTilesH * 32 - 1, "a place beyond the map is the map's last pixel");
         check(a != nullptr && a->loco_frame == walk_clip_of(3).count - 1 && a->loco_left_ms == 65535, "a frame beyond the clip is its last frame");
