@@ -1868,10 +1868,10 @@ int main(int argc, char* argv[]) {
         const assets::LevelWriteResult with_plants = assets::write_level(planted, assets::LevelLimits::for_extended_maps());
         ASSERT_TRUE(with_plants.ok && load_map_or_embedded(carrying(std::string(with_plants.bytes.begin(), with_plants.bytes.end())), dirs, level, error) && error.empty());
         const auto started = std::chrono::steady_clock::now();
-        const std::string crowd = tiny_with_ants({16000, 16000, 16000, 16000});        // (a file of 64,000 ants: seconds to set up natively, minutes in a browser)
+        const std::string crowd = tiny_with_ants({16384, 16384, 16384, 16383});        // (a file of 65,535 ants, the most that block 1 holds: seconds to set up natively, minutes in a browser)
         ASSERT_FALSE(crowd.empty());
         ASSERT_FALSE(load_embedded_map(carrying(crowd), level, error));
-        ASSERT_TRUE(contains(error, "64000 ants"));
+        ASSERT_TRUE(contains(error, "65535 ants"));
         ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(5));
         {   // the folder's own file is the server's: a map of it is never counted
             std::ofstream big(nowhere.path / "BIG.LVL", std::ios::binary);

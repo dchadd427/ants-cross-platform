@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the limit on the starting ants of a map that a replay file carries (include/ants_replay/replay.hpp kMaxEmbeddedStartAnts, checked in load_embedded_map; docs/REPLAYS.md \"A file of your own\", the paragraph \"A hostile file\") for tools/mutate.py (docs/WORKFLOW.md): RP9.11 of tests/test_replay/test_replay.cpp (the limit, the plants, 64,000 ants refused in no time, a folder's map never counted) and RA7.10 of tests/test_app/test_replay_app.cpp (the application refuses at once with failure 4 and the count). Run from a build folder: python3 tools/mutate.py tests/data/replay_ants_guard_mutants.json --keep-going --jobs 3 --timeout 900. Every mutant must be caught. Each `why` names what the mutant loses.",
+ "note": "Mutants of the limit on the starting ants of a map that a replay file carries (include/ants_replay/replay.hpp kMaxEmbeddedStartAnts, checked in load_embedded_map; docs/REPLAYS.md \"A file of your own\", the paragraph \"A hostile file\") for tools/mutate.py (docs/WORKFLOW.md): RP9.11 of tests/test_replay/test_replay.cpp (the limit, the plants, 65,535 ants refused in no time, a folder's map never counted) and RA7.10 of tests/test_app/test_replay_app.cpp (the application refuses at once with failure 4 and the count). Run from a build folder: python3 tools/mutate.py tests/data/replay_ants_guard_mutants.json --keep-going --jobs 3 --timeout 900. Every mutant must be caught. Each `why` names what the mutant loses.",
  "defaults": {
   "build": [
    "test_replay",
@@ -13,7 +13,7 @@
    "file": "src/ants_replay/player.cpp",
    "old": "if (ants > kMaxEmbeddedStartAnts) {",
    "new": "if (false) {",
-   "why": "a map of 64,000 ants is set up by the game: seconds natively, minutes in a browser"
+   "why": "a map of 65,535 ants is set up by the game: seconds natively, minutes in a browser"
   },
   {
    "id": "the_limit_is_one_more",

@@ -1391,7 +1391,7 @@ int main(int argc, char* argv[]) {
         }
     } TEST_END();
 
-    TEST_CASE("RA7.10 A map that the file carries and that starts more than 8,000 ants is refused at once (failure 4 with the count) and never set up, where setting up 64,000 takes seconds natively and minutes in a browser; a file that carries 8,000 is not refused for its ants") {
+    TEST_CASE("RA7.10 A map that the file carries and that starts more than 8,000 ants is refused at once (failure 4 with the count) and never set up, where setting up 65,535 takes seconds natively and minutes in a browser; a file that carries 8,000 is not refused for its ants") {
         const Handmade made = make_handmade(700, true);
         ASSERT_FALSE(made.bytes.empty());
         ScratchRoot empty;                                                                  // (a maps folder that holds a map, SMALL, and not the one of the match: the application needs one to start)
@@ -1410,14 +1410,14 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::None);
             v.app.shutdown();
         }
-        {   // 64,000 ants: refused while the file is read, the frames in which the match would be set up do nothing, and it all takes no time
-            const std::string crowd = tiny_with_ants({16000, 16000, 16000, 16000});
+        {   // 65,535 ants: refused while the file is read, the frames in which the match would be set up do nothing, and it all takes no time
+            const std::string crowd = tiny_with_ants({16384, 16384, 16384, 16383});
             ASSERT_FALSE(crowd.empty());
             const auto started = std::chrono::steady_clock::now();
             Viewer v(carrying(crowd), "crowd.antsrep", false, empty.path().string());
             v.frames(40);
             ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap && v.state() == ReplayState::Failed);
-            ASSERT_TRUE(v.app.replay_failure_text().find("64000 ants") != std::string::npos);
+            ASSERT_TRUE(v.app.replay_failure_text().find("65535 ants") != std::string::npos);
             ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(10));
             v.app.shutdown();
         }
