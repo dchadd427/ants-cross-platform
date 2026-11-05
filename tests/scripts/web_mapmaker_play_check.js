@@ -43,14 +43,14 @@ const NAMES = ['Green', 'Red', 'Blue', 'Black'];
 function finding(code, severity, team, message, count) { return { severity, code, message, row: -1, column: -1, team, count: count || 1, place_limit: false }; }
 // teams: for each color [ants, hill cells]; extra findings are added as they are
 function answers(opts) {
-    const o = Object.assign({ kind: 'classic', rows: 31, columns: 31, teams: [[3, 16], [3, 16], [3, 16], [3, 16]], extra: [], judged: true, loaded: true }, opts || {});
+    const o = Object.assign({ kind: 'classic', rows: 31, columns: 31, teams: [[3, 16], [3, 16], [3, 16], [3, 16]], extra: [], judged: true, loaded: true, plants: 0, waypoints: 0 }, opts || {});
     const findings = [];
     o.teams.forEach(([ants, cells], t) => {
         if (!cells) findings.push(finding('hill_missing', 'warning', t, NAMES[t] + ' has no hill'));
         if (!ants) findings.push(finding('starting_ants_missing', 'warning', t, NAMES[t] + ' has no starting ants (no start marker, tile 154)'));
     });
     return { check: { kind: o.kind, judged: o.judged, works: !findings.length, headline: 'x', badge: '', findings: findings.concat(o.extra) },
-             read: { loaded: o.loaded, rows: o.rows, columns: o.columns, teams: o.teams.map(([ants, cells], t) => ({ team: NAMES[t].toLowerCase(), start_markers: ants, hill_cells: cells })) } };
+             read: { loaded: o.loaded, rows: o.rows, columns: o.columns, plants: o.plants, waypoints: o.waypoints, teams: o.teams.map(([ants, cells], t) => ({ team: NAMES[t].toLowerCase(), start_markers: ants, hill_cells: cells })) } };
 }
 function verdictOf(opts) { const a = answers(opts); return Play.verdict(a.check, a.read); }
 const usable = (v) => v.seats.map((s) => (s.usable ? 1 : 0)).join('');
@@ -63,6 +63,15 @@ function verdictChecks() {
     check(v.ok && usable(v) === '1110' && v.ants === 2401 && v.heavy === true, 'a color that cannot play (no hill) still has its start markers counted, as the server counts them: 2,401 is heavy');
     v = verdictOf({ teams: [[800, 16], [800, 16], [800, 16], [0, 16]] });
     check(v.ok && v.ants === 2400 && v.heavy === false, '2,400 is not heavy');
+    // pairs of a plant and a waypoint (plants x waypoints): the cost of SimulationEngine::init's set-up, a second square that the ants do not show
+    v = verdictOf({ plants: 1000, waypoints: 1000 });
+    check(v.ok && v.pairs === 1000000 && v.online === true, '1,000 plants and 1,000 waypoints are 1,000,000 pairs, exactly the cap: online');
+    v = verdictOf({ plants: 1000, waypoints: 1001 });
+    check(v.ok && v.pairs === 1001000 && v.online === false, '1,001,000 pairs: over the cap, offline (ants alone would allow it)');
+    v = verdictOf({ plants: 65500, waypoints: 65535 });
+    check(v.ok && v.pairs === 65500 * 65535 && v.online === false, 'the brief\'s own crafted map (65,500 x 65,535) is far over the cap');
+    v = verdictOf({ plants: 0, waypoints: 65535 });
+    check(v.ok && v.pairs === 0 && v.online === true, '0 plants is 0 pairs, however many waypoints: online');
     v = verdictOf();
     equal(v.seats.map((s) => [s.seat, s.name, s.ants, s.hills]), [[0, 'Green', 3, 1], [1, 'Red', 3, 1], [2, 'Blue', 3, 1], [3, 'Black', 3, 1]], 'the seats are the game\'s own: Green 0, Red 1, Blue 2, Black 3, with their ants and hills');
     check(verdictOf({ rows: 90 }).ok && !verdictOf({ rows: 91 }).ok, 'Classic: ninety rows play, ninety-one do not');
@@ -501,6 +510,34 @@ function dialogChecks() {
     }
     check(Play.MAX_ONLINE_ANTS === 1000 && Play.onlineText(1001).indexOf('1,001 ants') > 0 && Play.onlineText(1001).indexOf('at most 1,000,') > 0, 'the cap is 1,000 and the words write the number with thousands separators');
     check(Play.HEAVY_START_ANTS === 2400 && Play.heavyText(1234567) === 'This map starts with 1,234,567 ants, so a game may run slowly, especially on phones and older computers.', 'the threshold is 2,400 and the words write the number with thousands separators');
+    // the pairs of a plant and a waypoint: a second limit, never a slow-game warning (the Against bots tab is never refused for it), with the same shape of refusal as the ants one, and the two notes can show together
+    for (const [plants, waypoints, online] of [[1000, 1000, true], [1000, 1001, false], [65500, 65535, false]]) {
+        const pairs = plants * waypoints;
+        const refusal = 'This map has ' + commasOf(pairs) + ' pairs of a plant and a waypoint. An online room plays at most 1,000,000, so it cannot host this map. You can still play it against bots on this device.';
+        p = pageOf();
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: answers({ plants, waypoints }).check }), readReport: () => ({ status: 0, json: answers({ plants, waypoints }).read }) } }));
+        check(!warnings(p, '.play-panel-bots').length && !warnings(p, '.play-panel-friends').length, pairs + ' pairs: no slow-game warning either panel');
+        check(!startButton(p).disabled, pairs + ' pairs: against bots the game can be started');
+        all(p, '.play-tab')[1].click();
+        const no = all(p, '.play-panel-friends .play-status');
+        if (online) {
+            equal(no.map((n) => n.textContent), [], pairs + ' pairs: at the cap, with other players there is no word about pairs');
+            check(!startButton(p).disabled, pairs + ' pairs: the room button is on');
+        } else {
+            equal(no.map((n) => n.textContent), [refusal], pairs + ' pairs: over the cap, the refusal is the only word under the map card');
+            check(no[0].className === 'play-status no' && no[0].getAttribute('role') === 'status', pairs + ' pairs: with the warning classes of the dialog');
+            check(startButton(p).disabled, pairs + ' pairs: the room button is off');
+        }
+    }
+    {   // a map over both caps (ants and pairs) shows both notes, one under the other
+        p = pageOf();
+        const both = answers({ teams: [[1200, 16], [1200, 16], [1200, 16], [1200, 16]], plants: 1001, waypoints: 1000 });
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: both.check }), readReport: () => ({ status: 0, json: both.read }) } }));
+        all(p, '.play-tab')[1].click();
+        const no = all(p, '.play-panel-friends .play-status');
+        check(no.length === 2 && no[0].textContent.indexOf('ants') > 0 && no[1].textContent.indexOf('pairs') > 0, 'over both caps: the ants note, then the pairs note, both shown');
+    }
+    check(Play.MAX_ONLINE_PAIRS === 1000000 && Play.onlinePairsText(1001000).indexOf('1,001,000 pairs') > 0 && Play.onlinePairsText(1001000).indexOf('at most 1,000,000') > 0, 'the pairs cap is 1,000,000 and the words write the number with thousands separators');
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }
 

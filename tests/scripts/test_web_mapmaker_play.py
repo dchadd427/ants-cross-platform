@@ -134,6 +134,13 @@ class TheHeavyMapWarning(unittest.TestCase):
         self.assertTrue(header and page)
         self.assertEqual(header.group(1), page.group(1))
 
+    def test_the_page_refuses_above_the_pairs_that_the_server_refuses(self):
+        """a room plays at most include/ants_server/online_limits.hpp's kMaxPlantWaypointPairs pairs of a plant and a waypoint; the page's copy of the number must be the same"""
+        header = re.search(r"kMaxPlantWaypointPairs = (\d+);", read("include", "ants_server", "online_limits.hpp"))
+        page = re.search(r"MAX_ONLINE_PAIRS = (\d+);", read("web", "front", "mapmaker_play.js"))
+        self.assertTrue(header and page)
+        self.assertEqual(header.group(1), page.group(1))
+
     def test_it_only_warns(self):
         play = read("web", "front", "mapmaker_play.js")
         for word in ("disabled = v.heavy", "ok: !v.heavy", "tooMany", "online game allows"):
