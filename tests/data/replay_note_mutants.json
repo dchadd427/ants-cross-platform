@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the note and the log line of a match that was not kept as a replay (Room::replay_keep in src/ants_server/room.cpp and the size limit of Recorder::on_command in src/ants_replay/recorder.cpp): a match that ran at least 30 seconds and whose recording failed says why (not 'ran less than 30 seconds'), with one line in the log; a match that really ran less than 30 seconds says that, with no line; which matches are kept does not change. For tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/replay_note_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Replays', 'What is kept') in test_server S3.244 and S3.162 (tests/test_server/replay_tests.hpp) or test_replay RP2.7. Not listed on purpose: the `ran == 0` branch (no test has a recording that failed before its first turn in a room).",
+ "note": "Mutants of the note and the log line of a match that was not kept as a replay (Room::replay_keep in src/ants_server/room.cpp and the size limit of Recorder::on_command in src/ants_replay/recorder.cpp): a match that ran at least 30 seconds and whose recording failed says why (not 'ran less than 30 seconds'), with one line in the log; a match that really ran less than 30 seconds says that, with no line; which matches are kept does not change. For tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/replay_note_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Replays', 'What is kept') in test_server S3.244, S3.245 (the 30 seconds of a failed recording, to the tick) and S3.162 (tests/test_server/replay_tests.hpp) or test_replay RP2.7. Not listed on purpose: the `ran == 0` branch (no test has a recording that failed before its first turn in a room).",
  "mutants": [
   {
    "id": "failed_recording_judged_by_its_own_turns",
@@ -102,6 +102,26 @@
     "test_replay"
    ],
    "test": "ANTS_TEST_FILTER=S3.244 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.162 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_replay/test_replay"
+  },
+  {
+   "id": "failed_recording_one_tick_short",
+   "file": "src/ants_server/room.cpp",
+   "old": "recorder.failure().empty() ? recorder.turns() : last_ticks_;",
+   "new": "recorder.failure().empty() ? recorder.turns() : last_ticks_ - 1u;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.245 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "failed_recording_one_tick_long",
+   "file": "src/ants_server/room.cpp",
+   "old": "recorder.failure().empty() ? recorder.turns() : last_ticks_;",
+   "new": "recorder.failure().empty() ? recorder.turns() : last_ticks_ + 1u;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.245 timeout 900 ./build/tests/test_server/test_server"
   }
  ]
 }
