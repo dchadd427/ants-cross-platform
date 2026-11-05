@@ -491,6 +491,7 @@ void hud_cases(const assets::AssetArchive& arc) {
         r.click(r.screen_of(980, 800).first, r.screen_of(980, 800).second);        // (an own ant is selected)
         const std::vector<uint32_t> selected = r.hud.get_selected_ant_ids();
         check(selected.size() == 1, "one own ant is selected");
+        r.hud.set_chat_input("x");                                                  // (a line waits in the box: a key that reached the chat would send it, clear it or add to it)
         const float cam_x = r.camera.x;
         const float cam_y = r.camera.y;
         const std::string status = r.hud.status_line().text();
@@ -510,12 +511,12 @@ void hud_cases(const assets::AssetArchive& arc) {
         for (const int32_t k : {'a', 'A', 'n', 'N', 'p', 'P', 's', 'S'}) blocked.emplace_back(k, uint16_t{0});             // (the kept letters without Ctrl are plain letters: nothing)
         for (const auto& k : blocked) {
             r.key(k.first, k.second);
-            const bool unchanged = r.hud.get_selected_ant_ids() == selected && r.hud.get_selected_base_team_id() == -1 && !r.hud.is_modal_open() && r.hud.get_chat_input().empty() && r.camera.x == cam_x &&
+            const bool unchanged = r.hud.get_selected_ant_ids() == selected && r.hud.get_selected_base_team_id() == -1 && !r.hud.is_modal_open() && r.hud.get_chat_input() == "x" && r.camera.x == cam_x &&
                                    r.camera.y == cam_y && r.sink->queued().empty() && r.hud.ant_health().when == marks.when && r.hud.ant_health().style == marks.style && r.hud.status_line().text() == status;
             if (!unchanged) check(false, "key " + std::to_string(k.first) + " with modifiers " + std::to_string(k.second) + " changed something");
         }
         check(true, std::to_string(blocked.size()) + " keys changed nothing");
-        check(r.hud.get_chat_input().empty() && r.hud.options().chat == false, "the chat is off and stays so");
+        check(r.hud.get_chat_input() == "x" && r.hud.options().chat == false, "the chat is off and stays so, and the line in its box is as it was");
 
         r.key(SDLK_ESCAPE);
         check(r.hud.get_selected_ant_ids().empty() && !r.hud.has_selection(), "Esc deselects");
@@ -540,6 +541,22 @@ void hud_cases(const assets::AssetArchive& arc) {
         r.hud.clear_selection();
         r.key('s', static_cast<uint16_t>(KMOD_LCTRL));
         check(r.sink->queued().empty(), "Ctrl+S with nothing selected sends nothing");
+    }
+
+    {
+        YardHud r;                                                                  // the chat option on all the same (nothing in the Yard turns it on): no key types into the box, edits it or sends it
+        r.apply(three_and_others());
+        r.look(900, 700);
+        r.hud.options().chat = true;
+        r.hud.set_chat_input("hi");
+        int sent = 0;
+        r.hud.set_on_chat_send([&sent](const std::string&, bool) { ++sent; });
+        const std::vector<int32_t> keys = {SDLK_RETURN, SDLK_KP_ENTER, SDLK_BACKSPACE, SDLK_F9, SDLK_F10, SDLK_F11, SDLK_F12, SDLK_F1, 'a', 'b', 'z', 'h', 'N', ' ', '0', '~'};
+        for (const int32_t k : keys) {
+            r.key(k, uint16_t{0});
+            r.key(k, static_cast<uint16_t>(KMOD_LSHIFT));
+        }
+        check(sent == 0 && r.hud.get_chat_input() == "hi", "with the chat option on all the same, no key types into the box, edits it or sends it: " + r.hud.get_chat_input() + ", " + std::to_string(sent) + " sent");
     }
 
     group("H4", "the HUD draws the minimap and the rubber band and nothing else");

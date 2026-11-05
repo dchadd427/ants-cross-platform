@@ -125,14 +125,46 @@ void start_cases() {
 }
 
 // (one game at a time: Application::shutdown ends SDL for the whole program, so a second game must not be made while a first one lives)
+/// A copy of GAUNTLET.LVL without its hills (the hill tiles of its layer 2 and the spawns of the teams that nobody plays), as a file of the test's own: what the Yard makes of the game's file
+std::string gauntlet_without_hills() {
+    static const std::string path = [] {
+        assets::LevelData level;
+        if (!level.load_lvl(maps_dir() + "GAUNTLET.LVL")) return std::string();
+        const assets::LevelData bare = level.for_roster(0);
+        const assets::LevelWriteResult written = assets::write_level(bare, assets::LevelLimits{});
+        const std::filesystem::path file = std::filesystem::temp_directory_path() / "ants_yard_test_gauntlet_bare.lvl";
+        std::ofstream out(file, std::ios::binary | std::ios::trunc);
+        if (written.ok) out.write(reinterpret_cast<const char*>(written.bytes.data()), static_cast<std::streamsize>(written.bytes.size()));
+        return written.ok && out ? file.string() : std::string();
+    }();
+    return path;
+}
+
+/// A Yard on a map file, its view put on a world pixel: the picture of it (one Application at a time: the rig lives for this call only)
+Picture yard_view_of(const std::string& map_file, int32_t world_x, int32_t world_y) {
+    YardRig r(960, 540, std::string(), map_file);
+    if (!r.ok) return Picture{};
+    r.app.yard_center_on(world_x, world_y);
+    r.frames(3);
+    return r.frame();
+}
+
 void start_map_cases() {
     group("A2", "the map file may be a map of the game: its hills, start markers and ants do not count");
-    YardRig game(960, 540, std::string(), maps_dir() + "GAUNTLET.LVL");
-    check(game.ok && game.app.yard_mode(), "a Yard on GAUNTLET");
-    check(game.app.sim().get_world_state().ants.empty() && game.app.sim().get_world_state().anthills.empty() && game.app.sim().roster_mask() == 0, "no ant, no hill, nobody plays");
-    game.frames(5);
-    check(game.app.sim().get_world_state().ants.empty(), "five frames later still none");
-    check(game.apply(scene()) == 8, "the batch is shown");
+    {
+        YardRig game(960, 540, std::string(), maps_dir() + "GAUNTLET.LVL");
+        check(game.ok && game.app.yard_mode(), "a Yard on GAUNTLET");
+        check(game.app.sim().get_world_state().ants.empty() && game.app.sim().get_world_state().anthills.empty() && game.app.sim().roster_mask() == 0, "no ant, no hill, nobody plays");
+        game.frames(5);
+        check(game.app.sim().get_world_state().ants.empty(), "five frames later still none");
+        check(game.apply(scene()) == 8, "the batch is shown");
+    }
+    // the hills of the file's four teams are tiles of its layer 2 as well: the picture of the Yard on the file, over its first hill (the tile 29, 7), is the picture of the Yard on a copy that has none
+    const std::string bare = gauntlet_without_hills();
+    check(!bare.empty(), "a copy of GAUNTLET without its hills is written");
+    const Picture on_file = yard_view_of(maps_dir() + "GAUNTLET.LVL", 29 * 32 + 64, 7 * 32 + 64);
+    const Picture on_copy = yard_view_of(bare, 29 * 32 + 64, 7 * 32 + 64);
+    check(!on_file.px.empty() && on_file.px == on_copy.px, "the Yard on the game's file draws no hill of the file: its picture is the one of a copy without them");
 }
 
 void refusal_cases() {
