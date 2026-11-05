@@ -135,7 +135,7 @@ class TheLocations(unittest.TestCase):
         self.assertIn("default_type application/json;", OFF)
         self.assertIn('add_header Cache-Control "no-store" always;', OFF)
 
-    def test_the_allowances_are_their_own_sized_for_the_whole_site_and_declared_outside_the_server(self):
+    def test_the_allowances_are_their_own_and_declared_outside_the_server(self):
         for zone, rate in (("ants_maps", 20), ("ants_map_previews", 200), ("ants_map_files", 20)):
             found = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/s;" % zone, CONF)
             self.assertIsNotNone(found, zone)

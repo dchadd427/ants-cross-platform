@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""docker/nginx.conf routes the map submissions and the owner's page safely (run by ./run_tests.sh --fast; the blocks are RUN where the program nginx is installed).
+"""docker/nginx.conf routes the map submissions and the admin page safely (run by ./run_tests.sh --fast; the blocks are RUN where the program nginx is installed).
 
 The game server's SUBMISSION door (ants_server --submit-port 4030, docs/MAP_SUBMISSIONS.md) is reached by the site's nginx only:
 
-  - the paths: /submissions and /submissions/<32 hex digits>[/withdraw] (a player), /admin/api/ (the owner's calls, the sign-in among them), /admin (the page, a static file that nothing links to), /maps/all (the
+  - the paths: /submissions and /submissions/<32 hex digits>[/withdraw] (a player), /admin/api/ (the admin's calls, the sign-in among them), /admin (the page, a static file that nothing links to), /maps/all (the
     list of the newest version) and the fallback that asks the game server for the file and the picture of an APPROVED map; everything else under /admin/ is a 404 (there is no helper, no callback);
-  - what is passed on: nothing the visitor sent but the few headers that each block names (the token of a maker, the cookie and the CSRF token of the owner, the type of the body), the real client address in
-    X-Client-Address (a header of that name from a visitor never gets through), no cookie set by the game server for a player's call and the cookie of the sign-in (Set-Cookie) for the owner's calls;
+  - what is passed on: nothing the visitor sent but the few headers that each block names (the token of a maker, the cookie and the CSRF token of the admin, the type of the body), the real client address in
+    X-Client-Address (a header of that name from a visitor never gets through), no cookie set by the game server for a player's call and the cookie of the sign-in (Set-Cookie) for the admin's calls;
   - the sign-in (POST /admin/api/login) has an allowance of its own, six a minute for each address;
   - the limits that nginx holds before the game server is asked: the size of a map (under a million bytes for a Classic one, 4 MiB for an Extended one), the methods, an allowance for each address;
-  - a game server that is not there is a JSON 503, never a page of the site; the owner's page is never kept by a cache, has a strict content security policy and cannot be framed.
+  - a game server that is not there is a JSON 503, never a page of the site; the admin page is never kept by a cache, has a strict content security policy and cannot be framed.
 """
 import http.client
 import json
@@ -67,7 +67,7 @@ class Door(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         if self.name in ("door", "testdoor"):
-            self.send_header("Set-Cookie", "evil=1")                  # (the game server sets the cookie of the owner's sign-in; for a player's call the site would not pass one on)
+            self.send_header("Set-Cookie", "evil=1")                  # (the game server sets the cookie of the admin's sign-in; for a player's call the site would not pass one on)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -245,7 +245,7 @@ class TheText(unittest.TestCase):
         self.assertNotIn("$arg_kind", head)
         self.assertIn("52428[0-8]", head)
 
-    def test_the_zones_are_outside_the_server_and_sized_for_the_whole_site(self):
+    def test_the_zones_are_outside_the_server(self):
         head = CONF[:CONF.index("server {")]
         for zone, rate in (("ants_submit_post", "10r/m"), ("ants_submit_read", "10r/s"), ("ants_admin_api", "20r/s"), ("ants_admin_login", "6r/m")):
             self.assertRegex(head, r"limit_req_zone \$[a-z_]+ zone=%s:1m rate=%s;" % (zone, rate))
@@ -281,7 +281,7 @@ class TheText(unittest.TestCase):
                          ["Connection", "Host", "Content-Type", "Cookie", "X-Ants-Csrf", "Sec-Fetch-Site", "X-Client-Address"])
         self.assertEqual(re.findall(r"proxy_set_header\s+(\S+)", block_of(CONF, "location = /submissions ")),
                          ["Connection", "Host", "Content-Type", "Authorization", "Sec-Fetch-Site", "X-Client-Address"])
-        self.assertNotIn("proxy_set_header Cookie", block_of(CONF, "location = /submissions "))           # (the cookie of the owner goes only where the owner's calls are)
+        self.assertNotIn("proxy_set_header Cookie", block_of(CONF, "location = /submissions "))           # (the admin's cookie goes only where the admin's calls are)
         self.assertNotIn("proxy_set_header Authorization", block_of(CONF, "location ^~ /admin/api/ "))
         self.assertIn("include /etc/nginx/ants-trusted-proxies/*.conf;", CONF)
 
@@ -407,7 +407,7 @@ class TheBlocksRun(unittest.TestCase):
                                                                                       "X-Client-Address": "6.6.6.6", "X-Forwarded-For": "7.7.7.7", "Referer": "http://evil.example/", "User-Agent": "attacker/1",
                                                                                       "Sec-Fetch-Site": "same-origin", "X-Real-IP": "8.8.8.8"}, b"{}")
         self.assertEqual(status, 201)
-        self.assertEqual(names(headers, "set-cookie"), ["evil=1"])                              # (what the game server sets for the owner's calls goes through: the sign-in, the new password, the sign-out)
+        self.assertEqual(names(headers, "set-cookie"), ["evil=1"])                              # (what the game server sets for the admin's calls goes through: the sign-in, the new password, the sign-out)
         method, path, seen, length = self.last(self.rig.door)
         self.assertEqual((method, path, length), ("POST", "/admin/api/maps/%s/approve" % ID, 2))
         self.assertEqual(seen.get("cookie"), "ants_admin=abc")
