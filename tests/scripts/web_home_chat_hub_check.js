@@ -72,10 +72,14 @@ async function main() {
         const answers = ['one', 'two', 'three', 'four', 'five'].map((t) => v.dock.say(t));
         check('five lines in a row: two go (the page\'s burst), the others wait, and the hub never has to say "rate" (the page paces below it)', JSON.stringify(answers) === JSON.stringify(['', '', 'rate', 'rate', 'rate']) && await until(() => v.rows().length === 5) && (hub.rateRefusals || 0) === 0 && hub.received.filter((m) => m.t === 'say').length === 2);
         check('the visitor\'s own lines come back from the hub as lines, in the visitor\'s mark', v.rows().slice(3).join('|') === 'maple.leaf: one|maple.leaf: two' && v.log.children[4].className.indexOf('gc-me') !== -1);
+        await until(() => v.note() === '', 8000);                      // (the page's own "Slow down a little" for the three that waited goes by itself)
+        hub.send(hub.peers[0], { t: 'err', code: 'rate' });
+        await sleep(150);
+        check('an err of the hub when no line of the page is in flight is nobody\'s: no words in the note', v.note() === '');
+        await sleep(2500);
+        check('after 2.5 s the page lets one more through', v.dock.say('six') === '');
         hub.send(hub.peers[0], { t: 'err', code: 'muted' });
-        check('an err of the hub is words in the note', await until(() => v.note() === 'You cannot chat for a while'));
-        await sleep(2600);
-        check('after 2.5 s the page lets one more through', v.dock.say('six') === '' && await until(() => v.rows().length === 6));
+        check('an err of the hub for a line that is in flight is words in the note', await until(() => v.note() === 'You cannot chat for a while') && await until(() => v.rows().length === 6));
         await hub.close();
     }
     {   // a hostile hub on a real socket: markup, bidi, a frame of megabytes, noise, a welcome in pieces

@@ -249,8 +249,8 @@
   {
    "id": "a_hub_of_unknown_kinds_is_dropped",
    "file": "web/home/chat.js",
-   "old": "delete said[refused.text]; } }       // (the hub answers in order",
-   "new": "delete said[refused.text]; } else lost(); }       // (the hub answers in order",
+   "old": "delete said[refused.text]; }\n        }",
+   "new": "delete said[refused.text]; } else lost();\n        }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -522,8 +522,8 @@
   {
    "id": "err_ignored",
    "file": "web/home/chat.js",
-   "old": "{ waiting(); var refused = unanswered.shift(); tell(m.code); if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; } }",
-   "new": "{ }",
+   "old": "else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) refuse(m.code);",
+   "new": "else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) { }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -704,8 +704,8 @@
   {
    "id": "ping_missing",
    "file": "web/home/chat.js",
-   "old": "liveSince = now();\n            ping();",
-   "new": "liveSince = now();",
+   "old": "liveSince = now(); hello = m;\n            ping();",
+   "new": "liveSince = now(); hello = m;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1376,15 +1376,15 @@
   {
    "id": "dock_free_while_a_dialog_is_up",
    "file": "web/home/home.js",
-   "old": "[bar, rbar, dock && dock.root].forEach(",
+   "old": "[bar, rbar, dock && dock.root, players && players.root].forEach(",
    "new": "[bar, rbar].forEach(",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "dock_mounted_free_while_going",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); } } catch (e) { dock = null; }",
-   "new": "dockShown(); } } catch (e) { dock = null; }",
+   "old": "inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; }",
+   "new": "dockShown(); wantPlayers(); } } catch (e) { dock = null; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1544,8 +1544,8 @@
   {
    "id": "dock_mount_error_reaches_the_page",
    "file": "web/home/home.js",
-   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); } } catch (e) { dock = null; }",
-   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); }",
+   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; }",
+   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2181,8 +2181,8 @@
   {
    "id": "the_refusal_does_not_forget_the_old",
    "file": "web/home/chat.js",
-   "old": "{ waiting(); var refused = unanswered.shift();",
-   "new": "{ var refused = unanswered.shift();",
+   "old": "            waiting();\n            var refused = unanswered.shift();\n",
+   "new": "            var refused = unanswered.shift();\n",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2468,8 +2468,8 @@
   {
    "id": "relink_waits_for_the_backoff",
    "file": "web/home/chat.js",
-   "old": "liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false;\n            go();",
-   "new": "liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false;",
+   "old": "liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null;\n            go();",
+   "new": "liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2652,6 +2652,55 @@
    "file": "web/home/chat.css",
    "old": "(orientation: landscape) { .gc, .gc[data-open=\"true\"] { height: min(286px, calc(100% - 118px))",
    "new": "(orientation: landscape) { .gcx, .gc[data-open=\"true\"] { height: min(286px, calc(100% - 118px))",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_of_another_kind_is_a_refused_line",
+   "file": "web/home/chat.js",
+   "old": "else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) refuse(m.code);",
+   "new": "else if (m.t === 'err') refuse(m.code);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "err_with_no_line_in_flight_is_told",
+   "file": "web/home/chat.js",
+   "old": "            if (refused === undefined && now() - commandAt >= MS.pending) return;\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_refused_command_is_not_told",
+   "file": "web/home/chat.js",
+   "old": "            else commandAt = now();\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_command_is_in_flight_for_ever",
+   "file": "web/home/chat.js",
+   "old": "if (refused === undefined && now() - commandAt >= MS.pending) return;",
+   "new": "if (refused === undefined && commandAt < 0) return;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_hub_codes_miss_bad",
+   "file": "web/home/chat.js",
+   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];",
+   "new": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young'];",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_hub_codes_miss_muted",
+   "file": "web/home/chat.js",
+   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];",
+   "new": "var SAID = ['rate', 'login', 'banned', 'long', 'empty', 'young', 'bad'];",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_refused_line_is_not_given_back_by_the_refusal_function",
+   "file": "web/home/chat.js",
+   "old": "if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; }\n        }",
+   "new": "if (refused !== undefined) { delete said[refused.text]; }\n        }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
