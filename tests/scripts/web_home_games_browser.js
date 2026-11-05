@@ -5,6 +5,9 @@
 //      the map, the seats), joins it from the list (a second client that only joins; the page's own room goes when the new one welcomes it), and the first sees the guest in its room;
 //   2. what a screen shows: with --shots DIR, pictures of Home (the count on the Games button), the Games list (rows and the empty state), the Room (public and private, a guest's chip), the card of the question and the notices,
 //      at 390 x 844, 844 x 390 and 1280 x 800 (the sizes of the approved pictures), named games4_*.png, and a few measurements (every target at least 44 px, nothing wider than the window).
+//   0c. the Games list docked in the Yard of the live site is centered in the window from 1280 px wide (its middle is the window's within 1 px, the chat panel open or folded, at the common sizes from 1280 x 800 to
+//      1920 x 1080), keeps right of the chat panel in a window narrower than that (1024 x 768), and the pictures of its rows: a map of the players shows the library's (the picture is there, loaded), a map that has none
+//      leaves the plain square with no broken image, an original shows its own, and no list of maps is fetched for it.
 //   0. the Yard's stand-in: a page of a build with the site label "staging" (the build argument ANTS_SITE_LABEL, which the Dockerfile stamps into the title and the footer) has it (the card, the tag, five ants, the size that
 //      it prints); a page with no label (production) has the bar over a plain sandy field, #yard empty, and the box of everything is the same either way; at 1280 x 800, 900 x 700, 390 x 844, 844 x 390 and 568 x 320.
 // usage: node web_home_games_browser.js --server PATH/ants_server --maps PATH/Original-Ants/Maps [--shots DIR]     (exit 0: every check holds; every failure is printed)
@@ -22,6 +25,7 @@ if (!serverPath || !mapsPath) { console.log('usage: web_home_games_browser.js --
 let playwright;
 try { playwright = require('playwright'); } catch (e) { console.log('SKIP: Playwright is not installed: the real browser was NOT run (tests/scripts/web_home_games_browser.js)'); process.exit(0); }
 const WEB = path.resolve(__dirname, '..', '..', 'web');
+const PREVIEWS = path.resolve(WEB, '..', 'Community-Maps', 'previews');       // (the site's nginx serves them at /maps/previews/: docker/nginx.conf)
 
 let checks = 0, failures = 0;
 function check(label, ok, detail) {
@@ -58,7 +62,7 @@ async function startServer() {
 }
 
 // ---- the stand-in for the site: the files of web/, /ws, /lobbies, /stats, /busy ----------------------------------------------------------------------------------------------------------------------------
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ttf': 'font/ttf', '.svg': 'image/svg+xml', '.json': 'application/json', '.wasm': 'application/wasm' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.webp': 'image/webp', '.ttf': 'font/ttf', '.svg': 'image/svg+xml', '.json': 'application/json', '.wasm': 'application/wasm' };
 function standIn(server, o) {
     o = o || {};
     const label = o.label || '';       // (o.label: the build argument ANTS_SITE_LABEL, put into the title and the footer as the Dockerfile's step does; none is the production site)
@@ -77,6 +81,13 @@ function standIn(server, o) {
             proxy(req, res, server.replay, '/lobbies'); return;
         }
         if (url.pathname === '/stats' || url.pathname === '/busy') { proxy(req, res, server.ws, url.pathname); return; }
+        if (url.pathname.startsWith('/maps/previews/')) {            // the library's pictures, as nginx serves them: a name of printable ASCII (no / or \\), .webp, a file that is there; anything else is a 404
+            let name = '';
+            try { name = decodeURIComponent(url.pathname.slice('/maps/previews/'.length)); } catch (e) { name = ''; }
+            const full = path.join(PREVIEWS, name);
+            if (!/^[ -.0-\[\]-~]{1,80}\.webp$/.test(name) || !full.startsWith(PREVIEWS + path.sep) || !fs.existsSync(full) || !fs.statSync(full).isFile()) { res.writeHead(404, { 'content-type': 'text/plain' }); res.end('not found'); return; }
+            res.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'public, max-age=86400' }); res.end(fs.readFileSync(full)); return;
+        }
         let file = url.pathname === '/' ? 'lobby.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');
         const full = path.resolve(WEB, file);
         if (!full.startsWith(WEB + path.sep) || !fs.existsSync(full) || !fs.statSync(full).isFile()) { res.writeHead(404); res.end('not found'); return; }
@@ -143,7 +154,7 @@ async function flows() {
                 return { title: document.title, label: !!document.getElementById('site-label'), yard: r(yard), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), popIn: !!pop && pop.parentNode === yard, popShown: !!pop && !pop.hidden, role: pop && pop.getAttribute('role'),
                     stand: yard.querySelectorAll('.ylabel, .ytag, .yant, .yres').length, standin: yard.classList.contains('standin'), text: yard.textContent, image: cs.backgroundImage, edge: getComputedStyle(yard, '::before').content, covered,
                     rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, size: /reserved: (\d+) x (\d+) px/.exec(yard.textContent), hasPopup: document.querySelector('.hchip.games').getAttribute('aria-haspopup'),
-                    wide: document.documentElement.scrollWidth <= window.innerWidth };
+                    wide: document.documentElement.scrollWidth <= window.innerWidth, mid: pop ? (pop.getBoundingClientRect().left + pop.getBoundingClientRect().right) / 2 : null, half: window.innerWidth / 2 };
             });
             for (const size of [['desktop', 1280, 800], ['tablet', 900, 700], ['narrow tablet', 768, 1024], ['small window', 800, 600], ['stacked', 760, 700], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
                 const plain = await newPage(browser, prod, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
@@ -183,6 +194,50 @@ async function flows() {
                 none.close(); many.close();
             }
             staging.close(); prod.close();
+        }
+
+        // ---- 0c. the docked list is centered in the window from 1280 px wide (the chat panel open or folded), and the pictures of its rows ------------------------------------------------------------------------------
+        {
+            const rows = () => ({ format: 1, count: 3, lobbies: [
+                { code: 'k7m2xq', host: 'dAwGy', map: 'POPcOrN.lvl', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 90 },
+                { code: 'p4n8dz', host: 'Pebble', map: 'No Picture Yet.lvl', mode: 'highest-score', people: 2, bots: 0, free: 2, size: 4, age: 60 },
+                { code: 'c1v3rr', host: 'Clover', map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 1, free: 1, size: 4, age: 30 }] });
+            const site = await standIn(server, { lobbies: rows });
+            const where = (page) => page.evaluate(() => {
+                const p = document.querySelector('.gpop').getBoundingClientRect(), c = document.querySelector('.gc').getBoundingClientRect();
+                return { mid: (p.left + p.right) / 2, half: window.innerWidth / 2, left: p.left, right: p.right, top: p.top, bottom: p.bottom, chat: [c.left, c.top, c.right, c.bottom], open: document.querySelector('.gc').getAttribute('data-open'), sideways: document.documentElement.scrollWidth > window.innerWidth };
+            });
+            for (const size of [['1280 x 800', 1280, 800], ['1366 x 768', 1366, 768], ['1536 x 864', 1536, 864], ['1920 x 1080', 1920, 1080], ['2560 x 1440', 2560, 1440], ['1024 x 768', 1024, 768], ['1279 x 800', 1279, 800]]) {
+                const page = await newPage(browser, site, 'Maple', size, '/', true);
+                await page.waitForSelector('.gpop .gitem'); await page.waitForSelector('.gc'); await sleep(300);
+                const centered = size[1] >= 1280;
+                for (const dock of ['open', 'folded']) {
+                    if (dock === 'folded') { await page.click('.gc-fold'); await sleep(250); }
+                    const w = await where(page);
+                    const clear = w.left >= w.chat[2] + 20 || w.right <= w.chat[0] || w.bottom <= w.chat[1] || w.top >= w.chat[3];       // (20 px: the chat panel's shadow and a gap)
+                    check(size[0] + ', chat panel ' + dock + ': the Games list docked in the Yard is clear of the chat panel with room to spare (right of it), and nothing scrolls sideways', w.open === (dock === 'open' ? 'true' : 'false') && clear && w.left >= w.chat[2] + 20 && !w.sideways, JSON.stringify(w));
+                    if (centered) check(size[0] + ', chat panel ' + dock + ': the list is centered in the window (its middle is the window\'s middle, within 1 px: ' + w.mid + ' / ' + w.half + ')', Math.abs(w.mid - w.half) <= 1, JSON.stringify(w));
+                    else check(size[0] + ', chat panel ' + dock + ': a window narrower than 1280 px cannot have the list in its middle and clear of the chat panel: it stays right of the panel, as it was', w.mid - w.half > 1, JSON.stringify(w));
+                }
+                check('(no script error in the page at ' + size[0] + ')', page.errors.length === 0, page.errors.join(' | '));
+                await page.context().close();
+            }
+            const page = await newPage(browser, site, 'Maple', SIZES[2], '/', true);
+            await page.waitForSelector('.gpop .gitem');
+            await page.waitForFunction(() => [...document.querySelectorAll('.gpop .gmap')].every((q) => { const i = q.querySelector('img'); return !i || i.complete; }), null, { timeout: 10000 });
+            await sleep(300);
+            const pics = await page.evaluate(() => [...document.querySelectorAll('.gpop .gitem')].map((li) => {
+                const q = li.querySelector('.gmap'), i = q.querySelector('img'), b = q.getBoundingClientRect();
+                return { host: li.querySelector('.gname').textContent, img: !!i, loaded: !!i && i.complete && i.naturalWidth > 0, src: i ? i.getAttribute('src') : null, w: Math.round(b.width), h: Math.round(b.height), bg: getComputedStyle(q).backgroundColor };
+            }));
+            const by = (host) => pics.find((x) => x.host === host) || {};
+            check('a map of the players shows the library\'s picture in its row: the picture is there and loaded (POPcOrN, at /maps/previews/POPcOrN.webp), 56 px square', by('dAwGy').loaded === true && by('dAwGy').src === '/maps/previews/POPcOrN.webp' && by('dAwGy').w === 56 && by('dAwGy').h === 56, JSON.stringify(pics));
+            check('a map that the library has no picture of (a 404) leaves the plain dark square: no image at all, so no broken image, and the square is still 56 px', by('Pebble').img === false && by('Pebble').w === 56 && by('Pebble').h === 56 && by('Pebble').bg === 'rgb(20, 32, 27)', JSON.stringify(by('Pebble')));
+            check('an original shows its own picture, as before (front/preview_treasure.png, loaded)', by('Clover').loaded === true && by('Clover').src === 'front/preview_treasure.png', JSON.stringify(by('Clover')));
+            check('the page asked the site for the two pictures by their percent-encoded names and for no list of maps (the 96 KB /maps/all or /maps)', site.hits.indexOf('/maps/previews/POPcOrN.webp') !== -1 && site.hits.indexOf('/maps/previews/No%20Picture%20Yet.webp') !== -1 && !site.hits.some((h) => /^\/maps(\/all)?(\?|$)/.test(h)), JSON.stringify(site.hits.filter((h) => /maps/.test(h))));
+            check('(no script error in the page)', page.errors.length === 0, page.errors.join(' | '));
+            await page.context().close();
+            site.close();
         }
 
         // ---- 1. two contexts against the real server --------------------------------------------------------------------------------------------------------------------------------------------
