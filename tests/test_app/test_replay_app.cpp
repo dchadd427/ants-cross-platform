@@ -1453,8 +1453,8 @@ int main(int argc, char* argv[]) {
         ScratchRoot empty;
         fs::copy_file(maps_dir() + "/SMALL.LVL", empty.path() / "SMALL.LVL");
         const auto watched = [&](const std::string& map) { return carrying_map(made, map, "TINY.LVL"); };      // (TINY.LVL is not in the folder: the map is the file's own)
-        {   // exactly 1,000,000 pairs is not refused; one more plant is; 2,000 records that are no plants (the tile 409) with the same waypoints are not; waypoints without a plant, or plants without a waypoint, are no work
-            const std::tuple<uint32_t, uint32_t, uint16_t, bool> cases[] = {{1000, 1000, 404, false}, {1001, 1000, 404, true}, {2000, 1000, 409, false}, {0, 65535, 404, false}, {65535 - 12, 0, 404, false}};
+        {   // exactly 1,000,000 pairs is not refused; one more plant is; 2,000 records that are no plants (the tile 409; and the tile 422, whose only flag is the 0x20 of a plant object: it does not have the plant flag) with the same waypoints are not; waypoints without a plant, or plants without a waypoint, are no work
+            const std::tuple<uint32_t, uint32_t, uint16_t, bool> cases[] = {{1000, 1000, 404, false}, {1001, 1000, 404, true}, {2000, 1000, 409, false}, {2000, 1000, 422, false}, {0, 65535, 404, false}, {65535 - 12, 0, 404, false}};
             for (const auto& [plants, waypoints, tile, refused] : cases) {
                 const std::string map = tiny_with_plants_and_waypoints(plants, waypoints, tile);
                 ASSERT_FALSE(map.empty());
@@ -1465,7 +1465,7 @@ int main(int argc, char* argv[]) {
                 v.app.shutdown();
             }
         }
-        {   // the file of the review: 65,400 plants on one cell and 65,535 waypoints on another, refused as the file is read
+        {   // the largest file (65,400 plants on one cell and 65,535 waypoints on another), refused as the file is read
             const std::string map = tiny_with_plants_and_waypoints(65400, 65535);
             ASSERT_FALSE(map.empty());
             const auto started = std::chrono::steady_clock::now();
@@ -1493,7 +1493,7 @@ int main(int argc, char* argv[]) {
         };
         for (const Case& c : cases) {
             ASSERT_TRUE(!c.huge.empty() && !c.just_over.empty());
-            {   // the file of the review, in the folder as the page writes it: refused as the file is read (the game would hold the thread for seconds), in no time
+            {   // the largest file of its kind (65,535 ants; 65,400 plants and 65,535 waypoints), in the folder as the page writes it: refused as the file is read (the game would hold the thread for seconds), in no time
                 ScratchRoot folder;
                 folder_with(folder, c.name, c.huge);
                 const auto started = std::chrono::steady_clock::now();

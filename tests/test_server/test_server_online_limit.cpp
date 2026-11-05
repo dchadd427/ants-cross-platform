@@ -1063,7 +1063,7 @@ void run_online_limit_tests() {
         fs::remove_all(maps.parent_path(), ignore);
     } TEST_END();
 
-    TEST_CASE("S3.232 A Viewer Takes Every Recording That A Room Can Make: The Most Starting Ants That A Map Carried In A Replay May Start Is At Least The Rooms' Cap, So A Later Raise Of The Cap Cannot Make A Recording That The Viewer Refuses (tests/test_replay RP9.11, tests/test_app RA7.10)") {
+    TEST_CASE("S3.231b A Viewer Takes Every Recording That A Room Can Make, For Its Starting Ants: The Most Starting Ants That A Map Carried In A Replay May Start Is At Least The Rooms' Cap, So A Later Raise Of The Cap Cannot Make A Recording That The Viewer Refuses (A Room Does Not Cap The Plants Times The Waypoints; tests/test_replay RP9.11, tests/test_app RA7.10)") {
         static_assert(replay::kMaxEmbeddedStartAnts >= OnlineLimits::kMaxStartAnts, "raise kMaxEmbeddedStartAnts (include/ants_replay/replay.hpp) and MAX_EMBEDDED_ANTS (web/map_files.js) with the rooms' cap: a room's map must be one that a viewer takes");
         ASSERT_TRUE(replay::kMaxEmbeddedStartAnts >= OnlineLimits::kMaxStartAnts);
     } TEST_END();

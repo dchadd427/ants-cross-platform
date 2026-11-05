@@ -226,12 +226,18 @@ check('a number is no name', M.validName(5) === false);
     const tiny = Uint8Array.from(fs.readFileSync(path.join(root, 'Original-Ants', 'Maps', 'TINY.LVL')));
     same('TINY asks for 12 ants and has no plant and no waypoint', M.factsOfMap(tiny), { ants: 12, plants: 0, waypoints: 0 });
     check('the page\'s limits are the game\'s: 8,000 ants and 1,000,000 pairs (kMaxEmbeddedStartAnts, kMaxEmbeddedPlantWaypointPairs)', M.MAX_EMBEDDED_ANTS === 8000 && M.MAX_EMBEDDED_PAIRS === 1000000);
-    same('N plants and M waypoints are counted as N and M (the review\'s two files: 65,400 x 65,535 and 30,000 x 30,000)', [[0, 0], [1, 1], [1000, 1000], [1001, 1000], [30000, 30000], [65400, 65535]].map(([n, m]) => { const f = M.factsOfMap(tools.mapWithPlantsAndWaypoints(tiny, n, m)); return [f.plants, f.waypoints]; }),
+    same('N plants and M waypoints are counted as N and M (up to the largest file: 65,400 plants and 65,535 waypoints)', [[0, 0], [1, 1], [1000, 1000], [1001, 1000], [30000, 30000], [65400, 65535]].map(([n, m]) => { const f = M.factsOfMap(tools.mapWithPlantsAndWaypoints(tiny, n, m)); return [f.plants, f.waypoints]; }),
          [[0, 0], [1, 1], [1000, 1000], [1001, 1000], [30000, 30000], [65400, 65535]]);
     {   // a plant is a record whose tile has the plant flag: 404 .. 408, 410 .. 416, 420 and 421, and no other (the engine's table, src/ants_sim/movement_tables_data.inc)
         const plants = []; for (let id = 395; id <= 430; id++) if (M.factsOfMap(tools.mapWithRecords(tiny, [id], 0)).plants === 1) plants.push(id);
         same('the tiles that are plants (the clovers and the flowers that drop)', plants, [404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421]);
         same('a start marker is no plant, and a plant is no ant', [M.factsOfMap(tools.mapWithRecords(tiny, [404, 404, 404], 0)).ants, M.factsOfMap(tiny).plants], [12, 0]);
+    }
+    {   // version 9: only a start marker has its ant type (the high four bits) split off its tile; every other record keeps the whole word as its tile (the loader's sp.tile_id = raw_tile), so the word 0x1000 | 404 is no plant
+        const crowd = (word) => M.factsOfMap(tools.mapAsVersion9(tools.mapWithRecords(tiny, Array.from({ length: 2000 }, () => word), 1000, 0), 0));
+        const refused = (facts) => !M.carriedVerdict(Object.assign({ bytes: null }, facts)).ok;
+        same('version 9: 2,000 records of the tile 404 and 1,000 waypoints are 2,000 plants (2,000,000 pairs: refused)', [crowd(404).plants, crowd(404).waypoints, refused(crowd(404))], [2000, 1000, true]);
+        same('version 9: 2,000 records of the word 0x1000 | 404 are no plant (the whole word is the tile), so their 2,000,000 pairs are no work and the map is not refused', [crowd(0x1000 | 404).plants, crowd(0x1000 | 404).waypoints, refused(crowd(0x1000 | 404))], [0, 1000, false]);
     }
     {   // the waypoints are the records of block 4 that the loader keeps: with a trigger (52 bytes) or without (8), and the record that a file ends in
         const five = tools.mapWithRecords(tiny, [], 5, 2), L = tools.lvlLayout(five), at = L.block4At + 2;
@@ -257,7 +263,7 @@ check('a number is no name', M.validName(5) === false);
     {   // the verdict: the product above 1,000,000 is refused with the numbers; each number alone is not; a map that cannot be read is the game's to judge; the ants come first
         const verdict = (n, m) => M.carriedVerdict(Object.assign({ bytes: null }, M.factsOfMap(tools.mapWithPlantsAndWaypoints(tiny, n, m))));
         same('exactly 1,000,000 pairs go to the game, one plant more do not', [verdict(1000, 1000).ok, verdict(1001, 1000).ok, verdict(1000, 1001).ok], [true, false, false]);
-        same('the sentence of the review\'s file: both numbers, the pairs, the limit', verdict(65400, 65535), { ok: false, text: 'the map in the file has 65,400 plants and 65,535 waypoints, so setting it up looks at 4,285,989,000 pairs of them, more than the 1,000,000 that a replay is set up with' });
+        same('the sentence for the largest file (65,400 plants and 65,535 waypoints): both numbers, the pairs, the limit', verdict(65400, 65535), { ok: false, text: 'the map in the file has 65,400 plants and 65,535 waypoints, so setting it up looks at 4,285,989,000 pairs of them, more than the 1,000,000 that a replay is set up with' });
         same('65,535 waypoints and no plant, or 65,523 plants and no waypoint, are no work for the engine', [verdict(0, 65535).ok, verdict(65523, 0).ok], [true, true]);
         check('the verdict of a map with unknown plants or waypoints is the game\'s: it goes on', M.carriedVerdict({ ants: 12, plants: 5000, waypoints: -1, bytes: tiny }).ok && M.carriedVerdict({ ants: 12, plants: -1, waypoints: 5000, bytes: tiny }).ok);
         const both = M.carriedVerdict({ ants: 9000, plants: 5000, waypoints: 5000, bytes: tiny });

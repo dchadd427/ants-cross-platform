@@ -1881,6 +1881,7 @@ int main(int argc, char* argv[]) {
         folder.head.map_name = "BIG.LVL";
         folder.embedded_map.clear();
         ASSERT_TRUE(load_map_or_embedded(folder, dirs, level, error) && error.empty());
+        folder.embedded_map = {1, 2, 3}; ASSERT_TRUE(load_map_or_embedded(folder, dirs, level, error) && error.empty());      // (bytes that are not the head's map, in a Replay made by hand: it carries no map, so the folder's copy is not counted either)
     } TEST_END();
 
     TEST_CASE("RP9.12 The Recording Kept In tests/data (replay_bots_tiny.antsrep: 7,205 Turns Of Four Computer Players On TINY, The Browser Checks' File) Plays Here To Its Last Hash: A Change That Strands It Fails Here And Not Only In The Opt-In Browser Check") {

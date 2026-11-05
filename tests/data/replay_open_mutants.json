@@ -752,6 +752,14 @@
    "new": "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return true;",
    "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
    "why": "the page writes the map into the maps folder, the game reads that copy, and no limit holds"
+  },
+  {
+   "id": "a_plant_with_high_bits_is_counted_by_its_low_bits",
+   "file": "web/map_files.js",
+   "old": "if (isPlantTile(raw)) plants++;",
+   "new": "if (isPlantTile(tile)) plants++;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a version 9 record whose word has high bits is no plant to the loader and the engine (the whole word is its tile): 2,000 of them and 1,000 waypoints are refused by the page and played by the game"
   }
  ]
 }

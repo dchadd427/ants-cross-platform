@@ -112,6 +112,20 @@
    "old": "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);",
    "new": "net::hash_bytes(carried.data(), carried.size()) != replay.head.map_hash) return fits_a_replay(level, error);",
    "why": "a library map in the folder is counted as if the file carried it"
+  },
+  {
+   "id": "a_plant_object_is_a_plant",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (sim::movement::is_dropper_plant_tile(spawn.tile_id)) ++plants;",
+   "new": "if (sim::movement::is_plant_object_tile(spawn.tile_id)) ++plants;",
+   "why": "a record whose tile has only the 0x20 flag of a plant object (422) is counted as a plant that the engine looks a waypoint up for: a map that is no work is refused"
+  },
+  {
+   "id": "the_folder_copy_is_counted_for_any_carried_bytes",
+   "file": "src/ants_replay/player.cpp",
+   "old": "&& net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);",
+   "new": ") return fits_a_replay(level, error);",
+   "why": "bytes that are not the head's map, in a Replay made by hand, make the server's own file in the folder a map that the file carries"
   }
  ]
 }
