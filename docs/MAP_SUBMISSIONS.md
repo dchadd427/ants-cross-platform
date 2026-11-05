@@ -40,7 +40,7 @@ browser --> site's nginx (docker/nginx.conf) --+--> ants_server submission door 
                                                +--> static files: /admin (the admin page), /maps/files, /maps/previews
 ```
 
-The state is in the server's database (`ants.db`, schema version 7; versions 5 and 6 made `map_submissions`, `submission_limits`, `review_log`, and for the accounts `admin_users`, `admin_locks`, `admin_known_addr`, `admin_audit`) and in the folder `submissions/files/<id>.lvl` of the results volume. The door has **no secret**: it is reached through the site's nginx only (nothing publishes it on the host), on the stack's private network, and it takes the client address from the header that nginx sets.
+The state is in the server's database (`ants.db`, schema version 7; versions 5 and 6 made `map_submissions`, `submission_limits`, `review_log`, and for the accounts `admin_users`, `admin_locks`, `admin_known_addr`, `admin_audit`) and in the folder `submissions/files/<id>.lvl` of the results volume. The door has **no secret**: it is reached through the site's nginx only (nothing publishes it on the host), and it takes the client address from the `X-Client-Address` header of whoever sends it, which is right only behind the site's nginx.
 
 ## For the player's half (S2): the API
 
@@ -169,7 +169,7 @@ The other switches of `ants_server` for the two doors (`--help` lists them; the 
 
 - `--submissions-dir DIR`: where the submitted maps are kept (the files in `DIR/files`). Default: the folder `submissions` in `--results-dir`; with neither, the server does not start when `--submit-port` is on. `--test-maps-dir DIR` is the same for the test maps (default `test-maps`; with neither, test rooms are off and the log says so).
 - `--submit-max-waiting N` (default 200) and `--submit-per-address N` (default 3): the submissions that may wait for a decision, and the ones an address may send in a UTC day, each a whole number from 1 to 100000 ("Limits, in one table").
-- `--submit-ignore-client-header`, `--test-map-ignore-client-header`: count an address by the connection's own address and never by `X-Client-Address`, for a door with no proxy of ours in front of it (by default the header from the site's nginx is used when it is there).
+- `--submit-ignore-client-header`, `--test-map-ignore-client-header`: count an address by the connection's own address and never by `X-Client-Address`, for a door with no proxy of ours in front of it (by default the door takes the address from the header of whoever sends it, which is right only behind the site's nginx).
 - `--submit-any-interface`, `--test-map-any-interface`: listen on every interface instead of this machine only, for a container (`Dockerfile.server` sets both).
 
 **Before an update that adds a schema version**, stop the server and **copy `ants.db`** (the file in the volume `ants-server-results`; `docs/SERVER.md`, "The database"; a clean stop leaves no `-wal` or `-shm` file beside it, and if there is one, copy it too). That copy is the only way back to an earlier build: the server migrates the database itself at its start, and **a program of an older version refuses a database of a newer one**. Keep the files of `submissions/files/` and `ants.db` together ("Behavior notes").

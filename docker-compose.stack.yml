@@ -55,7 +55,7 @@
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
-# The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all. The network below is private to the stack: its services trust each other, so keep no other container on it. The chat hub (port 4040, not published) is on it too: the site's nginx passes /hub/ws to it.
+# The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all. The services on the network below trust each other, so put only containers you trust on it (the stack's services and the proxy). The chat hub (port 4040, not published) is on it too: the site's nginx passes /hub/ws to it.
 services:
   ants-beta:
     build:

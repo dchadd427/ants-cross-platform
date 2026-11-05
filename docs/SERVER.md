@@ -366,7 +366,7 @@ Tests: the suite `test_db` ([`TESTING.md`](TESTING.md), 2.31) and the options pa
 docker compose -f docker-compose.server.yml up -d --build
 ```
 
-The service joins the external network `proxy-network`, which must exist: for a server alone, create it first with `docker network create proxy-network`. Keep that network private to the stack: its services trust each other.
+The service joins the external network `proxy-network`, which must exist: for a server alone, create it first with `docker network create proxy-network`. The services on that network trust each other: put only containers you trust on it (the stack's services and the proxy).
 
 ### One stack for the site and the server
 

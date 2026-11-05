@@ -73,7 +73,7 @@ Original-Ants/cnc-ddraw config.exe
 Original-Ants/Shaders/
 Original-Ants/chat.txt
 docs/legacy/Ants.exe.c
-# Local outputs of tools/analyze_binary.py (a function map and string dump of the original program: never committed)
+# Local outputs of tools/analyze_binary.py (a function map and string dump of the original program: keep them local)
 docs/ORIGINAL_BINARY_MAP.md
 docs/binary_analysis.json
 

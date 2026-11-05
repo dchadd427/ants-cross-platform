@@ -22,4 +22,4 @@ Please try things on your own copy of the code where you can. On the public site
 
 ## What to expect
 
-We will acknowledge your report within a few days, tell you whether we can reproduce it, and keep you posted until it is fixed. If you would like credit once the fix is out, say so in your report. There is no bounty. Please give us a reasonable time to fix a problem before you share it.
+We aim to acknowledge your report within a few days, to tell you whether we can reproduce it, and to keep you posted until it is fixed. If you would like credit once the fix is out, say so in your report. There is no bounty. Please give us a reasonable time to fix a problem before you share it.

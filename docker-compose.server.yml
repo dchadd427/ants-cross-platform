@@ -9,8 +9,8 @@
 #
 # Only the TCP game port is open to other machines. The WebSocket port (a reverse proxy that ends TLS passes browsers to it) and the control interface
 # (the lobby's backend calls it) are published on the host's loopback address only; a proxy or backend on another machine reaches them through a tunnel.
-# The service also joins the network of the site's container (docker-compose.yml): its nginx passes /ws to "ants-server:4002". Keep that network
-# private to the stack: its services trust each other.
+# The service also joins the network of the site's container (docker-compose.yml): its nginx passes /ws to "ants-server:4002". The services on that
+# network trust each other: put only containers you trust on it.
 services:
   ants-server:
     build:
