@@ -1423,9 +1423,23 @@ function caseN() {
     check(rs.file().rows === 20 && rs.file().columns === 20, 'Ctrl+Z undoes the grow back to 20x20');
     const raw9 = mapWith(9, 20, 20, 486, [], []); raw9[14] = 0;
     const rs9 = toolsPage(File.parse(raw9));
-    check(rs9.file().bytes[14] === 0 && rs9.tools.act(Blocks.resizeMap(rs9.file(), 95, 20, 0, 0)) === true && rs9.file().rows === 95 && rs9.file().bytes[14] === 1, 'resizing an Extended map past 90 rows upgrades rules to 1');
+    // a Resize that is given no word leaves the one the map has (the page gives it the word that mapmaker_sizes.js says, resizedRules)
+    check(rs9.file().bytes[14] === 0 && rs9.tools.act(Blocks.resizeMap(rs9.file(), 95, 20, 0, 0)) === true && rs9.file().rows === 95 && rs9.file().bytes[14] === 0, 'a Resize that is given no word leaves the rules word of the map');
     rs9.doc.key('z', { ctrlKey: true });
-    check(rs9.file().rows === 20 && rs9.file().bytes[14] === 0, 'Ctrl+Z undoes the Extended map resize and restores rules to 0');
+    check(rs9.file().rows === 20 && rs9.file().bytes[14] === 0, 'Ctrl+Z undoes it');
+    // given a word, it goes in the same step as the new size, and Ctrl+Z gives the old word back with the old size
+    for (const word of [1, 2]) {
+        check(rs9.tools.act(Blocks.resizeMap(rs9.file(), 95, 20, 0, 0, undefined, undefined, word)) === true && rs9.file().rows === 95 && rs9.file().bytes[14] === word && rs9.file().bytes[15] === 0 && File.parse(rs9.file().bytes).rules === word, 'a Resize that is given the word ' + word + ' puts it in the same step');
+        rs9.doc.key('z', { ctrlKey: true });
+        check(rs9.file().rows === 20 && rs9.file().bytes[14] === 0 && rs9.file().bytes[15] === 0, 'Ctrl+Z undoes the Extended map resize and gives the word back (' + word + ' to 0)');
+    }
+    // the word that the map has already is not written again
+    check(Blocks.resizeMap(rs9.file(), 30, 20, 0, 0, undefined, undefined, 0).splices.length === 1 && Blocks.resizeMap(rs9.file(), 30, 20, 0, 0, undefined, undefined, 2).splices.length === 2, 'the word that the map has is not written again, another is one piece more');
+    check(rs9.tools.act(Blocks.resizeMap(rs9.file(), 30, 20, 0, 0, undefined, undefined, 0)) === true && rs9.file().rows === 30 && rs9.file().bytes[14] === 0, 'the word that the map has is left alone');
+    rs9.doc.key('z', { ctrlKey: true });
+    // a Classic map has no word: it is never given one
+    const raw8 = mapWith(8, 20, 20, 486, [], []), classic8 = toolsPage(File.parse(raw8)), head8 = Array.from(raw8.slice(0, 40));
+    check(classic8.tools.act(Blocks.resizeMap(classic8.file(), 95, 20, 0, 0, undefined, undefined, 2)) === true && classic8.file().rows === 95 && classic8.file().version === 8 && JSON.stringify(Array.from(classic8.file().bytes.slice(0, 40))) === JSON.stringify(head8), 'a Classic map is not given a rules word');
 
     // Auto edges: Off by default, remembered in localStorage, sets edge pieces in one Undo step, and preserves hand-placed custom tiles
     const storeMem = {};

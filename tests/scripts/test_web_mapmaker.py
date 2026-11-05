@@ -307,11 +307,11 @@ class TheCodeRuns(unittest.TestCase):
         done = run_check(script=CONVERT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit"):
+        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit", "G the rules word of a new Extended map"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_convert_check_can_fail_on_broken_copies_of_the_scripts(self):
-        crop, convert = "mapmaker_crop.js", "mapmaker_convert.js"
+        crop, convert, sizes = "mapmaker_crop.js", "mapmaker_convert.js", "mapmaker_sizes.js"
         mutants = {
             "a frame that starts at the top left": (crop, "row: Math.floor((rows - b.rows) / 2), column: Math.floor((columns - b.columns) / 2)", "row: 0, column: 0"),
             "a start frame that is as wide as the limit allows, whatever the cells": (crop, "columns: Math.max(1, Math.min(m.columns, Math.floor(m.cells / m.rows)))", "columns: m.columns"),
@@ -352,11 +352,11 @@ class TheCodeRuns(unittest.TestCase):
             "reasons in the order of the core": (convert, "return rank(a) - rank(b); });", "return 0; });"),
             "a short reason that keeps the semicolon": (convert, ".replace('; ', ' and ')", ".replace('; ', ', ')"),
             "a name of the open map that is free": (convert, "f.ok = !!name && !taken(name);", "f.ok = !!name;"),
-            "a copy that is the open map's own array": (convert, "env.onMade(cur.bytes.slice(), nm.name());", "env.onMade(cur.bytes, nm.name());"),
+            "a copy that is the open map's own array": (convert, "return cur.bytes.slice();", "return cur.bytes;"),
             "a Make new map that stays on for a taken name": (convert, "'Next: what changes';\n                ctl.setDisabled('make', !nm.ok);", "'Next: what changes';\n                ctl.setDisabled('make', false);"),
             "a Make the new Extended map that stays on for a taken name": (convert, "if (ctl) ctl.setDisabled('make', !nm.ok); });", "if (ctl) ctl.setDisabled('make', false); });"),
             "a Classic choice that is never dimmed": (convert, ", !fits)", ", false)"),
-            "an Extended map that is not the core's": (convert, "var made = core.convertToExtended(cur.bytes);", "var made = { status: 0, json: { ok: true }, bytes: cur.bytes };"),
+            "an Extended map that is not the core's": (convert, "var made = Sizes.newRules(0, cur.file.rows) === 2 ? core.convertToLongOrders(cur.bytes) : core.convertToExtended(cur.bytes);", "var made = { status: 0, json: { ok: true }, bytes: cur.bytes };"),
             "an Extended name that is the open map's": (convert, "suffixed(cur.name, 'Extended')", "cur.name"),
             "a Classic name that is the open map's": (convert, "suffixed(w.sourceName, 'Classic')", "w.sourceName"),
             "a crop that is offered when it does not help": (convert, "sizes ? act('Crop it to fit...', crop) : ''", "act('Crop it to fit...', crop)"),
@@ -367,6 +367,25 @@ class TheCodeRuns(unittest.TestCase):
             "a Keep it Extended that makes a map": (convert, "{ id: 'keep', text: 'Keep it Extended' }", "{ id: 'keep', text: 'Keep it Extended', onClick: function () { env.onMade(w.bytes, 'x'); } }"),
             "a part that does not say what the core cut": (convert, "(cr ? cr.notes : []).concat(res.json.notes)", "res.json.notes"),
             "a badge on the wrong card": (convert, "(which === 'same') === ext ? h('span', 'badge-nv', 'New version only') : ''", "(which === 'same') ? h('span', 'badge-nv', 'New version only') : ''"),
+            "a wall that is given long orders": (sizes, "(rules === 0 && rows <= WALL_ROWS) ? 2 : rules", "rules === 0 ? 2 : rules"),
+            "a wall at 91 rows": (sizes, "var WALL_ROWS = 90;", "var WALL_ROWS = 91;"),
+            "a wall at 89 rows": (sizes, "var WALL_ROWS = 90;", "var WALL_ROWS = 89;"),
+            "a map of rules 1 that stays at 1": (sizes, "return rules === 1 || rules === 2 || (rules", "return rules === 2 || (rules"),
+            "a map of rules 0 that stays at 0": (sizes, "(rules === 0 && rows <= WALL_ROWS) ? 2 : rules", "(rules === 0 && rows < 0) ? 2 : rules"),
+            "a word that is not known and is made 2": (sizes, "function newRules(rules, rows) { return rules === 1 ||", "function newRules(rules, rows) { return rules > 0 ||"),
+            "rows gained below the wall that have one": (sizes, "rowsBefore <= WALL_ROWS && rowsAfter > WALL_ROWS ? 1 : rules", "false ? 1 : rules"),
+            "a Resize that frees a wall that was there": (sizes, "rules === 0 && rowsBefore <= WALL_ROWS && rowsAfter > WALL_ROWS ? 1 : rules", "rules === 0 && rowsAfter > WALL_ROWS ? 1 : rules"),
+            "a copy of a map that has rules 2 asked of the core again": (convert, "cur.kind === 'extended' && cur.file.rules !== 2 && Sizes.newRules(", "cur.kind === 'extended' && Sizes.newRules("),
+            "a copy that never gets long orders": (convert, "if (cur.kind === 'extended' && cur.file.rules !== 2 && Sizes.newRules(cur.file.rules, cur.file.rows) === 2) {", "if (false) {"),
+            "a copy of a Classic map asked of the core": (convert, "if (cur.kind === 'extended' && cur.file.rules !== 2", "if (cur.file.rules !== 2"),
+            "a copy that stops when the core cannot make it": (convert, "if (made.status === 0 && made.json.ok) return made.bytes;", "return made.bytes;"),
+            "a copy that is the core's whatever the rule says": (convert, "cur.file.rules !== 2 && Sizes.newRules(cur.file.rules, cur.file.rows) === 2", "cur.file.rules !== 2"),
+            "a Classic map of 120 rows that goes up with long orders": (convert, "var made = Sizes.newRules(0, cur.file.rows) === 2 ? core.convertToLongOrders", "var made = true ? core.convertToLongOrders"),
+            "a Classic map that goes up with rules 0": (convert, "var made = Sizes.newRules(0, cur.file.rows) === 2 ? core.convertToLongOrders", "var made = false ? core.convertToLongOrders"),
+            "a card of a map that does not say its word": (convert, "env.tags(tags, cur.kind, cur.file.rules);", "env.tags(tags, cur.kind);"),
+            "a Classic map whose badges are said to go away when only one does": (convert, "longer ? 'The \u201cNew version only\u201d and \u201cRules 2\u201d badges go away.' : ", "false ? 'x' : "),
+            "a Classic map made from long orders that says it plays the same": (convert, "(longer ? ', except long orders.' : '.')", "'.'"),
+            "a Classic map made from rules 1 that talks of long orders": (convert, "var longer = res.json.notes.some(function (n) { return n.code === 'rules_long_orders_dropped'; });", "var longer = res.json.notes.length > 0;"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):
@@ -887,7 +906,8 @@ class ThePage(unittest.TestCase):
         self.assertIn("if (tools.isSaved()) store.clearWork(", app, "a map that is saved or downloaded leaves nothing in the slot")
         self.assertIn("if (map && !tools.isSaved() && (store.status() !== 'ready' || keepPending))", app, "the browser's question only when the work is not safe in the browser")
         self.assertIn("else tools.markUnsaved();", app, "work picked up is still not saved")
-        self.assertIn("store.add(name, map.file.kind, made.bytes,", app)
+        self.assertIn("store.add(name, map.file.kind, bytes,", app, "Save as a new map keeps the bytes that fileBytes made, with the rules word that the rule gives a new map")
+        self.assertIn("var bytes = withLongOrders(made.bytes);", app)
         self.assertEqual(len(re.findall(r"store\.(add|keepWork)\(", app)), 2, "the page writes to the store in two places only")
         self.assertIn("MapStore.create({ idb: (function () { try { return win.indexedDB || null; } catch (e) { return null; } })()", app, "a browser that refuses the database does not stop the page")
         self.assertIn("taken: function (name) { return MapStore.key(name) === MapStore.key(map.name) || store.has(name); },", app, "the open map, a draft and a library map are taken")
@@ -1124,6 +1144,64 @@ class ThePage(unittest.TestCase):
         for part in (".mine { position: absolute; inset: 0; z-index: 8; overflow: auto; }", ".mine { position: static; overflow: visible; flex: 1 0 auto; }", ".mlist { grid-template-columns: 1fr 1fr; gap: 10px; }"):
             self.assertIn(part, self.css, "My maps: the screen over the editor, flowing on a phone, two columns sideways")
         self.assertRegex(self.css, r"\.mchip \{ min-height: 44px;", "the filters are 44 pixels")
+
+    def test_a_new_extended_map_asks_the_one_rule_for_its_rules_word_and_nothing_that_opens_or_hands_over_a_map_does(self):
+        """docs/MAP_EDITOR.md, E4: New map, Save as a new map, Resize, Copy and Start an Extended map give the word that mapmaker_sizes.js says (long orders where the map plays like the original with them);
+        Download, Open, Submit, Play and the work that is kept never change a word, so a map that is opened and saved again under its own name is not upgraded"""
+        convert = read("web", "front", "mapmaker_convert.js")
+        lines = [l.strip() for l in self.app.splitlines() if "withLongOrders(" in l]
+        self.assertEqual(len(lines), 3, lines)
+        self.assertTrue(lines[0].startswith("function withLongOrders(bytes) {"))
+        self.assertIn("var bytes = withLongOrders(made.bytes);", lines[1], "Save as a new map")
+        self.assertIn("setMap(withLongOrders(bytes), NEW_NAME)", lines[2], "New map")
+        self.assertIn("if (!f.ok || f.kind !== 'extended' || MapSizes.newRules(f.rules, f.rows) === f.rules) return bytes;", self.app, "only an Extended map whose word is not the one the rule gives")
+        self.assertEqual(self.app.count("core.convertToLongOrders("), 1, "the page's own call: in withLongOrders")
+        self.assertIn("MapSizes.resizedRules(f.rules, f.rows, newRows)", self.app, "Resize")
+        self.assertIn("win.MapBlocks.resizeMap(f, newRows, newCols, keepRow, keepCol, undefined, undefined, rules)", self.app, "and hands the word to the step of the new size")
+        self.assertEqual(self.app.count("setTags('top-tags', kind)"), 1, "the top bar is given no word")
+        self.assertEqual(convert.count("core.convertToLongOrders("), 2, "Copy and Start an Extended map")
+        self.assertIn("Sizes.newRules(cur.file.rules, cur.file.rows) === 2", convert)
+        self.assertIn("Sizes.newRules(0, cur.file.rows) === 2", convert, "a Classic map has the word 0")
+        for part in ("fileBytes", "download", "openBytes", "openFile", "restoreWork", "keepNow", "submitEnv", "playMap"):
+            start = self.app.index("function %s(" % part)
+            end = self.app.index("\n    }\n", start)
+            self.assertNotIn("LongOrders", self.app[start:end], part + " never changes the rules word of a map")
+        for name in ("mapmaker_edit.js", "mapmaker_tools.js", "mapmaker_canvas.js", "mapmaker_props.js", "mapmaker_store.js", "mapmaker_mine.js"):
+            self.assertNotIn("LongOrders", self.code[name], name + ": drawing, the properties and the store leave the word as it is")
+            self.assertNotRegex(self.code[name], r"newRules|resizedRules", name)
+        self.assertIn("rules !== undefined && rules !== rd(file.bytes, 14)", self.code["mapmaker_blocks.js"], "a Resize puts the word it is given in the same step, and only when it differs")
+
+    def test_the_badge_of_long_orders_is_in_the_side_panel_the_cards_and_the_phones_line_and_never_in_the_top_bar(self):
+        self.assertEqual(self.page.count('id="side-rules"'), 1)
+        self.assertIn('<h3>This map <span class="tags" id="side-rules"></span></h3>', self.page, "the chip on the heading line of This map, for a window that is not tall")
+        self.assertEqual(self.page.count('id="top-tags"'), 1)
+        self.assertIn("setTags('top-tags', kind); setTags('side-tags', kind, rules); fillRules($('side-rules'), rules);", self.app, "the top bar is given no word: a third badge there makes it taller and the Objects column overflows at 1280 x 720")
+        self.assertEqual(self.app.count("if (rules === 2) host.appendChild(rulesBadge());"), 2, "the tag row and the chip: the badge is for the word 2 and for no other")
+        self.assertIn("(rules === 2 ? ' \\u00b7 Rules 2' : '')", self.app, "the joined tag of a very narrow screen says it too")
+        self.assertEqual(self.app.count("badge-r2"), 1)
+        self.assertEqual(re.findall(r"function fillRules\(host, rules\) \{[^}]*\}", self.app)[0].count("rules === 2"), 1)
+        self.assertIn(".side h3 .tags { display: none; float: right;", self.css)
+        self.assertIn("@media (min-width: 601px) and (min-height: 451px) and (max-height: 860px) { .side h3 .tags { display: inline-flex; } .side h3 .tags:empty { display: none; } }", self.css, "the chip shows exactly where the tag row of the side panel does not (the same window as .side .sidetags { display: none; })")
+        self.assertIn("@media (min-width: 601px) and (min-height: 451px) and (max-height: 860px) { .tools { padding: 8px 10px; gap: 4px; } .toolbtns { gap: 4px; } .tool { min-height: 34px; padding: 4px 10px; } .toolnote .dsk, .side .sidetags { display: none; }", self.css)
+        self.assertIn("#size-line .sizebadges.two { display: block; }", self.css, "two badges on a phone's size line are on a line of their own")
+        self.assertIn("Long orders (rules 2): ants can walk orders of 450 tiles and more.", self.app)
+        for name in ("mapmaker_mine.js", "mapmaker_submit.js"):
+            self.assertIn("env.tags(tags, ", read("web", "front", name))
+        self.assertIn("env.tags(tags, file.kind, file.rules);", self.code["mapmaker_mine.js"], "a row of My maps")
+        submit = read("web", "front", "mapmaker_submit.js")
+        self.assertIn("env.tags(tags, kind, cur.file.rules);", submit, "the card of Submit for approval")
+        self.assertIn("file && file.rules);", submit, "a row of My submissions")
+        self.assertIn("fillTags(h, map.file.kind, map.file.rules);", self.app, "the crop screen of a Resize")
+        self.assertIn("fillTags(h, 'extended', file.rules);", self.app, "the crop screen of Make a Classic map")
+
+    def test_the_wall_of_the_rules_word_is_the_cores(self):
+        """the 90 rows below which rules 0 and 1 play the same: the page's WALL_ROWS is the core's LVL_ORIGINAL_RULES_MOST_ROWS and the rows of a new Classic map (LVL_CLASSIC_ROW_WALL), a copy that a test keeps equal"""
+        most = re.search(r"LVL_ORIGINAL_RULES_MOST_ROWS = (\d+);", read("include", "ants_assets", "lvl_writer.hpp"))
+        wall = re.search(r"LVL_CLASSIC_ROW_WALL = (\d+);", read("include", "ants_assets", "lvl_parser.hpp"))
+        page = re.search(r"var WALL_ROWS = (\d+);", self.code["mapmaker_sizes.js"])
+        self.assertTrue(most and wall and page)
+        self.assertEqual(most.group(1), page.group(1))
+        self.assertEqual(wall.group(1), page.group(1))
 
     def test_a_dialog_holds_the_focus_closes_on_escape_and_leaves_the_page_behind_it_inert(self):
         dialog = self.code["mapmaker_dialog.js"]
@@ -1560,7 +1638,7 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertIn("web_mapmaker_browser.py", script)
         self.assertTrue(os.access(os.path.join(REPO, "tests", "scripts", "test_web_mapmaker.sh"), os.X_OK))
         text = read("tests", "scripts", "web_mapmaker_browser.py")
-        for part in ("panned", "zoomed", "two fingers", "keyboard", "New map", "opened from the disk", "Download", "Check map", "512 x 512", "another interface version"):
+        for part in ("panned", "zoomed", "two fingers", "keyboard", "New map", "opened from the disk", "Download", "Check map", "512 x 512", "another interface version", "Rules 2 badge"):
             self.assertIn(part, text, part)
 
 

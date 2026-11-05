@@ -21,7 +21,9 @@
 //   G  hills, starting ants and food piles (web/front/mapmaker_blocks.js): the core's checker says "Blue has no hill" until the hill is there and then says nothing of it, counts the ants and the piles
 //      as they were put, writes the edited file as the same bytes, and every hill of the 540 maps taken away and put back is the same level (version 8 and 9)
 //   J  copy, convert and crop (web/front/mapmaker_convert.js, mapmaker_crop.js) on the real core: every map of the library goes up and comes back through the dialogs (the bytes are the core's, the open map is
-//      never touched), the reasons are the converter's own words in the order of the picture, a part cropped out of a large map goes through the conversion again, and the description is shortened on the copy
+//      never touched), the reasons are the converter's own words in the order of the picture, a part cropped out of a large map goes through the conversion again, and the description is shortened on the copy;
+//      the rules word of each new Extended map (the Classic map goes up with long orders, a copy of an Extended map of rules 0 or 1 gets them, a map of rules 0 taller than 90 rows keeps its wall, the
+//      page reads the word the core wrote) and the short note of the Classic map made from a map of long orders
 // Exit status 0 when everything passes (or there is no module and --require is not given), 1 otherwise.
 'use strict';
 
@@ -110,6 +112,12 @@ function caseC(core) {
     const limits = Sizes.limitsOf(core.limits('new_map').json, core.limits('extended').json);
     const words = (kind) => Sizes.limitLine(kind, limits).map((p) => p[0]).join('');
     equal(words('classic'), 'Up to 90 rows and 130 columns, 10,000 cells in all.', 'the Classic card, from the core\'s limits');
+    check(Sizes.WALL_ROWS === limits.classic.rows && Sizes.WALL_ROWS === 90, 'the wall that the rules word of a new map is asked by is the core\'s: the rows of a new Classic map (' + limits.classic.rows + ')');
+    // the rule against the core's own blank map: its word is the least that its size needs (0 up to 90 rows, 1 above, 2 beyond 256); the page asks for 2 on top, wherever the table says so
+    for (const [rows, columns, word] of [[1, 1, 0], [90, 256, 0], [91, 5, 1], [256, 256, 1], [5, 257, 2], [300, 40, 2], [512, 512, 2]]) {
+        const made = core.blankExtended(rows, columns, 485, 6, 10).bytes, f = File.parse(made);
+        check(f.rules === word && Sizes.newRules(f.rules, f.rows) === 2, 'a blank Extended map of ' + rows + ' x ' + columns + ' has the core\'s word ' + word + ' and the page\'s rule gives it 2 (' + f.rules + ', ' + Sizes.newRules(f.rules, f.rows) + ')');
+    }
     equal(words('extended'), 'Up to 512 x 512 cells (262,144 in all). The longest side can be 1,024.', 'the Extended card, from the core\'s limits');
     const refused = (kind, rows, columns) => {
         const answer = kind === 'classic' ? core.blank(rows, columns, 485, 6, 10, 'new_map') : core.blankExtended(rows, columns, 485, 6, 10);
@@ -539,7 +547,7 @@ function caseJ(core) {
         const doc = makeDocument(), host = doc.createElement('div'), top = doc.createElement('header');
         doc.body.appendChild(host); doc.body.appendChild(top);
         const made = [], crops = [], dialogs = Dialog.create(doc, host, [top]), report = core.checkMap(bytes, 'extended').json, f = core.readReport(bytes, 'extended').json;
-        const cur = { name, bytes, file: { rows: f.rows, columns: f.columns }, kind: f.version === 9 ? 'extended' : 'classic', report };
+        const cur = { name, bytes, file: File.parse(bytes), kind: f.version === 9 ? 'extended' : 'classic', report };
         const env = { doc, dialogs, core, limits, current: () => cur, thumb: () => null, tags: (el, kind) => { el.textContent = kind; }, onMade: (b, n) => made.push({ bytes: b, name: n }), crop: (spec) => crops.push(spec) };
         const convert = Convert.create(env);
         return { doc, host, dialogs, made, crops, convert, cur, button: (label) => host.querySelectorAll('button').filter((b) => b.textContent === label)[0], all: (s) => host.querySelectorAll(s), q: (s) => host.querySelector(s) };
@@ -551,9 +559,19 @@ function caseJ(core) {
         let p = page(name, classic);
         p.convert.convert();
         p.button('Make the new Extended map').click();
-        const want = core.convertToExtended(classic);
-        check(p.made.length === 1 && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(want.bytes)) === 0 && /Extended$/.test(p.made[0].name) && Buffer.compare(Buffer.from(classic), Buffer.from(keep)) === 0, name + ': the Extended map is the core\'s, a new map, and the Classic bytes are as they were');
+        const want = core.convertToLongOrders(classic), plain = core.convertToExtended(classic);
+        check(p.made.length === 1 && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(want.bytes)) === 0 && /Extended$/.test(p.made[0].name) && Buffer.compare(Buffer.from(classic), Buffer.from(keep)) === 0, name + ': the Extended map is the core\'s (with long orders), a new map, and the Classic bytes are as they were');
+        check(File.parse(p.made[0].bytes).rules === 2 && File.parse(plain.bytes).rules === 0 && File.parse(classic).rules === 0, name + ': the page reads rules 2 in the new map, and 0 in the plain conversion and in the Classic map');
         const ext = p.made[0].bytes;
+        // a copy of that Extended map is the same bytes (it has the word already); a copy of the older, plain one (rules 0) and of one of rules 1 gets the word; the open map is not touched
+        p = page(name + ' Extended', ext); p.convert.copy(); p.button('Make new map').click();
+        check(p.made.length === 1 && p.made[0].bytes !== ext && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(ext)) === 0, name + ': a copy of a map of rules 2 is the same bytes');
+        for (const word of [0, 1]) {
+            const older = plain.bytes.slice(); older[14] = word;
+            const olderKeep = older.slice();
+            p = page(name + ' Extended', older); p.convert.copy(); p.button('Make new map').click();
+            check(p.made.length === 1 && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(ext)) === 0 && File.parse(p.made[0].bytes).rules === 2 && Buffer.compare(Buffer.from(older), Buffer.from(olderKeep)) === 0, name + ': a copy of a map of rules ' + word + ' (' + File.parse(older).rows + ' rows) is the core\'s copy with long orders, and the open map is as it was');
+        }
         up++;
         // the same map as a copy of its own kind
         p = page(name, classic); p.convert.copy(); p.button('Make new map').click();
@@ -578,6 +596,22 @@ function caseJ(core) {
     }
     check(up === 540 && same === 540 && down + refused === 540, 'every map of the library went up and came back: ' + up + ', ' + down + ' fit again, ' + refused + ' give reasons');
     console.log('(' + down + ' fit a Classic map again, ' + refused + ' give reasons) ');
+
+    // a map of rules 0 taller than 90 rows keeps its wall: its copy is the same bytes, rules 0; made from a Classic map of 120 rows it is an Extended map of rules 0; with the word 1 it gets 2
+    const walled = core.blankExtended(120, 40, 485, 6, 10).bytes.slice(); walled[14] = 0;
+    let q = page('Walled', walled); q.convert.copy(); q.button('Make new map').click();
+    check(q.made.length === 1 && Buffer.compare(Buffer.from(q.made[0].bytes), Buffer.from(walled)) === 0 && File.parse(q.made[0].bytes).rules === 0, 'a copy of a map of rules 0 and 120 rows keeps rules 0');
+    const classicTall = core.blank(120, 40, 485, 6, 10, 'game').bytes;
+    q = page('Tall Classic', classicTall); q.convert.convert(); q.button('Make the new Extended map').click();
+    check(q.made.length === 1 && File.parse(q.made[0].bytes).rules === 0 && File.parse(q.made[0].bytes).rows === 120 && Buffer.compare(Buffer.from(q.made[0].bytes), Buffer.from(core.convertToExtended(classicTall).bytes)) === 0, 'a Classic map of 120 rows (the game\'s own limits) goes up with rules 0: its wall stays');
+    const walled1 = walled.slice(); walled1[14] = 1;
+    q = page('Walled 1', walled1); q.convert.copy(); q.button('Make new map').click();
+    check(q.made.length === 1 && File.parse(q.made[0].bytes).rules === 2 && File.parse(q.made[0].bytes).rows === 120, 'a copy of a map of rules 1 and 120 rows has rules 2');
+    // the Classic map made from a map of long orders: the core's short note and the words that go with it
+    const longMap = core.convertToLongOrders(new Uint8Array(fs.readFileSync(path.join(ROOT, 'Original-Ants', 'Maps', 'TINY.LVL')))).bytes;
+    q = page('Tiny Long', longMap); q.convert.convert();
+    check(q.all('.note').length === 1 && q.all('.note')[0].textContent === 'iThe map has long orders (rules 2); a Classic map has the original\'s rules only, so a long path order can fail there.', 'the short note of the core, as the picture has it: ' + q.all('.note').map((n) => n.textContent));
+    equal(q.all('.cbox').map((b) => b.textContent.replace(/\d+ rows and \d+ columns/, 'N')).map((t) => t.replace(/.*(How the map plays[^✓]*)✓.*/, '$1')), ['How the map plays, except long orders.', 'What changes→The copy keeps the limits of a Classic map: at most N.→The “New version only” and “Rules 2” badges go away.'], 'and the words of the two columns');
 
     // a large Extended map: the Classic choice is dimmed with the rows reason, Crop it to fit, Shorten the description
     const blank = core.blankExtended(120, 400, 485, 6, 10).bytes, tall = core.setProperties(blank, 'The tall valley has many ants!!', 10, 6, 0x7FFE, 'extended').bytes;
