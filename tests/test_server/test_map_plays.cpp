@@ -1,6 +1,6 @@
 // Tests of the play count of the maps (HistoryStore::put and map_plays, table map_plays of schema version 3, docs/SERVER.md "The database"): only matches with a person that ran 30 seconds count (29 s does not,
 // 30 s does; a match of computer players only does not), a draw and a quit count as the history records them, one match is one play however often it is kept or the server restarts, the key is the map's file
-// name and hash, the count survives a reopened database, and real recordings are counted by the feeder (and not again by a second feeder on the same database). A server with no database keeps no count.
+// name and hash, the count survives a reopened database, and real recordings are counted by the feeder (and not again by a second feeder on the same database), a recording on a map over the cap of starting ants is not played by the feeder (MP2.3 for a new file, MP2.4 for the stats of an older record). A server with no database keeps no count.
 #include <cstdlib>
 #include <functional>
 #include <iomanip>
@@ -359,6 +359,42 @@ int main() {
             if (rig.history.count() != (over ? 0u : 1u) || rig.feeder.left_out() != (over ? 1u : 0u)) std::cout << "[" << (over ? "over the cap" : "at the cap") << ": " << rig.history.count() << " counted, " << rig.feeder.left_out() << " left out] " << std::flush;
             ASSERT_TRUE(rig.history.count() == (over ? 0u : 1u) && rig.feeder.left_out() == (over ? 1u : 0u));
         }
+    } TEST_END();
+
+    TEST_CASE("MP2.4 A counted match with no details yet whose recording is on a map that starts more ants than a room plays (1,000, the four colors added up) is not played again by the backfill: it gets no details and no marker (the next start tries again, as for a map that is not here), and one line says why") {
+        TempDir maps;
+        { std::ofstream out(maps.path / "OVER CAP.LVL", std::ios::binary); out << tiny_with_ants({251, 251, 251, 251}); }          // (1,004 ants)
+        MatchSpec spec;
+        spec.dir = maps.path.string();
+        spec.file = "OVER CAP.LVL";
+        spec.seed = 41;
+        spec.turns = 700;
+        spec.roster = 0x03;
+        spec.names = {"Ann", "Bob", "", ""};
+        const std::vector<uint8_t> played = record_match(spec);
+        ASSERT_TRUE(!played.empty());
+        Rig rig(maps.path.string());
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(played);
+        ASSERT_FALSE(id.empty());
+        HistoryRecord record = play_of(rig.now, "OVER CAP.LVL", 0, 700, {"Ann", "Bob"});          // (the match was counted by an older version, which had no details: made by hand, so that nothing plays the recording)
+        record.id = id;
+        std::string why;
+        ASSERT_TRUE(rig.history.put(record, why));
+        rig.drain(8);
+        HistoryRecord got;
+        ASSERT_TRUE(rig.history.find(id, got) && got.details.empty());                          // no details, and no marker either: a marker is for a recording that cannot be played at all
+        ASSERT_EQ(rig.feeder.backfilled(), size_t{0});
+        size_t told = 0;
+        for (const std::string& line : rig.history.take_notes()) told += line.find(id + " has no stats yet: the map starts more ants than a room plays online") != std::string::npos ? 1u : 0u;
+        ASSERT_EQ(told, size_t{1});
+        const int asked = rig.idle_asked;
+        rig.drain(8);
+        ASSERT_EQ(rig.idle_asked, asked);                                                       // (not tried again in this run, not told again)
+        HistoryFeeder later(rig.history, rig.replays, maps.path.string());                      // (the next start: the same answer, and still no marker)
+        uint32_t ms = 100000;
+        for (int i = 0; i < 8; ++i) later.step([] { return true; }, ms += 300);
+        ASSERT_TRUE(rig.history.find(id, got) && got.details.empty() && later.backfilled() == 0);
     } TEST_END();
 
     TEST_CASE("MP3.1 A server with no database or no history keeps no count and nothing fails: the match path and the routes are as before") {
