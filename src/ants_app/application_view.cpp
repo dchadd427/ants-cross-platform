@@ -35,6 +35,7 @@ void Application::apply_match_zoom() {
 // Every player of a match has the same levels (FAIRNESS, application.hpp): the zoom is the view's own. Only a renderer that cannot make the offscreen target is limited: it draws the zoom 1.
 zoom::Limits Application::zoom_limits() const noexcept {
     if (renderer_ && renderer_->world_target_failed()) return zoom::Limits::only_normal();      // (a zoom is drawn through the target: with none there is only the original's picture)
+    if (layout_.yard) return zoom::Limits{zoom::series(-1), zoom::kIn};                          // the Yard: one notch out of the original's scale (0.84) and no further, for the server's cap of 120 others' ants in a batch
     return zoom::Limits::any();
 }
 
@@ -92,7 +93,7 @@ bool Application::set_zoom(float level, int32_t anchor_x, int32_t anchor_y) {
     const int32_t dy = std::clamp(anchor_y - view.y, 0, std::max(0, view.h - 1));
     camera.set_zoom(target, dx, dy, current_level_.width(), current_level_.height());
     zoom_wanted_ = target;                                                // remembered: the next match starts with it
-    config_store_.set_string("zoom", zoom::level_name(target));
+    if (!layout_.yard) config_store_.set_string("zoom", zoom::level_name(target));        // (the Yard's zoom is the Yard's: the game's remembered zoom is left as it is)
     return true;
 }
 

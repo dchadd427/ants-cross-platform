@@ -74,6 +74,9 @@ add_library(ants_app STATIC
     application_touch.cpp
     application_view.cpp
     application_net.cpp
+    application_yard.cpp
+    yard_puppet.cpp
+    yard_sink.cpp
 )
 
 if(NOT EMSCRIPTEN)

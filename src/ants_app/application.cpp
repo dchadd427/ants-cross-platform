@@ -500,6 +500,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
             mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--replay-live") == 0) {               // the file of --replay is a copy of a match that is still going on (ApplicationConfig::replay_live)
             cfg.replay_live = true;
+        } else if (std::strcmp(argv[i], "--yard") == 0) {                      // the Yard: the map alone, a world that the server's batches rewrite (ApplicationConfig::yard, docs/YARD.md)
+            cfg.yard = true;
+            mode_given = direct_match = true;
         } else if (std::strcmp(argv[i], "--play") == 0) {                      // the setup screen's own START at its first visit (ApplicationConfig::play_at_once)
             cfg.play_at_once = true;
             mode_given = true;
@@ -512,6 +515,12 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
         cfg.startup_error = "--replay shows a recorded match: it cannot be combined with --host, --join, --join-url, --bot, --alone or --play.";
     }
     if (cfg.replay_live && cfg.replay_path.empty() && cfg.startup_error.empty()) cfg.startup_error = "--replay-live follows the file of --replay: it needs --replay FILE.";
+    if (cfg.yard) {                                                            // the Yard starts straight into its picture, whatever else was asked for
+        cfg.start_in_map_select = false;
+        if (cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.bots.empty() || cfg.alone || cfg.play_at_once || !cfg.replay_path.empty() || cfg.game_mode_given)) {
+            cfg.startup_error = "--yard shows the Yard: it cannot be combined with --host, --join, --join-url, --bot, --alone, --play, --replay or --game-mode.";
+        }
+    }
     if (cfg.game_mode_given && cfg.startup_error.empty()) {      // the mode is the choice of whoever makes the game: this machine for a game of its own and for the room of --host, nobody else's
         if (!cfg.replay_path.empty()) cfg.startup_error = "--game-mode cannot be combined with --replay: the file says which game was played.";
         else if (cfg.net_role == ApplicationConfig::NetRole::Join || !cfg.net_room.empty() || cfg.net_create) cfg.startup_error = "--game-mode is the choice of the room's host: it cannot be used with --join, --join-url, --room or the --room-* options of a room that a server makes.";
@@ -555,7 +564,7 @@ bool Application::init(const ApplicationConfig& config) {
     }
     const bool local_bots = !config_.bots.empty() && config_.net_role == ApplicationConfig::NetRole::None;
     const bool local_seats = local_bots || game_for_one();                       // the seats were chosen: you and the bots, or you alone (--alone); every other seat has no colony
-    local_roster_ = local_seats ? bot_roster(own_seat) : uint8_t{0x0F};
+    local_roster_ = config_.yard ? uint8_t{0} : local_seats ? bot_roster(own_seat) : uint8_t{0x0F};          // (the Yard: no seat plays, and a map with no start marker is fine)
 
     // 1. Initialize SDL2
     uint32_t sdl_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER;
@@ -613,7 +622,9 @@ bool Application::init(const ApplicationConfig& config) {
     // 4. Initialize Simulation Engine. A local game that starts at once with bots (or --alone) plays the seats that are taken (you and the bots): a team nobody plays has no hill
     // and no ants (the setup screen's game does the same in start_game)
     sim_.set_game_mode(static_cast<sim::GameMode>(config_.game_mode));     // (a game of this machine plays by --game-mode; every init() after this one keeps it, "Play again" too. A room's match sets its own in load_match)
-    if (local_seats && !config_.start_in_map_select) {
+    if (config_.yard) {
+        prepare_yard_world();                                                // (the Yard's world: nobody plays, no hill and no ant of the file; application_yard.cpp)
+    } else if (local_seats && !config_.start_in_map_select) {
         if (local_roster_ != 0x0F) current_level_ = current_level_.for_roster(local_roster_);
         sim_.init(current_level_, config_.random_seed, local_roster_);
     } else {
@@ -623,7 +634,7 @@ bool Application::init(const ApplicationConfig& config) {
     // 5. Initialize Audio Subsystem
     audio_mixer_.set_headless_mode(config_.headless);
     audio_mixer_.init(assets_);
-    if (!config_.headless) {
+    if (!config_.headless && !config_.yard) {                                // (the Yard opens no audio device: it is silent)
         audio_mixer_.init_sdl_audio(1024);
     }
 
@@ -858,7 +869,9 @@ bool Application::init(const ApplicationConfig& config) {
     }
 
     // Determine initial AppState & audio lifecycle
-    if (replay_mode_) {
+    if (config_.yard) {
+        if (!start_yard_from_config()) return false;                         // (the Yard: application_yard.cpp)
+    } else if (replay_mode_) {
         audio_mixer_.stop_music();
         midi_player_.stop();
         config_.label_unnamed_teams = true;                          // (every seat of the match is shown, by its name or its color)
@@ -2457,7 +2470,9 @@ void Application::update_simulation(float dt) {
         return;
     }
 
-    if (replay_mode_) {
+    if (yard_mode_) {
+        run_yard(dt);
+    } else if (replay_mode_) {
         run_replay(dt);
         update_auto_camera(dt);
     } else if (network_active() && net_->phase() == net::NetGame::Phase::Playing) {
@@ -3141,64 +3156,66 @@ void Application::render_frame() {
 
     // Frame rate counter and frametime sparkline in the bottom right hand corner of the canvas (the viewport: the version stands next to the counter in every layout):
     // the plate is the canvas's, not the picture's (a page is the picture's own corner: corner_area)
-    const LayoutRect corner = corner_area();
-    renderer_->set_picture(corner);
-    const CornerPlate plate = CornerPlate::for_canvas(corner.w, corner.h);
-    int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
-    std::string fps_text = std::to_string(fps_val) + " FPS";
-    int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Px12);
-    int32_t text_h = renderer_->get_text_height(FontSize::Px12);
-    constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
-    constexpr int32_t spark_h = FPS_OVERLAY_SPARK_H;
-    std::string ver_text(ants::VERSION_STRING);
-    int32_t ver_w = renderer_->get_text_width(ver_text, FontSize::Px12);
-    const CornerRow row = CornerRow::of(plate, text_w, ver_w, spark_w, spark_h, text_h);          // (the version, the sparkline and the frame rate: one row from the right edge)
-    const int32_t text_x = row.fps_x;
-    const int32_t spark_x = row.spark_x;
-    const int32_t spark_y = row.spark_y;
-    const int32_t text_y = row.text_y;
-    renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
+    if (!yard_mode_) {                                       // (the Yard has no frame-rate plate)
+        const LayoutRect corner = corner_area();
+        renderer_->set_picture(corner);
+        const CornerPlate plate = CornerPlate::for_canvas(corner.w, corner.h);
+        int fps_val = std::max(1, static_cast<int>(std::round(fps_display_value_)));
+        std::string fps_text = std::to_string(fps_val) + " FPS";
+        int32_t text_w = renderer_->get_text_width(fps_text, FontSize::Px12);
+        int32_t text_h = renderer_->get_text_height(FontSize::Px12);
+        constexpr int32_t spark_w = static_cast<int32_t>(SPARKLINE_SAMPLES);
+        constexpr int32_t spark_h = FPS_OVERLAY_SPARK_H;
+        std::string ver_text(ants::VERSION_STRING);
+        int32_t ver_w = renderer_->get_text_width(ver_text, FontSize::Px12);
+        const CornerRow row = CornerRow::of(plate, text_w, ver_w, spark_w, spark_h, text_h);          // (the version, the sparkline and the frame rate: one row from the right edge)
+        const int32_t text_x = row.fps_x;
+        const int32_t spark_x = row.spark_x;
+        const int32_t spark_y = row.spark_y;
+        const int32_t text_y = row.text_y;
+        renderer_->draw_text(fps_text, text_x, text_y, {255, 255, 255, 255}, FontSize::Px12);
 
-    // Version number display (bottom-right next to FPS sparkline)
-    const int32_t ver_x = row.version_x;
-    const int32_t ver_y = text_y;
-    renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Px12);
+        // Version number display (bottom-right next to FPS sparkline)
+        const int32_t ver_x = row.version_x;
+        const int32_t ver_y = text_y;
+        renderer_->draw_text(ver_text, ver_x, ver_y, {180, 190, 200, 220}, FontSize::Px12);
 
-    // Dark translucent background plate + subtle border
-    renderer_->fill_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{0, 0, 0, 160});
-    renderer_->draw_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{80, 85, 90, 180});
+        // Dark translucent background plate + subtle border
+        renderer_->fill_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{0, 0, 0, 160});
+        renderer_->draw_rect(spark_x - 1, plate.top, spark_w + 2, plate.bottom - plate.top, ants::assets::ColorRGBA{80, 85, 90, 180});
 
-    // 60 FPS reference guide line (16.67ms -> 5 pixels from bottom)
-    int32_t ref_line_y = spark_y + spark_h - 5;
-    renderer_->fill_rect(spark_x, ref_line_y, spark_w, 1, ants::assets::ColorRGBA{50, 80, 70, 150});
+        // 60 FPS reference guide line (16.67ms -> 5 pixels from bottom)
+        int32_t ref_line_y = spark_y + spark_h - 5;
+        renderer_->fill_rect(spark_x, ref_line_y, spark_w, 1, ants::assets::ColorRGBA{50, 80, 70, 150});
 
-    // Render each frame history sample (oldest on left, newest on right)
-    for (int32_t i = 0; i < spark_w; ++i) {
-        size_t sample_idx = (frametime_index_ + static_cast<size_t>(i)) % SPARKLINE_SAMPLES;
-        float ft = frametime_history_[sample_idx];
+        // Render each frame history sample (oldest on left, newest on right)
+        for (int32_t i = 0; i < spark_w; ++i) {
+            size_t sample_idx = (frametime_index_ + static_cast<size_t>(i)) % SPARKLINE_SAMPLES;
+            float ft = frametime_history_[sample_idx];
 
-        // 33.3ms (30 FPS) is full box height (11px); 16.67ms (60 FPS) is ~5.5px
-        int32_t bar_h = static_cast<int32_t>(std::round((ft / 33.333f) * static_cast<float>(spark_h)));
-        bar_h = std::clamp(bar_h, 1, spark_h);
-        int32_t bar_y = spark_y + spark_h - bar_h;
+            // 33.3ms (30 FPS) is full box height (11px); 16.67ms (60 FPS) is ~5.5px
+            int32_t bar_h = static_cast<int32_t>(std::round((ft / 33.333f) * static_cast<float>(spark_h)));
+            bar_h = std::clamp(bar_h, 1, spark_h);
+            int32_t bar_y = spark_y + spark_h - bar_h;
 
-        // Color coding based on frame pacing:
-        // Green: <= 18.0ms (55-60+ FPS, solid)
-        // Yellow: 18.1 - 25.0ms (40-55 FPS, minor drop)
-        // Red: > 25.0ms (< 40 FPS, stutter spike)
-        ants::assets::ColorRGBA bar_color;
-        if (ft <= 18.0f) {
-            bar_color = ants::assets::ColorRGBA{60, 230, 90, 220};
-        } else if (ft <= 25.0f) {
-            bar_color = ants::assets::ColorRGBA{240, 210, 50, 220};
-        } else {
-            bar_color = ants::assets::ColorRGBA{240, 60, 60, 240};
+            // Color coding based on frame pacing:
+            // Green: <= 18.0ms (55-60+ FPS, solid)
+            // Yellow: 18.1 - 25.0ms (40-55 FPS, minor drop)
+            // Red: > 25.0ms (< 40 FPS, stutter spike)
+            ants::assets::ColorRGBA bar_color;
+            if (ft <= 18.0f) {
+                bar_color = ants::assets::ColorRGBA{60, 230, 90, 220};
+            } else if (ft <= 25.0f) {
+                bar_color = ants::assets::ColorRGBA{240, 210, 50, 220};
+            } else {
+                bar_color = ants::assets::ColorRGBA{240, 60, 60, 240};
+            }
+
+            renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
         }
 
-        renderer_->fill_rect(spark_x + i, bar_y, 1, bar_h, bar_color);
+        render_latency_corner(ver_x, text_y, plate);
     }
-
-    render_latency_corner(ver_x, text_y, plate);
 
     // Authentic Software Cursor (Matching Ants.exe 0x1026c5c / 0x1027e65): the pointer is the picture's
     renderer_->set_picture(picture_);
