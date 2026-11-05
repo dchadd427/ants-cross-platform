@@ -1421,7 +1421,7 @@
   {
    "id": "legal_forgets_the_seven_days",
    "file": "web/legal.html",
-   "old": "Chat lines are kept for 7 days,",
+   "old": "Chat lines are kept for up to 7 days,",
    "new": "Chat lines are kept for a while,",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1512,8 +1512,8 @@
   {
    "id": "logout_does_not_ask_for_the_cut",
    "file": "hub/store/sqlite.py",
-   "old": "        self.unsettled = True\n        return gone\n",
-   "new": "        return gone\n",
+   "old": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        self.unsettled = True\n        return gone\n",
+   "new": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        return gone\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
   },
   {
