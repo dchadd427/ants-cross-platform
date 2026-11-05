@@ -87,8 +87,11 @@ function lvlLayout(map) {
     const u16 = (at) => map[at] | (map[at + 1] << 8);
     const gridAt = 40 + 2 + 11 * (u16(40) + 1);
     const rows = read32(map, gridAt) & 0xffff, columns = read32(map, gridAt + 4) & 0xffff;
-    const layersAt = gridAt + 8, block1At = layersAt + rows * columns * 12, count = u16(block1At);
-    return { rows, columns, gridAt, layersAt, block1At, count, recordsAt: block1At + 2, afterAt: block1At + 2 + 6 * count };
+    const layersAt = gridAt + 8, block1At = layersAt + rows * columns * 12, count = u16(block1At), afterAt = block1At + 2 + 6 * count;
+    let at = afterAt + 2;                                                     // block 2: a word, then per food pile five words and the pairs of its stages
+    for (let i = 0, piles = u16(afterAt); i < piles; i++) { const stages = u16(at + 8); at += 10; if (stages === 0) break; at += 4 * stages; }
+    const block4At = at + 4;                                                  // (block 3 is two words)
+    return { rows, columns, gridAt, layersAt, block1At, count, recordsAt: block1At + 2, afterAt, block4At, waypoints: u16(block4At) };
 }
 // The map with exactly `ants` start markers (all green, on the cell at row 1, column 1): its plants stay and so does the rest of the file. Block 1 holds 65,535 records at most
 function mapWithAnts(map, ants) {
@@ -101,6 +104,21 @@ function mapWithAnts(map, ants) {
     if (records.length > 65535) throw new Error('block 1 holds at most 65,535 records');
     return Uint8Array.from(Array.from(map.subarray(0, L.block1At)).concat([records.length & 255, records.length >> 8], [].concat(...records), Array.from(map.subarray(L.afterAt))));
 }
+// The map with one more record in block 1 for each tile id of `tiles` (each on the cell at row 1, column 1: plants are records that no team owns) and exactly `waypoints` waypoints in block 4 (each on the cell at row 5,
+// column 5; the first `triggered` have a trigger and take 52 bytes, the others 8): the base must have none (TINY has none). A plant looks up its waypoint among all of them when a match is set up, so two crowds on different cells are the worst case
+function mapWithRecords(map, tiles, waypoints, triggered) {
+    const L = lvlLayout(map);
+    if (L.waypoints !== 0) throw new Error('the map has waypoints already');
+    if (L.count + tiles.length > 65535 || waypoints > 65535) throw new Error('a block holds 65,535 records at most');
+    const plants = [].concat(...tiles.map((tile) => [tile & 255, tile >> 8, 1, 0, 1, 0]));
+    const point = (i) => i < (triggered || 0) ? [5, 0, 5, 0, 1, 0, 0, 0].concat(Array(44).fill(0)) : [5, 0, 5, 0, 0, 0, 0, 0];      // (the first `triggered` have a flag: an interval and five doubles follow, 52 bytes)
+    const points = [].concat(...Array.from({ length: waypoints }, (_, i) => point(i)));
+    const total = L.count + tiles.length;
+    return Uint8Array.from(Array.from(map.subarray(0, L.block1At)).concat([total & 255, total >> 8], Array.from(map.subarray(L.recordsAt, L.afterAt)), plants, Array.from(map.subarray(L.afterAt, L.block4At)),
+                                                                            [waypoints & 255, waypoints >> 8], points, Array.from(map.subarray(L.block4At + 2))));
+}
+// ... with `plants` plants of the tile 404 (a clover) and `waypoints` waypoints
+const mapWithPlantsAndWaypoints = (map, plants, waypoints) => mapWithRecords(map, Array.from({ length: plants }, () => 404), waypoints);
 // The map with a grid of `rows` x `columns` cells (the first cells of the layers) and its start markers where they were: markers outside the grid, a map that the game's loader reads and its validity check refuses
 function mapWithGrid(map, rows, columns) {
     const L = lvlLayout(map);
@@ -111,4 +129,4 @@ function mapAsVersion9(map, rules) {
     return Uint8Array.from([9, 0, 0, 0].concat(Array.from(map.subarray(4, 10)), [0, 0, 0, 0, rules & 255, rules >> 8, 30, 0], Array.from(map.subarray(10))));
 }
 
-module.exports = { MAGIC, crc32, le32, read32, chunk, chunks, readHead, writeHead, fnv64, hashBytes, withHead, withMap, withRules, setField, text, lvlLayout, mapWithAnts, mapWithGrid, mapAsVersion9 };
+module.exports = { MAGIC, crc32, le32, read32, chunk, chunks, readHead, writeHead, fnv64, hashBytes, withHead, withMap, withRules, setField, text, lvlLayout, mapWithAnts, mapWithRecords, mapWithPlantsAndWaypoints, mapWithGrid, mapAsVersion9 };

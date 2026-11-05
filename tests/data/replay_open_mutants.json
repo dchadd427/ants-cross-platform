@@ -436,7 +436,7 @@
   {
    "id": "the_records_are_not_checked_against_the_file",
    "file": "web/map_files.js",
-   "old": "if (count * 6 > bytes.length - pos) return -1;",
+   "old": "if (count * 6 > bytes.length - pos) return facts;",
    "new": "",
    "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
    "why": "a header that claims 65,535 records is read past the end of the file"
@@ -468,10 +468,10 @@
   {
    "id": "the_count_is_not_handed_over",
    "file": "web/map_files.js",
-   "old": "bytes: found, ants: startMarkersOfMap(found) };",
-   "new": "bytes: found, ants: 0 };",
+   "old": "bytes: found, ants: facts.ants, plants: facts.plants, waypoints: facts.waypoints };",
+   "new": "bytes: found, ants: 0, plants: facts.plants, waypoints: facts.waypoints };",
    "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
-   "why": "the verdict has no number to judge"
+   "why": "the verdict has no ant count to judge"
   },
   {
    "id": "the_games_limit_is_nine_thousand",
@@ -624,6 +624,134 @@
    "new": "if (len > 4096) return '';",
    "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
    "why": "a player name of 4,000 characters reaches the chips"
+  },
+  {
+   "id": "no_plant_is_counted",
+   "file": "web/map_files.js",
+   "old": "if (isPlantTile(raw)) plants++;",
+   "new": "if (false) plants++;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a map of 65,400 plants and 65,535 waypoints looks like a map of none: the page hands the game a freeze of a minute"
+  },
+  {
+   "id": "every_record_is_a_plant",
+   "file": "web/map_files.js",
+   "old": "if (isPlantTile(raw)) plants++;",
+   "new": "plants++;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the start markers and every other record of block 1 are counted as plants"
+  },
+  {
+   "id": "the_flowers_end_one_tile_early",
+   "file": "web/map_files.js",
+   "old": "(id >= 410 && id <= 416)",
+   "new": "(id >= 410 && id <= 415)",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a plant that the engine looks a waypoint up for is not counted"
+  },
+  {
+   "id": "the_waypoints_are_not_counted",
+   "file": "web/map_files.js",
+   "old": "facts.waypoints = waypoints;",
+   "new": "facts.waypoints = 0;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the second square has one side that the page cannot see"
+  },
+  {
+   "id": "only_the_first_waypoint_is_counted",
+   "file": "web/map_files.js",
+   "old": "for (var w = 0; w < announced; w++) {",
+   "new": "for (var w = 0; w < 1 && w < announced; w++) {",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "65,535 waypoints are counted as one"
+  },
+  {
+   "id": "a_half_record_is_not_kept",
+   "file": "web/map_files.js",
+   "old": "if (pos + 4 > bytes.length) { waypoints++; break; }    // (a cell and no flag: the half record is kept)",
+   "new": "if (pos + 4 > bytes.length) { break; }    // (a cell and no flag: the half record is kept)",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the loader keeps a record that a file ends in, and the page does not"
+  },
+  {
+   "id": "a_waypoint_with_a_trigger_is_8_bytes",
+   "file": "web/map_files.js",
+   "old": "if (pos + 44 > bytes.length) { waypoints++; break; } pos += 44; }",
+   "new": "if (pos + 44 > bytes.length) { waypoints++; break; } pos += 0; }",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the waypoints after one with a trigger are read from the wrong bytes"
+  },
+  {
+   "id": "a_pile_without_stages_does_not_end_block_2",
+   "file": "web/map_files.js",
+   "old": "if (stages === 0) { if (version === 9) return facts; break; }",
+   "new": "if (stages === 0) { if (version === 9) return facts; continue; }",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "block 4 is looked for in the wrong place in a file with the quirk of the original's loader"
+  },
+  {
+   "id": "a_stage_is_two_bytes",
+   "file": "web/map_files.js",
+   "old": "pos += stages * 4;",
+   "new": "pos += stages * 2;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "block 4 is looked for in the wrong place: every map with food stages gives another count"
+  },
+  {
+   "id": "the_pairs_limit_is_a_hundred_times",
+   "file": "web/map_files.js",
+   "old": "var MAX_EMBEDDED_PAIRS = 1000000;",
+   "new": "var MAX_EMBEDDED_PAIRS = 100000000;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the page lets through what the game refuses"
+  },
+  {
+   "id": "the_page_never_refuses_a_product",
+   "file": "web/map_files.js",
+   "old": "if (carried.plants >= 0 && carried.waypoints >= 0 && carried.plants * carried.waypoints > MAX_EMBEDDED_PAIRS) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a map of 4.3 billion pairs reaches the game from the page"
+  },
+  {
+   "id": "the_product_may_equal_the_limit",
+   "file": "web/map_files.js",
+   "old": "carried.plants * carried.waypoints > MAX_EMBEDDED_PAIRS",
+   "new": "carried.plants * carried.waypoints >= MAX_EMBEDDED_PAIRS",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a map of exactly 1,000,000 pairs is refused by the page and played by the game"
+  },
+  {
+   "id": "the_pairs_are_a_sum",
+   "file": "web/map_files.js",
+   "old": "carried.plants * carried.waypoints > MAX_EMBEDDED_PAIRS",
+   "new": "carried.plants + carried.waypoints > MAX_EMBEDDED_PAIRS",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "65,535 waypoints and no plant are refused, 1,000 plants and 1,000 waypoints are not"
+  },
+  {
+   "id": "the_games_pairs_limit_is_two_million",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "inline constexpr uint64_t kMaxEmbeddedPlantWaypointPairs = 1000000;",
+   "new": "inline constexpr uint64_t kMaxEmbeddedPlantWaypointPairs = 2000000;",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "the game and the page count against different numbers"
+  },
+  {
+   "id": "the_game_does_not_look_at_the_pairs",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (plants * waypoints > kMaxEmbeddedPlantWaypointPairs) {",
+   "new": "if (false) {",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "a map of 4.3 billion pairs is set up by the game, for seconds natively and a minute on a phone"
+  },
+  {
+   "id": "the_folder_copy_of_a_carried_map_is_not_counted",
+   "file": "src/ants_replay/player.cpp",
+   "old": "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);",
+   "new": "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return true;",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "the page writes the map into the maps folder, the game reads that copy, and no limit holds"
   }
  ]
 }

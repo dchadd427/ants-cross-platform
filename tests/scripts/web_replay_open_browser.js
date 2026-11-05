@@ -497,6 +497,24 @@ async function partCards(browser, shot) {
         if (kindName === 'phone') { await sleep(200); await shot(page, 'built_c_phone_crowd'); } else await shot(page, 'built_c_desktop_crowd');
         await ctx.close();
     }
+    for (const [kindName, context] of [['desktop', DESKTOP], ['phone', PHONE]]) {   // 65,400 plants and 65,535 waypoints (the engine looks up the waypoint of every plant among all of them): the page says so at once, with the numbers
+        const { ctx, page } = await newPage(browser, context, null);
+        await open(page, asFile('plants.antsrep', tools.withMap(FIXTURE, 'Plants.lvl', tools.mapWithPlantsAndWaypoints(TINY_MAP, 65400, 65535), true)));
+        const started = Date.now();
+        const card = await cardOf(page);
+        check('a map of 65,400 plants and 65,535 waypoints carried by the file (' + kindName + '): the card "This replay can’t be played here" with the numbers, in no time', card.title === 'This replay can’t be played here'
+              && /The map in the file has 65,400 plants and 65,535 waypoints, so setting it up looks at 4,285,989,000 pairs of them, more than the 1,000,000 that a replay is set up with\./.test(card.body) && Date.now() - started < 5000, JSON.stringify(card));
+        check('... the game was never started', (await page.evaluate(() => typeof window.__stub)) === 'undefined');
+        if (kindName === 'phone') { await sleep(200); await shot(page, 'built_c_phone_pairs'); } else await shot(page, 'built_c_desktop_pairs');
+        await ctx.close();
+    }
+    {   // exactly 1,000,000 pairs go to the game
+        const { ctx, page } = await newPage(browser, DESKTOP, { map: 'Dune.lvl', turns: 20060 });
+        await open(page, asFile('plants.antsrep', tools.withMap(FIXTURE, 'Plants.lvl', tools.mapWithPlantsAndWaypoints(TINY_MAP, 1000, 1000), true)));
+        await stubStarted(page);
+        check('a map of exactly 1,000,000 pairs (1,000 plants and 1,000 waypoints) is handed to the game', !(await page.isVisible('#rm')));
+        await ctx.close();
+    }
     {   // 8,000 is the limit: that many go to the game
         const { ctx, page } = await newPage(browser, DESKTOP, { map: 'Dune.lvl', turns: 20060 });
         await open(page, asFile('crowd.antsrep', tools.withMap(FIXTURE, 'Crowd.lvl', tools.mapWithAnts(TINY_MAP, 8000), true)));
@@ -738,22 +756,46 @@ async function partReal(browser, shot) {
     const hostile = [['a map of nothing but zeros', new Uint8Array(1000)], ['a map cut after 100 bytes', DUNE.slice(0, 100)], ['a map cut in its middle', DUNE.slice(0, DUNE.length >> 1)], ['a map of random bytes of the longest size', Uint8Array.from({ length: 1 << 20 }, (_, i) => (i * 2654435761 >>> 7) & 255)],
                      ['a map whose header says the grid is huge', set32(DUNE, 8, 0xffffffff)], ['a map with a changed first byte', flip(DUNE, 0, DUNE[0] ^ 255)], ['a map with a changed byte in its tiles', flip(DUNE, 5000, DUNE[5000] ^ 255)],
                      ['a map with 65,535 in its second word', set32(DUNE, 4, 0xffff)], ['a map with its middle zeroed', (() => { const b = Uint8Array.from(DUNE); b.fill(0, 2000, 9000); return b; })()]];
-    // 3b. a crowd: a map that starts tens of thousands of ants held the tab for minutes (the game's set-up grows with the square of their number). The page counts first and says so at once; where the page does not (a map named like
-    //     one of the six originals is never taken by the page: the game gets the file) the game refuses it in the same breath, with the count
-    for (const [label, name, ants, words] of [['carried under a name of its own: the page refuses before the game starts', 'Crowd.lvl', 65535, /The map in the file starts 65,535 ants \(the start markers of the four colors\), more than the 8,000 that a replay is set up with\./],
-                                              ['carried under the name of an original (the page leaves it to the game): the game refuses it', 'TINY.LVL', 65535, /The map in the replay starts 65535 ants \(the start markers of the four colors\), more than the 8000 that a replay is set up with/],
-                                              ['8,001 ants under the name of an original: the game refuses it too', 'TINY.LVL', 8001, /The map in the replay starts 8001 ants/]]) {
+    // 3b. a crowd: a map that starts tens of thousands of ants, or has tens of thousands of plants and of waypoints (the engine looks the waypoint of every plant up among all of them), held the tab for seconds to minutes
+    //     (the set-up grows with the square). The page counts first and says so at once; where the page does not (a map named like one of the six originals is never taken by the page: the game gets the file) the game
+    //     refuses it in the same breath, with the count
+    const crowd = (ants) => tools.mapWithAnts(TINY_MAP, ants), plantsAndWaypoints = (plants, waypoints) => tools.mapWithPlantsAndWaypoints(TINY_MAP, plants, waypoints);
+    for (const [label, name, map, words, picture] of [
+        ['65,535 ants carried under a name of its own: the page refuses before the game starts', 'Crowd.lvl', crowd(65535), /The map in the file starts 65,535 ants \(the start markers of the four colors\), more than the 8,000 that a replay is set up with\./, 'built_real_crowd'],
+        ['65,535 ants carried under the name of an original (the page leaves it to the game): the game refuses it', 'TINY.LVL', crowd(65535), /The map in the replay starts 65,535 ants \(the start markers of the four colors\), more than the 8,000 that a replay is set up with/, 'built_real_crowd_game'],
+        ['8,001 ants under the name of an original: the game refuses it too', 'TINY.LVL', crowd(8001), /The map in the replay starts 8,001 ants/, ''],
+        ['65,400 plants and 65,535 waypoints (a file of 936 KB) under a name of its own: the page refuses', 'Plants.lvl', plantsAndWaypoints(65400, 65535), /The map in the file has 65,400 plants and 65,535 waypoints, so setting it up looks at 4,285,989,000 pairs of them, more than the 1,000,000 that a replay is set up with\./, 'built_real_pairs'],
+        ['65,400 plants and 65,535 waypoints under the name of an original: the game refuses it', 'TINY.LVL', plantsAndWaypoints(65400, 65535), /The map in the replay has 65,400 plants and 65,535 waypoints, so setting it up looks at 4,285,989,000 pairs of them, more than the 1,000,000 that a replay is set up with/, 'built_real_pairs_game'],
+        ['30,000 plants and 30,000 waypoints under the name of an original: the game refuses it', 'TINY.LVL', plantsAndWaypoints(30000, 30000), /The map in the replay has 30,000 plants and 30,000 waypoints, so setting it up looks at 900,000,000 pairs/, ''],
+    ]) {
         const ctx = await ctxOf(), page = await ctx.newPage();
         const hits = [];
         page.on('request', (r) => hits.push({ method: r.method(), url: new URL(r.url()).pathname, body: r.postData() }));
         const started = Date.now();
-        await openOn(page, asFile('crowd.antsrep', tools.withMap(FIXTURE, name, tools.mapWithAnts(TINY_MAP, ants), true)));
+        await openOn(page, asFile('crowd.antsrep', tools.withMap(FIXTURE, name, map, true)));
         const card = await anyCard(page);
         const took = Date.now() - started;
-        check(label + ': the card "This replay can’t be played here" with the count, no download, within 60 s (the page was held for minutes before)', card.title === 'This replay can’t be played here' && words.test(card.body.replace(/\s+/g, ' ')) && card.downloads === 0 && took < 60000, took + ' ms ' + JSON.stringify(card));
+        check(label + ': the card "This replay can’t be played here" with the count, no download, within 60 s (the page was held for seconds to minutes before)', card.title === 'This replay can’t be played here' && words.test(card.body.replace(/\s+/g, ' ')) && card.downloads === 0 && took < 60000, took + ' ms ' + JSON.stringify(card));
         check('... the page still answers (its buttons are there and the way to the list works)', await page.isVisible('#all-btn') && (await page.evaluate(() => new Promise((resolve) => { const t0 = performance.now(); setTimeout(() => resolve(performance.now() - t0), 50); }))) < 2000);
         check('... no request of the visit carries a body or asks the site for the map', hits.every((h) => h.method === 'GET' && !h.body) && !hits.some((h) => /^\/maps\/files\//.test(h.url)));
-        if (ants === 65535) { await sleep(400); await shot(page, name === 'Crowd.lvl' ? 'built_real_crowd' : 'built_real_crowd_game'); }
+        if (picture) { await sleep(400); await shot(page, picture); }
+        await ctx.close();
+    }
+    // 3b'. the same files for a page that does not count (an older page, a cached one): the page hands the game the map by writing it into the maps folder under its name, and the game, reading THAT copy, counts it too
+    const pageCountsNothing = () => {
+        let kept;
+        Object.defineProperty(window, 'AntsMapFiles', { configurable: true, get() { return kept; }, set(value) { if (value && typeof value.carriedVerdict === 'function') value.carriedVerdict = (carried) => ({ ok: true, bytes: carried.bytes }); kept = value; } });
+    };
+    for (const [label, name, map, words] of [['30,000 ants', 'Crowd30000.lvl', crowd(30000), /The map in the replay starts 30,000 ants \(the start markers of the four colors\), more than the 8,000 that a replay is set up with/],
+                                             ['30,000 plants and 30,000 waypoints', 'Plants30000.lvl', plantsAndWaypoints(30000, 30000), /The map in the replay has 30,000 plants and 30,000 waypoints, so setting it up looks at 900,000,000 pairs of them/]]) {
+        const ctx = await ctxOf();
+        await ctx.addInitScript(pageCountsNothing);
+        const page = await ctx.newPage();
+        const started = Date.now();
+        await openOn(page, asFile('crowd.antsrep', tools.withMap(FIXTURE, name, map, true)));
+        const card = await anyCard(page);
+        const took = Date.now() - started;
+        check('with the page\'s own count off, ' + label + ' under a name of their own: the REAL game ran (the page handed it the map) and refused it from the maps folder\'s copy, with the count', card.title === 'This replay can’t be played here' && words.test(card.body.replace(/\s+/g, ' ')) && await page.evaluate(() => typeof isReadyToPlay !== 'undefined' && isReadyToPlay === true) && took < 60000, took + ' ms ' + JSON.stringify(card));
         await ctx.close();
     }
     // 3c. a map that the game refuses although the file carries it: the game's reason, in the card, and never the words for a map that the site has not
@@ -791,6 +833,7 @@ async function partReal(browser, shot) {
         }
         for (const [name, file, route, kind] of [['otherversion_older', asFile(NAME, tools.withRules(FIXTURE, 4)), false, null], ['otherversion_newer', asFile(NAME, tools.withRules(FIXTURE, 99)), false, null],
                                                  ['mapmissing', asFile('dune.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', DUNE, false)), true, null], ['crowd', asFile('crowd.antsrep', tools.withMap(FIXTURE, 'Crowd.lvl', tools.mapWithAnts(TINY_MAP, 65535), true)), false, null],
+                                                 ['pairs', asFile('plants.antsrep', tools.withMap(FIXTURE, 'Plants.lvl', plantsAndWaypoints(65400, 65535), true)), false, null],
                                                  ['refusedmap', asFile('refused.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', tools.mapWithGrid(TINY_MAP, 1, 1), true)), false, null]]) {
             const ctx = await pctx(), page = await ctx.newPage();
             if (route && (await fetch(base + '/maps/files/Dune.lvl').then((r) => r.status, () => 0)) !== 404) await page.route('**/maps/files/Dune.lvl', (r) => r.fulfill({ status: 404, body: 'not found' }));

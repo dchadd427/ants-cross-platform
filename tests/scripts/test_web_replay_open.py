@@ -6,7 +6,8 @@ mode (web/shell.html at play.html?local=<id>) and the code that they share (web/
     byte is read, and again on the bytes; the 8 bytes that open a replay; a HEAD chunk after them, at most 4096 bytes long, with the right checksum) on the real file of tests/data/ and on every cut and every
     flipped bit of its head; the name of the file as text; the size in words;
   - the map that a file carries is counted before the game starts (web/map_files.js startMarkersOfMap, run on all the maps of the library by tests/scripts/web_map_files_check.js) and the limit is the game's:
-    kMaxEmbeddedStartAnts (include/ants_replay/replay.hpp, checked in load_embedded_map; the C++ tests RP9.11 and RA7.10) is pinned equal to the page's MAX_EMBEDDED_ANTS; the card of a map that the game
+    kMaxEmbeddedStartAnts and kMaxEmbeddedPlantWaypointPairs (include/ants_replay/replay.hpp, checked by fits_a_replay in src/ants_replay/player.cpp for the map that a file carries, whichever copy is read; the C++
+    tests RP9.11 and RA7.10 - RA7.13) are pinned equal to the page's MAX_EMBEDDED_ANTS and MAX_EMBEDDED_PAIRS, and the plants that the page counts are the tiles of the engine's table; the card of a map that the game
     refuses says the game's reason; text that cannot wrap (a file name, a map name, player names) is wrapped by the rules of the game page, and a file name is one unit for the bidirectional algorithm;
   - tests/data/replay_open_mutants.json is the list of changes to the page and the code that the checks must notice (tools/mutate.py runs it with `--keep-going --jobs 1`; the class at the end of this file
     runs the same list in the quick tier on a copy of the files): every one is a way to lose a promise (the size is not checked, the checksum is not, a drop that is not taken over, a file that is sent to the
@@ -158,15 +159,29 @@ class ThePlayer(unittest.TestCase):
             ceiling = int(re.search(r'"web/shell.html": (\d+)', f.read()).group(1))
         self.assertLessEqual(lines, ceiling)                                                              # (the logic is in web/replay_page.js: the page only calls it)
 
-    def test_a_map_that_a_file_carries_is_counted_before_the_game_starts_and_the_limit_is_the_games(self):
+    def test_a_map_that_a_file_carries_is_counted_before_the_game_starts_and_the_limits_are_the_games(self):
         has(self, "(carried ? Promise.resolve(window.AntsMapFiles.carriedVerdict(carried)) : need ?", self.glue)
         has(self, "if (!map.ok) { card(OWN && map.mismatch ? 'changed' : OWN && map.gone ? 'nomap' : 'cant', map.text); return; }", self.glue)        # (a refused count has neither flag: the card with the reason)
-        native = int(re.search(r"kMaxEmbeddedStartAnts = (\d+);", read("include", "ants_replay", "replay.hpp")).group(1))
-        page = int(re.search(r"var MAX_EMBEDDED_ANTS = (\d+);", read("web", "map_files.js")).group(1))
-        self.assertEqual((native, page), (8000, 8000))                                                    # (the page counts what the game counts, against the same number)
-        has(self, "if (ants > kMaxEmbeddedStartAnts) {", read("src", "ants_replay", "player.cpp"))      # (load_embedded_map: the one place that every reader of a carried map goes through)
-        has(self, "if (spawn.team_id < 4) ++ants;", read("src", "ants_replay", "player.cpp"))
-        has(self, "var MARKER_FIRST = 152, MARKER_LAST = 155;", read("web", "map_files.js"))                # (the tiles of the start markers: include/ants_assets/lvl_parser.hpp)
+        header, player, script = read("include", "ants_replay", "replay.hpp"), read("src", "ants_replay", "player.cpp"), read("web", "map_files.js")
+        native = [int(re.search(r"kMaxEmbeddedStartAnts = (\d+);", header).group(1)), int(re.search(r"kMaxEmbeddedPlantWaypointPairs = (\d+);", header).group(1))]
+        page = [int(re.search(r"var MAX_EMBEDDED_ANTS = (\d+);", script).group(1)), int(re.search(r"var MAX_EMBEDDED_PAIRS = (\d+);", script).group(1))]
+        self.assertEqual((native, page), ([8000, 1000000], [8000, 1000000]))                                # (the page counts what the game counts, against the same numbers)
+        for line in ("if (ants > kMaxEmbeddedStartAnts) {", "if (spawn.team_id < 4) ++ants;", "if (sim::movement::is_dropper_plant_tile(spawn.tile_id)) ++plants;", "const uint64_t waypoints = level.waypoints.size();",
+                     "if (plants * waypoints > kMaxEmbeddedPlantWaypointPairs) {", "    return fits_a_replay(level, error);\n}"):
+            has(self, line, player)                                                                          # (fits_a_replay: the one place that counts, for every reader of a carried map)
+        has(self, "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);", player)       # (the folder's copy of a carried map is counted too: the page writes it there)
+        self.assertEqual(player.count("fits_a_replay(level, error)"), 2)
+        has(self, "var MARKER_FIRST = 152, MARKER_LAST = 155;", script)                                       # (the tiles of the start markers: include/ants_assets/lvl_parser.hpp)
+
+    def test_the_plants_that_the_page_counts_are_the_tiles_that_the_engine_looks_a_waypoint_up_for(self):
+        table = read("src", "ants_sim", "movement_tables_data.inc")
+        start = table.index("kTileFlags[1344] = {")
+        body = re.sub(r"/\*.*?\*/", "", re.sub(r"//[^\n]*", "", table[start:table.index("};", start)]), flags=re.S).split("{", 1)[1]
+        flags = [int(x, 0) for x in re.findall(r"0[xX][0-9a-fA-F]+|\b\d+\b", body)]
+        self.assertEqual(len(flags), 1344)
+        ids = [i for i, f in enumerate(flags) if f & 0x10]                                                   # (kTileFlagPlant: sim::movement::is_dropper_plant_tile)
+        self.assertEqual(ids, list(range(404, 409)) + list(range(410, 417)) + [420, 421])
+        has(self, "function isPlantTile(id) { return (id >= 404 && id <= 408) || (id >= 410 && id <= 416) || id === 420 || id === 421; }", read("web", "map_files.js"))
 
     def test_nothing_in_the_game_page_can_make_it_scroll_sideways_for_a_name_that_cannot_wrap_and_a_file_name_is_a_unit(self):
         has(self, ".rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px;", self.page)           # (the chips: the track may be as narrow as the window)
@@ -187,7 +202,7 @@ class TheDocument(unittest.TestCase):
         has(self, "## A file of your own", text)
         part = text[text.index("## A file of your own"):]
         part = part[:part.index("\n## ", 5)] if "\n## " in part[5:] else part
-        for needle in ("play.html?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts"):
+        for needle in ("play.html?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts", "kMaxEmbeddedPlantWaypointPairs", "1,000,000", "fits_a_replay", "WHICHEVER copy"):
             has(self, needle, part)
 
     def test_the_tree_of_the_sources_lists_the_fuzz_script(self):
@@ -224,10 +239,10 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/replay_open_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make its checks fail, and the copy
     with nothing changed must pass"""
     FILES = ("web/replay_page.js", "web/matches.html", "web/matches.css", "web/shell.html", "web/map_files.js", "docs/REPLAYS.md", "docs/ARCHITECTURE.md", "tools/check_hygiene.py", ".gitattributes",
-             "include/ants_replay/replay.hpp", "src/ants_replay/player.cpp",
+             "include/ants_replay/replay.hpp", "src/ants_replay/player.cpp", "src/ants_sim/movement_tables_data.inc",
              "web/live.html", "web/lobby.html", "web/match.html",
              "tests/scripts/web_replay_open_check.js", "tests/scripts/web_map_files_check.js", "tests/scripts/replay_file_tools.js", "tests/scripts/test_web_replay_open.py",
-             "tests/data/replay_bots_tiny.antsrep", "tests/data/replay_head.hex", "tests/data/replay_tmap.hex", "Community-Maps/eze jungal.lvl") + tuple("Original-Ants/Maps/%s.LVL" % m for m in ("TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS"))
+             "tests/data/replay_bots_tiny.antsrep", "tests/data/replay_head.hex", "tests/data/replay_tmap.hex", "Community-Maps/eze jungal.lvl") + tuple("Original-Ants/Maps/%s.LVL" % m for m in ("TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS")) + tuple("Community-Maps/" + n for n in sorted(os.listdir(os.path.join(REPO, "Community-Maps"))) if n.lower().endswith(".lvl") and n != "eze jungal.lvl")       # (the library, for the check that no map of it is refused)
 
     @classmethod
     def setUpClass(cls):

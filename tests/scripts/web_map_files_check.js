@@ -218,6 +218,68 @@ check('a number is no name', M.validName(5) === false);
     }
 }
 
+// ---- the plants and the waypoints of a map: setting a match up looks through all the waypoints for the one of every plant that drops flowers (SimulationEngine::init), so the work is their product ----------------------
+{
+    const tools = require('./replay_file_tools.js');
+    const path = require('path');
+    const root = path.resolve(__dirname, '..', '..');
+    const tiny = Uint8Array.from(fs.readFileSync(path.join(root, 'Original-Ants', 'Maps', 'TINY.LVL')));
+    same('TINY asks for 12 ants and has no plant and no waypoint', M.factsOfMap(tiny), { ants: 12, plants: 0, waypoints: 0 });
+    check('the page\'s limits are the game\'s: 8,000 ants and 1,000,000 pairs (kMaxEmbeddedStartAnts, kMaxEmbeddedPlantWaypointPairs)', M.MAX_EMBEDDED_ANTS === 8000 && M.MAX_EMBEDDED_PAIRS === 1000000);
+    same('N plants and M waypoints are counted as N and M (the review\'s two files: 65,400 x 65,535 and 30,000 x 30,000)', [[0, 0], [1, 1], [1000, 1000], [1001, 1000], [30000, 30000], [65400, 65535]].map(([n, m]) => { const f = M.factsOfMap(tools.mapWithPlantsAndWaypoints(tiny, n, m)); return [f.plants, f.waypoints]; }),
+         [[0, 0], [1, 1], [1000, 1000], [1001, 1000], [30000, 30000], [65400, 65535]]);
+    {   // a plant is a record whose tile has the plant flag: 404 .. 408, 410 .. 416, 420 and 421, and no other (the engine's table, src/ants_sim/movement_tables_data.inc)
+        const plants = []; for (let id = 395; id <= 430; id++) if (M.factsOfMap(tools.mapWithRecords(tiny, [id], 0)).plants === 1) plants.push(id);
+        same('the tiles that are plants (the clovers and the flowers that drop)', plants, [404, 405, 406, 407, 408, 410, 411, 412, 413, 414, 415, 416, 420, 421]);
+        same('a start marker is no plant, and a plant is no ant', [M.factsOfMap(tools.mapWithRecords(tiny, [404, 404, 404], 0)).ants, M.factsOfMap(tiny).plants], [12, 0]);
+    }
+    {   // the waypoints are the records of block 4 that the loader keeps: with a trigger (52 bytes) or without (8), and the record that a file ends in
+        const five = tools.mapWithRecords(tiny, [], 5, 2), L = tools.lvlLayout(five), at = L.block4At + 2;
+        same('five waypoints, two of them with a trigger (52 bytes each)', [M.factsOfMap(five).waypoints, five.length - tiny.length], [5, 2 * 52 + 3 * 8 + 0]);
+        const cutAt = (length) => M.factsOfMap(five.slice(0, length)).waypoints;
+        same('a file that ends before the count of block 4 has no waypoint', [cutAt(L.block4At), cutAt(L.block4At + 1)], [0, 0]);
+        same('a file that ends inside the first record: not even a cell keeps nothing, a cell keeps the half record (the loader keeps it, with no trigger)', [cutAt(at + 2), cutAt(at + 3), cutAt(at + 4), cutAt(at + 5), cutAt(at + 8)], [0, 0, 1, 1, 1]);
+        same('a file that ends inside the second record, which has a trigger (52 bytes: it ends at 104), keeps that half record; at 104 the next record has no cell, at 108 it has the cell only', [cutAt(at + 55), cutAt(at + 56), cutAt(at + 70), cutAt(at + 103), cutAt(at + 104), cutAt(at + 105), cutAt(at + 108), cutAt(at + 112)], [1, 2, 2, 2, 2, 2, 3, 3]);
+        const claim = Uint8Array.from(five); claim[L.block4At] = 255; claim[L.block4At + 1] = 255;
+        same('a count of 65,535 that the file does not hold is the records that it does hold', M.factsOfMap(claim).waypoints, 5);
+    }
+    {   // block 2 (the food piles) is walked as the loader walks it: a version 8 pile without stages ends the block, and block 3 is read from the bytes right behind that pile's stage count; version 9 is no file then
+        const L = tools.lvlLayout(tiny), head = Array.from(tiny.subarray(0, L.afterAt));
+        const block2 = [2, 0, 3, 0, 4, 0, 0, 0, 0, 0, 0, 0], block3 = [0, 0, 0, 0], block4 = [2, 0, 5, 0, 5, 0, 0, 0, 0, 0, 5, 0, 5, 0, 0, 0, 0, 0], eggs = [6, 0];
+        const quirk = Uint8Array.from(head.concat(block2, block3, block4, eggs));
+        same('a version 8 pile without stages ends block 2 (the second pile that block 2 announces is never read): block 3 and block 4 follow the first one\'s stage count', M.factsOfMap(quirk), { ants: 12, plants: 0, waypoints: 2 });
+        const stages = Uint8Array.from(head.concat([1, 0, 3, 0, 4, 0, 0, 0, 0, 0, 2, 0, 9, 0, 1, 0, 8, 0, 2, 0], block3, block4, eggs));
+        same('a pile with two stages is walked: 10 bytes and 4 for each stage', M.factsOfMap(stages).waypoints, 2);
+        same('in a version 9 file a pile without stages is no file (the loader refuses it): the waypoints are not known', M.factsOfMap(tools.mapAsVersion9(quirk, 0)).waypoints, -1);
+        same('a block 2 that ends inside a pile, inside its stages or before block 3 is no file: not known', [M.factsOfMap(Uint8Array.from(head.concat([1, 0, 3, 0, 4, 0]))).waypoints, M.factsOfMap(Uint8Array.from(head.concat([1, 0, 3, 0, 4, 0, 0, 0, 0, 0, 5, 0, 1, 0]))).waypoints, M.factsOfMap(Uint8Array.from(head.concat([0, 0, 1, 0]))).waypoints], [-1, -1, -1]);
+        same('a map that is cut before block 4\'s count has the ants and the plants and none of the waypoints', M.factsOfMap(Uint8Array.from(head.concat([0, 0], block3))), { ants: 12, plants: 0, waypoints: 0 });
+    }
+    {   // the verdict: the product above 1,000,000 is refused with the numbers; each number alone is not; a map that cannot be read is the game's to judge; the ants come first
+        const verdict = (n, m) => M.carriedVerdict(Object.assign({ bytes: null }, M.factsOfMap(tools.mapWithPlantsAndWaypoints(tiny, n, m))));
+        same('exactly 1,000,000 pairs go to the game, one plant more do not', [verdict(1000, 1000).ok, verdict(1001, 1000).ok, verdict(1000, 1001).ok], [true, false, false]);
+        same('the sentence of the review\'s file: both numbers, the pairs, the limit', verdict(65400, 65535), { ok: false, text: 'the map in the file has 65,400 plants and 65,535 waypoints, so setting it up looks at 4,285,989,000 pairs of them, more than the 1,000,000 that a replay is set up with' });
+        same('65,535 waypoints and no plant, or 65,523 plants and no waypoint, are no work for the engine', [verdict(0, 65535).ok, verdict(65523, 0).ok], [true, true]);
+        check('the verdict of a map with unknown plants or waypoints is the game\'s: it goes on', M.carriedVerdict({ ants: 12, plants: 5000, waypoints: -1, bytes: tiny }).ok && M.carriedVerdict({ ants: 12, plants: -1, waypoints: 5000, bytes: tiny }).ok);
+        const both = M.carriedVerdict({ ants: 9000, plants: 5000, waypoints: 5000, bytes: tiny });
+        check('a map with too many ants and too many pairs is refused for its ants first', both.ok === false && /^the map in the file starts 9,000 ants/.test(both.text));
+        const file = tools.withMap(Uint8Array.from(fs.readFileSync(path.resolve(__dirname, '..', 'data', 'replay_bots_tiny.antsrep'))), 'Plants.lvl', tools.mapWithPlantsAndWaypoints(tiny, 65400, 65535), true);
+        const got = M.embeddedMapOfReplay(file);
+        check('a recording that carries a map hands over the plants and the waypoints with it', got !== null && got.plants === 65400 && got.waypoints === 65535 && got.ants === 12 && M.carriedVerdict(got).ok === false, JSON.stringify(got && [got.ants, got.plants, got.waypoints]));
+    }
+    {   // every map of the library is within both limits: the page never refuses a map that a recording of the library carries (the largest has 248 ants, 112 plants and 114 waypoints: 12,768 pairs)
+        const community = path.join(root, 'Community-Maps');
+        const files = fs.readdirSync(community).filter((f) => /\.lvl$/i.test(f)).map((f) => path.join(community, f)).concat(['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'ISLANDS'].map((n) => path.join(root, 'Original-Ants', 'Maps', n + '.LVL')));
+        let ants = 0, pairs = 0, unreadable = 0, refused = 0;
+        for (const f of files) {
+            const bytes = Uint8Array.from(fs.readFileSync(f)), facts = M.factsOfMap(bytes);
+            if (facts.ants < 0 || facts.plants < 0 || facts.waypoints < 0) unreadable++;
+            ants = Math.max(ants, facts.ants); pairs = Math.max(pairs, facts.plants * facts.waypoints);
+            if (!M.carriedVerdict(Object.assign({ bytes }, facts)).ok) refused++;
+        }
+        same('the 540 maps of the library: all read, none refused; the most ants, the most pairs', [files.length, unreadable, refused, ants, pairs], [540, 0, 0, 248, 12768]);
+    }
+}
+
 // ---- the downloads ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const NAME = 'Test Players Map (1).lvl';
 const BYTES = Uint8Array.from(fs.readFileSync(realMap));
