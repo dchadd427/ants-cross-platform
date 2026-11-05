@@ -708,6 +708,8 @@ async function partReal(browser, shot) {
         await openOn(page, asFile(NAME, tools.withRules(FIXTURE, rules)));
         const card = await anyCard(page);
         check('rules number ' + rules + ': the real game says "' + title + '" and the card has no download', card.title === title && words.test(card.body.replace(/\s+/g, ' ')) && card.downloads === 0 && card.buttons[0].text === 'Open another file', JSON.stringify(card));
+        await sleep(400);
+        await shot(page, 'built_real_otherversion_' + (rules === 4 ? 'older' : 'newer'));
         await ctx.close();
     }
     // 3. maps: one that the site has not; one that the file carries; one that the file carries and that is damaged in ways that a stranger could choose
@@ -720,6 +722,8 @@ async function partReal(browser, shot) {
         await openOn(page, asFile('dune.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', DUNE, false)));
         const card = await anyCard(page);
         check('a map of the library that the site has not: the card, from ' + (answer === 404 ? 'the real site\'s 404' : 'a 404 made here (the site answered ' + answer + ')'), card.title === 'This site doesn’t have the map' && /Dune\.lvl/.test(card.body), JSON.stringify(card));
+        await sleep(400);
+        await shot(page, 'built_real_mapmissing');
         await ctx.close();
     }
     {
@@ -749,6 +753,7 @@ async function partReal(browser, shot) {
         check(label + ': the card "This replay can’t be played here" with the count, no download, within 60 s (the page was held for minutes before)', card.title === 'This replay can’t be played here' && words.test(card.body.replace(/\s+/g, ' ')) && card.downloads === 0 && took < 60000, took + ' ms ' + JSON.stringify(card));
         check('... the page still answers (its buttons are there and the way to the list works)', await page.isVisible('#all-btn') && (await page.evaluate(() => new Promise((resolve) => { const t0 = performance.now(); setTimeout(() => resolve(performance.now() - t0), 50); }))) < 2000);
         check('... no request of the visit carries a body or asks the site for the map', hits.every((h) => h.method === 'GET' && !h.body) && !hits.some((h) => /^\/maps\/files\//.test(h.url)));
+        if (ants === 65535) { await sleep(400); await shot(page, name === 'Crowd.lvl' ? 'built_real_crowd' : 'built_real_crowd_game'); }
         await ctx.close();
     }
     // 3c. a map that the game refuses although the file carries it: the game's reason, in the card, and never the words for a map that the site has not
@@ -758,6 +763,7 @@ async function partReal(browser, shot) {
         await openOn(page, asFile('refused.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', bytes, true)));
         const card = await anyCard(page);
         check('a map that the file carries and that the real game refuses (' + label + '): "This replay can’t be played here" with the game\'s own reason, not "This site doesn’t have the map"', card.title === 'This replay can’t be played here' && words.test(card.body) && !/doesn’t have the map|no longer has it/.test(card.title + card.body) && card.downloads === 0, JSON.stringify(card));
+        if (label.indexOf('grid') !== -1) { await sleep(400); await shot(page, 'built_real_refusedmap'); }
         await ctx.close();
     }
     for (const [label, map] of hostile) {
@@ -769,6 +775,32 @@ async function partReal(browser, shot) {
         check(label + ': the real game plays it or the page says it cannot, within the start watchdog (' + verdict + ')', verdict !== 'neither');
         check(label + ': the page is still there (the way to the list answers)', await page.isVisible('#all-btn') || await page.isVisible('#rm'));
         await ctx.close();
+    }
+    // 4. the real game on a phone: the player, and the cards that the real game and the page say
+    {
+        const pctx = () => browser.newContext(Object.assign({}, PHONE, { baseURL: base }));
+        {
+            const ctx = await pctx(), page = await ctx.newPage();
+            await openOn(page, asFile(NAME, FIXTURE));
+            await up(page);
+            await page.waitForSelector('#rtag:not([hidden])', { timeout: 60000 });
+            await sleep(3000);
+            check('on a phone the real game plays the file, and the page does not scroll sideways', (await state(page)).total === 7205 && await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+            await shot(page, 'built_real_phone_player');
+            await ctx.close();
+        }
+        for (const [name, file, route, kind] of [['otherversion_older', asFile(NAME, tools.withRules(FIXTURE, 4)), false, null], ['otherversion_newer', asFile(NAME, tools.withRules(FIXTURE, 99)), false, null],
+                                                 ['mapmissing', asFile('dune.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', DUNE, false)), true, null], ['crowd', asFile('crowd.antsrep', tools.withMap(FIXTURE, 'Crowd.lvl', tools.mapWithAnts(TINY_MAP, 65535), true)), false, null],
+                                                 ['refusedmap', asFile('refused.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', tools.mapWithGrid(TINY_MAP, 1, 1), true)), false, null]]) {
+            const ctx = await pctx(), page = await ctx.newPage();
+            if (route && (await fetch(base + '/maps/files/Dune.lvl').then((r) => r.status, () => 0)) !== 404) await page.route('**/maps/files/Dune.lvl', (r) => r.fulfill({ status: 404, body: 'not found' }));
+            await openOn(page, file);
+            const card = await anyCard(page);
+            check('on a phone the real game and the page say the card "' + card.title + '" (' + name + ') and the page does not scroll sideways', card.title.length > 0 && await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), card.title);
+            await sleep(400);
+            await shot(page, 'built_real_phone_' + name);
+            await ctx.close();
+        }
     }
 }
 

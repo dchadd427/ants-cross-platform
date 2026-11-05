@@ -33,7 +33,7 @@
    "id": "plants_are_ants",
    "file": "src/ants_replay/player.cpp",
    "old": "if (spawn.team_id < 4) ++ants;",
-   "new": "++ants;",
+   "new": "if (spawn.team_id < 4 || spawn.team_id == 255) ++ants;",
    "why": "a map with plants in block 1 is refused for ants that it does not start"
   },
   {
