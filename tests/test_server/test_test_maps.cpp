@@ -492,7 +492,7 @@ int main() {
             ASSERT_TRUE(said.find("1,000,000") != std::string::npos && said.find("against bots") != std::string::npos);
             step();
         }
-        {   // the map the brief's own measurement used: 65,500 plants on one cell and 65,535 waypoints on another, 4.3 billion pairs
+        {   // close to the most that a map file can hold: 65,500 plants on one cell and 65,535 waypoints on another, 4.3 billion pairs
             const std::string huge = tiny_with_pairs(65500, 65535);
             ASSERT_TRUE(!huge.empty());
             r = upload_as(huge, "Huge Pairs", "203.0.113.44", true);

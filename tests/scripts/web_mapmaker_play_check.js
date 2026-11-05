@@ -69,7 +69,7 @@ function verdictChecks() {
     v = verdictOf({ plants: 1000, waypoints: 1001 });
     check(v.ok && v.pairs === 1001000 && v.online === false, '1,001,000 pairs: over the cap, offline (ants alone would allow it)');
     v = verdictOf({ plants: 65500, waypoints: 65535 });
-    check(v.ok && v.pairs === 65500 * 65535 && v.online === false, 'the brief\'s own crafted map (65,500 x 65,535) is far over the cap');
+    check(v.ok && v.pairs === 65500 * 65535 && v.online === false, 'a map of 65,500 plants and 65,535 waypoints is far over the cap');
     v = verdictOf({ plants: 0, waypoints: 65535 });
     check(v.ok && v.pairs === 0 && v.online === true, '0 plants is 0 pairs, however many waypoints: online');
     v = verdictOf();

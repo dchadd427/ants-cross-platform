@@ -317,7 +317,7 @@ int main() {
             ASSERT_TRUE(!o2.ok && o2.fail.status == 422);
             ASSERT_TRUE(o2.fail.message.find("1,000,000") != std::string::npos && o2.fail.message.find("against bots") != std::string::npos);
         }
-        {   // the map the brief's own measurement used: 65,500 plants on one cell and 65,535 waypoints on another
+        {   // close to the most that a map file can hold: 65,500 plants on one cell and 65,535 waypoints on another
             SubmitInput huge = rig.input(as_extended(with_pairs(65500, 65535)), "Huge Pairs");
             huge.kind = "extended";
             ASSERT_FALSE(huge.bytes.empty());

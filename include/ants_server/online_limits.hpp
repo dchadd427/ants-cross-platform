@@ -30,9 +30,9 @@ struct OnlineLimits {
     /// A match takes one more place for every started kAntsPerPlace starting ants (see weight): 400 ants one place, 1,000 ants three
     static constexpr uint32_t kAntsPerPlace = 400u;
 
-    /// The most pairs of a plant and a waypoint of a map that a room plays (the number the replay viewer sets a recording up with too, include/ants_replay/replay.hpp kMaxEmbeddedPlantWaypointPairs; a test
-    /// pins the two equal). Setting a match up looks at every plant that drops flowers for the first waypoint on its cell (SimulationEngine::init), so the work is the plants times the waypoints: a map within
-    /// kMaxCells and kMaxStartAnts can still hold far more of both than any real map does (block 1 and block 4 each hold up to 65,535 records on their own), so this is checked on its own. 1,000,000 is 80
+    /// The most pairs of a plant and a waypoint of a map that a room plays (the Map Maker's Play this map dialog keeps a copy of the number, `MAX_ONLINE_PAIRS` in mapmaker_play.js, and a test pins the two
+    /// equal). Setting a match up looks at every plant that drops flowers for the first waypoint on its cell (SimulationEngine::init), so the work is the plants times the waypoints: a map within
+    /// kMaxCells and kMaxStartAnts can still hold far more of both than any real map does (block 1 and block 4 each hold up to 65,535 records on their own), so this is checked on its own. 1,000,000 is 78
     /// times the largest map of the library (112 plants and 114 waypoints); a map above it stays on the lists and is played on the player's own device, as for the other two limits.
     static constexpr uint64_t kMaxPlantWaypointPairs = 1000000;
 
