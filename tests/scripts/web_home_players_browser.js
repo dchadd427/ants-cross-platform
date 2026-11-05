@@ -340,7 +340,13 @@ async function main() {
             await until('the chat says 2 too', async () => (await countsAgree(page)).chat === '2', 8000);
             joiner.send({ t: 'here', at: 'wait', pub: true, map: 'TINY.LVL', n: 1, of: 2, code: 'w1ll0w' });
             await until('willow waits', () => page.evaluate(() => document.querySelector('.pl-group[data-g="wait"]') && document.querySelector('.pl-group[data-g="wait"]').textContent.indexOf('Tiny · 1 of 2') !== -1), 8000);
-            check('... who waits in a public room: the group "Waiting", the room by its map and seats, a Join', await page.evaluate(() => !document.querySelector('.pl-group[data-g="look"]') && !!document.querySelector('.pl-group[data-g="wait"] .pl-join[data-code="w1ll0w"]')));
+            check('... who waits in a public room: the group "Waiting", the room by its map and seats, and no Join while the Games list has not got the room', await page.evaluate(() => !document.querySelector('.pl-group[data-g="look"]') && !!document.querySelector('.pl-group[data-g="wait"]') && !document.querySelector('.pl-join')));
+            const rooms = r.lobbies;
+            r.lobbies = { format: 1, count: rooms.lobbies.length + 1, lobbies: rooms.lobbies.concat([{ code: 'w1ll0w', host: 'Willow', map: 'TINY.LVL', mode: 'highest-score', people: 1, bots: 0, free: 1, size: 2, age: 5 }]) };
+            await until('the Games list has the room', () => page.evaluate(() => !!document.querySelector('.gdock .gjoin[data-code="w1ll0w"]')), 20000);
+            await until('the list has a Join for it', () => page.evaluate(() => !!document.querySelector('.pl-group[data-g="wait"] .pl-join[data-code="w1ll0w"]')), 5000);
+            r.lobbies = rooms;
+            check('... the Games list gets the room: the Join comes, and it is the one of the room', await page.evaluate(() => document.querySelectorAll('.pl-join').length === 1 && !!document.querySelector('.pl-group[data-g="wait"] .pl-join[data-code="w1ll0w"]')));
             joiner.send({ t: 'here', at: 'play', pub: true, map: 'TINY.LVL', n: 2 });
             await until('willow plays', () => page.evaluate(() => !!document.querySelector('.pl-group[data-g="play"]')), 8000);
             check('... who plays: "Playing", the map and the players, no Join', await page.evaluate(() => /Tiny · 2 players/.test(document.querySelector('.pl-group[data-g="play"]').textContent) && !document.querySelector('.pl-join')));
@@ -379,18 +385,23 @@ async function main() {
                 check(size[0] + ': Join in the list presses the Games list\'s own Join of that room (c1v3rr), the sheet is put away, and the list\'s own flow goes on', o.pressed.join() === 'c1v3rr' && (size[0] === 'desktop' || o.sheet === 'false') && o.joining, JSON.stringify(o));
                 await page.context().close();
             }
-            // a list that is not in the Yard (the test site: a popover) is opened for the Join
+            // a list that is not in the Yard (the test site: a popover that is closed draws no rows): the panel has no Join for a room that the Games list does not hold, and has it once the list was opened
             const label = await startRig({ label: 'staging' });
             try {
                 await person(label, '2004:clover', { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' });
                 const page = await openPage(label, SIZES[0], '1000_maple', { noGames: true });
                 await listShows(page, 'clover');
                 await sleep(1500);
-                const before = await page.evaluate(() => ({ popover: !document.querySelector('.gpop').hidden, role: document.querySelector('.gpop').getAttribute('role') }));
+                check('the test site (the Games list is a popover that is closed and has drawn nothing): the room that waits has no Join in the list (what a person says is not enough for a Join)', await page.evaluate(() => document.querySelectorAll('.pl-join').length === 0 && !document.querySelector('.gjoin')));
+                await page.click('.games');
+                await until('the Games list draws the room', () => page.evaluate(() => !!document.querySelector('.gpop .gjoin[data-code="c1v3rr"]')), 10000);
+                await page.click('.games');
+                await until('the list has the Join now', () => page.evaluate(() => !!document.querySelector('.pl-join[data-code="c1v3rr"]')), 5000);
+                await page.evaluate(() => { window.__pressed = []; document.querySelector('.gpop').addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('.gjoin'); if (b) window.__pressed.push(b.getAttribute('data-code')); }, true); });
                 await page.click('.pl-join[data-code="c1v3rr"]');
                 await sleep(500);
-                const after = await page.evaluate(() => ({ popover: !document.querySelector('.gpop').hidden, joining: !!document.querySelector('.gjoining:not([hidden])') || !!document.querySelector('.gpnote:not([hidden])') || !!document.querySelector('.gconfirm') }));
-                check('the test site (the Games list is a popover that is closed): the Join opens it and presses the room\'s Join', before.popover === false && before.role === 'dialog' && after.popover === true && after.joining, JSON.stringify([before, after]));
+                const after = await page.evaluate(() => ({ pressed: window.__pressed, joining: !!document.querySelector('.gjoining:not([hidden])') || !!document.querySelector('.gpnote:not([hidden])') || !!document.querySelector('.gconfirm') }));
+                check('... the Games list has drawn the room: the Join presses the list\'s own Join of it, and the list\'s own flow goes on', after.pressed.join() === 'c1v3rr' && after.joining, JSON.stringify(after));
                 await shot(page, 'test_site_join_1280x800');
                 await page.context().close();
             } finally { label.stop(); }
