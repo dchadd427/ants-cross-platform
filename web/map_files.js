@@ -56,6 +56,12 @@
 
     var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];
     var MAX_EMBEDDED_BYTES = 1024 * 1024;      // kMaxEmbeddedMapBytes (include/ants_replay/replay.hpp): the longest tmap chunk
+    var MAX_EMBEDDED_ANTS = 8000;              // kMaxEmbeddedStartAnts (include/ants_replay/replay.hpp): the most starting ants that a map carried in a file may start (tests/scripts/test_web_replay_open.py pins both numbers)
+    var MARKER_FIRST = 152, MARKER_LAST = 155; // the tile ids of the start markers: black, blue, green, red (include/ants_assets/lvl_parser.hpp, start_marker_team_of_id)
+    var MAX_EMBEDDED_PAIRS = 1000000;          // kMaxEmbeddedPlantWaypointPairs (include/ants_replay/replay.hpp): the most pairs of a plant and a waypoint that a map carried in a file may have (pinned equal in the same test)
+    // the tiles of the plants that drop flowers: the clovers 404 .. 408 and the flowers 410 .. 416, 420 and 421 (the plant flag, sim::movement::is_dropper_plant_tile; src/ants_sim/movement_tables_data.inc)
+    function isPlantTile(id) { return (id >= 404 && id <= 408) || (id >= 410 && id <= 416) || id === 420 || id === 421; }
+    function thousands(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
     function u32(bytes, at) { return (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0; }
     function tagAt(bytes, at) { return String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]); }
@@ -74,15 +80,31 @@
             while (pos < end && shift < 35) { var b = bytes[pos++]; v += (b & 0x7f) * Math.pow(2, shift); if (!(b & 0x80)) return v; shift += 7; }
             return -1;
         }
-        var name = '', hash = '';
+        var name = '', hash = '', roster, names = ['', '', '', ''];
         while (pos < end) {
             var id = varint(), len = varint();
             if (id < 0 || len < 0 || pos + len > end) return null;
             if (id === 3) { name = ''; for (var i = 0; i < len; i++) name += String.fromCharCode(bytes[pos + i]); }
             else if (id === 4 && len === 8) { hash = ''; for (var k = 7; k >= 0; k--) hash += ('0' + bytes[pos + k].toString(16)).slice(-2); }
+            else if (id === 6 && len === 1) roster = bytes[pos];                                                             // (the seats that play: bit 0 green ... bit 3 black)
+            else if (id >= 8 && id <= 11) names[id - 8] = printable(bytes, pos, len);                                          // (what each seat's player typed)
             pos += len;
         }
-        return name && hash ? { name: name, hash: hash, next: end + 4 } : null;
+        return name && hash ? { name: name, hash: hash, next: end + 4, roster: roster, names: names } : null;
+    }
+    // bytes[at, at + len) as text when every one is printable ASCII and there are at most 64 (the game's own rule for a text of a head), else ''
+    function printable(bytes, at, len) {
+        if (len > 64) return '';
+        var text = '';
+        for (var i = 0; i < len; i++) { if (bytes[at + i] < 0x20 || bytes[at + i] > 0x7E) return ''; text += String.fromCharCode(bytes[at + i]); }
+        return text;
+    }
+
+    // What a recording says of itself in its head, for a page that shows it before the game has read the file (or when the game never will): { map (any of the seven: "Dune.lvl", "TREASURE.LVL"), roster
+    // (the seats' bits, or undefined), names (four texts: what each seat's player typed, '' for none) }, or null when the file is no recording or its head has no map. Text from a file: the page only shows it as text.
+    function infoOfReplay(bytes) {
+        var head = headOf(bytes);
+        return head ? { map: head.name, roster: head.roster, names: head.names } : null;
     }
 
     // The map that a recording (.antsrep) was played on: { name, hash } from its HEAD chunk, or null when the file is no recording, has no such fields or plays one of the six originals.
@@ -109,7 +131,91 @@
             pos += 12 + length;
         }
         if (!found || hash64(found) !== head.hash) return null;
-        return { name: head.name, hash: head.hash, bytes: found };
+        var facts = factsOfMap(found);
+        return { name: head.name, hash: head.hash, bytes: found, ants: facts.ants, plants: facts.plants, waypoints: facts.waypoints };
+    }
+
+    // What a map file (.lvl) asks of the set-up of a match, counted as the game's loader and engine count it (docs/MAP_FORMAT.md, "The layout"; src/ants_assets/lvl_parser.cpp, SimulationEngine::init):
+    //   ants       the records of block 1 whose tile is a start marker (152 to 155; in a version 9 file the tile is the low 12 bits when the high four are at most 5),
+    //   plants     the records of block 1 whose tile has the plant flag (isPlantTile: the engine looks up the waypoint of each, from the first),
+    //   waypoints  the records of block 4 that the loader keeps (a file that ends inside a record keeps that record).
+    // Each is -1 when the file is not laid out as the loader reads it up to there (the game then says what is wrong). Only the header's numbers and the sizes of the blocks are read to find the parts, each checked
+    // against what is left of the file, and nothing is allocated for a size that the file claims.
+    function factsOfMap(bytes) {
+        var facts = { ants: -1, plants: -1, waypoints: -1 };
+        if (!bytes || bytes.length < 44) return facts;
+        function u16(at) { return bytes[at] | (bytes[at + 1] << 8); }
+        var version = u32(bytes, 0), pos;
+        if (version === 8) pos = 40;                                   // the mode, the minutes and the description's 30 bytes
+        else if (version === 9) pos = 18 + u16(16);                    // the mode, the minutes, the format flags and the rules, then the description: a word for its length, and its bytes
+        else return facts;
+        if (pos + 2 > bytes.length) return facts;
+        pos += 2 + 11 * (u16(pos) + 1);                                // the dictionary: a word, then one name of 11 bytes more than it says
+        if (pos + 8 > bytes.length) return facts;
+        var rows = u32(bytes, pos), columns = u32(bytes, pos + 4);
+        if (version === 8) { rows = rows & 0xffff; columns = columns & 0xffff; }    // (the original keeps the lower 16 bits of each)
+        pos += 8;
+        if (rows * columns * 12 > bytes.length - pos) return facts;    // (two layers of three words a cell)
+        pos += rows * columns * 12;
+        if (pos + 2 > bytes.length) return facts;
+        var count = u16(pos);
+        pos += 2;
+        if (count * 6 > bytes.length - pos) return facts;
+        var ants = 0, plants = 0;
+        for (var i = 0; i < count; i++) {
+            var raw = u16(pos + 6 * i), tile = version === 9 && (raw >> 12) <= 5 ? raw & 0x0fff : raw;
+            if (tile >= MARKER_FIRST && tile <= MARKER_LAST) ants++;
+            if (isPlantTile(raw)) plants++;
+        }
+        facts.ants = ants;
+        facts.plants = plants;
+        pos += count * 6;
+        // block 2: a word, then per food pile five words and `stages` pairs of words. A pile without stages ends the block in a version 8 file (block 3 is read from the bytes right behind that pile's stage count) and
+        // is no file in version 9
+        if (pos + 2 > bytes.length) return facts;
+        var piles = u16(pos);
+        pos += 2;
+        for (var p = 0; p < piles; p++) {
+            if (pos + 10 > bytes.length) return facts;
+            var stages = u16(pos + 8);
+            pos += 10;
+            if (stages === 0) { if (version === 9) return facts; break; }
+            if (stages * 4 > bytes.length - pos) return facts;
+            pos += stages * 4;
+        }
+        // block 3: two words. Block 4: a word, then per waypoint a cell (two words), a flag (a dword) and, when the flag is not 0, an interval (a dword) and five doubles; the record that a file ends in is kept
+        if (pos + 4 > bytes.length) return facts;
+        pos += 4;
+        var waypoints = 0;
+        if (pos + 2 <= bytes.length) {
+            var announced = u16(pos);
+            pos += 2;
+            for (var w = 0; w < announced; w++) {
+                if (pos + 4 > bytes.length) break;                     // (not even a cell: nothing is kept)
+                pos += 4;
+                if (pos + 4 > bytes.length) { waypoints++; break; }    // (a cell and no flag: the half record is kept)
+                var flag = u32(bytes, pos);
+                pos += 4;
+                if (flag !== 0) { if (pos + 44 > bytes.length) { waypoints++; break; } pos += 44; }
+                waypoints++;
+            }
+        }
+        facts.waypoints = waypoints;
+        return facts;
+    }
+    function startMarkersOfMap(bytes) { return factsOfMap(bytes).ants; }
+    // What the page does with the map that a file carries: it goes to the game ({ ok: true, bytes }) unless setting it up asks too much ({ ok: false, text }): more starting ants than a replay is set up with, or more pairs
+    // of a plant and a waypoint (the engine looks up the waypoint of every plant by scanning them all). The game refuses such a map too (load_embedded_map, and load_map_or_embedded whichever copy it reads), but setting one up
+    // holds a page for seconds to minutes with nothing said, so the page says it before the game starts. A map that is not laid out as the loader reads it (-1) is the game's to judge.
+    function carriedVerdict(carried) {
+        if (carried.ants > MAX_EMBEDDED_ANTS) {
+            return { ok: false, text: 'the map in the file starts ' + thousands(carried.ants) + ' ants (the start markers of the four colors), more than the ' + thousands(MAX_EMBEDDED_ANTS) + ' that a replay is set up with' };
+        }
+        if (carried.plants >= 0 && carried.waypoints >= 0 && carried.plants * carried.waypoints > MAX_EMBEDDED_PAIRS) {
+            return { ok: false, text: 'the map in the file has ' + thousands(carried.plants) + ' plants and ' + thousands(carried.waypoints) + ' waypoints, so setting it up looks at ' + thousands(carried.plants * carried.waypoints)
+                                      + ' pairs of them, more than the ' + thousands(MAX_EMBEDDED_PAIRS) + ' that a replay is set up with' };
+        }
+        return { ok: true, bytes: carried.bytes };
     }
 
     // env: { fetch, getFS() (the game's file system, or null before the game runs), setTimeout, clearTimeout, now, timeoutMs, tries, retryMs, AbortController, onChange(name, state) }
@@ -163,13 +269,14 @@
 
         // The bytes of the map, fetched and checked: hashed against the room's (`expect()` is read when the bytes are here, as the Start may come while they travel; '' means none yet), with one more fetch that
         // skips the HTTP cache when the hash is wrong, in case the cache holds the map of before an update of the site.
-        function verified(name, expect, fresh) {
+        function verified(name, expect, fresh, replay) {
             return download(name, fresh, tries).then(function (result) {
                 if (!result.ok) return result;
                 var h = hash64(result.bytes), want = expect();
                 if (want && h !== want) {
-                    if (!fresh) return verified(name, expect, true);
-                    return { ok: false, mismatch: true, text: 'The map ' + name + ' on this site is not the host\'s copy of it (the files differ). The host may need to choose the map again.' };
+                    if (!fresh) return verified(name, expect, true, replay);
+                    return { ok: false, mismatch: true, text: replay ? 'The map ' + name + ' on this site is not the file that this match was played on (the files differ).'
+                                                                     : 'The map ' + name + ' on this site is not the host\'s copy of it (the files differ). The host may need to choose the map again.' };
                 }
                 return { ok: true, bytes: result.bytes, hash: h };
             });
@@ -227,7 +334,7 @@
         // For a page that has the bytes before the game runs (a recording: the file system is not there yet): the checked bytes, to be written when it is. { ok, bytes } or { ok: false, text }
         function fetchOnly(name, hash) {
             if (!validName(name)) return Promise.resolve({ ok: false, text: 'The map name ' + name + ' is not one that the game takes.' });
-            return verified(name, function () { return hash || ''; }, false);
+            return verified(name, function () { return hash || ''; }, false, true);
         }
 
         return { request: request, status: status, message: message, fetchOnly: fetchOnly, fileUrl: fileUrl, entries: entries };
@@ -287,5 +394,5 @@
         }, function () { fail('Could not download the map ' + file + '. Check your connection and try again.', false); });
     }
 
-    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, embeddedMapOfReplay: embeddedMapOfReplay, create: create };
+    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, infoOfReplay: infoOfReplay, embeddedMapOfReplay: embeddedMapOfReplay, startMarkersOfMap: startMarkersOfMap, factsOfMap: factsOfMap, carriedVerdict: carriedVerdict, MAX_EMBEDDED_ANTS: MAX_EMBEDDED_ANTS, MAX_EMBEDDED_PAIRS: MAX_EMBEDDED_PAIRS, create: create };
 });

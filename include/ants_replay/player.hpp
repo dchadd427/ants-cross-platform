@@ -30,9 +30,10 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
 bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error);
 
 /// The map of `replay`: the file in the folders (load_map) when one of that name is there and is the head's, else the map that the file carries (its tmap chunk, replay.hpp), loaded the same way (the head's hash,
-/// LevelLimits::for_play_extended). A folder is never written. With no embedded map this is load_map and says what it says; with one and no usable file in the folders, `error` is the embedded map's.
+/// LevelLimits::for_play_extended). A folder is never written. With no embedded map this is load_map and says what it says; with one and no usable file in the folders, `error` is the embedded map's. A file that carries a
+/// map whose hash is the head's is held to kMaxEmbeddedStartAnts and kMaxEmbeddedPlantWaypointPairs whichever copy is read (the folder's file too: the web page writes the map there); a library map that the file does not carry is not counted.
 bool load_map_or_embedded(const Replay& replay, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error);
-/// The same for a replay with a map of its own only: the bytes of the replay's tmap chunk, which must be the file that the head's hash names, loaded as any map is.
+/// The same for a replay with a map of its own only: the bytes of the replay's tmap chunk, which must be the file that the head's hash names, loaded as any map is, and starting at most kMaxEmbeddedStartAnts ants and having at most kMaxEmbeddedPlantWaypointPairs pairs of a plant and a waypoint.
 bool load_embedded_map(const Replay& replay, assets::LevelData& level, std::string& error);
 
 /// Why this build does not play `head`'s match (its rules number and the game that made it): "recorded by v0.10.0 with simulation rules 0 ...". Only for a head that plays_here() says no to.
