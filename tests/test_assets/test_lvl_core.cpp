@@ -15,12 +15,14 @@
 //       edits, the limits of the description (the checker's own sentence), every refusal, the check of the map after it
 //   C12 the crop (interface version 4): the whole window is the canonical file, every other window is held to an independent reading of the rules (an object whole or not at all, the solid bits
 //       that go with it, the records that move) on the whole library as Classic and as Extended maps, the stored answers, the refusals, bounds before anything is allocated
+//   C13 the dropper-plant tile list of read_report's "plants" count: every one of the 1,344 tile ids agrees with sim::movement::is_dropper_plant_tile, which this module cannot link
 // `test_lvl_core --write-expected` writes the expectation again (after a change of the core that is meant), `--print-tile-names` prints src/ants_assets/lvl_tile_names.inc.
 #include "ants_assets/chd_parser.hpp"
 #include "ants_assets/lvl_checker.hpp"
 #include "ants_assets/lvl_core.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
+#include "ants_sim/movement_tables.hpp"      // C13: the dropper-plant tile list is pinned against sim::movement::is_dropper_plant_tile
 #include "ants_test_paths.hpp"
 
 #include <algorithm>
@@ -1343,6 +1345,29 @@ void c12_crop() {
     CHECK_MSG(g_bytes - before_one < 24ull * (1u << 20), "one cell of a large map asks for the map that is read and nothing more: " + std::to_string(g_bytes - before_one) + " bytes asked");
 }
 
+// ---- C13 ----
+// read_report's "plants" count (this module cannot link the simulation) against sim::movement::is_dropper_plant_tile, every tile id: a map of one block-1 record (team 255, never a start
+// marker) at each id in turn, read back. The two must agree at every id, or a room's cap on pairs of a plant and a waypoint (ants::server::OnlineLimits::kMaxPlantWaypointPairs) would not
+// be the cost that SimulationEngine::init pays.
+void c13_plant_tiles() {
+    for (uint32_t id = 0; id < 1344; ++id) {
+        LevelData level = blank_extended_level(1, 1, lvl_core::tile_names());
+        AnthillSpawn sp;
+        sp.tile_id = static_cast<uint16_t>(id);
+        const int marker_team = start_marker_team_of_id(sp.tile_id);          // a start marker's team must be its tile's (the writer refuses any other pairing): 255 (a plant or anything else) otherwise
+        sp.team_id = marker_team >= 0 ? static_cast<uint8_t>(marker_team) : uint8_t{255};
+        level.anthill_spawns.assign(1, sp);
+        const LevelWriteResult w = write_level(level, LevelLimits::for_extended_maps());
+        CHECK_MSG(w.ok, "tile " + std::to_string(id) + ": a one-record map writes");
+        if (!w.ok) continue;
+        const lvl_core::Result r = lvl_core::read_report(w.bytes.data(), w.bytes.size(), lvl_core::Profile::Extended);
+        const bool core_says_plant = r.status == 0 && contains(r.payload, "\"plants\":1");
+        const bool sim_says_plant = ants::sim::movement::is_dropper_plant_tile(static_cast<uint16_t>(id));
+        CHECK_MSG(core_says_plant == sim_says_plant, "tile " + std::to_string(id) + ": lvl_core's dropper-plant list agrees with the simulation's (core " + std::to_string(core_says_plant) +
+                                                          ", sim " + std::to_string(sim_says_plant) + ")");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -1374,6 +1399,7 @@ int main(int argc, char* argv[]) {
     run_case("C10 hostile Extended files", c10_hostile_extended);
     run_case("C11 the properties", c11_properties);
     run_case("C12 the crop", c12_crop);
+    run_case("C13 the dropper-plant tile list", c13_plant_tiles);
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

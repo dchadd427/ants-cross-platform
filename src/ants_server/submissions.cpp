@@ -283,6 +283,11 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
     if (!OnlineLimits::allows_ants(start_ants)) {          // (a map that no room plays is not sent for approval: it would be on the list with nothing to play online)
         return refuse(422, "map_too_many_ants_online", "This map starts too many ants to play online (1,000 at most, all colors together). You can still play it against bots on this computer.");
     }
+    const uint64_t pairs = static_cast<uint64_t>(std::max<int64_t>(0, meta.get("plants").as_int_or(0))) * static_cast<uint64_t>(std::max<int64_t>(0, meta.get("waypoints").as_int_or(0)));
+    if (!OnlineLimits::allows_pairs(pairs)) {          // (the same door, for a map whose plants times waypoints would hold the one thread just as long)
+        return refuse(422, "map_too_many_pairs_online",
+                      "This map has too many pairs of a plant and a waypoint to play online (1,000,000 at most). You can still play it against bots on this computer.");
+    }
     int64_t players = 0;
     for (size_t i = 0; i < meta.get("teams").size(); ++i) players += meta.get("teams").at(i).get("start_markers").as_int_or(0) > 0 ? 1 : 0;
     if (players == 0) players = 4;

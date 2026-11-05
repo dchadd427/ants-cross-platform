@@ -366,6 +366,8 @@ inline constexpr const char* kNoticeMapColors = "This map cannot be played with 
 inline constexpr const char* kNoticeMapTooBig = "This map is too big to play online (65,536 cells at most, like 256 x 256): choose another map.";
 /// A map that starts more ants than a room plays (ants::server::OnlineLimits::kMaxStartAnts = 1,000, all four colors together): said in the same way and the room keeps its map
 inline constexpr const char* kNoticeMapTooManyAnts = "This map starts too many ants to play online (1,000 at most): choose another map.";
+/// A map with more pairs of a plant and a waypoint than a room plays (ants::server::OnlineLimits::kMaxPlantWaypointPairs = 1,000,000): said in the same way and the room keeps its map
+inline constexpr const char* kNoticeMapTooManyPairs = "This map has too many plant-waypoint pairs to play online (1,000,000 at most): choose another map.";
 inline constexpr const char* kNoticeNoPlace = "The server has no place for another match right now: try again in a minute.";
 /// A START that was cancelled because one person's game could not load the map (to the whole room and then, as the second line, to the leader): "<name>'s game is too old for this map: refresh the page or update
 /// the game." for an Extended map (a game of before the Extended maps cannot read one), "<name>'s game could not load this map." for another, "<name>'s game did not load the map in time." when it was only slow.

@@ -436,6 +436,7 @@ uint8_t Room::roster_with(const std::vector<std::pair<uint8_t, net::FillLevel>>&
 // the room is told why, once it has started), and the lobby sends the Start. False, and the room is as it was (the bots go again), when the lobby refuses.
 bool Room::start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::pair<uint8_t, net::FillLevel>>& fill_seats, const sim::StartTeams& wanted) {
     if (!OnlineLimits::allows_ants(map_start_ants())) return false;          // (every start of a room comes through here: no match is made on a map that starts more ants than a room plays, whatever door the map came by)
+    if (!OnlineLimits::allows_pairs(map_plant_waypoint_pairs())) return false;          // (nor on a map with more pairs of a plant and a waypoint than a room plays)
     sim::StartTeams teams;
     std::string no_teams;
     if (wanted.set) {
@@ -530,6 +531,7 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     if (!level_.validate(roster, assets::LevelLimits::for_play_extended()).playable) return lobby_.end_start(net::kNoticeMapColors);
     const uint64_t start_ants = map_start_ants();
     if (!OnlineLimits::allows_ants(start_ants)) return lobby_.end_start(net::kNoticeMapTooManyAnts);          // (the last door before the engine is made: setting up the ants of such a map would hold the one thread for seconds; the plan's own door is choose_map)
+    if (!OnlineLimits::allows_pairs(map_plant_waypoint_pairs())) return lobby_.end_start(net::kNoticeMapTooManyPairs);          // (the same door, for a map whose plants times waypoints would hold the one thread just as long)
     if (!services_.match_place || !services_.match_place(now_ms, map_cells(), start_ants)) return lobby_.end_start(net::kNoticeNoPlace);
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
@@ -927,6 +929,10 @@ Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_
     const RestartHead& h = rec.head;
     if (!OnlineLimits::allows_ants(map_start_ants())) {          // (RoomManager::map_refusal says so first; this is the last door before the engine is made)
         why = "the map starts more ants than a room plays";
+        return ReplayBegin::Refused;
+    }
+    if (!OnlineLimits::allows_pairs(map_plant_waypoint_pairs())) {          // (the same door, for a map with more pairs of a plant and a waypoint than a room plays)
+        why = "the map has more pairs of a plant and a waypoint than a room plays";
         return ReplayBegin::Refused;
     }
     if (state_ != RoomState::Waiting || session_ != nullptr || !spec_.reconnect || restart_store_ == nullptr || h.code != spec_.code || !rec.ok()) {
