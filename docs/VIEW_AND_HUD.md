@@ -1,6 +1,6 @@
 # The picture, the view and the HUD
 
-What you see in a match and how the game draws it: the 16:9 picture, the map view with its edge scrolling and zoom, the minimap, the score boxes, the status line and the chat log, the results screen, and the text and sound that go with them. Where the original program's own numbers matter, the section names the part of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) that holds them (for example 5.43). The rules of the game are in [`GAMEPLAY.md`](GAMEPLAY.md), the mouse, keys and touch gestures in [`CONTROLS.md`](CONTROLS.md), and the web page in [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md).
+What you see in a match and how the game draws it: the 16:9 picture, the map view with its edge scrolling and zoom, the minimap, the score boxes, the status line and the chat log, the results screen, and the text and sound that go with them. Where the original program's own numbers matter, the section names the part of [`GAME_REVERSE_ENGINEERING.md`](GAME_REVERSE_ENGINEERING.md) that holds them (for example 5.43). The rules of the game are in [`GAMEPLAY.md`](GAMEPLAY.md), the mouse, keys and touch gestures in [`CONTROLS.md`](CONTROLS.md), and the web page in [`PLAY_IN_BROWSER.md`](PLAY_IN_BROWSER.md). The picture of the map alone that the front page's shared meadow uses is [`YARD.md`](YARD.md).
 
 **Wording.** On-screen text says "player", never "friend" (`tests/scripts/test_web_lobby.py` checks the lobby page).
 

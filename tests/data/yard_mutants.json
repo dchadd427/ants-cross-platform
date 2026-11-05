@@ -1,0 +1,770 @@
+{
+  "note": "Mutants of the Yard's client for tools/mutate.py (docs/YARD.md, \"Tests\"): the four gates of the HUD removed (the Yard then behaves as a game) and turned on for the game's own layouts (the game then changes), the HUD's Yard code (the keys, the rubber band, the minimap, the edge dwell), the layout's geometry, the puppet world's rules (the pool, the slots and the selection, what the server may send, the places), the order sink's rules, and the application's Yard (the window's scale, the sizes, the chat, the zoom and the settings, the frame-rate plate, the ticks, the flag). Run from the checkout: tools/mutate.py tests/data/yard_mutants.json --keep-going --jobs 1; every mutant must be caught (the gates that are turned on for every layout by tests/test_app/test_yard_isolation.cpp, every other one by tests/test_app/test_yard.cpp). The sound that the Yard does not make has no mutant: a headless game has no audio device to listen to.",
+  "baseline": {
+    "build": [
+      "test_yard",
+      "test_yard_isolation"
+    ],
+    "test": "./build/tests/test_app/test_yard && ./build/tests/test_app/test_yard_isolation"
+  },
+  "mutants": [
+    {
+      "id": "gate_apply_layout_removed",
+      "file": "src/ants_app/hud.cpp",
+      "old": "    if (lay.yard) apply_yard_layout();                    // the Yard has none of these buttons: they are given no size\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H1]"
+    },
+    {
+      "id": "gate_render_removed",
+      "file": "src/ants_app/hud.cpp",
+      "old": "    if (layout_.yard) { render_yard(renderer, assets, world, camera); return; }      // the Yard: the minimap and the rubber band are all that is left of the HUD (hud_yard.cpp)\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H4]"
+    },
+    {
+      "id": "gate_key_removed",
+      "file": "src/ants_app/hud.cpp",
+      "old": "    if (layout_.yard && !yard_takes_key(key, ctrl)) return true;                    // the Yard: no chat, no F keys, no options, no quit, no home hill (hud_yard.cpp)\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H3]"
+    },
+    {
+      "id": "gate_input_tick_removed",
+      "file": "src/ants_app/hud.cpp",
+      "old": "    if (layout_.yard && !is_radar_dragging_) step = yard_edge_dwell(step);          // the Yard: the view moves at the edge only after the pointer has stayed there (hud_yard.cpp)\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H5]"
+    },
+    {
+      "id": "gate_apply_layout_always",
+      "file": "src/ants_app/hud.cpp",
+      "old": "if (lay.yard) apply_yard_layout();",
+      "new": "apply_yard_layout();",
+      "build": [
+        "test_yard_isolation"
+      ],
+      "test": "./build/tests/test_app/test_yard_isolation",
+      "expect": "buttons"
+    },
+    {
+      "id": "gate_render_always",
+      "file": "src/ants_app/hud.cpp",
+      "old": "if (layout_.yard) { render_yard(renderer, assets, world, camera); return; }",
+      "new": "if (true) { render_yard(renderer, assets, world, camera); return; }",
+      "build": [
+        "test_yard_isolation"
+      ],
+      "test": "./build/tests/test_app/test_yard_isolation",
+      "expect": "render."
+    },
+    {
+      "id": "gate_key_always",
+      "file": "src/ants_app/hud.cpp",
+      "old": "if (layout_.yard && !yard_takes_key(key, ctrl)) return true;",
+      "new": "if (!yard_takes_key(key, ctrl)) return true;",
+      "build": [
+        "test_yard_isolation"
+      ],
+      "test": "./build/tests/test_app/test_yard_isolation",
+      "expect": "key."
+    },
+    {
+      "id": "gate_input_tick_always",
+      "file": "src/ants_app/hud.cpp",
+      "old": "if (layout_.yard && !is_radar_dragging_) step = yard_edge_dwell(step);",
+      "new": "if (!is_radar_dragging_) step = yard_edge_dwell(step);",
+      "build": [
+        "test_yard_isolation"
+      ],
+      "test": "./build/tests/test_app/test_yard_isolation",
+      "expect": "edge."
+    },
+    {
+      "id": "hud_yard_button_left_out",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "&send_to_button_,\n                        &team_button_, &yes_button_, &no_button_}",
+      "new": "&team_button_, &yes_button_, &no_button_}",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H1]"
+    },
+    {
+      "id": "hud_yard_quit_button_left_out",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "&team_button_, &yes_button_, &no_button_}",
+      "new": "&team_button_, &yes_button_}",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H1]"
+    },
+    {
+      "id": "hud_yard_no_minimap",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "    render_radar(renderer, assets, world, camera);\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H4]"
+    },
+    {
+      "id": "hud_yard_no_rubber_band",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "    if (is_dragging_) render_marquee_box(renderer);\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H4]"
+    },
+    {
+      "id": "hud_yard_key_next_left_out",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "key == 'n' || key == 'N' || ",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H3]"
+    },
+    {
+      "id": "hud_yard_key_home_hill_kept",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "key == 'a' || key == 'A' ||",
+      "new": "key == 'h' || key == 'a' || key == 'A' ||",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H3]"
+    },
+    {
+      "id": "hud_yard_key_chat_letters_kept",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "    if (key == SDLK_ESCAPE) return true;                   // (deselect)\n",
+      "new": "    if (key == SDLK_ESCAPE || key == SDLK_RETURN) return true;\n",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H3]"
+    },
+    {
+      "id": "hud_yard_dwell_not_reset",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "    if (step.dx == 0 && step.dy == 0) {                    // (not where the view scrolls: the dwell starts over)\n        yard_edge_ticks_ = 0;\n        return step;\n    }",
+      "new": "    if (step.dx == 0 && step.dy == 0) {\n        return step;\n    }",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H5]"
+    },
+    {
+      "id": "hud_yard_dwell_never_ends",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "    if (yard_edge_ticks_ < kYardEdgeDwellTicks) {\n        ++yard_edge_ticks_;",
+      "new": "    if (yard_edge_ticks_ < kYardEdgeDwellTicks + 100000) {\n        ++yard_edge_ticks_;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H5]"
+    },
+    {
+      "id": "hud_yard_dwell_none",
+      "file": "src/ants_app/hud_yard.cpp",
+      "old": "    if (yard_edge_ticks_ < kYardEdgeDwellTicks) {\n        ++yard_edge_ticks_;\n        step.dx = 0;\n        step.dy = 0;\n    }",
+      "new": "    if (false) {\n        ++yard_edge_ticks_;\n        step.dx = 0;\n        step.dy = 0;\n    }",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H5]"
+    },
+    {
+      "id": "hud_yard_dwell_one_tick_short",
+      "file": "include/ants_app/hud.hpp",
+      "old": "static constexpr uint32_t kYardEdgeDwellTicks = 5;",
+      "new": "static constexpr uint32_t kYardEdgeDwellTicks = 4;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H5]"
+    },
+    {
+      "id": "hud_yard_dwell_one_tick_long",
+      "file": "include/ants_app/hud.hpp",
+      "old": "static constexpr uint32_t kYardEdgeDwellTicks = 5;",
+      "new": "static constexpr uint32_t kYardEdgeDwellTicks = 6;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [H5]"
+    },
+    {
+      "id": "layout_equality_ignores_yard",
+      "file": "include/ants_app/screen_layout.hpp",
+      "old": "view_y == o.view_y && yard == o.yard; }",
+      "new": "view_y == o.view_y; }",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [L1]"
+    },
+    {
+      "id": "layout_view_ignores_yard",
+      "file": "include/ants_app/screen_layout.hpp",
+      "old": "constexpr LayoutRect view() const noexcept { return yard ? LayoutRect{0, 0, width, height} : LayoutRect{view_x, view_y, kClassicViewW + dx(), kClassicViewH + dy()}; }",
+      "new": "constexpr LayoutRect view() const noexcept { return LayoutRect{view_x, view_y, kClassicViewW + dx(), kClassicViewH + dy()}; }",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [L1]"
+    },
+    {
+      "id": "layout_yard_has_a_chat",
+      "file": "include/ants_app/screen_layout.hpp",
+      "old": "constexpr LayoutRect chat_view() const noexcept { return yard ? LayoutRect{} : LayoutRect{right(kChatViewX), kChatViewY, kChatViewW, kChatViewH + dy()}; }",
+      "new": "constexpr LayoutRect chat_view() const noexcept { return LayoutRect{right(kChatViewX), kChatViewY, kChatViewW, kChatViewH + dy()}; }",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [L1]"
+    },
+    {
+      "id": "layout_yard_has_a_panel",
+      "file": "include/ants_app/screen_layout.hpp",
+      "old": "constexpr LayoutRect panel_fill() const noexcept { return yard ? LayoutRect{} : LayoutRect{right(kPanelX), kPanelY, kPanelW, kPanelH + dy()}; }",
+      "new": "constexpr LayoutRect panel_fill() const noexcept { return LayoutRect{right(kPanelX), kPanelY, kPanelW, kPanelH + dy()}; }",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [L1]"
+    },
+    {
+      "id": "layout_minimap_margin",
+      "file": "include/ants_app/screen_layout.hpp",
+      "old": "static constexpr int32_t kYardMinimapMargin = 14;",
+      "new": "static constexpr int32_t kYardMinimapMargin = 16;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [L1]"
+    },
+    {
+      "id": "layout_map_only_minimum",
+      "file": "include/ants_app/screen_layout.hpp",
+      "old": "layout.width = std::max(w, kYardMinWidth);",
+      "new": "layout.width = w;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [L2]"
+    },
+    {
+      "id": "layout_map_only_not_yard",
+      "file": "include/ants_app/screen_layout.hpp",
+      "old": "        layout.yard = true;\n        return layout;",
+      "new": "        layout.yard = false;\n        return layout;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [L1]"
+    },
+    {
+      "id": "puppet_own_not_first",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "if ((r.color == yard::kColorMine) != (pass == 0)) continue;",
+      "new": "if (false) continue;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P6]"
+    },
+    {
+      "id": "puppet_pointed_slot_reused",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "if (!taken[j] && pointed_at.count(slots_[j].unit) == 0) free_slots.push_back(j);",
+      "new": "if (!taken[j]) free_slots.push_back(j);",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P4]"
+    },
+    {
+      "id": "puppet_same_id_twice",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": " || !seen.insert(r.id).second",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P5]"
+    },
+    {
+      "id": "puppet_any_clip",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": " || !sim::movement::clip_by_chd(r.clip, r.mirrored).valid()",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P5]"
+    },
+    {
+      "id": "puppet_any_color",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "r.color >= yard::kColorCount || ",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P5]"
+    },
+    {
+      "id": "puppet_id_zero_shown",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "if (r.id == 0 || r.color",
+      "new": "if (r.color",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P5]"
+    },
+    {
+      "id": "puppet_place_not_clamped",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "const int32_t px = std::clamp<int32_t>(r.px, 0, max_x);",
+      "new": "const int32_t px = static_cast<int32_t>(r.px);",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P5]"
+    },
+    {
+      "id": "puppet_frame_not_clamped",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "std::min<uint32_t>(r.frame, static_cast<uint32_t>(clip.count) - 1u)",
+      "new": "static_cast<uint32_t>(r.frame)",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P5]"
+    },
+    {
+      "id": "puppet_idle_is_walking",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "u.state = is_idle_clip(r.clip) ? sim::UnitState::Idle : sim::UnitState::Walking;",
+      "new": "u.state = sim::UnitState::Walking;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P2]"
+    },
+    {
+      "id": "puppet_every_color_is_green",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "u.player_id = r.color;",
+      "new": "u.player_id = 0;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P2]"
+    },
+    {
+      "id": "puppet_ms_left_lost",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "u.loco.next_ms = r.left_ms;",
+      "new": "u.loco.next_ms = 0;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P2]"
+    },
+    {
+      "id": "puppet_gone_ant_stays",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "        slots_[j].server = 0;\n        engine_.get_unit(slots_[j].unit).removed = true;\n",
+      "new": "        slots_[j].server = 0;\n",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P3]"
+    },
+    {
+      "id": "puppet_freed_slot_comes_first",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "        cursor_ = (place[i] + 1) % slots_.size();\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P3]"
+    },
+    {
+      "id": "puppet_hill_id_twice",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": " || ((used >> hill.id) & 1u) != 0",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P8]"
+    },
+    {
+      "id": "puppet_hill_off_the_map",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "if (static_cast<int32_t>(hill.x) + yard::kHillTiles > width || static_cast<int32_t>(hill.y) + yard::kHillTiles > height) continue;",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P8]"
+    },
+    {
+      "id": "puppet_nine_hills",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "        if (list.size() >= yard::kMaxHills) break;\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P8]"
+    },
+    {
+      "id": "puppet_hill_team_zero",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "spawn.team_id = hill.id;",
+      "new": "spawn.team_id = 0;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P8]"
+    },
+    {
+      "id": "puppet_own_is_a_target",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "if (slot.server != 0 && slot.color != yard::kColorMine && slot.px / 32 == tile_x",
+      "new": "if (slot.server != 0 && slot.px / 32 == tile_x",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P9]"
+    },
+    {
+      "id": "sink_foreign_ant_ordered",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "        if (!puppet_.is_own(slot)) continue;\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S2]"
+    },
+    {
+      "id": "sink_more_than_six",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "        if (intent.ants.size() >= yard::kMaxOrderAnts) break;\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S2]"
+    },
+    {
+      "id": "sink_ant_twice",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "        if (std::find(intent.ants.begin(), intent.ants.end(), server) != intent.ants.end()) continue;\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S2]"
+    },
+    {
+      "id": "sink_tile_off_the_map",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "if (!puppet_.on_map(command.tile_x, command.tile_y)) {",
+      "new": "if (false) {",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S3]"
+    },
+    {
+      "id": "sink_attack_on_nothing",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "        if (intent.target == 0) return result;                       // (Ignored: nobody stands there any more: an attack on nothing is not sent)\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S4]"
+    },
+    {
+      "id": "sink_hatch_is_a_stop",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "        case sim::CommandType::Stop: intent.kind = yard::IntentKind::Stop; break;",
+      "new": "        case sim::CommandType::Stop: case sim::CommandType::Hatch: intent.kind = yard::IntentKind::Stop; break;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S5]"
+    },
+    {
+      "id": "sink_queue_unbounded",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "    if (queue_.size() >= kMaxQueued) queue_.erase(queue_.begin());\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S6]"
+    },
+    {
+      "id": "sink_no_answer",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "    result.ack_ant = first;",
+      "new": "    result.ack_ant = 0;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S1]"
+    },
+    {
+      "id": "sink_no_needing_order",
+      "file": "src/ants_app/yard_sink.cpp",
+      "old": "    result.needing_order = static_cast<uint32_t>(intent.ants.size());",
+      "new": "    result.needing_order = 0;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [S1]"
+    },
+    {
+      "id": "app_window_not_scaled",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "SDL_SetWindowSize(window_, width * scale, height * scale);",
+      "new": "SDL_SetWindowSize(window_, width, height);",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [Z1]"
+    },
+    {
+      "id": "app_any_scale",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "scale >= 1 && scale <= kYardMaxScale;",
+      "new": "scale >= 1 && scale <= 4;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [A3]"
+    },
+    {
+      "id": "app_smaller_than_the_least",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "return width >= ScreenLayout::kYardMinWidth && height",
+      "new": "return width >= 100 && height",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [A3]"
+    },
+    {
+      "id": "app_chat_left_on",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "    hud_.options().chat = false;",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [A1]"
+    },
+    {
+      "id": "app_remembered_zoom_taken",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "    zoom_wanted_ = config_.zoom_given ? config_.zoom : zoom::kNormal;       // (the zoom that the game remembers is the game's: the Yard starts at the normal scale)\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [K1]"
+    },
+    {
+      "id": "app_file_hills_count",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "    current_level_ = current_level_.for_roster(0);\n    sim_.init(current_level_, config_.random_seed, 0);\n}",
+      "new": "    sim_.init(current_level_, config_.random_seed, 0);\n}",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [A2]"
+    },
+    {
+      "id": "app_selection_not_handed_over",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "    return yard_puppet_->apply(batch.ants, held);",
+      "new": "    return yard_puppet_->apply(batch.ants);",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [B4]"
+    },
+    {
+      "id": "app_sound_left_on",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "    hud_.set_on_play_sfx(nullptr);                            // (silent: no audio device is opened; a sound button of the page gives the voices back)\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard"
+    },
+    {
+      "id": "app_plate_in_the_yard",
+      "file": "src/ants_app/application.cpp",
+      "old": "    if (!yard_mode_) {                                       // (the Yard has no frame-rate plate)",
+      "new": "    if (true) {                                       // (the Yard has no frame-rate plate)",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [W1]"
+    },
+    {
+      "id": "app_yard_ticks",
+      "file": "src/ants_app/application.cpp",
+      "old": "    if (yard_mode_) {\n        run_yard(dt);\n    } else if (replay_mode_) {",
+      "new": "    if (replay_mode_) {",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [A1]"
+    },
+    {
+      "id": "app_yard_with_a_bot",
+      "file": "src/ants_app/application.cpp",
+      "old": "if (cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.bots.empty() || cfg.alone || cfg.play_at_once || !cfg.replay_path.empty() || cfg.game_mode_given)) {\n            cfg.startup_error = \"--yard shows",
+      "new": "if (false) {\n            cfg.startup_error = \"--yard shows",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [F1]"
+    },
+    {
+      "id": "app_yard_without_the_flag",
+      "file": "src/ants_app/application.cpp",
+      "old": "            cfg.yard = true;\n            mode_given = direct_match = true;",
+      "new": "            cfg.yard = false;\n            mode_given = direct_match = true;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [F1]"
+    },
+    {
+      "id": "app_zoom_out_without_limit",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "    if (layout_.yard) return zoom::Limits{zoom::series(-1), zoom::kIn};",
+      "new": "    if (false) return zoom::Limits{zoom::series(-1), zoom::kIn};",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [Q1]"
+    },
+    {
+      "id": "app_yard_zoom_written",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "    if (!layout_.yard) config_store_.set_string(\"zoom\", zoom::level_name(target));",
+      "new": "    config_store_.set_string(\"zoom\", zoom::level_name(target));",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [K1]"
+    },
+    {
+      "id": "app_zoom_limit_for_the_game",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "    if (layout_.yard) return zoom::Limits{zoom::series(-1), zoom::kIn};",
+      "new": "    if (true) return zoom::Limits{zoom::series(-1), zoom::kIn};",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [Q2]"
+    }
+  ]
+}

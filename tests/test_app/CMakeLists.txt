@@ -1289,3 +1289,40 @@ target_link_libraries(test_yard_isolation PRIVATE ants_test_paths)
 
 add_test(NAME test_yard_isolation COMMAND test_yard_isolation)
 set_tests_properties(test_yard_isolation PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The Yard's client: the picture of the map alone, the puppet world that a server's batches rewrite, the sink that turns the HUD's orders into intents, the HUD's gates and the application's Yard,
+# driven headless with made-up batches (docs/YARD.md)
+add_executable(test_yard
+    test_yard.cpp
+    test_yard_model.cpp
+    test_yard_app.cpp
+)
+
+target_include_directories(test_yard PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_yard PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_yard PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_yard PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_yard PRIVATE ants_test_paths)
+
+add_test(NAME test_yard COMMAND test_yard)
+set_tests_properties(test_yard PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
