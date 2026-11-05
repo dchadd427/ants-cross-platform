@@ -461,14 +461,15 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 10. The pictures of the rows. An original has the page's own (front/preview_<key>.png). A map of the players has the library's: /maps/previews/<its file name without .lvl, percent-encoded>.webp, the address that the
-//     server's own GET /maps gives (AntsMapPicker.previewPath, as the match pages make it from a name: no list is fetched for it). A picture that does not come (a map that has none, 24 of 564 on the live site) is taken
-//     away, so that no broken image shows and the square stays.
+//     server's own GET /maps gives (AntsMapPicker.previewPath, as the match pages make it from a name: no list is fetched for it). A picture that does not come (a 404: a map that the library has no picture of, an approved
+//     map, a test map) is taken away, so that no broken image shows and the square stays.
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'home_games_thumbs.json'), 'utf8')).maps;
     const library = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'Community-Maps', 'previews.json'), 'utf8'));       // (file -> { picture }: what the server turns into the "thumb" of its list)
     const serverEncode = (s) => Array.from(s).map((c) => (/[A-Za-z0-9\-._~]/.test(c) ? c : '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))).join('');       // (map_store.cpp percent_encode)
     const rowsFor = (files) => files.map((file, i) => row('r' + String(i).padStart(5, '0'), 'H' + i, { map: file, people: 1, free: 3, age: 5000 - i }));
+    const LOOK = 7000;          // (the open list is looked at every 5 s, 6 s at the latest with the jitter: a look is done by then)
     const site = fakeSite();
     site.body = listOf(rowsFor(fixture.map((m) => m.file)));
     const env = await page({ site, options: { label: '', picker: true } });
@@ -483,7 +484,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     for (let at = 0; at < files.length; at += 50) {          // every map of the library, 50 rows (the list's cap) at a time
         const batch = files.slice(at, at + 50);
         site.body = listOf(rowsFor(batch));
-        await wait(env, 6000);
+        await wait(env, LOOK);
         const li = rowsOf(env);
         if (li.length !== batch.length) { wrong.push('rows ' + li.length + ' of ' + batch.length + ' at ' + at); continue; }
         li.forEach((node, i) => { const want = '/maps/previews/' + serverEncode(library[batch[i]].picture); const got = srcOf(node); seen++; if (got.length !== 1 || got[0] !== want) wrong.push(batch[i] + ' -> ' + got.join() + ' (the server: ' + want + ')'); });
@@ -492,7 +493,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 
     // a picture that does not come: the picture goes, the square, the row and the other pictures stay (no broken image)
     site.body = listOf([row('aaaaaa', 'Has', { map: 'POPcOrN.lvl', people: 1, free: 3, age: 30 }), row('bbbbbb', 'Hasnt', { map: 'No Picture Yet.lvl', people: 1, free: 3, age: 20 }), row('cccccc', 'Own', { map: 'TINY.LVL', people: 1, free: 3, age: 10 })]);
-    await wait(env, 6000);
+    await wait(env, LOOK);
     let li = rowsOf(env);
     same('(three rows: the library\'s picture, a map that the library has no picture of, an original)', li.map(srcOf), [['/maps/previews/POPcOrN.webp'], ['/maps/previews/No%20Picture%20Yet.webp'], ['front/preview_tiny.png']]);
     const lost = find(li[1], 'gmap')[0].children[0];
@@ -509,12 +510,21 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     // names that mean something to an address: all of it is escaped, nothing of it can name another place, a name that is not a map's file name makes no row
     const nasty = ['a%2Fb.lvl', 'a%5Cb.lvl', 'a%00b.lvl', '100% #1 & (2)+3;4=5@6[7]{8}^`9,0.lvl', "it's a ~~..lvl", 'a b.LVL', 'x'.repeat(60) + '.lvl', '%41.lvl', 'a..b.lvl', '-.lvl', '~.lvl'];
     site.body = listOf(rowsFor(nasty.concat(['.hidden.lvl', 'a/b.lvl', 'a\\b.lvl', 'a?b.lvl', 'a<b>.lvl', 'a"b.lvl', 'a:b.lvl', 'a|b.lvl', 'a*b.lvl', '.lvl', 'noending'])));
-    await wait(env, 6000);
+    await wait(env, LOOK);
     li = rowsOf(env);
     same('(the names that are not a map\'s file name make no row at all: a leading dot, / \\ ? < > " : | *, a name that is too short, no ending)', li.length, nasty.length);
-    check('names with %, #, &, ?-less signs, quotes, brackets and a long one: every address is the one shape, escaped (%25 for a percent, never a raw sign, never an escaped slash)', li.every((x) => srcOf(x).length === 1 && LIBRARY.test(srcOf(x)[0]) && !/[^A-Za-z0-9._~%\/-]/.test(srcOf(x)[0])), li.map(srcOf).join(' '));
+    check('names with %, #, &, +, ;, =, @, brackets, an apostrophe, a name of 64 characters: every address is the one shape, escaped (%25 for a percent, never a raw sign, never an escaped slash)', li.every((x) => srcOf(x).length === 1 && LIBRARY.test(srcOf(x)[0]) && !/[^A-Za-z0-9._~%\/-]/.test(srcOf(x)[0])), li.map(srcOf).join(' '));
     same('... a percent sign is %25 (so "a%2Fb" never reads as a slash), a space is %20, dots and dashes stay', [srcOf(li[0])[0], srcOf(li[1])[0], srcOf(li[2])[0], srcOf(li[5])[0], srcOf(li[8])[0], srcOf(li[9])[0], srcOf(li[10])[0]],
         ['/maps/previews/a%252Fb.webp', '/maps/previews/a%255Cb.webp', '/maps/previews/a%2500b.webp', '/maps/previews/a%20b.webp', '/maps/previews/a..b.webp', '/maps/previews/-.webp', '/maps/previews/~.webp']);
+}
+{   // the test site's popover: nothing is drawn (so nothing is asked for) until Games is pressed, and then the rows have the library's picture as the docked list's do
+    const site = fakeSite();
+    site.body = listOf([row('aaaaaa', 'Has', { map: 'POPcOrN.lvl', people: 1, free: 3, age: 30 })]);
+    const env = await page({ site, options: { label: 'staging', picker: true } });
+    check('a popover that is closed has no picture in it (no row is drawn: the page asks for none)', popOf(env).findAll((e) => e.tagName === 'img').length === 0);
+    tap(env.home('games'));
+    await flush();
+    same('... opened, its row has the library\'s picture', rowsOf(env).map((li) => find(li, 'gmap')[0].children.map((i) => i.src)), [['/maps/previews/POPcOrN.webp']]);
 }
 {   // a page that has no map picker (its script did not come): the rows have the originals' pictures and no other, and nothing breaks
     const site = fakeSite();
