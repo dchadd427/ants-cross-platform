@@ -997,9 +997,9 @@ class ThePage(unittest.TestCase):
 
     def test_a_player_never_publishes_and_nothing_can_be_replaced_by_the_script_that_sends_maps(self):
         submit = read("web", "front", "mapmaker_submit.js")
-        # the calls: a map goes to the owner's queue (POST /submissions), the list is read (GET), a waiting map is withdrawn: nothing else, nothing of the owner's side or the lobby's lists
+        # the calls: a map goes to the admin's queue (POST /submissions), the list is read (GET), a waiting map is withdrawn: nothing else, nothing of the admin's side or the lobby's lists
         self.assertEqual(sorted(re.findall(r"calls\('(GET|POST|PUT|DELETE|PATCH)', ([^,]+),", submit)), [("GET", "'/submissions'"), ("GET", "'/submissions'"), ("POST", "'/submissions' + q"), ("POST", "'/submissions/' + enc(rec.id) + '/withdraw'")])
-        self.assertNotRegex(submit, r"/admin|/maps|PUT|DELETE|PATCH|innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|localStorage|sessionStorage", "the owner's page and the lists are not touched, and text is text")
+        self.assertNotRegex(submit, r"/admin|/maps|PUT|DELETE|PATCH|innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|localStorage|sessionStorage", "the admin page and the lists are not touched, and text is text")
         self.assertIn("function enc(t) { return encodeURIComponent(t); }", submit, "a space is %20 and a plus stays a plus")
         self.assertIn("var ready = works && !twin && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;", submit, "the button works only for a map that the checker says works, when the door is on")
         self.assertIn("if (sending || bad() || !works) return;", submit)

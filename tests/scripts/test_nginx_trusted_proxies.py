@@ -16,7 +16,7 @@ which are keyed on the address, and the X-Client-Address that the chat hub and t
   - opt-in (ANTS_TEST_ADDRESS_ALIASES=1; Linux, root, `ip`): the same through connections that really come from 10.x, 172.16-31.x, 192.168.x and public addresses (aliases on the loopback device, removed after);
   - the web port of the stack files: ANTS_WEB_BIND_PREFIX stands in front of it (empty by default, and then `docker compose config` renders exactly what the port line rendered before; `127.0.0.1:` publishes
     on the loopback address only), no other port line has it; the documents and the comments state what the list does and what the operator may set (who may reach the web container, a path that names an
-    existing FILE) and nothing else: no account of how a setting that is missing would fail, and no word of "the owner".
+    existing FILE) and nothing else.
 
 The broken copies of tests/data/trusted_proxies_mutants.json (run them with tools/mutate.py) must each fail one of these tests.
 """
@@ -163,7 +163,7 @@ class TheShippedList(unittest.TestCase):
         self.assertEqual([l for l in DIRECTIVES if l.startswith("real_ip_header")], ["real_ip_header X-Forwarded-For;"])
         self.assertEqual([l for l in DIRECTIVES if l.startswith("real_ip_recursive")], ["real_ip_recursive on;"])
 
-    def test_the_comment_states_what_it_assumes_as_requirements_and_gives_no_way_round_them(self):
+    def test_the_comment_states_what_the_list_assumes_as_requirements(self):
         comment = comment_words(LIST)
         for words in ("X-Forwarded-For itself", "Only the proxy can reach this container from an address in the list", "so that only the proxy can connect to it (ANTS_WEB_BIND_PREFIX in the stack files)",
                       "keep no container that you do not trust on the network of the proxy", "PUBLIC address", "ANTS_TRUSTED_PROXIES_FILE in the stack files: the full path of an existing file", "replaces this list"):
@@ -244,7 +244,7 @@ class TheWiring(unittest.TestCase):
                       "an address of the machine and a colon, such as `127.0.0.1:`", "would no longer reach it", "once over IPv4 and once over IPv6 if the machine has both"):
             self.assertIn(words, section, words)
 
-    def test_no_comment_or_paragraph_of_this_change_says_how_a_missing_setting_would_fail_or_how_to_get_round_a_requirement_or_names_the_owner(self):
+    def test_the_documents_and_comments_state_only_what_the_list_does(self):
         texts = {"docs/SERVER.md, the section": server_section(), "docker/trusted-proxies.conf": comment_words(LIST)}
         for name in COMPOSE_FILES:
             texts[name] = what_this_change_wrote(name)
@@ -253,7 +253,7 @@ class TheWiring(unittest.TestCase):
             for hint in ("one limit for the whole site", "the whole site's", "count the proxy", "counts as that proxy", "counts as the proxy", "has the proxy's address", "choose his address", "name any address",
                          "can use up", "gateway", "above all", "userland", "owner", "locks everybody"):
                 self.assertNotIn(hint, text, "%s: %s" % (name, hint))
-        conf = read("docker", "nginx.conf")                                     # (the whole file, its comments too: none of them tells how a setup without the list would behave)
+        conf = read("docker", "nginx.conf")                                     # (the whole file, its comments too)
         for phrase in ("proxy's address", "whole site", "whole-site", "sized to hold", "sized for", "every visitor", "may have the", "not small", "shares these", "ONE allowance", "can use up"):
             self.assertNotIn(phrase, conf, phrase)
         for name in ("MAP_SUBMISSIONS.md", "HUB.md"):

@@ -1,4 +1,4 @@
-/* The owner's page (docs/MAP_SUBMISSIONS.md, "The admin page"): the look of the approved pictures, on the site's own style sheet (front/classic.css). Nothing links here; the owner types the address. */
+/* The admin page (docs/MAP_SUBMISSIONS.md, "The admin page"): the look of the approved pictures, on the site's own style sheet (front/classic.css). Nothing links here; the admin types the address. */
 :root {
     --nv-bg: #12222c; --nv-ink: #cfe6f5; --nv-edge: #4f86a8;       /* the neutral "New version only" badge: blue-gray, never red */
     --ext-bg: #2a2208; --ext-edge: #6b5a14;                         /* the Extended tag: the gold of the lobby's mode tag */

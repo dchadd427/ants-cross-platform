@@ -239,7 +239,7 @@ public:
 
     bool status(const std::string& code, RoomStatus& out, uint32_t now_ms) const;
     std::vector<RoomStatus> list(uint32_t now_ms) const;
-    /// The owner closes a room (its clients are dropped); false when there is no such room
+    /// The operator closes a room (its clients are dropped); false when there is no such room
     bool close_room(const std::string& code, uint32_t now_ms);
 
     /// The rooms that ended (finished or failed) since the last call, once each: what the server logs and writes to its result files
