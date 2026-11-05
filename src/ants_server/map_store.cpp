@@ -438,7 +438,7 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
             o.set("online", ctl::JsonValue::make_bool(false));
             if (!OnlineLimits::allows_ants(m.start_ants)) o.set("online_why", ctl::JsonValue::make_string("ants"));       // (the picker says which limit: only the ants one is named, the size one is as it was)
         }
-        if (with_extended && OnlineLimits::heavy(m.start_ants)) {          // (a game on it may run slowly: the pages warn; no map is refused for its ants)
+        if (with_extended && OnlineLimits::heavy(m.start_ants)) {          // (a game on it may run slowly: the Map Maker warns; such a map is over the cap of ants too, the line above)
             o.set("ants", ctl::JsonValue::make_int(static_cast<int64_t>(m.start_ants)));
             o.set("heavy", ctl::JsonValue::make_bool(true));
         }

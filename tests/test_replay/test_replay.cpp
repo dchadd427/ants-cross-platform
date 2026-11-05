@@ -983,18 +983,19 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(nobody.commands() == 5 && nobody.own_commands() == 0);
     } TEST_END();
 
-    TEST_CASE("RP2.7 Recorder: A Match Too Long To Keep Is Dropped (No File, A Reason) And The Recorder Stops Growing") {
+    TEST_CASE("RP2.7 Recorder: A Recording Over Its Size Limit Is Dropped (No File, The Reason Names The Limit) And The Recorder Stops Growing And Stops Counting Turns (So Its Turns Are Not The Length Of The Match)") {
         sim::SimulationEngine engine;
         engine.init(tiny.level, 1, 0x0F);
         Recorder rec(head_for(tiny, "TINY", 1, 0x0F));
         const Command big = make_command(CommandType::GroupMove, 0, 3, 3, std::vector<uint32_t>(32, 1u));
         for (int i = 0; i < 9000 && rec.failure().empty(); ++i) rec.on_command(big);
         ASSERT_FALSE(rec.failure().empty());
-        ASSERT_TRUE(rec.commands() == 0 && contains(rec.failure(), "too long"));
+        ASSERT_TRUE(rec.commands() == 0 && contains(rec.failure(), "size limit (1 MiB)"));
         engine.tick();
         rec.on_tick(engine);
+        ASSERT_EQ(rec.turns(), 0u);                                                 // (the tick of a recording that failed is not counted: the server asks its room how long the match ran)
         std::string error;
-        ASSERT_TRUE(rec.finish(engine, error).empty() && contains(error, "too long"));
+        ASSERT_TRUE(rec.finish(engine, error).empty() && contains(error, "size limit (1 MiB)"));
     } TEST_END();
 
     TEST_CASE("RP2.8 What the match began with is part of it: the teams made at the start and the Fog of War setting are set up as they were, and an order given after the last tick (a Quit that ends the match) is played too") {

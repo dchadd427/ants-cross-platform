@@ -843,13 +843,15 @@ void Room::replay_end() {
     live_end(kept);                                              // (the recorder goes at the end of this function: the live board lets go of it first)
 }
 
-// The file's name when the match was kept, else empty (and the status says why)
+// The file's name when the match was kept, else empty (and the status says why). How long the match ran is the recorder's count of turns, unless the recording failed: it stops counting there, so the room's own count
+// says (a match that ran 30 seconds or more whose recording failed is told by the recording's reason, with a line in the log; one that ran less than that says so, as ever)
 std::string Room::replay_keep(replay::Recorder& recorder) {
-    if (recorder.turns() == 0) {
+    const uint32_t ran = recorder.failure().empty() ? recorder.turns() : last_ticks_;
+    if (ran == 0) {
         replay_note_ = "no match was played";
         return std::string();
     }
-    if (recorder.turns() < kReplayMinTurns) {
+    if (ran < kReplayMinTurns) {
         replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
         return std::string();
     }

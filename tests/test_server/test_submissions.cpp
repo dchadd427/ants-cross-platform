@@ -238,7 +238,7 @@ int main() {
         ASSERT_EQ(rig.files().size(), size_t{1});
     } TEST_END();
 
-    TEST_CASE("SUB1.2c A map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts = 8,000, the four colors added up) is refused with one plain sentence (422 map_too_many_ants_online) and nothing is kept or counted against the day's three; 8,000 passes; the count is the file's own") {
+    TEST_CASE("SUB1.2c A map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts = 1,000, the four colors added up) is refused with one plain sentence (422 map_too_many_ants_online) and nothing is kept or counted against the day's three; 1,000 passes; the count is the file's own") {
         Sub rig;
         const auto with_ants = [](const std::array<uint32_t, 4>& per_color) {
             assets::LevelData t;
@@ -257,15 +257,15 @@ int main() {
             const assets::LevelWriteResult w = assets::write_level(t, assets::LevelLimits::for_extended_maps());
             return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
         };
-        const std::string at_cap = with_ants({2000, 2000, 2000, 2000});
+        const std::string at_cap = with_ants({250, 250, 250, 250});
         ASSERT_FALSE(at_cap.empty());
-        for (const std::array<uint32_t, 4>& per_color : {std::array<uint32_t, 4>{2000, 2000, 2000, 2001}, std::array<uint32_t, 4>{1, 1, 7999, 1}, std::array<uint32_t, 4>{5000, 5000, 5000, 5000}}) {
+        for (const std::array<uint32_t, 4>& per_color : {std::array<uint32_t, 4>{250, 250, 250, 251}, std::array<uint32_t, 4>{1, 1, 998, 1}, std::array<uint32_t, 4>{5000, 5000, 5000, 5000}}) {
             const std::string over = with_ants(per_color);
             ASSERT_FALSE(over.empty());
             const SubmitOutcome o = rig.store->submit(rig.input(over, "Too Many Ants"), rig.now);
             ASSERT_EQ(o.fail.code, std::string("map_too_many_ants_online"));
             ASSERT_TRUE(!o.ok && o.fail.status == 422);
-            ASSERT_TRUE(o.fail.message.find("8,000") != std::string::npos && o.fail.message.find("against bots") != std::string::npos);
+            ASSERT_TRUE(o.fail.message.find("1,000") != std::string::npos && o.fail.message.find("against bots") != std::string::npos);
         }
         ASSERT_TRUE(rig.files().empty());
         ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions"), std::string("0"));

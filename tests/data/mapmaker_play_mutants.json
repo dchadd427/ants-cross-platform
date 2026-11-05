@@ -1122,13 +1122,6 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_heavy_no_warning_with_others",
-      "file": "web/front/mapmaker_play.js",
-      "old": "if (v.heavy) friendsPanel.appendChild(warning());",
-      "new": "if (false) friendsPanel.appendChild(warning());",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
       "id": "play_heavy_warning_everywhere",
       "file": "web/front/mapmaker_play.js",
       "old": "if (v.heavy) botsPanel.appendChild(warning());",
@@ -1185,17 +1178,17 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_cap_8001",
+      "id": "play_cap_1001",
       "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_ONLINE_ANTS = 8000;",
-      "new": "var MAX_ONLINE_ANTS = 8001;",
+      "old": "var MAX_ONLINE_ANTS = 1000;",
+      "new": "var MAX_ONLINE_ANTS = 1001;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_cap_7999",
+      "id": "play_cap_999",
       "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_ONLINE_ANTS = 8000;",
-      "new": "var MAX_ONLINE_ANTS = 7999;",
+      "old": "var MAX_ONLINE_ANTS = 1000;",
+      "new": "var MAX_ONLINE_ANTS = 999;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
@@ -1236,8 +1229,8 @@
     {
       "id": "play_cap_refusal_missing",
       "file": "web/front/mapmaker_play.js",
-      "old": "if (!v.online) {                                             // (the refusal takes the place of the slow-game warning)",
-      "new": "if (false) {                                             // (the refusal takes the place of the slow-game warning)",
+      "old": "if (!v.online) {                                             // (a heavy map is over the cap too: its only word)",
+      "new": "if (false) {                                             // (a heavy map is over the cap too: its only word)",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
