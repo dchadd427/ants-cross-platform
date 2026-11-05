@@ -15,6 +15,8 @@ class Limits:
     burst: int = 3                      # lines an account may send at once ...
     refill_seconds: float = 2.0         # ... then one every this long, across all its tabs
     duplicate_seconds: float = 30.0     # the same text twice within this long is dropped
+    account_hour_lines: int = 200       # lines an account may say in an hour: a budget of 200 that fills up again steadily (one every 18 seconds) ...
+    account_day_lines: int = 1000       # ... and in a day: 1,000, one more every 86.4 seconds. What is over is `quota`. (The store is everybody's: an account's share of it stays small)
     violations: int = 20                # this many mistakes within a minute close the socket (1008)
     violation_window: float = 60.0
     frame_burst: int = 10               # frames of any kind a socket may send at once ...
@@ -35,6 +37,9 @@ class Limits:
     global_burst: int = 50              # lines that all accounts together may say at once ...
     global_refill_seconds: float = 0.2  # ... then five a second (what the database is asked to keep)
     db_max_bytes: int = 67108864        # no new chat line is kept once hub.db and its log file hold this much (mutes, bans and deletions are never refused for it)
+    prune_from_percent: int = 90        # the hub starts to delete the oldest lines when hub.db and its log file hold this much of db_max_bytes ...
+    prune_to_percent: int = 80          # ... and goes on, purge_chunk lines a second, until the pages that hold something are down to this much (the freed pages are reused)
+    keep_lines: int = 1000              # the newest lines, which making room never deletes (a page shows 100 at most)
     purge_chunk: int = 2000             # lines deleted at a time when they are past their 7 days
     purge_failure_seconds: float = 60.0         # how soon a purge that failed (a locked or full database) is tried again
     checkpoint_retry_seconds: float = 10.0      # how soon the database's log file is cut again when a reader held it
@@ -54,6 +59,14 @@ class Limits:
     discord_seconds: float = 6.0                # ... a whole call, from the first byte sent to the last byte read ...
     discord_total_seconds: float = 10.0         # ... and the two calls of a login together (nginx waits 15 seconds for the hub's answer)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
+
+    @property
+    def prune_from_bytes(self):
+        return self.db_max_bytes * self.prune_from_percent // 100
+
+    @property
+    def prune_to_bytes(self):
+        return self.db_max_bytes * self.prune_to_percent // 100
 
 
 class TokenBucket:
@@ -84,14 +97,22 @@ class TokenBucket:
 
 
 class AccountLimits:
-    """What one account may say, however many tabs it has open: a token bucket, and the texts it said in the last `duplicate_seconds`."""
+    """What one account may say, however many tabs it has open: a token bucket, the texts it said in the last `duplicate_seconds`, and its budgets for the hour and for the day."""
 
     def __init__(self, limits):
         self.limits = limits
         self.accounts = {}                       # account id -> [bucket, {text: time said}, last use]
+        self.budgets = {}                        # account id -> [lines left for the hour, lines left for the day]: kept while they are not full again
+
+    def budget(self, account, now):
+        budget = self.budgets.get(account)
+        if budget is None:
+            hour, day = max(1, self.limits.account_hour_lines), max(1, self.limits.account_day_lines)
+            budget = self.budgets[account] = [TokenBucket(hour, 3600.0 / hour, now), TokenBucket(day, 86400.0 / day, now)]
+        return budget
 
     def check(self, account, text, now):
-        """None when the line may go out (and it is counted), else 'dup' or 'rate' (and nothing is counted: a refused line costs no token)."""
+        """None when the line may go out (and it is counted), else 'dup', 'quota' (the hour's or the day's budget is spent) or 'rate' (and nothing is counted: a refused line costs no token)."""
         entry = self.accounts.get(account)
         if entry is None:
             entry = self.accounts[account] = [TokenBucket(self.limits.burst, self.limits.refill_seconds, now), {}, now]
@@ -101,22 +122,31 @@ class AccountLimits:
             del said[old]
         if text in said:
             return "dup"
+        hour, day = self.budget(account, now)
+        if not (hour.ready(now) and day.ready(now)):
+            return "quota"
         if not bucket.take(now):
             return "rate"
+        hour.take(now)
+        day.take(now)
         said[text] = now
         return None
 
     def refund(self, account, text):
-        """Undo what check() counted for a line that was not kept after all (the database refused it): the token comes back, and the text may be tried again at once."""
+        """Undo what check() counted for a line that was not kept after all (the database refused it): the tokens come back, and the text may be tried again at once."""
         entry = self.accounts.get(account)
         if entry is not None:
             entry[0].give_back()
             entry[1].pop(text, None)
+        for bucket in self.budgets.get(account, ()):
+            bucket.give_back()
 
     def forget_idle(self, now, idle_seconds=300.0):
-        """Drop the accounts that have been quiet for a while (their bucket is full again anyway)."""
+        """Drop the accounts that have been quiet for a while (their bucket is full again anyway), and the budgets that are full again (an account that has not used up its hour or its day is remembered)."""
         for account in [a for a, e in self.accounts.items() if now - e[2] >= idle_seconds]:
             del self.accounts[account]
+        for account in [a for a, budget in self.budgets.items() if all(b.ready(now) and b.tokens >= b.burst for b in budget)]:
+            del self.budgets[account]
 
 
 class RateByAddress:
