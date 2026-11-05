@@ -275,6 +275,73 @@ int main() {
         ASSERT_EQ(rig.files().size(), size_t{1});
     } TEST_END();
 
+    TEST_CASE("SUB1.2d A map with more pairs of a plant and a waypoint than a room plays (OnlineLimits::kMaxPlantWaypointPairs = 1,000,000) is refused with one plain sentence (422 map_too_many_pairs_online) and nothing is kept or counted against the day's three; 1,000,000 passes; 0 plants or 0 waypoints is never refused for pairs") {
+        Sub rig;
+        const auto with_pairs = [](uint32_t plants, uint32_t waypoints) {
+            assets::LevelData t;
+            if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(tiny().data()), tiny().size(), t, nullptr, assets::LevelLimits::for_extended_maps())) return std::string();
+            if (t.anthill_spawns.size() + plants > 65535 || waypoints > 65535) return std::string();
+            for (uint32_t i = 0; i < plants; ++i) {
+                assets::AnthillSpawn p;
+                p.tile_id = 404;
+                p.y = 1;
+                p.x = 1;
+                p.team_id = 255;
+                t.anthill_spawns.push_back(p);
+            }
+            std::vector<assets::Waypoint> wps(waypoints);
+            for (assets::Waypoint& w : wps) {
+                w.y = 2;
+                w.x = 2;
+            }
+            t.waypoints = std::move(wps);
+            const assets::LevelWriteResult w = assets::write_level(t, assets::LevelLimits::for_extended_maps());
+            return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+        };
+        // A map with many waypoints or many plants is too big for a Classic submission (512 KB): it is sent as Extended (2 MiB) instead, as the sender's own tool would.
+        const auto as_extended = [](const std::string& bytes) {
+            assets::LevelData level;
+            if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, assets::LevelLimits::for_extended_maps())) return std::string();
+            const assets::LevelConversion conv = assets::convert_to_extended(level);
+            if (!conv.ok) return std::string();
+            const assets::LevelWriteResult w = assets::write_level(conv.level, assets::LevelLimits::for_extended_maps());
+            return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+        };
+        const std::string at_cap_pairs = with_pairs(1000, 1000);
+        ASSERT_FALSE(at_cap_pairs.empty());
+        for (const std::pair<uint32_t, uint32_t>& pw : {std::pair<uint32_t, uint32_t>{1001, 1000}, std::pair<uint32_t, uint32_t>{1000, 1001}}) {
+            const std::string over = with_pairs(pw.first, pw.second);
+            ASSERT_FALSE(over.empty());
+            const SubmitOutcome o2 = rig.store->submit(rig.input(over, "Too Many Pairs"), rig.now);
+            ASSERT_EQ(o2.fail.code, std::string("map_too_many_pairs_online"));
+            ASSERT_TRUE(!o2.ok && o2.fail.status == 422);
+            ASSERT_TRUE(o2.fail.message.find("1,000,000") != std::string::npos && o2.fail.message.find("against bots") != std::string::npos);
+        }
+        {   // the map the brief's own measurement used: 65,500 plants on one cell and 65,535 waypoints on another
+            SubmitInput huge = rig.input(as_extended(with_pairs(65500, 65535)), "Huge Pairs");
+            huge.kind = "extended";
+            ASSERT_FALSE(huge.bytes.empty());
+            const SubmitOutcome o3 = rig.store->submit(huge, rig.now);
+            ASSERT_EQ(o3.fail.code, std::string("map_too_many_pairs_online"));
+        }
+        ASSERT_TRUE(rig.files().empty());
+        ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions"), std::string("0"));
+        ASSERT_EQ(rig.text("SELECT COUNT(*) FROM submission_limits"), std::string("0"));          // (the refusals cost the sender nothing of the three a day)
+        const SubmitOutcome o = rig.store->submit(rig.input(at_cap_pairs, "Many Pairs"), rig.now);
+        ASSERT_TRUE(o.ok && o.submission.state == "waiting");
+        ASSERT_EQ(rig.files().size(), size_t{1});
+        {   // 0 plants, or 0 waypoints, is 0 pairs: never refused for pairs, however many waypoints or plants alone
+            SubmitInput no_plants = rig.input(as_extended(with_pairs(0, 65535)), "No Plants", "203.0.113.6");
+            no_plants.kind = "extended";
+            ASSERT_FALSE(no_plants.bytes.empty());
+            ASSERT_TRUE(rig.store->submit(no_plants, rig.now).ok);
+            SubmitInput no_waypoints = rig.input(as_extended(with_pairs(65500, 0)), "No Waypoints", "203.0.113.7");
+            no_waypoints.kind = "extended";
+            ASSERT_FALSE(no_waypoints.bytes.empty());
+            ASSERT_TRUE(rig.store->submit(no_waypoints, rig.now).ok);
+        }
+    } TEST_END();
+
     TEST_CASE("SUB1.3 A map that does not pass the server's check is refused with the findings, and nothing is kept: no file, no row, and no use of the day's three") {
         Sub rig;
         const SubmitOutcome o = rig.store->submit(rig.input(blank_map()), rig.now);
