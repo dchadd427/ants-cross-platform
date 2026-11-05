@@ -602,8 +602,7 @@ std::vector<Reason> classic_reasons(const LevelData& level, std::vector<Reason>*
     if (level.rules > LVL_RULES_MOST) {
         why.push_back({"rules_unknown", "the rules word is " + num(level.rules) + ": only 0, 1 and 2 are known"});
     } else if (level.rules == LVL_RULES_LONG_ORDERS && notes != nullptr) {
-        notes->push_back({"rules_long_orders_dropped", "the map asks for the long-order rules (rules 2); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
-                                                       "and a path order of about 400 tiles can fail)"});
+        notes->push_back({"rules_long_orders_dropped", "the map has long orders (rules 2); a Classic map has the original's rules only, so a long path order can fail there"});     // (a Classic map has at most 90 rows: no wall to mention)
     } else if (level.rules == LVL_RULES_EXTENDED && notes != nullptr) {
         notes->push_back({"rules_extended_dropped", "the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
                                                     "and a long path order can fail)"});

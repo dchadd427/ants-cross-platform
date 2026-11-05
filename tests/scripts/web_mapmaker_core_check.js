@@ -157,10 +157,12 @@ function caseE() {
     let thrown = null;
     try { LvlCore.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { thrown = e; }
     check(thrown && /interface version 1/.test(thrown.message), 'an older module is refused by wrap(): ' + (thrown && thrown.message));
-    check(LvlCore.EXPECTED_INTERFACE === 4, 'the page needs interface version 4');
-    let three = null;
+    check(LvlCore.EXPECTED_INTERFACE === 5, 'the page needs interface version 5');
+    let four = null, three = null;
+    try { LvlCore.wrap({ _lvl_interface_version: () => 4 }); } catch (e) { four = e; }
+    check(four && /interface version 4/.test(four.message) && /reload the page/.test(four.message), 'a module of the version before the long orders is refused too, with the advice to reload: ' + (four && four.message));
     try { LvlCore.wrap({ _lvl_interface_version: () => 3 }); } catch (e) { three = e; }
-    check(three && /interface version 3/.test(three.message) && /reload the page/.test(three.message), 'a module of the version before the crop is refused too, with the advice to reload: ' + (three && three.message));
+    check(three && /interface version 3/.test(three.message) && /reload the page/.test(three.message), 'and one of the version before the crop: ' + (three && three.message));
 }
 
 // The page's drawing, then the core: what the page writes into the bytes is a map that the core reads, checks and writes again as the same level
