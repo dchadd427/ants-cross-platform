@@ -16,7 +16,7 @@ The Yard has no hill of its own: the hills are the places with an open game (up 
 
 `--yard` (`ApplicationConfig::yard`) starts the game as the Yard at once: `--map FILE` is the Yard's map (it needs no start marker and no hill; the hills, markers and ants that a map of the game has are ignored), `--window-size WxH` the canvas (960 x 540 without it). It cannot be combined with `--host`, `--join`, `--join-url`, `--bot`, `--alone`, `--play`, `--replay` or `--game-mode`. A running game is put into the Yard by `Application::start_yard(w, h, scale)`, and `set_yard_size(w, h, scale)` follows the page's box while it runs. The window is the canvas times the whole number `scale` (1 to 3): SDL then scales the canvas by a whole number, and no seam or bar shows between the tiles.
 
-In the Yard the game opens no audio device and starts no music, shows no start dialog, has the chat option off (the option is not written: the Yard never changes the game's stored settings, not the zoom either) and starts at the normal scale whatever the game remembers.
+In the Yard the game opens no audio device, starts no music and plays none of the sounds that the HUD asks for (its sound call goes nowhere), shows no start dialog, has the chat option off (the option is not written: the Yard never changes the game's stored settings, not the zoom either) and starts at the normal scale whatever the game remembers.
 
 For the page (web build only), three exports with numbers only: `ants_yard_set_size(w, h, scale)`, `ants_yard_probe(what)` (the canvas, the scale, the ants shown, the orders waiting, the zoom, the middle of the view; `Application::yard_value`) and `ants_yard_show_own()` (the view goes to the middle of the visitor's own ants). The batches, the places and the orders pass through `yard_apply`, `yard_set_hills` and `yard_take_intents` of the `Application`; their wire is the codec's chapter.
 
@@ -45,7 +45,7 @@ The world is drawn as the last batch left it. Moving the ants between two batche
 
 ## The orders
 
-`YardSink` takes the HUD's commands. A group move, a group attack and a stop of the visitor's own ants become intents with the server's ids; a command of any other kind (a special, a hatch, an alliance, a quit) is refused. The sink leaves out every ant that is not the visitor's own and any ant that is named twice, keeps at most six (the HUD sends the nearest first), refuses a tile off the map, and sends an attack only when another visitor's ant still stands on the tile, naming that ant. It answers as the engine would, so the voice, the status text and the order ring still happen. At most 64 intents wait; the oldest is dropped when more come.
+`YardSink` takes the HUD's commands. A group move, a group attack and a stop of the visitor's own ants become intents with the server's ids; a command of any other kind (a special, a hatch, an alliance, a quit) is refused. The sink leaves out every ant that is not the visitor's own and any ant that is named twice, keeps at most six (the HUD sends the nearest first), refuses a tile off the map, and sends an attack only when another visitor's ant still stands on the tile, naming that ant. It answers as the engine would, so the status text and the order ring still happen and the HUD asks for its voices; the Yard plays none of them (see the sound under Running it). At most 64 intents wait; the oldest is dropped when more come.
 
 ## The normal game stays as it is
 

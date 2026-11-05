@@ -749,6 +749,50 @@ void settings_cases() {
     std::filesystem::remove(file, ec);
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// the silence
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+void sound_cases() {
+    group("V1", "the Yard is silent: the HUD asks for the voices of a selection, an order and a stop, and none of them takes a channel of the mixer; the same sound in a game does");
+    {
+        AppRig game(Aspect::Wide16x9);                                              // the control: in a game the HUD's sound is the mixer's
+        if (!game.ok) return check(false, "the game is up");
+        const size_t before = game.app.audio_mixer().active_channel_count();
+        game.app.hud().play_sfx(sim::SoundID::ButtonClick);
+        check(game.app.audio_mixer().active_channel_count() == before + 1, "in a game the HUD's sound takes a channel of the mixer");
+    }
+    YardRig r;
+    if (!r.ok) return check(false, "the Yard is up");
+    Application& app = r.app;
+    r.apply(scene());
+    app.renderer().camera().set_origin(700.0, 600.0, 128, 96);
+    app.handle_window_event(YardRig::window_event(SDL_WINDOWEVENT_ENTER));
+    r.frames(2);
+    check(app.audio_mixer().active_channel_count() == 0, "a Yard that has just started plays nothing");
+    app.hud().play_sfx(sim::SoundID::ButtonClick);
+    check(app.audio_mixer().active_channel_count() == 0, "a sound that the HUD asks for goes nowhere in the Yard");
+    const auto a = r.screen_of(980, 790);
+    const auto b = r.screen_of(1020, 836);
+    const auto ground = r.screen_of(1060, 900);
+    const auto play = [&]() {
+        app.hud().clear_selection();
+        r.drag(a.first - 40, a.second - 60, b.first + 40, b.second + 20);          // a selection: the ants answer with a voice
+        r.click(ground.first, ground.second, SDL_BUTTON_RIGHT);                    // an order: the move voice
+        r.key('s', static_cast<uint16_t>(KMOD_LCTRL));                              // a stop
+        r.frames(2);
+    };
+    play();
+    check(app.audio_mixer().active_channel_count() == 0, "a selection, an order and a stop: no channel of the mixer is used");
+    const std::vector<yard::Intent> given = app.yard_take_intents();
+    check(given.size() == 2 && given[0].kind == yard::IntentKind::Move && given[1].kind == yard::IntentKind::Stop, "(the order and the stop were given all the same)");
+    int asked = 0;
+    app.hud().set_on_play_sfx([&asked](uint32_t) { ++asked; });
+    play();
+    check(asked >= 3, "the HUD asks for its voices as in a game: " + std::to_string(asked) + " calls for a selection, an order and a stop");
+    check(app.audio_mixer().active_channel_count() == 0, "and what the page does with the calls is not the mixer's");
+}
+
 }  // namespace
 
 void yard_app_groups() {
@@ -769,6 +813,7 @@ void yard_app_groups() {
     api_game_cases();
     start_yard_cases();
     settings_cases();
+    sound_cases();
 }
 
 /// The command line as a whole: init(argc, argv) with --yard

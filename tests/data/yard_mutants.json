@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the Yard's client for tools/mutate.py (docs/YARD.md, \"Tests\"): the four gates of the HUD removed (the Yard then behaves as a game) and turned on for the game's own layouts (the game then changes), the HUD's Yard code (the keys, the rubber band, the minimap, the edge dwell), the layout's geometry, the puppet world's rules (the pool, the slots and the selection, what the server may send, the places), the order sink's rules, and the application's Yard (the window's scale, the sizes, the chat, the zoom and the settings, the frame-rate plate, the ticks, the flag). Run from the checkout: tools/mutate.py tests/data/yard_mutants.json --keep-going --jobs 1; every mutant must be caught (the gates that are turned on for every layout by tests/test_app/test_yard_isolation.cpp, every other one by tests/test_app/test_yard.cpp). The sound that the Yard does not make has no mutant: a headless game has no audio device to listen to.",
+  "note": "Mutants of the Yard's client for tools/mutate.py (docs/YARD.md, \"Tests\"): the four gates of the HUD removed (the Yard then behaves as a game) and turned on for the game's own layouts (the game then changes), the HUD's Yard code (the keys, the rubber band, the minimap, the edge dwell), the layout's geometry, the puppet world's rules (the pool, the slots and the selection, what the server may send, the places), the order sink's rules, and the application's Yard (the window's scale, the sizes, the chat, the zoom and the settings, the frame-rate plate, the ticks, the flag). Run from the checkout: tools/mutate.py tests/data/yard_mutants.json --keep-going --jobs 1; every mutant must be caught (the gates that are turned on for every layout by tests/test_app/test_yard_isolation.cpp, every other one by tests/test_app/test_yard.cpp). The Yard's silence (the HUD's sound call goes nowhere) is caught by the mixer's channel count in tests/test_app/test_yard_app.cpp.",
   "baseline": {
     "build": [
       "test_yard",
@@ -687,7 +687,8 @@
       "build": [
         "test_yard"
       ],
-      "test": "./build/tests/test_app/test_yard"
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [V1]"
     },
     {
       "id": "app_plate_in_the_yard",
