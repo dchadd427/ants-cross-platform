@@ -536,6 +536,19 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     env.last().receive(welcome(1, KEY2, 0));
     check('... then it leaves', leaves(own) === 1 && own.closed);
 }
+{   // the row inside the card has the map's picture too (the list's rows and the card's are one code): an original's own, or the library's for a map of the players
+    for (const [map, src] of [['ISLANDS.LVL', 'front/preview_islands.png'], ['BarnEy PoPCORN 2.lvl', '/maps/previews/BarnEy%20PoPCORN%202.webp']]) {
+        const env = await withList([row('k7m2xq', 'Pebble', { map, people: 2, free: 2 })], { options: { picker: true } });
+        myRoom(env, ['Maya', 'Sage']);
+        env.roomBar('rhome').click();
+        await openGames(env);
+        tap(joinOf(rowsOf(env)[0]));
+        const box = dialogOf(env);
+        same('the card of "Leave your room?" shows the picture of the map that is joined (' + map + ')', [!!box, box && first(box, 'gmap').children.map((i) => i.src)], [true, [src]]);
+        first(box, 'gmap').children[0].fire('error');
+        same('... a picture that does not come is taken away there too (the square stays)', [first(box, 'gmap').children.length, find(box, 'gmap').length], [0, 1]);
+    }
+}
 {   // three or more in the room: no names, the one who has been there longest
     const env = await withList();
     myRoom(env, ['Maya', 'Sage', 'Pip']);
