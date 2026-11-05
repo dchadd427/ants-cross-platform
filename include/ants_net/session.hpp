@@ -42,7 +42,8 @@
 // A seat whose state differs from the referee's (docs/NETWORK_PORT.md "Sessions" and "Room"). Only a host without a seat has an independent referee: its own engine never takes a client's word, so when the hash that a seat
 // reports for a turn is not the referee's, the seat is the one that is wrong. The seat alone is told (a Desync) and is dropped as a seat that quits is (Sequencer::judge_hashes; a Quit in the turn stream, which ends a
 // match of two sides and ranks the seat last, else the seat's team drops out): its ants die, its alliance ends, its key is told "dropped", and the others go on. A match is only stopped when no seat at the table agrees with the
-// referee, and none can still say (it may be the referee that is wrong; every differing seat is told, nobody is dropped and the room fails). A host with a seat is itself the reference: it stops the match, as it always did.
+// referee, and none can still say (it may be the referee that is wrong; every differing seat is told, nobody is dropped and the room fails). A seat that is away, or came back after a turn was sealed, was not there to run
+// it: a turn that only such seats could vouch for is let go, and the next hashed turn decides. A host with a seat is itself the reference: it stops the match, as it always did.
 //
 // Coming back (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A dedicated server's room may HOLD the seat of a player whose connection is LOST instead of dropping it
 // (HostSession::Config::hold_seats, the server's `--reconnect`; every other host, a game on the local network above all, keeps the rules above). A connection is lost when its link

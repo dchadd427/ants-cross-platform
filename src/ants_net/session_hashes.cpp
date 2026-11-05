@@ -8,10 +8,12 @@ namespace ants::net {
 void HostSession::judge_hashes() {
     while (!frozen_) {                                   // (a frozen match is over, or stopped by a verdict already: nothing is left to protect)
         uint8_t seated = 0;                              // the people at the table: a seat that is held, a bot's and an empty one are not (they send no hashes)
+        uint8_t held = 0;                                // the seats that are away (a lost link, a machine that is coming back): they may be back and say of the turns that follow
         for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
             if (clients_[p].present && clients_[p].conn != nullptr) seated = static_cast<uint8_t>(seated | (1u << p));
+            if (seat_held(p)) held = static_cast<uint8_t>(held | (1u << p));
         }
-        const HashVerdict verdict = sequencer_.judge_hashes(seated);
+        const HashVerdict verdict = sequencer_.judge_hashes(seated, held);
         if (verdict.kind == HashVerdict::Kind::Nothing) return;
         if (verdict.kind == HashVerdict::Kind::Drop) {
             for (const DesyncMsg& d : verdict.seats) drop_diverged(d);

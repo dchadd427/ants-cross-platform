@@ -73,13 +73,16 @@ public:
     void set_host_player(uint8_t player) noexcept { host_player_ = player; }
     /// A host without a seat (a dedicated server) plays no player but runs the match on its own engine: its report is the reference (judge_hashes() weighs the seats' against it)
     void on_referee_hash(uint32_t turn, const sim::StateHash& hash);
-    /// A host without a seat: the referee's word on the seats of `seated` (a bit for each: the people who are at the table now) whose report of a turn differs from the referee's.
-    /// The decision depends on the reports and the acknowledgements alone, never on the clock or on which report came first. For the oldest turn that has such a seat and an answer:
+    /// A host without a seat: the referee's word on the seats of `seated` (a bit for each: the people who are at the table now) whose report of a turn differs from the referee's; `held` are the seats
+    /// that are away and may come back (a lost link, in a room that holds seats). The decision depends on the reports and the acknowledgements alone, never on the clock or on which report came first.
+    /// For the oldest turn that has such a seat and an answer:
     ///   - a seat of `seated` agrees with the referee: the seats that differ are to be dropped (Drop), the referee has a witness;
     ///   - no seat agrees and a seat that has not executed the turn yet may still report it: Nothing, the answer is awaited (a seat that is stuck is dropped by the lag policy);
+    ///   - no seat agrees and none can, but a seat is away or came to the table after the turn was sealed (it was not there to run it, and says nothing of it; it can say of the turns that follow):
+    ///     Nothing, the turn is let go and the next hashed turn decides;
     ///   - no seat agrees and none can: Fail. The referee may be the one that is wrong (a bug that only its machine has), so nobody is blamed.
     /// A turn is answered once; a seat that is not in `seated` (gone, held, a bot, never reported) is no witness and is not judged. Call it until it says Nothing.
-    HashVerdict judge_hashes(uint8_t seated);
+    HashVerdict judge_hashes(uint8_t seated, uint8_t held = 0);
 
     /// True unless an active peer's ack is more than max_lag_turns behind the next turn.
     bool can_seal() const noexcept;
@@ -103,6 +106,7 @@ private:
     Config cfg_;
     std::array<bool, sim::MAX_PLAYERS> active_{};
     std::array<uint32_t, sim::MAX_PLAYERS> acked_{};          // highest executed turn + 1 (0 = nothing executed yet)
+    std::array<uint32_t, sim::MAX_PLAYERS> joined_{};         // the turn at which the slot last became active (0: at the start): it was not at the table for the turns before it
     std::array<uint32_t, sim::MAX_PLAYERS> queued_by_{};
     std::vector<sim::Command> queue_;
     std::array<std::deque<sim::Command>, sim::MAX_PLAYERS> carry_;   // per player: the commands beyond max_commands_per_turn, in the order they came

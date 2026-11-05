@@ -21,8 +21,11 @@ void Sequencer::set_active(uint8_t player, bool active) {
             for (auto& entry : have_report_) entry.second[player] = false;
         }
     }
-    // a player that joins is level with the sequencer: it has "executed" everything before the current turn
-    if (active) acked_[player] = next_turn_;
+    // a player that joins is level with the sequencer: it has "executed" everything before the current turn (and was not at the table for any of them)
+    if (active) {
+        acked_[player] = next_turn_;
+        joined_[player] = next_turn_;
+    }
 }
 
 bool Sequencer::submit(uint8_t player, sim::Command command) {
@@ -56,6 +59,7 @@ void Sequencer::resume(uint32_t next_turn) {
     have_report_.clear();
     referee_.clear();
     acked_.fill(0);
+    joined_.fill(0);
     active_.fill(false);                             // the new host activates the peers that follow it, one by one
 }
 
@@ -135,7 +139,7 @@ std::vector<DesyncMsg> Sequencer::on_hash(uint8_t player, uint32_t turn, const s
     return out;
 }
 
-HashVerdict Sequencer::judge_hashes(uint8_t seated) {
+HashVerdict Sequencer::judge_hashes(uint8_t seated, uint8_t held) {
     HashVerdict verdict;
     for (auto it = suspect_.begin(); it != suspect_.end();) {
         const uint32_t turn = *it;
@@ -149,6 +153,7 @@ HashVerdict Sequencer::judge_hashes(uint8_t seated) {
         uint8_t agree = 0;                           // the seats at the table that report the referee's state, report another, or have not executed the turn yet
         uint8_t differ = 0;
         uint8_t waiting = 0;
+        uint8_t later = 0;                           // the seats that came to the table after the turn was sealed: they were not there to run it
         for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
             if ((seated & bit(p)) == 0 || !active_[p]) continue;
             if (have->second[p]) {
@@ -156,6 +161,8 @@ HashVerdict Sequencer::judge_hashes(uint8_t seated) {
                 side = static_cast<uint8_t>(side | bit(p));
             } else if (acked_[p] <= turn) {          // (a client sends its hash of a turn before its acknowledgement of it: one that has executed the turn and said nothing never will)
                 waiting = static_cast<uint8_t>(waiting | bit(p));
+            } else if (joined_[p] > turn) {
+                later = static_cast<uint8_t>(later | bit(p));
             }
         }
         if (differ == 0) {                           // the seat that differed is gone (dropped, lost): nothing to judge
@@ -164,6 +171,10 @@ HashVerdict Sequencer::judge_hashes(uint8_t seated) {
         }
         if (agree == 0 && waiting != 0) {            // nobody has vouched for the referee yet and somebody still may: wait for the answer
             ++it;
+            continue;
+        }
+        if (agree == 0 && (later != 0 || held != 0)) {       // nobody who was there can say, but a seat that is away or came later can say of the turns that follow: this one is let go
+            it = suspect_.erase(it);
             continue;
         }
         verdict.kind = agree != 0 ? HashVerdict::Kind::Drop : HashVerdict::Kind::Fail;
