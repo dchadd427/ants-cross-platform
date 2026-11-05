@@ -10,6 +10,7 @@
 //   uint8_t* lvl_same_level(a, size_a, b, size_b, profile)         JSON {"same": ...} (lvl_core::same_level)
 //   uint8_t* lvl_check_map(data, size, profile)                    JSON findings of a file by its kind, Classic or Extended (lvl_core::check_map)
 //   uint8_t* lvl_convert_to_extended(data, size)                   a conversion: the JSON of the answer and the Extended file (lvl_core::convert_to_extended)
+//   uint8_t* lvl_convert_to_long_orders(data, size)                a conversion as lvl_convert_to_extended, with the rules word 2 in the new file (lvl_core::convert_to_long_orders)
 //   uint8_t* lvl_convert_to_classic(data, size, profile)           a conversion: the JSON of the answer and the Classic file (lvl_core::convert_to_classic)
 //   uint8_t* lvl_needs_extended(data, size, profile)               JSON: why a map cannot be a Classic map (lvl_core::needs_extended)
 //   uint8_t* lvl_blank_extended(rows, columns, ground_tile, eggs, minutes)   a new Extended map's bytes (lvl_core::blank_extended)
@@ -19,9 +20,9 @@
 //   uint32_t lvl_result_status(const uint8_t* result)              0 the answer, 1 a refusal (the payload is a sentence), 2 a fault or no memory (a sentence, empty when even that did not fit); a null block reads as 2
 //   uint32_t lvl_result_size(const uint8_t* result)                the bytes of the payload
 //   const uint8_t* lvl_result_data(const uint8_t* result)          the payload (valid until lvl_free(result))
-//   uint32_t lvl_interface_version()                               4 (1: the five calls of the first version; 2 adds the Extended profile and the calls that follow them; 3 adds lvl_set_properties; 4 adds lvl_crop)
+//   uint32_t lvl_interface_version()                               5 (1: the five calls of the first version; 2 adds the Extended profile and the calls that follow them; 3 adds lvl_set_properties; 4 adds lvl_crop; 5 adds lvl_convert_to_long_orders)
 //
-// A conversion's payload (and lvl_set_properties's and lvl_crop's) is a dword (the size of the JSON), the JSON, then the new file: lvl_core.hpp, convert_to_extended.
+// A conversion's payload (and lvl_set_properties's and lvl_crop's, and lvl_convert_to_long_orders's) is a dword (the size of the JSON), the JSON, then the new file: lvl_core.hpp, convert_to_extended.
 // `profile`: 0 the limits of a new Classic map (LevelLimits::for_new_maps()), 1 the game's own (LevelLimits{}), 2 a place that takes Extended maps too (LevelLimits::for_extended_maps()). A call returns 0 only when there is no memory left for its answer.
 #include "ants_assets/lvl_core.hpp"
 
@@ -76,6 +77,7 @@ LVL_CORE_EXPORT uint8_t* lvl_blank(uint32_t rows, uint32_t columns, uint32_t gro
 }
 LVL_CORE_EXPORT uint8_t* lvl_check_map(const uint8_t* data, uint32_t size, uint32_t profile) { return block_of(ants::assets::lvl_core::check_map(data, size, profile_of(profile))); }
 LVL_CORE_EXPORT uint8_t* lvl_convert_to_extended(const uint8_t* data, uint32_t size) { return block_of(ants::assets::lvl_core::convert_to_extended(data, size)); }
+LVL_CORE_EXPORT uint8_t* lvl_convert_to_long_orders(const uint8_t* data, uint32_t size) { return block_of(ants::assets::lvl_core::convert_to_long_orders(data, size)); }
 LVL_CORE_EXPORT uint8_t* lvl_convert_to_classic(const uint8_t* data, uint32_t size, uint32_t profile) { return block_of(ants::assets::lvl_core::convert_to_classic(data, size, profile_of(profile))); }
 LVL_CORE_EXPORT uint8_t* lvl_needs_extended(const uint8_t* data, uint32_t size, uint32_t profile) { return block_of(ants::assets::lvl_core::needs_extended(data, size, profile_of(profile))); }
 LVL_CORE_EXPORT uint8_t* lvl_blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes) {
@@ -96,4 +98,4 @@ LVL_CORE_EXPORT uint8_t* lvl_same_level(const uint8_t* a, uint32_t size_a, const
 LVL_CORE_EXPORT uint32_t lvl_result_status(const uint8_t* result) { return result == nullptr ? 2 : get_u32(result); }
 LVL_CORE_EXPORT uint32_t lvl_result_size(const uint8_t* result) { return result == nullptr ? 0 : get_u32(result + 4); }
 LVL_CORE_EXPORT const uint8_t* lvl_result_data(const uint8_t* result) { return result == nullptr ? nullptr : result + kHeader; }
-LVL_CORE_EXPORT uint32_t lvl_interface_version() { return 4; }
+LVL_CORE_EXPORT uint32_t lvl_interface_version() { return 5; }

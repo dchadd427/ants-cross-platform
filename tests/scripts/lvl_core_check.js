@@ -15,6 +15,7 @@
 //   C  a blank map of each size passes the checker where it should: it fits the place and its only findings are the missing hills and starting ants
 //   D  hostile input (empty, one byte, cut, 513 KB, huge counts, random bytes, wrong arguments): an error report, never a throw, never a hang, and the module's memory does
 //      not grow when the same calls are made again (every buffer was given back)
+//   E  the long-order conversion (interface version 5) is the plain conversion with the rules word 2 (byte 14) and nothing else different, on the whole set and on 2,000 mutated files
 // (The match fingerprint is not used: no native tool prints one for a map file. The round-trip law that the writer keeps, same play after a rewrite, is test_lvl_writer's.)
 'use strict';
 
@@ -46,6 +47,8 @@ async function runCase(name, fn) {
     }
     if (failures === before) console.log('PASS');
 }
+
+function tiny0(library) { return library.find((c) => c.id === 'tiny').bytes; }
 
 function parseArgs(argv) {
     const o = { module: process.env.ANTS_LVL_CORE_DIR || path.join(ROOT, 'build_web', 'lvl_core'), lvlTool: '', require: false };
@@ -172,8 +175,9 @@ function main() {
         const hostile = hostileCases();
 
         await runCase('module: the interface', () => {
-            check(core.interfaceVersion === 4, 'interface version 4');
+            check(core.interfaceVersion === 5, 'interface version 5');
             check(typeof module._lvl_free === 'function' && typeof module._lvl_alloc === 'function', 'the buffer calls are exported');
+            check(typeof module._lvl_convert_to_long_orders === 'function', 'the long-order conversion is exported');
             check(module.FS === undefined, 'no file system in the module');
         });
 
@@ -289,9 +293,12 @@ function main() {
                 check(chk.status === 0 && chk.json.works_in_original_game === false && chk.text === text(c.id + '.check.json'), c.id + ': it does not work in the original game, as the native check says');
                 check(rw.status === 1 && rw.bytes === undefined && rw.error === expected[c.id][4], c.id + ': no rewrite, the native sentence');
                 check(same.status === 1, c.id + ': no comparison');
+                const lo = core.convertToLongOrders(c.bytes), plain = core.convertToExtended(c.bytes);
+                check(lo.status === 1 && lo.bytes === undefined && lo.error === plain.error && /does not load/.test(lo.error), c.id + ': the long-order conversion refuses it as the plain one does: ' + lo.error);
             }
             // wrong arguments
             check(core.readReport(null).status === 1 && core.readReport('abc').status === 1 && core.readReport([1, 2]).status === 1, 'something that is no Uint8Array is refused');
+            check(core.convertToLongOrders(null).status === 1 && core.convertToLongOrders('abc').status === 1 && core.convertToLongOrders([1, 2]).status === 1 && core.convertToLongOrders(new Uint8Array(0)).status === 1, 'so is it for the long-order conversion');
             check(core.sameLevel(new Uint8Array(0), 5).status === 1, 'the second file must be bytes too');
             check(core.readReport(new Uint8Array(0), 'bogus').status === 1 && core.readReport(new Uint8Array(0), 'game').status === 0, 'an unknown profile is refused');
             // 513 KB is a new map's limit, not the game's
@@ -316,7 +323,7 @@ function main() {
             check(core.limits('extended').json.extended.rows === 1024 && core.limits('extended').json.extended.cells === 262144 && core.limits('extended').json.classic.rows === 256, 'the Extended profile: 1,024 a side, 262,144 cells, a Classic map keeps 256');
             check(core.limits('new_map').json.classic.rows === 90 && core.limits('new_map').json.extended === null, 'a new Classic map: 90 rows, no Extended map');
             check(core.limits('bogus').status === 1 && core.checkMap(new Uint8Array(0), 'bogus').status === 1 && core.convertToClassic(new Uint8Array(0), 'bogus').status === 1 && core.needsExtended(new Uint8Array(0), 'bogus').status === 1, 'an unknown profile is refused');
-            check(api.EXPECTED_INTERFACE === 4 && api.moduleVersion(module) === 4 && api.moduleVersion({}) === 0 && api.moduleVersion({ _lvl_interface_version: () => 1 }) === 1 && api.moduleVersion(null) === 0, 'the version a page can ask for before it wraps a module');
+            check(api.EXPECTED_INTERFACE === 5 && api.moduleVersion(module) === 5 && api.moduleVersion({}) === 0 && api.moduleVersion({ _lvl_interface_version: () => 1 }) === 1 && api.moduleVersion(null) === 0, 'the version a page can ask for before it wraps a module');
             const tiny = library.find((c) => c.id === 'tiny').bytes;
             const up = core.convertToExtended(tiny);
             check(up.status === 0 && up.json.ok === true, 'tiny goes up');
@@ -363,6 +370,21 @@ function main() {
                 check(rw.status === 0 && Buffer.compare(Buffer.from(rw.bytes), Buffer.from(back.bytes)) === 0, c.id + ': up and back is the canonical file');
                 check(core.needsExtended(up.bytes, 'extended').json.needs_extended === false && core.needsExtended(c.bytes).json.needs_extended === false, c.id + ': it needs nothing');
             }
+            // the long-order conversion (interface version 5): the plain copy with the rules word 2 and nothing else different, the source untouched, on every file of the set
+            for (const c of library) {
+                const up = core.convertToExtended(c.bytes), keep = c.bytes.slice();
+                const lo = core.convertToLongOrders(c.bytes);
+                check(lo.status === 0 && lo.json.ok === true && lo.json.from === 'classic' && lo.json.to === 'extended' && lo.text === up.text, c.id + ': the answer of the long-order conversion is the plain one\'s, word for word');
+                check(up.bytes[14] === 0 && lo.bytes[14] === 2 && lo.bytes[15] === 0 && lo.bytes.length === up.bytes.length && lo.bytes.every((b, i) => i === 14 || i === 15 ? true : b === up.bytes[i]), c.id + ': nothing but the rules word (byte 14) differs from the plain copy');
+                check(Buffer.compare(Buffer.from(c.bytes), Buffer.from(keep)) === 0, c.id + ': the bytes that were given are as they were');
+                check(core.readReport(lo.bytes, 'extended').json.loaded === true && core.sameLevel(up.bytes, lo.bytes, 'extended').text === '{"same":false,"difference":"rules: 0 / 2"}', c.id + ': the one difference of the two levels is the word');
+                const again = core.convertToLongOrders(lo.bytes);
+                check(again.json.from === 'extended' && Buffer.compare(Buffer.from(again.bytes), Buffer.from(lo.bytes)) === 0, c.id + ': converting it again changes nothing');
+                check(Buffer.compare(Buffer.from(core.convertToLongOrders(up.bytes).bytes), Buffer.from(lo.bytes)) === 0, c.id + ': an Extended map of rules 0 goes to the same file');
+                const back = core.convertToClassic(lo.bytes);
+                check(back.status === 0 && back.json.ok === true && codesOf(back.json.notes).includes('rules_long_orders_dropped') && Buffer.compare(Buffer.from(back.bytes), Buffer.from(core.rewrite(c.bytes).bytes)) === 0, c.id + ': a Classic map from it says what is lost and is the canonical file again');
+            }
+            check(core.convertToLongOrders(Uint8Array.of(8)).status === 1 && core.convertToLongOrders(tiny0(library)).status === 0, 'a file that does not load is refused, a map is converted');
             const refused = core.convertToExtended(Uint8Array.of(8));
             check(refused.status === 1 && refused.bytes === undefined && /does not load/.test(refused.error), 'a file that does not load is not converted: ' + refused.error);
             check(core.convertToClassic(new Uint8Array(0)).status === 1 && core.convertToExtended('abc').status === 1, 'nor is something that is no bytes');
@@ -442,7 +464,50 @@ function main() {
                 check(map.status === 0 && map.json.works === false && map.text === text(c.id + '.map.json'), c.id + ': it does not work, as the native check says');
                 check(read.status === 0 && read.json.loaded === false && read.text === text(c.id + '.read.json'), c.id + ': it does not load, as the native report says');
                 check(down.status === 1 && down.error === expected[c.id][2] && core.convertToExtended(c.bytes).status === 1 && core.needsExtended(c.bytes, 'extended').status === 1, c.id + ': it is not converted, the native sentence');
+                const lo = core.convertToLongOrders(c.bytes);
+                check(lo.status === 1 && lo.error === down.error && lo.bytes === undefined, c.id + ': nor with long orders, the native sentence');
             }
+        });
+
+        await runCase('E the long-order conversion on mutated files: no throw, 0 or 1, the plain conversion\'s answer, and a file of rules 2 that has the plain copy\'s cells', () => {
+            const tiny = library.find((c) => c.id === 'tiny').bytes;
+            const up = core.convertToExtended(tiny).bytes;
+            const shift = 18 + (up[16] | (up[17] << 8)) - 40;
+            const one = up.slice(); one[14] = 1;
+            const seeds = [tiny, up, one, core.blankExtended(95, 20, 485, 6, 10).bytes];
+            const interesting = [0, 1, 2, 3, 7, 8, 9, 10, 89, 90, 91, 255, 256, 257, 1024, 1025, 65535, 65536, 0x7FFFFFFF, 0x80000000, 0xFFFFFFFF];
+            let x = 20241104;
+            const rnd = (n) => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return n === 0 ? 0 : (x >>> 0) % n; };
+            let inputs = 0, converted = 0, refused = 0, bad = 0, worst = 0;
+            for (const seed of seeds) {
+                for (let i = 0; i < 500; i++) {
+                    let b = seed.slice();
+                    switch (rnd(8)) {
+                        case 0: for (let k = 1 + rnd(8); k > 0; k--) b[rnd(b.length)] = rnd(256); break;
+                        case 1: for (let k = 1 + rnd(4); k > 0; k--) b[rnd(64)] = rnd(256); break;
+                        case 2: b = b.slice(0, rnd(b.length)); break;
+                        case 3: { const at = rnd(b.length), grow = 1 + rnd(40), v = rnd(256), n = new Uint8Array(b.length + grow); n.set(b.subarray(0, at)); n.fill(v, at, at + grow); n.set(b.subarray(at), at + grow); b = n; break; }
+                        case 4: { const at = rnd(b.length), cut = Math.min(1 + rnd(40), b.length - at), n = new Uint8Array(b.length - cut); n.set(b.subarray(0, at)); n.set(b.subarray(at + cut), at); b = n; break; }
+                        case 5: { const at = rnd(2) === 0 ? 0 : 4 + 4 * rnd(3); if (b.length > at + 4) put32(b, at, interesting[rnd(21)]); break; }
+                        case 6: { const at = (seed[0] === 9 ? 7412 + shift : 7412) + 4 * rnd(2); if (b.length > at + 4) put32(b, at, interesting[rnd(21)]); break; }
+                        default: if (b.length > 17) { b[10 + rnd(4)] = rnd(4); b[14] = rnd(5); b[15] = rnd(3) === 0 ? rnd(256) : 0; }
+                    }
+                    const before = Date.now();
+                    const lo = core.convertToLongOrders(b), plain = core.convertToExtended(b);
+                    worst = Math.max(worst, Date.now() - before);
+                    inputs++;
+                    if (lo.status > 1 || lo.status !== plain.status || lo.text !== plain.text) { bad++; if (bad < 4) console.log('    ' + (lo.error || lo.text).slice(0, 100) + ' / ' + (plain.error || plain.text).slice(0, 100)); continue; }
+                    if (lo.status === 1) { refused++; continue; }
+                    if (lo.json.ok !== true) { check(lo.bytes === undefined, 'no file when the map cannot be converted (input ' + inputs + ')'); continue; }
+                    converted++;
+                    const read = core.readReport(lo.bytes, 'extended');
+                    if (!(read.json.loaded === true && lo.bytes[14] === 2 && lo.bytes[15] === 0 && lo.bytes.length === plain.bytes.length && lo.bytes.every((v, k) => k === 14 || k === 15 || v === plain.bytes[k]))) { bad++; if (bad < 4) console.log('    input ' + inputs + ': what was made is not the plain copy with the word 2'); }
+                }
+            }
+            check(bad === 0, 'every answer is the plain conversion\'s, and every file made is the plain copy with rules 2: ' + bad + ' differ');
+            check(inputs === 2000 && converted > 100 && refused > 100, 'mutated files met both answers: ' + inputs + ' inputs, ' + converted + ' converted, ' + refused + ' refused');
+            check(worst < 2000, 'no file took the call long (' + worst + ' ms at most)');
+            console.log('(' + inputs + ' mutated files: ' + converted + ' converted, ' + refused + ' refused) ');
         });
 
         await runCase('F the properties: the module sets them as the native core does; the values a file has give the same bytes; the edits are the pieces that changed', () => {
@@ -568,7 +633,7 @@ function main() {
             const round = () => {
                 c2.readReport(bomber); c2.checkOriginal(bomber); const rw = c2.rewrite(bomber); c2.sameLevel(bomber, rw.bytes);
                 c2.blank(90, 90, 485, 6, 10);
-                const small = c2.convertToExtended(library[0].bytes); c2.checkMap(small.bytes, 'extended'); c2.convertToClassic(small.bytes); c2.needsExtended(small.bytes, 'extended');
+                const small = c2.convertToExtended(library[0].bytes); c2.convertToLongOrders(library[0].bytes); c2.convertToLongOrders(small.bytes); c2.checkMap(small.bytes, 'extended'); c2.convertToClassic(small.bytes); c2.needsExtended(small.bytes, 'extended');
                 c2.convertToClassic(c2.blankExtended(95, 20, 485, 6, 10).bytes); c2.limits('extended'); c2.checkMap(bomber);
                 c2.setProperties(bomber, 'A new text', 7, 3, 63); c2.setProperties(small.bytes, 'x'.repeat(256), 7, 3, 63, 'extended'); c2.setProperties(small.bytes, 'Caf\u00e9', 7, 3, 63, 'extended');
                 c2.crop(small.bytes, 3, 4, 20, 18, 'extended'); c2.crop(bomber, 5, 5, 60, 60, 'extended'); c2.crop(small.bytes, 0, 0, 0, 1, 'extended');
@@ -590,13 +655,19 @@ function main() {
         await runCase('wrapper: a module of another interface version is refused, a trap kills the core', () => {
             let threw = '';
             try { api.wrap({ _lvl_interface_version: () => 1 }); } catch (e) { threw = e.message; }
-            check(/interface version 1/.test(threw) && /needs 4/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
+            check(/interface version 1/.test(threw) && /needs 5/.test(threw), 'a module of interface version 1 (the first one) is refused with a sentence: ' + threw);
             threw = '';
             try { api.wrap({ _lvl_interface_version: () => 2 }); } catch (e) { threw = e.message; }
-            check(/interface version 2/.test(threw) && /needs 4/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 2 (the one before the properties) is refused with a sentence that says to reload: ' + threw);
+            check(/interface version 2/.test(threw) && /needs 5/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 2 (the one before the properties) is refused with a sentence that says to reload: ' + threw);
             threw = '';
             try { api.wrap({ _lvl_interface_version: () => 3 }); } catch (e) { threw = e.message; }
-            check(/interface version 3/.test(threw) && /needs 4/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 3 (the one before the crop) is refused with a sentence that says to reload: ' + threw);
+            check(/interface version 3/.test(threw) && /needs 5/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 3 (the one before the crop) is refused with a sentence that says to reload: ' + threw);
+            threw = '';
+            try { api.wrap({ _lvl_interface_version: () => 4 }); } catch (e) { threw = e.message; }
+            check(/interface version 4/.test(threw) && /needs 5/.test(threw) && /reload the page/.test(threw), 'a cached module of interface version 4 (the one before the long orders) is refused with a sentence that says to reload: ' + threw);
+            threw = '';
+            try { api.wrap({ _lvl_interface_version: () => 6 }); } catch (e) { threw = e.message; }
+            check(/interface version 6/.test(threw) && /needs 5/.test(threw), 'and a module of a later version is refused too: ' + threw);
             threw = '';
             try { api.wrap({}); } catch (e) { threw = e.message; }
             check(/interface version 0/.test(threw), 'a module with no version call is refused');
@@ -610,13 +681,13 @@ function main() {
             check(first.status === 2 && /unreachable/.test(first.error), 'the trap is a status 2 with its sentence: ' + first.error);
             check(c3.isDead() === true, 'the core is dead after a trap');
             for (const r of [c3.readReport(new Uint8Array(1)), c3.checkOriginal(new Uint8Array(1)), c3.rewrite(new Uint8Array(1)), c3.sameLevel(new Uint8Array(1), new Uint8Array(1)), c3.blank(31, 31, 485, 6, 10),
-                c3.checkMap(new Uint8Array(1)), c3.convertToExtended(new Uint8Array(1)), c3.convertToClassic(new Uint8Array(1)), c3.needsExtended(new Uint8Array(1)), c3.blankExtended(31, 31, 485, 6, 10), c3.limits(), c3.setProperties(new Uint8Array(1), 'x', 1, 1, 1), c3.crop(new Uint8Array(1), 0, 0, 1, 1)]) {
+                c3.checkMap(new Uint8Array(1)), c3.convertToExtended(new Uint8Array(1)), c3.convertToClassic(new Uint8Array(1)), c3.needsExtended(new Uint8Array(1)), c3.blankExtended(31, 31, 485, 6, 10), c3.limits(), c3.setProperties(new Uint8Array(1), 'x', 1, 1, 1), c3.crop(new Uint8Array(1), 0, 0, 1, 1), c3.convertToLongOrders(new Uint8Array(1))]) {
                 check(r.status === 2 && /stopped/.test(r.error) && /create the module again/.test(r.error), 'every later call fails clearly: ' + r.error);
             }
             // a trap in a conversion, in the check by kind, in the limits: the same
             for (const [name, call] of [['_lvl_convert_to_extended', (c) => c.convertToExtended(new Uint8Array(4))], ['_lvl_convert_to_classic', (c) => c.convertToClassic(new Uint8Array(4))], ['_lvl_check_map', (c) => c.checkMap(new Uint8Array(4))],
                 ['_lvl_needs_extended', (c) => c.needsExtended(new Uint8Array(4))], ['_lvl_blank_extended', (c) => c.blankExtended(31, 31, 485, 6, 10)], ['_lvl_limits', (c) => c.limits()],
-                ['_lvl_set_properties', (c) => c.setProperties(new Uint8Array(4), 'x', 1, 1, 1)], ['_lvl_crop', (c) => c.crop(new Uint8Array(4), 0, 0, 1, 1)]]) {
+                ['_lvl_set_properties', (c) => c.setProperties(new Uint8Array(4), 'x', 1, 1, 1)], ['_lvl_crop', (c) => c.crop(new Uint8Array(4), 0, 0, 1, 1)], ['_lvl_convert_to_long_orders', (c) => c.convertToLongOrders(new Uint8Array(4))]]) {
                 const trap = Object.create(real);
                 trap[name] = () => { throw new WebAssembly.RuntimeError('unreachable'); };
                 const cc = api.wrap(trap);

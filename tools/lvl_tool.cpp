@@ -1090,7 +1090,7 @@ int selftest() {
                         auto_level.load_from_memory(auto_bytes.data(), auto_bytes.size(), nullptr, LevelLimits::for_extended_maps()) && auto_level.rules == LVL_RULES_LONG_ORDERS,
                     "convert --rows 300 --columns 300 without --rules: a side above 256 gets rules 2 by itself");
             const Run back_down = run_words({"convert", two_path, "--to", "classic", "-o", dir.file("tiny_rules2_back.lvl")});
-            t.check(back_down.status == 0 && has(back_down.out, "note: the map asks for the long-order rules (rules 2)"), "convert a map of rules 2 --to classic: written, with the note that the rules are dropped: " + back_down.out);
+            t.check(back_down.status == 0 && has(back_down.out, "note: the map has long orders (rules 2); a Classic map has the original's rules only, so a long path order can fail there"), "convert a map of rules 2 --to classic: written, with the note that the rules are dropped: " + back_down.out);
             t.check(run_words({"convert", tiny_path, "--to", "classic", "-o", dir.file("r2c.lvl"), "--rules", "2"}).status == 2 && run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r1.lvl"), "--rules", "1"}).status == 2 &&
                         run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r3.lvl"), "--rules", "3"}).status == 2 && run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r0.lvl"), "--rules"}).status == 2 &&
                         run_words({"check", tiny_path, "--rules", "2"}).status == 2,

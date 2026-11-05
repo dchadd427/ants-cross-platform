@@ -202,7 +202,7 @@
             function build(body, c) {
                 ctl = c;
                 var tags = h('span', 'tags'), pic = env.thumb(cur.file);
-                env.tags(tags, kind);
+                env.tags(tags, kind, cur.file.rules);
                 body.appendChild(h('p', 'lead', 'Send your map to the owner of the game. If the owner approves it, it joins the map list for everyone.'));
                 body.appendChild(h('div', 'srccard', [pic ? h('span', 'cthumb', pic) : '', h('div', 'st', [h('div', 'sh', [tags]), h('div', 'sl', cur.file.rows + ' x ' + cur.file.columns + (env.sent.status() === 'ready' ? ' · saved in this browser' : ''))])]));
                 body.appendChild(h('div', 'cname', [h('label', '', 'Name of the map', { 'for': 'sub-name' }), nameIn, nameBox]));
@@ -308,7 +308,7 @@
         function row(rec, ui, paint) {
             var st = statusOf(rec), file = rec.bytes ? env.parse(new Uint8Array(rec.bytes)) : null, node = h('div', 'mrow'), tags = h('span', 'tags'), acts = h('div', 'macts'), mid = h('div', 'mmid'), name = String(rec.name || '');
             var rows = rec.height || rec.rows, cols = rec.width || rec.columns, pic = file && env.thumb(file);
-            env.tags(tags, rec.kind === 'extended' ? 'extended' : 'classic');
+            env.tags(tags, rec.kind === 'extended' ? 'extended' : 'classic', file && file.rules);
             mid.appendChild(h('div', 't1', [name + ' ', tags]));
             mid.appendChild(h('div', 't2', 'Sent ' + when(rec.sent_at || 0, env.now()) + (rows && cols ? ' · ' + rows + ' x ' + cols : '')));
             mid.appendChild(h('div', 't3', [h('i', 'dot ' + st[0]), h('span', 'st-' + st[0], st[1])]));

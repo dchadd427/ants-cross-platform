@@ -22,6 +22,10 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .tags { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
 .tag-join { display: none; color: var(--gold); background: var(--ext-bg); border: 1px solid var(--ext-edge); border-left: 4px solid var(--nv-edge); white-space: normal; }
 @media (max-width: 359px) { .tags .tag-ext, .tags .badge-nv { display: none; } .tags .tag-join { display: inline-block; } }
+/* "Rules 2": the chip on the heading line of This map where the tag row is not shown, and two badges on a line of their own on a phone; never in the top bar (a third badge makes it 28 px taller) */
+.side h3 .tags { display: none; float: right; margin-top: -3px; text-transform: none; letter-spacing: .03em; }
+@media (min-width: 601px) and (min-height: 451px) and (max-height: 860px) { .side h3 .tags { display: inline-flex; } .side h3 .tags:empty { display: none; } }
+@media (max-width: 600px) { #size-line .sizebadges.two { display: block; } #size-line .two .badge-nv { font-size: 12px; padding: 1px 6px; } }
 @media (max-width: 340px) { #edges-btn { font-size: 12px; padding: 0 1px; min-width: 0; } .drawopts { gap: 1px; } }
 
 /* the screen: top bar, then tools - map - side */
