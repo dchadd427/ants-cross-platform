@@ -33,6 +33,7 @@
 #include <thread>
 #include <vector>
 #include "../common/test_assert.hpp"
+#include "../test_server/big_map_fixtures.hpp"
 
 #if defined(_WIN32)
 #include <process.h>
@@ -1386,6 +1387,38 @@ int main(int argc, char* argv[]) {
             const std::vector<uint8_t> too_long = with_filler(bytes, replay::kMaxFileBytes);
             Viewer v(too_long, "long.antsrep", false, empty.path().string());
             ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::Unreadable);
+            v.app.shutdown();
+        }
+    } TEST_END();
+
+    TEST_CASE("RA7.10 A map that the file carries and that starts more than 8,000 ants is refused at once (failure 4 with the count) and never set up, where setting up 64,000 takes seconds natively and minutes in a browser; a file that carries 8,000 is not refused for its ants") {
+        const Handmade made = make_handmade(700, true);
+        ASSERT_FALSE(made.bytes.empty());
+        ScratchRoot empty;                                                                  // (a maps folder that holds a map, SMALL, and not the one of the match: the application needs one to start)
+        fs::copy_file(maps_dir() + "/SMALL.LVL", empty.path() / "SMALL.LVL");
+        const auto carrying = [&](const std::string& map) {
+            replay::Replay r = made.file;
+            r.embedded_map.assign(map.begin(), map.end());
+            r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+            std::string error;
+            return replay::encode(r, error);
+        };
+        {   // exactly the limit: the file is not refused for its ants (what its match does on that map is not this test's business: nothing is played)
+            const std::string at = tiny_with_ants({2000, 2000, 2000, 2000});
+            ASSERT_FALSE(at.empty());
+            Viewer v(carrying(at), "at.antsrep", false, empty.path().string());
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::None);
+            v.app.shutdown();
+        }
+        {   // 64,000 ants: refused while the file is read, the frames in which the match would be set up do nothing, and it all takes no time
+            const std::string crowd = tiny_with_ants({16000, 16000, 16000, 16000});
+            ASSERT_FALSE(crowd.empty());
+            const auto started = std::chrono::steady_clock::now();
+            Viewer v(carrying(crowd), "crowd.antsrep", false, empty.path().string());
+            v.frames(40);
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap && v.state() == ReplayState::Failed);
+            ASSERT_TRUE(v.app.replay_failure_text().find("64000 ants") != std::string::npos);
+            ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(10));
             v.app.shutdown();
         }
     } TEST_END();

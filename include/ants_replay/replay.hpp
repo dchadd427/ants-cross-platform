@@ -45,6 +45,12 @@ inline constexpr size_t kMaxFileBytes = 1u << 20;      // 1 MiB: a heavy half ho
 inline constexpr size_t kChunkFrameBytes = 4 + 4 + 4;  // a chunk's tag, length and checksum
 inline constexpr size_t kMaxEmbeddedMapBytes = 1u << 20;   // 1 MiB: a map of 65,536 cells (the most that a room plays) is about 0.8 MB, a Classic map at most 512 KB
 inline constexpr size_t kMaxFileBytesWithMap = kMaxFileBytes + kMaxEmbeddedMapBytes + kChunkFrameBytes;   // the longest file there can be: 2 MiB and the frame of the map's chunk (a reader refuses more before it reads a byte)
+/// The most starting ants (the start markers of the four colors added up) that a map carried in a file may start. A viewer sets the match up on its own machine, in one thread, and setting the ants up grows with the square
+/// of their number (natively 6,000 ants take about 50 ms, 10,000 about 0.5 s, 40,000 about 9 s: ants_server/online_limits.hpp; WebAssembly is several times slower, and the page's timers cannot run meanwhile, so no card
+/// could say what is wrong). 8,000 is above every map of the library (at most 248) and of the players (the largest, 6,000); load_embedded_map refuses a map above it with one sentence. A library map is never counted (the
+/// server's own files), and this is not the rooms' cap (OnlineLimits::kMaxStartAnts), which is another thing and may move: a viewer shows what a device can play. The page counts the same markers before it starts the
+/// game (web/map_files.js MAX_EMBEDDED_ANTS: tests/scripts/test_web_replay_open.py pins both numbers equal). A writer that carries a map in a file must keep to it.
+inline constexpr uint32_t kMaxEmbeddedStartAnts = 8000;
 /// The longest file that holds `embedded_map_bytes` bytes of map (0: no tmap chunk): the match's kMaxFileBytes plus the map's whole chunk
 constexpr size_t max_file_bytes(size_t embedded_map_bytes) noexcept { return kMaxFileBytes + (embedded_map_bytes == 0 ? size_t{0} : embedded_map_bytes + kChunkFrameBytes); }
 inline constexpr uint32_t kMaxTurns = 1u << 21;        // 29 hours of play: more is not a match

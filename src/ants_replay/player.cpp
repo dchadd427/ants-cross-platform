@@ -104,6 +104,15 @@ bool load_embedded_map(const Replay& replay, assets::LevelData& level, std::stri
         error = "the map in the replay cannot be loaded" + (verdict.first_fatal() ? ": " + verdict.reason() : std::string());
         return false;
     }
+    // (a stranger's file: setting up the ants of a map that starts tens of thousands holds the one thread for seconds natively and minutes in a browser: a map above the limit is refused before any match is made of it)
+    uint64_t ants = 0;
+    for (const assets::AnthillSpawn& spawn : level.anthill_spawns()) {
+        if (spawn.team_id < 4) ++ants;
+    }
+    if (ants > kMaxEmbeddedStartAnts) {
+        error = "the map in the replay starts " + std::to_string(ants) + " ants (the start markers of the four colors), more than the " + std::to_string(kMaxEmbeddedStartAnts) + " that a replay is set up with";
+        return false;
+    }
     return true;
 }
 

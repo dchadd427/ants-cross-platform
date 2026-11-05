@@ -1,0 +1,61 @@
+{
+ "note": "Mutants of the limit on the starting ants of a map that a replay file carries (include/ants_replay/replay.hpp kMaxEmbeddedStartAnts, checked in load_embedded_map; docs/REPLAYS.md \"A file of your own\", the paragraph \"A hostile file\") for tools/mutate.py (docs/WORKFLOW.md): RP9.11 of tests/test_replay/test_replay.cpp (the limit, the plants, 64,000 ants refused in no time, a folder's map never counted) and RA7.10 of tests/test_app/test_replay_app.cpp (the application refuses at once with failure 4 and the count). Run from a build folder: python3 tools/mutate.py tests/data/replay_ants_guard_mutants.json --keep-going --jobs 3 --timeout 900. Every mutant must be caught. Each `why` names what the mutant loses.",
+ "defaults": {
+  "build": [
+   "test_replay",
+   "test_replay_app"
+  ],
+  "test": "ANTS_TEST_FILTER=RP9.11 ./build/tests/test_replay/test_replay && ANTS_TEST_FILTER=RA7.10 ./build/tests/test_app/test_replay_app"
+ },
+ "mutants": [
+  {
+   "id": "the_guard_is_gone",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (ants > kMaxEmbeddedStartAnts) {",
+   "new": "if (false) {",
+   "why": "a map of 64,000 ants is set up by the game: seconds natively, minutes in a browser"
+  },
+  {
+   "id": "the_limit_is_one_more",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (ants > kMaxEmbeddedStartAnts) {",
+   "new": "if (ants > kMaxEmbeddedStartAnts + 1) {",
+   "why": "a map of 8,001 ants is played"
+  },
+  {
+   "id": "the_limit_refuses_the_limit",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (ants > kMaxEmbeddedStartAnts) {",
+   "new": "if (ants >= kMaxEmbeddedStartAnts) {",
+   "why": "a map of exactly 8,000 ants is refused"
+  },
+  {
+   "id": "plants_are_ants",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (spawn.team_id < 4) ++ants;",
+   "new": "++ants;",
+   "why": "a map with plants in block 1 is refused for ants that it does not start"
+  },
+  {
+   "id": "only_green_ants_are_counted",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (spawn.team_id < 4) ++ants;",
+   "new": "if (spawn.team_id == 0) ++ants;",
+   "why": "three quarters of a crowd are not counted"
+  },
+  {
+   "id": "the_refusal_is_no_refusal",
+   "file": "src/ants_replay/player.cpp",
+   "old": "more than the \" + std::to_string(kMaxEmbeddedStartAnts) + \" that a replay is set up with\";\n        return false;",
+   "new": "more than the \" + std::to_string(kMaxEmbeddedStartAnts) + \" that a replay is set up with\";\n        return true;",
+   "why": "the sentence is said and the map is used"
+  },
+  {
+   "id": "a_refused_map_is_another_failure",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "        replay_failure_ = ReplayFailure::NoMap;\n        replay_failure_text_ = why;",
+   "new": "        replay_failure_ = ReplayFailure::Unreadable;\n        replay_failure_text_ = why;",
+   "why": "the page learns of a refused map as of a file that cannot be read"
+  }
+ ]
+}
