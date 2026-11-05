@@ -306,6 +306,16 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
+    session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)
+        const auto seats = [](uint8_t n) { return std::to_string(static_cast<unsigned>(n)) + (n == 1 ? " seat" : " seats"); };
+        notes_.push_back("room " + spec_.code + ": " + seats(differ) + " dropped at turn " + std::to_string(turn) + " for a state that differed from the referee's; " + seats(agree) + " agreed with it");
+    });
+}
+
+std::vector<std::string> Room::take_notes() {
+    std::vector<std::string> out;
+    out.swap(notes_);
+    return out;
 }
 
 namespace {
@@ -629,9 +639,11 @@ void Room::update(uint32_t now_ms) {
             sim_->clear_news_events();                                   // the screen's queues: nobody on a server reads them, and they would only grow
             sim_->clear_audio_events();
         }
-        if (!session_->desyncs().empty()) {
-            const net::DesyncMsg& d = session_->desyncs().front();
-            return fail("the simulation of seat " + std::to_string(static_cast<int>(d.player)) + " diverged at turn " + std::to_string(d.turn), now_ms);
+        if (!session_->desyncs().empty()) {                              // every seat at the table differed from the referee (HostSession::judge_hashes): it may be the one that is wrong, so none was dropped
+            const std::vector<net::DesyncMsg>& desyncs = session_->desyncs();
+            std::string seats = desyncs.size() == 1 ? "seat " : "seats ";
+            for (size_t i = 0; i < desyncs.size(); ++i) seats += (i == 0 ? "" : i + 1 == desyncs.size() ? " and " : ", ") + std::to_string(static_cast<int>(desyncs[i].player));
+            return fail("the simulation of " + seats + " diverged at turn " + std::to_string(desyncs.front().turn) + " and no seat agreed with the referee", now_ms);
         }
         if (sim_ && sim_->is_match_over()) {
             ended_by_rules_ = true;                                      // (the rules ended it: every machine shows the results, and a lobby room's people may have their rematch)
@@ -831,13 +843,15 @@ void Room::replay_end() {
     live_end(kept);                                              // (the recorder goes at the end of this function: the live board lets go of it first)
 }
 
-// The file's name when the match was kept, else empty (and the status says why)
+// The file's name when the match was kept, else empty (and the status says why). How long the match ran is the recorder's count of turns, unless the recording failed: it stops counting there, so the room's own count
+// says (a match that ran 30 seconds or more whose recording failed is told by the recording's reason, with a line in the log; one that ran less than that says so, as ever)
 std::string Room::replay_keep(replay::Recorder& recorder) {
-    if (recorder.turns() == 0) {
+    const uint32_t ran = recorder.failure().empty() ? recorder.turns() : last_ticks_;
+    if (ran == 0) {
         replay_note_ = "no match was played";
         return std::string();
     }
-    if (recorder.turns() < kReplayMinTurns) {
+    if (ran < kReplayMinTurns) {
         replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
         return std::string();
     }
@@ -1251,6 +1265,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.rejoins = a.rejoins();
         s.drops_by_vote = a.drops_by_vote();
         s.drops_by_cap = a.drops_by_cap();
+        s.drops_by_state = session_->diverged_drops();
         s.rejoins_refused = a.rejoins_refused();
         s.catch_up_expired = a.catch_up_expired();
         s.streamed_bytes = a.streamed_bytes();

@@ -508,7 +508,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(len(self.stub_requests("/live", live + 1)) - live, 1)
         self.assertEqual(len(self.stub_requests("/history", history + 1)) - history, 1)       # and the two asks of the history were one request
 
-    def test_the_list_may_be_asked_ten_times_a_second_by_the_whole_site_with_a_burst_of_fifty_and_the_matches_have_an_allowance_of_their_own(self):
+    def test_the_list_may_be_asked_ten_times_a_second_with_a_burst_of_fifty_and_the_matches_have_an_allowance_of_their_own(self):
         started = time.monotonic()
         codes = [self.ask("GET", "/history")[0] for _ in range(150)]
         took = time.monotonic() - started
@@ -535,7 +535,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.assertEqual(self.ask("GET", "/history?sort=score&limit=7")[0], 200)           # the same search again and again: one request to the server (cached five seconds under its arguments)
         self.assertEqual(len(self.stub_requests("/history", again + 1)) - again, 1)
 
-    def test_twenty_matches_a_second_for_the_whole_site_with_a_burst_of_forty_and_the_rest_is_503(self):
+    def test_twenty_matches_a_second_with_a_burst_of_forty_and_the_rest_is_503(self):
         time.sleep(6.5)                                                                       # (the list's flood of the test before is paid for)
         started = time.monotonic()
         codes = [self.ask("GET", "/history/" + ITEM_ID)[0] for _ in range(120)]

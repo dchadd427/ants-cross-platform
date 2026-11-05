@@ -456,59 +456,50 @@ function dialogChecks() {
     check(rrec && rrec.name === 'Mosh Pit' && digest(rrec.bytes) === before && rrec.bytes !== bytes, 'the lobby tab receives a copy of the open map bytes');
     const warnings = (p, panel) => all(p, panel + ' .play-status').filter((n) => n.textContent.indexOf('may run slowly') >= 0);
     equal([warnings(p, '.play-panel-bots').length, warnings(p, '.play-panel-friends').length], [0, 0], 'a map of 12 ants has no word about ants in either panel');
-    // a map of more than 2,400 start ants (all colors together): a warning in both tabs, under the intro, nothing refused and nothing turned off; 2,400 is not heavy
-    for (const [ants, heavy] of [[2400, false], [2401, true], [6000, true], [8000, true]]) {
+    // the start ants of the open map (all colors together) and what the dialog says. An online room plays up to 1,000: a map of 1,000 ants opens one as any map does. A map above that is refused in words in the
+    // With other players tab, whose button is off and which opens and hands over nothing. Above 2,400 a map is heavy: the Against bots tab warns, under the intro, that a game may run slowly (a warning only: nothing is
+    // refused and no button is turned off; 2,400 is not heavy). A heavy map is over the cap too, so the With other players tab has the refusal and never the warning; the game against bots is never refused for its ants
+    const commasOf = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    for (const [ants, online, heavy] of [[400, true, false], [999, true, false], [1000, true, false], [1001, false, false], [2400, false, false], [2401, false, true], [6000, false, true], [8000, false, true], [9500, false, true], [40000, false, true]]) {
         const per = [Math.floor(ants / 4), Math.floor(ants / 4), Math.floor(ants / 4), ants - 3 * Math.floor(ants / 4)];
         const big = answers({ teams: per.map((n) => [n, 16]) });
-        const count = ants === 8000 ? '8,000' : ants === 6000 ? '6,000' : ants === 2400 ? '2,400' : '2,401';
-        const word = 'This map starts with ' + count + ' ants, so a game may run slowly, especially on phones and older computers.';
-        p = pageOf();
-        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
+        const word = 'This map starts with ' + commasOf(ants) + ' ants, so a game may run slowly, especially on phones and older computers.';
+        const refusal = 'This map starts ' + commasOf(ants) + ' ants. An online room plays at most 1,000, so it cannot host this map. You can still play it against bots on this device.';
+        const open = () => { p = pageOf(); Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } })); };
+        open();
         const bots = warnings(p, '.play-panel-bots'), others = warnings(p, '.play-panel-friends');
+        equal(others.map((n) => n.textContent), [], ants + ' ants: the slow-game warning is never in the With other players tab');
         if (!heavy) {
-            equal([bots.length, others.length], [0, 0], ants + ' ants: no warning in either panel');
+            equal(bots.length, 0, ants + ' ants: no warning against bots');
         } else {
-            equal([bots.map((n) => n.textContent), others.map((n) => n.textContent)], [[word], [word]], ants + ' ants: the same warning in both panels');
-            check(bots[0].className === 'play-status no' && bots[0].getAttribute('role') === 'status' && others[0].className === 'play-status no', ants + ' ants: with the warning classes of the dialog');
+            equal(bots.map((n) => n.textContent), [word], ants + ' ants: the warning against bots');
+            check(bots[0].className === 'play-status no' && bots[0].getAttribute('role') === 'status', ants + ' ants: with the warning classes of the dialog');
             const kids = q(p, '.play-panel-bots').children, at = kids.indexOf(bots[0]);
             check(at > 0 && kids[at - 1].className === 'play-lead' && kids[at + 1].className === 'play-quick', ants + ' ants: against bots the warning is directly under the intro and above Quick, before the seats (a phone shows it without scrolling)');
-            const fkids = q(p, '.play-panel-friends').children, fat = fkids.indexOf(others[0]);
-            check(fat > 0 && fkids[fat - 1].className === 'play-fcard', ants + ' ants: with other players the warning is directly under the map card, above the colors');
         }
         check(!startButton(p).disabled && /Start the game/.test(startButton(p).textContent) && all(p, '.play-panel-bots .play-status').some((n) => /^You and 1 bot/.test(n.textContent)), ants + ' ants: the game against bots can be started');
         all(p, '.play-tab')[1].click();
-        check(!startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: the room button is on');
+        if (online) {
+            check(!startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: the room button is on');
+            startButton(p).click();
+            const room = /^\/lobby\.html\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
+            check(p.opened.length === 1 && !!room, ants + ' ants: and it opens the room (nothing is refused)');
+            equal(all(p, '.play-panel-friends .play-status').map((n) => n.textContent), [], ants + ' ants: with other players there is no word about ants');
+        } else {
+            const no = all(p, '.play-panel-friends .play-status');
+            equal(no.map((n) => n.textContent), [refusal], ants + ' ants: with other players the refusal is the only word under the map card (not the slow-game warning)');
+            check(no[0].className === 'play-status no' && no[0].getAttribute('role') === 'status', ants + ' ants: with the warning classes of the dialog');
+            check(startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: the room button is off');
+            startButton(p).click();
+            check(p.opened.length === 0, ants + ' ants: and pressing it opens nothing');
+            all(p, '.play-tab')[0].click();
+            check(!startButton(p).disabled, ants + ' ants: back on the bots tab the game can be started');
+        }
+        open();
         startButton(p).click();
-        const room = /^\/lobby\.html\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
-        check(p.opened.length === 1 && !!room, ants + ' ants: and it opens the room (nothing is refused)');
-        p = pageOf();
-        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: big.check }), readReport: () => ({ status: 0, json: big.read }) } }));
-        startButton(p).click();
-        check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: the game against bots opens the game page');
+        check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: the game against bots opens the game page (it is never refused for its ants)');
     }
-    // a map that starts more ants than an online room plays (8,000, all colors together): the game against bots is as any other (the slow-game warning only); With other players says so in words in the place of
-    // the warning and its button is off, and nothing is opened or handed over; 8,000 itself (above) opens the room
-    for (const ants of [8001, 9500, 40000]) {
-        const per = [Math.floor(ants / 4), Math.floor(ants / 4), Math.floor(ants / 4), ants - 3 * Math.floor(ants / 4)];
-        const over = answers({ teams: per.map((n) => [n, 16]) });
-        const commas = String(ants).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-        const refusal = 'This map starts ' + commas + ' ants. An online room plays at most 8,000, so it cannot host this map. You can still play it against bots on this device.';
-        p = pageOf();
-        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: over.check }), readReport: () => ({ status: 0, json: over.read }) } }));
-        check(warnings(p, '.play-panel-bots').length === 1 && !startButton(p).disabled && /Start the game/.test(startButton(p).textContent), ants + ' ants: against bots the slow-game warning and a button that works, as for any heavy map');
-        all(p, '.play-tab')[1].click();
-        const no = all(p, '.play-panel-friends .play-status');
-        equal(no.map((n) => n.textContent), [refusal], ants + ' ants: with other players the refusal is the only word under the map card (not the slow-game warning)');
-        check(no[0].className === 'play-status no' && no[0].getAttribute('role') === 'status', ants + ' ants: with the warning classes of the dialog');
-        check(startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: the room button is off');
-        startButton(p).click();
-        check(p.opened.length === 0, ants + ' ants: and pressing it opens nothing');
-        all(p, '.play-tab')[0].click();
-        check(!startButton(p).disabled, ants + ' ants: back on the bots tab the game can be started');
-        startButton(p).click();
-        check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: and it is started (the game against bots is never refused for its ants)');
-    }
-    check(Play.MAX_ONLINE_ANTS === 8000 && Play.onlineText(8001).indexOf('8,001 ants') > 0, 'the cap is 8,000 and the words write the number with thousands separators');
+    check(Play.MAX_ONLINE_ANTS === 1000 && Play.onlineText(1001).indexOf('1,001 ants') > 0 && Play.onlineText(1001).indexOf('at most 1,000,') > 0, 'the cap is 1,000 and the words write the number with thousands separators');
     check(Play.HEAVY_START_ANTS === 2400 && Play.heavyText(1234567) === 'This map starts with 1,234,567 ants, so a game may run slowly, especially on phones and older computers.', 'the threshold is 2,400 and the words write the number with thousands separators');
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }

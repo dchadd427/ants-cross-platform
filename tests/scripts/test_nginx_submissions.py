@@ -35,6 +35,7 @@ block_of = maps.block_of
 PNG = b"\x89PNG\r\n\x1a\n" + b"stand-in picture"
 LVL = b"stand-in map file"
 ID = "0123456789abcdef0123456789abcdef"
+DEVNULL = object()                                                                              # (Rig(own=DEVNULL): the file that the stack files mount when ANTS_TRUSTED_PROXIES_FILE is not set)
 
 
 class Door(BaseHTTPRequestHandler):
@@ -88,15 +89,17 @@ def stub(name):
                 raise
             continue
         break
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=lambda: server.serve_forever(poll_interval=0.05), daemon=True).start()          # (shutdown() waits for one poll: the default half second, three times for each rig, is most of a rig's life)
     return cls, server, port
 
 
 class Rig:
-    def __init__(self, trusted="", relaxed=True, log=False, real_ports=None):
-        """`real_ports` = (submission door, replay door[, test-map door]) of a running ants_server: the doors are then not the stand-ins of the rig but the real program (test_nginx_big_maps.py, test_nginx_test_maps.py)."""
+    def __init__(self, trusted="", relaxed=True, log=False, real_ports=None, own=None, hub_port=None):
+        """`real_ports` = (submission door, replay door[, test-map door]) of a running ants_server: the doors are then not the stand-ins of the rig but the real program (test_nginx_big_maps.py, test_nginx_test_maps.py).
+        `trusted` is the text of the image's list of reverse proxies (docker/trusted-proxies.conf; nothing by default: tests/scripts/test_nginx_trusted_proxies.py runs the real file). `own` is an operator's list
+        in the folder that the stack files mount ANTS_TRUSTED_PROXIES_FILE into: its text, DEVNULL (the stack's default mount) or None (no file). `hub_port` = the port of a running chat hub (/hub/ws, the pages of the login)."""
         self.work = tempfile.mkdtemp(prefix="ants_nginx_submit_")
-        for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp", "html", "trusted"):
+        for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp", "html", "trusted", "trusted.d"):
             os.makedirs(os.path.join(self.work, sub), exist_ok=True)
         shutil.copyfile(os.path.join(REPO, "web", "admin.html"), os.path.join(self.work, "html", "admin.html"))
         shutil.copyfile(os.path.join(REPO, "web", "mapmaker.html"), os.path.join(self.work, "html", "mapmaker.html"))
@@ -109,6 +112,11 @@ class Rig:
             f.write(b"static file")
         with open(os.path.join(self.work, "trusted", "proxies.conf"), "w") as f:
             f.write(trusted)
+        if own is DEVNULL:                                                                       # (a mount of /dev/null is a file that holds nothing: here a link to it, which nginx reads the same way)
+            os.symlink(os.devnull, os.path.join(self.work, "trusted.d", "own.conf"))
+        elif own is not None:
+            with open(os.path.join(self.work, "trusted.d", "own.conf"), "w") as f:
+                f.write(own)
         if real_ports is None:
             self.door, self.door_server, self.door_port = stub("door")
             self.replay, self.replay_server, self.replay_port = stub("replay")
@@ -119,7 +127,9 @@ class Rig:
             self.test_door_port = real_ports[2] if len(real_ports) > 2 else real_ports[0]
         text = RAW
         text = text.replace("/usr/share/nginx/html", self.work + "/html")
-        text = text.replace("/etc/nginx/ants-trusted-proxies/", self.work + "/trusted/")
+        text = text.replace("/etc/nginx/ants-trusted-proxies/", self.work + "/trusted/").replace("/etc/nginx/ants-trusted-proxies.d/", self.work + "/trusted.d/")
+        if hub_port is not None:
+            text = text.replace("set $ants_hub ants-hub:4040;", "set $ants_hub 127.0.0.1:%d;" % hub_port)
         text = text.replace("set $ants_submit ants-server:4030;", "set $ants_submit 127.0.0.1:%d;" % self.door_port)
         text = text.replace("set $ants_test_maps ants-server:4031;", "set $ants_test_maps 127.0.0.1:%d;" % self.test_door_port)
         text = text.replace("set $ants_replays ants-server:4020;", "set $ants_replays 127.0.0.1:%d;" % self.replay_port)
@@ -152,8 +162,9 @@ class Rig:
                 server.server_close()
         shutil.rmtree(self.work, ignore_errors=True)
 
-    def ask(self, method, target, headers=None, body=None):
-        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20)
+    def ask(self, method, target, headers=None, body=None, source=None):
+        """One request; `source` = the address of this machine that the connection comes from (127.0.0.2 is another peer for nginx than 127.0.0.1; a Linux machine has all of 127.0.0.0/8)."""
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=20, source_address=(source, 0) if source else None)
         try:
             conn.putrequest(method, target, skip_host=False, skip_accept_encoding=True)
             for k, v in (headers or {}).items():
@@ -234,7 +245,7 @@ class TheText(unittest.TestCase):
         self.assertNotIn("$arg_kind", head)
         self.assertIn("52428[0-8]", head)
 
-    def test_the_zones_are_outside_the_server_and_sized_for_the_whole_site(self):
+    def test_the_zones_are_outside_the_server(self):
         head = CONF[:CONF.index("server {")]
         for zone, rate in (("ants_submit_post", "10r/m"), ("ants_submit_read", "10r/s"), ("ants_admin_api", "20r/s"), ("ants_admin_login", "6r/m")):
             self.assertRegex(head, r"limit_req_zone \$[a-z_]+ zone=%s:1m rate=%s;" % (zone, rate))
@@ -305,13 +316,14 @@ class TheText(unittest.TestCase):
     def test_the_paths_that_carry_a_players_text_are_logged_without_their_query(self):
         head = CONF[:CONF.index("server {")]
         fmt = re.search(r"log_format\s+ants_noquery\s+(.+?);", head, re.S).group(1)
-        self.assertIn("$uri", fmt)
-        for query in ("$request ", "$request\"", "$request_uri", "$args", "$query_string", "$is_args"):
+        self.assertIn("$ants_path", fmt)                                                      # (the map above it cuts $request_uri at the ?)
+        self.assertRegex(head, r'map \$request_uri \$ants_path \{\s+default \$request_uri;\s+"~\^\(\?<ants_p>\[\^\?\]\*\)" \$ants_p;\s+\}')
+        for query in ("$request ", "$request\"", "$request_uri", "$args", "$query_string", "$is_args", "$uri", "$http_referer", "$http_cookie", "$http_authorization"):
             self.assertNotIn(query, fmt)
         for header in ("location = /submissions ", "location ^~ /submissions/ ", "location ^~ /admin/api/ "):
             self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, header), header)
         self.assertIn("access_log /dev/stdout ants_noquery;", block_of(CONF, "location = /test-maps "))          # (the name of a test map is in the query: tests/scripts/test_nginx_test_maps.py)
-        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 4)             # (no other block says it: the other paths keep the stock log)
+        self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 5)             # (these four, and the server block, which gives every other path the same format: tests/scripts/test_nginx_headers.py)
 
     def test_the_stacks_the_image_and_the_documents_agree_with_the_file(self):
         for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):

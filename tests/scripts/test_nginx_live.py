@@ -353,7 +353,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(len(self.stub_requests("/replays", replays + 1)) - replays, 1)       # the list of the recorded matches reached the server: it is not answered from the live list's entry
         self.assertEqual(len(self.stub_requests("/live", live + 1)) - live, 1)                # and the two asks of the live list were one request (the requests are counted by their access lines: the stand-in's error line for the file it has not is no request)
 
-    def test_the_list_may_be_asked_twenty_times_a_second_by_the_whole_site_with_a_burst_of_a_hundred_and_the_snapshots_have_an_allowance_of_their_own(self):
+    def test_the_list_may_be_asked_twenty_times_a_second_with_a_burst_of_a_hundred_and_the_snapshots_have_an_allowance_of_their_own(self):
         started = time.monotonic()
         codes = [self.ask("GET", "/live")[0] for _ in range(160)]
         took = time.monotonic() - started
@@ -363,7 +363,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(codes[:101], [200] * 101)                                            # (the refusals come after the allowance, none between)
         self.assertEqual(self.ask("GET", "/live/" + SNAPSHOT_ID)[0], 200)                     # the snapshots are another zone: a flood of the list does not use their allowance
 
-    def test_thirty_snapshots_a_second_for_the_whole_site_with_a_burst_of_sixty_and_the_rest_is_503(self):
+    def test_thirty_snapshots_a_second_with_a_burst_of_sixty_and_the_rest_is_503(self):
         before = self.stub_lines()
         started = time.monotonic()
         codes = [self.ask("GET", "/live/" + SNAPSHOT_ID)[0] for _ in range(120)]

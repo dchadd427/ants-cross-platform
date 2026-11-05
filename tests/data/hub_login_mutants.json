@@ -1260,15 +1260,15 @@
   {
    "id": "nginx_game_socket_gets_the_cookie",
    "file": "docker/nginx.conf",
-   "old": "        proxy_set_header Cookie \"\";                               # (the hub's login cookie is for the site's path /, so the browser sends it here too: the game server never sees a cookie)\n",
-   "new": "",
+   "old": "        proxy_pass_request_headers off;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection \"upgrade\";\n        proxy_set_header Host $host;\n        proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;\n        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "new": "        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection \"upgrade\";\n        proxy_set_header Host $host;\n        proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;\n        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
    "id": "nginx_busy_gets_the_cookie",
    "file": "docker/nginx.conf",
-   "old": "        proxy_set_header Cookie \"\";                               # (no cookie of the visitor reaches the game server)\n",
-   "new": "",
+   "old": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;                 # (the server's own nosniff line is the one that this block inherits: not twice)\n",
+   "new": "        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 5s;\n        proxy_send_timeout 5s;\n        proxy_hide_header X-Content-Type-Options;                 # (the server's own nosniff line is the one that this block inherits: not twice)\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {
@@ -1421,7 +1421,7 @@
   {
    "id": "legal_forgets_the_seven_days",
    "file": "web/legal.html",
-   "old": "Chat lines are kept for 7 days,",
+   "old": "Chat lines are kept for up to 7 days,",
    "new": "Chat lines are kept for a while,",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1512,8 +1512,8 @@
   {
    "id": "logout_does_not_ask_for_the_cut",
    "file": "hub/store/sqlite.py",
-   "old": "        self.unsettled = True\n        return gone\n",
-   "new": "        return gone\n",
+   "old": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        self.unsettled = True\n        return gone\n",
+   "new": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        return gone\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
   },
   {

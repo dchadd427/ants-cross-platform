@@ -178,7 +178,7 @@ TestMapOutcome TestMapStore::submit(const TestMapInput& in, int64_t now) {
     uint64_t start_ants = 0;                                       // (the start markers of the four colors added up, from the canonical file's own reading: never a number that the sender gave)
     for (size_t s = 0; s < 4 && s < meta.get("teams").size(); ++s) start_ants += static_cast<uint64_t>(std::max<int64_t>(0, meta.get("teams").at(s).get("start_markers").as_int_or(0)));
     if (!OnlineLimits::allows_ants(start_ants)) {          // (checked here, before the map is kept or a room could be asked to set its ants up: it is a good map, it can be played here against bots, not by a room)
-        return refuse(422, "map_too_many_ants_online", "This map starts too many ants to play online (8,000 at most, all colors together). You can still play it against bots on this computer.");
+        return refuse(422, "map_too_many_ants_online", "This map starts too many ants to play online (1,000 at most, all colors together). You can still play it against bots on this computer.");
     }
     const JsonValue& findings = report.get("findings");
     bool team_bad[4] = {false, false, false, false};

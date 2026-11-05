@@ -605,7 +605,7 @@ void run_online_limit_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S3.221 Nothing Is Refused For Its Start Ants Up To The Cap: A Map Of 6,000 Ants Is Chosen By A Lobby's Leader (No Word In The Chat), Made Into A Room By The Control Interface, Offered To A Visitor Through --demo-maps, Taken As A Test Map Into A Lobby; The List Marks It Heavy And Names The Count") {
+    TEST_CASE("S3.221 Nothing Is Refused For Its Start Ants Up To The Cap: A Map Of 1,000 Ants Is Chosen By A Lobby's Leader (No Word In The Chat), Made Into A Room By The Control Interface, Offered To A Visitor Through --demo-maps, Taken As A Test Map Into A Lobby, And The List Has No Mark For It; A Heavy Map (Over 2,400) Is Over The Cap, Marked Offline With Its Count") {
         const fs::path dir = fresh_dir("s221");
         const auto keep = [&](const std::string& name, const std::array<uint32_t, 4>& per_color) {
             const std::string bytes = tiny_with_ants(per_color);
@@ -614,30 +614,30 @@ void run_online_limit_tests() {
             out << bytes;
         };
         keep("TINY.LVL", {3, 3, 3, 3});
-        keep("Edge 2400.lvl", {600, 600, 600, 600});
+        keep("Edge 400.lvl", {100, 100, 100, 100});
+        keep("Cap 1000.lvl", {250, 250, 250, 250});
         keep("Over 2401.lvl", {600, 600, 600, 601});
-        keep("Huge 6000.lvl", {1500, 1500, 1500, 1500});
         ServerLimits l = limits_with(8);
-        l.demo_maps = {"TINY.LVL", "Huge 6000.lvl"};
+        l.demo_maps = {"TINY.LVL", "Cap 1000.lvl"};
         World w(l, dir.string());
         const MapStore& store = w.mgr.store();
         Client& pia = w.connect_page("Pia", "ant00001", lobby_block_of());
         w.run(300);
         ASSERT_TRUE(pia.lobby->is_leader());
-        for (const char* name : {"Over 2401.lvl", "huge 6000.LVL", "Edge 2400.lvl", "Huge 6000.lvl"}) {
+        for (const char* name : {"cap 1000.LVL", "Edge 400.lvl", "Cap 1000.lvl"}) {
             ASSERT_TRUE(pia.lobby->request_plan(plan_for(name)));
             w.run(300);
             ASSERT_EQ(lower_of(w.status("ant00001").map), lower_of(name));                                    // (the room has the map that was chosen, whatever it starts)
         }
         ASSERT_TRUE(said(pia.room_chat).empty());                                                    // (and nobody is told anything)
         const LobbyServices services = w.mgr.lobby_services();
-        for (const char* name : {"Over 2401.lvl", "Huge 6000.lvl", "HUGE 6000.LVL"}) {
+        for (const char* name : {"Cap 1000.lvl", "CAP 1000.LVL"}) {
             ASSERT_EQ(services.choose_map(name), store.listed_name(name));
             ASSERT_TRUE(!services.choose_map(name).empty() && services.map_refusal(name).empty());
         }
         MapEntry entry;
         ants::assets::LevelData level;
-        ASSERT_TRUE(services.load_map("Huge 6000.lvl", entry, level) && OnlineLimits::start_ants(level) == 6000u);
+        ASSERT_TRUE(services.load_map("Cap 1000.lvl", entry, level) && OnlineLimits::start_ants(level) == 1000u);
         const ctl::JsonValue newest = [&]() { ctl::JsonValue v; ctl::parse_json(store.list_json(nullptr, true), v, nullptr, ctl::JsonLimits()); return v; }();
         const auto entry_of = [&](const char* file) -> const ctl::JsonValue* {
             for (size_t i = 0; i < newest.get("maps").size(); ++i) {
@@ -645,18 +645,19 @@ void run_online_limit_tests() {
             }
             return nullptr;
         };
-        ASSERT_TRUE(entry_of("Huge 6000.lvl") != nullptr && entry_of("Huge 6000.lvl")->get("heavy").as_bool_or(false) && entry_of("Huge 6000.lvl")->get("ants").as_int_or(0) == 6000);
+        for (const char* fine : {"Cap 1000.lvl", "Edge 400.lvl", "TINY.LVL"}) {                      // (up to the cap the list has no mark: not heavy, not offline)
+            ASSERT_TRUE(entry_of(fine) != nullptr && entry_of(fine)->get("heavy").is_null() && entry_of(fine)->get("ants").is_null() && entry_of(fine)->get("online").is_null() && entry_of(fine)->get("online_why").is_null());
+        }
         ASSERT_TRUE(entry_of("Over 2401.lvl") != nullptr && entry_of("Over 2401.lvl")->get("heavy").as_bool_or(false) && entry_of("Over 2401.lvl")->get("ants").as_int_or(0) == 2401);
-        ASSERT_TRUE(entry_of("Edge 2400.lvl") != nullptr && entry_of("Edge 2400.lvl")->get("heavy").is_null() && entry_of("Edge 2400.lvl")->get("ants").is_null());
-        ASSERT_TRUE(entry_of("TINY.LVL") != nullptr && entry_of("TINY.LVL")->get("heavy").is_null());
-        ASSERT_TRUE(entry_of("Huge 6000.lvl")->get("online").is_null());                              // ("online" is about the size of the grid only)
+        ASSERT_TRUE(entry_of("Over 2401.lvl")->get("online").as_bool_or(true) == false && entry_of("Over 2401.lvl")->get("online_why").str() == "ants");           // (a heavy map is over the cap: the room refuses it, the list says so)
+        ASSERT_FALSE(services.map_refusal("Over 2401.lvl").empty());
         // the control interface makes a room on it
-        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-huge", 2, "Huge 6000.lvl"), w.now).ok);
-        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-over", 2, "Over 2401.lvl"), w.now).ok);
-        {   // a test map (an unlisted room map with other players in it): taken into a lobby at 6,000 ants as at 2,400
+        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-cap", 2, "Cap 1000.lvl"), w.now).ok);
+        ASSERT_FALSE(w.mgr.create_room(spec_of("ctl-over", 2, "Over 2401.lvl"), w.now).ok);
+        {   // a test map (an unlisted room map with other players in it): taken into a lobby at 1,000 ants as at 400
             ApprovedMap a;
-            a.name = "Huge Draft ~test-0badf00d.lvl";
-            const std::string bytes = tiny_with_ants({1500, 1500, 1500, 1500});
+            a.name = "Cap Draft ~test-0badf00d.lvl";
+            const std::string bytes = tiny_with_ants({250, 250, 250, 250});
             a.path = (dir / (a.name + ".bin")).string();
             { std::ofstream out(a.path, std::ios::binary); out << bytes; }
             a.size = bytes.size();
@@ -671,22 +672,22 @@ void run_online_limit_tests() {
             w.run(300);
             ASSERT_EQ(w.status("ant00002").map, a.name);
         }
-        {   // a visitor's block that names a map that the operator offers (--demo-maps) and that has 6,000 ants: the room is made
+        {   // a visitor's block that names a map that the operator offers (--demo-maps) and that has 1,000 ants: the room is made
             ServerLimits offered = limits_with(8);
-            offered.demo_maps = {"TINY.LVL", "Huge 6000.lvl"};
+            offered.demo_maps = {"TINY.LVL", "Cap 1000.lvl"};
             World v(offered, dir.string());
-            Client& big = v.connect_creating("Big", "pub00501", block_of("Huge 6000.lvl", 2));
+            Client& big = v.connect_creating("Big", "pub00501", block_of("Cap 1000.lvl", 2));
             ASSERT_EQ(door_answer(v, big), static_cast<net::RejectReason>(0));
-            ASSERT_EQ(v.status("pub00501").map, std::string("Huge 6000.lvl"));
+            ASSERT_EQ(v.status("pub00501").map, std::string("Cap 1000.lvl"));
         }
         fs::remove_all(dir);
     } TEST_END();
 
-    TEST_CASE("S3.222 A Restart Record Of A Match On A Map Of 6,000 Ants Is Not Refused For Its Ants (It Goes To The Replay, Which Says What It Says For Its Own Reasons)") {
+    TEST_CASE("S3.222 A Restart Record Of A Match On A Map Of 800 Ants Is Not Refused For Its Ants (It Goes To The Replay, Which Says What It Says For Its Own Reasons)") {
         const fs::path maps = fs::path(temp_dir_for("online-222")) / "Maps";
         fs::create_directories(maps);
         fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
-        const std::string many = tiny_with_ants({1500, 1500, 1500, 1500});
+        const std::string many = tiny_with_ants({200, 200, 200, 200});
         ASSERT_TRUE(!many.empty());
         { std::ofstream out(maps / "MANY.LVL", std::ios::binary); out << many; }
         uint64_t many_hash = 0;
@@ -701,10 +702,10 @@ void run_online_limit_tests() {
         std::error_code ignore;
         fs::remove_all(maps.parent_path(), ignore);
     } TEST_END();
-    TEST_CASE("S3.223 The cap of the starting ants (OnlineLimits::kMaxStartAnts = 8,000, all four colors together): 8,000 is in and 8,001 is out whichever color has the last ant; the weight of a match is the most of its cells' places and its ants' (one for every started 400 ants, rounded up)") {
-        ASSERT_TRUE(OnlineLimits::kMaxStartAnts == 8000u && OnlineLimits::kAntsPerPlace == 400u);
-        ASSERT_TRUE(OnlineLimits::allows_ants(0) && OnlineLimits::allows_ants(7999) && OnlineLimits::allows_ants(8000) && !OnlineLimits::allows_ants(8001) && !OnlineLimits::allows_ants(40000));
-        ASSERT_TRUE(OnlineLimits::allows(65536, 8000) && !OnlineLimits::allows(65536, 8001) && !OnlineLimits::allows(65537, 0) && !OnlineLimits::allows(65537, 8000) && OnlineLimits::allows(1, 0));          // (both limits hold)
+    TEST_CASE("S3.223 The cap of the starting ants (OnlineLimits::kMaxStartAnts = 1,000, all four colors together): 1,000 is in and 1,001 is out whichever color has the last ant; the weight of a match is the most of its cells' places and its ants' (one for every started 400 ants, rounded up)") {
+        ASSERT_TRUE(OnlineLimits::kMaxStartAnts == 1000u && OnlineLimits::kAntsPerPlace == 400u);
+        ASSERT_TRUE(OnlineLimits::allows_ants(0) && OnlineLimits::allows_ants(999) && OnlineLimits::allows_ants(1000) && !OnlineLimits::allows_ants(1001) && !OnlineLimits::allows_ants(8000) && !OnlineLimits::allows_ants(40000));
+        ASSERT_TRUE(OnlineLimits::allows(65536, 1000) && !OnlineLimits::allows(65536, 1001) && !OnlineLimits::allows(65537, 0) && !OnlineLimits::allows(65537, 1000) && OnlineLimits::allows(1, 0));          // (both limits hold)
         const auto counted = [](const std::array<uint32_t, 4>& per_color) -> int64_t {
             const std::string bytes = tiny_with_ants(per_color);
             ants::assets::LevelData level;
@@ -712,43 +713,41 @@ void run_online_limit_tests() {
             return static_cast<int64_t>(OnlineLimits::start_ants(level));
         };
         const auto fits = [&](const std::array<uint32_t, 4>& per_color) { return OnlineLimits::allows_ants(static_cast<uint64_t>(counted(per_color))); };
-        ASSERT_EQ(counted({2000, 2000, 2000, 2000}), int64_t{8000});
-        ASSERT_TRUE(fits({2000, 2000, 2000, 2000}));                                                 // (the cap itself)
-        ASSERT_EQ(counted({2000, 2000, 2000, 2001}), int64_t{8001});
-        ASSERT_FALSE(fits({2000, 2000, 2000, 2001}));                                                // (one over, on black)
-        ASSERT_FALSE(fits({2001, 2000, 2000, 2000}));                                                // (one over, on green: no color is left out of the count)
-        ASSERT_FALSE(fits({2000, 2001, 2000, 2000}));                                                // (red)
-        ASSERT_FALSE(fits({2000, 2000, 2001, 2000}));                                                // (blue)
-        ASSERT_TRUE(fits({8000, 0, 0, 0}) && !fits({0, 8001, 0, 0}) && fits({0, 0, 0, 8000}) && !fits({0, 0, 8001, 0}));        // (one color with all of them: the same total)
-        ASSERT_TRUE(fits({1500, 1500, 1500, 1500}) && fits({693, 693, 693, 693}));                   // (the 6,000-ant and the 2,772-ant maps of the players stay in)
+        ASSERT_EQ(counted({250, 250, 250, 250}), int64_t{1000});
+        ASSERT_TRUE(fits({250, 250, 250, 250}));                                                 // (the cap itself)
+        ASSERT_EQ(counted({250, 250, 250, 251}), int64_t{1001});
+        ASSERT_FALSE(fits({250, 250, 250, 251}));                                                // (one over, on black)
+        ASSERT_FALSE(fits({251, 250, 250, 250}));                                                // (one over, on green: no color is left out of the count)
+        ASSERT_FALSE(fits({250, 251, 250, 250}));                                                // (red)
+        ASSERT_FALSE(fits({250, 250, 251, 250}));                                                // (blue)
+        ASSERT_TRUE(fits({1000, 0, 0, 0}) && !fits({0, 1001, 0, 0}) && fits({0, 0, 0, 1000}) && !fits({0, 0, 1001, 0}));        // (one color with all of them: the same total)
+        ASSERT_TRUE(fits({62, 62, 62, 62}) && fits({166, 0, 0, 0}));                                // (the largest map of the library, 248 ants, is far inside)
+        ASSERT_FALSE(fits({1500, 1500, 1500, 1500}) || fits({693, 693, 693, 693}) || fits({2000, 2000, 2000, 2000}));        // (a map of 6,000, 2,772 or 8,000 ants is over: it stays on the lists and plays offline)
         ASSERT_FALSE(fits({10000, 10000, 10000, 10000}));                                            // (a 40,000-ant map)
         // the weight: the most of the places for its cells (one for every started 10,000) and for its ants (one for every started 400)
         ASSERT_TRUE(OnlineLimits::weight(1) == 1 && OnlineLimits::weight(10000) == 1 && OnlineLimits::weight(10001) == 2 && OnlineLimits::weight(65536) == 7);        // (the ants default to none: as before)
         ASSERT_TRUE(OnlineLimits::weight(961, 0) == 1 && OnlineLimits::weight(961, 12) == 1 && OnlineLimits::weight(961, 248) == 1 && OnlineLimits::weight(961, 400) == 1);
         ASSERT_TRUE(OnlineLimits::weight(961, 401) == 2 && OnlineLimits::weight(961, 800) == 2 && OnlineLimits::weight(961, 801) == 3);                        // (rounded UP: a floor would give 1 and 2)
-        ASSERT_EQ(OnlineLimits::weight(961, 2400), 6u);                                              // (2,400 ants: six places)
-        ASSERT_EQ(OnlineLimits::weight(961, 2401), 7u);
-        ASSERT_EQ(OnlineLimits::weight(961, 2772), 7u);
-        ASSERT_EQ(OnlineLimits::weight(961, 6000), 15u);                                             // (6,000 ants: fifteen)
-        ASSERT_EQ(OnlineLimits::weight(961, 8000), 20u);
-        ASSERT_TRUE(OnlineLimits::weight(65536, 400) == 7 && OnlineLimits::weight(65536, 2400) == 7 && OnlineLimits::weight(65536, 2801) == 8 && OnlineLimits::weight(65536, 6000) == 15);       // (the cells, when they weigh more)
+        ASSERT_EQ(OnlineLimits::weight(961, 1000), 3u);                                              // (the cap itself: three places)
+        ASSERT_EQ(OnlineLimits::weight(961, 2400), 6u);                                              // (the formula goes on past the cap: 400 to a place)
+        ASSERT_TRUE(OnlineLimits::weight(65536, 400) == 7 && OnlineLimits::weight(65536, 1000) == 7 && OnlineLimits::weight(65536, 2801) == 8);       // (the cells, when they weigh more)
         ASSERT_TRUE(OnlineLimits::weight(23040, 12) == 3 && OnlineLimits::weight(23040, 1200) == 3 && OnlineLimits::weight(23040, 1201) == 4);
         ASSERT_TRUE(OnlineLimits::weight(0, 0) == 1);                                                // (never less than a place)
-        ASSERT_TRUE(OnlineLimits::weight(961, 8000) <= 48 && OnlineLimits::weight(65536, 8000) <= 48);        // (the pool of the real server is 48: the heaviest allowed match fits it)
+        ASSERT_TRUE(OnlineLimits::weight(961, 1000) <= 48 && OnlineLimits::weight(65536, 1000) <= 48);        // (the pool of the real server is 48: the heaviest allowed match fits it)
     } TEST_END();
 
-    TEST_CASE("S3.224 A Lobby Leader Who Chooses A Map Over The Cap Of Starting Ants Is Told So In One Sentence And The Room Keeps Its Map; 8,000 Is Taken, Any Letter Case, A Test Map Too; The List Marks It; The Control Interface Is A 422; A Visitor's Block Does Not Make A Room On It") {
+    TEST_CASE("S3.224 A Lobby Leader Who Chooses A Map Over The Cap Of Starting Ants Is Told So In One Sentence And The Room Keeps Its Map; 1,000 Is Taken, Any Letter Case, A Test Map Too; The List Marks It; The Control Interface Is A 422; A Visitor's Block Does Not Make A Room On It") {
         const fs::path dir = fresh_dir("s224");
         World w(limits_with(48));
-        std::vector<ApprovedMap> approved = {ants_map(dir, "Ants 8000.lvl", {2000, 2000, 2000, 2000}), ants_map(dir, "Ants 8001.lvl", {2000, 2000, 2000, 2001}, "extended"), ants_map(dir, "Ants 40000.lvl", {10000, 10000, 10000, 10000})};
+        std::vector<ApprovedMap> approved = {ants_map(dir, "Ants 1000.lvl", {250, 250, 250, 250}), ants_map(dir, "Ants 1001.lvl", {250, 250, 250, 251}, "extended"), ants_map(dir, "Ants 40000.lvl", {10000, 10000, 10000, 10000})};
         ASSERT_TRUE(!approved[0].name.empty() && !approved[1].name.empty() && !approved[2].name.empty());
         w.mgr.mutable_store().set_approved(approved);
         const MapStore& store = w.mgr.store();
-        ASSERT_TRUE(store.start_ants_of("Ants 8000.lvl") == 8000u && store.start_ants_of("Ants 8001.lvl") == 8001u && store.start_ants_of("Ants 40000.lvl") == 40000u && store.start_ants_of("NOT-HERE.LVL") == 0u);
+        ASSERT_TRUE(store.start_ants_of("Ants 1000.lvl") == 1000u && store.start_ants_of("Ants 1001.lvl") == 1001u && store.start_ants_of("Ants 40000.lvl") == 40000u && store.start_ants_of("NOT-HERE.LVL") == 0u);
         Client& pia = w.connect_page("Pia", "cap00001", lobby_block_of());
         w.run(300);
         ASSERT_TRUE(pia.lobby->is_leader());
-        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Ants 8001.lvl")));
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Ants 1001.lvl")));
         w.run(300);
         ASSERT_EQ(w.status("cap00001").map, std::string("TINY.LVL"));                                // (the map stays)
         ASSERT_EQ(said(pia.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeMapTooManyAnts}));
@@ -757,23 +756,23 @@ void run_online_limit_tests() {
         ASSERT_EQ(w.status("cap00001").map, std::string("TINY.LVL"));
         ASSERT_TRUE(pia.lobby->room().plan[1] == K::Easy);
         ASSERT_EQ(said(pia.room_chat).size(), size_t{2});
-        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Ants 8000.lvl")));
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Ants 1000.lvl")));
         w.run(300);
-        ASSERT_EQ(w.status("cap00001").map, std::string("Ants 8000.lvl"));                           // (exactly the cap is in)
+        ASSERT_EQ(w.status("cap00001").map, std::string("Ants 1000.lvl"));                           // (exactly the cap is in)
         ASSERT_EQ(said(pia.room_chat).size(), size_t{2});                                            // (and no word about it)
-        ASSERT_TRUE(std::string(net::kNoticeMapTooManyAnts).find("8,000") != std::string::npos && std::string(net::kNoticeMapTooManyAnts).size() <= net::kMaxChatChars);
+        ASSERT_TRUE(std::string(net::kNoticeMapTooManyAnts).find("1,000") != std::string::npos && std::string(net::kNoticeMapTooManyAnts).size() <= net::kMaxChatChars);
         const LobbyServices services = w.mgr.lobby_services();
-        ASSERT_TRUE(services.choose_map("Ants 8001.lvl").empty() && services.choose_map("ANTS 8001.LVL").empty() && services.choose_map("Ants 40000.lvl").empty() && !services.choose_map("Ants 8000.lvl").empty());
-        ASSERT_EQ(services.map_refusal("Ants 8001.lvl"), std::string(net::kNoticeMapTooManyAnts));
+        ASSERT_TRUE(services.choose_map("Ants 1001.lvl").empty() && services.choose_map("ANTS 1001.LVL").empty() && services.choose_map("Ants 40000.lvl").empty() && !services.choose_map("Ants 1000.lvl").empty());
+        ASSERT_EQ(services.map_refusal("Ants 1001.lvl"), std::string(net::kNoticeMapTooManyAnts));
         ASSERT_EQ(services.map_refusal("ants 40000.LVL"), std::string(net::kNoticeMapTooManyAnts));
-        ASSERT_TRUE(services.map_refusal("Ants 8000.lvl").empty() && services.map_refusal("TINY.LVL").empty() && services.map_refusal("NOT-HERE.LVL").empty());
-        ASSERT_TRUE(store.too_many_ants_online("Ants 8001.lvl") && store.too_many_ants_online("ANTS 40000.LVL") && !store.too_many_ants_online("Ants 8000.lvl") && !store.too_many_ants_online("TINY.LVL") && !store.too_big_online("Ants 8001.lvl"));
-        {   // the room's own load of the file (what the START does when the plan has another map): a map over the cap is not loaded, 8,000 is
+        ASSERT_TRUE(services.map_refusal("Ants 1000.lvl").empty() && services.map_refusal("TINY.LVL").empty() && services.map_refusal("NOT-HERE.LVL").empty());
+        ASSERT_TRUE(store.too_many_ants_online("Ants 1001.lvl") && store.too_many_ants_online("ANTS 40000.LVL") && !store.too_many_ants_online("Ants 1000.lvl") && !store.too_many_ants_online("TINY.LVL") && !store.too_big_online("Ants 1001.lvl"));
+        {   // the room's own load of the file (what the START does when the plan has another map): a map over the cap is not loaded, 1,000 is
             MapEntry entry;
             ants::assets::LevelData level;
-            ASSERT_FALSE(services.load_map("Ants 8001.lvl", entry, level));
+            ASSERT_FALSE(services.load_map("Ants 1001.lvl", entry, level));
             ASSERT_FALSE(services.load_map("Ants 40000.lvl", entry, level));
-            ASSERT_TRUE(services.load_map("Ants 8000.lvl", entry, level) && OnlineLimits::start_ants(level) == 8000u);
+            ASSERT_TRUE(services.load_map("Ants 1000.lvl", entry, level) && OnlineLimits::start_ants(level) == 1000u);
         }
         {   // the list: "online": false and the reason "ants" (the size's refusal names none); the new list only, a map at the cap has neither key
             ctl::JsonValue v;
@@ -784,19 +783,20 @@ void run_online_limit_tests() {
                 }
                 return nullptr;
             };
-            for (const char* over : {"Ants 8001.lvl", "Ants 40000.lvl"}) {
+            for (const char* over : {"Ants 1001.lvl", "Ants 40000.lvl"}) {
                 ASSERT_TRUE(entry_of(over) != nullptr && entry_of(over)->get("online").as_bool_or(true) == false && entry_of(over)->get("online_why").str() == "ants");
-                ASSERT_TRUE(entry_of(over)->get("heavy").as_bool_or(false) && entry_of(over)->get("ants").as_int_or(0) > 8000);            // (it keeps its warning chip and its count)
             }
-            ASSERT_TRUE(entry_of("Ants 8000.lvl") != nullptr && entry_of("Ants 8000.lvl")->get("online").is_null() && entry_of("Ants 8000.lvl")->get("online_why").is_null() && entry_of("Ants 8000.lvl")->get("heavy").as_bool_or(false));
+            ASSERT_TRUE(entry_of("Ants 40000.lvl")->get("heavy").as_bool_or(false) && entry_of("Ants 40000.lvl")->get("ants").as_int_or(0) == 40000);       // (a heavy one keeps its count)
+            ASSERT_TRUE(entry_of("Ants 1001.lvl")->get("heavy").is_null() && entry_of("Ants 1001.lvl")->get("ants").is_null());                           // (one that is only over the cap has the refusal and no count)
+            ASSERT_TRUE(entry_of("Ants 1000.lvl") != nullptr && entry_of("Ants 1000.lvl")->get("online").is_null() && entry_of("Ants 1000.lvl")->get("online_why").is_null() && entry_of("Ants 1000.lvl")->get("heavy").is_null());
             ASSERT_TRUE(entry_of("TINY.LVL") != nullptr && entry_of("TINY.LVL")->get("online").is_null());
             ASSERT_TRUE(store.list_json(nullptr, false).find("online") == std::string::npos);        // (the old list has no new keys)
         }
         {   // a page whose link names a test map: a draft that a room plays is the room's map, one that starts more ants than the cap is not (the room keeps the server's own map)
-            ApprovedMap draft_over = ants_map(dir, "Over Draft ~test-0badf00d.lvl", {2000, 2000, 2000, 2001});
-            ApprovedMap draft_fits = ants_map(dir, "Fits Draft ~test-0badf00e.lvl", {2000, 2000, 2000, 2000});
-            draft_over.start_ants = 8001;                                                            // (the test store counts them from the canonical file it keeps)
-            draft_fits.start_ants = 8000;
+            ApprovedMap draft_over = ants_map(dir, "Over Draft ~test-0badf00d.lvl", {250, 250, 250, 251});
+            ApprovedMap draft_fits = ants_map(dir, "Fits Draft ~test-0badf00e.lvl", {250, 250, 250, 250});
+            draft_over.start_ants = 1001;                                                            // (the test store counts them from the canonical file it keeps)
+            draft_fits.start_ants = 1000;
             w.mgr.mutable_store().set_test_maps({draft_over, draft_fits});
             ASSERT_EQ(w.mgr.store().online_refusal("over draft ~TEST-0badf00d.lvl"), std::string(net::kNoticeMapTooManyAnts));
             ASSERT_TRUE(services.choose_map("Over Draft ~test-0badf00d.lvl").empty() && services.choose_map("OVER DRAFT ~TEST-0BADF00D.LVL").empty());        // (the lobby's plan: a test map over the cap is not chosen, in any letter case)
@@ -809,22 +809,22 @@ void run_online_limit_tests() {
         }
         // the control interface
         const size_t rooms = w.mgr.room_count();
-        const CreateResult refused = w.mgr.create_room(spec_of("ctl-ants", 2, "Ants 8001.lvl"), w.now);
+        const CreateResult refused = w.mgr.create_room(spec_of("ctl-ants", 2, "Ants 1001.lvl"), w.now);
         ASSERT_TRUE(!refused.ok && refused.http_status == 422 && refused.error.find("too many ants") != std::string::npos && refused.error.find(net::kNoticeMapTooManyAnts) != std::string::npos);
         ASSERT_FALSE(w.mgr.create_room(spec_of("ctl-ants4", 2, "Ants 40000.lvl"), w.now).ok);
         ASSERT_EQ(w.mgr.room_count(), rooms);                                                         // (no room was made)
-        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-edge", 2, "Ants 8000.lvl"), w.now).ok);
-        {   // a visitor's block that names a map the operator offers (--demo-maps) with 8,001 ants: no room is made; the one with 8,000 is
+        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-edge", 2, "Ants 1000.lvl"), w.now).ok);
+        {   // a visitor's block that names a map the operator offers (--demo-maps) with 1,001 ants: no room is made; the one with 1,000 is
             ServerLimits offered = limits_with(48);
-            offered.demo_maps = {"TINY.LVL", "Ants 8001.lvl", "Ants 8000.lvl"};
+            offered.demo_maps = {"TINY.LVL", "Ants 1001.lvl", "Ants 1000.lvl"};
             World v(offered, dir.string());
             v.mgr.mutable_store().set_approved(approved);
-            Client& over = v.connect_creating("Over", "pub00601", block_of("Ants 8001.lvl", 2));
+            Client& over = v.connect_creating("Over", "pub00601", block_of("Ants 1001.lvl", 2));
             ASSERT_TRUE(door_answer(v, over) != static_cast<net::RejectReason>(0));
             ASSERT_EQ(v.mgr.room_count(), size_t{0});
-            Client& fits = v.connect_creating("Fits", "pub00602", block_of("Ants 8000.lvl", 2));
+            Client& fits = v.connect_creating("Fits", "pub00602", block_of("Ants 1000.lvl", 2));
             ASSERT_EQ(door_answer(v, fits), static_cast<net::RejectReason>(0));
-            ASSERT_EQ(v.status("pub00602").map, std::string("Ants 8000.lvl"));
+            ASSERT_EQ(v.status("pub00602").map, std::string("Ants 1000.lvl"));
         }
         fs::remove_all(dir);
     } TEST_END();
@@ -859,62 +859,59 @@ void run_online_limit_tests() {
         fs::remove_all(dir);
     } TEST_END();
 
-    TEST_CASE("S3.226 A Match Takes The Places Of Its Ants As Well As Its Cells: On The Server's 48 Places A 6,000-Ant Map (Fifteen) Fits Three Times, A Fourth Is Refused And A Shipped Map Still Fits; A 2,400-Ant Map Takes Six; An 8,000-Ant Map Takes Twenty; A Map That Needs More Than The Free Places Is Refused As Before (The Server Is Full)") {
+    TEST_CASE("S3.226 A Match Takes The Places Of Its Ants As Well As Its Cells: On A Pool Of 10 Places A 1,000-Ant Map (Three) Fits Three Times, A Fourth Is Refused And A Shipped Map Still Fits; An 800-Ant Map Takes Two; A Map That Needs More Than The Free Places Is Refused As Before (The Server Is Full)") {
         const fs::path dir = fresh_dir("s226");
-        ServerLimits l = limits_with(48);
-        l.demo_maps = {"TINY.LVL", "Six Thousand.lvl", "Twenty.lvl", "Edge 2400.lvl"};
-        {   // 6,000 ants = 15 places: three rooms take 45, the fourth (15 more) does not fit, a shipped map (one place) does
+        ServerLimits l = limits_with(10);
+        l.demo_maps = {"TINY.LVL", "Three Places.lvl", "Two Places.lvl"};
+        const auto approved = [&](bool as_file) {
+            return std::vector<ApprovedMap>{ants_map(dir, "Three Places.lvl", {250, 250, 250, 250}, "classic", as_file), ants_map(dir, "Two Places.lvl", {200, 200, 200, 200}, "classic", as_file)};
+        };
+        {   // 1,000 ants = 3 places: three rooms take 9, the fourth (3 more) does not fit, a shipped map (one place) does
             World w(l);
-            w.mgr.mutable_store().set_approved({ants_map(dir, "Six Thousand.lvl", {1500, 1500, 1500, 1500}), ants_map(dir, "Twenty.lvl", {2000, 2000, 2000, 2000}), ants_map(dir, "Edge 2400.lvl", {600, 600, 600, 600})});
-            ASSERT_EQ(w.mgr.store().start_ants_of("Six Thousand.lvl"), uint64_t{6000});
+            w.mgr.mutable_store().set_approved(approved(false));
+            ASSERT_EQ(w.mgr.store().start_ants_of("Three Places.lvl"), uint64_t{1000});
             for (int i = 1; i <= 3; ++i) {
-                Client& c = w.connect_creating("P" + std::to_string(i), "pub0080" + std::to_string(i), block_of("Six Thousand.lvl", 2));
+                Client& c = w.connect_creating("P" + std::to_string(i), "pub0080" + std::to_string(i), block_of("Three Places.lvl", 2));
                 ASSERT_MSG(door_answer(w, c) == static_cast<net::RejectReason>(0), "room " + std::to_string(i));
             }
-            Client& fourth = w.connect_creating("P4", "pub00804", block_of("Six Thousand.lvl", 2));
-            ASSERT_EQ(door_answer(w, fourth), net::RejectReason::NoSuchRoom);                        // (45 + 15 > 48: the server is full for it, as for any match that needs more than is free)
+            Client& fourth = w.connect_creating("P4", "pub00804", block_of("Three Places.lvl", 2));
+            ASSERT_EQ(door_answer(w, fourth), net::RejectReason::NoSuchRoom);                        // (9 + 3 > 10: the server is full for it, as for any match that needs more than is free)
             Client& small = w.connect_creating("P5", "pub00805", block_of("TINY.LVL", 2));
-            ASSERT_EQ(door_answer(w, small), static_cast<net::RejectReason>(0));                     // (45 + 1)
+            ASSERT_EQ(door_answer(w, small), static_cast<net::RejectReason>(0));                     // (9 + 1 = 10)
             Client& small2 = w.connect_creating("P6", "pub00806", block_of("TINY.LVL", 2));
-            ASSERT_EQ(door_answer(w, small2), static_cast<net::RejectReason>(0));                    // (46 + 1)
-            Client& small3 = w.connect_creating("P7", "pub00807", block_of("TINY.LVL", 2));
-            ASSERT_EQ(door_answer(w, small3), static_cast<net::RejectReason>(0));                    // (47 + 1 = 48)
-            Client& small4 = w.connect_creating("P8", "pub00808", block_of("TINY.LVL", 2));
-            ASSERT_EQ(door_answer(w, small4), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(door_answer(w, small2), net::RejectReason::NoSuchRoom);                        // (10 + 1)
         }
-        {   // 2,400 ants = 6 places: eight rooms fit 48, a ninth does not; the 8,000-ant map takes 20: two fit (40), a third does not
+        {   // 800 ants = 2 places: five rooms fit 10, a sixth does not; four of them take 8, and the 1,000-ant map (3 more) does not fit beside them while one more of the 800-ant map does
             World w(l);
-            w.mgr.mutable_store().set_approved({ants_map(dir, "Six Thousand.lvl", {1500, 1500, 1500, 1500}), ants_map(dir, "Twenty.lvl", {2000, 2000, 2000, 2000}), ants_map(dir, "Edge 2400.lvl", {600, 600, 600, 600})});
-            for (int i = 1; i <= 8; ++i) {
-                Client& c = w.connect_creating("Q" + std::to_string(i), "pub0090" + std::to_string(i), block_of("Edge 2400.lvl", 2));
+            w.mgr.mutable_store().set_approved(approved(false));
+            for (int i = 1; i <= 5; ++i) {
+                Client& c = w.connect_creating("Q" + std::to_string(i), "pub0090" + std::to_string(i), block_of("Two Places.lvl", 2));
                 ASSERT_MSG(door_answer(w, c) == static_cast<net::RejectReason>(0), "room " + std::to_string(i));
             }
-            ASSERT_EQ(door_answer(w, w.connect_creating("Q9", "pub00909", block_of("Edge 2400.lvl", 2))), net::RejectReason::NoSuchRoom);
+            ASSERT_EQ(door_answer(w, w.connect_creating("Q6", "pub00906", block_of("Two Places.lvl", 2))), net::RejectReason::NoSuchRoom);
             World t(l);
-            t.mgr.mutable_store().set_approved({ants_map(dir, "Six Thousand.lvl", {1500, 1500, 1500, 1500}), ants_map(dir, "Twenty.lvl", {2000, 2000, 2000, 2000}), ants_map(dir, "Edge 2400.lvl", {600, 600, 600, 600})});
-            ASSERT_EQ(door_answer(t, t.connect_creating("T1", "pub01001", block_of("Twenty.lvl", 2))), static_cast<net::RejectReason>(0));
-            ASSERT_EQ(door_answer(t, t.connect_creating("T2", "pub01002", block_of("Twenty.lvl", 2))), static_cast<net::RejectReason>(0));
-            ASSERT_EQ(door_answer(t, t.connect_creating("T3", "pub01003", block_of("Twenty.lvl", 2))), net::RejectReason::NoSuchRoom);                  // (40 + 20 > 48)
-            ASSERT_EQ(door_answer(t, t.connect_creating("T4", "pub01004", block_of("Edge 2400.lvl", 2))), static_cast<net::RejectReason>(0));          // (40 + 6 = 46: what is free is used)
+            t.mgr.mutable_store().set_approved(approved(false));
+            for (int i = 1; i <= 4; ++i) ASSERT_EQ(door_answer(t, t.connect_creating("T" + std::to_string(i), "pub0100" + std::to_string(i), block_of("Two Places.lvl", 2))), static_cast<net::RejectReason>(0));
+            ASSERT_EQ(door_answer(t, t.connect_creating("T5", "pub01005", block_of("Three Places.lvl", 2))), net::RejectReason::NoSuchRoom);                // (8 + 3 > 10)
+            ASSERT_EQ(door_answer(t, t.connect_creating("T6", "pub01006", block_of("Two Places.lvl", 2))), static_cast<net::RejectReason>(0));            // (8 + 2 = 10: what is free is used)
         }
-        {   // a lobby's START on the 6,000-ant map with 40 of the 48 places taken: no place (the existing sentence), and the same lobby on a shipped map has one
+        {   // a lobby's START on the 1,000-ant map with 8 of the 10 places taken: no place (the existing sentence), and the same lobby on the 800-ant map has one
             World w(l);
-            w.mgr.mutable_store().set_approved({ants_map(dir, "Six Thousand.lvl", {1500, 1500, 1500, 1500}, "classic", true), ants_map(dir, "Twenty.lvl", {2000, 2000, 2000, 2000}), ants_map(dir, "Edge 2400.lvl", {600, 600, 600, 600}, "classic", true)});
+            w.mgr.mutable_store().set_approved(approved(true));
             fs::copy_file(maps_dir() + "/TINY.LVL", dir / "TINY.LVL", fs::copy_options::overwrite_existing);       // (the newest machine reads the shipped map from the same folder)
-            ASSERT_EQ(door_answer(w, w.connect_creating("R1", "occu0801", block_of("Twenty.lvl", 2))), static_cast<net::RejectReason>(0));            // (20)
-            ASSERT_EQ(door_answer(w, w.connect_creating("R2", "occu0802", block_of("Twenty.lvl", 2))), static_cast<net::RejectReason>(0));            // (40; 8 are free, 15 are needed)
+            for (int i = 1; i <= 4; ++i) ASSERT_EQ(door_answer(w, w.connect_creating("R" + std::to_string(i), "occu080" + std::to_string(i), block_of("Two Places.lvl", 2))), static_cast<net::RejectReason>(0));            // (8)
             Client& pia = w.connect_page("Pia", "lobb0801", lobby_block_of());
             const net::SeatKey key = pia.lobby->key();
-            ASSERT_TRUE(pia.lobby->request_plan(plan_for("Six Thousand.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
+            ASSERT_TRUE(pia.lobby->request_plan(plan_for("Three Places.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));
             w.run(300);
-            ASSERT_EQ(w.status("lobb0801").map, std::string("Six Thousand.lvl"));
+            ASSERT_EQ(w.status("lobb0801").map, std::string("Three Places.lvl"));
             ASSERT_TRUE(pia.lobby->request_start());
             w.run(200);
             Client& game = w.connect_game("Pia", "lobb0801", key, false, dir.string());
             w.run(500);
             ASSERT_TRUE(w.status("lobb0801").state == RoomState::Waiting && !w.status("lobb0801").starting);
             ASSERT_EQ(said(game.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeNoPlace}));
-            ASSERT_TRUE(game.lobby->request_plan(plan_for("Edge 2400.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));      // 6 places: 40 + 6 = 46
+            ASSERT_TRUE(game.lobby->request_plan(plan_for("Two Places.lvl", {K::Open, K::Medium, K::Nobody, K::Nobody})));      // 2 places: 8 + 2 = 10
             w.run(300);
             ASSERT_TRUE(game.lobby->request_start());
             w.run(3000);
@@ -927,8 +924,8 @@ void run_online_limit_tests() {
         fs::create_directories(maps);
         fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
         const std::string over = tiny_with_ants({10000, 10000, 10000, 10000});                       // (40,000 ants: the map that froze a server for 11 s)
-        const std::string edge = tiny_with_ants({2000, 2000, 2000, 2000});                           // (8,000: the cap itself)
-        const std::string one = tiny_with_ants({2000, 2000, 2000, 2001});                            // (8,001)
+        const std::string edge = tiny_with_ants({250, 250, 250, 250});                               // (1,000: the cap itself)
+        const std::string one = tiny_with_ants({250, 250, 250, 251});                                // (1,001)
         ASSERT_TRUE(!over.empty() && !edge.empty() && !one.empty());
         { std::ofstream out(maps / "OVER.LVL", std::ios::binary); out << over; }
         { std::ofstream out(maps / "EDGE.LVL", std::ios::binary); out << edge; }
@@ -950,7 +947,7 @@ void run_online_limit_tests() {
             ASSERT_TRUE(s.state == RoomState::Failed && s.reason == w.report.items[0].note && !s.restored);
             ASSERT_TRUE(w.record_files().empty());
         }
-        {   // a record that names a map of exactly 8,000 ants is not refused for its ants (this record's turns are TINY's, so its replay says no for its own reasons)
+        {   // a record that names a map of exactly 1,000 ants is not refused for its ants (this record's turns are TINY's, so its replay says no for its own reasons)
             PWorld w("online-227edge", ServerLimits(), maps.string());
             w.start_server(500);
             crash_with_record_of(w, "AC-2", 8000);
@@ -980,9 +977,9 @@ void run_online_limit_tests() {
             return true;
         };
         std::unique_ptr<Room> over, edge;
-        ASSERT_TRUE(room_with(2001, over) && room_with(2000, edge));                                 // (8,004 ants and 8,000)
-        ASSERT_TRUE(over->map_start_ants() == 8004u && edge->map_start_ants() == 8000u);
-        ASSERT_TRUE(over->map_places() == 21u && edge->map_places() == 20u);                          // (the places of the ants, 400 each, rounded up)
+        ASSERT_TRUE(room_with(251, over) && room_with(250, edge));                                   // (1,004 ants and 1,000)
+        ASSERT_TRUE(over->map_start_ants() == 1004u && edge->map_start_ants() == 1000u);
+        ASSERT_TRUE(over->map_places() == 3u && edge->map_places() == 3u);                            // (the places of the ants, 400 each, rounded up)
         std::string why;
         RestartLoaded nothing;                                                                       // (no record at all: whatever else is wrong, the ants come first)
         ASSERT_TRUE(over->begin_replay(nothing, 0, why) == Room::ReplayBegin::Refused);
@@ -990,15 +987,15 @@ void run_online_limit_tests() {
         ASSERT_TRUE(edge->begin_replay(nothing, 0, why) == Room::ReplayBegin::Refused);
         ASSERT_MSG(why.find("not one that a record can be restored into") != std::string::npos, why);        // (at the cap: the record's own check says no)
     } TEST_END();
-    TEST_CASE("S3.229 A Record That Waits For Its Replay Holds The Places Of Its Ants As Well As Of Its Cells: A 2,400-Ant Map On A Small Grid Takes Six, So On Seven Places One Small Public Room Fits Beside It And A Second Does Not; The Room That Comes Back Still Holds Six") {
+    TEST_CASE("S3.229 A Record That Waits For Its Replay Holds The Places Of Its Ants As Well As Of Its Cells: A 1,000-Ant Map On A Small Grid Takes Three, So On Four Places One Small Public Room Fits Beside It And A Second Does Not; The Room That Comes Back Still Holds Three") {
         const fs::path maps = fs::path(temp_dir_for("online-229")) / "Maps";
         fs::create_directories(maps);
         fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
-        const std::string many = tiny_with_ants({600, 600, 600, 600});                               // (2,400 ants on TINY's own 31 x 31: one place by its cells, six by its ants)
+        const std::string many = tiny_with_ants({250, 250, 250, 250});                               // (1,000 ants on TINY's own 31 x 31: one place by its cells, three by its ants)
         ASSERT_TRUE(!many.empty());
         { std::ofstream out(maps / "MANY.LVL", std::ios::binary); out << many; }
         ServerLimits l;
-        l.demo_rooms = 7;
+        l.demo_rooms = 4;
         l.demo_map = "TINY.LVL";
         l.demo_maps = {"TINY.LVL"};
         PWorld w("online-229w", l, maps.string());
@@ -1017,23 +1014,23 @@ void run_online_limit_tests() {
         RClient& ann = w.connect_creating("Ann", "pub00001", block_of("TINY.LVL", 2));
         RClient& bob = w.connect_creating("Bob", "pub00002", block_of("TINY.LVL", 2));
         w.run(300);
-        ASSERT_TRUE(w.mgr->restoring_count() == 1 && w.status("pub00001").joined == 1 && !ann.was_rejected);            // (6 + 1 = 7: a place)
-        ASSERT_TRUE(bob.was_rejected && bob.rejected == net::RejectReason::NoSuchRoom);                                  // (6 + 1 + 1 = 8: none; counted as one place it would have let the second in)
+        ASSERT_TRUE(w.mgr->restoring_count() == 1 && w.status("pub00001").joined == 1 && !ann.was_rejected);            // (3 + 1 = 4: a place)
+        ASSERT_TRUE(bob.was_rejected && bob.rejected == net::RejectReason::NoSuchRoom);                                  // (3 + 1 + 1 = 5: none; counted as one place it would have let the second in)
         ASSERT_TRUE(w.until([&]() { return w.mgr->restoring_count() == 0; }, 30000));
         ASSERT_TRUE(w.status("MY-1").restored);
         RClient& cat = w.connect_creating("Cat", "pub00003", block_of("TINY.LVL", 2));
         w.run(300);
-        ASSERT_TRUE(cat.was_rejected && cat.rejected == net::RejectReason::NoSuchRoom);                                  // (the room that came back holds its six: 6 + 1 + 1 > 7)
+        ASSERT_TRUE(cat.was_rejected && cat.rejected == net::RejectReason::NoSuchRoom);                                  // (the room that came back holds its three: 3 + 1 + 1 > 4)
         std::error_code ignore;
         fs::remove_all(maps.parent_path(), ignore);
     } TEST_END();
-    TEST_CASE("S3.231 Of Two Restart Records That Wait For Their Replay, The One Whose Room Is Not Made Yet Weighs Its Ants Too: Two 2,400-Ant Matches Hold 6 + 6 Of 13 Places Whichever Has Its Room, So One Small Public Room Fits And A Second Does Not") {
+    TEST_CASE("S3.231 Of Two Restart Records That Wait For Their Replay, The One Whose Room Is Not Made Yet Weighs Its Ants Too: Two 1,000-Ant Matches Hold 3 + 3 Of 7 Places Whichever Has Its Room, So One Small Public Room Fits And A Second Does Not") {
         const fs::path maps = fs::path(temp_dir_for("online-231")) / "Maps";
         fs::create_directories(maps);
         fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
-        { std::ofstream out(maps / "MANY.LVL", std::ios::binary); out << tiny_with_ants({600, 600, 600, 600}); }
+        { std::ofstream out(maps / "MANY.LVL", std::ios::binary); out << tiny_with_ants({250, 250, 250, 250}); }
         ServerLimits l;
-        l.demo_rooms = 13;
+        l.demo_rooms = 7;
         l.demo_map = "TINY.LVL";
         l.demo_maps = {"TINY.LVL"};
         PWorld w("online-231w", l, maps.string());
@@ -1057,8 +1054,8 @@ void run_online_limit_tests() {
         RClient& ann = w.connect_creating("Ann", "pub00001", block_of("TINY.LVL", 2));
         RClient& bob = w.connect_creating("Bob", "pub00002", block_of("TINY.LVL", 2));
         w.run(100);
-        ASSERT_TRUE(w.mgr->restoring_count() >= 1 && w.status("pub00001").joined == 1 && !ann.was_rejected);       // (6 + 6 + 1 = 13)
-        ASSERT_TRUE(bob.was_rejected && bob.rejected == net::RejectReason::NoSuchRoom);                            // (14: with the unmade record weighed as one place it would be 9 and Bob would be in)
+        ASSERT_TRUE(w.mgr->restoring_count() >= 1 && w.status("pub00001").joined == 1 && !ann.was_rejected);       // (3 + 3 + 1 = 7)
+        ASSERT_TRUE(bob.was_rejected && bob.rejected == net::RejectReason::NoSuchRoom);                            // (8: with the unmade record weighed as one place it would be 6 and Bob would be in)
         std::error_code ignore;
         fs::remove_all(maps.parent_path(), ignore);
     } TEST_END();

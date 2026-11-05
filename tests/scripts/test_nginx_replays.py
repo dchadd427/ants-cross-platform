@@ -270,7 +270,7 @@ class TheLocations(unittest.TestCase):
         self.assertIn("`ANTS_REPLAY_DAYS`). A server with other settings", read("docs", "SERVER.md"))     # (the document that names the variable says that the pages repeat its number and what to change)
         self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
 
-    def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_that_the_network_is_private(self):
+    def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_who_can_reach_the_door(self):
         for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "is not published on the host at all", "put only containers you trust on it")),
                               ("docker-compose.server.yml", ("ran 30 seconds or more", "put only containers you trust on it")),
                               ("docker-compose.staging.yml", ("ANTS_REPLAY_PORT", "not published")),
@@ -403,7 +403,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(self.ask("GET", "/replays")[0], 200)
         self.assertEqual(self.stub_lines(before + 5) - before, 5)
 
-    def test_the_list_may_be_asked_twenty_times_a_second_by_the_whole_site_with_a_burst_of_a_hundred_and_the_files_have_an_allowance_of_their_own(self):
+    def test_the_list_may_be_asked_twenty_times_a_second_with_a_burst_of_a_hundred_and_the_files_have_an_allowance_of_their_own(self):
         before = self.stub_lines()
         started = time.monotonic()
         codes = [self.ask("GET", "/replays")[0] for _ in range(160)]
@@ -415,7 +415,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertLessEqual(self.stub_lines() - before, 1 + int(took / 5))                   # the cache: the server was asked once (and again every five seconds), not 100 times
         self.assertEqual(self.ask("GET", "/replays/" + FILE)[0], 200)                         # the files are another zone: a flood of the list does not use their allowance
 
-    def test_ten_files_a_second_for_the_whole_site_with_a_burst_of_twenty_and_the_rest_is_503_and_never_reaches_the_server(self):
+    def test_ten_files_a_second_with_a_burst_of_twenty_and_the_rest_is_503_and_never_reaches_the_server(self):
         before = self.stub_lines()
         started = time.monotonic()
         codes = [self.ask("GET", "/replays/" + FILE)[0] for _ in range(60)]

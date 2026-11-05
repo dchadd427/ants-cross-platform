@@ -1,11 +1,11 @@
 {
- "note": "Mutants of the cap of starting ants of an online room (OnlineLimits::kMaxStartAnts = 8,000, all four colors together) and of the weight of a match (the most of the places of its cells and of its ants, one for every started 400 ants), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_ants_cap_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'Starting ants') or docs/MAP_SUBMISSIONS.md ('The online size limit'). The web side (the Play this map dialog's refusal and the picker's chip) is in tests/data/mapmaker_play_mutants.json (play_cap_*) and tests/scripts/test_web_map_picker.py. Not listed on purpose: three second locks behind a first one that a test does reach: the check in Room::start_lobby and in the lobby's START (Room::update) behind choose_map, load_map and build_room (no door of the manager makes a Room on a map over the cap, so no test can start one), the ants check in the history's approved-map callback behind the feeder's own load_level.",
+ "note": "Mutants of the cap of starting ants of an online room (OnlineLimits::kMaxStartAnts = 1,000, all four colors together) and of the weight of a match (the most of the places of its cells and of its ants, one for every started 400 ants), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_ants_cap_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit', 'Starting ants') or docs/MAP_SUBMISSIONS.md ('The online size limit'). The web side (the Play this map dialog's refusal and the picker's chip) is in tests/data/mapmaker_play_mutants.json (play_cap_*) and tests/scripts/test_web_map_picker.py. Not listed on purpose: three second locks behind a first one that a test does reach: the check in Room::start_lobby and in the lobby's START (Room::update) behind choose_map, load_map and build_room (no door of the manager makes a Room on a map over the cap, so no test can start one), the ants check in the history's approved-map callback behind the feeder's own load_level (the two calls of load_level are listed: a new file, MP2.3, and the stats of an older record, MP2.4).",
  "mutants": [
   {
    "id": "cap_one_more",
    "file": "include/ants_server/online_limits.hpp",
-   "old": "kMaxStartAnts = 8000;",
-   "new": "kMaxStartAnts = 8001;",
+   "old": "kMaxStartAnts = 1000;",
+   "new": "kMaxStartAnts = 1001;",
    "build": [
     "test_server",
     "test_map_list",
@@ -18,8 +18,36 @@
   {
    "id": "cap_one_less",
    "file": "include/ants_server/online_limits.hpp",
-   "old": "kMaxStartAnts = 8000;",
-   "new": "kMaxStartAnts = 7999;",
+   "old": "kMaxStartAnts = 1000;",
+   "new": "kMaxStartAnts = 999;",
+   "build": [
+    "test_server",
+    "test_map_list",
+    "test_test_maps",
+    "test_submissions",
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_map_list && ./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions && ./build/tests/test_server/test_map_plays"
+  },
+  {
+   "id": "cap_back_to_8000",
+   "file": "include/ants_server/online_limits.hpp",
+   "old": "kMaxStartAnts = 1000;",
+   "new": "kMaxStartAnts = 8000;",
+   "build": [
+    "test_server",
+    "test_map_list",
+    "test_test_maps",
+    "test_submissions",
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_map_list && ./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions && ./build/tests/test_server/test_map_plays"
+  },
+  {
+   "id": "cap_under_the_largest_library_map",
+   "file": "include/ants_server/online_limits.hpp",
+   "old": "kMaxStartAnts = 1000;",
+   "new": "kMaxStartAnts = 247;",
    "build": [
     "test_server",
     "test_map_list",
@@ -264,7 +292,7 @@
   {
    "id": "upload_test_maps_refusal_message_missing",
    "file": "src/ants_server/test_maps.cpp",
-   "old": "This map starts too many ants to play online (8,000 at most, all colors together). You can still play it against bots on this computer.",
+   "old": "This map starts too many ants to play online (1,000 at most, all colors together). You can still play it against bots on this computer.",
    "new": "",
    "build": [
     "test_test_maps"
@@ -284,7 +312,7 @@
   {
    "id": "upload_submissions_refusal_message_missing",
    "file": "src/ants_server/submissions.cpp",
-   "old": "This map starts too many ants to play online (8,000 at most, all colors together). You can still play it against bots on this computer.",
+   "old": "This map starts too many ants to play online (1,000 at most, all colors together). You can still play it against bots on this computer.",
    "new": "",
    "build": [
     "test_submissions"
@@ -545,7 +573,7 @@
   {
    "id": "message_of_the_leader_missing",
    "file": "include/ants_net/protocol.hpp",
-   "old": "\"This map starts too many ants to play online (8,000 at most): choose another map.\"",
+   "old": "\"This map starts too many ants to play online (1,000 at most): choose another map.\"",
    "new": "\"\"",
    "build": [
     "test_server",
@@ -559,7 +587,7 @@
   {
    "id": "message_of_the_leader_without_the_number",
    "file": "include/ants_net/protocol.hpp",
-   "old": "(8,000 at most): choose another map.\"",
+   "old": "(1,000 at most): choose another map.\"",
    "new": "(too many): choose another map.\"",
    "build": [
     "test_server",
@@ -569,6 +597,26 @@
     "test_map_plays"
    ],
    "test": "ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server && ./build/tests/test_server/test_map_list && ./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions && ./build/tests/test_server/test_map_plays"
+  },
+  {
+   "id": "replay_over_the_cap_gets_its_stats_from_the_history",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "else if (!load_level(rep.head, level, why)) for_now = true;",
+   "new": "else if (!load_map_of(rep.head, level, why)) for_now = true;",
+   "build": [
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=MP2.4 ./build/tests/test_server/test_map_plays"
+  },
+  {
+   "id": "replay_over_the_cap_is_counted_by_the_feeder",
+   "file": "src/ants_server/history_store.cpp",
+   "old": "if (!load_level(rep.head, level, why)) {\n        skip(id, why);",
+   "new": "if (!load_map_of(rep.head, level, why)) {\n        skip(id, why);",
+   "build": [
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=MP2.3 ./build/tests/test_server/test_map_plays"
   }
  ]
 }

@@ -108,7 +108,8 @@ class Hub:
         self.port = None
         self.online_shown = 0
         self.online_at = float("-inf")
-        self.next_deletions = self.next_forget = self.next_purge = self.next_checkpoint = self.next_crowded = float("-inf")
+        self.next_deletions = self.next_forget = self.next_purge = self.next_checkpoint = self.next_crowded = self.next_room = float("-inf")
+        self.pruning = False                        # True while the oldest lines are being deleted to make room (from prune_from_percent of the limit down to prune_to_percent)
         self.routes = getattr(sessions, "routes", None) or {}
         if hasattr(sessions, "attach"):
             sessions.attach(self)
@@ -296,6 +297,20 @@ class Hub:
         elif self.store.unsettled and now >= self.next_checkpoint:
             self.next_checkpoint = now + self.limits.checkpoint_retry_seconds
             self.store.checkpoint()
+        if now >= self.next_room:
+            self.next_room = now + self.limits.tick_seconds
+            if self.pruning or self.store.size() >= self.limits.prune_from_bytes:
+                self.next_room = now + self.limits.purge_failure_seconds         # (set first, as for the purge: a database that refuses is tried again in a minute, not at every tick)
+                gone = self.store.make_room(self.limits.prune_to_bytes, self.limits.purge_chunk, self.limits.keep_lines)
+                self.pruning = gone > 0                                           # (a chunk a tick, until the store is down to prune_to_percent or no line may go)
+                self.next_room = now + self.limits.tick_seconds
+                if gone:
+                    self.log.event("prune", lines=gone)
+                elif self.store.size() >= self.limits.prune_from_bytes:           # (nothing went and it is still over the mark: it is not asked again at every tick)
+                    held = self.store.unsettled                                    # (make_room has just tried to cut the log file: if that was refused, a reader holds the database)
+                    self.next_room = now + (self.limits.checkpoint_retry_seconds if held else self.limits.purge_failure_seconds)
+                    if self.store.size() >= self.limits.db_max_bytes:
+                        self.log.event("warning", what="database_full_a_reader_holds_the_log_file" if held else "database_full_and_no_line_to_delete")
         if now >= self.next_crowded:
             self.next_crowded = now + self.limits.crowded_log_seconds
             biggest = max(self.per_address.counts.values(), default=0)
