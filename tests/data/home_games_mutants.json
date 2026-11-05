@@ -2555,6 +2555,13 @@
    "old": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 856px)); } }",
    "new": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 440px)); } }",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_lazy_set_after_the_address",
+   "file": "web/home/games.js",
+   "old": "img.setAttribute('loading', 'lazy'); img.src = src;",
+   "new": "img.src = src; img.setAttribute('loading', 'lazy');",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
   }
  ]
 }

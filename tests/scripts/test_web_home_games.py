@@ -154,6 +154,7 @@ class TheFolder(unittest.TestCase):
     def test_a_picture_that_does_not_come_is_taken_away_and_the_square_stays(self):
         self.assertEqual(self.js.count("img.addEventListener('error', function () { pic.removeChild(img); });"), 1)
         self.assertIn("img.setAttribute('loading', 'lazy');", self.js, "a list of 50 rows is not 50 requests at once, and a closed popover asks for none")
+        self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
     def test_nothing_is_kept_in_the_browser_and_the_one_address_has_no_query_and_no_cookies(self):

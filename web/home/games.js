@@ -412,7 +412,7 @@
         function rowNode(row, onList, best, yours) {
             var li = el(onList ? 'li' : 'div', 'gitem'), seats = seatsOf(row), pic = el('span', 'gmap'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
             var src = row.mapKey ? 'front/preview_' + row.mapKey + '.png' : Picker ? Picker.previewPath(row.map) : '';
-            if (src) { var img = el('img'); img.src = src; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); img.setAttribute('loading', 'lazy'); img.addEventListener('error', function () { pic.removeChild(img); }); pic.appendChild(img); }
+            if (src) { var img = el('img'); img.setAttribute('loading', 'lazy'); img.src = src; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); img.addEventListener('error', function () { pic.removeChild(img); }); pic.appendChild(img); }
             pic.setAttribute('aria-hidden', 'true'); dots.setAttribute('aria-hidden', 'true');
             top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
