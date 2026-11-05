@@ -59,8 +59,8 @@ struct ServerLimits {
     // the seats, the teams and the leader-starts flag that the room should have) for a room that does not exist makes it, at most `demo_rooms` of them at a time (0 = off). The code is only a name: whatever
     // 6 letters and numbers the first player's game made. The block chooses the seats (2 to 4), the teams and whether a full room waits for its leader's START; the map is the block's when the server offers
     // it (`demo_maps`) and `demo_map` when it does not (a page that offers a map this server does not allow still gets the room it asked for). A public room waits `demo_wait_ms` (ten minutes) for its players and is
-    // forgotten half a minute after it ended; a Hello with a block for the code of one that is over makes a new room at once, and a Hello without a block is NoSuchRoom (a Hello for a room that is not there is, too). Whoever can
-    // reach the door can fill these rooms and hold them for a match: that is the price of a page that works without a secret; rooms of the control interface are made by the control interface and are never public.
+    // forgotten half a minute after it ended; a Hello with a block for the code of one that is over makes a new room at once, and a Hello without a block is NoSuchRoom (a Hello for a room that is not there is, too). These rooms
+    // are open to anyone who can reach the door, so their number is bounded by `demo_rooms`; rooms of the control interface are made by the control interface and are never public.
     size_t demo_rooms{0};
     std::string demo_map;
     // Lobby rooms (protocol 16; the server's --demo-lobbies, which needs --demo-rooms, the demo maps and reconnect): see the paragraph at the top. A waiting lobby is forgotten `lobby_empty_close_ms` after the last person

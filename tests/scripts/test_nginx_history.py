@@ -10,7 +10,7 @@ forwards the two addresses like /replays and /live (tests/scripts/test_nginx_rep
     server (the history decides which exist); the list takes the query of its filters, of the characters that the filters are made of and 400 characters at most (400 otherwise), so that no other byte
     reaches the server or its log, and the server refuses by name what it does not know;
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
-  - allowances of their own, sized for the whole site (behind a reverse proxy every visitor has the proxy's address) and not shared with the recorded or the live matches': ten a second for the list,
+  - allowances of their own, not shared with the recorded or the live matches': ten a second for the list,
     twenty for single matches (503 beyond);
   - the list WITHOUT a query is cached for five seconds in one entry for everybody in the cache of /stats, and an old list is served while a new one is fetched and when the server does not answer; a list
     WITH a query (a search is dear for the game server) has a low allowance (two a second, a burst of five) and is cached for five seconds under its arguments in a small cache of its own (so that made-up
@@ -186,8 +186,7 @@ class TheLocations(unittest.TestCase):
 
 
 class TheAllowancesAndTheCache(unittest.TestCase):
-    def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address: docs/audit/site_stats_notes.md; an allowance per visitor would be one for everybody)
+    def test_each_address_has_an_allowance_of_its_own_and_the_zones_are_outside_the_server(self):
         # The list has two allowances, one for a request without a query (ten a second) and a much lower one for a request with one (two a second): the zone's key is the address for the one kind of
         # request and empty (not counted) for the other, chosen by $is_args
         for zone_name, key, rate in (("ants_history", "$history_plain_key", 10), ("ants_history_query", "$history_query_key", 2), ("ants_history_items", "$binary_remote_addr", 20)):

@@ -183,7 +183,7 @@ COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
-# The owner's page (docs/MAP_SUBMISSIONS.md "The owner's page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
+# The owner's page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js

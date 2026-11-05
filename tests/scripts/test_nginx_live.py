@@ -8,7 +8,7 @@ the two addresses like /replays (tests/scripts/test_nginx_replays.py), as the on
   - /live is an exact location and /live/ a prefix location, the only ones of the name (the named location of /replays answers when the server has no such door);
   - only a GET without a query goes through (405 and 404 otherwise); an id of the wrong shape is 404 here and never reaches the server (the board decides which exist);
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
-  - allowances of their own, sized for the whole site (behind a reverse proxy every visitor has the proxy's address) and not shared with the recorded matches': twenty a second for the list,
+  - allowances of their own, not shared with the recorded matches': twenty a second for the list,
     thirty for the snapshots (503 beyond);
   - both are cached for TWO seconds in the cache of /stats (the list in one entry, a snapshot in one entry for each id), only a 200 is kept, an answer is served old only while a new one is being fetched
     (never because the server does not answer: a snapshot that is repeated for minutes looks like a match that goes on), and a server that has no such door is answered 404 with a JSON body.
@@ -132,8 +132,7 @@ class TheLocations(unittest.TestCase):
 
 
 class TheAllowancesAndTheCache(unittest.TestCase):
-    def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address; an allowance per visitor would be one for everybody)
+    def test_each_address_has_an_allowance_of_its_own_and_the_zones_are_outside_the_server(self):
         for zone_name, block, rate, burst in (("ants_live", LIST, 20, 100), ("ants_live_files", SNAPSHOT, 30, 60)):
             zone = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/([sm]);" % zone_name, CONF)
             self.assertIsNotNone(zone, zone_name)

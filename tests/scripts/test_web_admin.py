@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The owner's page, web/admin.html with web/admin_page.js and web/admin.css (run by ./run_tests.sh --fast and by the CI; docs/MAP_SUBMISSIONS.md "The owner's page").
+"""The owner's page, web/admin.html with web/admin_page.js and web/admin.css (run by ./run_tests.sh --fast and by the CI; docs/MAP_SUBMISSIONS.md "The admin page").
 
   - the page's own code is RUN (node, when it is installed): what it shows to nobody (the sign-in box), to an account with a starting password (the choice of its own), to an Admin and to a Moderator (the first
     design's pictures: the account menu, the four tabs, the rows, the rename box, the decline box, the question before a take-down, the users, the password shown once, the log, the empty states), what each button

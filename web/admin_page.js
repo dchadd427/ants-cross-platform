@@ -1,4 +1,4 @@
-// The owner's page (docs/MAP_SUBMISSIONS.md, "The owner's page" and "Accounts"), reached only by typing /admin: no page of the site links to it. It shows the sign-in box (and nothing else) to a stranger, the
+// The owner's page (docs/MAP_SUBMISSIONS.md, "The admin page" and "Accounts"), reached only by typing /admin: no page of the site links to it. It shows the sign-in box (and nothing else) to a stranger, the
 // choice of a new password to an account that still has its starting password (the server holds that too), and the sections to everybody else: the maps that players sent (Admin and Moderator) and the users and
 // the log of what was done (Admin only). The page asks the server who is here (GET /admin/api/me) and shows only what it is told; the server decides everything again on every call.
 //   * Every text that comes from a person or from the server goes into the page with textContent, never as HTML. A password is typed into a password input (autocomplete current-password / new-password), sent in the

@@ -139,7 +139,7 @@ class TheDockerIgnore(unittest.TestCase):
         ignore = wd.DockerIgnore(read(".dockerignore"))
         for folder in (".git", ".git/refs", ".git/refs/heads", "src", "src/ants_app"):
             self.assertTrue(ignore.may_contain_included(folder), folder)
-        for folder in (".git/objects", "tests", "docs", "docs/audit", "scratch", "build_web", ".github", "Original-Ants/Shaders"):          # (nothing of docs/ is in the context)
+        for folder in (".git/objects", "tests", "docs", "docs/reverse_engineering", "scratch", "build_web", ".github", "Original-Ants/Shaders"):          # (nothing of docs/ is in the context)
             self.assertFalse(ignore.may_contain_included(folder), folder)
 
     def test_the_matching_rules(self):
