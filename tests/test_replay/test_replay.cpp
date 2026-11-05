@@ -1861,7 +1861,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(!at.empty() && !over.empty());
         ASSERT_TRUE(load_map_or_embedded(carrying(at), dirs, level, error) && error.empty());
         ASSERT_FALSE(load_map_or_embedded(carrying(over), dirs, level, error));
-        ASSERT_TRUE(contains(error, "8001 ants") && contains(error, "8000"));
+        ASSERT_TRUE(contains(error, "8,001 ants") && contains(error, "8,000"));
         assets::LevelData planted;                                                     // (the plants of block 1, records that are no start marker, start no ant: 8,000 markers and 2,000 plants are not too many)
         ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(at.data()), at.size(), planted, nullptr, assets::LevelLimits::for_extended_maps()));
         for (int i = 0; i < 2000; ++i) planted.anthill_spawns.push_back(assets::AnthillSpawn{404, 1, 1, 255, 0});
@@ -1871,7 +1871,7 @@ int main(int argc, char* argv[]) {
         const std::string crowd = tiny_with_ants({16384, 16384, 16384, 16383});        // (a file of 65,535 ants, the most that block 1 holds: seconds to set up natively, minutes in a browser)
         ASSERT_FALSE(crowd.empty());
         ASSERT_FALSE(load_embedded_map(carrying(crowd), level, error));
-        ASSERT_TRUE(contains(error, "65535 ants"));
+        ASSERT_TRUE(contains(error, "65,535 ants"));
         ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(5));
         {   // the folder's own file is the server's: a map of it is never counted
             std::ofstream big(nowhere.path / "BIG.LVL", std::ios::binary);
