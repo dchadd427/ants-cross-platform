@@ -17,9 +17,12 @@
 //   G  the rules word of a new Extended map: the table (the word of the map it comes from x its rows -> the word it gets), the rows of a Resize, and each way of making a new map from it (a copy, Start an
 //      Extended map): the core's copy with long orders where the table says 2, the plain bytes where it does not, the open map never touched; the Classic map made from a map of long orders (the short note
 //      of the core and the words that go with it)
+//   H  New map and Save as a new map: the page's own function that gives the word (taken out of mapmaker_app.js): the core is asked where the map has not the word that the rule gives, the very
+//      bytes come back where it has it, and a core that cannot give the copy (ok false, a refusal, a fault) never costs the map
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const argv = process.argv.slice(2);
 const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front') + 1]) : path.resolve(__dirname, '..', '..', 'web', 'front');
@@ -479,8 +482,43 @@ function caseG() {
 }
 function equalTo(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
+// ---- H: New map and Save as a new map give the word through the page's own function (mapmaker_app.js, withLongOrders: the page needs a real canvas to run, so the function is taken out of the source) ----
+function caseH() {
+    const Sizes = require(path.join(FRONT, 'mapmaker_sizes.js'));
+    const found = /\n    function withLongOrders\(bytes\) \{\n[\s\S]*?\n    \}\n/.exec(fs.readFileSync(path.join(FRONT, 'mapmaker_app.js'), 'utf8'));
+    check(found !== null && found[0].split('\n').length <= 10, 'withLongOrders is in mapmaker_app.js and is a few lines');
+    if (!found) return;
+    function run(core, src) {
+        const dead = [], parse = (b) => ({ ok: b.unreadable !== true, kind: b.kind, rules: b.rules, rows: b.rows });
+        const withLongOrders = new Function('win', 'MapSizes', 'core', 'alive', found[0] + '\nreturn withLongOrders;')({ MapFile: { parse } }, Sizes, core, () => { dead.push('alive'); return true; });
+        return { out: withLongOrders(src), dead };
+    }
+    // where the map has not the word that the rule gives, the core is asked once and its copy is the map: a blank Extended map of rules 0 (up to the wall) or 1 (any size)
+    for (const [word, rows] of [[0, 1], [0, 90], [1, 1], [1, 91], [1, 512]]) {
+        const calls = [], src = file('extended', rows, 40, 'ok', word), r = run(standIn(calls), src);
+        check(equalTo(calls, ['toLongOrders']) && r.out !== src && r.out.rules === 2 && r.out.kind === 'extended' && r.dead.length === 0, 'rules ' + word + ', ' + rows + ' rows: the core is asked once and its copy has rules 2');
+    }
+    // where it has it, or the rule gives it no word: no call, the very bytes (rules 2, a Classic map, a map of rules 0 with a wall, a file that does not read)
+    const unreadable = file('extended', 40, 40, 'ok', 0);
+    unreadable.unreadable = true;
+    for (const [what, src] of [['rules 2', file('extended', 40, 40, 'ok', 2)], ['rules 2, 300 rows', file('extended', 300, 40, 'ok', 2)], ['a Classic map', file('classic', 40, 40)], ['rules 0 with a wall (91 rows)', file('extended', 91, 40, 'ok', 0)], ['rules 0, 400 rows', file('extended', 400, 40, 'ok', 0)], ['a file that does not read', unreadable]]) {
+        const calls = [], r = run(standIn(calls), src);
+        check(calls.length === 0 && r.out === src && r.dead.length === 0, what + ': the core is not asked and the bytes are the same ones');
+    }
+    // the core cannot give the copy: the map stays as it was, never lost for the word; and a core that has stopped for good is said to have (the page's alive() says it once)
+    const refused = file('extended', 40, 40, 'ok', 0);
+    refused.refuse = true;
+    let r = run(standIn([]), refused);
+    check(r.out === refused && r.dead.length === 0, 'an answer with ok false (the copy cannot be written): the map as it was, and the core is not taken for dead');
+    const plain = file('extended', 40, 40, 'ok', 1);
+    r = run({ convertToLongOrders: () => ({ status: 1, error: 'the file does not load' }) }, plain);
+    check(r.out === plain && r.dead.length === 0, 'a refusal (status 1): the map as it was, and the core is not taken for dead');
+    r = run({ convertToLongOrders: () => ({ status: 2, error: 'no memory' }) }, plain);
+    check(r.out === plain && r.dead.length === 1, 'a fault of the core (status 2): the map as it was, and the page is asked whether the core is alive');
+}
+
 function main() {
-    for (const [name, fn] of [['A the frame', caseA], ['B the names', caseB], ['C the Crop to fit screen', caseC], ['D Copy this map', caseD], ['E Start an Extended map, Make a Classic map, the reasons', caseE], ['F Crop it to fit', caseF], ['G the rules word of a new Extended map', caseG]]) {
+    for (const [name, fn] of [['A the frame', caseA], ['B the names', caseB], ['C the Crop to fit screen', caseC], ['D Copy this map', caseD], ['E Start an Extended map, Make a Classic map, the reasons', caseE], ['F Crop it to fit', caseF], ['G the rules word of a new Extended map', caseG], ['H New map and Save as a new map', caseH]]) {
         process.stdout.write('RUNNING: ' + name + ' ... ');
         const before = failures;
         try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

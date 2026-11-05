@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the rules word that a NEW Extended map gets (docs/MAP_EDITOR.md, E4): the rule and its line at 90 rows (mapmaker_sizes.js), the Resize that gives the word in the step of the new size (mapmaker_blocks.js), Copy and Start an Extended map (the core's copy with long orders, the plain copy, the open map never touched: mapmaker_convert.js), the places that make a new map and the places that must not (mapmaker_app.js: New map, Save as a new map, Download, Open), the Rules 2 badge (the page, its style, the cards and the lists) and the words of the Classic map made from a map of long orders. Run: python3 tools/mutate.py tests/data/mapmaker_rules_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Each must fail the page's node checks or its wiring tests; the last one needs build_web/lvl_core.",
+ "note": "Mutants of the rules word that a NEW Extended map gets (docs/MAP_EDITOR.md, E4): the rule and its line at 90 rows (mapmaker_sizes.js), the Resize that gives the word in the step of the new size (mapmaker_blocks.js), Copy and Start an Extended map (the core's copy with long orders, the plain copy, the open map never touched: mapmaker_convert.js), the places that make a new map and the places that must not (mapmaker_app.js: New map, Save as a new map, Download, Open), the Rules 2 badge (the page, its style, the cards and the lists), the words of the Classic map made from a map of long orders, the Undo of a Resize that changed a word, the New map that is never lost to a core that cannot give the copy, and the page that is told to reload when its wrapper and its module are both old. Run: python3 tools/mutate.py tests/data/mapmaker_rules_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Each must fail the page's node checks or its wiring tests; the last one needs build_web/lvl_core.",
  "mutants": [
   {
    "id": "rules_wall_at_89_rows",
@@ -301,6 +301,76 @@
    "old": "env.tags(tags, rec.kind === 'extended' ? 'extended' : 'classic', file && file.rules);",
    "new": "env.tags(tags, rec.kind === 'extended' ? 'extended' : 'classic');",
    "test": "node tests/scripts/web_mapmaker_submit_check.js"
+  },
+  {
+   "id": "resize_undo_gives_the_word_zero_back",
+   "file": "web/front/mapmaker_blocks.js",
+   "old": "removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8])",
+   "new": "removed: new Uint8Array(2), inserted: new Uint8Array([rules & 255, rules >> 8])",
+   "test": "node tests/scripts/web_mapmaker_edit_check.js"
+  },
+  {
+   "id": "resize_undo_gives_the_low_byte_of_the_word_back_only",
+   "file": "web/front/mapmaker_blocks.js",
+   "old": "removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8])",
+   "new": "removed: new Uint8Array([file.bytes[14], 0]), inserted: new Uint8Array([rules & 255, rules >> 8])",
+   "test": "node tests/scripts/web_mapmaker_edit_check.js"
+  },
+  {
+   "id": "new_map_is_lost_when_the_core_cannot_give_the_copy",
+   "file": "web/front/mapmaker_app.js",
+   "old": "return made.status === 0 && made.json.ok ? made.bytes : bytes;",
+   "new": "return made.bytes;",
+   "test": "node tests/scripts/web_mapmaker_convert_check.js"
+  },
+  {
+   "id": "new_map_never_asks_whether_the_core_has_stopped",
+   "file": "web/front/mapmaker_app.js",
+   "old": "var made = core.convertToLongOrders(bytes);\n        if (made.status === 2) alive();",
+   "new": "var made = core.convertToLongOrders(bytes);",
+   "test": "node tests/scripts/web_mapmaker_convert_check.js"
+  },
+  {
+   "id": "new_map_asks_the_core_again_for_a_map_that_has_the_word",
+   "file": "web/front/mapmaker_app.js",
+   "old": "|| MapSizes.newRules(f.rules, f.rows) === f.rules) return bytes;",
+   "new": ") return bytes;",
+   "test": "node tests/scripts/web_mapmaker_convert_check.js"
+  },
+  {
+   "id": "new_map_asks_the_core_for_a_classic_map",
+   "file": "web/front/mapmaker_app.js",
+   "old": "if (!f.ok || f.kind !== 'extended' || MapSizes",
+   "new": "if (!f.ok || MapSizes",
+   "test": "node tests/scripts/web_mapmaker_convert_check.js"
+  },
+  {
+   "id": "new_map_asks_the_core_for_a_file_that_does_not_read",
+   "file": "web/front/mapmaker_app.js",
+   "old": "if (!f.ok || f.kind !== 'extended' || MapSizes",
+   "new": "if (f.kind !== 'extended' || MapSizes",
+   "test": "node tests/scripts/web_mapmaker_convert_check.js"
+  },
+  {
+   "id": "old_wrapper_beside_old_module_starts_the_page",
+   "file": "web/front/mapmaker_app.js",
+   "old": "if (typeof core.convertToLongOrders !== 'function') return fatal(OUT_OF_DATE);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_mapmaker.py ThePage.test_an_old_wrapper_beside_an_old_module_is_told_to_reload_before_anything_of_the_page_is_made"
+  },
+  {
+   "id": "old_wrapper_guard_is_upside_down",
+   "file": "web/front/mapmaker_app.js",
+   "old": "if (typeof core.convertToLongOrders !== 'function') return fatal(OUT_OF_DATE);",
+   "new": "if (typeof core.convertToLongOrders === 'function') return fatal(OUT_OF_DATE);",
+   "test": "python3 tests/scripts/test_web_mapmaker.py ThePage.test_an_old_wrapper_beside_an_old_module_is_told_to_reload_before_anything_of_the_page_is_made"
+  },
+  {
+   "id": "old_wrapper_guard_has_a_sentence_of_its_own",
+   "file": "web/front/mapmaker_app.js",
+   "old": "if (typeof core.convertToLongOrders !== 'function') return fatal(OUT_OF_DATE);",
+   "new": "if (typeof core.convertToLongOrders !== 'function') return fatal('The map code did not answer. Reload the page.');",
+   "test": "python3 tests/scripts/test_web_mapmaker.py ThePage.test_an_old_wrapper_beside_an_old_module_is_told_to_reload_before_anything_of_the_page_is_made"
   },
   {
    "id": "rules_the_core_blank_map_is_trusted",

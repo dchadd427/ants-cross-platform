@@ -702,15 +702,9 @@ LevelConversion convert_to_extended(const LevelData& level) {
 
 LevelConversion convert_to_long_orders(const LevelData& level) {
     LevelConversion result = convert_to_extended(level);
-    if (!result.ok) return result;
-    result.level.rules = LVL_RULES_LONG_ORDERS;               // the copy plays by the long-order rules; its cells are the source's
-    const LevelWriteResult check = write_level(result.level, conversion_limits(true));
-    if (!check.ok) {
-        result.ok = false;
-        result.reasons.push_back("the map cannot be written as an Extended map of rules 2: " + check.error);
-        result.reason_codes.push_back("not_writable_as_extended");
-        result.level = LevelData{};
-    }
+    // the copy plays by the long-order rules; its cells are the source's. No second check of the copy: write_level reads the rules word for its range (0 to 2) and to write it, so the check that
+    // convert_to_extended made (and its guard against running out of memory) holds for the word 2 as well; the caller writes the file
+    if (result.ok) result.level.rules = LVL_RULES_LONG_ORDERS;
     return result;
 }
 

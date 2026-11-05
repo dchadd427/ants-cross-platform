@@ -11,7 +11,9 @@ rules word), never from the inside of the page.
              Make a Classic map from a map of long orders shows the short note and the two words of the picture;
   1280 x 720: the top bar is not taller with the badge and the Objects column (5 pixels to spare) does not overflow;
   1280 x 960 (a tall window): the badge is in the tag row beside "New version only" and the chip is not shown;
-  390 x 844 (a phone): the badges are on a line of their own under the size, nothing scrolls sideways, and the Copy sheet of a map has no new row either."""
+  390 x 844 (a phone): the badges are on a line of their own under the size, nothing scrolls sideways, and the Copy sheet of a map has no new row either;
+  an old pair: a wrapper and a module that both say version 4 (two old files of a cache agree with each other, so the check of the versions lets them through) and a core without the call that New map
+             and Copy make: the page says that the map code is out of date and offers a reload, and the same pair with the call lets it start."""
 import json
 import os
 import tempfile
@@ -293,3 +295,14 @@ def run_rules(page, tab, args, check, env, edges_bytes, edges_js):
     check(sheet["boxes"] == 0 and "ong orders" not in sheet["text"] and "ules" not in sheet["text"].replace("Rules 2", "") and sheet["inside"], "the sheet has no new row and is inside the screen")
     page.shot(args.shots, "mapmaker-rules2-copy-phone")
     time.sleep(0.2)
+
+    print("[web map maker] an old wrapper beside an old module: both say version 4, so the check of the versions lets them through")
+    tab.emulate(1280, 800, 1)
+    hook = ("(function () { var real; Object.defineProperty(window, 'LvlCore', { configurable: true, get: function () { return real; }, set: function (v) { var wrap = v.wrap; v.EXPECTED_INTERFACE = 4; "
+            "v.moduleVersion = function () { return 4; }; v.wrap = function (m) { var core = wrap(m); %s return core; }; real = v; } }); })();")
+    check(page.open(hook % "") and page.ready(), "a wrapper and a module that say 4 and a core that has the call the page needs: the page starts (the control)")
+    check(page.open(hook % "delete core.convertToLongOrders;"), "a core without convertToLongOrders: the page answers")
+    text = page.ev("document.getElementById('boot').textContent")
+    check(not page.ev("document.getElementById('boot').hidden") and "out of date" in text and "Reload the page" in text, "it says that the map code is out of date and offers a reload: %r" % text)
+    check(page.ev("[].every.call(document.querySelectorAll('[data-act]'), function (b) { return b.disabled; })"), "and no button works: New map and Copy never run into the missing call")
+    page.shot(args.shots, "mapmaker-old-wrapper")

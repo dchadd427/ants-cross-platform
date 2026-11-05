@@ -307,7 +307,7 @@ class TheCodeRuns(unittest.TestCase):
         done = run_check(script=CONVERT_CHECK)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failed", done.stdout)
-        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit", "G the rules word of a new Extended map"):
+        for part in ("A the frame", "B the names", "C the Crop to fit screen", "D Copy this map", "E Start an Extended map, Make a Classic map, the reasons", "F Crop it to fit", "G the rules word of a new Extended map", "H New map and Save as a new map"):
             self.assertIn("RUNNING: %s ... PASS" % part, done.stdout)
 
     def test_the_convert_check_can_fail_on_broken_copies_of_the_scripts(self):
@@ -386,6 +386,11 @@ class TheCodeRuns(unittest.TestCase):
             "a Classic map whose badges are said to go away when only one does": (convert, "longer ? 'The \u201cNew version only\u201d and \u201cRules 2\u201d badges go away.' : ", "false ? 'x' : "),
             "a Classic map made from long orders that says it plays the same": (convert, "(longer ? ', except long orders.' : '.')", "'.'"),
             "a Classic map made from rules 1 that talks of long orders": (convert, "var longer = res.json.notes.some(function (n) { return n.code === 'rules_long_orders_dropped'; });", "var longer = res.json.notes.length > 0;"),
+            "a New map that is lost when the core cannot give the copy": ("mapmaker_app.js", "return made.status === 0 && made.json.ok ? made.bytes : bytes;", "return made.bytes;"),
+            "a New map that never asks whether the core has stopped": ("mapmaker_app.js", "var made = core.convertToLongOrders(bytes);\n        if (made.status === 2) alive();", "var made = core.convertToLongOrders(bytes);"),
+            "a New map that asks the core again for a map that has the word": ("mapmaker_app.js", "|| MapSizes.newRules(f.rules, f.rows) === f.rules) return bytes;", ") return bytes;"),
+            "a New map that asks the core for a Classic map": ("mapmaker_app.js", "if (!f.ok || f.kind !== 'extended' || MapSizes", "if (!f.ok || MapSizes"),
+            "a New map that asks the core for a file that does not read": ("mapmaker_app.js", "if (!f.ok || f.kind !== 'extended' || MapSizes", "if (f.kind !== 'extended' || MapSizes"),
         }
         for what, (name, old, new) in mutants.items():
             with self.subTest(what):
@@ -563,6 +568,9 @@ class TheCodeRuns(unittest.TestCase):
             "a tool that is not told about the mouse over the map": ("mapmaker_canvas.js", "if (painter && painter.hover) painter.hover(over);          // (a tool that shows what a click would do: Pick up)", "void 0;"),
             "a tool that is not told that the mouse left the map": ("mapmaker_canvas.js", "hover = null; if (painter && painter.hover) painter.hover(null); if (file) { chrome();", "hover = null; if (file) { chrome();"),
             "a tool that is not told which cell is pressed": ("mapmaker_canvas.js", "var tapTool = !panning && !!cell && tapOnly(cell);", "var tapTool = !panning && !!cell && tapOnly();"),
+            "a Resize whose Undo gives the word 0 back": ("mapmaker_blocks.js", "removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8])", "removed: new Uint8Array(2), inserted: new Uint8Array([rules & 255, rules >> 8])"),
+            "a Resize that gives back the low byte of the word only": ("mapmaker_blocks.js", "removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8])", "removed: new Uint8Array([file.bytes[14], 0]), inserted: new Uint8Array([rules & 255, rules >> 8])"),
+            "a Resize that writes the word the map has again": ("mapmaker_blocks.js", "if (file.version === 9 && rules !== undefined && rules !== rd(file.bytes, 14)) {", "if (file.version === 9 && rules !== undefined) {"),
             "a change of the properties that is put in while a stroke goes on": ("mapmaker_tools.js", "function act(change) { if (!editor || canvas.isStroking()) return false;", "function act(change) { if (!editor) return false;"),
         }
         for what, (name, old, new) in mutants.items():
@@ -1193,6 +1201,16 @@ class ThePage(unittest.TestCase):
         self.assertIn("file && file.rules);", submit, "a row of My submissions")
         self.assertIn("fillTags(h, map.file.kind, map.file.rules);", self.app, "the crop screen of a Resize")
         self.assertIn("fillTags(h, 'extended', file.rules);", self.app, "the crop screen of Make a Classic map")
+
+    def test_an_old_wrapper_beside_an_old_module_is_told_to_reload_before_anything_of_the_page_is_made(self):
+        """the check of boot compares the module with the wrapper, and two old files agree on their version: the call that New map, Save as a new map and Copy make (convertToLongOrders) must be in the core
+        that the wrapper gives, or the page says what it says for a module of another version (the browser check, part `rules`, has the page with such a pair)"""
+        self.assertIn("if (typeof core.convertToLongOrders !== 'function') return fatal(OUT_OF_DATE);", self.app)
+        self.assertEqual(self.app.count("OUT_OF_DATE"), 3, "one sentence: its declaration, the check of the versions and this check")
+        self.assertIn("if (found !== LvlCore.EXPECTED_INTERFACE) return fatal(OUT_OF_DATE);", self.app)
+        wrapped, guard, made = (self.app.index(text) for text in ("core = LvlCore.wrap(module);", "typeof core.convertToLongOrders", "store = MapStore.create("))
+        self.assertLess(wrapped, guard)
+        self.assertLess(guard, made, "before anything of the page is made")
 
     def test_the_wall_of_the_rules_word_is_the_cores(self):
         """the 90 rows below which rules 0 and 1 play the same: the page's WALL_ROWS is the core's LVL_ORIGINAL_RULES_MOST_ROWS and the rows of a new Classic map (LVL_CLASSIC_ROW_WALL), a copy that a test keeps equal"""

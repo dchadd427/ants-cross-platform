@@ -243,7 +243,7 @@
    "id": "name_extended_not_checked_at_make",
    "file": "web/front/mapmaker_convert.js",
    "old": "                    nm.check();\n                    if (!nm.ok) return;\n                    var made = Sizes.newRules(0, cur.file.rows) === 2 ? core.convertToLongOrders(cur.bytes) : core.convertToExtended(cur.bytes);",
-   "new": "                    if (!nm.ok) return;\n                    var made = core.convertToExtended",
+   "new": "                    if (!nm.ok) return;\n                    var made = Sizes.newRules(0, cur.file.rows) === 2 ? core.convertToLongOrders(cur.bytes) : core.convertToExtended(cur.bytes);",
    "test": "node tests/scripts/web_mapmaker_save_check.js"
   },
   {

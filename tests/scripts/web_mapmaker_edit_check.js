@@ -1437,6 +1437,26 @@ function caseN() {
     check(Blocks.resizeMap(rs9.file(), 30, 20, 0, 0, undefined, undefined, 0).splices.length === 1 && Blocks.resizeMap(rs9.file(), 30, 20, 0, 0, undefined, undefined, 2).splices.length === 2, 'the word that the map has is not written again, another is one piece more');
     check(rs9.tools.act(Blocks.resizeMap(rs9.file(), 30, 20, 0, 0, undefined, undefined, 0)) === true && rs9.file().rows === 30 && rs9.file().bytes[14] === 0, 'the word that the map has is left alone');
     rs9.doc.key('z', { ctrlKey: true });
+    // a map that has a word already (1, and 258 for both of its bytes): Ctrl+Z gives that word back and not 0, Ctrl+Y puts the new one again; a map that has the word that it is given gets no piece for it
+    for (const had of [1, 258]) {
+        const rawHad = mapWith(9, 20, 20, 486, [], []);
+        rawHad[14] = had & 255; rawHad[15] = had >> 8;
+        const pg = toolsPage(File.parse(rawHad)), wordNow = () => File.parse(pg.file().bytes).rules;
+        check(wordNow() === had && pg.tools.act(Blocks.resizeMap(pg.file(), 95, 20, 0, 0, undefined, undefined, 2)) === true && pg.file().rows === 95 && wordNow() === 2, 'a Resize of a map of rules ' + had + ' that is given the word 2 puts it in the same step as the new size');
+        pg.doc.key('z', { ctrlKey: true });
+        check(pg.file().rows === 20 && wordNow() === had, 'Ctrl+Z gives the word ' + had + ' back with the old size, and not 0');
+        pg.doc.key('y', { ctrlKey: true });
+        check(pg.file().rows === 95 && wordNow() === 2, 'Ctrl+Y puts the new size and the word 2 again');
+        pg.doc.key('z', { ctrlKey: true });
+        check(pg.file().rows === 20 && wordNow() === had, 'and Ctrl+Z gives the word ' + had + ' back once more');
+    }
+    const raw2 = mapWith(9, 20, 20, 486, [], []);
+    raw2[14] = 2; raw2[15] = 0;
+    const pg2 = toolsPage(File.parse(raw2));
+    check(Blocks.resizeMap(pg2.file(), 95, 20, 0, 0, undefined, undefined, 2).splices.length === 1, 'a map of rules 2 that is given the word 2 gets no piece for it: the size is the one piece');
+    check(pg2.tools.act(Blocks.resizeMap(pg2.file(), 95, 20, 0, 0, undefined, undefined, 2)) === true && File.parse(pg2.file().bytes).rules === 2, 'and keeps the word 2');
+    pg2.doc.key('z', { ctrlKey: true });
+    check(pg2.file().rows === 20 && File.parse(pg2.file().bytes).rules === 2, 'Ctrl+Z keeps the word 2 with the old size');
     // a Classic map has no word: it is never given one
     const raw8 = mapWith(8, 20, 20, 486, [], []), classic8 = toolsPage(File.parse(raw8)), head8 = Array.from(raw8.slice(0, 40));
     check(classic8.tools.act(Blocks.resizeMap(classic8.file(), 95, 20, 0, 0, undefined, undefined, 2)) === true && classic8.file().rows === 95 && classic8.file().version === 8 && JSON.stringify(Array.from(classic8.file().bytes.slice(0, 40))) === JSON.stringify(head8), 'a Classic map is not given a rules word');

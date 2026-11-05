@@ -15,6 +15,7 @@
     var keepTimer = 0, keepReady = false, keepPending = false, keepEdits = 0;      // the unsaved work kept in the browser: a rest of 1.5 s after a change, and not before the work of the last visit was dealt with
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
+    var OUT_OF_DATE = 'The map code is out of date (a copy of one of its files is old in this browser). Reload the page.';
     function fatal(text) {
         var boot = $('boot');
         boot.hidden = false;
@@ -481,6 +482,7 @@
 
     function start(module) {
         core = LvlCore.wrap(module);
+        if (typeof core.convertToLongOrders !== 'function') return fatal(OUT_OF_DATE);       // (a wrapper and a module that are both old agree on their version: this call is what they lack)
         store = MapStore.create({ idb: (function () { try { return win.indexedDB || null; } catch (e) { return null; } })(), fetch: win.fetch ? win.fetch.bind(win) : null, later: function (f, ms) { win.setTimeout(f, ms); } });
         var small = core.limits('new_map'), big = core.limits('extended');
         if (small.status !== 0 || big.status !== 0) return fatal('The map code did not answer. Reload the page.');
@@ -569,7 +571,7 @@
         if (missing.length) return fatal(missing.indexOf('createLvlCore') >= 0 ? 'The map code did not load. Reload the page; if it keeps failing, try again later.' : 'A part of this page did not load (' + missing.join(', ') + '). Reload the page.');
         win.createLvlCore().then(function (module) {
             var found = LvlCore.moduleVersion(module);
-            if (found !== LvlCore.EXPECTED_INTERFACE) return fatal('The map code is out of date (a copy of one of its files is old in this browser). Reload the page.');
+            if (found !== LvlCore.EXPECTED_INTERFACE) return fatal(OUT_OF_DATE);
             start(module);
         }, function (e) { fatal('The map code could not start: ' + (e && e.message ? e.message : e)); });
     }
