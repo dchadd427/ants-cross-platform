@@ -64,8 +64,10 @@ struct DropWatch {
 void run_hash_tests() {
     TEST_CASE("S2.40 Dedicated Server: A Seat Whose State Differs From The Referee's Is Dropped And The Others Go On: It Alone Is Told, The Match Is Not Stopped, Its Ants Die On Every Machine, And The Rest Stay Equal To The Referee") {
         ServerMatch m(1, 4, {40, 10});
+        std::vector<std::array<unsigned, 3>> told;                                   // what the session tells its caller when it drops seats: the turn, how many differ, how many agree
+        m.host->set_on_diverged([&](uint32_t turn, uint8_t differ, uint8_t agree) { told.push_back({turn, differ, agree}); });
         m.run(3000);
-        ASSERT_TRUE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.host->desyncs().empty() && told.empty());
         m.sims[3]->get_unit(m.ids.ants[3][1]).hp = 3;                                // a hit point that no command explains
         const uint32_t before = m.now;
         m.run(2000, false);
@@ -73,6 +75,7 @@ void run_hash_tests() {
         ASSERT_FALSE(m.host->frozen());                                              // the match goes on
         ASSERT_TRUE(m.host->desyncs().empty());
         ASSERT_EQ(m.host->diverged_drops(), 1u);
+        ASSERT_TRUE(told.size() == 1 && (told[0][0] + 1) % kHashEveryTurns == 0 && told[0][1] == 1 && told[0][2] >= 1 && told[0][2] <= 3);        // once, at a hashed turn, for the one seat (some of the three that agree had reported)
         ASSERT_FALSE(m.host->client_present(3));                                     // the seat is out ...
         for (uint8_t p = 0; p < 3; ++p) ASSERT_TRUE(m.host->client_present(p) && !m.clients[p]->desynced());     // ... the others are not told and stay
         ASSERT_TRUE(m.clients[3]->desynced());                                       // it alone is told
@@ -138,6 +141,11 @@ void run_hash_tests() {
                 for (const DesyncMsg& d : v.seats) {
                     ASSERT_TRUE(d.turn == 19 && d.host == r.state[0] && d.peer == r.state[c.report[d.player]] && d.peer.ants == r.state[c.report[d.player]].ants);      // each names the turn and both states
                 }
+                uint8_t vouching = 0;
+                for (uint8_t p = 0; p < 3 && c.kind == Kind::Drop; ++p) {
+                    if (c.report[p] == 0 && (c.seated & (1u << p)) != 0) vouching = static_cast<uint8_t>(vouching | (1u << p));
+                }
+                ASSERT_EQ(static_cast<unsigned>(v.agree), static_cast<unsigned>(vouching));          // a Drop says which seats vouched for the referee (and the others say none)
                 ASSERT_TRUE(r.seq.judge_hashes(c.seated).kind == Kind::Nothing);       // a turn is answered once (and a verdict that waits has no other answer meanwhile)
             }
         }
@@ -279,6 +287,8 @@ void run_hash_tests() {
 
     TEST_CASE("S2.47 Dedicated Server: A Seat That Is Behind The Others By Several Seconds But Alive Is Waited For And Then Counts: A Slow Seat That Agrees Vouches For The Referee Like Any Other, And One That Differs Is Dropped Like Any Other") {
         ServerMatch m(1, 3, {40, 10});
+        std::vector<std::array<unsigned, 3>> told;
+        m.host->set_on_diverged([&](uint32_t turn, uint8_t differ, uint8_t agree) { told.push_back({turn, differ, agree}); });
         m.run(500);
         m.frozen_mask = 0x01;                                                        // seat 0 stands still for 5 s: it is behind, not gone (the lag policy drops it at 30 s without an acknowledgement)
         m.sims[1]->get_unit(m.ids.ants[1][1]).hp = 3;
@@ -290,6 +300,7 @@ void run_hash_tests() {
         m.run(8000, false);
         ASSERT_FALSE(m.host->frozen());
         ASSERT_EQ(m.host->diverged_drops(), 2u);
+        ASSERT_TRUE(told.size() == 1 && told[0][1] == 2 && told[0][2] == 1);          // told once: two seats differed, the one that was slow agreed
         ASSERT_TRUE(m.host->client_present(0) && !m.host->client_present(1) && !m.host->client_present(2));
         ASSERT_TRUE(m.clients[1]->desynced() && m.clients[2]->desynced() && !m.clients[0]->desynced());
     } TEST_END();
@@ -394,6 +405,12 @@ void run_hash_tests() {
     TEST_CASE("S2.50 Dedicated Server: Several Seats That Differ At Once Are Dropped Together, Whatever Their Number, As Long As One Seat At The Table Agrees With The Referee: Two Of Four, Three Of Four; The Match Is Not Stopped") {
         for (const uint8_t odd_seats : {uint8_t{0x0C}, uint8_t{0x0E}}) {
             ServerMatch m(1, 4, {40, 10});
+            unsigned told_seats = 0;                                                 // the seats that the session told it dropped, and the fewest that agreed at any of its verdicts
+            unsigned fewest_agreeing = 9;
+            m.host->set_on_diverged([&](uint32_t, uint8_t differ, uint8_t agree) {
+                told_seats += differ;
+                fewest_agreeing = std::min<unsigned>(fewest_agreeing, agree);
+            });
             std::vector<std::unique_ptr<ants_test::HashSkew>> skews;
             for (uint8_t p = 0; p < 4; ++p) {
                 if ((odd_seats & (1u << p)) == 0) continue;
@@ -409,6 +426,7 @@ void run_hash_tests() {
                 ASSERT_EQ(m.clients[p]->desynced(), differs);
             }
             ASSERT_TRUE(m.host->client_present(0));                                  // the seat that agrees stays
+            ASSERT_TRUE(told_seats == (odd_seats == 0x0C ? 2u : 3u) && fewest_agreeing >= 1);
             const uint32_t sealed = m.host->turns_sealed();
             m.run(2000);
             ASSERT_TRUE(m.host->turns_sealed() >= sealed + 30);                      // the match is sealed on

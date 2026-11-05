@@ -672,6 +672,7 @@ void RoomManager::update(uint32_t now_ms) {
     std::vector<std::string> rematches;
     for (auto it = rooms_.begin(); it != rooms_.end();) {
         it->second->update(now_ms);
+        for (std::string& line : it->second->take_notes()) room_notes_.push_back(std::move(line));
         if (it->second->rematch_due()) rematches.push_back(it->first);
         if (it->second->expired(now_ms)) {
             if (!it->second->end_reported()) {                     // (a room with no keep time ends and expires in one pass: its end is still reported)
@@ -816,6 +817,8 @@ std::vector<std::string> RoomManager::take_notices() {
     std::vector<std::string> notes = restart_ != nullptr ? restart_->take_notes() : std::vector<std::string>();
     for (std::string& line : bot_notes_) notes.push_back(std::move(line));
     bot_notes_.clear();
+    for (std::string& line : room_notes_) notes.push_back(std::move(line));
+    room_notes_.clear();
     if (replays_ != nullptr) {
         for (std::string& line : replays_->take_notes()) notes.push_back(std::move(line));
     }

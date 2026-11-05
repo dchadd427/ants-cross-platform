@@ -205,7 +205,7 @@ When the body leaves a key out, the five reconnect keys take what the server was
 | `absent` | The seats that are missing, longest away first: `[{"seat", "name", "state", "away_seconds", "progress"}]`. `state` is `absent` or `catching_up`, and `away_seconds` is the seat's total time away. |
 | `vote` | `{"seat", "continue", "voters"}`, or null. |
 | `paused_seconds`, `rejoins`, `drops_by_vote`, `drops_by_cap`, `rejoins_refused`, `catch_up_expired`, `streamed_bytes` | What the pauses of the match came to. Never a key. |
-| `drops_by_state` | The seats dropped because their state differed from the referee's (a room that holds seats or not). |
+| `drops_by_state` | The seats dropped because their state differed from the referee's (a room that holds seats or not). The log has a line when it happens: the room, the turn, how many seats differed and how many agreed. |
 | `log` | `{"turns", "bytes", "usable"}`: the turn log that a returning player is given. |
 | `record` | `{"kept", "stale", "bytes", "note"}`: whether a restart of the server would bring this match back, and why not when it would not. |
 | `replay` | `{"kept", "file", "bytes", "note"}` (in the list `GET /rooms`, only for a match that was kept): whether the match is kept as a replay and under which name; `note` says why not (the server keeps none, the room was made with `"record": false`, it is a demo room and the server does not keep those, the match ran less than 30 seconds, the disk or the limits refused it, the room was brought back from a restart record or its record was refused) and is empty while the match may still be kept ("Replays"). |

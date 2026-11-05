@@ -22,12 +22,13 @@ namespace ants::net {
 /// What the referee of a dedicated server makes of the seats whose reported state differs from its own (Sequencer::judge_hashes)
 struct HashVerdict {
     enum class Kind : uint8_t {
-        Nothing,    ///< no report differs, or the seats that may still say which state is right have not
+        Nothing,    ///< no report differs, or the seats that may still say which state is right have not, or the turn is let go (nobody who was at the table for it can say)
         Drop,       ///< the seats of `seats` differ and at least one seat agrees with the referee: those are out of the match, the others go on
         Fail        ///< every seat that could say differs: nobody vouches for the referee, which may be the one that is wrong; nobody is blamed and the match stops
     };
     Kind kind{Kind::Nothing};
     std::vector<DesyncMsg> seats;      ///< Drop, Fail: one for each seat that differs: the turn, the seat, the referee's hash (host) and the seat's (peer)
+    uint8_t agree{0};                  ///< Drop: the seats (a bit for each) that report the referee's state for that turn
 };
 
 class Sequencer {

@@ -212,7 +212,8 @@ public:
     bool bot_matches_enabled() const noexcept { return bot_every_ms_ != 0; }
     /// One match of computer players now (what the timer does): the room's code when it was made, else the reason in `why`
     bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why);
-    /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not) and the replays (files purged, a match that was not kept): once each, never a key
+    /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not), the replays (files purged, a match that was not kept) and the seats that a room dropped
+    /// for a state that differed from the referee's: once each, never a key
     std::vector<std::string> take_notices();
 
     const MapStore& store() const noexcept { return store_; }
@@ -357,6 +358,7 @@ private:
     uint32_t next_bot_match_ms_{0};
     std::mt19937 bot_rng_;
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
+    std::vector<std::string> room_notes_;        // what the rooms said (Room::take_notes), for the log (take_notices)
 };
 
 }  // namespace ants::server

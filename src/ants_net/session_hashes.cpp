@@ -2,6 +2,14 @@
 
 namespace ants::net {
 
+namespace {
+uint8_t seats_in(uint8_t mask) noexcept {
+    uint8_t n = 0;
+    for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) n = static_cast<uint8_t>(n + ((mask >> p) & 1u));
+    return n;
+}
+}  // namespace
+
 // What a dedicated server does with the state hashes that its clients report (session.hpp, "A seat whose state differs from the referee's"). The rule that says who differs, who agrees and
 // when the answer is final is Sequencer::judge_hashes; this is what the host does with the answer. It is called after every pass, so whatever moves it (a report, an acknowledgement, a seat that
 // leaves the table) is seen in the pass that brings it.
@@ -16,6 +24,7 @@ void HostSession::judge_hashes() {
         const HashVerdict verdict = sequencer_.judge_hashes(seated, held);
         if (verdict.kind == HashVerdict::Kind::Nothing) return;
         if (verdict.kind == HashVerdict::Kind::Drop) {
+            if (on_diverged_) on_diverged_(verdict.seats.front().turn, static_cast<uint8_t>(verdict.seats.size()), seats_in(verdict.agree));
             for (const DesyncMsg& d : verdict.seats) drop_diverged(d);
             continue;                                    // (the next turn that has an answer, if any)
         }

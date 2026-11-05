@@ -284,6 +284,9 @@ public:
     /// Called with the referee's own state hash after every kHashEveryTurns-th turn that this host's runner has executed (a host without a seat only: the dedicated server's referee): turn is the
     /// number of that turn (the hash is the state after it). The room writes it to the record as a checkpoint. Set it before the first turn is executed.
     void set_on_referee_hash(std::function<void(uint32_t turn, const sim::StateHash&)> fn) { on_referee_hash_ = std::move(fn); }
+    /// Called when seats are dropped for a state that differs from the referee's (a host without a seat only): the turn, how many seats differed and how many agreed with the referee. The room writes it to the
+    /// server's log, so that a majority that is dropped shows when it happens and not only in the line at the end of the room. Set it before the first turn is executed. The hook must not change the session.
+    void set_on_diverged(std::function<void(uint32_t turn, uint8_t differ, uint8_t agree)> fn) { on_diverged_ = std::move(fn); }
     /// A sealed turn of a match that is being restored (before start_restored(); the turns must come in order, the first is 0): it goes into the log and into the host's own runner, which executes it
     /// when the caller runs runner().fast_forward() (nothing is drawn or told to anybody). False, and the session is not to be used, when the session does not hold seats, the turn is not the next
     /// one, the runner refuses it, or the log cannot hold it (its limit, the server's budget): the match cannot be restored.
@@ -374,6 +377,7 @@ private:
     std::function<void(const ChatMsg&)> on_chat_;
     std::function<void(const TurnMsg&)> on_seal_;                       // the restart record's turn (set_on_seal)
     std::function<void(uint32_t, const sim::StateHash&)> on_referee_hash_;     // ... and its checkpoint (set_on_referee_hash)
+    std::function<void(uint32_t, uint8_t, uint8_t)> on_diverged_;       // the seats that were dropped for their state (set_on_diverged)
     uint32_t restored_turns_{0};            // the turns that restore_turn took
     bool started_{false};
     bool frozen_{false};

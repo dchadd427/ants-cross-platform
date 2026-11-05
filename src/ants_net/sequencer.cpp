@@ -178,6 +178,7 @@ HashVerdict Sequencer::judge_hashes(uint8_t seated, uint8_t held) {
             continue;
         }
         verdict.kind = agree != 0 ? HashVerdict::Kind::Drop : HashVerdict::Kind::Fail;
+        verdict.agree = agree;
         for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
             if ((differ & bit(p)) == 0) continue;
             DesyncMsg d;

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of a dedicated server's verdict on the state hashes that its seats report (Sequencer::judge_hashes and what a HostSession does with it; docs/NETWORK_PORT.md, 'Sessions' and 'Room'), of the status that counts the seats it dropped, and of the codes that the control interface draws (draw_room_code), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/state_hash_mutants.json --keep-going --jobs 1. Every mutant must be caught, and by the tests its test command runs: test_lockstep S2.40 - S2.57 (the rule, whole matches, the seats that held their places, the guards of the verdict, the table that changes between a turn and its answer) and test_server S3.250 - S3.258 (rooms, results, replays, a room that holds seats) and S3.10c - S3.10d (the codes). Not listed on purpose: Sequencer::resume (a host with a seat never has a verdict to forget) and the log line of main.cpp (the program's own log is read by no test).",
+ "note": "Mutants of a dedicated server's verdict on the state hashes that its seats report (Sequencer::judge_hashes and what a HostSession does with it; docs/NETWORK_PORT.md, 'Sessions' and 'Room'), of the status that counts the seats it dropped, and of the codes that the control interface draws (draw_room_code), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/state_hash_mutants.json --keep-going --jobs 1. Every mutant must be caught, and by the tests its test command runs: test_lockstep S2.40 - S2.57 (the rule, whole matches, the seats that held their places, the guards of the verdict, the table that changes between a turn and its answer) and test_server S3.250 - S3.258 (rooms, results, replays, a room that holds seats) and S3.10c - S3.10d (the codes). Not listed on purpose: Sequencer::resume (a host with a seat never has a verdict to forget) and the lines that main.cpp writes to the program's own log (the lines that the rooms hand to RoomManager::take_notices are tested).",
  "baseline": {
   "build": [
    "test_lockstep",
@@ -417,6 +417,106 @@
     "test_lockstep"
    ],
    "test": "ANTS_TEST_FILTER=\"S2.44\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.45\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "verdict_does_not_say_who_agreed",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        verdict.agree = agree;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "drop_not_told_to_the_room",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "if (on_diverged_) on_diverged_(",
+   "new": "if (false && on_diverged_) on_diverged_(",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.47\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seats_that_agreed_not_counted",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "seats_in(verdict.agree)",
+   "new": "seats_in(0)",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.47\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seats_that_differed_counted_for_those_that_agreed",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "static_cast<uint8_t>(verdict.seats.size()), seats_in(verdict.agree)",
+   "new": "seats_in(verdict.agree), static_cast<uint8_t>(verdict.seats.size())",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.47\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "room_makes_no_line_of_a_drop",
+   "file": "src/ants_server/room.cpp",
+   "old": "        notes_.push_back(",
+   "new": "        (void)(",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "manager_does_not_take_the_lines_of_the_rooms",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        for (std::string& line : it->second->take_notes()) room_notes_.push_back(std::move(line));\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "manager_does_not_hand_on_the_lines_of_the_rooms",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    for (std::string& line : room_notes_) notes.push_back(std::move(line));\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "machines_forget_the_turn_of_a_return",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        joined_[player] = next_turn_;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.56\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "room_forgets_the_turn_of_a_return",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        joined_[player] = next_turn_;\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.258\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "room_does_not_know_that_a_seat_is_away",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "sequencer_.judge_hashes(seated, held)",
+   "new": "sequencer_.judge_hashes(seated, static_cast<uint8_t>(held & 0))",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.258\" ./build/tests/test_server/test_server"
   }
  ]
 }

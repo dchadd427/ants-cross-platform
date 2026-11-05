@@ -306,6 +306,16 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
+    session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)
+        const auto seats = [](uint8_t n) { return std::to_string(static_cast<unsigned>(n)) + (n == 1 ? " seat" : " seats"); };
+        notes_.push_back("room " + spec_.code + ": " + seats(differ) + " dropped at turn " + std::to_string(turn) + " for a state that differed from the referee's; " + seats(agree) + " agreed with it");
+    });
+}
+
+std::vector<std::string> Room::take_notes() {
+    std::vector<std::string> out;
+    out.swap(notes_);
+    return out;
 }
 
 namespace {

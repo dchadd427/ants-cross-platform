@@ -1,8 +1,8 @@
 // The tests of a dedicated server's room and the seats whose state differs from the referee's (docs/NETWORK_PORT.md, "Sessions" and "Room"; the verdict itself is Sequencer::judge_hashes, tested in test_lockstep
-// S2.40 - S2.53). A machine that reports a state which is not the one it holds is a Client whose link changes its Hash messages (tests/common/hash_skew.hpp): it plays as any other. A machine whose state really
+// S2.40 - S2.57). A machine that reports a state which is not the one it holds is a Client whose link changes its Hash messages (tests/common/hash_skew.hpp): it plays as any other. A machine whose state really
 // differs is one whose engine was changed after the map was loaded (RClient::tamper).
 //   S3.250 - S3.252  a seat that differs is dropped and the room goes on (the cases that fail without the change); a match of two ends with the seat as the quitter: the results, the replay (kept from 30 s, and not
-//                    before), the history record that is made of it
+//                    before), the history record that is made of it; the line in the server's log at the moment of the drop (S3.250)
 //   S3.253 - S3.254  the room fails, as it always did, when no seat at the table agrees with the referee; a computer player's seat is not touched
 //   S3.255 - S3.257  a room that holds seats (the key of the dropped seat is told "dropped", the status counts the drop), a machine that really differs, a link that is no seat's
 //   S3.258           a room that holds seats, one odd report from a machine whose acknowledgements run late, while the other seat's link is lost or just after it is back: the room goes on
@@ -54,6 +54,18 @@ void run_state_hash_tests() {
         ASSERT_TRUE(s.state == RoomState::Running);                                      // the room goes on
         ASSERT_EQ(s.joined, 3);
         ASSERT_EQ(s.drops_by_state, 1u);
+        {   // the log has a line for it at the moment of the drop: the room, the turn, how many differed and how many agreed (never a name)
+            const std::vector<std::string> notes = w.mgr.take_notices();
+            std::vector<std::string> mine;
+            for (const std::string& line : notes) {
+                if (line.find("differed from the referee's") != std::string::npos) mine.push_back(line);
+            }
+            ASSERT_EQ(mine.size(), size_t{1});
+            ASSERT_TRUE(mine[0].find("room HASH-1: 1 seat dropped at turn 19 for a state that differed from the referee's; ") == 0);
+            ASSERT_TRUE(mine[0].find("; 1 seat agreed with it") != std::string::npos || mine[0].find("; 2 seats agreed with it") != std::string::npos);
+            ASSERT_TRUE(mine[0].find("Cat") == std::string::npos);
+            ASSERT_TRUE(w.mgr.take_notices().empty());                                   // (said once)
+        }
         ASSERT_TRUE(cat.session->desynced());                                            // Cat alone is told ...
         ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());                // ... and is out
         ASSERT_FALSE(cat.end->is_open());

@@ -336,6 +336,9 @@ public:
     /// The server's restart records (restart_record.hpp; it must outlive the room): a room that holds seats and whose match starts keeps a record there. Set it right after the room is made, before its
     /// match is started. Null (the default): the room keeps none.
     void set_restart_store(RestartStore* store) noexcept { restart_store_ = store; }
+    /// The lines for the server's log that the room made since the last call: one for each time seats were dropped for a state that differed from the referee's (the room's code, the turn, how many seats
+    /// differed and how many agreed; never a name or a key). A seat is dropped once, so there are at most four in the life of a room. RoomManager::update takes them after every pass of the room.
+    std::vector<std::string> take_notes();
     /// The server's store of replays (replay_store.hpp; it must outlive the room): the match is recorded and kept there. Null (the default): the room records nothing, and `why_not` is what its status says. Set it
     /// right after the room is made, before its match is started.
     void set_replay_store(ReplayStore* store, const std::string& why_not = std::string());
@@ -537,6 +540,7 @@ private:
     uint16_t quitter_{0xFFFF};
     uint64_t final_hash_{0};                 // the referee's state hash when the match ended
     std::array<std::string, 4> names_{};
+    std::vector<std::string> notes_;         // take_notes()
     // Restart records
     RestartStore* restart_store_{nullptr};
     std::unique_ptr<RestartWriter> record_;
