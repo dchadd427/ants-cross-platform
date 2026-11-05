@@ -19,8 +19,8 @@ ants-cross-platform/
 │   │                                   # ants::BUILD_ID at every build
 │   └── ants_test_paths.cpp.in          # Template of the generated file that tells the tests where the checkout is
 ├── docker/                             # Container deployment configuration
-│   ├── nginx.conf                      # nginx of the web image: game files revalidated (ETag, 304), cross-origin and
-│   │                                   # WASM headers, routes to the game server
+│   ├── nginx.conf                      # nginx of the web image: game files revalidated (ETag, 304) and compressed once,
+│   │                                   # cross-origin, security and WASM headers, routes to the game server
 │   └── resolve_build_id.sh             # The build id of a Docker image build (a build argument, else the clone's git
 │                                       # files, else the build time)
 ├── docs/                               # Guides, specifications and design notes

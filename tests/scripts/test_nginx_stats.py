@@ -114,7 +114,7 @@ class TheLocations(unittest.TestCase):
             sent = sorted(h.lower() for h in re.findall(r"proxy_set_header\s+(\S+)", block))
             self.assertEqual(sent, ["connection", "content-length", "host"], name)           # (the whole list of what the server is sent: no Cookie, no address, nothing of the browser)
             self.assertIn("proxy_set_header Host $host;", block, name)                       # (exactly one Host: the door refuses none and two)
-        self.assertNotIn("proxy_pass_request_headers", WS)                                   # (the other door needs the visitor's headers: the handshake is made of them)
+        self.assertIn("proxy_pass_request_headers off;", WS)                                 # (the other door too: it is given the headers of its handshake, one by one, and the address nginx sees: tests/scripts/test_nginx_headers.py)
 
     def test_they_go_to_the_same_server_and_port_as_the_websocket_door(self):
         door = re.search(r"set \$ants_server ([a-z0-9.-]+):(\d+);", WS)
