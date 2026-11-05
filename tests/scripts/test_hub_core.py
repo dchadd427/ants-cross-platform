@@ -101,7 +101,7 @@ class WorldTest(unittest.TestCase):
 class TheWelcome(WorldTest):
     def test_shape_for_a_reader_a_member_and_a_moderator(self):
         reader = self.w.chat.welcome(self.reader)
-        self.assertEqual(reader, {"t": "welcome", "v": 1, "you": None, "login": True, "online": 3, "history": []})
+        self.assertEqual(reader, {"t": "welcome", "v": 1, "you": None, "login": True, "presence": True, "online": 3, "history": []})
         self.assertEqual(self.w.chat.welcome(self.alice)["you"], {"name": "alice", "mod": False})
         mod = self.w.join(MOD)
         self.assertEqual(self.w.chat.welcome(mod)["you"], {"name": "moddy", "mod": True})

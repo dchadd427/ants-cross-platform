@@ -40,6 +40,10 @@ class Limits:
     checkpoint_retry_seconds: float = 10.0      # how soon the database's log file is cut again when a reader held it
     crowded_sockets: int = 6            # more sockets than this from one address group is logged (all visitors may share one address, docs/HUB.md)
     crowded_log_seconds: float = 60.0
+    who_rows_max: int = 200             # named people that the list of the front page carries (the rest are counted: `more`); moderators first, then the people who wait, who play, who look
+    who_seconds: float = 2.0            # the list is sent to the pages that watch it when it changed, not sooner than this after the last send, whatever happens (changes in between are one change)
+    who_resend_seconds: float = 10.0    # a socket may ask for the whole list again after this long (it gets it once, whatever it asks in between)
+    who_diff_max: int = 50              # a change of more rows than this is sent as the whole list: a frame is never bigger than the list's own
     login_burst: int = 10               # /hub/login and /hub/callback: for each client address a burst of 10, then one every 6 seconds (10 a minute; nginx has the same numbers in front)
     login_refill_seconds: float = 6.0
     session_burst: int = 20             # /hub/me, /hub/logout and /hub/forget: a burst of 20, then one every 3 seconds

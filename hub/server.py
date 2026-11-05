@@ -34,6 +34,17 @@ class Peer:
         self.closed = False
         self.closed_at = None                       # when it was closed (the hub cuts a closed socket whose output is still unsent after a while)
 
+    @property
+    def closed(self):
+        return self._closed
+
+    @closed.setter
+    def closed(self, value):
+        self._closed = value
+        peers = getattr(getattr(self.hub, "chat", None), "peers", None)
+        if hasattr(peers, "version"):
+            peers.version += 1                      # (a closed socket is nobody: the number of people is counted again)
+
     def send_text(self, data):
         self.write(ws.encode_frame(ws.TEXT, data))
 
@@ -173,7 +184,7 @@ class Hub:
                 peer.closed = True
                 self.chat.peers.discard(peer)
                 self.per_address.remove(peer.key)
-                self.log.event("gone", tag=peer.tag, online=len(self.chat.peers))
+                self.log.event("gone", tag=peer.tag, sockets=len(self.chat.peers))
             writer.close()
 
     async def page(self, route, request, writer):
@@ -224,7 +235,7 @@ class Hub:
                 peer.closed = True
                 self.chat.peers.discard(peer)
             raise
-        self.log.event("open", tag=peer.tag, online=len(self.chat.peers), account="yes" if peer.identity else "no")
+        self.log.event("open", tag=peer.tag, sockets=len(self.chat.peers), account="yes" if peer.identity else "no")
         return peer
 
     def store_trouble(self, error):
@@ -274,10 +285,14 @@ class Hub:
             elif now - peer.last_ping >= self.limits.ping_seconds:
                 peer.last_ping = now
                 peer.write(ws.encode_frame(ws.PING))
-        count = len(self.chat.peers)
+        count = self.chat.presence.people()
         if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
             self.online_shown, self.online_at = count, now
             self.chat.online()
+        try:
+            self.chat.presence.flush(now)                # (the list of the front page, on its own: a bug in it never stops the retention below, and a failing purge never stops the list)
+        except Exception as e:
+            self.log.event("error", kind=type(e).__name__, where="presence")
         if now >= self.next_deletions:
             self.next_deletions = now + self.limits.deletions_seconds
             self.chat.sync_deletions()
