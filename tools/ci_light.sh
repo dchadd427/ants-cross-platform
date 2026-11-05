@@ -66,16 +66,18 @@ is_light() {    # is_light PATH: 0 when the path is one of the light kinds and n
     return 1
 }
 
+# The characters of the two patterns below are listed, not given as ranges: in the old bash of macOS (3.2) a range follows the collation of the locale, and in a CI run a commit id of
+# capitals (A to E) and digits was taken for one.
 is_commit_id() {    # a full lower case commit id: 40 hexadecimal digits (so that it can never be taken for an option)
     case "$1" in
-        "" | *[!0-9a-f]*) return 1 ;;
+        "" | *[!0123456789abcdef]*) return 1 ;;
     esac
     [ "${#1}" -eq 40 ]
 }
 
 is_main_ref() {     # a remote branch of origin, in the long form, of plain characters (so that it can never be taken for an option or hold a command)
     case "$1" in
-        refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!A-Za-z0-9._/-]*) return 1 ;;
+        refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;
         refs/remotes/origin/?*) return 0 ;;
     esac
     return 1

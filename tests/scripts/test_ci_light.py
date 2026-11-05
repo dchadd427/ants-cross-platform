@@ -272,7 +272,8 @@ class Decision(unittest.TestCase):
         light, out, _ = self.decide(head, MAIN_REF="refs/remotes/origin/probe-main")
         self.assertTrue(light, out)
         for bad in ("", "main", "origin/main", "refs/heads/main", "refs/remotes/upstream/main", "refs/remotes/origin/", "refs/remotes/origin/-x", "--output=x", "refs/remotes/origin/a b",
-                    "refs/remotes/origin/main;touch pwned", "refs/remotes/origin/$(touch pwned)", "refs/remotes/origin/main\nrefs/remotes/origin/probe-main", "refs/remotes/origin/ma*"):
+                    "refs/remotes/origin/main;touch pwned", "refs/remotes/origin/$(touch pwned)", "refs/remotes/origin/main\nrefs/remotes/origin/probe-main", "refs/remotes/origin/ma*", "refs/remotes/origin/ma\u00efn", "refs/remotes/origin/\u00e9", "refs/remotes/origin/{a,b}",
+                    "refs/remotes/origin/a[b]", "refs/remotes/origin/a!b", "refs/remotes/origin/a@b"):
             light, out, _ = self.decide(head, MAIN_REF=bad)
             if bad == "":
                 self.assertTrue(light, "an empty MAIN_REF is the default: " + out)
@@ -299,9 +300,14 @@ class Decision(unittest.TestCase):
             light, out, _ = self.decide(head, EVENT=name)
             self.assertFalse(light, name)
             self.assertIn("not a pull request", out)
-        for bad in (None, "", "main", "HEAD", head[:12], head.upper(), head + "0", "--output=x", "-h", head[:39] + "g", "@", "HEAD~1", "refs/heads/main"):
-            self.assertFalse(self.decide(head, BASE_SHA=bad)[0], "base %r" % bad)
-            self.assertFalse(self.decide(head, HEAD_SHA=bad)[0], "head %r" % bad)
+        # (capitals without an F, and letters that are not ASCII, whatever the commit is: in a CI run the bash of macOS (3.2) took 7A41A713... for a commit id, as the ranges of its patterns follow the
+        # collation of the locale; a commit id has no F one time in 13, so the test used to fail by chance)
+        for bad in (None, "", "main", "HEAD", head[:12], head.upper(), head + "0", "--output=x", "-h", head[:39] + "g", "@", "HEAD~1", "refs/heads/main", "ABCDE" * 8, "A" * 40, "e" * 39 + "E",
+                    "0" * 39 + "B", "0" * 39 + "\u00e9", "0" * 38 + "\u00e9\u00e9"):
+            for name in ("BASE_SHA", "HEAD_SHA"):
+                light, out, _ = self.decide(head, **{name: bad})
+                self.assertFalse(light, "%s %r" % (name, bad))
+                self.assertIn("is not a full commit id", out, "%s %r: git must not be asked about it" % (name, bad))
         self.assertFalse(self.decide(head, HEAD_SHA="0" * 40)[0], "a commit that is not there")
         self.assertFalse(self.decide(head, BASE_SHA="1" * 40)[0])
         empty = self.pull_request({})

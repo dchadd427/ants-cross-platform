@@ -208,15 +208,50 @@
   {
    "id": "the_name_of_main_may_have_any_character",
    "file": "tools/ci_light.sh",
-   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!A-Za-z0-9._/-]*) return 1 ;;",
+   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
    "new": "refs/remotes/origin/ | refs/remotes/origin/-*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_name_of_main_may_have_an_at_sign",
+   "file": "tools/ci_light.sh",
+   "old": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "new": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-@]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_name_of_main_may_have_a_letter_that_is_not_ascii",
+   "file": "tools/ci_light.sh",
+   "old": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "new": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-éï]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_commit_id_in_capitals_is_taken",
+   "file": "tools/ci_light.sh",
+   "old": "\"\" | *[!0123456789abcdef]*) return 1 ;;",
+   "new": "\"\" | *[!0123456789abcdefABCDEF]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_commit_id_with_a_g_is_taken",
+   "file": "tools/ci_light.sh",
+   "old": "\"\" | *[!0123456789abcdef]*) return 1 ;;",
+   "new": "\"\" | *[!0123456789abcdefg]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_commit_id_may_have_a_letter_that_is_not_ascii",
+   "file": "tools/ci_light.sh",
+   "old": "\"\" | *[!0123456789abcdef]*) return 1 ;;",
+   "new": "\"\" | *[!0123456789abcdefé]*) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py"
   },
   {
    "id": "the_name_of_main_may_begin_with_a_dash",
    "file": "tools/ci_light.sh",
-   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!A-Za-z0-9._/-]*) return 1 ;;",
-   "new": "refs/remotes/origin/ | refs/remotes/origin/*[!A-Za-z0-9._/-]*) return 1 ;;",
+   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "new": "refs/remotes/origin/ | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py"
   },
   {
