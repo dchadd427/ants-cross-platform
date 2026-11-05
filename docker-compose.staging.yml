@@ -1,6 +1,5 @@
-# The staging site: a second copy of the whole site (docker-compose.stack.yml) that runs on the same machine next to the first one, for the owner to try finished work before it
-# is released. For Portainer: Stacks -> Add stack -> Repository, reference "refs/heads/staging", compose path "docker-compose.staging.yml" (docs/WORKFLOW.md: the whole set-up,
-# with the reverse proxy and the DNS record). Nothing is shared with the production stack: its container names, host ports, volumes and network are its own, so both run at once.
+# The staging site: a second copy of the whole site (docker-compose.stack.yml), for the maintainer to try finished work before it
+# is released. Nothing is shared with the production stack: its container names, host ports, volumes and network are its own.
 # The web page says "staging" in its title and footer (the build argument ANTS_SITE_LABEL); nothing else of the images differs.
 #
 # Host ports (production: 19980, 4001, 4002, 4010): 19981 the web page, 4003 the public TCP game port, 4004 the WebSocket port and 4011 the control interface (both on the
@@ -59,7 +58,7 @@ services:
     command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
-      # the owner's page (docs/MAP_SUBMISSIONS.md): this secret signs the sign-in cookie (32 or more characters); without it every /admin/api path answers 404
+      # the admin page (docs/MAP_SUBMISSIONS.md): this secret signs the sign-in cookie (32 or more characters); without it every /admin/api path answers 404
       ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-staging-maps}:/maps:ro

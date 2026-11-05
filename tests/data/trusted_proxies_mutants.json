@@ -115,7 +115,7 @@
   {
    "id": "document_forgets_that_a_relative_path_does_not_work",
    "file": "docs/SERVER.md",
-   "old": "and a relative path is no use in a Portainer repository stack, whose files are not on the host",
+   "old": "and a relative path is no use in a stack that a deployment tool builds from a repository, whose files are not on the host",
    "new": "and a relative path does as well"
   },
   {
@@ -173,46 +173,46 @@
    "new": "(/dev/null is an empty file: the web image's list is used)\n"
   },
   {
-   "id": "document_gives_the_reason_for_the_port_requirement",
+   "id": "document_names_the_gateway",
    "file": "docs/SERVER.md",
    "old": "The header is believed for every connection from such an address, the proxy's own among them.",
-   "new": "The header is believed for every connection from such an address, the proxy's own among them (Docker can show a visitor of a published port, IPv6 above all, as the gateway of its network)."
+   "new": "The header is believed for every connection from such an address, the proxy's own among them (the gateway included)."
   },
   {
-   "id": "list_comment_tells_how_the_list_missing_would_fail",
+   "id": "list_comment_names_the_whole_sites_list",
    "file": "docker/trusted-proxies.conf",
    "old": "# What it does: a connection FROM one of the addresses below is a reverse proxy",
-   "new": "# Without it every visitor counts as the proxy and every limit for one visitor is one limit for the whole site. A connection FROM one of the addresses below is a reverse proxy"
+   "new": "# This is the whole site's list. A connection FROM one of the addresses below is a reverse proxy"
   },
   {
-   "id": "stack_comment_tells_how_a_missing_list_would_fail",
+   "id": "stack_comment_says_what_the_list_has",
    "file": "docker-compose.stack.yml",
    "old": "a proxy at a public address goes in a list of your own.\n",
-   "new": "a proxy at a public address goes in a list of your own. Without one every visitor has the proxy's address.\n"
+   "new": "a proxy at a public address goes in a list of your own. It has the proxy's address.\n"
   },
   {
    "id": "document_names_the_owner",
    "file": "docs/SERVER.md",
    "old": "(the zones of `docker/nginx.conf`; the `X-Client-Address` that the game server and the chat hub count by)",
-   "new": "(the zones of `docker/nginx.conf`; the `X-Client-Address` that the game server and the chat hub count by; the owner's page)"
+   "new": "(the zones of `docker/nginx.conf`; the `X-Client-Address` that the game server and the chat hub count by; an owner)"
   },
   {
-   "id": "nginx_comment_of_the_replays_zones_is_sized_for_the_whole_site",
+   "id": "nginx_comment_of_the_replays_zones_names_every_visitor",
    "file": "docker/nginx.conf",
    "old": "# The recorded matches of the game server (/replays, below): twenty a second for the list",
-   "new": "# The recorded matches of the game server (/replays, below), sized for the whole site: twenty a second for the list"
+   "new": "# The recorded matches of the game server (/replays, below), kept for every visitor: twenty a second for the list"
   },
   {
-   "id": "nginx_comment_of_the_hub_handshakes_tells_the_whole_site_numbers",
+   "id": "nginx_comment_of_the_hub_handshakes_names_every_visitor",
    "file": "docker/nginx.conf",
    "old": "# the hub). A hub that restarts is reached again by its clients",
-   "new": "# the hub). The whole site's numbers; a hub that restarts is reached again by its clients"
+   "new": "# the hub). It counts every visitor; a hub that restarts is reached again by its clients"
   },
   {
-   "id": "nginx_comment_of_the_replays_door_tells_the_whole_site",
+   "id": "nginx_comment_of_the_replays_door_names_every_visitor",
    "file": "docker/nginx.conf",
    "old": "and the allowances are the zones above\n    # (503 beyond).",
-   "new": "and the allowances of the zones above are the whole site's\n    # (503 beyond)."
+   "new": "and the allowances of the zones above are for every visitor\n    # (503 beyond)."
   }
  ]
 }

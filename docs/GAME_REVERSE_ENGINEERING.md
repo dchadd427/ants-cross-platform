@@ -74,7 +74,7 @@ To guarantee authentic 1:1 behavioral parity with the 1998 original game, all sy
 
    - Always cross-referenced with Capstone to verify exact opcode behavior and eliminate decompilation ambiguity.
 
-**Both references are local copies, not part of the repository.** From the original game the repository holds only data and pictures made from it, never the program (the License section of `README.md` lists them); `docs/ORIGINAL_PROGRAM.md` says where your own copy of the program goes, what the tools need and how the tests run without it. The citations "Ants.exe.c line NNNN" in this document and in the code point at that local decompilation, the addresses at the program.
+**Both references are local copies, not part of the repository.** From the original game the repository holds only data and pictures made from it (the License section of `README.md` lists them); `docs/ORIGINAL_PROGRAM.md` says where your own copy of the program goes, what the tools need and how the tests run without it. The citations "Ants.exe.c line NNNN" in this document and in the code point at that local decompilation, the addresses at the program.
 
 ### 2.1 Binary Characteristics
 
@@ -3228,7 +3228,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (checked with Capsto
 
 ### 5.64 The Original's Recorder and Observer Playback (`-O` and `-I`; Capstone-Verified)
 
-Checked with Capstone on the local copy of `Ants.exe` (read only, nothing of the program is copied) and read in the local decompilation (never committed):
+Checked with Capstone on the local copy of `Ants.exe` (read only, nothing of the program is copied) and read in the local decompilation:
 
 * `-I<file>` (the case at **0x100ca69**) sets `[W+0x4ae4] = 1` (OBSERVER) and stores the argument (at most 0x104 characters) at `[W+0x4ff7]`; `-O<file>` stores the name without the flag.
 

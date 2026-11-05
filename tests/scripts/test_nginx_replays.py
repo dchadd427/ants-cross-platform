@@ -9,7 +9,7 @@ as the one request each takes and nothing else:
   - only a GET without a query goes through (405 and 404 otherwise); a file name of the wrong shape is 404 here and never reaches the server (the store decides which names exist);
   - nothing of the visitor's request is passed on but Host and Connection: no cookie, no body, no upgrade; the connection is not kept; the browser is not told to keep an answer, and the LIST is
     cached for five seconds in nginx (one entry for everybody, in the cache of /stats), so a crowd asks the game server once in five seconds;
-  - the allowances are the whole site's, as behind a reverse proxy every visitor has the proxy's address: twenty a second for the list, ten for the files, a zone each (503 beyond), short timeouts;
+  - the allowances are twenty a second for the list, ten for the files, a zone each (503 beyond), short timeouts;
   - it goes to the replay port that the stack gives the server (4020 inside the container, not published on the host), and a server that has no such door, or is not there, is answered
     404 with a JSON body (never nginx's 502 page).
 
@@ -149,8 +149,7 @@ class TheLocations(unittest.TestCase):
             self.assertIn("EXPOSE", read("Dockerfile.server"))
             self.assertRegex(read("Dockerfile.server"), r"(?m)^EXPOSE [0-9 ]*\b%s\b" % target.group(2))
 
-    def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address; an allowance per visitor would be one for everybody)
+    def test_each_address_has_an_allowance_of_its_own_and_the_zones_are_outside_the_server(self):
         for zone_name, block, low, high, burst in (("ants_replays", LIST, 10.0, 30.0, 100), ("ants_replay_files", FILES, 5.0, 20.0, 20)):
             zone = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/([sm]);" % zone_name, CONF)
             self.assertIsNotNone(zone, zone_name)
@@ -272,8 +271,8 @@ class TheLocations(unittest.TestCase):
         self.assertIn("changes the words in `web/lobby.html` and `web/shell.html`", read("docs", "SERVER.md"))
 
     def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_who_can_reach_the_door(self):
-        for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "the replay port (read only, no secret)", "do not put a container there that you do not trust")),
-                              ("docker-compose.server.yml", ("ran 30 seconds or more", "the replay port when it is switched on (read only, no secret", "do not put a container there that you do not trust")),
+        for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "is not published on the host at all", "put only containers you trust on it")),
+                              ("docker-compose.server.yml", ("ran 30 seconds or more", "put only containers you trust on it")),
                               ("docker-compose.staging.yml", ("ANTS_REPLAY_PORT", "not published")),
                               ("Dockerfile.server", ("do not publish it either", "five-second cache"))):
             text = " ".join(re.sub(r"(?m)^\s*#\s?", "", read(name)).split())                    # (a comment broken over lines reads as one)
@@ -404,7 +403,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(self.ask("GET", "/replays")[0], 200)
         self.assertEqual(self.stub_lines(before + 5) - before, 5)
 
-    def test_the_list_may_be_asked_twenty_times_a_second_by_the_whole_site_with_a_burst_of_a_hundred_and_the_files_have_an_allowance_of_their_own(self):
+    def test_the_list_may_be_asked_twenty_times_a_second_with_a_burst_of_a_hundred_and_the_files_have_an_allowance_of_their_own(self):
         before = self.stub_lines()
         started = time.monotonic()
         codes = [self.ask("GET", "/replays")[0] for _ in range(160)]
@@ -416,7 +415,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertLessEqual(self.stub_lines() - before, 1 + int(took / 5))                   # the cache: the server was asked once (and again every five seconds), not 100 times
         self.assertEqual(self.ask("GET", "/replays/" + FILE)[0], 200)                         # the files are another zone: a flood of the list does not use their allowance
 
-    def test_ten_files_a_second_for_the_whole_site_with_a_burst_of_twenty_and_the_rest_is_503_and_never_reaches_the_server(self):
+    def test_ten_files_a_second_with_a_burst_of_twenty_and_the_rest_is_503_and_never_reaches_the_server(self):
         before = self.stub_lines()
         started = time.monotonic()
         codes = [self.ask("GET", "/replays/" + FILE)[0] for _ in range(60)]

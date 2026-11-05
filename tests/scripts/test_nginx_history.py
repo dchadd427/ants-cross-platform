@@ -6,11 +6,11 @@ the live ones (--replay-port: no secret; the records hold the names that the pla
 forwards the two addresses like /replays and /live (tests/scripts/test_nginx_replays.py, test_nginx_live.py), as the one request each takes and nothing else:
 
   - /history is an exact location and /history/ a prefix location, the only ones of the name (the named location of /replays answers when the server has no such door);
-  - only a GET goes through (405 otherwise: the owner's delete is the control interface's and is never offered here); the item takes no query and an id of the wrong shape is 404 here and never reaches the
+  - only a GET goes through (405 otherwise: the operator's delete is the control interface's and is never offered here); the item takes no query and an id of the wrong shape is 404 here and never reaches the
     server (the history decides which exist); the list takes the query of its filters, of the characters that the filters are made of and 400 characters at most (400 otherwise), so that no other byte
     reaches the server or its log, and the server refuses by name what it does not know;
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
-  - allowances of their own, sized for the whole site (behind a reverse proxy every visitor has the proxy's address) and not shared with the recorded or the live matches': ten a second for the list,
+  - allowances of their own, not shared with the recorded or the live matches': ten a second for the list,
     twenty for single matches (503 beyond);
   - the list WITHOUT a query is cached for five seconds in one entry for everybody in the cache of /stats, and an old list is served while a new one is fetched and when the server does not answer; a list
     WITH a query (a search is dear for the game server) has a low allowance (two a second, a burst of five) and is cached for five seconds under its arguments in a small cache of its own (so that made-up
@@ -186,8 +186,7 @@ class TheLocations(unittest.TestCase):
 
 
 class TheAllowancesAndTheCache(unittest.TestCase):
-    def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address: docs/audit/site_stats_notes.md; an allowance per visitor would be one for everybody)
+    def test_each_address_has_an_allowance_of_its_own_and_the_zones_are_outside_the_server(self):
         # The list has two allowances, one for a request without a query (ten a second) and a much lower one for a request with one (two a second): the zone's key is the address for the one kind of
         # request and empty (not counted) for the other, chosen by $is_args
         for zone_name, key, rate in (("ants_history", "$history_plain_key", 10), ("ants_history_query", "$history_query_key", 2), ("ants_history_items", "$binary_remote_addr", 20)):
@@ -448,7 +447,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         before = self.stub_lines()
         for path in ("/history", "/history/" + ITEM_ID):
             for method in ("POST", "PUT", "DELETE", "PATCH", "OPTIONS"):
-                self.assertEqual(self.ask(method, path, body=b"" if method in ("POST", "PUT", "PATCH") else None)[0], 405, (method, path))      # (the owner's delete is not offered to the visitors)
+                self.assertEqual(self.ask(method, path, body=b"" if method in ("POST", "PUT", "PATCH") else None)[0], 405, (method, path))      # (the operator's delete is not offered to the visitors)
             self.assertEqual(self.ask("HEAD", path)[0], 405, path)
         for query in ("?x=1", "?x", "?limit=5", "?a=b&c=d"):
             self.assertEqual(self.ask("GET", "/history/" + ITEM_ID + query)[0], 404, query)    # a query is no request for a match
@@ -509,7 +508,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(len(self.stub_requests("/live", live + 1)) - live, 1)
         self.assertEqual(len(self.stub_requests("/history", history + 1)) - history, 1)       # and the two asks of the history were one request
 
-    def test_the_list_may_be_asked_ten_times_a_second_by_the_whole_site_with_a_burst_of_fifty_and_the_matches_have_an_allowance_of_their_own(self):
+    def test_the_list_may_be_asked_ten_times_a_second_with_a_burst_of_fifty_and_the_matches_have_an_allowance_of_their_own(self):
         started = time.monotonic()
         codes = [self.ask("GET", "/history")[0] for _ in range(150)]
         took = time.monotonic() - started
@@ -536,7 +535,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
             self.assertEqual(self.ask("GET", "/history?sort=score&limit=7")[0], 200)           # the same search again and again: one request to the server (cached five seconds under its arguments)
         self.assertEqual(len(self.stub_requests("/history", again + 1)) - again, 1)
 
-    def test_twenty_matches_a_second_for_the_whole_site_with_a_burst_of_forty_and_the_rest_is_503(self):
+    def test_twenty_matches_a_second_with_a_burst_of_forty_and_the_rest_is_503(self):
         time.sleep(6.5)                                                                       # (the list's flood of the test before is paid for)
         started = time.monotonic()
         codes = [self.ask("GET", "/history/" + ITEM_ID)[0] for _ in range(120)]
