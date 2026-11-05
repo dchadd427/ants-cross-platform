@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the list of reverse proxies that the web image ships (docker/trusted-proxies.conf), of the places where docker/nginx.conf includes it and of the way the stack files and the image carry it, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/trusted_proxies_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_trusted_proxies.py: each breaks one rule - only the private and internal ranges are believed (not one of them missing, none widened, none for everybody), the header is X-Forwarded-For and it is read from the right, the list is the site's default and the operator's folder replaces it, a zone and a door get the address nginx settled on and never a header, the stacks mount the operator's file by a full path with /dev/null as the default, into the folder that nginx includes, and the image has the list, the optional prefix of the web port is in front of the web port and nothing else, the documents and comments state the requirements and what the operator may set (an existing file, who may reach the web container) and tell neither how a missing setting would fail nor a way round a requirement. The mutants change one file each and put it back.",
+ "note": "Mutants of the list of reverse proxies that the web image ships (docker/trusted-proxies.conf), of the places where docker/nginx.conf includes it and of the way the stack files and the image carry it, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/trusted_proxies_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_trusted_proxies.py: each breaks one rule - only the private and internal ranges are believed (not one of them missing, none widened, none for everybody), the header is X-Forwarded-For and it is read from the right, the list is the site's default and the operator's folder replaces it, a zone and a door get the address nginx settled on and never a header, the stacks mount the operator's file by a full path with /dev/null as the default, into the folder that nginx includes, and the image has the list, the optional prefix of the web port is in front of the web port and nothing else, the documents and comments state the requirements and what the operator may set (an existing file, who may reach the web container) and tell neither how a missing setting would fail nor a way round a requirement (the comments of docker/nginx.conf too). The mutants change one file each and put it back.",
  "defaults": {
   "test": "PYTHONDONTWRITEBYTECODE=1 python3 tests/scripts/test_nginx_trusted_proxies.py -f"
  },
@@ -195,6 +195,24 @@
    "file": "docs/SERVER.md",
    "old": "(the zones of `docker/nginx.conf`; the `X-Client-Address` that the game server and the chat hub count by)",
    "new": "(the zones of `docker/nginx.conf`; the `X-Client-Address` that the game server and the chat hub count by; the owner's page)"
+  },
+  {
+   "id": "nginx_comment_of_the_replays_zones_is_sized_for_the_whole_site",
+   "file": "docker/nginx.conf",
+   "old": "# The recorded matches of the game server (/replays, below): twenty a second for the list",
+   "new": "# The recorded matches of the game server (/replays, below), sized for the whole site: twenty a second for the list"
+  },
+  {
+   "id": "nginx_comment_of_the_hub_handshakes_tells_the_whole_site_numbers",
+   "file": "docker/nginx.conf",
+   "old": "# the hub). A hub that restarts is reached again by its clients",
+   "new": "# the hub). The whole site's numbers; a hub that restarts is reached again by its clients"
+  },
+  {
+   "id": "nginx_comment_of_the_replays_door_tells_the_whole_site",
+   "file": "docker/nginx.conf",
+   "old": "and the allowances are the zones above\n    # (503 beyond).",
+   "new": "and the allowances of the zones above are the whole site's\n    # (503 beyond)."
   }
  ]
 }

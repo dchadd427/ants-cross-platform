@@ -253,8 +253,9 @@ class TheWiring(unittest.TestCase):
             for hint in ("one limit for the whole site", "the whole site's", "count the proxy", "counts as that proxy", "counts as the proxy", "has the proxy's address", "choose his address", "name any address",
                          "can use up", "gateway", "above all", "userland", "owner", "locks everybody"):
                 self.assertNotIn(hint, text, "%s: %s" % (name, hint))
-        for phrase in ("ONE allowance for the whole site", "shares these with the whole site"):
-            self.assertNotIn(phrase, read("docker", "nginx.conf"), phrase)
+        conf = read("docker", "nginx.conf")                                     # (the whole file, its comments too: none of them tells how a setup without the list would behave)
+        for phrase in ("proxy's address", "whole site", "whole-site", "sized to hold", "sized for", "every visitor", "may have the", "not small", "shares these", "ONE allowance", "can use up"):
+            self.assertNotIn(phrase, conf, phrase)
         for name in ("MAP_SUBMISSIONS.md", "HUB.md"):
             for line in read("docs", name).splitlines():
                 if "trusted-proxies" in line:
