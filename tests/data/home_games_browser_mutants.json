@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) and of the own-room row of the Games list (web/home/games.js) and of the steps of the two bars for narrow windows and the Room's switch label at narrow widths and the two compact rows of a phone held sideways and of the page's end above the system bar of a phone (web/home/home.css, web/home/chat.css) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
+ "note": "Mutants of the cards' rules for short and narrow windows (web/home/games.css, docs/HOME_SCREEN.md) and of the own-room row of the Games list (web/home/games.js) and of the steps of the two bars for narrow windows and the Room's switch label at narrow widths and the two compact rows of a phone held sideways and of the page's end above the system bar of a phone (web/home/home.css, web/home/chat.css) and of the docked list's place in a wide window (centered from 1280 px, never over the chat panel) and the pictures of its rows (web/home/games.css, games.js) that only the opt-in real-Chromium check can see (Playwright, a built ants_server, `build/src/ants_server/ants_server`): run with `python3 tools/mutate.py tests/data/home_games_browser_mutants.json --keep-going` from the repository root.",
  "mutants": [
   {
    "id": "short_window_rule_applies_at_normal_sizes",
@@ -279,6 +279,41 @@
    "file": "web/home/games.css",
    "old": "font-size: .765em; }",
    "new": "font-size: 1em; }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "list_not_centered_on_a_wide_window",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 856px)); } }",
+   "new": "@media (min-width: 1280px) { .gdock { right: 12px; width: min(560px, calc(100% - 440px)); } }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "list_centered_over_the_chat_panel",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 856px)); } }",
+   "new": "@media (min-width: 1280px) { .gdock { left: 12px; right: 12px; width: min(560px, calc(100% - 24px)); } }",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "list_centered_in_a_window_that_is_too_narrow",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px;",
+   "new": "@media (min-width: 1000px) { .gdock { right: 428px;",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "picture_that_does_not_come_shows_a_broken_image",
+   "file": "web/home/games.js",
+   "old": " img.addEventListener('error', function () { pic.removeChild(img); });",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
+  },
+  {
+   "id": "picture_of_a_map_of_the_players_not_asked_for",
+   "file": "web/home/games.js",
+   "old": ": Picker ? Picker.previewPath(row.map) : '';",
+   "new": ": '';",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   }
  ]

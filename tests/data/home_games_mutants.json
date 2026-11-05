@@ -340,8 +340,8 @@
   {
    "id": "picture_from_the_rows_text",
    "file": "web/home/games.js",
-   "old": "img.src = 'front/preview_' + row.mapKey + '.png';",
-   "new": "img.src = 'front/preview_' + row.map + '.png';",
+   "old": "src = row.mapKey ? 'front/preview_' + row.mapKey + '.png' :",
+   "new": "src = row.mapKey ? 'front/preview_' + row.map + '.png' :",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1565,8 +1565,8 @@
   {
    "id": "on_its_way_leaves_the_list_open",
    "file": "web/home/games.js",
-   "old": "        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)\n            closeAll();\n",
-   "new": "        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)\n",
+   "old": "a reload gets it back)\n            closeAll();\n",
+   "new": "a reload gets it back)\n",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -2463,6 +2463,104 @@
    "file": "web/home/games.css",
    "old": ".vbtn { min-height: 44px; display: block; padding: 5px 14px 3px; font-size: 17px; }",
    "new": ".vbtn { min-height: 44px; display: inline-flex; gap: 8px; align-items: baseline; padding: 5px 14px 3px; font-size: 17px; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_of_the_players_maps_dropped",
+   "file": "web/home/games.js",
+   "old": ": Picker ? Picker.previewPath(row.map) : '';",
+   "new": ": '';",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_address_made_by_encodeURIComponent",
+   "file": "web/home/games.js",
+   "old": "Picker.previewPath(row.map)",
+   "new": "'/maps/previews/' + encodeURIComponent(row.map.replace(/\\.lvl$/i, '')) + '.webp'",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_named_by_the_shown_name",
+   "file": "web/home/games.js",
+   "old": "Picker.previewPath(row.map)",
+   "new": "Picker.previewPath(row.mapName)",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_of_the_originals_dropped",
+   "file": "web/home/games.js",
+   "old": "src = row.mapKey ? 'front/preview_' + row.mapKey + '.png' : Picker ?",
+   "new": "src = Picker ?",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_that_does_not_come_stays_broken",
+   "file": "web/home/games.js",
+   "old": " img.addEventListener('error', function () { pic.removeChild(img); });",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_not_lazy",
+   "file": "web/home/games.js",
+   "old": " img.setAttribute('loading', 'lazy');",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picker_script_after_home",
+   "file": "web/lobby.html",
+   "old": "<script src=\"front/map_picker.js\"></script>\n<script src=\"shapes.js\"></script><script src=\"map_files.js\"></script><script src=\"home/home.js\"></script>\n",
+   "new": "<script src=\"shapes.js\"></script><script src=\"map_files.js\"></script><script src=\"home/home.js\"></script><script src=\"front/map_picker.js\"></script>\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "wide_list_keeps_the_old_place",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 856px)); } }",
+   "new": "@media (min-width: 1280px) { .gdock { right: 12px; width: min(560px, calc(100% - 440px)); } }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "wide_list_room_on_one_side_only",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px;",
+   "new": "@media (min-width: 1280px) { .gdock { right: 300px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "wide_list_over_the_chat_panel",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 856px)); } }",
+   "new": "@media (min-width: 1280px) { .gdock { left: 12px; right: 12px; width: min(560px, calc(100% - 24px)); } }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "wide_centering_for_every_window",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px;",
+   "new": "@media (min-width: 0px) { .gdock { right: 428px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "wide_centering_too_early",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px;",
+   "new": "@media (min-width: 1100px) { .gdock { right: 428px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "wide_list_wider_than_the_room",
+   "file": "web/home/games.css",
+   "old": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 856px)); } }",
+   "new": "@media (min-width: 1280px) { .gdock { right: 428px; width: min(560px, calc(100% - 440px)); } }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "picture_lazy_set_after_the_address",
+   "file": "web/home/games.js",
+   "old": "img.setAttribute('loading', 'lazy'); img.src = src;",
+   "new": "img.src = src; img.setAttribute('loading', 'lazy');",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
   }
  ]
