@@ -134,7 +134,7 @@ COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 # The players' maps for the browser (docs/SERVER.md "The list of maps"): the preview pictures (534 small WebP files) and the .lvl files themselves, served by docker/nginx.conf at /maps/previews/ and /maps/files/ from
 # a folder outside the web root, so that only those two locations can reach them. The six originals' pictures are the front page's own (web/front/): no second copy.
 # The six original maps (Original-Ants/Maps, read only) go into the same files folder, so that the Map Maker's "Start from a game map" can fetch them at /maps/files/ like any other map (the game server
-# serves only the players' maps that the owner approved, and the page's data package is the game's own). A test keeps their names apart from the players' (tests/scripts/test_nginx_original_maps.py).
+# serves only the players' maps that the maintainer approved, and the page's data package is the game's own). A test keeps their names apart from the players' (tests/scripts/test_nginx_original_maps.py).
 COPY Community-Maps/previews/ /srv/community-maps/previews/
 COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
 COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/
@@ -188,7 +188,7 @@ COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
-# The owner's page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
+# The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
