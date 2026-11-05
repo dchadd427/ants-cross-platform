@@ -187,6 +187,8 @@ ants-cross-platform/
 │   ├── web_without_docker.py           # The web image without Docker (Linux): the Dockerfile's commands on
 │   │                                   # this machine, the pages served with nginx, for the browser checks
 │   ├── deploy_webhook.sh               # Calls the Portainer deploy webhook without ever printing its address
+│   ├── ci_light.sh                     # Does a pull request need all of CI or only the light checks? (the first job
+│   │                                   # of ci.yml: pages, documents and page tests only)
 │   └── front_page_art/                 # Makes the front page's pictures in web/front/ from the game's own assets
 │                                       # (needs Pillow; a developer's tool, in no build or test)
 ├── web/                                # The web build's page files

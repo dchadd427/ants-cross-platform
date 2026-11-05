@@ -6,7 +6,7 @@ How to build and start Ants from source on macOS, Linux and Windows, how to buil
 
 The game needs a C++17 compiler, CMake 3.16 or newer, and SDL2 and SDL2_ttf. Only the game and the application's test programs need SDL: `-DANTS_BUILD_APP=OFF` leaves them out and builds the dedicated server and the other tests without it (see "Manual CMake Build"). `ccache` and Ninja are optional.
 
-The project is developed on macOS and on Windows 11 (Visual Studio 2022 Build Tools). CI builds every pull request on Linux (GCC), macOS (Apple clang) and Windows (MSVC 2022 and 2026) with `-DANTS_WERROR=ON` (every warning is an error) and runs the tests there; it also builds the web image and the server image. The compilers and the SDL2 versions of each job are in the table of [`TESTING.md`](TESTING.md#continuous-integration); what to install on your own machine is in the sections below.
+The project is developed on macOS and on Windows 11 (Visual Studio 2022 Build Tools). CI builds every pull request on Linux (GCC), macOS (Apple clang) and Windows (MSVC 2022 and 2026) with `-DANTS_WERROR=ON` (every warning is an error) and runs the tests there, except that a pull request of documents, web pages and their tests only skips macOS and Windows ([`WORKFLOW.md`](WORKFLOW.md#light-checks-for-web-and-document-pull-requests)); every push to `main` runs all of it. It also builds the web image and the server image. The compilers and the SDL2 versions of each job are in the table of [`TESTING.md`](TESTING.md#continuous-integration); what to install on your own machine is in the sections below.
 
 ### macOS
 

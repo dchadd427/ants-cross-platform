@@ -4,6 +4,16 @@
 # none of them without changing the branch protection in the same release (tests/scripts/test_ci_workflow.py keeps the names). What runs where is listed in docs/TESTING.md ("Continuous
 # Integration"); the tiers of tests and the release procedure: docs/WORKFLOW.md.
 #
+# The Linux and macOS work is shared between jobs that run side by side (the tests, not the build, take the time), behind the same two names:
+#   - `linux_tests` and `macos_tests` build and test. Each is a matrix of legs: ctest in parts (Linux), the tool self-tests and the script suites, the python tests (in slices on Linux, the
+#     groups that depend on the system on macOS: tests/scripts/run_python_tests.py). Every leg builds what it needs from the compiler cache (about a minute).
+#   - `linux` and `macos` are small jobs that carry the required names. They look at the result of the legs and pass only when every leg passed. `linux` runs whatever the legs did
+#     (`if: always()`), because a job whose needs failed would otherwise be skipped, and a skipped job counts as passing for a required check: the explicit test is what keeps a failed leg from passing.
+#   - `changes`, the first job, decides for a pull request (never for a push or a manual run) whether the change is of documents, web pages and page tests only, apart from the few files that the C++ tests
+#     and the macOS script suite read (tools/ci_light.sh; the rules are in docs/WORKFLOW.md). Then `macos` and its legs are skipped, and the Windows jobs run but skip their steps: a matrix job that a
+#     job-level `if` skips is reported once, under the unexpanded template of its name, so the required names "Windows (MSVC 2022)" and "Windows (MSVC 2026)" would never appear. Linux and the web job
+#     run in full for every change. If `changes` itself fails, everything runs.
+#
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
 # application), then the self-tests of the four tools (map_sweep, bot_arena, replay_tool, lvl_tool; bot_watch and gen_food_footprints are only built, so that no change breaks them unseen; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
@@ -36,26 +46,87 @@ env:
   SDL_VIDEODRIVER: dummy
   SDL_AUDIODRIVER: dummy
   CTEST_OUTPUT_ON_FAILURE: "1"
+  # How the Linux legs share ctest (names of tests, as regular expressions; the times are those of a run of the whole of ctest, in seconds): test_engine_lookups takes 530 and decides the time of a
+  # leg that has it, so it runs alone; the next legs take the four tests that take 160 to 290 seconds, and every other test (test_server, test_network_app and the 95 that are short: a new test lands
+  # here, and a name that matches nothing is an error because of --no-tests=error).
+  CTEST_ALONE: "^test_engine_lookups$"
+  CTEST_LONG: "^(test_ai|test_lockstep|test_ai_worker|test_engine_copy)$"
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  linux:
-    name: Linux (GCC)
+  changes:
+    name: Which checks does this change need?
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      light: ${{ steps.decide.outputs.light }}
+    steps:
+      # The whole history, for the merge base of a pull request and its base. Nothing is pushed from here: the checkout keeps no credentials.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The decision and every changed file are printed. The commit ids come through the environment; no text of the pull request (title, branch, body) is read by this job. The change is judged
+      # against the base of the pull request and against main (MAIN_REF, a literal): a pull request that is retargeted starts no new run, so the verdict must not depend on the base.
+      - name: Light checks or all of them?
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MAIN_REF: refs/remotes/origin/main
+        run: bash tools/ci_light.sh
+
+  linux_tests:
+    name: Linux tests (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # The legs are chosen so that none takes much longer than the longest test or group (docs/TESTING.md has the times): ctest in three parts, the tool self-tests with the E2E runner and the
+        # script suites, and the python tests in three slices (`run_python_tests.py --shard`; the three groups of the page tests that take minutes each are in different slices). Every leg builds
+        # everything: with the compiler cache that is about a minute, and the python tests use some built programs (bot_arena, ants_server), which they skip when they are not there.
+        include:
+          - id: ctest-lookups
+            name: "ctest: test_engine_lookups alone"
+            part: ctest-lookups
+          - id: ctest-long
+            name: "ctest: the next longest tests"
+            part: ctest-long
+          - id: ctest-rest
+            name: "ctest: all the other tests"
+            part: ctest-rest
+          - id: scripts
+            name: "tool self-tests, E2E runner, script suites"
+            part: scripts
+          - id: python-1
+            name: "python tests, slice 1 of 3"
+            part: python
+            slice: 1/3
+          - id: python-2
+            name: "python tests, slice 2 of 3"
+            part: python
+            slice: 2/3
+          - id: python-3
+            name: "python tests, slice 3 of 3"
+            part: python
+            slice: 3/3
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 400M
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install SDL2, SDL2_ttf, ccache, Ninja
+      # python3-yaml: tests/scripts/test_ci_workflow.py reads this file with PyYAML (its checks of the legs are skipped without it, and a test fails on these machines when it is missing)
+      - name: Install SDL2, SDL2_ttf, ccache, Ninja, PyYAML
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build
+          sudo apt-get install -y --no-install-recommends libsdl2-dev libsdl2-ttf-dev ccache ninja-build python3-yaml
 
       - name: Restore the compiler cache
         uses: actions/cache@v6
@@ -78,16 +149,25 @@ jobs:
 
       - name: Build the E2E runner
         id: build_e2e
+        if: ${{ matrix.part == 'scripts' }}
         run: |
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build_e2e
 
-      - name: Test programs (ctest)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
+      - name: Test programs (ctest, test_engine_lookups alone)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'ctest-lookups' }}
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error -R "$CTEST_ALONE"
+
+      - name: Test programs (ctest, the next longest tests)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'ctest-long' }}
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error -R "$CTEST_LONG"
+
+      - name: Test programs (ctest, all the other tests)
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'ctest-rest' }}
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error -E "${CTEST_ALONE}|${CTEST_LONG}"
 
       - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts' }}
         run: |
           status=0
           build/map_sweep --selftest || status=1
@@ -99,11 +179,11 @@ jobs:
           exit $status
 
       - name: Opaque-box E2E runner
-        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' && matrix.part == 'scripts' }}
         run: build_e2e/e2e_runner --all
 
       - name: Script suites (start script, dedicated server with two headless clients)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts' }}
         run: |
           status=0
           bash tests/scripts/test_start_game.sh || status=1
@@ -112,26 +192,59 @@ jobs:
           bash tests/scripts/test_ants_server.sh --list-parts | xargs -P 5 -I{} bash tests/scripts/test_ants_server.sh --part {} || status=1
           exit $status
 
+      # Every slice runs the version check (a second), so that each leg of the python tests ends with the same repository checks as before.
       - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.part == 'python' }}
+        env:
+          SLICE: ${{ matrix.slice }}
         run: |
           status=0
           python3 tools/check_version_consistency.py || status=1
-          python3 tests/scripts/run_python_tests.py || status=1
+          python3 tests/scripts/run_python_tests.py --shard "$SLICE" || status=1
           exit $status
 
       - name: Keep the test logs of a failed run
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: linux-test-logs
+          name: linux-test-logs-${{ matrix.id }}
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
-  macos:
-    name: macOS (Apple clang)
+  # The required check "Linux (GCC)": it passes when every leg of linux_tests passed. It runs whatever the legs did (a job whose needs failed would be skipped, and a skipped job counts as passing).
+  linux:
+    name: Linux (GCC)
+    needs: linux_tests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Did every Linux job pass?
+        env:
+          RESULT: ${{ needs.linux_tests.result }}
+        run: |
+          echo "the Linux test jobs: $RESULT"
+          [ "$RESULT" = success ] || { echo "a Linux test job failed, was cancelled or did not run: this check fails"; exit 1; }
+
+  macos_tests:
+    name: macOS tests (${{ matrix.name }})
+    needs: changes
+    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.
+    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}
     runs-on: macos-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # Two legs: ctest, which takes as long as its longest test (about 410 seconds), and the rest. Of the python tests the leg runs the groups that depend on the system (servers, sockets, HTTP,
+        # clocks, shells, file names and paths, compilers; run_python_tests.py --skip-linux-only): Linux runs every python test.
+        include:
+          - id: ctest
+            name: ctest
+            part: ctest
+          - id: scripts-python
+            name: tool self-tests, script suites, python tests
+            part: scripts-python
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 400M
@@ -178,6 +291,7 @@ jobs:
       - name: Configure (Release, warnings are errors)
         run: |
           clang --version | head -1
+          cmake --version | head -1
           "$HOME/sdl2/bin/sdl2-config" --version
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DANTS_WERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_PREFIX_PATH="$HOME/sdl2"
 
@@ -190,16 +304,17 @@ jobs:
 
       - name: Build the E2E runner
         id: build_e2e
+        if: ${{ matrix.part == 'scripts-python' }}
         run: |
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build_e2e
 
       - name: Test programs (ctest)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'ctest' }}
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error
 
       - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}
         run: |
           status=0
           build/map_sweep --selftest || status=1
@@ -211,11 +326,11 @@ jobs:
           exit $status
 
       - name: Opaque-box E2E runner
-        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build_e2e.conclusion == 'success' && matrix.part == 'scripts-python' }}
         run: build_e2e/e2e_runner --all
 
       - name: Script suites (start script, dedicated server with two headless clients)
-        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
+        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}
         run: |
           status=0
           bash tests/scripts/test_start_game.sh || status=1
@@ -224,25 +339,47 @@ jobs:
           bash tests/scripts/test_ants_server.sh --list-parts | xargs -P 5 -I{} bash tests/scripts/test_ants_server.sh --part {} || status=1
           exit $status
 
-      - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers)
-        if: ${{ !cancelled() }}
+      - name: Repository checks (version and changelog consistency, python tests of the tools and the tiers that depend on the system)
+        if: ${{ !cancelled() && matrix.part == 'scripts-python' }}
         run: |
           status=0
           python3 tools/check_version_consistency.py || status=1
-          python3 tests/scripts/run_python_tests.py || status=1
+          python3 tests/scripts/run_python_tests.py --skip-linux-only || status=1
           exit $status
 
       - name: Keep the test logs of a failed run
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: macos-test-logs
+          name: macos-test-logs-${{ matrix.id }}
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
+  # The required check "macOS (Apple clang)": it passes when every leg of macos_tests passed, and is skipped (which counts as passing) together with them when the change is of pages, documents
+  # and page tests only. Like "Linux (GCC)" it runs whatever the legs did.
+  macos:
+    name: macOS (Apple clang)
+    needs: [changes, macos_tests]
+    if: ${{ always() && needs.changes.outputs.light != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Did every macOS job pass?
+        env:
+          RESULT: ${{ needs.macos_tests.result }}
+        run: |
+          echo "the macOS test jobs: $RESULT"
+          [ "$RESULT" = success ] || { echo "a macOS test job failed, was cancelled or did not run: this check fails"; exit 1; }
+
   windows:
     name: Windows (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
+    needs: changes
+    # For a change of web pages, documents and page tests only (the job `changes`) there is nothing to build: the job then runs on a small Linux machine and every step below is skipped. (It is not
+    # skipped as a whole: a matrix job that is skipped by its `if` is reported once, under the unexpanded template of its name, so that "Windows (MSVC 2022)" and "Windows (MSVC 2026)", the names
+    # that main requires, would never be reported and the pull request could not be merged.) If `changes` failed, everything runs: the `if` below (no `success()`) keeps the job from being skipped
+    # with it, which a plain `needs` would do.
+    if: ${{ !cancelled() }}
+    runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -257,9 +394,16 @@ jobs:
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 600M
     steps:
+      - name: Nothing to build (only web pages, documents and page tests changed)
+        if: ${{ needs.changes.outputs.light == 'true' }}
+        run: |
+          echo "Light checks: no file of this change is read by the Windows build or its tests (see the first job, Which checks does this change need?)."
+
       - uses: actions/checkout@v7
+        if: ${{ needs.changes.outputs.light != 'true' }}
 
       - name: Restore the compiler cache
+        if: ${{ needs.changes.outputs.light != 'true' }}
         uses: actions/cache@v6
         with:
           path: .sccache
@@ -268,6 +412,7 @@ jobs:
 
       # sccache: a pinned release of Mozilla's compiler cache, its SHA-256 checked (the digest is the one that GitHub shows for the release asset).
       - name: Install sccache 0.14.0
+        if: ${{ needs.changes.outputs.light != 'true' }}
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
@@ -284,12 +429,14 @@ jobs:
 
       # The Visual C++ environment (cl, link, the include and library paths) for the steps below; the action is pinned to the commit of its tag v1.13.0.
       - name: Set up the MSVC environment (x64)
+        if: ${{ needs.changes.outputs.light != 'true' }}
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
         with:
           arch: x64
 
       # SDL2 and SDL2_ttf are not installed: CMakeLists.txt downloads the prebuilt Visual C++ packages itself (FetchContent), as it does on a developer's PC.
       - name: Configure (Ninja, Release, warnings are errors, sccache)
+        if: ${{ needs.changes.outputs.light != 'true' }}
         run: |
           cmake --version | head -1
           cl 2>&1 | head -1 || true
@@ -297,25 +444,27 @@ jobs:
 
       - name: Build the game, the server and the test programs (Release)
         id: build
+        if: ${{ needs.changes.outputs.light != 'true' }}
         run: |
           cmake --build build
           cmake --build build --target map_sweep bot_arena replay_tool lvl_tool bot_watch gen_food_footprints
 
       - name: Build the E2E runner (Release)
         id: build_e2e
+        if: ${{ needs.changes.outputs.light != 'true' }}
         run: |
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
           cmake --build build_e2e
 
       - name: Compiler cache statistics
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}
         run: |
           sccache --show-stats || true
           sccache --stop-server || true
 
       - name: Test programs (ctest)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
-        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4
+        run: ctest --test-dir build --output-on-failure --timeout 900 --parallel 4 --no-tests=error
 
       - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)
         if: ${{ !cancelled() && steps.build.conclusion == 'success' }}
@@ -422,7 +571,7 @@ jobs:
 
   deploy:
     name: Deploy (Portainer webhook)
-    needs: [linux, macos, windows, web]
+    needs: [changes, linux_tests, linux, macos_tests, macos, windows, web]
     if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
     runs-on: ubuntu-latest
     # The job may wait for a quiet server for hours (tools/deploy_wait.py waits 300 minutes at the most, whatever DEPLOY_MAX_WAIT_MINUTES says): its limit is above that.
