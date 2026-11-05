@@ -7,7 +7,7 @@ Exit 0 when everything is in order, 1 when there are findings (one line each), 2
 Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --tools and by CI). The checks:
   1. a document (docs/**/*.md, root *.md) is at most DOC_LIMIT bytes, except the pages of DOC_CEILINGS (ceilings that may only shrink);
   2. every docs/*.md and docs/<folder>/README.md is reachable from README.md by relative markdown links (a link to a folder reaches its README.md);
-  3. no tracked text file names a private planning document or repository (PRIVATE_NAME_DIGESTS: kept as digests, spelled nowhere), a commit trailer or a session link (FORBIDDEN), except the files of FORBIDDEN_ALLOWED and the vendored files of VENDORED_CODE;
+  3. no tracked text file and no tracked path names a private planning document or repository (PRIVATE_NAME_DIGESTS: kept as digests, spelled nowhere; the files of FORBIDDEN_ALLOWED are looked at for these too), and no tracked text file names a commit trailer or a session link (FORBIDDEN), except the files of FORBIDDEN_ALLOWED and the vendored files of VENDORED_CODE;
   4. a test file has at most TEST_LINES lines and a production file at most PROD_LINES, except the files of LINE_CEILINGS (ceilings that may only shrink);
   5. at most ASSERT_TRUE_DEFINITIONS definitions of the macro ASSERT_TRUE;
   6. every .cpp under src/, tests/ and tools/ is named in a CMakeLists.txt, except CMAKE_EXCEPTIONS;
@@ -51,8 +51,11 @@ ASSERT_TRUE_DEFINITIONS = 2  # tests/common/test_assert.hpp and the throwing ASS
 
 FORBIDDEN = re.compile(r"claude\.ai/code|Co-Authored-By|Claude-Session|project thread|the other thread", re.I)
 # The names of private planning documents and repositories are spelled nowhere in a public file, this one included: each is kept as the SHA-256 of its lower-case spelling, with its length (the idea
-# of the digests in tests/scripts/test_web_mapmaker.py). A name is made of letters, digits and "_-." only, so it lies inside one run of those characters (PRIVATE_RUN); a window of each length
-# slides over the runs of a file, and a finding names the file and the line, never the name. A short word is easy to find again from its digest, so an entry has 10 characters or more.
+# of the digests in tests/scripts/test_web_mapmaker.py). The digests keep the names out of a casual search of the repository and nothing more: a name that is easy to guess can be found again from its
+# digest, whatever its length. A name is made of letters, digits and "_-." only, so it lies inside one run of those characters (PRIVATE_RUN); a window of each length slides over the runs of a file and
+# over the path of each tracked file, and a finding names the file and the line, never the name (a path is printed with the name hidden). An entry has PRIVATE_NAME_MIN_LENGTH characters or more, which
+# private_name_matcher() enforces: a shorter one could be found again by trying every spelling.
+PRIVATE_NAME_MIN_LENGTH = 10
 PRIVATE_NAME_DIGESTS = (
     ("90ba2548bd1781b44437596aa2c4b006083995971e727a8615fb292c961a4936", 19),
     ("09ca0aaa77c748fe98f733209eaefdd67e555418f78a985289203d2d05d7e9fa", 10),
@@ -169,9 +172,12 @@ def looks_binary(data):
 
 
 def private_name_matcher(digests=PRIVATE_NAME_DIGESTS):
-    """holds(run): does a run of lower-case name characters hold a window with the digest and the length of an entry? Remembers its answers (a repository has few distinct runs)."""
+    """holds(run): does a run of lower-case name characters hold a window with the digest and the length of an entry? Remembers its answers (a repository has few distinct runs).
+    holds.spans(text): the (start, end) offsets of those windows in a lower-case text (to hide a name in a path before the path is printed)."""
     wanted = {}
     for digest, length in digests:
+        if length < PRIVATE_NAME_MIN_LENGTH:
+            raise ValueError("an entry of %d characters: at least %d are needed (a shorter one could be found again by trying every spelling)" % (length, PRIVATE_NAME_MIN_LENGTH))
         wanted.setdefault(length, set()).add(digest)
     shortest = min(wanted) if wanted else 0
     memo = {}
@@ -184,6 +190,16 @@ def private_name_matcher(digests=PRIVATE_NAME_DIGESTS):
             hit = any(hashlib.sha256(run[i:i + n].encode("utf-8")).hexdigest() in found for n, found in wanted.items() for i in range(len(run) - n + 1))
             memo[run] = hit
         return hit
+
+    def spans(text):
+        found_at = []
+        for m in PRIVATE_RUN.finditer(text):
+            for n, found in wanted.items():
+                for i in range(len(m.group(0)) - n + 1):
+                    if hashlib.sha256(m.group(0)[i:i + n].encode("utf-8")).hexdigest() in found:
+                        found_at.append((m.start() + i, m.start() + i + n))
+        return found_at
+    holds.spans = spans
     return holds
 
 
@@ -191,7 +207,13 @@ def check_forbidden(root, files, allowed=FORBIDDEN_ALLOWED, digests=PRIVATE_NAME
     out = []
     holds = private_name_matcher(digests)
     for rel in files:
-        if rel in allowed or rel.startswith("previews/") or "/previews/" in rel or rel in VENDORED_CODE:       # (vendored code is not ours: SQLite's own comments say "the other thread")
+        low = rel.lower()
+        if any(holds(run) for run in PRIVATE_RUN.findall(low)):                  # (the name of a tracked file counts too: a private file is kept out by its name as much as by its text)
+            shown = list(rel if len(low) == len(rel) else low)
+            for start, end in holds.spans(low):
+                shown[start:end] = "*" * (end - start)
+            out.append("%s: the path names a private planning document or repository (PRIVATE_NAME_DIGESTS; the name is hidden here)" % "".join(shown))
+        if rel.startswith("previews/") or "/previews/" in rel or rel in VENDORED_CODE:       # (vendored code is not ours: SQLite's own comments say "the other thread")
             continue
         if os.path.splitext(rel)[1].lower() in TEXT_SUFFIXES_SKIPPED:
             continue
@@ -201,7 +223,7 @@ def check_forbidden(root, files, allowed=FORBIDDEN_ALLOWED, digests=PRIVATE_NAME
         text = data.decode("utf-8", "replace")
         private = any(holds(run) for run in set(PRIVATE_RUN.findall(text.lower())))      # (once for the whole file; the lines are looked at one by one only when there is a hit)
         for n, line in enumerate(text.splitlines(), 1):
-            m = FORBIDDEN.search(line)
+            m = None if rel in allowed else FORBIDDEN.search(line)                       # (the allow-list is for the files that must spell the trailers: the names are looked for in them too)
             if m:
                 out.append("%s:%d: names '%s' (private planning, trailer or session text does not belong in a public file)" % (rel, n, m.group(0)))
             if private and any(holds(run) for run in PRIVATE_RUN.findall(line.lower())):

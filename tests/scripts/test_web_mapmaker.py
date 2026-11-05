@@ -62,8 +62,11 @@ def read(*parts):
         return f.read()
 
 
-# The page names nothing private (AGENTS.md, rule 3), and this file is public too, so the words are kept as SHA-256 digests of their exact bytes (case counts) with their length, never spelled.
-# private_hits() slides a window of each length over a text and reports the offsets whose digest is on the list. An entry has 9 characters or more (the digest of a short word is easy to find again). DECOY_DIGEST is a harmless decoy that only the self-test uses.
+# The page names nothing private (AGENTS.md, rule 3), and this file is public too, so the words are kept as SHA-256 digests of their exact bytes (case counts) with their length, never spelled. The digests keep
+# the words out of a casual search and nothing more: a word that is easy to guess can be found again from its digest, whatever its length.
+# private_hits() slides a window of each length over a text and reports the offsets whose digest is on the list. An entry has PRIVATE_MIN_LENGTH characters or more, which private_hits() enforces (a shorter
+# one could be found again by trying every spelling). DECOY_DIGEST is a harmless decoy that only the self-test uses.
+PRIVATE_MIN_LENGTH = 9
 PRIVATE_DIGESTS = (
     ("7a7bd3f4b15b42e706bdee964a4f6b9bd2088bb079a9f9e564e6166c35935e93", 9),
     ("41109810504e65405ce6c19dfe205f908b333cc4fd6fc4dc75edfefbc3d6d7e7", 9),
@@ -76,6 +79,8 @@ def private_hits(text, digests=PRIVATE_DIGESTS):
     """The offsets in text where a window has the digest and the length of an entry; the matched text is never returned."""
     by_length = {}
     for digest, length in digests:
+        if length < PRIVATE_MIN_LENGTH:
+            raise ValueError("an entry of %d characters: at least %d are needed" % (length, PRIVATE_MIN_LENGTH))
         by_length.setdefault(length, set()).add(digest)
     hits = []
     for length, wanted in sorted(by_length.items()):
@@ -1096,7 +1101,6 @@ class ThePage(unittest.TestCase):
             self.assertIn(part, canvas, part)
 
     def test_the_page_names_nothing_private(self):
-        self.assertTrue(all(length >= 9 for _, length in PRIVATE_DIGESTS), "a short entry could be found again from its digest")
         for name in ("mapmaker.html",) + tuple("front/" + n for n in SCRIPTS) + ("front/mapmaker.css",):
             hits = private_hits(read("web", name))
             self.assertEqual(hits, [], "%s names a private word at offset(s) %s" % (name, hits))
@@ -1109,6 +1113,8 @@ class ThePage(unittest.TestCase):
         self.assertEqual(private_hits("", decoy), [])
         self.assertEqual(private_hits("decoyword", PRIVATE_DIGESTS), [], "the decoy is not on the real list")
         self.assertEqual(private_hits("x" * 5000), [], "a page of nothing special is clean")
+        with self.assertRaises(ValueError):
+            private_hits("x", (("0" * 64, PRIVATE_MIN_LENGTH - 1),))                                       # (an entry that is too short is refused, not used)
 
     def test_the_style_has_the_three_layouts_the_joined_tag_and_only_tokens_it_defines(self):
         self.assertIn("@media (max-width: 600px) {", self.css)

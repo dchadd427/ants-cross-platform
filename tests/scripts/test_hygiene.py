@@ -113,11 +113,19 @@ class Forbidden(Tree):
         self.assertEqual(len(out), 1)
         self.assertNotIn("decoy", out[0].lower())
 
-    def test_the_names_on_the_list_are_digests_of_ten_characters_or_more(self):
+    def test_the_names_on_the_list_are_digests_that_pass_the_minimum(self):
         self.assertEqual(len(ch.PRIVATE_NAME_DIGESTS), len(set(ch.PRIVATE_NAME_DIGESTS)))
         for digest, length in ch.PRIVATE_NAME_DIGESTS:
             self.assertRegex(digest, r"^[0-9a-f]{64}$")
-            self.assertGreaterEqual(length, 10)
+            self.assertGreaterEqual(length, ch.PRIVATE_NAME_MIN_LENGTH)
+        ch.private_name_matcher()                                                            # (the real list is accepted)
+
+    def test_a_short_entry_is_refused_when_the_check_starts(self):
+        short = (hashlib.sha256(b"x" * (ch.PRIVATE_NAME_MIN_LENGTH - 1)).hexdigest(), ch.PRIVATE_NAME_MIN_LENGTH - 1)
+        with self.assertRaises(ValueError):
+            ch.private_name_matcher((short,))
+        with self.assertRaises(ValueError):
+            ch.check_forbidden(self.root, self.files(), digests=(self.DECOY, short))
 
     def test_allowlist_binary_maps_and_previews_are_skipped(self):
         self.put("AGENTS.md", "Claude-Session\n")
@@ -129,9 +137,28 @@ class Forbidden(Tree):
             f.write(b"\0\0claude.ai/code decoy-notes.md")
         self.put("docs/ok.md", "plain words\n")
         self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}, digests=(self.DECOY,)), [])
-        self.put("AGENTS.md", "decoy-notes.md\n")
-        self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}, digests=(self.DECOY,)), [])
         self.assertEqual(len(ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))), 1)
+
+    def test_the_allow_list_is_for_the_trailers_and_not_for_the_names(self):
+        self.put("AGENTS.md", "Claude-Session\n// see decoy-notes.md\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}, digests=(self.DECOY,))
+        self.assertEqual([o.split(" ")[0] for o in out], ["AGENTS.md:2:"])                       # (the trailer on line 1 is allowed there, the name on line 2 is not)
+
+    def test_the_name_of_a_tracked_file_is_looked_at_too(self):
+        self.put("notes/Decoy-Notes.md", "innocent words\n")                                      # (any case; the text is clean: only the name of the file is private)
+        self.put("docs/mydecoy-notes.mdx.txt", "x\n")                                             # (inside a longer run)
+        self.put("docs/decoy notes.md", "x\n")                                                    # (near misses)
+        self.put("docs/decoy-notes", "x\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))
+        self.assertEqual([o.split(":")[0] for o in out], ["docs/my**************x.txt", "notes/**************"])
+        self.assertFalse(any("decoy" in o.lower() for o in out), "a finding about a path does not repeat the name")
+
+    def test_the_name_of_a_file_in_the_allow_list_or_in_a_skipped_folder_is_looked_at_too(self):
+        self.put("tests/decoy-notes.md", "x\n")
+        self.put("previews/x-decoy-notes.md", "x\n")
+        self.put("Community-Maps/decoy-notes.md", "x\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed={"tests/decoy-notes.md"}, digests=(self.DECOY,))
+        self.assertEqual(len(out), 3)
 
     def test_our_own_files_in_third_party_are_checked(self):
         self.put("third_party/sqlite/README.md", "see Claude-Session\n")
@@ -140,7 +167,7 @@ class Forbidden(Tree):
         self.assertEqual(len(out), 2)
 
 
-
+class Lines(Tree):
     def test_limits_by_kind(self):
         self.put("tests/a/test_ok.cpp", lines=ch.TEST_LINES)
         self.put("tests/a/test_big.cpp", lines=ch.TEST_LINES + 1)
