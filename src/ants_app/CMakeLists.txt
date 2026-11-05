@@ -40,6 +40,7 @@ add_library(ants_app STATIC
     hud.cpp
     hud_input.cpp
     hud_radar.cpp
+    hud_yard.cpp
     hud_match_start.cpp
     minimap_tables.cpp
     map_preview.cpp

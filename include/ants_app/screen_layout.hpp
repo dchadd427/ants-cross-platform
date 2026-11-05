@@ -96,6 +96,10 @@ struct ScreenLayout {
     static constexpr int32_t kDialogY = 100;
     static constexpr int32_t kDialogW = 320;
     static constexpr int32_t kDialogH = 224;
+    /// The Yard's picture is any canvas of at least this size (a phone held upright is 390 x 600), and its minimap keeps this distance from the top and the right edge
+    static constexpr int32_t kYardMinWidth = 320;
+    static constexpr int32_t kYardMinHeight = 240;
+    static constexpr int32_t kYardMinimapMargin = 14;
 
     /// The size of the picture: the original's 640 x 480, or a bigger canvas of the same screen
     int32_t width{kClassicWidth};
@@ -103,6 +107,8 @@ struct ScreenLayout {
     /// The map view's top left corner: the original's (16, 21) in every layout of this model (only a test moves it, to see that a consumer reads it and does not assume it)
     int32_t view_x{kClassicViewX};
     int32_t view_y{kClassicViewY};
+    /// THE YARD (docs/YARD.md): the whole picture is the map view, and the panel, the top bar, the chat and the bottom strip do not exist. Only `map_only` makes it; every other layout has it false.
+    bool yard{false};
 
     /// The original's picture
     static constexpr ScreenLayout classic() noexcept { return ScreenLayout{}; }
@@ -115,8 +121,19 @@ struct ScreenLayout {
         return layout;
     }
 
+    /// The picture of the Yard: a canvas of any size (at least 320 x 240) whose whole area is the map view, with the minimap in a small slot in the top right corner; no panel, no top bar, no chat
+    static constexpr ScreenLayout map_only(int32_t w, int32_t h) noexcept {
+        ScreenLayout layout;
+        layout.width = std::max(w, kYardMinWidth);
+        layout.height = std::max(h, kYardMinHeight);
+        layout.view_x = 0;
+        layout.view_y = 0;
+        layout.yard = true;
+        return layout;
+    }
+
     constexpr bool is_classic() const noexcept { return *this == ScreenLayout{}; }
-    constexpr bool operator==(const ScreenLayout& o) const noexcept { return width == o.width && height == o.height && view_x == o.view_x && view_y == o.view_y; }
+    constexpr bool operator==(const ScreenLayout& o) const noexcept { return width == o.width && height == o.height && view_x == o.view_x && view_y == o.view_y && yard == o.yard; }
     constexpr bool operator!=(const ScreenLayout& o) const noexcept { return !(*this == o); }
 
     /// What the right-anchored parts move by, and the bottom-anchored ones
@@ -126,10 +143,12 @@ struct ScreenLayout {
     constexpr int32_t right(int32_t classic_x) const noexcept { return classic_x + dx(); }
     constexpr int32_t bottom(int32_t classic_y) const noexcept { return classic_y + dy(); }
 
-    /// The map view: it keeps its top left corner and takes what the panel and the bottom strip do not
-    constexpr LayoutRect view() const noexcept { return LayoutRect{view_x, view_y, kClassicViewW + dx(), kClassicViewH + dy()}; }
-    /// The minimap's image (the hit zone of the minimap too): right anchored
-    constexpr LayoutRect minimap() const noexcept { return LayoutRect{right(kMinimapX), kMinimapY, kMinimapW, kMinimapH}; }
+    /// The map view: it keeps its top left corner and takes what the panel and the bottom strip do not (the Yard's is the whole picture)
+    constexpr LayoutRect view() const noexcept { return yard ? LayoutRect{0, 0, width, height} : LayoutRect{view_x, view_y, kClassicViewW + dx(), kClassicViewH + dy()}; }
+    /// The minimap's image (the hit zone of the minimap too): right anchored (the Yard's: a slot kYardMinimapMargin from the top right corner of the picture)
+    constexpr LayoutRect minimap() const noexcept {
+        return yard ? LayoutRect{width - kMinimapW - kYardMinimapMargin, kYardMinimapMargin, kMinimapW, kMinimapH} : LayoutRect{right(kMinimapX), kMinimapY, kMinimapW, kMinimapH};
+    }
     /// The minimap's rectangle for a map of `cols` x `rows` tiles: the full 119 x 91 slot for a square map (cols == rows, or an empty size), top-aligned 119 x mh for a wide map
     /// (cols > rows), and horizontally centered mw x 91 for a tall map (cols < rows)
     constexpr LayoutRect minimap_for_map(int32_t cols, int32_t rows) const noexcept {
@@ -142,10 +161,10 @@ struct ScreenLayout {
         const int32_t mw = std::clamp(static_cast<int32_t>((static_cast<int64_t>(full.h) * cols + rows / 2) / rows), 1, full.w);
         return LayoutRect{full.x + (full.w - mw) / 2, full.y, mw, full.h};
     }
-    /// The chat log's view: right anchored, and it takes the extra height
-    constexpr LayoutRect chat_view() const noexcept { return LayoutRect{right(kChatViewX), kChatViewY, kChatViewW, kChatViewH + dy()}; }
-    /// The panel's backing fill: right anchored, and as tall as the screen below the top bar
-    constexpr LayoutRect panel_fill() const noexcept { return LayoutRect{right(kPanelX), kPanelY, kPanelW, kPanelH + dy()}; }
+    /// The chat log's view: right anchored, and it takes the extra height (the Yard has none: an empty rectangle, which contains no point)
+    constexpr LayoutRect chat_view() const noexcept { return yard ? LayoutRect{} : LayoutRect{right(kChatViewX), kChatViewY, kChatViewW, kChatViewH + dy()}; }
+    /// The panel's backing fill: right anchored, and as tall as the screen below the top bar (the Yard has none)
+    constexpr LayoutRect panel_fill() const noexcept { return yard ? LayoutRect{} : LayoutRect{right(kPanelX), kPanelY, kPanelW, kPanelH + dy()}; }
 
     /// What cut `index` (0 = the leftmost) of a piece with `cuts` cuts adds to the piece's width: dx shared in equal parts, the leftmost cut taking the remainder (no extra width, no share).
     /// The frame (shell_layout.hpp) and the score slots read this one rule.
