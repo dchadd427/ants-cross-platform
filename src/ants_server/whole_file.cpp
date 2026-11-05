@@ -32,6 +32,11 @@ bool flush_to_disk(std::FILE* f) {
 
 bool write_whole_file(const std::string& path, const std::string& text, std::string& why) {
     const std::string tmp = path + ".tmp";
+    // The temporary file is always a new plain file: what is found in its place (a leftover, a link, a pipe, another name of a file) is removed first and never opened as it is. A folder is left alone (the open then
+    // fails and says so). The folder of the results is trusted to the extent that it always was: whoever can write there can also write the result files themselves.
+    std::error_code seen;
+    const std::filesystem::file_type kind = std::filesystem::symlink_status(tmp, seen).type();
+    if (kind != std::filesystem::file_type::not_found && kind != std::filesystem::file_type::none && kind != std::filesystem::file_type::directory) std::filesystem::remove(tmp, seen);
     std::FILE* f = std::fopen(tmp.c_str(), "wb");                          // (mode 0666 less the umask, as the file always had)
     if (f == nullptr) {
         why = "cannot write " + tmp + " (" + std::error_code(errno, std::generic_category()).message() + ")";

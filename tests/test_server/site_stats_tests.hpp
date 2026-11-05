@@ -887,7 +887,7 @@ void run_site_stats_tests() {
     } TEST_END();
 
 #ifndef _WIN32
-    TEST_CASE("S3.246 The result file is written whole: the text goes to <name>.tmp, is fsync'ed (once) and only then renamed over the file, so that a file of an earlier room is the whole old text or the whole new one; a failure (a sync, a folder where the file or the temporary file goes) is one line in the log and nothing is lost or left behind, and the room named like the statistics file gets that line and not the line of its other name; a link named like the file is replaced, not followed") {
+    TEST_CASE("S3.246 The result file is written whole: the text goes to <name>.tmp, is fsync'ed (once) and only then renamed over the file, so that a file of an earlier room is the whole old text or the whole new one; a failure (a sync, a folder where the file or the temporary file goes) is one line in the log and nothing is lost or left behind, and the room named like the statistics file gets that line and not the line of its other name; a link named like the file is replaced, not followed, and a link, another name of a file or a pipe in the place of the temporary file is taken away, not written through") {
         const fs::path dir = fs::canonical(temp_dir_for("result-whole"));
         stats_write(dir / SiteStats::kFileName, stats_file_text());
         const std::string statistics = stats_slurp(dir / SiteStats::kFileName);
@@ -941,6 +941,37 @@ void run_site_stats_tests() {
         ASSERT_EQ(result_for("LINK-1"), std::string());
         ASSERT_EQ(stats_slurp(outside / "target.txt"), std::string("outside"));
         ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "LINK-1.json")) && stats_slurp(dir / "LINK-1.json") == result_of(ended_room("LINK-1", RoomState::Finished, 700)));
+        // what stands in the temporary file's place and is no folder is taken away, never written through: a link (what it points to stays as it was, and a link to a file that is not there makes none), another name of a file that has two (that file stays as it was) and a pipe (nothing waits for a reader)
+        const auto result_text = [&](const std::string& code) { return result_of(ended_room(code, RoomState::Finished, 700)); };
+        stats_write(outside / "victim.txt", "victim");
+        fs::create_symlink(outside / "victim.txt", dir / "SYM-1.json.tmp");
+        ASSERT_EQ(result_for("SYM-1"), std::string());
+        ASSERT_EQ(stats_slurp(outside / "victim.txt"), std::string("victim"));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "SYM-1.json")) && stats_slurp(dir / "SYM-1.json") == result_text("SYM-1") && !fs::exists(fs::symlink_status(dir / "SYM-1.json.tmp")));
+        fs::create_symlink(outside / "not-there.txt", dir / "SYM-2.json.tmp");
+        ASSERT_EQ(result_for("SYM-2"), std::string());
+        ASSERT_FALSE(fs::exists(fs::symlink_status(outside / "not-there.txt")));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "SYM-2.json")) && stats_slurp(dir / "SYM-2.json") == result_text("SYM-2"));
+        stats_write(outside / "shared.txt", "shared");
+        std::error_code linked;
+        fs::create_hard_link(outside / "shared.txt", dir / "HARD-1.json.tmp", linked);
+        ASSERT_MSG(!linked, linked.message());
+        ASSERT_EQ(result_for("HARD-1"), std::string());
+        ASSERT_EQ(stats_slurp(outside / "shared.txt"), std::string("shared"));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "HARD-1.json")) && stats_slurp(dir / "HARD-1.json") == result_text("HARD-1") && !fs::exists(fs::symlink_status(dir / "HARD-1.json.tmp")));
+        {   // the test holds the pipe open for reading and writing, so that a write through it cannot wait for a reader: it would fail on the sync and say so, and not hang the run
+            const std::string pipe = (dir / "PIPE-1.json.tmp").string();
+            ASSERT_EQ(::mkfifo(pipe.c_str(), 0600), 0);
+            struct Held {
+                int fd;
+                ~Held() {
+                    if (fd >= 0) ::close(fd);
+                }
+            } held{::open(pipe.c_str(), O_RDWR | O_NONBLOCK)};
+            ASSERT_TRUE(held.fd >= 0);
+            ASSERT_EQ(result_for("PIPE-1"), std::string());
+            ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "PIPE-1.json")) && stats_slurp(dir / "PIPE-1.json") == result_text("PIPE-1") && !fs::exists(fs::symlink_status(dir / "PIPE-1.json.tmp")));
+        }
         // a folder where the file goes: one line, the folder is as it was, no temporary file
         fs::create_directories(dir / "DIR-1.json" / "inside");
         const std::string no_name = result_for("DIR-1");

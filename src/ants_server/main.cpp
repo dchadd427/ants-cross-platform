@@ -931,7 +931,7 @@ int main(int argc, char** argv) {
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
                 const std::string note = ants::server::write_result_file(o.results_dir, s);
-                if (!note.empty()) log(note);                      // (only the room named like the statistics file has its result under another name than <code>.json)
+                if (!note.empty()) log(note);                      // (a line for the room named like the statistics file, whose result is under another name than <code>.json, and for a result that could not be written)
             }
         }
         for (const std::string& line : rooms.take_notices()) log(line);          // (a record that the disk refused, ...)

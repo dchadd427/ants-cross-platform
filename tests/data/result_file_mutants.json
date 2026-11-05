@@ -162,10 +162,10 @@
    "test": "ANTS_TEST_FILTER=S3.246 timeout 900 ./build/tests/test_server/test_server"
   },
   {
-   "id": "whole_file_temporary_file_added_to",
+   "id": "whole_file_temporary_file_left_there_and_added_to",
    "file": "src/ants_server/whole_file.cpp",
-   "old": "std::fopen(tmp.c_str(), \"wb\")",
-   "new": "std::fopen(tmp.c_str(), \"ab\")",
+   "old": "std::filesystem::remove(tmp, seen);\n    std::FILE* f = std::fopen(tmp.c_str(), \"wb\");",
+   "new": "(void)seen;\n    std::FILE* f = std::fopen(tmp.c_str(), \"ab\");",
    "build": [
     "test_server"
    ],
@@ -176,6 +176,56 @@
    "file": "src/ants_server/whole_file.cpp",
    "old": "if (ok) std::filesystem::rename(tmp, path, ec);",
    "new": "if (ok) { (void)path; }",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.246 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "whole_file_temporary_files_place_not_cleared",
+   "file": "src/ants_server/whole_file.cpp",
+   "old": "std::filesystem::remove(tmp, seen);",
+   "new": "(void)seen;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.246 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "whole_file_folder_in_the_temporary_files_place_cleared_too",
+   "file": "src/ants_server/whole_file.cpp",
+   "old": "kind != std::filesystem::file_type::directory)",
+   "new": "true)",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.246 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "whole_file_link_in_the_temporary_files_place_looked_through",
+   "file": "src/ants_server/whole_file.cpp",
+   "old": "std::filesystem::symlink_status(tmp, seen).type()",
+   "new": "std::filesystem::status(tmp, seen).type()",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.246 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "whole_file_only_a_link_in_the_temporary_files_place_cleared",
+   "file": "src/ants_server/whole_file.cpp",
+   "old": "if (kind != std::filesystem::file_type::not_found && kind != std::filesystem::file_type::none && kind != std::filesystem::file_type::directory) std::filesystem::remove(tmp, seen);",
+   "new": "if (kind == std::filesystem::file_type::symlink) std::filesystem::remove(tmp, seen);",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.246 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "whole_file_pipe_in_the_temporary_files_place_left",
+   "file": "src/ants_server/whole_file.cpp",
+   "old": "kind != std::filesystem::file_type::directory)",
+   "new": "kind != std::filesystem::file_type::directory && kind != std::filesystem::file_type::fifo)",
    "build": [
     "test_server"
    ],
