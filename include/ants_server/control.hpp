@@ -68,7 +68,8 @@ ctl::JsonValue status_to_json(const RoomStatus& status, bool in_list = false);
 /// letter case, as a file system may not tell them apart) gets `<code>.room.json` instead (a code has letters, digits, '_' and '-', no dot, so no code makes that name); "" for a code that is empty or no room code
 /// (valid_room_code): nothing is written for it.
 std::string result_file_name(const std::string& code);
-/// Writes the status of an ended room to its result file in `dir`, replacing the file of an earlier room with the same code. A line for the server's log when the file has another name than `<code>.json` or was not written, else "".
+/// Writes the status of an ended room to its result file in `dir`, whole or not at all (write_whole_file: the file of an earlier room with the same code is replaced when the new one is whole, and a link of that name is
+/// replaced, not followed). A line for the server's log when the file has another name than `<code>.json` or was not written (and then only that), else "".
 std::string write_result_file(const std::filesystem::path& dir, const RoomStatus& status);
 /// Reads a RoomSpec from the JSON body of POST /rooms; false with a reason when a field is missing, of the wrong kind or out of its range. `out` holds the defaults when it is called (the
 /// server's own, RoomManager::default_spec; a fresh RoomSpec is the built-in ones): only what the body says is changed, and on failure `out` is left as it was.

@@ -1,6 +1,6 @@
 // The tests of the site statistics (ants_server/site_stats.hpp): the counting rules, the window of 24 hours with a clock that the test moves, the cap on single-player reports, the file
 // (kept, atomic, put aside when it is no usable file), the JSON of GET /stats, a real room manager (a match that ran and ended counts once, a room that never began counts nothing), the
-// door over real sockets, and the result file of an ended room that shares the results folder with the statistics file (S3.243: no room code gives the statistics file's name). Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, Client); test_server.cpp calls run_site_stats_tests().
+// door over real sockets, and the result file of an ended room that shares the results folder with the statistics file (S3.243: no room code gives the statistics file's name; S3.246: it is written whole, like the statistics file). Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, Client); test_server.cpp calls run_site_stats_tests().
 #pragma once
 
 namespace {
@@ -880,7 +880,85 @@ void run_site_stats_tests() {
         ASSERT_EQ(count_files(), before);
         ASSERT_FALSE(fs::exists(dir.parent_path() / "evil.json"));
         ASSERT_EQ(stats_slurp(dir / SiteStats::kFileName), statistics);
+        // no results folder: one line that says the result was not written (and why), nothing is made
+        const std::string nowhere = write_result_file(dir / "no-such-folder", ended_room("ROOM-3", RoomState::Finished, 700));
+        ASSERT_MSG(nowhere.find("ROOM-3") != std::string::npos && nowhere.find("not written") != std::string::npos && nowhere.find("cannot write") != std::string::npos, nowhere);
+        ASSERT_FALSE(fs::exists(dir / "no-such-folder"));
     } TEST_END();
+
+#ifndef _WIN32
+    TEST_CASE("S3.246 The result file is written whole: the text goes to <name>.tmp, is fsync'ed (once) and only then renamed over the file, so that a file of an earlier room is the whole old text or the whole new one; a failure (a sync, a folder where the file or the temporary file goes) is one line in the log and nothing is lost or left behind, and the room named like the statistics file gets that line and not the line of its other name; a link named like the file is replaced, not followed") {
+        const fs::path dir = fs::canonical(temp_dir_for("result-whole"));
+        stats_write(dir / SiteStats::kFileName, stats_file_text());
+        const std::string statistics = stats_slurp(dir / SiteStats::kFileName);
+        const auto result_of = [](const RoomStatus& room) { return ctl::to_json(status_to_json(room)) + "\n"; };
+        const auto result_for = [&](const std::string& code) { return write_result_file(dir, ended_room(code, RoomState::Finished, 700)); };
+#ifdef ANTS_FSYNC_SPY
+        {   // the order: while the temporary file is synced it holds the whole new text and the file still has the old one
+            const RoomStatus first = ended_room("ROOM-1", RoomState::Failed, 0);
+            const RoomStatus second = ended_room("ROOM-1", RoomState::Finished, 700);
+            ASSERT_EQ(write_result_file(dir, first), std::string());
+            FsyncSpy::calls = 0;
+            FsyncSpy::fail = false;
+            FsyncSpy::interrupt_first = false;
+            FsyncSpy::watch = (dir / "ROOM-1.json.tmp").string();
+            FsyncSpy::beside = (dir / "ROOM-1.json").string();
+            FsyncSpy::armed = true;
+            const std::string line = write_result_file(dir, second);
+            FsyncSpy::armed = false;
+            ASSERT_EQ(line, std::string());
+            ASSERT_EQ(FsyncSpy::calls, 1);
+            ASSERT_TRUE(FsyncSpy::watched_text == result_of(second) && FsyncSpy::beside_text == result_of(first));
+            ASSERT_TRUE(stats_slurp(dir / "ROOM-1.json") == result_of(second) && !fs::exists(dir / "ROOM-1.json.tmp"));
+            // a sync that fails: the old file is whole, no temporary file is left, one line says where
+            FsyncSpy::calls = 0;
+            FsyncSpy::fail = true;
+            FsyncSpy::armed = true;
+            const std::string failed = write_result_file(dir, first);
+            FsyncSpy::armed = false;
+            FsyncSpy::fail = false;
+            ASSERT_EQ(FsyncSpy::calls, 1);
+            ASSERT_MSG(failed.find("ROOM-1") != std::string::npos && failed.find("not written") != std::string::npos && failed.find("cannot write") != std::string::npos && failed.find(".tmp") != std::string::npos, failed);
+            ASSERT_TRUE(stats_slurp(dir / "ROOM-1.json") == result_of(second) && !fs::exists(dir / "ROOM-1.json.tmp"));
+            // a sync that a signal interrupts is not a failure: it is asked again
+            FsyncSpy::calls = 0;
+            FsyncSpy::interrupt_first = true;
+            FsyncSpy::armed = true;
+            const std::string again = write_result_file(dir, first);
+            FsyncSpy::armed = false;
+            FsyncSpy::interrupt_first = false;
+            ASSERT_TRUE(again.empty() && FsyncSpy::calls == 2 && stats_slurp(dir / "ROOM-1.json") == result_of(first) && !fs::exists(dir / "ROOM-1.json.tmp"));
+        }
+#endif
+        // a temporary file that a crash left is written over, never added to
+        stats_write(dir / "ROOM-2.json.tmp", std::string(500, 'x'));
+        ASSERT_EQ(result_for("ROOM-2"), std::string());
+        ASSERT_TRUE(stats_slurp(dir / "ROOM-2.json") == result_of(ended_room("ROOM-2", RoomState::Finished, 700)) && !fs::exists(dir / "ROOM-2.json.tmp"));
+        // a link named like the file is replaced by the file, and what it pointed to (outside the folder) is not touched
+        const fs::path outside = fs::canonical(temp_dir_for("result-whole-outside"));
+        stats_write(outside / "target.txt", "outside");
+        fs::create_symlink(outside / "target.txt", dir / "LINK-1.json");
+        ASSERT_EQ(result_for("LINK-1"), std::string());
+        ASSERT_EQ(stats_slurp(outside / "target.txt"), std::string("outside"));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "LINK-1.json")) && stats_slurp(dir / "LINK-1.json") == result_of(ended_room("LINK-1", RoomState::Finished, 700)));
+        // a folder where the file goes: one line, the folder is as it was, no temporary file
+        fs::create_directories(dir / "DIR-1.json" / "inside");
+        const std::string no_name = result_for("DIR-1");
+        ASSERT_MSG(no_name.find("DIR-1") != std::string::npos && no_name.find("not written") != std::string::npos && no_name.find("cannot rename") != std::string::npos, no_name);
+        ASSERT_TRUE(fs::is_directory(dir / "DIR-1.json" / "inside") && !fs::exists(dir / "DIR-1.json.tmp"));
+        // a folder where the temporary file goes: one line, the old file whole, and the folder is not ours to remove
+        stats_write(dir / "TMP-1.json", "old");
+        fs::create_directories(dir / "TMP-1.json.tmp");
+        const std::string no_tmp = result_for("TMP-1");
+        ASSERT_MSG(no_tmp.find("TMP-1") != std::string::npos && no_tmp.find("not written") != std::string::npos && no_tmp.find("cannot write") != std::string::npos, no_tmp);
+        ASSERT_TRUE(stats_slurp(dir / "TMP-1.json") == "old" && fs::is_directory(dir / "TMP-1.json.tmp"));
+        // the room named like the statistics file: when its write fails the log has the failure and not "its result is in ..."; the statistics are as they were
+        fs::create_directories(dir / "site-stats.room.json" / "inside");
+        const std::string no_stats_room = result_for("site-stats");
+        ASSERT_MSG(no_stats_room.find("site-stats") != std::string::npos && no_stats_room.find("not written") != std::string::npos && no_stats_room.find("its result is in") == std::string::npos, no_stats_room);
+        ASSERT_TRUE(stats_slurp(dir / SiteStats::kFileName) == statistics && !fs::exists(dir / "site-stats.room.json.tmp"));
+    } TEST_END();
+#endif
 
     TEST_CASE("S3.148 A real room manager: a public room that played 30 s and ended counts once (also when its code is asked for again before anybody looked), a match that was quit sooner, a room closed during the dialog and one closed while it waited count nothing, a match that played 30 s and was closed by the owner counts, and nothing counts twice") {
         ServerLimits limits;

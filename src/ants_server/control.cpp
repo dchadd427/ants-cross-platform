@@ -12,6 +12,7 @@
 #include "ants_server/map_preview.hpp"
 #include "ants_server/site_stats.hpp"
 #include "ants_server/submissions_http.hpp"
+#include "ants_server/whole_file.hpp"
 
 namespace ants::server {
 
@@ -212,8 +213,8 @@ std::string result_file_name(const std::string& code) {
 std::string write_result_file(const std::filesystem::path& dir, const RoomStatus& status) {
     const std::string name = result_file_name(status.code);
     if (name.empty()) return "a room's result was not written: its code is not a room code";
-    std::ofstream out(dir / name, std::ios::binary | std::ios::trunc);
-    out << ctl::to_json(status_to_json(status)) << "\n";
+    std::string why;
+    if (!write_whole_file((dir / name).string(), ctl::to_json(status_to_json(status)) + "\n", why)) return "room " + status.code + ": its result was not written: " + why;
     if (name == status.code + ".json") return std::string();
     return "room " + status.code + ": its result is in " + name + " (" + SiteStats::kFileName + " is the statistics file)";
 }
