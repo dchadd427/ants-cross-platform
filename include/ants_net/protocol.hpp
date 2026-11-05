@@ -120,7 +120,7 @@ enum class MsgType : uint8_t {
     Turn = 5,       // host -> everybody: a sealed turn
     TurnAck = 6,    // client -> host: the highest turn the client has executed
     Hash = 7,       // client -> host: the state hash after a turn
-    Desync = 8,     // host -> everybody: two peers disagree
+    Desync = 8,     // host -> everybody, or alone to the seat that differs: a state that is not the host's
     Chat = 9,       // both ways (the host relays)
     Ping = 10,      // either way
     Pong = 11,      // the answer, echoing the nonce

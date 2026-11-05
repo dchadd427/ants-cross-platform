@@ -16,11 +16,12 @@
 //   Loading  a client that cannot load the map or leaves cancels the start: back to Waiting (a few times at most); the bots that the fill seated go again, so the room is what it was
 //   Running  the referee executes the turns (and runs the room's bots: ants_ai's BotController over the referee's own engine, called after every tick, its commands go
 //            through the session's sequencer like a person's, `HostSession::submit_bot`; a bot seat has no connection, is never absent, never votes and is never counted as
-//            connected); a diverging client is named and the room fails; the match end (the clock, the rules) finishes it. A room that HOLDS seats
+//            connected); a client whose state differs from the referee's is told and dropped as a seat that quits is, and the others go on (HostSession::judge_hashes); the room fails
+//            only when no seat at the table agrees with the referee; the match end (the clock, the rules) finishes it. A room that HOLDS seats
 //            (RoomSpec::reconnect, protocol 10) keeps the seat of a player whose connection is lost and PAUSES the match for everybody (see "Reconnect" below)
 //   Finished the result (rows as the results screen shows them) is kept; the room goes on answering its players (pings, acknowledgements: the session is frozen, it seals nothing)
 //            and the connections close after a grace period, later when a player is still catching up (kGraceMs, kEndWaitMs)
-//   Failed   nobody came, too many failed starts, a desync, the owner closed it: the reason is kept
+//   Failed   nobody came, too many failed starts, a desync of every seat at the table, the operator closed it: the reason is kept
 //
 // Reconnect (protocol 10, docs/NETWORK_PORT.md "Reconnect"). A room made with `reconnect` gives every player a KEY in its Welcome (the operating system's random bytes: the lobby's
 // make_key) and passes the keys of the seats, the Start message and its limits to the match's session (HostSession::Config::hold_seats). From then on a connection that is lost
@@ -268,6 +269,7 @@ struct RoomStatus {
     uint32_t rejoins{0};                    // seats that came back and were verified
     uint32_t drops_by_vote{0};              // seats dropped because the players voted to go on without them
     uint32_t drops_by_cap{0};               // seats dropped because the match's pauses used up max_pause_ms
+    uint32_t drops_by_state{0};             // seats dropped because their state differed from the referee's (the others went on; any room, held seats or not)
     uint32_t rejoins_refused{0};            // Hellos with a key that were refused for a budget (the absence's catch-up time, twelve attempts a minute, three times the log's size in ten minutes)
     uint32_t catch_up_expired{0};           // absences whose catch-up time ran out
     uint64_t streamed_bytes{0};             // the bytes of the turn log that were streamed to returning players (all seats)
@@ -334,6 +336,9 @@ public:
     /// The server's restart records (restart_record.hpp; it must outlive the room): a room that holds seats and whose match starts keeps a record there. Set it right after the room is made, before its
     /// match is started. Null (the default): the room keeps none.
     void set_restart_store(RestartStore* store) noexcept { restart_store_ = store; }
+    /// The lines for the server's log that the room made since the last call: one for each time seats were dropped for a state that differed from the referee's (the room's code, the turn, how many seats
+    /// differed and how many agreed; never a name or a key). A seat is dropped once, so there are at most four in the life of a room. RoomManager::update takes them after every pass of the room.
+    std::vector<std::string> take_notes();
     /// The server's store of replays (replay_store.hpp; it must outlive the room): the match is recorded and kept there. Null (the default): the room records nothing, and `why_not` is what its status says. Set it
     /// right after the room is made, before its match is started.
     void set_replay_store(ReplayStore* store, const std::string& why_not = std::string());
@@ -535,6 +540,7 @@ private:
     uint16_t quitter_{0xFFFF};
     uint64_t final_hash_{0};                 // the referee's state hash when the match ended
     std::array<std::string, 4> names_{};
+    std::vector<std::string> notes_;         // take_notes()
     // Restart records
     RestartStore* restart_store_{nullptr};
     std::unique_ptr<RestartWriter> record_;

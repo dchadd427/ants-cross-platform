@@ -124,6 +124,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("rejoins", JsonValue::make_int(s.rejoins));
     o.set("drops_by_vote", JsonValue::make_int(s.drops_by_vote));
     o.set("drops_by_cap", JsonValue::make_int(s.drops_by_cap));
+    o.set("drops_by_state", JsonValue::make_int(s.drops_by_state));
     o.set("rejoins_refused", JsonValue::make_int(s.rejoins_refused));
     o.set("catch_up_expired", JsonValue::make_int(s.catch_up_expired));
     o.set("streamed_bytes", JsonValue::make_int(static_cast<int64_t>(s.streamed_bytes)));

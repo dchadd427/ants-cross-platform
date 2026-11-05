@@ -927,6 +927,7 @@ int main(int argc, char** argv) {
                 held = ", paused " + std::to_string(s.paused_s) + " s, " + std::to_string(s.rejoins) + " back, dropped " + std::to_string(s.drops_by_vote) + " by vote and " + std::to_string(s.drops_by_cap) + " by the cap, " + std::to_string(s.rejoins_refused) +
                        " refused by a budget";
             }
+            if (s.drops_by_state > 0) held += ", " + std::to_string(s.drops_by_state) + " dropped for a state that differed from the referee's";
             if (s.replay_kept) held += ", kept as " + s.replay_file;                       // (the replay of the match: its file name is the map and the end time, no code and no name of a person)
             log("room " + s.code + " " + ants::server::room_state_name(s.state) + ": " + s.reason + " (map " + s.map + ", " + std::to_string(s.ticks) + " ticks" + held + ")");
             if (!o.results_dir.empty() && !demo) {
