@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the page that opens a replay file of your own (docs/REPLAYS.md \"A file of your own\") for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/replay_page.js (the size, the checksum, the hand-off, the strip), web/matches.html, web/shell.html and web/map_files.js against tests/scripts/web_replay_open_check.js (node: the code on the real file, on every cut and every flipped bit of its head, on a fake IndexedDB and a fake page) and the static checks of tests/scripts/test_web_replay_open.py. Run from the checkout: python3 tools/mutate.py tests/data/replay_open_mutants.json --keep-going --jobs 1 --timeout 300. Every mutant must be caught; the same test file runs the list in the quick tier on a copy. Each `why` names what the mutant loses.",
+ "note": "Mutants of the page that opens a replay file of your own (docs/REPLAYS.md \"A file of your own\") for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/replay_page.js (the size, the checksum, the hand-off, the strip, the card of a map that the game refuses, the header), web/matches.html, web/shell.html (the card, the wrapping of text that cannot wrap), web/map_files.js (the count of the starting ants of a carried map) and the constant of include/ants_replay/replay.hpp against tests/scripts/web_replay_open_check.js (node: the code on the real file, on every cut and every flipped bit of its head, on a fake IndexedDB and a fake page) and the static checks of tests/scripts/test_web_replay_open.py. Run from the checkout: python3 tools/mutate.py tests/data/replay_open_mutants.json --keep-going --jobs 1 --timeout 300. Every mutant must be caught; the same test file runs the list in the quick tier on a copy. Each `why` names what the mutant loses.",
  "mutants": [
   {
    "id": "size_is_not_asked_before_the_file_is_read",
@@ -376,6 +376,254 @@
    "new": "        for (var i = 0; i < len; i++) { text += String.fromCharCode(bytes[at + i]); }",
    "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
    "why": "a name with a control character reaches the header"
+  },
+  {
+   "id": "no_start_marker_is_counted",
+   "file": "web/map_files.js",
+   "old": "if (tile >= MARKER_FIRST && tile <= MARKER_LAST) ants++;",
+   "new": "if (false) ants++;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a map of a million ants is handed to the game as a map of none"
+  },
+  {
+   "id": "the_red_marker_is_not_counted",
+   "file": "web/map_files.js",
+   "old": "var MARKER_FIRST = 152, MARKER_LAST = 155;",
+   "new": "var MARKER_FIRST = 152, MARKER_LAST = 154;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a quarter of the ants of a crowded map are not counted"
+  },
+  {
+   "id": "the_ant_type_of_a_version_9_marker_is_not_split_off",
+   "file": "web/map_files.js",
+   "old": "tile = version === 9 && (raw >> 12) <= 5 ? raw & 0x0fff : raw;",
+   "new": "tile = raw;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "every marker with an ant type (the Map Maker writes them) is no ant to the page"
+  },
+  {
+   "id": "a_version_8_file_has_ant_types_too",
+   "file": "web/map_files.js",
+   "old": "tile = version === 9 && (raw >> 12) <= 5 ?",
+   "new": "tile = (raw >> 12) <= 5 ?",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a Classic plant with a high bit is counted as a marker"
+  },
+  {
+   "id": "the_layers_are_one_layer_long",
+   "file": "web/map_files.js",
+   "old": "pos += rows * columns * 12;",
+   "new": "pos += rows * columns * 6;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "block 1 is looked for in the wrong place: every count is wrong"
+  },
+  {
+   "id": "the_dictionary_is_one_name_short",
+   "file": "web/map_files.js",
+   "old": "pos += 2 + 11 * (u16(pos) + 1);",
+   "new": "pos += 2 + 11 * u16(pos);",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "block 1 is looked for in the wrong place: every count is wrong"
+  },
+  {
+   "id": "a_version_8_grid_keeps_its_high_bits",
+   "file": "web/map_files.js",
+   "old": "if (version === 8) { rows = rows & 0xffff; columns = columns & 0xffff; }",
+   "new": "if (version === 8) { }",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the page counts a Classic map by a grid that the game does not read"
+  },
+  {
+   "id": "the_records_are_not_checked_against_the_file",
+   "file": "web/map_files.js",
+   "old": "if (count * 6 > bytes.length - pos) return -1;",
+   "new": "",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a header that claims 65,535 records is read past the end of the file"
+  },
+  {
+   "id": "the_limit_refuses_the_limit",
+   "file": "web/map_files.js",
+   "old": "if (carried.ants > MAX_EMBEDDED_ANTS) {",
+   "new": "if (carried.ants >= MAX_EMBEDDED_ANTS) {",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a map of exactly 8,000 ants is refused by the page and played by the game"
+  },
+  {
+   "id": "the_page_never_refuses_a_crowd",
+   "file": "web/map_files.js",
+   "old": "if (carried.ants > MAX_EMBEDDED_ANTS) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a map of 65,535 ants is handed to the game: the tab is held for minutes"
+  },
+  {
+   "id": "the_page_limit_is_ten_times_the_games",
+   "file": "web/map_files.js",
+   "old": "var MAX_EMBEDDED_ANTS = 8000;",
+   "new": "var MAX_EMBEDDED_ANTS = 80000;",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the page lets through what the game refuses"
+  },
+  {
+   "id": "the_count_is_not_handed_over",
+   "file": "web/map_files.js",
+   "old": "bytes: found, ants: startMarkersOfMap(found) };",
+   "new": "bytes: found, ants: 0 };",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "the verdict has no number to judge"
+  },
+  {
+   "id": "the_games_limit_is_nine_thousand",
+   "file": "include/ants_replay/replay.hpp",
+   "old": "inline constexpr uint32_t kMaxEmbeddedStartAnts = 8000;",
+   "new": "inline constexpr uint32_t kMaxEmbeddedStartAnts = 9000;",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "the game and the page count against different numbers"
+  },
+  {
+   "id": "the_game_does_not_look_at_the_ants_of_a_carried_map",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (ants > kMaxEmbeddedStartAnts) {",
+   "new": "if (false) {",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "a map of 64,000 ants is set up by the game, for minutes"
+  },
+  {
+   "id": "every_reason_is_a_missing_map",
+   "file": "web/replay_page.js",
+   "old": "/^the map .+ is not in /.test(why)",
+   "new": "/./.test(why)",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a map that the game refuses is said to be a map that the site does not have"
+  },
+  {
+   "id": "a_refused_carried_map_is_the_missing_map_card",
+   "file": "web/shell.html",
+   "old": "failure === FAIL.nomap && OWN.lacks(text) ? 'nomap' : 'cant'",
+   "new": "failure === FAIL.nomap ? 'nomap' : 'cant'",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "the reason of the game is dropped: \"This site doesn't have the map\" for a map that the file carried"
+  },
+  {
+   "id": "a_carried_map_goes_to_the_game_unjudged",
+   "file": "web/shell.html",
+   "old": "carried ? Promise.resolve(window.AntsMapFiles.carriedVerdict(carried)) : need ?",
+   "new": "carried ? Promise.resolve({ ok: true, bytes: carried.bytes }) : need ?",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "a crowd of ants reaches the game from the page"
+  },
+  {
+   "id": "the_file_name_is_no_unit",
+   "file": "web/replay_page.js",
+   "old": "if (name) small.appendChild(mk(doc, 'bdi', '', name));",
+   "new": "if (name) small.appendChild(mk(doc, 'span', '', name));",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a name that reads right to left takes the length that follows it into its own order"
+  },
+  {
+   "id": "the_chips_may_run_off_a_phone",
+   "file": "web/shell.html",
+   "old": ".rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px;",
+   "new": ".rhead { flex: 1 1 0; min-width: 0; display: grid; gap: 5px;",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "four long player names make the page scroll sideways on a phone"
+  },
+  {
+   "id": "the_title_cannot_wrap",
+   "file": "web/shell.html",
+   "old": "gap: 0 14px; color: var(--ink); overflow-wrap: anywhere; }",
+   "new": "gap: 0 14px; color: var(--ink); }",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "a file name of 100 characters or a map name of 59 makes the page scroll sideways on a phone"
+  },
+  {
+   "id": "the_text_of_a_card_cannot_wrap",
+   "file": "web/shell.html",
+   "old": ".rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }",
+   "new": ".rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); }",
+   "test": "python3 tests/scripts/test_web_replay_open.py ThePlayer",
+   "why": "the name of a map in a card makes the page scroll sideways on a phone"
+  },
+  {
+   "id": "the_fuzz_script_is_not_in_the_tree",
+   "file": "docs/ARCHITECTURE.md",
+   "old": "│   │   ├── web_replay_open_fuzz.sh     # Changed maps and heads of a recording through the native readers (no crash, no hang)\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_replay_open.py TheDocument",
+   "why": "a script that nobody can find from the tree of the sources"
+  },
+  {
+   "id": "a_file_of_exactly_the_limit_is_too_big",
+   "file": "web/replay_page.js",
+   "old": "size > 0 && size <= LOCAL_MAX_BYTES; }",
+   "new": "size > 0 && size < LOCAL_MAX_BYTES; }",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file of exactly 2,097,164 bytes (the longest that exists) is refused"
+  },
+  {
+   "id": "the_last_magic_byte_is_not_looked_at",
+   "file": "web/replay_page.js",
+   "old": "for (var i = 0; i < MAGIC.length; i++) if (bytes[i] !== MAGIC[i]) return bad('magic');",
+   "new": "for (var i = 0; i < MAGIC.length - 1; i++) if (bytes[i] !== MAGIC[i]) return bad('magic');",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file whose eighth byte is another is taken for a replay"
+  },
+  {
+   "id": "a_head_one_byte_too_long_is_taken",
+   "file": "web/replay_page.js",
+   "old": "if (length > HEAD_MAX_BYTES) return bad('head length');",
+   "new": "if (length > HEAD_MAX_BYTES + 1) return bad('head length');",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a head of 4,097 bytes (the game refuses it) is handed on"
+  },
+  {
+   "id": "a_record_from_the_future_is_taken",
+   "file": "web/replay_page.js",
+   "old": "return typeof rec.at === 'number' && age >= -OWN_SKEW_MS && age < OWN_KEEP_MS;",
+   "new": "return typeof rec.at === 'number' && age < OWN_KEEP_MS;",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a record dated far ahead (a clock that was wrong) is never old"
+  },
+  {
+   "id": "the_players_helper_makes_markup_from_text",
+   "file": "web/replay_page.js",
+   "old": "        if (text !== undefined) node.textContent = text;\n        return node;\n    }\n    function ownPage(env) {",
+   "new": "        if (text !== undefined) node.innerHTML = text;\n        return node;\n    }\n    function ownPage(env) {",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file name or a map name that holds markup runs in the player"
+  },
+  {
+   "id": "an_id_without_randomness",
+   "file": "web/replay_page.js",
+   "old": "if (crypto && typeof crypto.getRandomValues === 'function') crypto.getRandomValues(bytes);",
+   "new": "if (false) crypto.getRandomValues(bytes);",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "every id is the same: an old link finds the new file"
+  },
+  {
+   "id": "a_right_to_left_override_is_not_stripped",
+   "file": "web/replay_page.js",
+   "old": "(c >= 0x2028 && c <= 0x202e)",
+   "new": "(c >= 0x2028 && c <= 0x202d)",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file name can turn the rest of the header around"
+  },
+  {
+   "id": "a_long_name_is_not_cut",
+   "file": "web/replay_page.js",
+   "old": "return s.length > 100 ? s.slice(0, 99) + String.fromCharCode(0x2026) : s;",
+   "new": "return s;",
+   "test": "node tests/scripts/web_replay_open_check.js web/replay_page.js tests/data/replay_bots_tiny.antsrep",
+   "why": "a file name of 10,000 characters fills the header"
+  },
+  {
+   "id": "a_head_name_of_4096_bytes_is_taken",
+   "file": "web/map_files.js",
+   "old": "if (len > 64) return '';",
+   "new": "if (len > 4096) return '';",
+   "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
+   "why": "a player name of 4,000 characters reaches the chips"
   }
  ]
 }

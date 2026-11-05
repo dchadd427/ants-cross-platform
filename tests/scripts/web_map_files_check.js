@@ -163,6 +163,61 @@ check('a number is no name', M.validName(5) === false);
     check('a map after two thousand other chunks is found', M.embeddedMapOfReplay(make(many)) !== null);
 }
 
+// ---- the starting ants of a map (the page's guard on the map that a recording carries; the game's own is kMaxEmbeddedStartAnts, include/ants_replay/replay.hpp) ---------------------------------------------------
+{
+    const tools = require('./replay_file_tools.js');
+    const path = require('path');
+    const originals = path.resolve(__dirname, '..', '..', 'Original-Ants', 'Maps');
+    const tiny = Uint8Array.from(fs.readFileSync(path.join(originals, 'TINY.LVL')));
+    same('the six original maps start the ants that the native tool counts (lvl_tool info: 4 colors of 3, 4, 6, 6, 6 and 8)', ['TINY', 'SMALL', 'MEDIUM', 'GAUNTLET', 'TREASURE', 'ISLANDS'].map((n) => M.startMarkersOfMap(fs.readFileSync(path.join(originals, n + '.LVL')))), [12, 16, 24, 24, 24, 32]);
+    const counts = [0, 1, 7999, 8000, 8001, 20000, 65535];
+    same('a map with exactly N start markers counts N (the limit is at 8,000, the most that block 1 can hold is 65,535)', counts.map((n) => M.startMarkersOfMap(tools.mapWithAnts(tiny, n))), counts);
+    check('the page\'s limit is the game\'s: 8,000 ants (kMaxEmbeddedStartAnts)', M.MAX_EMBEDDED_ANTS === 8000);
+    {   // the plants of block 1 (a record that is no start marker) start no ant
+        const L = tools.lvlLayout(tiny), at = tools.mapWithAnts(tiny, 3), La = tools.lvlLayout(at);
+        const plants = [].concat(...[0, 1, 2, 3, 4].map(() => [404 & 255, 404 >> 8, 1, 0, 1, 0]));
+        const withPlants = Uint8Array.from(Array.from(at.subarray(0, La.afterAt)).concat(plants, Array.from(at.subarray(La.afterAt))));
+        withPlants[La.block1At] = (La.count + 5) & 255; withPlants[La.block1At + 1] = (La.count + 5) >> 8;
+        same('plants are no ants: three markers and five plants start three', [tools.lvlLayout(withPlants).count - La.count, M.startMarkersOfMap(withPlants)], [5, 3]);
+        check('(the layout helper reads TINY: 31 x 31 cells and 12 records in block 1)', L.rows === 31 && L.columns === 31 && L.count === 12);
+    }
+    {   // version 9: the tile is the low 12 bits when the high four are at most 5 (the ant type the Map Maker writes), else it is the whole word; version 8 never splits
+        const v9 = tools.mapAsVersion9(tiny, 0), L = tools.lvlLayout(v9.slice(8)), at = L.recordsAt + 8;
+        same('a version 9 file is counted as the version 8 file that it was made from', M.startMarkersOfMap(v9), 12);
+        const typed = Uint8Array.from(v9), set = (i, raw) => { typed[at + 6 * i] = raw & 255; typed[at + 6 * i + 1] = raw >> 8; };
+        set(0, (3 << 12) | 154); set(1, (6 << 12) | 154);
+        same('version 9: a start marker with an ant type of 0 to 5 counts, one with a type of 6 does not (its tile is the whole word)', M.startMarkersOfMap(typed), 11);
+        const classic = Uint8Array.from(tiny), c = tools.lvlLayout(tiny).recordsAt;
+        classic[c] = 154; classic[c + 1] = 0x30; classic[c + 6] = 154; classic[c + 7] = 0x60;
+        same('version 8: the same two words are not start markers (a Classic map has no ant types)', M.startMarkersOfMap(classic), 10);
+    }
+    {   // a file that is not laid out as the loader reads it counts as -1 (the game says what is wrong), whatever it claims
+        const L = tools.lvlLayout(tiny), dword = (b, at, v) => { const o = Uint8Array.from(b); tools.le32(v).forEach((x, i) => { o[at + i] = x; }); return o; };
+        const bad = {
+            'nothing': null, 'an empty file': new Uint8Array(0), 'a file of 43 bytes': tiny.slice(0, 43), 'a version that nobody reads': dword(tiny, 0, 7), 'version 10': dword(tiny, 0, 10),
+            'a file cut inside the dictionary': tiny.slice(0, 200), 'a file cut inside the layers': tiny.slice(0, L.layersAt + 500), 'a file cut before block 1': tiny.slice(0, L.block1At + 1),
+            'a grid of 65,535 x 65,535 cells in a file of 19 KB': dword(dword(tiny, L.gridAt, 65535), L.gridAt + 4, 65535), 'a count of 65,535 records in a file that holds 12': (() => { const o = Uint8Array.from(tiny); o[L.block1At] = 255; o[L.block1At + 1] = 255; return o; })(),
+            'a version 9 file whose description runs past the end': (() => { const o = Uint8Array.from(tools.mapAsVersion9(tiny, 0)); o[16] = 255; o[17] = 255; return o; })(),
+        };
+        Object.keys(bad).forEach((label) => check(label + ' count as -1', M.startMarkersOfMap(bad[label]) === -1, String(M.startMarkersOfMap(bad[label]))));
+        same('a version 8 grid keeps the lower 16 bits of each size, as the original does: a header with more bits is the map that its lower bits name', [M.startMarkersOfMap(dword(tiny, L.gridAt, 31 + 65536)), M.startMarkersOfMap(dword(dword(tiny, L.gridAt, 31 + 131072), L.gridAt + 4, 31 + 65536))], [12, 12]);
+        const started = Date.now();
+        for (let i = 0; i < 2000; i++) M.startMarkersOfMap(dword(dword(tiny, L.gridAt, 4294967295), L.gridAt + 4, 4294967295));
+        check('a header that claims four billion cells costs nothing (2,000 of them in under a second)', Date.now() - started < 1000);
+    }
+    {   // what a recording hands the page: the count with the map; the verdict that goes to the game or to a card
+        const crowd = tools.mapWithAnts(tiny, 8001);
+        const file = tools.withMap(Uint8Array.from(fs.readFileSync(path.resolve(__dirname, '..', 'data', 'replay_bots_tiny.antsrep'))), 'Crowd.lvl', crowd, true);
+        const got = M.embeddedMapOfReplay(file);
+        check('a recording that carries a map hands over its count with it', got !== null && got.ants === 8001 && got.bytes.length === crowd.length, JSON.stringify(got && got.ants));
+        same('the verdict on 8,001 ants is a sentence with both numbers (and no bytes)', M.carriedVerdict(got), { ok: false, text: 'the map in the file starts 8,001 ants (the start markers of the four colors), more than the 8,000 that a replay is set up with' });
+        const ok = M.embeddedMapOfReplay(tools.withMap(Uint8Array.from(fs.readFileSync(path.resolve(__dirname, '..', 'data', 'replay_bots_tiny.antsrep'))), 'Crowd.lvl', tools.mapWithAnts(tiny, 8000), true));
+        check('at the limit it goes to the game, with its bytes', M.carriedVerdict(ok).ok === true && M.carriedVerdict(ok).bytes === ok.bytes);
+        check('65,535 ants say so with the comma', M.carriedVerdict({ ants: 65535, bytes: null }).text.indexOf('the map in the file starts 65,535 ants (') === 0);
+        check('a map that is not laid out as the loader reads it goes to the game (it says why not)', M.carriedVerdict({ ants: -1, bytes: tiny }).ok === true);
+    }
+}
+
 // ---- the downloads ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const NAME = 'Test Players Map (1).lvl';
 const BYTES = Uint8Array.from(fs.readFileSync(realMap));

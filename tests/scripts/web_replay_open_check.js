@@ -668,14 +668,22 @@ async function settle() {
         check('the record of the address is read: its bytes and its name', !!got.bytes && sameBytes(got.bytes, FIXTURE) && got.name === 'ants-TINY-20261006-143209.antsrep' && got.error === undefined, JSON.stringify(Object.keys(got)));
         same('the map of the head is known before the game reads the file', w2.page.map(), 'TINY.LVL');
         w2.page.header(null, 0, false);
-        same('the header before the game reports: the map, Your file and the name; no length, no date', [w2.doc.getElementById('r-title').children[0].data, kids(w2.doc.getElementById('r-title').children[1])], ['Tiny', ['span:Your file', ' ants-TINY-20261006-143209.antsrep']]);
+        same('the header before the game reports: the map, Your file and the name; no length, no date', [w2.doc.getElementById('r-title').children[0].data, kids(w2.doc.getElementById('r-title').children[1])], ['Tiny', ['span:Your file', ' ', 'bdi:ants-TINY-20261006-143209.antsrep']]);
         same('... the chips are the players of the head', w2.doc.getElementById('r-meta').children[0].children.map((li) => li.children[1].textContent), ['Bot (Medium)', 'Bot (Medium)', 'Bot (Medium)', 'Bot (Medium)']);
         same('the pill is the pill of the page (class pill own)', w2.doc.getElementById('r-title').children[1].children[0].className, 'pill own');
         w2.page.header({ map: 'TREASURE.LVL', roster: 5, names: ['Mika', '', 'Pip', ''] }, 1003, false);
         same('what the game reports wins: its map, its players, the length of the match', [w2.doc.getElementById('r-title').children[0].data, kids(w2.doc.getElementById('r-title').children[1]), w2.doc.getElementById('r-meta').children[0].children.map((li) => li.children[1].textContent)],
-             ['Treasure', ['span:Your file', ' ants-TINY-20261006-143209.antsrep \u00b7 16:43'], ['Mika', 'Pip']]);
+             ['Treasure', ['span:Your file', ' ', 'bdi:ants-TINY-20261006-143209.antsrep', ' \u00b7 16:43'], ['Mika', 'Pip']]);
         w2.page.header({ map: 'TREASURE.LVL', roster: 1, names: ['Mika'] }, 600, true);
         same('a recording that was cut short says so', kids(w2.doc.getElementById('r-title').children[1]).slice(-2), [' ', 'span:Cut short']);
+        {   // a name that is all controls and direction marks is no name: the pill, no unit for the name, and the length alone
+            const idn = await w.store.put('\u202e\u0007\u202c', FIXTURE);
+            const wn = ownWorld({ id: idn });
+            wn.store = w.store; wn.page = R.ownPage({ doc: wn.doc, win: wn.win, store: w.store, search: '?local=' + idn, say: () => {}, go: () => {}, infoOf: MAPS.infoOfReplay });
+            const gotn = await wn.page.read();
+            wn.page.header(null, 600, false);
+            same('a file whose name is all controls has no name to show: the pill and the length, no empty unit', [gotn.name, kids(wn.doc.getElementById('r-title').children[1])], ['', ['span:Your file', ' ', '10:00']]);
+        }
         w2.page.chrome();
         same('the way back is Matches, and More has one thing: Open another file', [w2.back.textContent, w2.more.children.length, w2.more.children[0].textContent, w2.more.children[0].id, w2.more.children[0].attrs.type === undefined ? w2.more.children[0].type : w2.more.children[0].attrs.type], ['\u2039 Matches', 1, 'Open another file', 'own-more', 'button']);
         const key = w2.more.children[0];
@@ -717,6 +725,16 @@ async function settle() {
         same('the rest: This replay can\u2019t be played here, the reason as a sentence, no download', shape(plan('cant', { why: 'chunk CMDS: the checksum is wrong' })), { title: 'This replay can\u2019t be played here', body: [['The match could not be set up on this page.'], ['Chunk CMDS: the checksum is wrong.']],
             buttons: ['button:Open another file', 'a:\u2039 All matches>/matches.html'] });
         same('the reason keeps its own full stop and an empty one is left out', [kids(plan('cant', { why: 'it broke.' }).body[1]), plan('cant', { why: '' }).body.length], [['It broke.'], 1]);
+        same('the game\'s words for a map that the folder has not are the site\'s missing-map card; every other reason of failure 4 is the game\'s own, said as it is (a carried map it refuses, a hash that is not the head\'s, a map that the seats cannot play)', [
+            'the map Dune.lvl is not in Original-Ants/Maps (the replay needs it; --maps-dir says where the maps are)',
+            'the map in the replay cannot be loaded: the rules word is 2: only 0 (the original\'s rules) and 1 (extended rules) are known, the file is not read',
+            'the map cannot be played by the seats of this match: team green: 3 start marker(s) lie outside the 1 x 1 grid',
+            'the map in the replay starts 64000 ants (the start markers of the four colors), more than the 8000 that a replay is set up with',
+            'the map in the replay is not the file that the match was played on (its hash is 0011, the head\'s is 2233)',
+            'the map TINY.LVL here is not the file that the match was played on (its hash is 0011, the replay\'s is 2233)',
+            '', undefined, 7, null].map((why) => w.page.lacks(why)), [true, false, false, false, false, false, false, false, false, false]);
+        same('the card of a reason that the game gave for a carried map shows that reason (not the missing-map words)', [shape(plan('cant', { why: 'the map cannot be played by the seats of this match: team green: 3 start marker(s) lie outside the 1 x 1 grid' })).body[1]],
+             [['The map cannot be played by the seats of this match: team green: 3 start marker(s) lie outside the 1 x 1 grid.']]);
         same('a kind that a file of your own has no words for is none', [plan('gone'), plan('over'), plan('notlive')], [null, null, null]);
         check('no card offers the file for download', ['older', 'newer', 'nomap', 'changed', 'again', 'cant'].every((k) => plan(k).buttons.every((b) => !('download' in b.attrs) && !/download/i.test(b.textContent)) && plan(k).body.every((n) => !/download/i.test(n.textContent))));
         check('every button of a card is a real button or a link, and the buttons press with Enter and Space', plan('older').buttons[0].type === 'button' && (plan('older').buttons[0]._on.keydown || []).length === 1);

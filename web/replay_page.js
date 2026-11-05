@@ -732,6 +732,9 @@
                 }, function () { return fail('this browser does not let the page read the file back (site data may be blocked)'); });
             },
             map: function () { return head && head.map ? head.map : ''; },
+            // Whether the game's reason for failure 4 is that the site has no such map: the folder's own words (player.cpp load_map: "the map X is not in ..."), which the game says only for a file that carries no map
+            // (load_map_or_embedded gives a carried map's own reasons). Anything else (a map that the game refuses: "the rules word is 2", "team green: 3 start marker(s) lie outside the 1 x 1 grid") is the game's reason, said as it is.
+            lacks: function (why) { return typeof why === 'string' && /^the map .+ is not in /.test(why); },
             // the header of the page: the map, "Your file" and the file's name and length, the players (what the game reported, else what the file's head says: a file that the game never reads has them too)
             header: function (info, seconds, cut) {
                 var title = doc.getElementById('r-title'), meta = doc.getElementById('r-meta'), small = mk(doc, 'small'), from = info && info.map ? info : head;
@@ -740,7 +743,9 @@
                 title.appendChild(doc.createTextNode(mapTitle(from && from.map) || 'A match to watch'));
                 if (name || head) {                                                   // (no file, no "Your file": the card that asks for the file again has none to name)
                     small.appendChild(mk(doc, 'span', 'pill own', 'Your file'));
-                    small.appendChild(doc.createTextNode(' ' + [name, seconds ? lengthText(seconds) : ''].filter(Boolean).join(' · ')));
+                    small.appendChild(doc.createTextNode(' '));
+                    if (name) small.appendChild(mk(doc, 'bdi', '', name));                  // (a unit: a name that reads right to left cannot take the length that follows it into its own order)
+                    if (seconds) small.appendChild(doc.createTextNode((name ? ' · ' : '') + lengthText(seconds)));
                     if (cut) { small.appendChild(doc.createTextNode(' ')); small.appendChild(mk(doc, 'span', 'pill cut', 'Cut short')); }
                     title.appendChild(small);
                 }

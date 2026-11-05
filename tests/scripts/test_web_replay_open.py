@@ -5,6 +5,9 @@ mode (web/shell.html at play.html?local=<id>) and the code that they share (web/
   - the shared code is RUN (node, when it is installed: tests/scripts/web_replay_open_check.js): the cheap questions that are asked before the game is loaded for a file (the size from File.size before a
     byte is read, and again on the bytes; the 8 bytes that open a replay; a HEAD chunk after them, at most 4096 bytes long, with the right checksum) on the real file of tests/data/ and on every cut and every
     flipped bit of its head; the name of the file as text; the size in words;
+  - the map that a file carries is counted before the game starts (web/map_files.js startMarkersOfMap, run on all the maps of the library by tests/scripts/web_map_files_check.js) and the limit is the game's:
+    kMaxEmbeddedStartAnts (include/ants_replay/replay.hpp, checked in load_embedded_map; the C++ tests RP9.11 and RA7.10) is pinned equal to the page's MAX_EMBEDDED_ANTS; the card of a map that the game
+    refuses says the game's reason; text that cannot wrap (a file name, a map name, player names) is wrapped by the rules of the game page, and a file name is one unit for the bidirectional algorithm;
   - tests/data/replay_open_mutants.json is the list of changes to the page and the code that the checks must notice (tools/mutate.py runs it with `--keep-going --jobs 1`; the class at the end of this file
     runs the same list in the quick tier on a copy of the files): every one is a way to lose a promise (the size is not checked, the checksum is not, a drop that is not taken over, a file that is sent to the
     server, a record that is kept for ever ...).
@@ -143,7 +146,7 @@ class ThePlayer(unittest.TestCase):
         self.assertIn("plan = OWN ? OWN.card(kind, { made: made, version: pageVersion(), map: info && info.map ? info.map : OWN.map(), why: why }) : null;", self.glue)
         self.assertIn("if (plan) { title = plan.title; plan.body.forEach(function (node) { body.appendChild(node); }); plan.buttons.forEach(function (node) { buttons.appendChild(node); }); } else if (kind === 'older') {", self.glue)
         has(self, "card(OWN && map.mismatch ? 'changed' : OWN && map.gone ? 'nomap' : 'cant', map.text);", self.glue)
-        has(self, "else card(OWN && failure === FAIL.nomap ? 'nomap' : 'cant', text);", self.glue)
+        has(self, "else card(OWN && failure === FAIL.nomap && OWN.lacks(text) ? 'nomap' : 'cant', text);", self.glue)       # (the missing-map card only for the game's words for a folder that lacks the map: any other reason is said as the game says it)
         self.assertIn("if (OWN) { OWN.header(info, headLength(), !!(info && info.turns && !info.over)); return; }", self.glue)
         has(self, "else if (OWN) setHeader();", self.glue)
         has(self, "if (OWN) OWN.chrome();", self.glue)
@@ -154,6 +157,24 @@ class ThePlayer(unittest.TestCase):
         with open(os.path.join(REPO, "tools", "check_hygiene.py"), encoding="utf-8") as f:
             ceiling = int(re.search(r'"web/shell.html": (\d+)', f.read()).group(1))
         self.assertLessEqual(lines, ceiling)                                                              # (the logic is in web/replay_page.js: the page only calls it)
+
+    def test_a_map_that_a_file_carries_is_counted_before_the_game_starts_and_the_limit_is_the_games(self):
+        has(self, "(carried ? Promise.resolve(window.AntsMapFiles.carriedVerdict(carried)) : need ?", self.glue)
+        has(self, "if (!map.ok) { card(OWN && map.mismatch ? 'changed' : OWN && map.gone ? 'nomap' : 'cant', map.text); return; }", self.glue)        # (a refused count has neither flag: the card with the reason)
+        native = int(re.search(r"kMaxEmbeddedStartAnts = (\d+);", read("include", "ants_replay", "replay.hpp")).group(1))
+        page = int(re.search(r"var MAX_EMBEDDED_ANTS = (\d+);", read("web", "map_files.js")).group(1))
+        self.assertEqual((native, page), (8000, 8000))                                                    # (the page counts what the game counts, against the same number)
+        has(self, "if (ants > kMaxEmbeddedStartAnts) {", read("src", "ants_replay", "player.cpp"))      # (load_embedded_map: the one place that every reader of a carried map goes through)
+        has(self, "if (spawn.team_id < 4) ++ants;", read("src", "ants_replay", "player.cpp"))
+        has(self, "var MARKER_FIRST = 152, MARKER_LAST = 155;", read("web", "map_files.js"))                # (the tiles of the start markers: include/ants_assets/lvl_parser.hpp)
+
+    def test_nothing_in_the_game_page_can_make_it_scroll_sideways_for_a_name_that_cannot_wrap_and_a_file_name_is_a_unit(self):
+        has(self, ".rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px;", self.page)           # (the chips: the track may be as narrow as the window)
+        has(self, "gap: 0 14px; color: var(--ink); overflow-wrap: anywhere; }", self.page)                                                    # (the title: the map's name and the file's)
+        has(self, ".rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }", self.page)  # (the cards: the map's name, the reason)
+        script = read("web", "replay_page.js")
+        has(self, "if (name) small.appendChild(mk(doc, 'bdi', '', name));", script)                      # (a name that reads right to left is a unit: the length after it stays after it)
+        lacks(self, "' ' + [name, seconds", script)
 
     def test_only_these_places_of_a_page_of_the_site_know_the_address_local(self):
         for name in ("lobby.html", "match.html", "live.html"):
@@ -166,8 +187,11 @@ class TheDocument(unittest.TestCase):
         has(self, "## A file of your own", text)
         part = text[text.index("## A file of your own"):]
         part = part[:part.index("\n## ", 5)] if "\n## " in part[5:] else part
-        for needle in ("play.html?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh"):
+        for needle in ("play.html?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts"):
             has(self, needle, part)
+
+    def test_the_tree_of_the_sources_lists_the_fuzz_script(self):
+        has(self, "web_replay_open_fuzz.sh", read("docs", "ARCHITECTURE.md"))
 
 
 class TheFixture(unittest.TestCase):
@@ -199,10 +223,11 @@ class TheFixture(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/replay_open_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make its checks fail, and the copy
     with nothing changed must pass"""
-    FILES = ("web/replay_page.js", "web/matches.html", "web/matches.css", "web/shell.html", "web/map_files.js", "docs/REPLAYS.md", "tools/check_hygiene.py", ".gitattributes",
+    FILES = ("web/replay_page.js", "web/matches.html", "web/matches.css", "web/shell.html", "web/map_files.js", "docs/REPLAYS.md", "docs/ARCHITECTURE.md", "tools/check_hygiene.py", ".gitattributes",
+             "include/ants_replay/replay.hpp", "src/ants_replay/player.cpp",
              "web/live.html", "web/lobby.html", "web/match.html",
              "tests/scripts/web_replay_open_check.js", "tests/scripts/web_map_files_check.js", "tests/scripts/replay_file_tools.js", "tests/scripts/test_web_replay_open.py",
-             "tests/data/replay_bots_tiny.antsrep", "tests/data/replay_head.hex", "tests/data/replay_tmap.hex", "Community-Maps/eze jungal.lvl")
+             "tests/data/replay_bots_tiny.antsrep", "tests/data/replay_head.hex", "tests/data/replay_tmap.hex", "Community-Maps/eze jungal.lvl") + tuple("Original-Ants/Maps/%s.LVL" % m for m in ("TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS"))
 
     @classmethod
     def setUpClass(cls):

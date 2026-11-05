@@ -5,8 +5,8 @@
 // that the real game plays a file (the C++ tests and the part REAL below do). Every request is counted: none carries a body, none asks the site for the file, none asks for its stats.
 // With --web URL (or ANTS_WEB_URL: a running site, the web image or tools/web_without_docker.py) the part REAL runs the same pages with the REAL game against that site (no stand-in: the game says what a file is).
 // Parts (--only): strip (the Matches page: the strip, the chooser, a dropped file, a refused file and its card, the page with the site down, a phone), hand (the hand-off: the bytes that the game gets are the
-// file's, a reload, a record that is gone, the header of the player, a library map), cards (a file of an older or newer version, a map that the site does not have, an unreadable file, and the way out of each).
-// usage: node web_replay_open_browser.js [--only strip|hand|cards|real] [--shots DIR] [--web URL] [--require]     (exit 0: every check holds, or the browser is not there; every failure is printed;
+// file's, a reload, a record that is gone, the header of the player, a library map), cards (a file of an older or newer version, a map that the site does not have, an unreadable file, and the way out of each), long (text that cannot wrap and a file name that reads right to left, on a phone and a computer).
+// usage: node web_replay_open_browser.js [--only strip|hand|cards|long|real] [--shots DIR] [--web URL] [--require]     (exit 0: every check holds, or the browser is not there; every failure is printed;
 // with --require a check that could not be made, for want of Playwright, a browser or a site, is a failure: the CI asks for it)
 'use strict';
 const fs = require('fs');
@@ -18,7 +18,7 @@ const tools = require('./replay_file_tools.js');
 const args = process.argv.slice(2);
 const opt = (name) => { const i = args.indexOf(name); return i === -1 ? null : args[i + 1]; };
 const only = opt('--only'), shotsDir = opt('--shots'), webUrl = opt('--web') || process.env.ANTS_WEB_URL || '', required = args.indexOf('--require') !== -1;
-const PARTS = ['strip', 'hand', 'cards', 'real'];
+const PARTS = ['strip', 'hand', 'cards', 'long', 'real'];
 if (only && PARTS.indexOf(only) === -1) { console.log('--only is one of: ' + PARTS.join(', ')); process.exit(2); }
 let playwright;
 for (const name of ['playwright', 'playwright-core']) { try { playwright = require(name); break; } catch (e) { /* the next one */ } }
@@ -119,7 +119,7 @@ async function main() {
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log((required ? 'FAIL' : 'SKIP') + ': no browser could be started (' + String(e.message).split('\n')[0] + '): the pages were NOT run in a browser'); if (required) failures++; return; }
     const shot = async (page, name) => { if (shotsDir) { fs.mkdirSync(shotsDir, { recursive: true }); await page.screenshot({ path: path.join(shotsDir, name + '.png') }); } };
     try {
-        const parts = { strip: partStrip, hand: partHand, cards: partCards, real: partReal };
+        const parts = { strip: partStrip, hand: partHand, cards: partCards, long: partLong, real: partReal };
         for (const name of PARTS) {
             if (name === 'real' && !webUrl) { if (only === 'real') { console.log((required ? 'FAIL' : 'SKIP') + ': no site to run the real game against (--web URL or ANTS_WEB_URL): the real game was NOT run (tests/scripts/web_replay_open_browser.js, part real)'); if (required) failures++; } continue; }
             if (!only || only === name) await parts[name](browser, shot);
@@ -384,12 +384,31 @@ async function partHand(browser, shot) {
         down.server.close();
     }
     // 9. a browser that keeps no site data: the card that says so
-    {
-        const { ctx, page } = await newPage(browser, DESKTOP, report, () => { Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }); });
+    for (const [kindName, context] of [['desktop', DESKTOP], ['phone', PHONE]]) {
+        const { ctx, page } = await newPage(browser, context, report, () => { Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }); });
         await openMatches(site, page);
         await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
         await page.waitForSelector('#open-note .card');
-        check('no IndexedDB: the card says that the browser will not keep the file, the page stays', /will not keep the file/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches.html') !== -1);
+        check('no IndexedDB (' + kindName + '): the card says that the browser will not keep the file, the page stays', /will not keep the file/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches.html') !== -1);
+        await sleep(200);
+        await shot(page, 'built_c_' + kindName + '_nostorage');
+        await ctx.close();
+    }
+    {   // 10. the card that asks for the file again, on a phone (a second file took the place of the first)
+        const { ctx, page } = await newPage(browser, PHONE, report);
+        await openMatches(site, page);
+        await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
+        await page.waitForURL(LOCAL_URL);
+        const first = page.url();
+        await page.goto(site.url('/matches.html'));
+        await page.waitForSelector('#opener:not([hidden])');
+        await chooseFile(page, '#open-btn', asFile('second.antsrep', FIXTURE));
+        await page.waitForURL(LOCAL_URL);
+        await page.goto(first);
+        const gone = await cardOf(page);
+        check('on a phone the address of the first file, after a second was opened, is the card "Choose the replay file again"', gone.title === 'Choose the replay file again');
+        await sleep(200);
+        await shot(page, 'built_e_phone_again');
         await ctx.close();
     }
     site.server.close();
@@ -445,10 +464,44 @@ async function partCards(browser, shot) {
         await ctx.close();
     }
     {
-        const { ctx, page } = await newPage(browser, DESKTOP, { failure: 4, text: 'the map cannot be found', map: 'Dune.lvl', turns: 20060 });
+        const { ctx, page } = await newPage(browser, DESKTOP, { failure: 4, text: 'the map Dune.lvl is not in Original-Ants/Maps (the replay needs it; --maps-dir says where the maps are)', map: 'Dune.lvl', turns: 20060 });
         await open(page, asFile(NAME, FIXTURE));
         const card = await cardOf(page);
-        check('the game has not the map: "This site doesn’t have the map" with the map\'s name', card.title === 'This site doesn’t have the map' && /played on the map Dune\.lvl/.test(card.body) && card.downloads === 0, JSON.stringify(card));
+        check('the game has not the map (its own words for a folder that lacks it): "This site doesn’t have the map" with the map\'s name', card.title === 'This site doesn’t have the map' && /played on the map Dune\.lvl/.test(card.body) && card.downloads === 0, JSON.stringify(card));
+        await ctx.close();
+    }
+    // 2b. the game refuses a map that the FILE carries: its reason is the card's, and the words for a map that the site has not are not said of a map that the file brought
+    for (const [label, bytes, why, wanted] of [
+        ['markers outside its grid', tools.withMap(FIXTURE, 'Dune.lvl', tools.mapWithGrid(TINY_MAP, 1, 1), true), 'the map cannot be played by the seats of this match: team green: 3 start marker(s) lie outside the 1 x 1 grid', /Team green: 3 start marker\(s\) lie outside the 1 x 1 grid|team green: 3 start marker\(s\) lie outside the 1 x 1 grid/],
+        ['a rules word that no reader knows', tools.withMap(FIXTURE, 'Dune.lvl', tools.mapAsVersion9(TINY_MAP, 2), true), 'the map in the replay cannot be loaded: the rules word is 2: only 0 (the original’s rules) and 1 (extended rules) are known, the file is not read', /The map in the replay cannot be loaded: the rules word is 2/],
+    ]) {
+        for (const [kindName, context] of [['desktop', DESKTOP], ['phone', PHONE]]) {
+            const { ctx, page } = await newPage(browser, context, { failure: 4, text: why, map: 'Dune.lvl', turns: 20060, over: true });          // (over: the game knows the whole file even when it refuses its map)
+            const before = site.hits.length;
+            await open(page, asFile('carried.antsrep', bytes));
+            const card = await cardOf(page);
+            check('a map that the file carries and the game refuses (' + label + ', ' + kindName + '): "This replay can’t be played here" with the game\'s reason, not the words for a missing map', card.title === 'This replay can’t be played here' && wanted.test(card.body) && !/doesn’t have the map|no longer has it/.test(card.title + card.body) && card.downloads === 0, JSON.stringify(card));
+            check('... the site was not asked for the map (the file brought it), and the buttons are Open another file and All matches', askedFor(site.hits.slice(before), /^\/maps\/files\//).length === 0 && JSON.stringify(card.buttons.map((b) => b.text)) === JSON.stringify(['Open another file', '‹ All matches']));
+            if (label.indexOf('grid') !== -1) { await sleep(200); await shot(page, 'built_c_' + kindName + '_refusedmap'); }
+            await ctx.close();
+        }
+    }
+    // 2c. a map that the file carries and that starts more ants than a replay is set up with: the page says so before the game starts (the game is never asked), at once, with the count
+    for (const [kindName, context] of [['desktop', DESKTOP], ['phone', PHONE]]) {
+        const { ctx, page } = await newPage(browser, context, null);
+        await open(page, asFile('crowd.antsrep', tools.withMap(FIXTURE, 'Crowd.lvl', tools.mapWithAnts(TINY_MAP, 65535), true)));
+        const started = Date.now();
+        const card = await cardOf(page);
+        check('a map of 65,535 start markers carried by the file (' + kindName + '): the card "This replay can’t be played here" with the count, in no time', card.title === 'This replay can’t be played here' && /The map in the file starts 65,535 ants \(the start markers of the four colors\), more than the 8,000 that a replay is set up with\./.test(card.body) && Date.now() - started < 5000, JSON.stringify(card));
+        check('... the game was never started and nothing was fetched for the map', (await page.evaluate(() => typeof window.__stub)) === 'undefined' && askedFor(site.hits, /^\/maps\/files\/Crowd/).length === 0);
+        if (kindName === 'phone') { await sleep(200); await shot(page, 'built_c_phone_crowd'); } else await shot(page, 'built_c_desktop_crowd');
+        await ctx.close();
+    }
+    {   // 8,000 is the limit: that many go to the game
+        const { ctx, page } = await newPage(browser, DESKTOP, { map: 'Dune.lvl', turns: 20060 });
+        await open(page, asFile('crowd.antsrep', tools.withMap(FIXTURE, 'Crowd.lvl', tools.mapWithAnts(TINY_MAP, 8000), true)));
+        await stubStarted(page);
+        check('a map of exactly 8,000 start markers is handed to the game', (await page.evaluate(() => window.__stub.args.join(' '))).indexOf('--replay /replay.antsrep') !== -1 && !(await page.isVisible('#rm')));
         await ctx.close();
     }
     // 3. the maps of a file: an original is in the game; a map of the library is fetched by its name and checked; a map that the file carries is used without asking; a hostile name asks for nothing
@@ -538,6 +591,73 @@ async function partCards(browser, shot) {
     site.server.close();
 }
 
+// ---- part long: text that cannot wrap (a file name of 100 characters, a map name of 59, four player names of 64) on a phone: the page does not scroll sideways; and a file name that reads right to left keeps the header's order
+async function partLong(browser, shot) {
+    const site = await makeSite();
+    const widths = (page) => page.evaluate(() => ({ root: document.documentElement.scrollWidth, body: document.body.scrollWidth, window: window.innerWidth }));
+    const fits = (w) => w.root <= w.window && w.body <= w.window;
+    const cases = [
+        ['a file name of 100 characters', 'ants-' + 'x'.repeat(91) + '.antsrep', FIXTURE, {}, 'file'],
+        ['a map name of 59 characters (the header, and the card of a map that the site does not have)', NAME, tools.withMap(FIXTURE, 'Q'.repeat(55) + '.lvl', TINY_MAP, false), {}, 'card'],
+        ['four player names of 64 characters', NAME, FIXTURE, { names: ['a', 'b', 'c', 'd'].map((c) => c.repeat(64)), roster: 15 }, 'players'],
+    ];
+    for (const [label, name, bytes, report, key] of cases) {
+        const { ctx, page } = await newPage(browser, PHONE, Object.assign({ map: 'TREASURE.LVL', turns: 20060 }, report));
+        await openMatches(site, page);
+        await chooseFile(page, '#open-btn', asFile(name, bytes));
+        await page.waitForURL(LOCAL_URL);
+        if (key === 'card') await cardOf(page); else await stubStarted(page);
+        await sleep(400);
+        const w = await widths(page);
+        check('on a phone, ' + label + ' do not make the page scroll sideways', fits(w), JSON.stringify(w));
+        await shot(page, 'built_f_phone_long_' + key);
+        await ctx.close();
+    }
+    {   // the three at once, and the header on a computer too
+        for (const [kind, context] of [['phone', PHONE], ['desktop', DESKTOP]]) {
+            const { ctx, page } = await newPage(browser, context, { map: 'TREASURE.LVL', turns: 20060, names: ['a', 'b', 'c', 'd'].map((c) => c.repeat(64)), roster: 15 });
+            await openMatches(site, page);
+            await chooseFile(page, '#open-btn', asFile('ants-' + 'x'.repeat(91) + '.antsrep', tools.withMap(FIXTURE, 'Q'.repeat(55) + '.lvl', TINY_MAP, false)));
+            await page.waitForURL(LOCAL_URL);
+            await cardOf(page);
+            await sleep(400);
+            const w = await widths(page);
+            check('a ' + kind + ': the long file name, map name and player names together do not make the page scroll sideways', fits(w), JSON.stringify(w));
+            await ctx.close();
+        }
+    }
+    {   // a file name that reads right to left: the name is a unit, so the length that follows it stays after it (a plain run of text puts the digits in the middle of the Arabic)
+        const arabic = '\u0645\u0644\u0641_\u0625\u0639\u0627\u062f\u0629_\u0627\u0644\u0645\u0628\u0627\u0631\u0627\u0629.antsrep';
+        for (const [kind, context] of [['phone', PHONE], ['desktop', DESKTOP]]) {
+            const { ctx, page } = await newPage(browser, context, { map: 'TREASURE.LVL', turns: 20060 });
+            await openMatches(site, page);
+            await chooseFile(page, '#open-btn', asFile(arabic, FIXTURE));
+            await page.waitForURL(LOCAL_URL);
+            await stubStarted(page);
+            await sleep(300);
+            const g = await page.evaluate((expect) => {
+                const small = document.querySelector('#r-title small');
+                const bdi = small && small.querySelector('bdi');
+                let length = null;
+                if (small) {
+                    const walker = document.createTreeWalker(small, NodeFilter.SHOW_TEXT);
+                    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                        const at = n.data.indexOf('16:43');
+                        if (at !== -1) { const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + 5); length = r.getBoundingClientRect().toJSON(); }
+                    }
+                }
+                const pill = small && small.querySelector('.pill.own');
+                return { bdi: bdi ? bdi.textContent : null, same: bdi ? bdi.textContent === expect : false, name: bdi ? bdi.getBoundingClientRect().toJSON() : null, length, pill: pill ? pill.getBoundingClientRect().toJSON() : null };
+            }, arabic);
+            check('a ' + kind + ': the file name that reads right to left is one unit (a bdi) with the text as it is', g.same, JSON.stringify(g.bdi));
+            check('a ' + kind + ': the header reads Your file, the name, then the length, from the left (the length is not in the middle of the name)', !!g.name && !!g.length && !!g.pill && g.pill.right <= g.name.left + 1 && g.length.left >= g.name.right - 1, JSON.stringify(g));
+            if (kind === 'phone') await shot(page, 'built_f_phone_long_rtl');
+            await ctx.close();
+        }
+    }
+    site.server.close();
+}
+
 // ---- part real: the same pages and the REAL game, against a running site (the web image, or tools/web_without_docker.py): the game, not a stand-in, says what each file is
 async function partReal(browser, shot) {
     const base = webUrl.replace(/\/+$/, '');
@@ -614,6 +734,32 @@ async function partReal(browser, shot) {
     const hostile = [['a map of nothing but zeros', new Uint8Array(1000)], ['a map cut after 100 bytes', DUNE.slice(0, 100)], ['a map cut in its middle', DUNE.slice(0, DUNE.length >> 1)], ['a map of random bytes of the longest size', Uint8Array.from({ length: 1 << 20 }, (_, i) => (i * 2654435761 >>> 7) & 255)],
                      ['a map whose header says the grid is huge', set32(DUNE, 8, 0xffffffff)], ['a map with a changed first byte', flip(DUNE, 0, DUNE[0] ^ 255)], ['a map with a changed byte in its tiles', flip(DUNE, 5000, DUNE[5000] ^ 255)],
                      ['a map with 65,535 in its second word', set32(DUNE, 4, 0xffff)], ['a map with its middle zeroed', (() => { const b = Uint8Array.from(DUNE); b.fill(0, 2000, 9000); return b; })()]];
+    // 3b. a crowd: a map that starts tens of thousands of ants held the tab for minutes (the game's set-up grows with the square of their number). The page counts first and says so at once; where the page does not (a map named like
+    //     one of the six originals is never taken by the page: the game gets the file) the game refuses it in the same breath, with the count
+    for (const [label, name, ants, words] of [['carried under a name of its own: the page refuses before the game starts', 'Crowd.lvl', 65535, /The map in the file starts 65,535 ants \(the start markers of the four colors\), more than the 8,000 that a replay is set up with\./],
+                                              ['carried under the name of an original (the page leaves it to the game): the game refuses it', 'TINY.LVL', 65535, /The map in the replay starts 65535 ants \(the start markers of the four colors\), more than the 8000 that a replay is set up with/],
+                                              ['8,001 ants under the name of an original: the game refuses it too', 'TINY.LVL', 8001, /The map in the replay starts 8001 ants/]]) {
+        const ctx = await ctxOf(), page = await ctx.newPage();
+        const hits = [];
+        page.on('request', (r) => hits.push({ method: r.method(), url: new URL(r.url()).pathname, body: r.postData() }));
+        const started = Date.now();
+        await openOn(page, asFile('crowd.antsrep', tools.withMap(FIXTURE, name, tools.mapWithAnts(TINY_MAP, ants), true)));
+        const card = await anyCard(page);
+        const took = Date.now() - started;
+        check(label + ': the card "This replay can’t be played here" with the count, no download, within 60 s (the page was held for minutes before)', card.title === 'This replay can’t be played here' && words.test(card.body.replace(/\s+/g, ' ')) && card.downloads === 0 && took < 60000, took + ' ms ' + JSON.stringify(card));
+        check('... the page still answers (its buttons are there and the way to the list works)', await page.isVisible('#all-btn') && (await page.evaluate(() => new Promise((resolve) => { const t0 = performance.now(); setTimeout(() => resolve(performance.now() - t0), 50); }))) < 2000);
+        check('... no request of the visit carries a body or asks the site for the map', hits.every((h) => h.method === 'GET' && !h.body) && !hits.some((h) => /^\/maps\/files\//.test(h.url)));
+        await ctx.close();
+    }
+    // 3c. a map that the game refuses although the file carries it: the game's reason, in the card, and never the words for a map that the site has not
+    for (const [label, bytes, words] of [['markers outside its grid', tools.mapWithGrid(TINY_MAP, 1, 1), /start marker\(s\) lie outside the 1 x 1 grid/],
+                                         ['a rules word that no reader knows', tools.mapAsVersion9(TINY_MAP, 2), /the rules word is 2/i]]) {
+        const ctx = await ctxOf(), page = await ctx.newPage();
+        await openOn(page, asFile('refused.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', bytes, true)));
+        const card = await anyCard(page);
+        check('a map that the file carries and that the real game refuses (' + label + '): "This replay can’t be played here" with the game\'s own reason, not "This site doesn’t have the map"', card.title === 'This replay can’t be played here' && words.test(card.body) && !/doesn’t have the map|no longer has it/.test(card.title + card.body) && card.downloads === 0, JSON.stringify(card));
+        await ctx.close();
+    }
     for (const [label, map] of hostile) {
         const ctx = await ctxOf(), page = await ctx.newPage();
         const errors = [];

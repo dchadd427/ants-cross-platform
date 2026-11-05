@@ -77,7 +77,7 @@ class TheGameSide(unittest.TestCase):
         self.assertTrue("var seen = ANTS_LIVE_MODE ? latest : got.bytes," in self.page)                                            # the bytes of the recording (the live page's newest copy)
         self.assertTrue("window.AntsMapFiles.mapOfReplay(seen)" in self.page)                                                      # a recording of a map of the players: fetched by its name
         self.assertTrue("window.AntsMapFiles.embeddedMapOfReplay(seen)" in self.page)                                              # a recording that carries its map: that map, nothing fetched
-        self.assertTrue("carried ? Promise.resolve({ ok: true, bytes: carried.bytes })" in self.page)
+        self.assertTrue("carried ? Promise.resolve(window.AntsMapFiles.carriedVerdict(carried))" in self.page)                    # (the map goes to the game unless it starts more ants than a replay is set up with: map_files.js carriedVerdict)
 
     def test_the_script_is_in_the_image_and_the_ci_looks_for_it(self):
         self.assertTrue("COPY web/map_files.js /usr/share/nginx/html/map_files.js" in read("Dockerfile"))

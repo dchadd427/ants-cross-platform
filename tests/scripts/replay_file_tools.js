@@ -81,4 +81,34 @@ function withMap(file, name, mapBytes, embed) {
 // The recording with another rules number of the simulation (a file of an older or a newer version of the game: the game decides, whatever the page thinks)
 function withRules(file, rules) { return withHead(file, (fields) => setField(fields, 16, [rules & 255, (rules >> 8) & 255])); }
 
-module.exports = { MAGIC, crc32, le32, read32, chunk, chunks, readHead, writeHead, fnv64, hashBytes, withHead, withMap, withRules, setField, text };
+// ---- maps made by hand, from the shipped TINY (a Classic map: version 8; docs/MAP_FORMAT.md "The layout"): bytes of a .lvl file that a recording can carry
+// Where the parts of a version 8 map start: the dictionary, the grid size, the two layers, block 1 (the start markers and the plants: a word for the count, then 6 bytes a record) and what follows it
+function lvlLayout(map) {
+    const u16 = (at) => map[at] | (map[at + 1] << 8);
+    const gridAt = 40 + 2 + 11 * (u16(40) + 1);
+    const rows = read32(map, gridAt) & 0xffff, columns = read32(map, gridAt + 4) & 0xffff;
+    const layersAt = gridAt + 8, block1At = layersAt + rows * columns * 12, count = u16(block1At);
+    return { rows, columns, gridAt, layersAt, block1At, count, recordsAt: block1At + 2, afterAt: block1At + 2 + 6 * count };
+}
+// The map with exactly `ants` start markers (all green, on the cell at row 1, column 1): its plants stay and so does the rest of the file. Block 1 holds 65,535 records at most
+function mapWithAnts(map, ants) {
+    const L = lvlLayout(map), kept = [];
+    for (let i = 0; i < L.count; i++) {
+        const record = Array.from(map.subarray(L.recordsAt + 6 * i, L.recordsAt + 6 * i + 6)), tile = record[0] | (record[1] << 8);
+        if (tile < 152 || tile > 155) kept.push(record);
+    }
+    const records = kept.concat(Array.from({ length: ants }, () => [154, 0, 1, 0, 1, 0]));
+    if (records.length > 65535) throw new Error('block 1 holds at most 65,535 records');
+    return Uint8Array.from(Array.from(map.subarray(0, L.block1At)).concat([records.length & 255, records.length >> 8], [].concat(...records), Array.from(map.subarray(L.afterAt))));
+}
+// The map with a grid of `rows` x `columns` cells (the first cells of the layers) and its start markers where they were: markers outside the grid, a map that the game's loader reads and its validity check refuses
+function mapWithGrid(map, rows, columns) {
+    const L = lvlLayout(map);
+    return Uint8Array.from(Array.from(map.subarray(0, L.gridAt)).concat(le32(rows), le32(columns), Array.from(map.subarray(L.layersAt, L.layersAt + rows * columns * 12)), Array.from(map.subarray(L.block1At))));
+}
+// The same map as a version 9 file whose rules word is `rules` (0 and 1 are known: any other the reader refuses before it reads a cell): the header of version 9 (format flags 0, the rules, the description as a length and its 30 bytes), then the rest as it was
+function mapAsVersion9(map, rules) {
+    return Uint8Array.from([9, 0, 0, 0].concat(Array.from(map.subarray(4, 10)), [0, 0, 0, 0, rules & 255, rules >> 8, 30, 0], Array.from(map.subarray(10))));
+}
+
+module.exports = { MAGIC, crc32, le32, read32, chunk, chunks, readHead, writeHead, fnv64, hashBytes, withHead, withMap, withRules, setField, text, lvlLayout, mapWithAnts, mapWithGrid, mapAsVersion9 };

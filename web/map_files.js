@@ -56,6 +56,8 @@
 
     var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];
     var MAX_EMBEDDED_BYTES = 1024 * 1024;      // kMaxEmbeddedMapBytes (include/ants_replay/replay.hpp): the longest tmap chunk
+    var MAX_EMBEDDED_ANTS = 8000;              // kMaxEmbeddedStartAnts (include/ants_replay/replay.hpp): the most starting ants that a map carried in a file may start (tests/scripts/test_web_replay_open.py pins both numbers)
+    var MARKER_FIRST = 152, MARKER_LAST = 155; // the tile ids of the start markers: black, blue, green, red (include/ants_assets/lvl_parser.hpp, start_marker_team_of_id)
 
     function u32(bytes, at) { return (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0; }
     function tagAt(bytes, at) { return String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]); }
@@ -125,7 +127,45 @@
             pos += 12 + length;
         }
         if (!found || hash64(found) !== head.hash) return null;
-        return { name: head.name, hash: head.hash, bytes: found };
+        return { name: head.name, hash: head.hash, bytes: found, ants: startMarkersOfMap(found) };
+    }
+
+    // The starting ants of a map file (.lvl), counted as the game's loader counts them (docs/MAP_FORMAT.md, "The layout"; src/ants_assets/lvl_parser.cpp): the records of block 1 whose tile is a start marker (152 to 155;
+    // in a version 9 file the tile is the low 12 bits when the high four are at most 5). -1 when the file is not laid out as the loader reads it (the game then says what is wrong). Only the header's numbers are read to find
+    // block 1, each checked against what is left of the file, and nothing is allocated for a size that the file claims.
+    function startMarkersOfMap(bytes) {
+        if (!bytes || bytes.length < 44) return -1;
+        function u16(at) { return bytes[at] | (bytes[at + 1] << 8); }
+        var version = u32(bytes, 0), pos;
+        if (version === 8) pos = 40;                                   // the mode, the minutes and the description's 30 bytes
+        else if (version === 9) pos = 18 + u16(16);                    // the mode, the minutes, the format flags and the rules, then the description: a word for its length, and its bytes
+        else return -1;
+        if (pos + 2 > bytes.length) return -1;
+        pos += 2 + 11 * (u16(pos) + 1);                                // the dictionary: a word, then one name of 11 bytes more than it says
+        if (pos + 8 > bytes.length) return -1;
+        var rows = u32(bytes, pos), columns = u32(bytes, pos + 4);
+        if (version === 8) { rows = rows & 0xffff; columns = columns & 0xffff; }    // (the original keeps the lower 16 bits of each)
+        pos += 8;
+        if (rows * columns * 12 > bytes.length - pos) return -1;       // (two layers of three words a cell)
+        pos += rows * columns * 12;
+        if (pos + 2 > bytes.length) return -1;
+        var count = u16(pos);
+        pos += 2;
+        if (count * 6 > bytes.length - pos) return -1;
+        var ants = 0;
+        for (var i = 0; i < count; i++) {
+            var raw = u16(pos + 6 * i), tile = version === 9 && (raw >> 12) <= 5 ? raw & 0x0fff : raw;
+            if (tile >= MARKER_FIRST && tile <= MARKER_LAST) ants++;
+        }
+        return ants;
+    }
+    // What the page does with the map that a file carries: it goes to the game ({ ok: true, bytes }) unless it starts more ants than a replay is set up with ({ ok: false, text }): the game refuses it too, but setting up
+    // such a map holds a page for minutes with nothing said, so the page says it before the game starts. A map that is not laid out as the loader reads it (-1) is the game's to judge.
+    function carriedVerdict(carried) {
+        if (carried.ants > MAX_EMBEDDED_ANTS) {
+            return { ok: false, text: 'the map in the file starts ' + String(carried.ants).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' ants (the start markers of the four colors), more than the ' + String(MAX_EMBEDDED_ANTS).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' that a replay is set up with' };
+        }
+        return { ok: true, bytes: carried.bytes };
     }
 
     // env: { fetch, getFS() (the game's file system, or null before the game runs), setTimeout, clearTimeout, now, timeoutMs, tries, retryMs, AbortController, onChange(name, state) }
@@ -304,5 +344,5 @@
         }, function () { fail('Could not download the map ' + file + '. Check your connection and try again.', false); });
     }
 
-    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, infoOfReplay: infoOfReplay, embeddedMapOfReplay: embeddedMapOfReplay, create: create };
+    return { warm: warm, forPage: forPage, writer: writer, communityFile: communityFile, beforeLocalGame: beforeLocalGame, PENDING: PENDING, READY: READY, FAILED: FAILED, MAX_BYTES: MAX_BYTES, fileUrl: fileUrl, validName: validName, hash64: hash64, mapOfReplay: mapOfReplay, infoOfReplay: infoOfReplay, embeddedMapOfReplay: embeddedMapOfReplay, startMarkersOfMap: startMarkersOfMap, carriedVerdict: carriedVerdict, MAX_EMBEDDED_ANTS: MAX_EMBEDDED_ANTS, create: create };
 });
