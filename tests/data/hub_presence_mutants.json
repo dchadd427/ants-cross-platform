@@ -7,8 +7,8 @@
   {
    "id": "people_counts_sockets",
    "file": "hub/presence.py",
-   "old": "            else:\n                accounts.add(peer.identity.account_id)\n        return len(accounts) + guests",
-   "new": "            else:\n                guests += 1\n        return len(accounts) + guests",
+   "old": "            else:\n                accounts.add(peer.identity.account_id)\n        count = len(accounts) + guests",
+   "new": "            else:\n                guests += 1\n        count = len(accounts) + guests",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -42,8 +42,8 @@
   {
    "id": "online_of_the_welcome_counts_sockets",
    "file": "hub/chat.py",
-   "old": "\"presence\": True, \"online\": self.presence.people(),",
-   "new": "\"presence\": True, \"online\": len(self.peers),",
+   "old": "\"online\": self.presence.people(), \"history\"",
+   "new": "\"online\": len(self.peers), \"history\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -70,8 +70,8 @@
   {
    "id": "the_welcome_does_not_say_presence",
    "file": "hub/chat.py",
-   "old": "\"login\": bool(self.login), \"presence\": True, \"online\"",
-   "new": "\"login\": bool(self.login), \"online\"",
+   "old": "bool(self.login), \"presence\": True,",
+   "new": "bool(self.login),",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -112,8 +112,8 @@
   {
    "id": "the_cap_is_not_applied",
    "file": "hub/presence.py",
-   "old": "for account, (_, name, where) in order[:self.limits.who_rows_max]:",
-   "new": "for account, (_, name, where) in order:",
+   "old": "for account, (_, name, where, young) in order[:self.limits.who_rows_max]:",
+   "new": "for account, (_, name, where, young) in order:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -133,15 +133,15 @@
   {
    "id": "a_row_has_the_account_id",
    "file": "hub/presence.py",
-   "old": "rows[ident] = row_of(ident, name, account in mods, where)",
-   "new": "rows[ident] = row_of(int(account), name, account in mods, where)",
+   "old": "rows[ident] = row_of(ident, name,",
+   "new": "rows[ident] = row_of(int(account), name,",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
    "id": "the_number_of_a_row_changes_at_every_look",
    "file": "hub/presence.py",
-   "old": "            ident = self.ids.get(account)\n            if ident is None:",
-   "new": "            ident = None\n            if ident is None:",
+   "old": "        ident = self.ids.get(account)\n        if ident is None:",
+   "new": "        ident = None\n        if ident is None:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -257,13 +257,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
-   "id": "a_map_does_not_go_through_the_text_rules",
-   "file": "hub/presence.py",
-   "old": "    text, why = textrules.clean_line(value)\n    return value if why is None and text == value else None",
-   "new": "    return value",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
-  },
-  {
    "id": "a_code_is_not_checked",
    "file": "hub/presence.py",
    "old": "(code is not None and not (isinstance(code, str) and ROOM_CODE.match(code)))",
@@ -287,7 +280,7 @@
   {
    "id": "a_wrong_here_is_no_mistake",
    "file": "hub/presence.py",
-   "old": "        if where is None:\n            return self.chat.mistake(peer, \"bad\")",
+   "old": "        if where is None:\n            return self.chat.mistake(peer, REFUSED)",
    "new": "        if where is None:\n            return",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
@@ -308,8 +301,8 @@
   {
    "id": "the_asker_hears_the_change_and_the_list",
    "file": "hub/presence.py",
-   "old": "        self.refresh(now, True)\n        self.watchers.add(peer)",
-   "new": "        self.watchers.add(peer)\n        self.refresh(now, True)",
+   "old": "        self.asked[peer] = now\n        if self.sent is None or",
+   "new": "        self.asked[peer] = now\n        self.watchers.add(peer)\n        if self.sent is None or",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -329,7 +322,7 @@
   {
    "id": "the_sends_are_not_held_together",
    "file": "hub/presence.py",
-   "old": "        if now - self.sent_at < (self.limits.who_soon_seconds if soon else self.limits.who_seconds):\n            return",
+   "old": "        if not force and now - self.sent_at < self.limits.who_seconds:\n            return",
    "new": "        if False:\n            return",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
@@ -343,21 +336,21 @@
   {
    "id": "the_list_is_sent_to_those_who_did_not_ask",
    "file": "hub/presence.py",
-   "old": "        self.watchers.add(peer)                     # (after",
-   "new": "        self.watchers = set(self.chat.peers)        # (after",
+   "old": "        self.watchers.add(peer)                     # (every watcher",
+   "new": "        self.watchers = set(self.chat.peers)        # (every watcher",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
    "id": "the_list_is_looked_at_with_nobody_watching",
    "file": "hub/presence.py",
-   "old": "        if self.watchers:\n            self.refresh(now, False)",
-   "new": "        self.refresh(now, False)",
+   "old": "        if self.watchers:\n            self.refresh(now)",
+   "new": "        self.refresh(now)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
    "id": "the_clock_does_not_send",
    "file": "hub/server.py",
-   "old": "        self.chat.presence.flush(now)\n",
+   "old": "        try:\n            self.chat.presence.flush(now)                # (the list of the front page, on its own: a bug in it never stops the retention below, and a failing purge never stops the list)\n        except Exception as e:\n            self.log.event(\"error\", kind=type(e).__name__, where=\"presence\")\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
@@ -411,10 +404,199 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
-   "id": "the_first_ask_waits_as_long_as_the_clock",
+   "id": "a_double_space_is_not_a_map",
    "file": "hub/presence.py",
-   "old": "(self.limits.who_soon_seconds if soon else self.limits.who_seconds)",
-   "new": "self.limits.who_seconds",
+   "old": "MAP_FILE = re.compile(r\"[ -~]{5,64}\\Z\")",
+   "new": "MAP_FILE = re.compile(r\"(?!.*  )[ -~]{5,64}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_map_may_end_in_any_case_of_lvl",
+   "file": "hub/presence.py",
+   "old": "or not value.endswith((\".lvl\", \".LVL\")):",
+   "new": "or not value.lower().endswith(\".lvl\"):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_code_may_end_in_a_newline",
+   "file": "hub/presence.py",
+   "old": "ROOM_CODE = re.compile(r\"[a-z0-9_-]{1,32}\\Z\")",
+   "new": "ROOM_CODE = re.compile(r\"[a-z0-9_-]{1,32}$\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_map_may_be_four_characters",
+   "file": "hub/presence.py",
+   "old": "MAP_FILE = re.compile(r\"[ -~]{5,64}\\Z\")",
+   "new": "MAP_FILE = re.compile(r\"[ -~]{4,64}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_map_may_be_a_hidden_file",
+   "file": "hub/presence.py",
+   "old": "or value[0] == \".\" or not value.endswith",
+   "new": "or not value.endswith",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_watcher_that_closed_is_kept",
+   "file": "hub/presence.py",
+   "old": "        self.watchers &= alive\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_count_is_made_for_every_ping",
+   "file": "hub/presence.py",
+   "old": "        if version is not None and version == self.counted_version:\n            return self.counted\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_count_is_never_made_again",
+   "file": "hub/presence.py",
+   "old": "        if version is not None and version == self.counted_version:\n",
+   "new": "        if version is not None and self.counted_version is not None:\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_count_is_not_made_again_at_the_tick",
+   "file": "hub/presence.py",
+   "old": "        self.counted_version = None                 # (the number of people is counted again at least once a tick)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_socket_that_closes_does_not_tell_the_count",
+   "file": "hub/server.py",
+   "old": "            peers.version += 1                      # (a closed socket is nobody: the number of people is counted again)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_way_to_change_the_set_is_not_told",
+   "file": "hub/presence.py",
+   "old": "\"clear\", \"pop\", \"update\",",
+   "new": "\"clear\", \"update\",",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_sockets_are_a_plain_set",
+   "file": "hub/chat.py",
+   "old": "        self.peers = presencemod.Peers()\n",
+   "new": "        self.peers = set()\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_banned_account_is_named",
+   "file": "hub/presence.py",
+   "old": "        for account in banned.intersection(best):\n            del best[account]\n            guests += 1\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_banned_account_is_not_counted",
+   "file": "hub/presence.py",
+   "old": "            del best[account]\n            guests += 1\n",
+   "new": "            del best[account]\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_banned_account_loses_its_number",
+   "file": "hub/presence.py",
+   "old": "for account in [a for a in self.ids if a not in best]:",
+   "new": "for account in [a for a in self.ids if a not in best or a in banned]:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_muted_account_keeps_the_details",
+   "file": "hub/presence.py",
+   "old": "(young or account in muted)",
+   "new": "young",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_young_account_keeps_the_details",
+   "file": "hub/presence.py",
+   "old": "(young or account in muted)",
+   "new": "account in muted",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_bans_are_never_read",
+   "file": "hub/presence.py",
+   "old": "frozenset(row[0] for row in store.bans())",
+   "new": "frozenset()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_mutes_are_never_read",
+   "file": "hub/presence.py",
+   "old": "frozenset(row[0] for row in store.mutes())",
+   "new": "frozenset()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_store_that_fails_forgets_the_bans",
+   "file": "hub/presence.py",
+   "old": "        except StoreError:\n            pass\n        return self.limited",
+   "new": "        except StoreError:\n            self.limited = (frozenset(), frozenset())\n        return self.limited",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_welcome_has_no_row_number",
+   "file": "hub/chat.py",
+   "old": "            welcome[\"me\"] = self.presence.row_id(you.account_id)",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_row_number_is_the_account_id",
+   "file": "hub/chat.py",
+   "old": "welcome[\"me\"] = self.presence.row_id(you.account_id)",
+   "new": "welcome[\"me\"] = int(you.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_reader_has_a_row_number",
+   "file": "hub/chat.py",
+   "old": "        if you:\n            welcome[\"me\"]",
+   "new": "        if True:\n            welcome[\"me\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "an_ask_brings_a_send_forward",
+   "file": "hub/presence.py",
+   "old": "        if self.sent is None or not any(self.alive(p) for p in self.watchers):\n            self.refresh(now, force=True)",
+   "new": "        if True:\n            self.refresh(now, force=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_first_page_is_given_an_old_list",
+   "file": "hub/presence.py",
+   "old": "        if self.sent is None or not any(self.alive(p) for p in self.watchers):",
+   "new": "        if self.sent is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_refused_here_is_a_bad",
+   "file": "hub/presence.py",
+   "old": "return self.chat.mistake(peer, REFUSED)",
+   "new": "return self.chat.mistake(peer, \"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_failing_list_stops_the_clock",
+   "file": "hub/server.py",
+   "old": "        try:\n            self.chat.presence.flush(now)                # (the list of the front page, on its own: a bug in it never stops the retention below, and a failing purge never stops the list)\n        except Exception as e:\n            self.log.event(\"error\", kind=type(e).__name__, where=\"presence\")\n",
+   "new": "        self.chat.presence.flush(now)\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_log_says_online_for_sockets",
+   "file": "hub/server.py",
+   "old": "self.log.event(\"open\", tag=peer.tag, sockets=len(self.chat.peers),",
+   "new": "self.log.event(\"open\", tag=peer.tag, online=len(self.chat.peers),",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   }
  ]

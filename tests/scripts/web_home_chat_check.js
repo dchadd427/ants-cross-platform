@@ -278,14 +278,25 @@ function rig(o) {
 {   // the err codes, in words
     const words = { rate: 'Slow down a little', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first', young: 'Your account is too new to chat yet', bad: 'That line could not be sent' };
     Object.keys(words).forEach((code) => {
-        const r = rig(); r.live(W({ you: YOU, login: true }));
+        const r = rig(); r.live(W({ you: YOU, login: true })); r.dock.say('hello');
         r.s().recv({ t: 'err', code });
         check('err ' + code + ': "' + words[code] + '" in the note, which goes after a few seconds', r.note() === words[code] && (r.clock.advance(5900), r.note() === words[code]) && (r.clock.advance(200), r.note() === ''));
     });
-    const a = rig(); a.live(W({ you: null, login: true })); a.s().recv({ t: 'err', code: 'login' });
-    const b = rig(); b.live(W({ you: null, login: false })); b.s().recv({ t: 'err', code: 'login' });
-    const c = rig(); c.live(W({ you: YOU, login: true })); ['what', 5, null, undefined, {}, 'constructor'].forEach((code) => c.s().recv({ t: 'err', code }));
-    same('err login: "Log in with Discord to chat" where the hub has a login, "Chat is read-only for now" where it has none; a code that is not known is the generic words', [a.note(), b.note(), c.note()], ['Log in with Discord to chat', 'Chat is read-only for now', 'That did not go through']);
+    const a = rig(); a.live(W({ you: YOU, login: true })); a.dock.say('hello'); a.s().recv({ t: 'err', code: 'login' });
+    const b = rig(); b.live(W({ you: YOU, login: false })); b.dock.say('hello'); b.s().recv({ t: 'err', code: 'login' });
+    const c = rig(); c.live(W({ you: YOU, login: true })); c.dock.say('hello'); ['what', 5, null, undefined, {}, 'constructor', '__proto__', 'here'].forEach((code) => c.s().recv({ t: 'err', code }));
+    const cNote = c.note(); c.s().recv({ t: 'err', code: 'rate' });
+    same('err login: "Log in with Discord to chat" where the hub has a login, "Chat is read-only for now" where it has none; a code that is not one of the hub\'s answers to a line (a refused `here` has its own: "here") is no answer to a line: no word, and the line still waits for its own',
+        [a.note(), b.note(), cNote, c.note(), c.field().value], ['Log in with Discord to chat', 'Chat is read-only for now', '', 'Slow down a little', 'hello']);
+    const noLine = rig(); noLine.live(W({ you: YOU }));
+    ['rate', 'bad', 'login', 'muted', 'banned', 'young'].forEach((code) => noLine.s().recv({ t: 'err', code }));
+    same('an err when no line of this page is in flight is not for a line of this page: no word, nothing put in the field', [noLine.note(), noLine.field().value], ['', '']);
+    const lateErr = rig(); lateErr.live(W({ you: YOU })); lateErr.dock.say('hello'); lateErr.clock.advance(9000); lateErr.s().recv({ t: 'err', code: 'rate' });
+    same('(a line that had no answer for 8 s is not waited for: a late err is nobody\'s)', [lateErr.note(), lateErr.field().value], ['', '']);
+    const badCommand = rig(); badCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); badCommand.dock.say('/mute nobody 5'); badCommand.s().recv({ t: 'err', code: 'bad' });
+    same('a moderator\'s command that the hub refuses is told, with nothing put in the field, and the dock stays live: it is in flight for a few seconds', [badCommand.note(), badCommand.field().value, badCommand.dock.state()], ['That line could not be sent', '', 'live']);
+    const oldCommand = rig(); oldCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); oldCommand.dock.say('/mute nobody 5'); oldCommand.clock.advance(9000); oldCommand.s().recv({ t: 'err', code: 'bad' });
+    same('... and not 8 s later', oldCommand.note(), '');
     const d = rig(); d.live(W({ you: YOU })); d.dock.say('hello'); d.s().recv({ t: 'err', code: 'rate' });
     check('a line that the hub refused comes back into the field (nothing typed is lost)', d.field().value === 'hello');
     d.field().value = 'new words'; d.dock.say('again'); d.s().recv({ t: 'err', code: 'bad' });
@@ -404,7 +415,7 @@ function rig(o) {
     same('a short echo ("lo": under half of "hello world", no part of "hi") answers neither of two lines that wait: the refusals give back "hello world", then "hi"', [refusedFirst, shortPair.field().value], ['hello world', 'hi']);
     const idle = rig(); idle.live(W({ you: YOU }));
     idle.s().recv({ t: 'err', code: 'rate' });
-    check('an err with nothing waiting for an answer takes nothing back, says the words of the err, and no code of the dock throws (the page\'s guard would hide a throw: the dock\'s error hook is looked at)', idle.field().value === '' && idle.note() === 'Slow down a little' && idle.errors.length === 0, String(idle.errors[0]));
+    check('an err with nothing waiting for an answer is not for a line of this page: it takes nothing back, says nothing, and no code of the dock throws (the page\'s guard would hide a throw: the dock\'s error hook is looked at)', idle.field().value === '' && idle.note() === '' && idle.errors.length === 0, String(idle.errors[0]));
     const stranger = rig(); stranger.live(W({ you: YOU }));
     stranger.dock.say('hello world'); stranger.s().recv(L(77, 'maple.leaf', 'goodbye'));
     stranger.s().recv({ t: 'err', code: 'rate' });

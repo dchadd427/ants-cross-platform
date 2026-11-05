@@ -119,7 +119,7 @@
   {
    "id": "the_visitor_is_listed_twice",
    "file": "web/home/players.js",
-   "old": "if (!(you && row.name === you.name)) out[row.mod ? 'mod' : row.at].push(row);",
+   "old": "if (row.id !== me) out[row.mod ? 'mod' : row.at].push(row);",
    "new": "out[row.mod ? 'mod' : row.at].push(row);",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -301,14 +301,14 @@
   {
    "id": "a_join_in_the_own_room",
    "file": "web/home/players.js",
-   "old": "join: r.code !== '' && r.code !== own",
-   "new": "join: r.code !== ''",
+   "old": "join: r.listed && r.code !== own",
+   "new": "join: r.listed",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "a_join_for_every_row",
    "file": "web/home/players.js",
-   "old": "join: r.code !== '' && r.code !== own",
+   "old": "join: r.listed && r.code !== own",
    "new": "join: true",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -504,8 +504,8 @@
   {
    "id": "the_games_list_runs_into_the_big_panel",
    "file": "web/home/players.css",
-   "old": ".pl-on .gdock { right: 308px; width: min(560px, calc(100% - 736px)); }",
-   "new": ".pl-on .gdock { right: 288px; width: min(560px, calc(100% - 716px)); }",
+   "old": "@media (min-width: 1180px) and (max-width: 1279px) and (min-height: 501px) { .pl-on .gdock { right: 288px; width: min(560px, calc(100% - 716px)); } }",
+   "new": "@media (min-width: 1180px) and (max-width: 1279px) and (min-height: 501px) { .pl-on .gdock { right: 280px; width: min(560px, calc(100% - 700px)); } }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -611,6 +611,125 @@
    "file": "web/home/players.js",
    "old": " && client.isLeader && client.isLeader()) say.code = client.code;",
    "new": ") say.code = client.code;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_community_map_is_named_by_the_hub",
+   "file": "web/home/players.js",
+   "old": "if (!row.mapName && row.guess && game && game.name === row.guess) copy.mapName = row.guess;",
+   "new": "if (!row.mapName && row.guess) copy.mapName = row.guess;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_community_map_is_named_by_any_room_of_the_list",
+   "file": "web/home/players.js",
+   "old": "if (!row.mapName && row.guess && game && game.name === row.guess) copy.mapName = row.guess;",
+   "new": "if (!row.mapName && row.guess && game) copy.mapName = row.guess;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_join_without_a_games_row",
+   "file": "web/home/players.js",
+   "old": "join: r.listed && r.code !== own",
+   "new": "join: r.code !== '' && r.code !== own",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_visitors_own_map_is_not_trusted",
+   "file": "web/home/players.js",
+   "old": "row.mapName = row.mapName || row.guess; youList",
+   "new": "row.mapName = row.mapName; youList",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_originals_name_is_not_used",
+   "file": "web/home/players.js",
+   "old": "row.mapName = known ? known.name : '';",
+   "new": "row.mapName = '';",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_wrong_row_is_the_visitors",
+   "file": "web/home/players.js",
+   "old": "if (row.id !== me) out[row.mod ? 'mod' : row.at].push(row);",
+   "new": "if (row.id === me) out[row.mod ? 'mod' : row.at].push(row);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_welcome_names_no_row",
+   "file": "web/home/players.js",
+   "old": "me = whole(m && m.me, 0, LIMIT.ids) ? m.me : null;",
+   "new": "me = null;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_buttons_say_the_whole_number",
+   "file": "web/home/players.js",
+   "old": "p[0].hidden = !counted; p[0].textContent = badge(model.n);",
+   "new": "p[0].hidden = !counted; p[0].textContent = countText(model.n);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_cap_of_a_button_is_100",
+   "file": "web/home/players.js",
+   "old": "badge: 99, map: 28",
+   "new": "badge: 100, map: 28",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_header_says_99plus",
+   "file": "web/home/players.js",
+   "old": "total.textContent = countText(model.n);",
+   "new": "total.textContent = badge(model.n);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_name_of_a_button_has_the_capped_number",
+   "file": "web/home/players.js",
+   "old": "counted ? TEXT.title + ' (' + countText(model.n) + ')' : TEXT.title",
+   "new": "counted ? TEXT.title + ' (' + badge(model.n) + ')' : TEXT.title",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_community_map_is_a_guess_that_is_not_kept",
+   "file": "web/home/players.js",
+   "old": "row.guess = known ? '' : rules.communityName(raw.map).slice(0, LIMIT.map);",
+   "new": "row.guess = '';",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_games_list_rule_is_for_every_wide_window",
+   "file": "web/home/players.css",
+   "old": "@media (min-width: 1180px) and (max-width: 1279px) and (min-height: 501px) { .pl-on .gdock {",
+   "new": "@media (min-width: 1180px) and (min-height: 501px) { .pl-on .gdock {",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_games_list_rule_returns_for_a_big_window",
+   "file": "web/home/players.css",
+   "old": "@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; } }",
+   "new": "@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; } .pl-on .gdock { right: 308px; width: min(560px, calc(100% - 736px)); } }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_word_stays_too_long",
+   "file": "web/home/players.css",
+   "old": "@media (max-width: 380px) { .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }",
+   "new": "@media (max-width: 369px) { .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bar_is_not_closer_under_360",
+   "file": "web/home/players.css",
+   "old": "@media (max-width: 359px) { .pl-on .hbar .hright { gap: 6px; } .pl-on .hbar .pl-bar { padding: 6px 8px; gap: 6px; } .pl-bar .pill { margin-left: 0; padding: 0 6px; font-size: 14px; } }",
+   "new": "@media (max-width: 359px) { }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bar_button_keeps_homes_padding",
+   "file": "web/home/players.css",
+   "old": "@media (max-width: 440px) { .pl-on .hbar .pl-bar { padding: 6px 10px; } }",
+   "new": "@media (max-width: 440px) { .pl-bar { padding: 6px 10px; } }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

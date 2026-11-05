@@ -14,7 +14,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var LIMIT = { rows: 200, name: 32, seats: 4, ids: 1e9, here: 500, map: 28 };       // (the hub's own: 200 rows, names of 32, four colors; a map's name is cut for the line as the Games list cuts it)
+    var LIMIT = { rows: 200, name: 32, seats: 4, ids: 1e9, here: 500, badge: 99, map: 28 };       // (the hub's own: 200 rows, names of 32, four colors; a map's name is cut for the line as the Games list cuts it)
     var MS = { poll: 1000, tell: 3000, note: 4000 };                      // (poll: the page looks at its own room this often; tell: the hub is told what changed at most this often)
     var WIDE = '(min-width: 1180px) and (min-height: 501px)';             // the panel is docked at the right of the Yard (players.css has the same breakpoint); a narrower window has the button and the sheet
     var ROOM = /^[a-z0-9_-]{1,32}$/;
@@ -23,7 +23,7 @@
     var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing' };
     var TEXT = {
         title: 'Players', here: ' here now', you: 'you', mod: 'mod', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
-        guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
+        guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', badges: '99+', player: ' player', players: ' players', of: ' of ',
         empty: 'Just you here. Host a game!', emptyNote: 'People who log in with Discord show up here by name.', host: '+ Host a game',
         off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games, rooms and the Yard work as always; this list comes back by itself.',
         fold: 'Fold the list', unfold: 'Open the list', close: 'Close the list', button: 'Players'
@@ -37,17 +37,18 @@
         return first.length > 1 && first.charAt(first.length - 1) === '…' ? first.slice(0, -1) : first;
     }
     function fresh() { return { rows: Object.create(null), n: 0, g: 0, more: 0 }; }
-    // One row of the hub's list, cleaned: { id, name, at, mod, pub, map, mapName, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
+    // One row of the hub's list, cleaned: { id, name, at, mod, pub, map, mapName, guess, n, of, code }, or null when it is not a row. A room's details are kept for a public room only, a code for a room that waits only.
+    // mapName is an original's name (the page's own table); guess is what a community map would be called, which is drawn only where the Games list shows the same room under the same name (the hub's words are not drawn).
     function rowOf(raw, Chat, rules) {
         if (!raw || typeof raw !== 'object' || !whole(raw.i, 0, LIMIT.ids) || typeof raw.name !== 'string' || STATUS.indexOf(raw.at) === -1) return null;
         var name = Chat.clip(Chat.plain(raw.name.slice(0, LIMIT.name * 4), true), LIMIT.name);
         if (!name) return null;
-        var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, pub: false, map: '', mapName: '', n: -1, of: -1, code: '' };
+        var row = { id: raw.i, name: name, at: raw.at, mod: raw.mod === true, pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' };
         if (raw.pub === true) {
             row.pub = true;
             if (typeof raw.map === 'string' && rules.validMapFile(raw.map)) {
                 var known = rules.mapOfFile(raw.map);
-                row.map = raw.map; row.mapName = known ? known.name : rules.communityName(raw.map).slice(0, LIMIT.map);
+                row.map = raw.map; row.mapName = known ? known.name : ''; row.guess = known ? '' : rules.communityName(raw.map).slice(0, LIMIT.map);
             }
             if (whole(raw.n, 0, LIMIT.seats)) row.n = raw.n;
             if (whole(raw.of, 1, LIMIT.seats) && raw.of >= row.n) row.of = raw.of;
@@ -67,12 +68,12 @@
         for (id in rows) kept++;
         return kept > LIMIT.rows ? null : { rows: rows, n: m.n, g: m.g, more: m.more };
     }
-    // The rows in their groups, each by name; the visitor's own row is shown apart and is not among them
-    function listOf(model, you) {
+    // The rows in their groups, each by name; the visitor's own row (its number, `me`, comes with the hub's welcome) is shown apart and is not among them
+    function listOf(model, me) {
         var out = { mod: [], look: [], wait: [], play: [] };
         for (var id in model.rows) {
             var row = model.rows[id];
-            if (!(you && row.name === you.name)) out[row.mod ? 'mod' : row.at].push(row);
+            if (row.id !== me) out[row.mod ? 'mod' : row.at].push(row);
         }
         GROUPS.forEach(function (g) { out[g[0]].sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id; }); });
         return out;
@@ -114,7 +115,7 @@
         var now = env.now || function () { return Date.now(); };
         var yard = env.yard || host;
         var phase = 'none', supported = null, live = false, asked = false, you = null, model = fresh();      // phase: 'none' (nothing shows), 'off' (the hub is not there), 'on'
-        var open = false, opener = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], timers = { poll: 0, note: 0 };
+        var me = null, open = false, opener = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], timers = { poll: 0, note: 0 };
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -128,6 +129,7 @@
         function stop(name) { if (timers[name]) { clearTimeout(timers[name]); timers[name] = 0; } }
         function docked() { try { return !!win.matchMedia && win.matchMedia(WIDE).matches; } catch (e) { return false; } }
         function countText(n) { return n > LIMIT.here ? TEXT.many : String(n); }
+        function badge(n) { return n > LIMIT.badge ? TEXT.badges : String(n); }          // (the buttons are small: 99+)
         function find(selector) { try { return host.querySelector ? host.querySelector(selector) : null; } catch (e) { return null; } }
         function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
@@ -162,6 +164,17 @@
 
         // ---- what is drawn ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function ownCode() { var c = page.client ? page.client() : null; return c && c.code ? c.code : ''; }
+        function gameOf(code) {                                          // the Games list's own row of a room (the game server's public list): its Join button, and the map's name that it shows
+            var b = find('.gjoin[data-code="' + code + '"]'), item = b && b.parentNode, name = item && item.querySelector ? item.querySelector('.gmapname') : null;
+            return b ? { name: name ? name.textContent : '' } : null;
+        }
+        function named(row) {                                            // the row as it is drawn: `listed` when the Games list has that room (a Join is offered only then), and a community map's name only if that row shows the same
+            var game = row.code ? gameOf(row.code) : null, copy = {};
+            for (var k in row) copy[k] = row[k];
+            copy.listed = !!game;
+            if (!row.mapName && row.guess && game && game.name === row.guess) copy.mapName = row.guess;
+            return copy;
+        }
         function quick() { return env.quickHost; }
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
             var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label);
@@ -189,7 +202,7 @@
             var s = el('section', 'pl-group'), h = el('h3', 'pl-gh'), mark = el('i', 'pl-gd'), ul = el('ul', 'pl-cards');
             s.setAttribute('data-g', key); mark.setAttribute('aria-hidden', 'true');
             put(h, [mark, el('span', '', label), el('span', 'pl-gn', String(rows.length))]);
-            rows.forEach(function (r) { ul.appendChild(card(r, { label: key === 'mod', join: r.code !== '' && r.code !== own })); });
+            rows.forEach(function (r) { ul.appendChild(card(r, { label: key === 'mod', join: r.listed && r.code !== own })); });
             return put(s, [h, ul]);
         }
         function guests(n, cls) {                                        // "+ 4 guests, not logged in": counted, never named (in the list on a short window, under it otherwise)
@@ -199,10 +212,10 @@
             return put(g, [av, text]);
         }
         function paintBody() {                                           // the part under the header: made again only when what it shows changed (the scroll and the focus stay where they were)
-            var q = quick(), own = ownCode(), shown = listOf(model, you), people = 0;
-            GROUPS.forEach(function (x) { people += shown[x[0]].length; });
+            var q = quick(), own = ownCode(), shown = listOf(model, me), people = 0;
+            GROUPS.forEach(function (x) { shown[x[0]] = shown[x[0]].map(named); people += shown[x[0]].length; });
             var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, doing: doing } : null;
-            var sig = JSON.stringify([phase, mine, own, !!(q && !q.disabled), model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.pub, r.map, r.n, r.of, r.code]; }); })]);
+            var sig = JSON.stringify([phase, mine, own, !!(q && !q.disabled), model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.pub, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
             if (sig === painted) return;
             var active = doc.activeElement, focused = active && active.getAttribute ? active.getAttribute('data-code') : null, scroll = list.scrollTop;
             painted = sig;
@@ -210,7 +223,7 @@
             if (phase === 'off') { put(offBox, [el('p', '', TEXT.off), el('p', 'small', TEXT.offNote)]); body.appendChild(offBox); return; }
             if (you) {                                                   // the visitor, first, as the page knows it (not as the hub last said)
                 var row = rowOf({ i: 0, name: you.name, at: doing ? doing.at : 'look', mod: you.mod, pub: !!(doing && doing.pub), map: doing && doing.map, n: doing && doing.n, of: doing && doing.of }, Chat, rules);
-                if (row) { youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }
+                if (row) { row.mapName = row.mapName || row.guess; youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }       // (the page's own room: its map's name is its own word)
             }
             body.appendChild(status);
             if (empty) {
@@ -236,7 +249,7 @@
             var counted = on && model.n > 1;                             // (just the visitor is no count)
             total.hidden = !counted; dot.hidden = on; total.textContent = countText(model.n); total.setAttribute('aria-label', countText(model.n) + TEXT.here);
             [[cornerPill, corner], [barPill, barBtn]].forEach(function (p) {
-                p[0].hidden = !counted; p[0].textContent = countText(model.n);
+                p[0].hidden = !counted; p[0].textContent = badge(model.n);
                 p[1].setAttribute('aria-label', counted ? TEXT.title + ' (' + countText(model.n) + ')' : TEXT.title);
             });
             if (shown) paintBody();
@@ -319,6 +332,7 @@
             if (kind === 'live') {
                 var name = m && m.you && typeof m.you === 'object' && typeof m.you.name === 'string' ? Chat.clip(Chat.plain(m.you.name.slice(0, LIMIT.name * 4), true), LIMIT.name) : '';
                 supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh();
+                me = whole(m && m.me, 0, LIMIT.ids) ? m.me : null;
                 you = name ? { name: name, mod: m.you.mod === true } : null;
                 if (!supported) phase = 'none'; else { doing = look(); tell(); ask(); }
             } else if (kind === 'who') {
@@ -326,7 +340,7 @@
                 if (!next) return;
                 model = next; phase = 'on';
             } else if (kind === 'lost') {
-                live = false; asked = false; model = fresh();
+                live = false; asked = false; model = fresh(); me = null;
                 phase = supported === false ? 'none' : 'off';
             } else if (kind === 'shown') { if (!m) hide(false); return; }          // (the Room shows: a sheet that was open is closed)
             else return;

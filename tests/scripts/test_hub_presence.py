@@ -4,14 +4,19 @@
 A page that has the front page open says what its visitor is doing (looking, waiting in a room, in a match) and asks for the list; the hub keeps it in memory for as long as the socket is open and sends the
 whole list once and then the changes, at most every two seconds. What this file checks:
 
-  - the count: an account is one person however many tabs it has, a guest is one socket, a closed socket is nobody; the chat's "here now" is that number (welcome, ping, the broadcast);
+  - the count: an account is one person however many tabs it has, a guest is one socket, a closed socket is nobody; the chat's "here now" is that number (welcome, ping, the broadcast), counted again only
+    when the sockets change (a ping is answered from the last count);
   - the list: the people by their account's name (never an id), moderators marked, the one that does the most of an account's sockets is its row, the order, the cap (200 rows and a count of the rest),
-    a guest counted and never named, the numbers of a row stay while the person is here;
-  - what a page may say: nothing but looking, waiting and playing, with a map's file name, seats and a room's code only for a room that the page calls public (a private room, a match, a visitor who is looking
-    carry none of it, and a code is never relayed for a room that is not announced as public), every field checked for its kind and size, a guest cannot say anything;
-  - the sends: nothing to a socket that did not ask, the whole list at the first ask and again only after 10 seconds, the changes in one frame at most every 2 seconds (a flapping person is one change), a
-    change of more than 50 rows is the whole list, and a page that asked in the middle of an interval is brought to the same list as the others (a random run against a model of the page);
+    a guest counted and never named, the numbers of a row stay while the person is here, and the welcome says which row is the account's own (`me`);
+  - who may chat: a banned account is a guest in the list (counted, never named), a muted or too new account is named and has none of the room's details, whatever its page said;
+  - what a page may say: nothing but looking, waiting and playing, with a map's file name (exactly what the game takes: every map of the repository, and the game's own list of good and bad names), seats and a
+    room's code only for a room that the page calls public (a private room, a match, a visitor who is looking carry none of it, and a code is never relayed for a room that is not announced as public), every
+    field checked for its kind and size, a guest cannot say anything, a `here` that is refused has a code of its own;
+  - the sends: nothing to a socket that did not ask, the whole list at the first ask and again only after 10 seconds, the changes in one frame to every watcher at once and never sooner than 2 seconds after
+    the last send whatever happens (a flapping person and a crowd that comes and asks are one change; an ask brings nothing forward), a change of more than 50 rows is the whole list, the first page to ask
+    when nobody keeps the list current gets it as it is now (a random run against a model of the page);
   - memory only: nothing is added to the database, a socket that is gone leaves the list and the hub's own tables, the log of a real process holds no name, map or code of the list;
+  - the clock: the list's own work cannot stop the retention, and the log says sockets for the number of open sockets;
   - on real sockets (tests/scripts/hub_rig.py): the list over the wire, a name that is not a username is a guest, a guest's `here` is refused, a flood of `here` frames is no cheaper than a flood of
     anything else (the socket is closed).
 tests/data/hub_presence_mutants.json breaks the rules one at a time for tools/mutate.py (every one must be caught).
@@ -51,11 +56,13 @@ class FakePeer:
     def __init__(self, identity=None):
         self.identity = identity
         self.sent = []
+        self.sizes = []
         self.strikes = 0
         self.charges = 0
         self.closed = False
 
     def send_text(self, data):
+        self.sizes.append(len(data))
         self.sent.append(json.loads(data.decode("utf-8")))
 
     def strike(self):
@@ -72,6 +79,28 @@ class FakePeer:
 
     def codes(self):
         return [m["code"] for m in self.kinds("err")]
+
+
+class FakeWriter:
+    """The part of an asyncio StreamWriter that hub.server.Peer uses."""
+
+    class transport:
+        @staticmethod
+        def get_write_buffer_size():
+            return 0
+
+        @staticmethod
+        def abort():
+            pass
+
+    def write(self, data):
+        pass
+
+    def is_closing(self):
+        return False
+
+    def close(self):
+        pass
 
 
 class Page:
@@ -116,6 +145,11 @@ class World:
         peer.closed = True
         self.chat.peers.discard(peer)
 
+    def shut(self, peer):
+        """A socket that closes and that the hub has not let go of yet (hub.server.Peer.closed tells the set of sockets that it changed)."""
+        peer.closed = True
+        self.chat.peers.version += 1
+
     def send(self, peer, **message):
         self.chat.on_text(peer, json.dumps(message))
 
@@ -148,7 +182,8 @@ class WorldTest(unittest.TestCase):
 class TheLimits(unittest.TestCase):
     def test_they_are_the_documented_ones(self):
         limits = limitmod.Limits()
-        self.assertEqual((limits.who_rows_max, limits.who_seconds, limits.who_soon_seconds, limits.who_resend_seconds, limits.who_diff_max), (200, 2.0, 0.25, 10.0, 50))
+        self.assertEqual((limits.who_rows_max, limits.who_seconds, limits.who_resend_seconds, limits.who_diff_max), (200, 2.0, 10.0, 50))
+        self.assertFalse(hasattr(limits, "who_soon_seconds"), "an ask brings no send forward")
         self.assertEqual(presence.SEATS, 4)
         self.assertEqual(presence.AT, ("look", "wait", "play"))
 
@@ -171,9 +206,86 @@ class TheCount(WorldTest):
 
     def test_a_closed_socket_is_nobody_even_before_the_hub_has_let_go_of_it(self):
         a, g = self.w.join(person(1)), self.w.join(None)
-        a.closed = True
+        self.assertEqual(self.w.presence.people(), 2)
+        self.w.shut(a)
         self.assertEqual(self.w.presence.people(), 1)
-        g.closed = True
+        self.w.shut(g)
+        self.assertEqual(self.w.presence.people(), 0)
+
+    def test_the_number_is_counted_again_only_when_the_sockets_change(self):
+        looked = []
+
+        class Counting(FakePeer):
+            @property
+            def identity(self):
+                looked.append(1)
+                return self._identity
+
+            @identity.setter
+            def identity(self, value):
+                self._identity = value
+
+        for n in range(1, 6):
+            self.w.chat.peers.add(Counting(person(n)))
+        self.assertEqual(self.w.presence.people(), 5)
+        counted = len(looked)
+        for _ in range(100):
+            self.assertEqual(self.w.presence.people(), 5)
+        self.assertEqual(len(looked), counted, "a hundred pings are answered from the last count")
+        self.w.chat.peers.add(Counting(person(6)))
+        self.assertEqual(self.w.presence.people(), 6)
+        self.assertGreater(len(looked), counted)
+
+    def test_every_way_to_change_the_set_of_sockets_tells_the_count(self):
+        readers = {"copy", "difference", "intersection", "isdisjoint", "issubset", "issuperset", "symmetric_difference", "union"}
+        mutators = {name for name in dir(set) if not name.startswith("_") and name not in readers} | {"__ior__", "__iand__", "__isub__", "__ixor__"}
+        self.assertEqual(sorted(name for name in mutators if getattr(presence.Peers, name) is getattr(set, name)), [], "a way to change the set that the count is not told of")
+        peers, a, b = presence.Peers(), FakePeer(person(1)), FakePeer(person(2))
+        version = [peers.version]
+
+        def changed(label):
+            self.assertGreater(peers.version, version[0], label)
+            version[0] = peers.version
+
+        peers.add(a); changed("add")
+        peers.update([b]); changed("update")
+        peers.discard(b); changed("discard")
+        peers.remove(a); changed("remove")
+        peers.add(a); changed("add again")
+        peers.pop(); changed("pop")
+        peers.update([a, b]); changed("update again")
+        peers.difference_update([b]); changed("difference_update")
+        peers.intersection_update([a]); changed("intersection_update")
+        peers.symmetric_difference_update([b]); changed("symmetric_difference_update")
+        peers |= {a}; changed("|=")
+        peers &= {a}; changed("&=")
+        peers -= {b}; changed("-=")
+        peers ^= {b}; changed("^=")
+        peers.clear(); changed("clear")
+        self.assertIsInstance(peers, set)
+        self.assertIsInstance(self.w.chat.peers, presence.Peers, "the chat's own sockets are counted this way")
+
+    def test_a_real_socket_that_closes_is_nobody_at_once(self):
+        from hub import config as configmod, log as logmod, server
+        import io
+        hub = server.Hub(configmod.Config(db=self.w.db), self.w.store, session.NoLogin(), logmod.Log(io.StringIO()), limitmod.Limits(), clock=lambda: 100.0)
+        peer = server.Peer(hub, FakeWriter(), "k", "tag", person(1), 0.0)
+        hub.chat.peers.add(peer)
+        self.assertEqual(hub.chat.presence.people(), 1)
+        peer.close(1000, "bye")
+        self.assertEqual(hub.chat.presence.people(), 0, "closed, and the hub has not let go of it yet")
+        other = server.Peer(hub, FakeWriter(), "k", "tag", None, 0.0)
+        hub.chat.peers.add(other)
+        self.assertEqual(hub.chat.presence.people(), 1)
+        other.closed = True
+        self.assertEqual(hub.chat.presence.people(), 0, "whatever closes a socket")
+
+    def test_a_count_that_missed_a_change_is_counted_again_at_the_next_tick(self):
+        a = self.w.join(person(1))
+        self.assertEqual(self.w.presence.people(), 1)
+        a.closed = True                                                # (a socket that closes without a word to the count)
+        self.assertEqual(self.w.presence.people(), 1)
+        self.w.advance(1.0)
         self.assertEqual(self.w.presence.people(), 0)
 
     def test_the_chats_here_now_is_that_number_in_the_welcome_the_answer_to_a_ping_and_the_broadcast(self):
@@ -245,6 +357,25 @@ class TheList(WorldTest):
         self.assertIs(a.frames()[0]["full"], True)
         self.assertEqual((page.n, page.g, page.more), (3, 1, 0))
         self.assertEqual(sorted(self.names(page)), ["alice", "bob"])
+
+    def test_the_welcome_of_a_login_says_which_row_is_its_own_and_a_reader_has_none(self):
+        a1, a2, b, g = self.w.join(person(1, "alice")), self.w.join(person(1, "alice")), self.w.join(person(2, "bob")), self.w.join(None)
+        mine = [self.w.chat.welcome(p)["me"] for p in (a1, a2, b)]
+        self.assertEqual((mine[0], len(set(mine))), (mine[1], 2), "an account has one row, however many tabs; two accounts two")
+        self.assertNotIn("me", self.w.chat.welcome(g))
+        page = self.w.watch(g).update()
+        self.assertEqual(sorted(page.rows), sorted(mine[1:]), "the number is the row's own, and the same in the list")
+        self.assertEqual(page.rows[mine[0]]["name"], "alice")
+        a3 = self.w.join(person(1, "alice"))
+        self.assertEqual(self.w.chat.welcome(a3)["me"], mine[0], "and it stays while the account has a socket")
+        self.w.leave(a1)
+        self.w.leave(a2)
+        self.w.advance(2.5)
+        self.assertEqual(sorted(r["name"] for r in page.update().rows.values()), ["alice", "bob"], "a third tab keeps the row")
+        self.w.leave(a3)
+        self.w.advance(2.5)
+        self.assertEqual([r["name"] for r in page.update().rows.values()], ["bob"])
+        self.assertNotEqual(self.w.chat.welcome(self.w.join(person(1, "alice")))["me"], mine[0], "an account that came back is a new row")
 
     def test_a_row_has_the_name_and_where_and_never_an_account_id(self):
         a = self.w.join(person(1, "alice"))
@@ -319,6 +450,14 @@ class TheList(WorldTest):
         self.assertEqual((watcher.n, watcher.g, watcher.more), (10, 1, 4))
         self.assertEqual(sorted(r["name"] for r in watcher.rows.values()), ["moddy", "p01", "p02", "p07", "p08"], "the moderator, the two who wait, then those who look by name")
 
+    def test_the_biggest_frame_is_the_size_that_the_docs_say(self):
+        for n in range(1, 201):
+            peer = self.w.join(person(n, "n" * 29 + "%03d" % n))
+            self.w.here(peer, "wait", pub=True, map="M" * 60 + ".lvl", n=3, of=4, code="c" * 32)
+        watcher = self.w.watch(self.w.join(None))
+        self.assertEqual(len(watcher.update().rows), 200)
+        self.assertTrue(40000 < max(watcher.peer.sizes) < 42000, "200 rows with the longest name, map and code that a row can have are about 41 KB: %d" % max(watcher.peer.sizes))
+
     def test_the_number_of_a_row_stays_while_the_person_is_here_and_is_new_when_they_come_back(self):
         a = self.w.join(person(1, "alice"))
         watcher = self.w.watch(self.w.join(None))
@@ -381,21 +520,64 @@ class WhatAPageSays(WorldTest):
                dict(at="wait", pub=True, n=True), dict(at="wait", pub=True, n="2"), dict(at="wait", pub=True, n=5), dict(at="wait", pub=True, n=-1), dict(at="wait", pub=True, n=1.5),
                dict(at="wait", pub=True, of=0), dict(at="wait", pub=True, of=5), dict(at="wait", pub=True, n=3, of=2),
                dict(at="wait", pub=True, map=7), dict(at="wait", pub=True, map="TREASURE"), dict(at="wait", pub=True, map="a/b.LVL"), dict(at="wait", pub=True, map="..\\x.LVL"), dict(at="wait", pub=True, map=".hidden.LVL"),
-               dict(at="wait", pub=True, map="TREASURE.LVL "), dict(at="wait", pub=True, map="TREA  SURE.LVL"), dict(at="wait", pub=True, map="TREASURE\u202e.LVL"), dict(at="wait", pub=True, map="TREAS\u200bURE.LVL"),
+               dict(at="wait", pub=True, map="TREASURE.LVL "), dict(at="wait", pub=True, map="TREASURE.Lvl"), dict(at="wait", pub=True, map="TREASURE.LVL\n"), dict(at="wait", pub=True, map="TREASURE\u202e.LVL"), dict(at="wait", pub=True, map="TREAS\u200bURE.LVL"),
                dict(at="wait", pub=True, map="x" * 70 + ".LVL"), dict(at="wait", pub=True, map="<b>.LVL"), dict(at="wait", pub=True, map="caf\u00e9.LVL"), dict(at="wait", pub=True, map="TREASURE.TXT"),
-               dict(at="wait", pub=True, code="ABCDEF"), dict(at="wait", pub=True, code=""), dict(at="wait", pub=True, code="x" * 33), dict(at="wait", pub=True, code="a b"), dict(at="wait", pub=True, code=5),
+               dict(at="wait", pub=True, code="ABCDEF"), dict(at="wait", pub=True, code="abcdef\n"), dict(at="wait", pub=True, code=""), dict(at="wait", pub=True, code="x" * 33), dict(at="wait", pub=True, code="a b"), dict(at="wait", pub=True, code=5),
                dict(at="look", n=9), dict(at="look", map="nope"), dict(at="look", code="UPPER")]
         for fields in bad:
             before = self.a.strikes
             self.w.here(self.a, **fields)
-            self.assertEqual(self.a.codes()[-1:], ["bad"], fields)
+            self.assertEqual(self.a.codes()[-1:], ["here"], fields)
             self.assertEqual(self.a.strikes, before + 1, fields)
         self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "wait", "pub": True, "map": "TREASURE.LVL", "n": 2, "of": 4, "code": "c1v3rr"})
+
+    def test_a_map_with_two_spaces_in_its_name_is_a_map(self):
+        for name in ("Bomber Match  by PRo.lvl", "FKD  Deathmatch.lvl", "PoP iT Up  PoPcOrN.lvl", "OHH MY GOD..  TRAP!!.lvl", "a.LVL", " lead.lvl", "trail .lvl", "x" * 60 + ".LVL"):
+            self.w.here(self.a, "wait", pub=True, map=name, n=1, of=4, code="c1v3rr")
+            self.assertEqual((self.a.codes(), self.a.strikes), ([], 0), name)
+            self.assertEqual(self.row()["map"], name)
+
+    def test_the_hub_takes_exactly_the_map_names_that_the_game_takes(self):
+        def game_takes(name):                                   # net::valid_map_name (src/ants_net/protocol.cpp)
+            if len(name) < 5 or len(name) > 64:
+                return False
+            if any(ord(c) < 0x20 or ord(c) > 0x7E or c in '/\\:*?"<>|' for c in name):
+                return False
+            return name[0] != "." and name[-4:] in (".LVL", ".lvl")
+        unit_test = {                                           # the names in tests/test_net/test_lobby_basics.cpp
+            True: ["TREASURE.LVL", "my-map_2.lvl", "!!!! My Map ~v2~ (final).lvl", "ANTS WORLD....lvl", "Beach Day !...lvl", "OHH MY GOD..  TRAP!!.lvl", "Lero .lvl", "#1 Map $5 & It's.lvl", "a.LVL", "x y.lvl",
+                   "M" * 60 + ".lvl"],
+            False: ["../secret.LVL", "a/b.LVL", "a\\b.LVL", ".hidden.LVL", "x.txt", "LVL", "a:b.LVL", "a*b.lvl", "a?b.lvl", 'a"b.lvl', "a<b.lvl", "a>b.lvl", "a|b.lvl", "tab\t.lvl", "del\x7f.lvl", "caf\u00e9.lvl",
+                    "nul\0x.lvl", "x.lv", "x.lvlx", "..lvl", "M" * 61 + ".lvl", "", "x.Lvl", "x.lVL", "name.lvl ", "\ufeffname.lvl"],
+        }
+        for expected, names in unit_test.items():
+            for name in names:
+                self.assertEqual((presence.map_file(name) is not None, game_takes(name)), (expected, expected), repr(name))
+        rng = random.Random(7)
+        alphabet = "abcXYZ019 .!~#$&'()-_+=,;[]{}@%^`" + '/\\:*?"<>|' + "\t\n\r\x00\x1f\x7f\u00e9\u202e\u200b"
+        for _ in range(30000):
+            name = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 70)))
+            name = rng.choice(["", ".", " ", "..", "x"]) + name + rng.choice([".lvl", ".LVL", ".Lvl", ".lvL", ".lv", "lvl", "", ".lvl\n", ".lvl "])
+            self.assertEqual(presence.map_file(name) is not None, game_takes(name), repr(name))
+        for value in (None, 5, b"x.lvl", ["x.lvl"]):
+            self.assertIsNone(presence.map_file(value))
+
+    def test_it_takes_every_map_of_the_repository_and_keeps_it_as_it_is(self):
+        names = []
+        for folder, ending in (("Community-Maps", ".lvl"), (os.path.join("Original-Ants", "Maps"), ".lvl")):
+            names += [n for n in sorted(os.listdir(os.path.join(REPO, folder))) if n.lower().endswith(ending)]
+        self.assertGreaterEqual(len(names), 500, "the folders of the maps were not found")
+        refused = [n for n in names if presence.map_file(n) != n]
+        self.assertEqual(refused, [], "maps that the game takes and the hub does not")
+        for name in [n for n in names if "  " in n] + names[::50]:
+            self.w.here(self.a, "wait", pub=True, map=name, n=1, of=4, code="c1v3rr")
+            self.assertEqual(self.a.codes(), [], name)
+        self.assertGreaterEqual(len([n for n in names if "  " in n]), 1, "the maps with two spaces are in the folder, and in this test")
 
     def test_a_message_that_is_not_an_object_with_an_at_is_a_mistake_too(self):
         for raw in ('{"t":"here"}', '{"t":"here","at":""}', '{"t":"here","at":"LOOK"}'):
             self.w.chat.on_text(self.a, raw)
-        self.assertEqual(self.a.codes(), ["bad", "bad", "bad"])
+        self.assertEqual(self.a.codes(), ["here", "here", "here"])
 
     def test_a_guest_cannot_say_where_it_is(self):
         g = self.w.join(None)
@@ -413,6 +595,85 @@ class WhatAPageSays(WorldTest):
     def test_a_valid_message_costs_nothing_and_says_nothing_back(self):
         self.w.here(self.a, "wait", pub=True, map="TREASURE.LVL", n=2, of=4, code="c1v3rr")
         self.assertEqual((self.a.sent, self.a.strikes, self.a.charges), ([], 0, 0))
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# who may chat (a banned, a muted and a too new account may not: what they say about a room is not shown)
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class WhoMayChat(WorldTest):
+    ROOM = dict(pub=True, map="TREASURE.LVL", n=2, of=4, code="c1v3rr")
+
+    def setUp(self):
+        super().setUp()
+        self.watcher = self.w.watch(self.w.join(None))
+
+    def rows(self):
+        self.w.advance(2.5)
+        return {r["name"]: {k: v for k, v in r.items() if k != "i"} for r in self.watcher.update().rows.values()}
+
+    def test_a_muted_account_is_named_and_has_none_of_the_rooms_details_and_they_are_back_when_it_may_speak(self):
+        a, b = self.w.join(person(1, "alice")), self.w.join(person(2, "bob"))
+        self.w.here(a, "wait", **self.ROOM)
+        self.w.here(b, "wait", **self.ROOM)
+        self.w.store.mute("1001", 10, "9001", "alice")
+        rows = self.rows()
+        self.assertEqual(rows["alice"], {"name": "alice", "at": "wait"})
+        self.assertEqual(rows["bob"], {"name": "bob", "at": "wait", **self.ROOM})
+        self.assertEqual((a.codes(), a.strikes), ([], 0), "what a muted page says is taken, and shown to nobody")
+        self.w.store.mute("1001", 0, "9001")
+        self.assertEqual(self.rows()["alice"], {"name": "alice", "at": "wait", **self.ROOM})
+
+    def test_a_too_new_account_is_named_and_has_none_of_the_rooms_details(self):
+        a = self.w.join(person(1, "alice", young=True))
+        self.w.here(a, "play", **self.ROOM)
+        self.assertEqual(self.rows()["alice"], {"name": "alice", "at": "play"})
+        self.assertEqual(a.codes(), [])
+
+    def test_a_banned_account_is_a_guest_counted_and_never_named_and_is_named_again_when_it_may_speak(self):
+        a, b = self.w.join(person(1, "alice")), self.w.join(person(2, "bob"))
+        mine = self.w.chat.welcome(a)["me"]
+        self.w.here(a, "wait", **self.ROOM)
+        self.w.store.ban("1001", "9001", "alice")
+        self.w.advance(2.5)
+        page = self.watcher.update()
+        self.assertEqual((page.n, page.g, sorted(r["name"] for r in page.rows.values())), (3, 2, ["bob"]), "the watcher and the banned account are guests, the count is the same")
+        self.assertEqual(self.w.presence.people(), 3, "and so is the chat's")
+        for text in ("alice", "c1v3rr", "TREASURE"):
+            self.assertNotIn(text, json.dumps(self.watcher.peer.sent))
+        self.assertEqual(self.w.chat.welcome(a)["me"], mine, "its number is kept, so that it is the same row when it is named again")
+        self.w.store.unban("1001")
+        self.w.advance(2.5)
+        self.assertEqual(self.watcher.update().rows[mine]["name"], "alice")
+        self.assertEqual((self.watcher.n, self.watcher.g), (3, 1))
+
+    def test_a_banned_moderator_is_a_guest_too(self):
+        self.w.join(MOD)
+        self.w.store.ban("9001", "9002", "moddy")
+        self.assertEqual(self.rows(), {})
+        self.assertEqual((self.watcher.n, self.watcher.g), (2, 2))
+
+    def test_a_store_that_does_not_answer_leaves_what_it_said_last(self):
+        a = self.w.join(person(1, "alice"))
+        self.w.here(a, "wait", **self.ROOM)
+        self.w.store.mute("1001", 10, "9001", "alice")
+        self.w.join(person(2, "bob"))
+        self.w.store.ban("1002", "9001", "bob")
+        self.assertEqual(self.rows(), {"alice": {"name": "alice", "at": "wait"}})
+
+        def broken(*args):
+            raise storemod.StoreError("locked")
+        self.w.store.bans = self.w.store.mutes = broken
+        self.w.join(person(3, "carol"))
+        self.assertEqual(sorted(self.rows()), ["alice", "carol"], "bob is still a guest, alice still has none of the details")
+        self.assertNotIn("code", self.rows()["alice"])
+
+    def test_the_accounts_that_may_speak_are_as_they_were(self):
+        a = self.w.join(person(1, "alice"))
+        self.w.here(a, "wait", **self.ROOM)
+        self.w.store.mute("1002", 10, "9001", "bob")
+        self.w.store.ban("1003", "9001", "carol")
+        self.assertEqual(self.rows()["alice"], {"name": "alice", "at": "wait", **self.ROOM})
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -534,24 +795,63 @@ class WhatIsSent(WorldTest):
         page = self.w.watch(new).update()
         self.assertEqual((page.n, sorted(r["name"] for r in page.rows.values())), (2, ["alice", "bob"]))
 
-    def test_the_first_ask_may_bring_the_send_forward_but_not_closer_than_a_quarter_of_a_second(self):
-        a = self.w.watch(self.w.join(person(1)))
-        self.w.join(person(2))
-        self.w.advance(0.1)
-        b = self.w.watch(self.w.join(person(3)))
-        self.assertEqual(len(a.peer.frames()), 1, "asked 0.1 s after the last send: the list that b gets is the one that was last sent, and a is sent the rest at the next send")
-        self.assertEqual(len(b.update().rows), 1)
-        self.w.advance(2.5)
-        self.assertEqual(len(a.update().rows), 3)
-        self.assertEqual(len(b.update().rows), 3)
-
-    def test_a_page_that_asks_half_a_second_after_the_last_send_gets_the_list_as_it_is_now(self):
-        first = self.w.watch(self.w.join(person(1, "alice")))
+    def test_an_ask_brings_nothing_forward_the_page_gets_the_list_as_it_was_last_sent_and_the_change_comes_with_the_next_send_to_everybody(self):
+        a = self.w.watch(self.w.join(person(1, "alice")))
         self.w.join(person(2, "bob"))
         self.w.advance(0.5)
         late = self.w.watch(self.w.join(person(3, "carol")))
-        self.assertEqual(sorted(r["name"] for r in late.update().rows.values()), ["alice", "bob", "carol"], "a quarter of a second is the least between two sends that an ask may bring forward")
-        self.assertEqual(sorted(r["name"] for r in first.update().rows.values()), ["alice", "bob", "carol"], "and the others are sent the change at that moment")
+        self.assertEqual(len(a.peer.frames()), 1, "nobody is sent anything because a page asked")
+        self.assertEqual([r["name"] for r in late.update().rows.values()], ["alice"], "the list as it was last sent")
+        self.w.advance(1.4)
+        self.assertEqual((len(a.peer.frames()), len(late.peer.frames())), (1, 1), "1.9 seconds after the last send")
+        self.w.advance(0.2)
+        for page in (a, late):
+            self.assertEqual(sorted(r["name"] for r in page.update().rows.values()), ["alice", "bob", "carol"], "the same frame for both")
+        self.assertEqual((len(a.peer.frames()), len(late.peer.frames())), (2, 2))
+
+    def test_whatever_happens_a_watcher_gets_one_send_in_two_seconds_at_the_most(self):
+        flapper = self.w.join(person(1, "flap"))
+        watcher = self.w.watch(self.w.join(None))
+        crowd = [self.w.watch(self.w.join(person(n))) for n in range(2, 6)]
+        times, seen, n = [], len(watcher.peer.frames()), 100
+        for step in range(400):                                  # (two minutes: a new socket that asks every 0.3 seconds, and a person who changes at every step)
+            self.w.here(flapper, "wait" if step % 2 else "look")
+            n += 1
+            self.w.watch(self.w.join(person(n) if n % 2 else None))
+            self.w.advance(0.3)
+            for page in [watcher] + crowd:
+                page.update()
+            if len(watcher.peer.frames()) > seen:
+                times.append(self.w.now)
+                seen = len(watcher.peer.frames())
+        self.assertGreater(len(times), 30, "it does hear the changes")
+        gaps = [b - a for a, b in zip(times, times[1:])]
+        self.assertGreaterEqual(min(gaps), 2.0 - 1e-6, "no two sends are closer than who_seconds")
+        self.assertLessEqual(len(times), 61)
+        self.assertEqual({len(p.peer.frames()) for p in crowd}, {len(watcher.peer.frames())}, "and everybody gets the same frames")
+
+    def test_the_first_page_to_ask_when_nobody_keeps_the_list_current_gets_it_as_it_is_now(self):
+        a = self.w.join(person(1, "alice"))
+        first = self.w.watch(self.w.join(None))
+        self.w.leave(first.peer)
+        self.w.advance(3.0)
+        self.w.leave(a)
+        for n in range(2, 5):
+            self.w.join(person(n, "p%d" % n))
+        for _ in range(50):
+            self.w.advance(3600.0)                               # (hours pass: nobody watches, so nobody looks)
+        late = self.w.watch(self.w.join(None)).update()
+        self.assertEqual((sorted(r["name"] for r in late.rows.values()), late.n, late.g), (["p2", "p3", "p4"], 4, 1), "not the list of hours ago")
+
+    def test_a_watcher_that_closed_is_not_kept_while_nothing_changes(self):
+        a = self.w.watch(self.w.join(person(1)))
+        b = self.w.watch(self.w.join(person(2)))
+        self.w.shut(a.peer)
+        self.w.advance(1.0)
+        self.assertEqual(self.w.presence.watchers, {b.peer}, "a socket that is closed is not a watcher after the next tick, whether or not the list changed")
+        self.w.leave(b.peer)
+        self.w.advance(1.0)
+        self.assertEqual(self.w.presence.watchers, set())
 
     def test_the_count_in_the_list_is_the_number_of_people_too(self):
         asker = self.w.watch(self.w.join(person(1)))
@@ -574,16 +874,23 @@ class TheListAgainstAModelOfThePage(WorldTest):
                     op = rng.random()
                     if op < 0.20 or not peers:
                         peers.append(w.join(person(rng.randint(1, 18)) if rng.random() < 0.75 else None))
-                    elif op < 0.30:
+                    elif op < 0.28:
                         peer = peers.pop(rng.randrange(len(peers)))
                         w.leave(peer)
                         pages.pop(peer, None)
-                    elif op < 0.60:
+                    elif op < 0.31:
+                        peer = peers.pop(rng.randrange(len(peers)))      # (closed, and the hub has not let go of it)
+                        w.shut(peer)
+                        pages.pop(peer, None)
+                    elif op < 0.55:
                         peer = rng.choice(peers)
                         if peer.identity is not None:
                             at = rng.choice(presence.AT)
                             fields = rng.choice([{}, {"pub": True, "map": "TREASURE.LVL", "n": rng.randint(1, 3), "of": 4, "code": "r%d" % rng.randint(1, 9)}, {"pub": False}])
                             w.here(peer, at, **fields)
+                    elif op < 0.62:
+                        account = str(1000 + rng.randint(1, 18))          # (a ban, a lift, a mute: who may chat changes while the pages watch)
+                        rng.choice([lambda: w.store.ban(account, "9001"), lambda: w.store.unban(account), lambda: w.store.mute(account, 5, "9001"), lambda: w.store.mute(account, 0, "9001")])()
                     elif op < 0.75:
                         peer = rng.choice(peers)
                         if peer not in pages:
@@ -598,8 +905,38 @@ class TheListAgainstAModelOfThePage(WorldTest):
                     view = w.presence.view()
                     self.assertEqual((page.rows, page.n, page.g, page.more), (view["rows"], view["n"], view["g"], view["more"]), "seed %d" % seed)
                     self.assertLessEqual(len(page.rows), 12)
+                    self.assertEqual(page.n, w.presence.people(), "seed %d: the count of the list is the chat's" % seed)
             finally:
                 w.close()
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# the clock (hub/server.py on_tick)
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+class TheClockAndTheList(WorldTest):
+    def hub(self):
+        from hub import config as configmod, log as logmod, server
+        import io
+        self.out = io.StringIO()
+        return server.Hub(configmod.Config(db=self.w.db), self.w.store, session.NoLogin(), logmod.Log(self.out), limitmod.Limits(), clock=lambda: 100.0)
+
+    def test_a_list_that_fails_is_logged_by_its_kind_and_never_stops_the_work_of_the_clock(self):
+        hub = self.hub()
+        done = []
+
+        def broken(now):
+            raise RuntimeError("alice is in this message")
+        hub.chat.presence.flush = broken
+        hub.chat.sync_deletions = lambda: done.append("deletions")
+        hub.on_tick(100.0)
+        self.assertEqual(done, ["deletions"], "the retention is done in that tick")
+        self.assertGreater(hub.next_purge, 100.0)
+        line = [l for l in self.out.getvalue().splitlines() if " error " in l]
+        self.assertEqual(len(line), 1)
+        self.assertIn("kind=RuntimeError", line[0])
+        self.assertIn("where=presence", line[0])
+        self.assertNotIn("alice", self.out.getvalue())
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -705,7 +1042,7 @@ def send_json(client, **message):
 
 
 class OnTheWire(ths.RigTest):
-    rig_args = dict(tick_seconds=0.05, online_seconds=0.2, who_seconds=0.2, who_soon_seconds=0.05, who_resend_seconds=1.0, mods="1002", frame_burst=1000, frame_refill_seconds=0.001)
+    rig_args = dict(tick_seconds=0.05, online_seconds=0.2, who_seconds=0.2, who_resend_seconds=1.0, mods="1002", frame_burst=1000, frame_refill_seconds=0.001)
 
     def login(self, login):
         c = hc.Client(self.rig.port, login=login)
@@ -718,11 +1055,13 @@ class OnTheWire(ths.RigTest):
     def test_a_reader_and_a_member_watch_the_list_and_hear_the_changes(self):
         alice, welcome = self.login("1001:alice")
         self.assertIs(welcome["presence"], True)
+        self.assertIsInstance(welcome["me"], int)
         send_json(alice, t="here", at="wait", pub=True, map="TREASURE.LVL", n=2, of=4, code="c1v3rr")
         send_json(alice, t="who")
         alice_sees = Model()
         alice_sees.take(who_frames(alice))
         self.assertEqual((alice_sees.n, alice_sees.g, [(r["name"], r["at"], r.get("code")) for r in alice_sees.rows.values()]), (1, 0, [("alice", "wait", "c1v3rr")]))
+        self.assertEqual(list(alice_sees.rows), [welcome["me"]], "the row that is hers is the one that the welcome named")
         guest = hc.Client(self.rig.port)
         self.clients.append(guest)
         guest.recv_json()
@@ -757,7 +1096,7 @@ class OnTheWire(ths.RigTest):
         self.assertEqual(guest.recv_json(), {"t": "err", "code": "login"})
         alice, _ = self.login("1001:alice")
         send_json(alice, t="here", at="wait", pub=True, map="../../etc/passwd.LVL")
-        self.assertEqual(alice.recv_json(), {"t": "err", "code": "bad"})
+        self.assertEqual(alice.recv_json(), {"t": "err", "code": "here"}, "a refused here has a code of its own: the chat's `bad` is for its lines")
 
     def test_the_whole_list_is_sent_again_only_after_the_wait(self):
         alice, _ = self.login("1001:alice")
@@ -809,12 +1148,14 @@ class TheProcessLogHoldsNothingOfTheList(unittest.TestCase):
             send_json(moddy, t="who")
             self.assertEqual(len(who_frames(moddy)), 1)
             send_json(alice, t="here", at="wait", pub=True, map="not a map")
-            self.assertEqual(frames_within(alice, 0.5)[-1], {"t": "err", "code": "bad"})
+            self.assertEqual(frames_within(alice, 0.5)[-1], {"t": "err", "code": "here"})
             time.sleep(0.2)
             proc.send_signal(signal.SIGTERM)
             proc.wait(10)
             text = ths.read_text(log_path)
             self.assertIn(" open ", text)
+            self.assertIn("sockets=", text, "the log counts sockets, and says so")
+            self.assertNotIn("online=", text)
             for canary in ("alice", "moddy", "canary", "CANARYMAP", "canary12", "6101", "5551234567", "not a map", "Traceback"):
                 self.assertNotIn(canary, text, "the log shows " + canary)
         finally:

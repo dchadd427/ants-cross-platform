@@ -163,15 +163,20 @@ class TheStyle(unittest.TestCase):
         self.assertIn("width: 260px;", self.css.split("@media " + wide + " {")[1].split("}")[0])
         self.assertIn("@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; }", self.css)
 
-    def test_the_games_list_that_the_live_site_docks_in_the_yard_keeps_clear_of_the_panel(self):
+    def test_the_games_list_that_the_live_site_docks_in_the_yard_keeps_clear_of_the_panel_under_1280_px_and_is_centered_from_there(self):
         rules = re.sub(r"/\*.*?\*/", "", self.games, flags=re.S)
         left, right, cap, taken = (int(g) for g in re.search(r"\.gdock \{ position: absolute; z-index: \d+; top: 12px; left: (\d+)px; right: (\d+)px; width: min\((\d+)px, calc\(100% - (\d+)px\)\);", rules).groups())
-        for width, gap in ((260, 16), (280, 16)):
-            at = (right + width + gap, left + right + width + gap)
-            self.assertIn(".pl-on .gdock { right: %dpx; width: min(%dpx, calc(100%% - %dpx)); }" % (at[0], cap, at[1]), self.css, "the list ends %d px before the panel (%d px wide, %d px from the Yard's edge)" % (gap, width, right))
+        gap, width = 16, 260
+        self.assertIn("@media (min-width: 1180px) and (max-width: 1279px) and (min-height: 501px) { .pl-on .gdock { right: %dpx; width: min(%dpx, calc(100%% - %dpx)); } }" % (right + width + gap, cap, left + right + width + gap), self.css,
+                      "from 1180 to 1279 px the list ends %d px before the panel (%d px wide, %d px from the Yard's edge)" % (gap, width, right))
         panel = re.search(r"\.pl \{ position: absolute; z-index: 6; display: flex; top: 14px; right: 14px; width: 260px;", self.css)
         self.assertIsNotNone(panel)
         self.assertEqual(right, 12, "the panel's 14 px from the edge and the list's 12 are why the gap is 16 and not 14: the panel's frame is 5 px, the list's 5")
+        # from 1280 px the list's own rule holds (it is centered in the window and ends well before the panel): nothing here says where it is, whatever the window
+        css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        placed = [(query.strip(), body) for query, body in re.findall(r"@media ([^{]+)\{((?:[^{}]|\{[^{}]*\})*)\}", css) if re.search(r"\.pl-on \.gdock \{[^}]*\bwidth:", body)]
+        self.assertEqual(len(placed), 1, "one rule of the list's width and place")
+        self.assertIn("max-width: 1279px", placed[0][0])
 
     def test_the_games_list_goes_under_the_corner_button_or_beside_it(self):
         height = int(re.search(r"min-height: (\d+)px", self.rule(".pl-btn")).group(1))
@@ -193,10 +198,12 @@ class TheStyle(unittest.TestCase):
         css = self.css
         self.assertIn("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {", css, "the bar's three rows (home.css has the same condition)")
         phone = css.split("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {")[1].split("\n}")[0]
-        for part in (".pl-bar { display: inline-flex; padding: 6px 12px; }", ".pl-on .hbar .hbrand { grid-column: 1; grid-row: 1; }", ".pl-on .hbar .hright { grid-column: 1 / -1; min-width: 0; max-width: calc(100% - 102px); }", ".pl-btn { display: none; }"):
+        for part in (".pl-bar { display: inline-flex; }", ".pl-on .hbar .hbrand { grid-column: 1; grid-row: 1; }", ".pl-on .hbar .hright { grid-column: 1 / -1; min-width: 0; max-width: calc(100% - 102px); }", ".pl-btn { display: none; }"):
             self.assertIn(part, phone, part)
-        self.assertIn("@media (max-width: 410px) { .pl-bar .pl-ppl { display: none; } }", css)
-        self.assertIn("@media (max-width: 369px) { .pl-bar { padding: 6px 10px; } .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }", css)
+        self.assertIn("@media (max-width: 440px) { .pl-on .hbar .pl-bar { padding: 6px 10px; } }", css, "(the bar's own rule has two classes, so this one has three: Home's `.hbar .btn` padding is 16 px)")
+        self.assertIn("@media (max-width: 410px) { .pl-bar .pl-ppl { display: none; } }", css, "from 411 px the picture, the word and the number; under that the word and the number")
+        self.assertIn("@media (max-width: 380px) { .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }", css, "from 381 px the word has room even with \"99+\"; under that the picture and the number")
+        self.assertIn("@media (max-width: 359px) { .pl-on .hbar .hright { gap: 6px; } .pl-on .hbar .pl-bar { padding: 6px 8px; gap: 6px; } .pl-bar .pill { margin-left: 0; padding: 0 6px; font-size: 14px; } }", css, "a little closer under 360 px, so that \"99+\" fits at 320")
         self.assertIn("@media (max-width: 340px) { .pl-on .hbar .hlogo { width: 76px; } .pl-on .hbar .hright { max-width: calc(100% - 86px); } }", css)
 
     def test_the_sheet_clears_a_phones_system_bar_and_the_window_that_the_page_has(self):

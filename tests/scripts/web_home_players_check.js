@@ -71,7 +71,7 @@ function loadPlayers(clock) {
     new Function('self', 'setTimeout', 'clearTimeout', playersSource)(root, clock.setTimeout, clock.clearTimeout);
     return root.AntsHomePlayers;
 }
-const W = (o) => Object.assign({ t: 'welcome', v: 1, you: { name: 'maple', mod: false }, login: true, presence: true, online: 2, history: [] }, o);
+const W = (o) => Object.assign({ t: 'welcome', v: 1, you: { name: 'maple', mod: false }, login: true, presence: true, me: 1, online: 2, history: [] }, o);
 const row = (i, name, at, more) => Object.assign({ i, name, at: at || 'look' }, more || {});
 const FULL = (rows, o) => Object.assign({ t: 'who', full: true, n: rows.length + 1, g: 0, more: 0, rows }, o);
 const MAP_OF = { 'TREASURE.LVL': 'Treasure' };
@@ -119,6 +119,14 @@ function rig(o) {
     r.barButton = () => one(r.right, 'pl-bar');
     r.sheetOpen = () => r.panel().getAttribute('data-sheet') === 'true';
     r.tick = (ms) => r.clock.advance(ms === undefined ? 1000 : ms);
+    r.listed = (code, name) => {                                     // the Games list has a row for that room: its Join button (the list's own) and the map's name that it shows
+        const item = new El(env, 'li'), top = new El(env, 'span'), label = new El(env, 'span'), b = new El(env, 'button');
+        item.className = 'gitem'; label.className = 'gmapname'; label.textContent = name; b.className = 'gjoin'; b.setAttribute('data-code', code);
+        top.appendChild(label); item.appendChild(top); item.appendChild(b);
+        found['.gjoin[data-code="' + code + '"]'] = b;
+        return b;
+    };
+    r.unlisted = (code) => { delete found['.gjoin[data-code="' + code + '"]']; };
     return r;
 }
 
@@ -128,7 +136,7 @@ function rig(o) {
 {
     const P = Pure;
     const rowOf = (raw) => P.rowOf(raw, Chat, Rules);
-    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, pub: false, map: '', mapName: '', n: -1, of: -1, code: '' });
+    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
     same('the mark of a moderator is exactly true (a string or a number is none)', [rowOf(row(1, 'a1', 'look', { mod: true })).mod, rowOf(row(1, 'a1', 'look', { mod: 'true' })).mod, rowOf(row(1, 'a1', 'look', { mod: 1 })).mod], [true, false, false]);
     same('a name loses the invisible and bidirectional characters and is cut at 32 code points', [rowOf(row(1, '‮alice​⁦')).name, rowOf(row(1, 'x'.repeat(40))).name], ['alice', 'x'.repeat(32) + '…']);
     same('markup in a name stays text', rowOf(row(1, '<img src=x onerror=1>')).name, '<img src=x onerror=1>');
@@ -136,8 +144,9 @@ function rig(o) {
     same('a status that is not one of the three is no row (also one that is a name of Object)', [rowOf(row(1, 'ab', 'away')), rowOf(row(1, 'ab', 'constructor')), rowOf(row(1, 'ab', '__proto__')), rowOf({ i: 1, name: 'ab', at: ['wait'] }), rowOf({ i: 1, name: 'ab' })], [null, null, null, null, null]);
     same('a number that is not a whole number from 0 is no row', [rowOf(row(-1, 'ab')), rowOf(row(1.5, 'ab')), rowOf(row('1', 'ab')), rowOf(row(1e12, 'ab')), rowOf(row(NaN, 'ab')), rowOf(null), rowOf('row'), rowOf([])], [null, null, null, null, null, null, null, null]);
     const pub = rowOf(row(5, 'clover', 'wait', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }));
-    same('a public room that waits: the map (by the page\'s own name for it), the seats and the code', [pub.pub, pub.map, pub.mapName, pub.n, pub.of, pub.code], [true, 'TREASURE.LVL', 'Treasure', 2, 4, 'c1v3rr']);
-    same('a map of the players is shown as its file name without the ending, cut at 28', [rowOf(row(5, 'ab', 'wait', { pub: true, map: 'My Map.LVL' })).mapName, rowOf(row(5, 'ab', 'wait', { pub: true, map: 'A'.repeat(40) + '.LVL' })).mapName.length], ['My Map', 28]);
+    same('a public room that waits: the map (by the page\'s own name for it: an original\'s), the seats and the code', [pub.pub, pub.map, pub.mapName, pub.guess, pub.n, pub.of, pub.code], [true, 'TREASURE.LVL', 'Treasure', '', 2, 4, 'c1v3rr']);
+    same('a map of the players has no name of its own: the name that it would have (its file name without the ending, cut at 28) is a guess, drawn only where the Games list says the same', [rowOf(row(5, 'ab', 'wait', { pub: true, map: 'My Map.LVL' })).mapName, rowOf(row(5, 'ab', 'wait', { pub: true, map: 'My Map.LVL' })).guess, rowOf(row(5, 'ab', 'wait', { pub: true, map: 'A'.repeat(40) + '.LVL' })).guess.length], ['', 'My Map', 28]);
+    same('a map with two spaces in its name is a map (the game takes it)', [rowOf(row(5, 'ab', 'wait', { pub: true, map: 'Bomber Match  by PRo.lvl' })).map, rowOf(row(5, 'ab', 'wait', { pub: true, map: 'Bomber Match  by PRo.lvl' })).guess], ['Bomber Match  by PRo.lvl', 'Bomber Match  by PRo']);
     same('a map that the page\'s rule refuses is none, whatever it is (a path, no ending, markup, a control character, too long)', ['../x.LVL', 'TREASURE', '<b>.LVL', 'a\u0007b.LVL', 'x'.repeat(70) + '.LVL', '.hidden.LVL', 7, null].map((m) => rowOf(row(5, 'ab', 'wait', { pub: true, map: m })).map), ['', '', '', '', '', '', '', '']);
     same('seats: 0 to 4 taken of 1 to 4, and of is not less than n; anything else is none', [rowOf(row(5, 'ab', 'wait', { pub: true, n: 5 })).n, rowOf(row(5, 'ab', 'wait', { pub: true, n: -1 })).n, rowOf(row(5, 'ab', 'wait', { pub: true, n: '2' })).n, rowOf(row(5, 'ab', 'wait', { pub: true, of: 0 })).of, rowOf(row(5, 'ab', 'wait', { pub: true, n: 3, of: 2 })).of, rowOf(row(5, 'ab', 'wait', { pub: true, n: 0, of: 4 })).n], [-1, -1, -1, -1, -1, 0]);
     same('a code is kept for a room that waits and has the shape of a code (lower case, - and _, at most 32)', ['c1v3rr', 'a-b_c', 'ABC', '', 'x'.repeat(33), 'a b', 'a/b', 5].map((c) => rowOf(row(5, 'ab', 'wait', { pub: true, code: c })).code), ['c1v3rr', 'a-b_c', '', '', '', '', '', '']);
@@ -161,9 +170,11 @@ function rig(o) {
     same('rows that are not rows are left out of a frame, the others stay', rowsOf(apply(FULL([row(1, 'a1'), { i: 2 }, null, 'x', row(3, 'c3', 'away'), row(4, 'd4')]))), ['a1', 'd4']);
 
     const model = apply(FULL([row(1, 'zed', 'wait'), row(2, 'amy'), row(3, 'moddy', 'play', { mod: true }), row(4, 'bob', 'play'), row(5, 'maple'), row(6, 'cat')]));
-    const groups = P.listOf(model, { name: 'maple', mod: false });
-    same('the groups: moderators apart whatever they do, the rest by status, each by name, the visitor not among them', ['mod', 'look', 'wait', 'play'].map((g) => groups[g].map((r) => r.name)), [['moddy'], ['amy', 'cat'], ['zed'], ['bob']]);
-    same('with nobody named as the visitor every row is listed', ['mod', 'look', 'wait', 'play'].map((g) => P.listOf(model, null)[g].length), [1, 3, 1, 1]);
+    const groups = P.listOf(model, 5);
+    same('the groups: moderators apart whatever they do, the rest by status, each by name, the visitor\'s own row (by its number) not among them', ['mod', 'look', 'wait', 'play'].map((g) => groups[g].map((r) => r.name)), [['moddy'], ['amy', 'cat'], ['zed'], ['bob']]);
+    same('with no row that is the visitor\'s every row is listed (a visitor that the list does not hold, a hub that did not say)', ['mod', 'look', 'wait', 'play'].map((g) => P.listOf(model, null)[g].length), [1, 3, 1, 1]);
+    const twins = apply(FULL([row(1, 'maple'), row(2, 'maple'), row(3, 'sage')]));
+    same('a person with the visitor\'s name is not the visitor: only the row that is the visitor\'s number is left out', [P.listOf(twins, 2).look.map((r) => r.id), P.listOf(twins, 1).look.map((r) => r.id)], [[1, 3], [2, 3]]);
 
     const m = (o) => Object.assign({ at: 'look', pub: false, mapName: '', n: -1, of: -1 }, o);
     same('the line under a name: nothing for one who looks (the visitor and a moderator are told where), a room by its map and seats or "Private room"', [
@@ -201,7 +212,15 @@ function rig(o) {
     r.who(FULL([row(1, 'maple')], { n: 1, g: 0 }));
     check('one person alone is no count (no number in the header or on the buttons)', r.count() === '' && one(r.corner(), 'pill').hidden === true && one(r.barButton(), 'pill').hidden === true && r.corner().getAttribute('aria-label') === 'Players');
     r.who(FULL([row(1, 'maple')], { n: 600, g: 599 }));
-    check('over 500 people is "500+"', r.count() === '500+' && one(r.corner(), 'pill').textContent === '500+');
+    r.who(FULL([row(1, 'maple')], { n: 99, g: 98 }));
+    same('up to 99 the header and the buttons say the number', [r.count(), one(r.corner(), 'pill').textContent, one(r.barButton(), 'pill').textContent], ['99', '99', '99']);
+    r.who(FULL([row(1, 'maple')], { n: 100, g: 99 }));
+    same('over 99 the buttons say "99+" (they are small: the bar of a phone has no room for more) and their names say the number; the header says it too', [one(r.corner(), 'pill').textContent, one(r.barButton(), 'pill').textContent, r.corner().getAttribute('aria-label'), r.barButton().getAttribute('aria-label'), r.count(), one(r.panel(), 'pl-count').getAttribute('aria-label')],
+        ['99+', '99+', 'Players (100)', 'Players (100)', '100', '100 here now']);
+    r.who(FULL([row(1, 'maple')], { n: 600, g: 599 }));
+    same('over 500 people the header says "500+" and the buttons "99+"', [r.count(), one(r.corner(), 'pill').textContent, one(r.barButton(), 'pill').textContent], ['500+', '99+', '99+']);
+    r.who(FULL([row(1, 'maple')], { n: 99999, g: 99998 }));
+    same('a count that no hub has: the same words', [r.count(), one(r.barButton(), 'pill').textContent], ['500+', '99+']);
     r.lost();
     check('the hub is gone: "off" (the panel stays, the count goes, a grey dot and the words come), the rows are not kept', r.list.state() === 'off' && r.panel().getAttribute('data-state') === 'off' && r.count() === '' && one(r.panel(), 'pl-dot').hidden === false && texts(r.panel(), 'pl-note')[0].indexOf('Players list is off right now') === 0
         && r.names().length === 0 && Object.keys(r.list.model().rows).length === 0 && r.root.hidden === false);
@@ -309,6 +328,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     row(6, 'clover', 'wait', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }), row(7, 'juniper', 'wait'), row(8, 'pebble', 'play', { pub: true, map: 'ISLANDS.LVL', n: 3 }), row(9, 'hazel', 'play', { pub: true, map: 'GAUNTLET.LVL', n: 2 })];
 {
     const r = rig({ wide: true });
+    r.listed('c1v3rr', 'Treasure');
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
     same('the groups in their order with their counts, each by name; the visitor is not among them', r.groups(), [
         { g: 'mod', n: '1', names: ['tess'] }, { g: 'look', n: '3', names: ['basil', 'fern', 'sage'] }, { g: 'wait', n: '2', names: ['clover', 'juniper'] }, { g: 'play', n: '2', names: ['hazel', 'pebble'] }]);
@@ -330,6 +350,9 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     check('a change that does change something is drawn again with the list scrolled where it was, and a Join that had the focus has it again', byClass(r.panel(), 'pl-group')[0] !== keep && one(r.panel(), 'pl-list').scrollTop === 120
         && !!r.env.focused && r.env.focused.getAttribute('data-code') === 'c1v3rr' && r.joins().indexOf(r.env.focused) !== -1);
     same('a change: a row comes, one goes, the numbers follow', [r.groups().map((g) => g.n), r.count(), texts(r.panel(), 'pl-guests')[1]], [['1', '2', '3', '2'], '14', '…+ 5 guestsnot logged in']);
+    r.listed('a5h555', 'Tiny');
+    r.tick(1000);
+    same('the Games list gets the room: a Join comes with it (the rows are by name: ash, clover)', r.joins().map((b) => b.getAttribute('data-code')), ['a5h555', 'c1v3rr']);
     r.state.client = CLIENT(ROOM({ isPublic: true }), 'a5h555'); r.tick(1000);
     same('a Join is not offered on a room that the page is in', r.joins().map((b) => b.getAttribute('data-code')), ['c1v3rr']);
 }
@@ -369,7 +392,10 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     check('... and the line goes with them', byClass(r.panel(), 'pl-more').length === 0);
     const joins = Array.from({ length: 50 }, (_, i) => row(300 + i, 'w' + i, 'wait', { pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'r' + i }));
     r.who(FULL([row(1, 'maple')].concat(joins), { n: 51 }));
-    check('fifty rooms that wait: fifty Joins, each for its own room', r.joins().length === 50 && new Set(r.joins().map((b) => b.getAttribute('data-code'))).size === 50);
+    check('fifty rooms that wait and that the Games list has not: no Join (what a person says is not enough for a Join)', r.joins().length === 0);
+    for (let i = 0; i < 50; i++) r.listed('r' + i, 'Treasure');
+    r.tick(1000);
+    check('... the Games list gets them: fifty Joins, each for its own room', r.joins().length === 50 && new Set(r.joins().map((b) => b.getAttribute('data-code'))).size === 50);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -377,32 +403,90 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const r = rig({ wide: false });
-    r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
     const clicks = [];
-    r.found['.gjoin[data-code="c1v3rr"]'] = Object.assign(new El(r.env, 'button'), { click() { clicks.push('c1v3rr'); } });
+    Object.assign(r.listed('c1v3rr', 'Treasure'), { click() { clicks.push('c1v3rr'); } });
+    r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
     r.corner().click();
     check('(the sheet is open for the next check)', r.sheetOpen());
     r.joins()[0].click();
     same('Join presses the Games list\'s own Join of that room, and the sheet is put away', [clicks, r.sheetOpen()], [['c1v3rr'], false]);
-    // a list that is a popover: closed, so no button; pressing Games opens it and the button is there
+    // a row of the Games list that is gone between the drawing and the press, in a list that is a popover (the test site): Games is pressed to open it, and its Join is there again if the room is
     const p = rig({ wide: true });
+    p.listed('c1v3rr', 'Treasure');
     p.live(); p.who(FULL(CROWD, { n: 13, g: 4 }));
+    p.unlisted('c1v3rr');
     p.games.click = () => { p.games.attributes['aria-expanded'] = 'true'; p.found['.gjoin[data-code="c1v3rr"]'] = Object.assign(new El(p.env, 'button'), { click() { clicks.push('popover'); } }); };
     p.games.setAttribute('aria-haspopup', 'dialog'); p.games.setAttribute('aria-expanded', 'false');
     p.joins()[0].click();
     same('a Games list that is a popover (the test site) is opened, and then its Join is pressed', clicks.slice(1), ['popover']);
-    // a game that is not there
+    // a game that is not there any more
     const q = rig({ wide: true });
+    q.listed('c1v3rr', 'Treasure');
     q.live(); q.who(FULL(CROWD, { n: 13, g: 4 }));
+    q.unlisted('c1v3rr');
     q.joins()[0].click();
-    check('a game that the list has not got says so (a few seconds), and presses nothing', texts(q.panel(), 'pl-status').join() === 'That game is not open any more.');
+    check('a game that the list has not got any more says so (a few seconds), and presses nothing', texts(q.panel(), 'pl-status').join() === 'That game is not open any more.');
     q.tick(4100);
     check('... and the words go by themselves', texts(q.panel(), 'pl-status').join() === '');
     const docked = rig({ wide: true });
+    docked.listed('c1v3rr', 'Treasure');
     docked.live(); docked.who(FULL(CROWD, { n: 13, g: 4 }));
+    docked.unlisted('c1v3rr');
     docked.games.click = () => clicks.push('wrong');
     docked.joins()[0].click();
     check('a list that is docked has no popup: Games is not pressed for a game that is not in it', clicks.indexOf('wrong') === -1);
+    // no row in the Games list, no Join (and a Join comes by itself when the list gets the room)
+    const n = rig({ wide: true });
+    n.live(); n.who(FULL(CROWD, { n: 13, g: 4 }));
+    check('a room that waits and that the Games list does not have: no Join', n.joins().length === 0);
+    n.listed('c1v3rr', 'Treasure'); n.tick(1000);
+    check('... the Games list gets it: the Join comes at the next look of the page', n.joins().length === 1);
+    n.unlisted('c1v3rr'); n.tick(1000);
+    check('... and goes when the list loses it', n.joins().length === 0);
+}
+{   // a map of the players: its name is drawn only where the Games list shows that room under the same name; the hub\'s words are never drawn
+    const comm = (name, code) => row(6, 'clover', 'wait', { pub: true, map: name + '.lvl', n: 2, of: 4, code: code || 'c0mm00' });
+    const r = rig({ wide: true });
+    r.live(); r.who(FULL([row(1, 'maple'), comm('Bomber Match  by PRo')], { n: 3 }));
+    same('a map of the players that the Games list does not have: no name, only the seats', r.metaOf('clover'), '2 of 4');
+    r.listed('c0mm00', 'Bomber Match  by PRo'); r.tick(1000);
+    same('... the Games list has the room under that name: the name is drawn', r.metaOf('clover'), 'Bomber Match  by PRo · 2 of 4');
+    r.unlisted('c0mm00'); r.listed('c0mm00', 'Another Map'); r.tick(1000);
+    same('... the Games list has the room under another name: the hub\'s word is not drawn, and the list\'s is not either', [r.metaOf('clover'), r.joins().length], ['2 of 4', 1]);
+    const lie = rig({ wide: true });
+    lie.live(); lie.who(FULL([row(1, 'maple'), row(6, 'mallory', 'wait', { pub: true, map: 'Free nitro at discord.gg-abc.LVL', n: 1, of: 4, code: 'f4k3f4' })], { n: 3 }));
+    same('a made-up map and code: no name, no Join', [lie.metaOf('mallory'), lie.joins().length, JSON.stringify(texts(lie.panel(), 'pl-card')).indexOf('nitro')], ['1 of 4', 0, -1]);
+    lie.listed('f4k3f4', 'Treasure'); lie.tick(1000);
+    same('a code of a room that the Games list has, with a map that is not that room\'s: the name is not drawn (a Join to that room is what the list offers)', [lie.metaOf('mallory'), JSON.stringify(texts(lie.panel(), 'pl-card')).indexOf('nitro')], ['1 of 4', -1]);
+    const play = rig({ wide: true });
+    play.live(); play.who(FULL([row(1, 'maple'), row(7, 'pat', 'play', { pub: true, map: 'Bomber Match  by PRo.lvl', n: 3 }), row(8, 'orig', 'play', { pub: true, map: 'ISLANDS.LVL', n: 2 })], { n: 3 }));
+    same('a match: an original\'s name, never a map of the players\' (a match has no code to look up)', [play.metaOf('pat'), play.metaOf('orig')], ['3 players', 'Islands · 2 players']);
+    const own = rig({ wide: true });
+    own.state.client = CLIENT(ROOM({ isPublic: true, map: 'Bomber Match  by PRo.lvl' }), 'c0mm00'); own.state.count = { people: 1, size: 4 };
+    own.live(); own.who(FULL([row(1, 'maple')], { n: 1 }));
+    check('the visitor\'s own room: its map\'s name is the page\'s own word, drawn', texts(one(own.panel(), 'pl-you'), 'pl-meta').join().indexOf('Bomber Match  by PRo · 1 of 4') !== -1);
+    const mine = rig({ wide: true });
+    mine.live(); mine.who(FULL([row(1, 'maple'), row(2, 'maple', 'wait', { pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'c1v3rr' }), row(3, 'sage')], { n: 4 }));
+    same('a person who has the visitor\'s name is not hidden (only the row that is the visitor\'s number is)', mine.names().sort(), ['maple', 'maple', 'sage'].sort());
+}
+{   // the visitor's own row is the one that the hub's welcome names, not a row with the visitor's name
+    const youAnd = (r) => r.names().filter((n) => n === 'maple').length;
+    const twins = [row(1, 'maple'), row(2, 'maple', 'wait'), row(3, 'sage')];
+    const r = rig({ wide: true });
+    r.live(W({ me: 2 })); r.who(FULL(twins, { n: 4 }));
+    same('the welcome names the row (2): that one is left out of the groups, the other person called maple is not', [youAnd(r), r.groups().map((g) => g.g + ':' + g.names.join())], [2, ['look:maple,sage']]);
+    r.live(W({ me: 1 })); r.who(FULL(twins, { n: 4 }));
+    same('a new welcome (a new socket) names its own row: now it is the first that is left out', [youAnd(r), r.groups().map((g) => g.g + ':' + g.names.join())], [2, ['look:sage', 'wait:maple']]);
+    ['2', -1, 1.5, 1e12, null, undefined, {}, [1], true].forEach((me) => {
+        const q = rig({ wide: true });
+        q.live(W({ me })); q.who(FULL([row(1, 'maple'), row(3, 'sage')], { n: 3 }));
+        check('a welcome whose `me` is ' + JSON.stringify(me) + ' hides no row (nothing is guessed from a name)', youAnd(q) === 2);
+    });
+    const none = rig({ wide: true });
+    none.live(W({ me: undefined })); none.who(FULL([row(1, 'maple')], { n: 2 }));
+    check('a welcome with no `me` (a reader\'s, or a hub that does not say) hides no row', youAnd(none) === 2);
+    r.lost(); r.live(W({ me: 7 })); r.who(FULL([row(1, 'maple'), row(7, 'maple', 'wait')], { n: 3 }));
+    same('a link that was lost and comes back: the number is the new welcome\'s', [youAnd(r), r.groups().map((g) => g.g + ':' + g.names.join())], [2, ['look:maple']]);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -29,6 +29,7 @@
         fold: 'Fold chat', open: 'Open chat', crowded: 'No room to open it: close a notice',  mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.'
     };
+    var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
         young: 'Your account is too new to chat yet', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again'
@@ -104,7 +105,7 @@
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
         var tight = 0;                                                           // what Home leaves under its bar: 0 the room for the panel, 1 too little for the open panel (the strip shows), 2 too little for the strip (nothing shows)
-        var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
+        var commandAt = -MS.pending, taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -337,11 +338,18 @@
             else if (m.t === 'del') onDel(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
-            else if (m.t === 'err') { waiting(); var refused = unanswered.shift(); tell(m.code); if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; } }       // (the hub answers in order: the refused line is the oldest without an answer; the hub forgets it)
+            else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) refuse(m.code);
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
         function waiting() { var t = now(); unanswered = unanswered.filter(function (o) { return t - o.at < MS.pending; }); }       // (a line with no answer after 8 s is not waited for)
+        function refuse(code) {                                                 // the hub refused a line: the oldest without an answer (it answers in order), which the hub forgets; a refusal with no line, or command, of ours in flight is not ours
+            waiting();
+            var refused = unanswered.shift();
+            if (refused === undefined && now() - commandAt >= MS.pending) return;
+            tell(code);
+            if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; }
+        }
         function allowed(text) {                                                // this page's own pace, below the hub's; a text that was sent in the last 31 s is not sent again (the hub remembers every one of them, not only the last)
             var t = now(), old;
             tokens = Math.min(PACE.burst, tokens + Math.max(0, t - tokensAt) / PACE.every); tokensAt = t;
@@ -355,7 +363,8 @@
             var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
-            if (!(you.mod && text.charAt(0) === '/')) { waiting(); unanswered.push({ text: text, key: nfc(text), at: now() }); }       // (a moderator's command has no answer)
+            if (!(you.mod && text.charAt(0) === '/')) { waiting(); unanswered.push({ text: text, key: nfc(text), at: now() }); }       // (a moderator's command has no answer: it has an err when it is wrong, for a few seconds)
+            else commandAt = now();
             return '';
         }
         function setOpen(on) { open = !!on; if (seen()) stale = true; render(); }

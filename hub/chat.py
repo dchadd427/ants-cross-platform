@@ -32,7 +32,7 @@ class Chat:
         self.login = login
         self.account_limits = AccountLimits(limits)
         self.global_limit = TokenBucket(limits.global_burst, limits.global_refill_seconds, clock())      # all accounts together: what the database is asked to keep
-        self.peers = set()
+        self.peers = presencemod.Peers()
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
         self.ring = collections.deque(maxlen=limits.history_lines)
@@ -51,8 +51,11 @@ class Chat:
 
     def welcome(self, peer):
         you = peer.identity
-        return {"t": "welcome", "v": PROTOCOL, "you": {"name": you.name, "mod": you.account_id in self.mods} if you else None, "login": bool(self.login), "presence": True, "online": self.presence.people(),
-                "history": [self.line_of(l) for l in self.recent()]}
+        welcome = {"t": "welcome", "v": PROTOCOL, "you": {"name": you.name, "mod": you.account_id in self.mods} if you else None, "login": bool(self.login), "presence": True,
+                   "online": self.presence.people(), "history": [self.line_of(l) for l in self.recent()]}
+        if you:
+            welcome["me"] = self.presence.row_id(you.account_id)       # (the number of the account's own row in the list: the page leaves that row out of its groups)
+        return welcome
 
     @staticmethod
     def line_of(line):

@@ -1,27 +1,31 @@
 """Who is on the front page right now (docs/HUB.md, "Presence"): the list that Home shows beside the Yard. No sockets here: a peer is the object that hub.chat talks to.
 
-A socket that is let in with a login is a named person (the Discord username that the hub already shows in the chat); a socket without one is a guest, counted and never named. A page says what its
-visitor is doing (looking, waiting in a room that has not started, in a match) and asks for the list; the hub sends the list once and then the changes, at most every `who_seconds`. All of it is
-memory, for as long as a socket is open: nothing goes to the database, the log has no name or number of a person, and a person is out of the list one send after the socket closes.
+A socket that is let in with a login is a named person (the Discord username that the hub already shows in the chat); a socket without one is a guest, counted and never named, and so is an account that is banned
+from the chat. A page says what its visitor is doing (looking, waiting in a room that has not started, in a match) and asks for the list; the hub sends the list once and then the changes, to every page that
+watches it at once, at most every `who_seconds`. All of it is memory, for as long as a socket is open: nothing goes to the database, the log has no name or number of a person, and a person is out of the list
+one send after the socket closes.
 
 Messages (JSON, docs/HUB.md has the table):
-  up    {"t":"who"}                                    watch the list: it is answered at once with the whole list
-        {"t":"here","at":"look"|"wait"|"play", ...}    what this page's visitor is doing (a login is needed); a room that is public may say its map, seats and code, a private one nothing
+  up    {"t":"who"}                                    watch the list: it is answered at once with the whole list as it was last sent
+        {"t":"here","at":"look"|"wait"|"play", ...}    what this page's visitor is doing (a login is needed); a room that is public may say its map, seats and code, a private one nothing; an account that
+                                                       may not chat (muted, too new) has none of it kept
   down  {"t":"who","full":bool,"n","g","more","rows":[row,...],"gone":[id,...]}
+        the welcome of a login says `me`, the number of the row that is the account's own
 A row is {"i": a number that names it while the person is here, "name", "at", "mod" (moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
-A message that is no `here` is a mistake of the socket; a second `who` too soon is not (it costs the socket a frame more, like any refusal that is not its doing).
+A `here` that is not what a page says is refused with the code `here` and is a mistake of the socket; a second `who` too soon is not (it costs the socket a frame more, like any refusal that is not its doing).
 """
 import collections
 import re
 
-from . import text as textrules
+from .store import StoreError
 
 AT = ("look", "wait", "play")
 WEIGHT = {"look": 0, "wait": 1, "play": 2}              # of the sockets of one account, the one that is doing the most is the account's row
 RANK = {"wait": 0, "play": 1, "look": 2}                # when there are more people than rows: moderators first, then those who wait (a Join is there), those who play, those who look
 SEATS = 4
+REFUSED = "here"                                        # the code of the `err` for a `here` that is not what a page says (the chat's own codes are for its lines)
 ROOM_CODE = re.compile(r"[a-z0-9_-]{1,32}\Z")           # (the codes that the game server makes for a room: lower case, the page's own rule)
-MAP_FILE = re.compile(r"[ -~]{5,64}\Z")                 # (a map's file name as the game server lists it: printable ASCII, 5 to 64 characters, a .LVL ending, none of / \ : * ? " < > | and no leading dot)
+MAP_FILE = re.compile(r"[ -~]{5,64}\Z")                 # (a map's file name as the game takes it, net::valid_map_name: printable ASCII, 5 to 64 characters; double spaces and dots are fine)
 NOT_IN_A_FILE_NAME = frozenset('/\\:*?"<>|')
 
 Where = collections.namedtuple("Where", "at map n of pub code seq")
@@ -32,11 +36,10 @@ def whole(value, low, high):
 
 
 def map_file(value):
-    """The file name if it is one (and goes through the text rules unchanged), else None."""
+    """The file name if the game takes it as the name of a map (net::valid_map_name: printable ASCII, 5 to 64 characters, none of / \\ : * ? " < > |, no leading dot, ending in .lvl or .LVL), else None."""
     if not isinstance(value, str) or not MAP_FILE.match(value) or NOT_IN_A_FILE_NAME & set(value) or value[0] == "." or not value.endswith((".lvl", ".LVL")):
         return None
-    text, why = textrules.clean_line(value)
-    return value if why is None and text == value else None
+    return value
 
 
 def parse_here(msg, seq):
@@ -57,6 +60,11 @@ def parse_here(msg, seq):
     return Where(at, file, n, size, True, code, seq)
 
 
+def bare(where):
+    """What a person is doing and nothing about the room: what is kept of an account that may not chat."""
+    return Where(where.at, None, None, None, False, None, where.seq)
+
+
 def row_of(ident, name, mod, where):
     row = {"i": ident, "name": name, "at": where.at if where else "look"}
     if mod:
@@ -69,6 +77,29 @@ def row_of(ident, name, mod, where):
     return row
 
 
+class Peers(set):
+    """The open sockets of the chat (a plain set for everything that reads it). `version` goes up at every change of the set, and when a socket in it closes (hub.server.Peer), so that the number of people is
+    counted again only after a change and not for every ping."""
+
+    def __init__(self):
+        super().__init__()
+        self.version = 0
+
+
+def _bumping(name):
+    base = getattr(set, name)
+
+    def method(self, *args):
+        self.version += 1
+        return base(self, *args)
+    method.__name__ = name
+    return method
+
+
+for _name in ("add", "discard", "remove", "clear", "pop", "update", "difference_update", "intersection_update", "symmetric_difference_update", "__ior__", "__iand__", "__isub__", "__ixor__"):
+    setattr(Peers, _name, _bumping(_name))
+
+
 class Presence:
     def __init__(self, chat, limits, clock, dumps):
         self.chat = chat
@@ -78,32 +109,62 @@ class Presence:
         self.where = {}                 # peer -> Where: what its page last said (a socket that never said anything is looking)
         self.watchers = set()           # the peers that asked for the list
         self.asked = {}                 # peer -> when it last asked for the whole list
-        self.ids = {}                   # account id -> the number that names its row for as long as the account is here (never sent)
+        self.ids = {}                   # account id -> the number that names its row for as long as the account has a socket open (the welcome says it to the account's own sockets, never the account)
         self.next_id = 1
         self.seq = 0                    # the order in which pages said what they do (the newer one wins between two sockets of one account that do the same)
         self.sent = None                # the list as it was last sent: {"n", "g", "more", "rows": {id: row}}
         self.sent_bytes = None          # ... as one frame, for the next page that asks
-        self.sent_at = float("-inf")             # when the list was last sent: the sends are held to `who_seconds` from that (`who_soon_seconds` for a page that asks)
+        self.sent_at = float("-inf")    # when the list was last sent: the next send is `who_seconds` after that at the soonest, whatever happens
+        self.limited = (frozenset(), frozenset())       # the accounts that are banned and muted, as the store last said
+        self.counted = 0                # the number of people, and the version of the sockets that it was counted for
+        self.counted_version = None
 
     def alive(self, peer):
         return peer in self.chat.peers and not getattr(peer, "closed", False)
 
     def people(self):
-        """How many people are here: the accounts that have a socket open (one for each, however many tabs) and the sockets that have no login (a guest is one socket). The chat's "here now" is this too."""
+        """How many people are here: the accounts that have a socket open (one for each, however many tabs) and the sockets that have no login (a guest is one socket). The chat's "here now" is this too.
+        Counted again only when the sockets changed (the pings, which are most of what asks, are answered from the last count)."""
+        peers = self.chat.peers
+        version = getattr(peers, "version", None)
+        if version is not None and version == self.counted_version:
+            return self.counted
         accounts, guests = set(), 0
-        for peer in self.chat.peers:
+        for peer in peers:
             if getattr(peer, "closed", False):
                 continue
             if peer.identity is None:
                 guests += 1
             else:
                 accounts.add(peer.identity.account_id)
-        return len(accounts) + guests
+        count = len(accounts) + guests
+        if version is not None:
+            self.counted, self.counted_version = count, version
+        return count
+
+    def row_id(self, account):
+        """The number of the account's row: made when it is first asked for (the welcome of its first socket) and kept while the account has a socket open."""
+        ident = self.ids.get(account)
+        if ident is None:
+            ident = self.ids[account] = self.next_id
+            self.next_id += 1
+        return ident
+
+    def restricted(self):
+        """The accounts that are banned and the accounts that are muted now, as the store says (a store that does not answer leaves what it said last)."""
+        try:
+            store = self.chat.store
+            self.limited = (frozenset(row[0] for row in store.bans()), frozenset(row[0] for row in store.mutes()))
+        except StoreError:
+            pass
+        return self.limited
 
     # ---- the list --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     def view(self):
-        """The list as it is now: the people (an account once), who of them is where, in the order that decides who is left out when there are more than `who_rows_max`."""
+        """The list as it is now: the people (an account once), who of them is where, in the order that decides who is left out when there are more than `who_rows_max`. An account that is banned from the chat is
+        a guest here (counted, never named); one that is muted, or too new to chat, is named and has none of the room's details: what a page says is kept for the accounts that may speak."""
+        banned, muted = self.restricted()
         best, guests = {}, 0
         for peer in self.chat.peers:
             if getattr(peer, "closed", False):
@@ -115,18 +176,18 @@ class Presence:
             where = self.where.get(peer)
             key = (WEIGHT[where.at], where.seq) if where else (0, 0)
             if who.account_id not in best or key > best[who.account_id][0]:
-                best[who.account_id] = (key, who.name, where)
+                best[who.account_id] = (key, who.name, where, who.young)
+        for account in [a for a in self.ids if a not in best]:
+            del self.ids[account]                   # (a person who left is a new row if they come back)
+        for account in banned.intersection(best):
+            del best[account]
+            guests += 1
         mods = self.chat.mods
         order = sorted(best.items(), key=lambda item: (item[0] not in mods, RANK[item[1][2].at if item[1][2] else "look"], item[1][1], item[0]))
         rows = {}
-        for account, (_, name, where) in order[:self.limits.who_rows_max]:
-            ident = self.ids.get(account)
-            if ident is None:
-                ident = self.ids[account] = self.next_id
-                self.next_id += 1
-            rows[ident] = row_of(ident, name, account in mods, where)
-        for account in [a for a in self.ids if a not in best]:
-            del self.ids[account]                   # (a person who left is a new row if they come back)
+        for account, (_, name, where, young) in order[:self.limits.who_rows_max]:
+            ident = self.row_id(account)
+            rows[ident] = row_of(ident, name, account in mods, bare(where) if where is not None and (young or account in muted) else where)
         return {"n": len(best) + guests, "g": guests, "more": max(0, len(best) - self.limits.who_rows_max), "rows": rows}
 
     def frame(self, view, previous):
@@ -139,10 +200,11 @@ class Presence:
                 return dict({"t": "who", "full": False}, **numbers, rows=up, gone=gone)
         return dict({"t": "who", "full": True}, **numbers, rows=list(view["rows"].values()))
 
-    def refresh(self, now, soon):
-        """Look at the list, and send the change to the pages that watch it: at most every `who_seconds` after the last send (`who_soon_seconds` for a page that asks for it for the first time). A change after a
-        quiet time goes out at the next look; changes that come while the last send is young wait for it to be old, and are one send."""
-        if now - self.sent_at < (self.limits.who_soon_seconds if soon else self.limits.who_seconds):
+    def refresh(self, now, force=False):
+        """Look at the list, and send the change to the pages that watch it: every page gets the same frame, and not sooner than `who_seconds` after the last send, whatever happens (a person who flaps, a
+        crowd that comes: changes that come while the last send is young wait for it to be old, and are one send). `force` looks at once and sends to nobody who was not watching: for the first page that
+        asks when nobody keeps the list current."""
+        if not force and now - self.sent_at < self.limits.who_seconds:
             return
         view = self.view()
         if view == self.sent:
@@ -168,8 +230,9 @@ class Presence:
         if last is not None and now - last < self.limits.who_resend_seconds:
             return peer.charge()                    # (a page that needs the list again has waited: this is no mistake, and no free frame either)
         self.asked[peer] = now
-        self.refresh(now, True)
-        self.watchers.add(peer)                     # (after the send above: what it is sent now is the list as last sent, and every change after that is sent to it too)
+        if self.sent is None or not any(self.alive(p) for p in self.watchers):
+            self.refresh(now, force=True)           # (nobody has kept the list current: look now; nobody else is sent anything)
+        self.watchers.add(peer)                     # (every watcher has the list as last sent, and every change after that is sent to it too)
         peer.send_text(self.snapshot())
 
     def on_here(self, peer, msg):
@@ -178,7 +241,7 @@ class Presence:
         self.seq += 1
         where = parse_here(msg, self.seq)
         if where is None:
-            return self.chat.mistake(peer, "bad")
+            return self.chat.mistake(peer, REFUSED)
         self.where[peer] = where
 
     # ---- the clock's work ------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -186,10 +249,11 @@ class Presence:
     def flush(self, now):
         """Once a tick: forget the sockets that are gone, and send the change if somebody watches."""
         alive = {p for p in self.chat.peers if not getattr(p, "closed", False)}
+        self.counted_version = None                 # (the number of people is counted again at least once a tick)
         self.where = {p: w for p, w in self.where.items() if p in alive}
         self.asked = {p: t for p, t in self.asked.items() if p in alive}
         self.watchers &= alive
         here = {p.identity.account_id for p in alive if p.identity is not None}
         self.ids = {a: i for a, i in self.ids.items() if a in here}
         if self.watchers:
-            self.refresh(now, False)
+            self.refresh(now)

@@ -66,7 +66,7 @@
 
 /* ---- the buttons that open it where it does not fit ---- */
 .pl-btn { position: absolute; z-index: 6; top: 10px; right: 10px; min-height: 46px; padding: 6px 16px; font-size: 16px; }
-.pl-bar { display: none; min-height: 46px; padding: 6px 14px; font-size: 16px; }
+.pl-bar { display: none; min-height: 46px; font-size: 16px; }
 .pl-ppl { flex: none; display: inline-block; width: 18px; height: 18px; background: var(--cream); -webkit-mask: var(--ppl) no-repeat center / contain; mask: var(--ppl) no-repeat center / contain; }
 :root { --ppl: url("data:image/svg+xml,%3Csvg xmlns='http:%2F%2Fwww.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Ccircle cx='6.5' cy='5.5' r='3'/%3E%3Cpath d='M1 15c0-3.3 2.4-5.4 5.5-5.4S12 11.7 12 15z'/%3E%3Ccircle cx='13' cy='6.5' r='2.3'/%3E%3Cpath d='M13 10c2.6 0 4.5 1.8 4.5 5H13.6c0-2-.5-3.6-1.4-4.6.2 0 .5-.4.8-.4z'/%3E%3C/svg%3E"); }
 .pl-btn .pill, .pl-bar .pill { margin-left: 2px; }
@@ -75,20 +75,22 @@
 @media (min-width: 1180px) and (min-height: 501px) {
     .pl { position: absolute; z-index: 6; display: flex; top: 14px; right: 14px; width: 260px; max-height: calc(100% - 26px); }
     .pl-fold:not(.pl-close) { display: inline-flex; } .pl-close, .pl-btn, .pl-bar, .pl-scrim { display: none; }
-    .pl-on .gdock { right: 288px; width: min(560px, calc(100% - 716px)); }
 }
-@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; } .pl-on .gdock { right: 308px; width: min(560px, calc(100% - 736px)); } }
+@media (min-width: 1180px) and (max-width: 1279px) and (min-height: 501px) { .pl-on .gdock { right: 288px; width: min(560px, calc(100% - 716px)); } }      /* (from 1280 px the Games list is centered in the window: it ends well before the panel, and its own rule is the one that holds) */
+@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; } }
 
 /* ---- a phone upright, or any window under 640 px: the button is in the bar's first row (its picture goes first, then its word), the panel is a sheet over the bottom of the page ---- */
 @media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {
     .pl-btn { display: none; }
-    .pl-bar { display: inline-flex; padding: 6px 12px; }
+    .pl-bar { display: inline-flex; }
     .pl-on .hbar .hbrand { grid-column: 1; grid-row: 1; }
     .pl-on .hbar .hright { grid-column: 1 / -1; min-width: 0; max-width: calc(100% - 102px); }
     .pl { top: auto; left: 10px; right: 10px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: calc(100vh - 76px - env(safe-area-inset-bottom, 0px)); max-height: calc(100dvh - 76px - env(safe-area-inset-bottom, 0px)); }
 }
+@media (max-width: 440px) { .pl-on .hbar .pl-bar { padding: 6px 10px; } }
 @media (max-width: 410px) { .pl-bar .pl-ppl { display: none; } }
-@media (max-width: 369px) { .pl-bar { padding: 6px 10px; } .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }
+@media (max-width: 380px) { .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }
+@media (max-width: 359px) { .pl-on .hbar .hright { gap: 6px; } .pl-on .hbar .pl-bar { padding: 6px 8px; gap: 6px; } .pl-bar .pill { margin-left: 0; padding: 0 6px; font-size: 14px; } }
 @media (max-width: 340px) { .pl-on .hbar .hlogo { width: 76px; } .pl-on .hbar .hright { max-width: calc(100% - 86px); } }
 
 /* ---- a window that is not wide and not a phone upright: the button is in the Yard's corner and the Games list moves out of its way, under it ---- */
