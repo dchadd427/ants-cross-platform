@@ -5,6 +5,7 @@
 //                    before), the history record that is made of it
 //   S3.253 - S3.254  the room fails, as it always did, when no seat at the table agrees with the referee; a computer player's seat is not touched
 //   S3.255 - S3.257  a room that holds seats (the key of the dropped seat is told "dropped", the status counts the drop), a machine that really differs, a link that is no seat's
+//   S3.258           a room that holds seats, one odd report from a machine whose acknowledgements run late, while the other seat's link is lost or just after it is back: the room goes on
 // The codes that the control interface draws, from the bytes of the operating system's generator, are tested in test_server_core.cpp (S3.10c the alphabet, S3.10d the source of the bytes).
 // Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness and, from replay_tests.hpp, the helpers of the replays; test_server.cpp calls run_state_hash_tests(). The mutants:
 // tests/data/state_hash_mutants.json (tools/mutate.py), every one caught.
@@ -314,5 +315,51 @@ void run_state_hash_tests() {
         ASSERT_TRUE(s.state == RoomState::Running && s.drops_by_state == 0 && s.joined == 2);
         ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());
         ASSERT_TRUE(ann.end->is_open() && bob.end->is_open());
+    } TEST_END();
+
+    TEST_CASE("S3.258 A Room That Holds Seats: One Odd Report From A Machine Whose Acknowledgements Run Late, Sent While The Other Seat's Link Is Lost Or Just After The Seat Is Back, Does Not Fail The Room (Nobody Who Was At The Table For That Turn Can Say Which State Was Right: The Turn Is Let Go); The Next One, Once The Table Has Settled, Drops The Seat As Any Other Report Of Another State Does") {
+        for (const bool away : {true, false}) {
+            RWorld w;
+            const std::string code = away ? "HASH-9A" : "HASH-9B";
+            ASSERT_TRUE(w.mgr.create_room(held_spec(code, 2), w.now).ok);
+            RClient& ann = w.connect("Ann", code);
+            RClient& bob = w.connect("Bob", code);
+            ASSERT_TRUE(w.until([&] { return ann.session && bob.session; }, 5000));
+            ants_test::HashHold odd(ann.end, &w.now, 1200);                                  // Ann's machine: its acknowledgements reach the room 1.2 s late, and it reports no state of its own
+            ann.session->set_connection(&odd);
+            w.run(kPre + 6000);
+            ASSERT_TRUE(w.status(code).state == RoomState::Running);
+            odd.hold_acks = true;                                                            // (while a seat is missing, the acknowledgements stand still, so that the newest turns are kept)
+            bob.reconnects = false;                                                          // Bob's machine does not come back by itself (until the test says)
+            w.cut(bob);
+            ASSERT_TRUE(w.until([&] { return w.status(code).paused; }, 3000));
+            uint32_t first = 0;
+            if (away) first = odd.report_odd();
+            w.run(1000);
+            RoomStatus s = w.status(code);
+            ASSERT_TRUE(s.state == RoomState::Running && s.drops_by_state == 0);
+            ASSERT_TRUE(s.paused && s.absent.size() == 1 && !s.absent[0].catching_up);      // Bob's seat is still held
+            bob.reconnects = true;
+            ASSERT_TRUE(w.until([&] {
+                const RoomStatus t = w.status(code);
+                return !t.paused && t.absent.empty() && t.rejoins == 1;
+            }, 20000));
+            if (!away) first = odd.report_odd();
+            odd.hold_acks = false;
+            w.run(1500);
+            s = w.status(code);
+            ASSERT_TRUE(first != 0 && (first + 1) % net::kHashEveryTurns == 0);
+            ASSERT_TRUE(s.state == RoomState::Running && s.drops_by_state == 0);             // the room goes on, nobody is dropped
+            ASSERT_FALSE(ann.session->desynced() || bob.session->desynced());
+            ASSERT_TRUE(ann.end->is_open() && bob.end->is_open());
+            w.run(3000);                                                                     // the table settles
+            const uint32_t second = odd.report_odd();
+            ASSERT_TRUE(second > first);
+            w.run(2000);
+            s = w.status(code);
+            ASSERT_TRUE(s.state == RoomState::Finished && s.quitter == 0 && s.drops_by_state == 1);       // Ann quit a match of two: Bob wins
+            ASSERT_TRUE(ann.session->desynced() && !bob.session->desynced() && !ann.end->is_open());
+            ASSERT_TRUE(s.rows.size() == 2 && s.rows[0].first == 1 && s.rows[0].winner && s.rows[1].first == 0 && !s.rows[1].winner);
+        }
     } TEST_END();
 }

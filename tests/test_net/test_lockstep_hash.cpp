@@ -7,7 +7,11 @@
 //                  leaves does not take the verdict with it
 //   S2.48 - S2.50  the verdict is the same on links of any speed, reports that mean nothing change nothing, several seats at once and a seat that is alone with the referee
 //   S2.51 - S2.53  a seat that held its place (the key of a dropped seat is told so, a machine that comes back and sends hashes, a link that is no seat's), the seat of a computer player
-// The Quit of the dropped seat in the turn stream and what it makes of the results, the history and the replay are tested in front of real rooms (test_server S3.250 - S3.257). The mutants of all of it:
+//   S2.54 - S2.56  the table changes between the turn and the verdict (a seat that came back since the turn was sealed): nobody who was there can say, the turn is let go and the next hashed turn decides; a seat
+//                  that vouches, or one that is awaited, decides as before. The guards of the verdict (a seat that has run exactly the turn, two turns that wait, the reports of a seat that is not at the table
+//                  or that leaves, a report that comes after the reports are forgotten, a late report after an answer). A whole room that holds seats, with real machines, one of them behind a link whose
+//                  acknowledgements run late
+// The Quit of the dropped seat in the turn stream and what it makes of the results, the history and the replay are tested in front of real rooms (test_server S3.250 - S3.258). The mutants of all of it:
 // tests/data/state_hash_mutants.json (tools/mutate.py), every one caught.
 #include "lockstep_fixtures.hpp"
 
@@ -32,6 +36,13 @@ struct JudgeRig {
     }
     void report(uint8_t seat, uint32_t turn, int which) { seq.on_hash(seat, turn, state[which]); }
     void executed(uint8_t seat, uint32_t turn) { seq.on_ack(seat, turn + 3); }       // the seat has run the turn (and a few after it): a client sends its hash of a turn before its acknowledgement
+    void seal_to(uint32_t next_turn) {
+        while (seq.next_turn() < next_turn) seq.seal();
+    }
+    void leave_and_return(uint8_t seat) {                                           // the link of the seat is lost and it is back: level with the sequencer, with no report of what came before
+        seq.set_active(seat, false);
+        seq.set_active(seat, true);
+    }
 };
 
 uint8_t seats_of(const HashVerdict& v) {
@@ -508,6 +519,198 @@ void run_hash_tests() {
             ASSERT_TRUE(m.host->desyncs().size() == 1 && m.host->desyncs()[0].player == 0);
             ASSERT_EQ(m.host->diverged_drops(), 0u);
             ASSERT_FALSE(m.referee.is_player_dropped(0) || m.referee.is_player_dropped(1));
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.54 Dedicated Server: A Seat That Has Come Back Since A Turn Was Sealed Cannot Say Which State Was Right For It, And Nobody Waits For It: When No Other Seat Can Say Either The Turn Is Let Go And The Next Hashed Turn Decides, Not The Failure Of The Room; A Seat That Vouches For The Referee, Or One That Has Not Run The Turn Yet, Decides As Before") {
+        {   // seat 0 reported the turn right, its link was lost and it is back (level with the sequencer, its reports gone); the only report left is seat 1's, and it differs
+            JudgeRig r;
+            r.report(0, 19, 0);
+            r.leave_and_return(0);
+            r.report(1, 19, 1);
+            r.seq.on_referee_hash(19, r.state[0]);
+            ASSERT_TRUE(r.seq.judge_hashes(3).kind == Kind::Nothing);                // seat 0 was not at the table when the turn was sealed: nobody who was can say
+            ASSERT_TRUE(r.seq.judge_hashes(3).kind == Kind::Nothing);                // (the turn is let go: nothing is left to answer)
+            r.seal_to(120);                                                          // the next hashed turn, sealed with seat 0 at the table
+            r.report(0, 119, 0);
+            r.report(1, 119, 1);
+            r.seq.on_referee_hash(119, r.state[0]);
+            const HashVerdict v = r.seq.judge_hashes(3);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2 && v.seats[0].turn == 119);       // seat 0 vouches for the referee now: seat 1 is dropped
+        }
+        {   // the same with no seat gone from the table: the seat that reported the turn right vouches for it
+            JudgeRig r;
+            r.report(0, 19, 0);
+            r.report(1, 19, 1);
+            r.seq.on_referee_hash(19, r.state[0]);
+            const HashVerdict v = r.seq.judge_hashes(3);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2 && v.seats[0].turn == 19);
+        }
+        for (const uint32_t sealed_at_return : {119u, 120u}) {   // a seat that is back before the turn is sealed runs it, and what it says of it counts; one that is back after it does not
+            JudgeRig r(sealed_at_return);
+            r.leave_and_return(0);
+            r.seal_to(120);                                                          // (the turn 119 is sealed before the return, or after it)
+            r.report(1, 119, 1);
+            r.seq.on_referee_hash(119, r.state[0]);
+            r.seq.on_ack(0, 119);                                                    // seat 0 has run the turn
+            const HashVerdict v = r.seq.judge_hashes(3);
+            if (sealed_at_return == 119) ASSERT_TRUE(v.kind == Kind::Fail && seats_of(v) == 2);      // it ran the turn and said nothing: nobody vouches for the referee and nobody can
+            else ASSERT_TRUE(v.kind == Kind::Nothing);
+        }
+        {   // a seat vouches for the referee: the seat that differs is dropped, whoever else came or went
+            JudgeRig r;
+            r.report(2, 19, 0);
+            r.leave_and_return(0);
+            r.report(1, 19, 1);
+            r.seq.on_referee_hash(19, r.state[0]);
+            const HashVerdict v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2);
+        }
+        {   // a seat that has not run the turn yet is awaited: the turn is not let go while it is, and when the seat reports it decides
+            JudgeRig r;
+            r.leave_and_return(0);
+            r.report(1, 19, 1);
+            r.seq.on_referee_hash(19, r.state[0]);
+            ASSERT_TRUE(r.seq.judge_hashes(7).kind == Kind::Nothing);                // seat 2 has run nothing
+            r.report(2, 19, 0);
+            const HashVerdict v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2);
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.55 Dedicated Server: The Guards Of The Verdict: A Seat That Has Run Exactly The Turn And Said Nothing Is Not Awaited, A Turn That Waits Does Not Hold Up A Newer One That Can Be Answered (The Oldest Answerable First), The Reports Of A Seat That Is Not At The Table Are Nobody's, A Seat That Leaves Takes Only Its Own Reports, A Referee's Report That Comes After The Reports Are Forgotten Judges Nothing, And A Report That Comes After The Answer Is Answered By Itself") {
+        {   // all three seats have run turn 19 and nothing beyond it (acknowledged 19 = executed up to and including 19), seat 1 reported another state, the others said nothing
+            JudgeRig r;
+            r.report(1, 19, 1);
+            r.seq.on_referee_hash(19, r.state[0]);
+            for (uint8_t p = 0; p < 3; ++p) r.seq.on_ack(p, 19);
+            const HashVerdict v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Fail && seats_of(v) == 2);                   // none is awaited: they ran the turn, and a seat that ran it and said nothing never will
+        }
+        {   // three turns wait for an answer: 19 is awaited (seat 2 has run nothing), 39 and 59 can be answered
+            JudgeRig r;
+            for (uint32_t turn : {19u, 39u, 59u}) {
+                r.report(1, turn, 1);
+                r.seq.on_referee_hash(turn, r.state[0]);
+            }
+            r.report(0, 39, 0);
+            r.report(0, 59, 0);
+            r.seq.on_ack(0, 65);                                                     // seat 0 ran them all (it reported only the last two), seat 1 too, seat 2 has run nothing
+            r.seq.on_ack(1, 65);
+            HashVerdict v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2 && v.seats[0].turn == 39);        // the oldest that can be answered
+            v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2 && v.seats[0].turn == 59);
+            ASSERT_TRUE(r.seq.judge_hashes(7).kind == Kind::Nothing);                // (turn 19 still waits for seat 2)
+            r.report(2, 19, 0);
+            v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2 && v.seats[0].turn == 19);
+        }
+        {   // a report that comes while the seat is not at the table is nobody's: back at the table, nothing is held against it
+            JudgeRig r;
+            r.seq.set_active(2, false);
+            r.seq.on_hash(2, 19, r.state[1]);
+            r.seq.set_active(2, true);
+            r.seq.on_referee_hash(19, r.state[0]);
+            r.report(0, 19, 0);                                                      // (a seat that vouches, so that a report of seat 2 that was kept would be dropped on)
+            for (uint8_t p = 0; p < 3; ++p) r.seq.on_ack(p, 30);
+            ASSERT_TRUE(r.seq.judge_hashes(7).kind == Kind::Nothing);
+        }
+        {   // a seat that leaves takes its own reports with it and the others keep theirs
+            JudgeRig r;
+            r.report(0, 39, 0);
+            r.report(1, 39, 1);
+            r.report(2, 39, 1);
+            r.seq.on_referee_hash(39, r.state[0]);
+            r.seq.on_ack(0, 45);
+            r.seq.on_ack(1, 45);
+            r.seq.set_active(2, false);                                              // seat 2 is gone (dropped by another rule) before the verdict is asked for
+            const HashVerdict v = r.seq.judge_hashes(3);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2);                   // seat 0 still vouches for the referee
+        }
+        {   // the reports of a turn are forgotten when every seat has passed it: a referee's report that comes after that judges nothing, the next hashed turn does
+            JudgeRig r;
+            r.report(1, 19, 1);
+            for (uint8_t p = 0; p < 3; ++p) r.seq.on_ack(p, 70);
+            ASSERT_EQ(r.seq.pending_reports(), size_t{0});
+            r.seq.on_referee_hash(19, r.state[0]);
+            ASSERT_TRUE(r.seq.judge_hashes(7).kind == Kind::Nothing);
+            r.report(0, 99, 0);
+            r.report(1, 99, 1);
+            r.seq.on_referee_hash(99, r.state[0]);
+            const HashVerdict v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2 && v.seats[0].turn == 99);
+        }
+        {   // a seat that reports a turn after it was answered gets its own answer (the seat that was dropped is not at the table any more)
+            JudgeRig r;
+            r.report(0, 19, 0);
+            r.report(1, 19, 1);
+            r.seq.on_referee_hash(19, r.state[0]);
+            HashVerdict v = r.seq.judge_hashes(7);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2);
+            r.seq.set_active(1, false);
+            ASSERT_TRUE(r.seq.judge_hashes(7).kind == Kind::Nothing);
+            r.report(2, 19, 2);
+            v = r.seq.judge_hashes(5);
+            ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 4 && v.seats[0].turn == 19);
+        }
+    } TEST_END();
+
+    TEST_CASE("S2.56 Dedicated Server (Seats Held): One Odd Report From A Machine Whose Acknowledgements Run Behind Does Not Stop The Room While The Other Seat's Link Is Lost Or Has Just Come Back, For Nobody Who Was At The Table For That Turn Can Say Which State Was Right: The Turn Is Let Go; The Next Odd Report, Once The Table Has Settled, Drops The Seat, And So Does One With Both Seats There All Along") {
+        enum class When { Never, AllAlong, Away, Back };
+        for (const When when : {When::Never, When::AllAlong, When::Away, When::Back}) {
+            HoldMatch m(2);
+            ants_test::HashHold odd(m.client_ends[0], &m.now, 1200);                 // seat 0: its acknowledgements reach the host 1.2 s late, and it reports no state of its own
+            m.clients[0]->set_connection(&odd);
+            m.run(9000);
+            uint32_t first = 0;
+            uint32_t sealed_back = 0;
+            if (when == When::AllAlong) first = odd.report_odd();                    // both seats at the table since the start of the match
+            if (when != When::AllAlong) {
+                m.auto_reconnect[1] = false;                                         // seat 1's machine does not come back by itself (until the test says)
+                odd.hold_acks = when != When::Never;                                 // the acknowledgements of seat 0 stand still while a seat is missing, so that the newest turns are kept
+                m.cut(1);
+                ASSERT_TRUE(m.until([&]() { return m.host->seat_held(1); }, 2000));
+                if (when == When::Away) first = odd.report_odd();
+                m.run(1000);
+                ASSERT_TRUE(m.host->paused() && m.host->seat_held(1));               // the seat is still away
+                m.auto_reconnect[1] = true;
+                ASSERT_TRUE(m.until([&]() { return m.host->client_present(1) && !m.host->seat_held(1); }, 20000));
+                sealed_back = m.sealed();
+                if (when == When::Back) first = odd.report_odd();
+                odd.hold_acks = false;
+            }
+            m.run(1500);
+            ASSERT_TRUE((first != 0) == (when != When::Never));
+            if (first != 0) ASSERT_EQ((first + 1) % kHashEveryTurns, 0u);
+            ASSERT_TRUE(m.host->desyncs().empty() && !m.host->frozen());
+            if (when == When::AllAlong) {
+                ASSERT_EQ(m.host->diverged_drops(), 1u);                             // a seat vouches for the referee: the seat that reported another state is out
+                ASSERT_TRUE(!m.host->client_present(0) && m.host->client_present(1));
+                ASSERT_TRUE(m.clients[0]->desynced() && !m.clients[1]->desynced());
+            } else {
+                ASSERT_EQ(m.host->diverged_drops(), 0u);                             // nobody was there to say: the turn is let go, nobody is dropped and the room goes on
+                ASSERT_TRUE(m.host->client_present(0) && m.host->client_present(1));
+                ASSERT_FALSE(m.clients[0]->desynced() || m.clients[1]->desynced());
+            }
+            if (when == When::Away || when == When::Back) {
+                m.run(3000);                                                         // the table settles: seat 1 reports the turns that are sealed after its return
+                const uint32_t second = odd.report_odd();
+                ASSERT_TRUE(second > first && second >= sealed_back);
+                m.run(1500);
+                ASSERT_FALSE(m.host->frozen());
+                ASSERT_TRUE(m.host->desyncs().empty());
+                ASSERT_EQ(m.host->diverged_drops(), 1u);
+                ASSERT_TRUE(!m.host->client_present(0) && m.host->client_present(1));
+                ASSERT_TRUE(m.clients[0]->desynced() && !m.clients[1]->desynced());
+            }
+            m.settle();
+            if (when == When::Never) {
+                ASSERT_TRUE(m.host->client_present(0) && m.host->client_present(1) && m.all_equal());
+            } else {
+                ASSERT_TRUE(m.referee.is_player_dropped(0) && !m.referee.is_player_dropped(1));       // the Quit of the seat travelled in the turn stream
+                ASSERT_TRUE(m.sims[1]->is_player_dropped(0) && m.sims[1]->state_hash() == m.referee.state_hash());
+            }
         }
     } TEST_END();
 }
