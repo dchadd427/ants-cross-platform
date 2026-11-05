@@ -28,6 +28,8 @@ def refusal_as_store_error(method, errors=sqlite3.OperationalError):
 
 
 class Store(StoreBase):
+    log_max_bytes = 16 * 1024 * 1024                # a reader that holds hub.db (a backup tool, a shell that was left open) keeps the log file from being cut, and every chunk that make_room deletes adds its pages to it: when the log is this long and cannot be cut, no more lines go
+
     def __init__(self, path, clock=time.time, retention_days=7, busy_ms=5000):
         self.path = path
         self.busy_ms = busy_ms                      # how long a write waits for another process's write (the hub uses a short time: its one thread must not wait for seconds)
@@ -170,22 +172,27 @@ class Store(StoreBase):
         page_size = self.db.execute("PRAGMA page_size").fetchone()[0]
         return (pages - free) * page_size
 
+    def log_bytes(self):
+        """The size of the log file (hub.db-wal)."""
+        try:
+            return os.path.getsize(self.path + "-wal")
+        except OSError:
+            return 0
+
     def size(self):
         """Bytes in use: the pages of hub.db that hold something, and the log file."""
-        try:
-            log_file = os.path.getsize(self.path + "-wal")
-        except OSError:
-            log_file = 0
-        return self.used_bytes() + log_file
+        return self.used_bytes() + self.log_bytes()
 
     def make_room(self, target, chunk=2000, keep=1000):
         """The oldest lines go first, so that the pages they leave are whole and the lines that follow use them: the lines are in the order of their numbers, and so are their time and their
         pages. The moderators' lines and the lines that a moderator deleted (they are kept for moderation) go last, and the newest `keep` never (the screens and the hub's memory hold fewer). The log file is cut at once, so that the lines are in neither file (a reader
-        that holds it up leaves them there until a later look: `unsettled`)."""
+        that holds it up leaves them there until a later look: `unsettled`; while it does and the log file is over `log_max_bytes`, no line is deleted: nothing would cut what a chunk adds to it)."""
         chunk, keep = max(1, int(chunk)), max(0, int(keep))
         if self.size() <= target:
             return 0
-        self.checkpoint()                          # (what is left of the log file is not lines to delete: cut it, and look at the pages that hold something)
+        cut = self.checkpoint()                    # (what is left of the log file is not lines to delete: cut it, and look at the pages that hold something)
+        if not cut and self.log_bytes() > self.log_max_bytes:
+            return 0                               # (a reader holds the log file and it is long: a chunk would add its pages to a file that cannot be cut; `unsettled` says so, and the hub's clock asks again)
         if self.used_bytes() <= target:
             return 0
         edge = self.db.execute("SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?", (keep,)).fetchone()
@@ -207,7 +214,7 @@ class Store(StoreBase):
     def usage(self):
         lines, oldest = self.db.execute("SELECT COUNT(*), COALESCE(MIN(at), 0) FROM lines").fetchone()
         free = self.db.execute("PRAGMA freelist_count").fetchone()[0] * self.db.execute("PRAGMA page_size").fetchone()[0]
-        return Usage(self.size(), free, lines, oldest)
+        return Usage(self.used_bytes(), free, lines, oldest, self.log_bytes())
 
     # ---- logins ---------------------------------------------------------------------------------------------------------------------------
 

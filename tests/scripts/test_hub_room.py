@@ -12,12 +12,16 @@ these tests must notice are tests/data/hub_room_mutants.json (`python3 tools/mut
                                   the chat takes lines again at the next tick; the newest lines, the mutes, the bans, the deletion counter and the logins stay.
   TheRoomInTheFile                what only the SQLite file has: the pages that the oldest lines leave are free and whole, the file stops growing, the target ends a call within a chunk, the bytes
                                   decide and not the number of lines, the text of a deleted line is in neither file (also when a reader holds the log file), a locked database, a store at its target.
+  TheReaderThatHoldsTheDatabase   a program that has hub.db open for reading keeps the log file from being cut: while the log file is short the lines go, when it is long they stop and the log file stops
+                                  growing, and when the reader lets go they go on; the length that is too long is 16 MB.
   TheBudgetsOfAnAccount           the hour's and the day's budget of an account (fills up steadily, a refused line costs nothing, a refund, the memory that stays small).
   TheChatTellsQuota               the code `quota`: the line is not kept, it is no mistake of the socket and costs it a frame; a moderator's command is not held back; the other codes stay as they were.
   TheBusiestChat                  twelve accounts that say a line every 2 seconds for an hour and twenty quiet ones: the store stays inside its limit, nobody quiet is refused.
   TheGuardAtItsEdges              exactly at the limit and one byte under it, a line of the largest size, lines that are deleted by the bytes.
-  TheHubsClock                    the marks (90% and 80%), a chunk a second, a database that refuses (a minute, not every tick), a store where no line may go (said once a minute), the time of a tick.
-  TheStaffTool                    `hub.admin status` and `purge` (the lower mark, --keep-lines, what a screen may show, a refusal, the hub going on during and after).
+  TheHubsClock                    the marks (90% and 80%), a chunk a second, a database that refuses (a minute, not every tick), a store where no line may go (said once a minute), a reader that holds
+                                  the database (named in the log, asked again in 10 seconds), a log file that is over the mark by itself, the time of a tick (the work, with 5,000 names).
+  TheStaffTool                    `hub.admin status` and `purge` (the lower mark, --keep-lines, what a screen may show, a refusal, a pause after each chunk with no lock held, a cut that is refused for a
+                                  moment and one that a reader holds, the status line with the log file on its own, the hub going on during and after).
   TheToolAndTheHubWriteAtTheSameTime   the command line's purge in a thread and the hub's clock and chat in this one: the file stays whole, the numbers of the lines go up, what stands is what the hub took.
   TheHubOnRealSockets             `quota` on the wire (the socket stays), and a running hub on a full store takes a line again.
   TheDocumentsSayWhatTheCodeDoes  docs/HUB.md and the page's word agree with the numbers of hub/limits.py.
@@ -57,8 +61,9 @@ FILL = """WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i
 
 
 def fill(store, lines, accounts=10, per_second=5, length=150, serial=0):
-    """`lines` chat lines of `length` characters from `accounts` accounts in turn (ids 1000, 1001, ...), `per_second` of them for each second of the store's clock, which moves on by that long:
-    what a busy chat leaves in the database, made in one statement so that a test can fill a store of 64 MB in a moment."""
+    """`lines` chat lines of `length` characters from `accounts` accounts in turn (ids 1000, 1001, ... and the names user0, user1, ...), `per_second` of them for each second of the store's clock, which
+    moves on by that long: what a busy chat leaves in the database, made in one statement so that a test can fill a store of 64 MB in a moment. With few accounts the oldest lines of a chunk lie
+    together in the index of names; with thousands (5,000 in the tests that time a chunk or count the pages that it touches) they lie all over it, and a chunk costs several times more."""
     start = int(store.clock())
     with store.transaction():
         store.db.execute(FILL, (lines - 1, start, per_second, accounts, accounts, serial, "x" * length))
@@ -76,6 +81,15 @@ def fill_to(store, limit, batch=50, **kw):
         store.checkpoint()
         if store.size() >= limit:
             return serial
+
+
+def reader_holding(test, path):
+    """A program that has the database open for reading (a backup tool, a shell that was left open): its read stays open, and the log file cannot be cut while it does. `COMMIT` lets it go."""
+    reader = sqlite3.connect(path, isolation_level=None)
+    test.addCleanup(reader.close)
+    reader.execute("BEGIN")
+    reader.execute("SELECT COUNT(*) FROM lines").fetchone()
+    return reader
 
 
 def answer(client):
@@ -339,6 +353,52 @@ class TheRoomInTheFile(StoreTest):
         self.assertEqual(self.store.make_room(0, 100, 50), 0)                          # (the 50 lines are the newest 50: none may go)
         blocker.execute("ROLLBACK")
         blocker.close()
+
+
+class TheReaderThatHoldsTheDatabase(StoreTest):
+    """A program that has hub.db open for reading keeps the log file from being cut, and a chunk of deleted lines adds its pages to it (some megabytes for 2,000 lines when the names are many): when the
+    log file is long and cannot be cut, no more lines go, and the clock asks again until the reader lets go."""
+
+    def test_the_log_file_does_not_grow_without_end_when_it_cannot_be_cut(self):
+        fill(self.store, 30000, accounts=3000)                                         # (3,000 names: a chunk touches the index of names all over)
+        self.store.checkpoint()
+        reader = reader_holding(self, self.path)
+        gone = [self.store.make_room(0, 500, 100)]
+        first = self.store.log_bytes()
+        self.assertEqual(gone, [500])
+        self.assertGreater(first, 100_000)                                             # (a chunk of 500 lines adds this much to the log file, which cannot be cut)
+        self.assertTrue(self.store.unsettled)
+        self.store.log_max_bytes = int(first * 2.5)                                    # (a long log file, for the test: the program's is 16 MB)
+        sizes = [first]
+        for call in range(15):
+            gone.append(self.store.make_room(0, 500, 100))
+            sizes.append(self.store.log_bytes())
+        stopped = gone.index(0)
+        self.assertGreaterEqual(stopped, 3)                                            # (the lines went while the log file was short)
+        self.assertEqual(gone[stopped:], [0] * (len(gone) - stopped))                  # (and when it was long, no more)
+        self.assertEqual(len(set(sizes[stopped:])), 1)                                 # (nothing was written then)
+        self.assertLessEqual(max(sizes), self.store.log_max_bytes + first)             # (never more than a long log file and a chunk)
+        self.assertEqual(self.store.usage().lines, 30000 - 500 * stopped)
+        self.assertTrue(self.store.unsettled)
+        reader.execute("COMMIT")                                                       # (the reader lets go: the cut works, and the lines go on)
+        self.assertEqual(self.store.make_room(0, 500, 100), 500)
+        self.assertEqual(self.store.log_bytes(), 0)
+        self.assertFalse(self.store.unsettled)
+
+    def test_a_short_log_file_that_cannot_be_cut_does_not_stop_the_lines(self):
+        fill(self.store, 3000, accounts=300)
+        self.store.checkpoint()
+        reader_holding(self, self.path)
+        self.assertEqual(self.store.make_room(0, 500, 100), 500)                       # (the log file is short: the lines go, and the cut is tried again later)
+        self.assertGreater(self.store.log_bytes(), 0)
+        self.assertLess(self.store.log_bytes(), self.store.log_max_bytes)
+        self.assertTrue(self.store.unsettled)
+
+    def test_the_log_file_that_is_too_long_is_16_mb_unless_the_store_is_told_otherwise(self):
+        self.assertEqual(storemod.Store.log_max_bytes, 16 * 1024 * 1024)
+        other = storemod.Store(os.path.join(self.folder.name, "other.db"))
+        self.addCleanup(other.close)
+        self.assertEqual(other.log_max_bytes, 16 * 1024 * 1024)
 
 
 class TheBudgetsOfAnAccount(unittest.TestCase):
@@ -628,16 +688,89 @@ class TheHubsClock(unittest.TestCase):
     def test_a_tick_at_the_default_size_holds_the_loop_for_a_short_time(self):
         room = Room()
         self.addCleanup(room.close)
-        fill_to(room.store, room.limits.db_max_bytes, batch=50)
+        fill_to(room.store, room.limits.db_max_bytes, batch=50, accounts=5000)         # (5,000 names: a chunk of 2,000 lines touches the index of names all over)
         room.tick()
-        slowest = 0.0
+        walls, works = [], []
         for second in range(40):
-            started = time.perf_counter()
+            started, work = time.perf_counter(), time.process_time()
             room.tick()
-            slowest = max(slowest, time.perf_counter() - started)
-        self.assertLess(slowest, 3.0)                                                  # (a chunk of 2,000 lines is some 20 milliseconds on a quiet machine; the loop is not held for seconds)
+            walls.append(time.perf_counter() - started)
+            works.append(time.process_time() - work)
+        works.sort()
+        self.assertLess(works[len(works) // 2], 0.2)                                   # (the work of a tick is some 10 milliseconds here, without the disk's promise, which adds 30 to 100 on a real volume: a slowdown of 30 times shows)
+        self.assertLess(max(walls), 1.0)                                               # (and no tick holds the loop for a second, whatever else the machine is doing)
         self.assertLessEqual(room.store.size(), room.limits.prune_to_bytes)
         self.assertTrue(all(0 < n <= 2000 for n in self.prune_lines()))
+
+    def test_a_log_file_that_is_over_the_mark_by_itself_is_cut_by_the_clock_and_the_chat_goes_on(self):
+        room = self.room
+        room.tick()                                                                    # (the first look at the age of the lines is done: that one cuts the log file, too)
+        room.store.db.execute("PRAGMA wal_autocheckpoint=0")                           # (the log file is not folded into the database by itself)
+        n = 0
+        while room.store.size() < room.limits.db_max_bytes:
+            room.store.add_line("1000", "user0", "line %d %s" % (n, "x" * 100), False)
+            n += 1
+        self.assertLess(room.store.used_bytes(), room.limits.prune_from_bytes)         # (a few pages of lines)
+        self.assertGreater(room.store.log_bytes(), room.limits.prune_from_bytes)       # (and a log file that is the whole of the store)
+        who = room.person(1)
+        room.say(who, "hello")
+        self.assertEqual(who.codes(), ["rate"])
+        room.tick()
+        self.assertEqual(room.store.log_bytes(), 0)
+        room.say(who, "hello again")
+        self.assertEqual(who.codes(), ["rate"])                                        # (the first refusal only)
+        self.assertEqual(room.store.lines(1)[0][4], "hello again")
+
+    def test_a_reader_that_holds_the_database_is_named_in_the_log_and_the_log_file_stays_short(self):
+        room, limits = self.room, self.room.limits
+        room.tick()                                                                    # (the first look at the age of the lines is done)
+        fill_to(room.store, limits.db_max_bytes, batch=20, accounts=500)
+        reader = reader_holding(self, room.path)
+        who = room.person(1)
+        room.say(who, "hello")
+        self.assertEqual(who.codes(), ["rate"])
+        room.tick()                                                                    # (a first chunk goes: the log file is short)
+        first = room.store.log_bytes()
+        self.assertGreater(first, 0)
+        room.store.log_max_bytes = int(first * 2.5)
+        before = len(self.calls)
+        for second in range(40):
+            room.tick()
+        asked = len(self.calls) - before
+        log = room.log.getvalue()
+        self.assertLessEqual(room.store.log_bytes(), room.store.log_max_bytes + first)
+        self.assertIn("warning what=database_full_a_reader_holds_the_log_file", log)
+        self.assertNotIn("no_line_to_delete", log)
+        self.assertLessEqual(log.count("database_full_a_reader_holds_the_log_file"), 5)  # (once in 10 seconds at the most)
+        self.assertLessEqual(asked, 8)                                                 # (the chunks that went while the log file was short, and then a try every 10 seconds)
+        self.assertGreaterEqual(asked, 3)
+        room.say(who, "still full")
+        self.assertEqual(who.codes(), ["rate", "rate"])                                # (the guard holds: the log file counts)
+        lines = room.store.usage().lines
+        reader.execute("COMMIT")                                                       # (the reader lets go)
+        for second in range(25):
+            room.tick()
+        self.assertEqual(room.store.log_bytes(), 0)                                    # (the clock cut the log file within its 10 seconds)
+        self.assertFalse(room.store.unsettled)
+        room.say(who, "and now")
+        self.assertEqual(who.codes(), ["rate", "rate"])
+        self.assertEqual(room.store.lines(1)[0][4], "and now")
+        self.assertLess(room.store.usage().lines, lines)                               # (and the lines go on)
+
+    def test_a_clock_that_finds_the_log_file_held_asks_again_in_ten_seconds_and_not_in_a_minute(self):
+        room, limits = self.room, self.room.limits
+        room.tick()
+        fill_to(room.store, limits.db_max_bytes, batch=20, accounts=500)
+        reader_holding(self, room.path)
+        room.tick()
+        room.store.log_max_bytes = 1                                                   # (any log file is long)
+        gaps = []
+        for second in range(30):
+            room.tick()
+            gaps.append(room.hub.next_room - room.mono.now)
+        self.assertEqual(max(gaps), limits.checkpoint_retry_seconds)
+        self.assertEqual(limits.checkpoint_retry_seconds, 10.0)
+        self.assertLess(limits.checkpoint_retry_seconds, limits.purge_failure_seconds)
 
 
 class TheStaffTool(unittest.TestCase):
@@ -652,18 +785,19 @@ class TheStaffTool(unittest.TestCase):
 
     def run_admin(self, *args):
         out, err = io.StringIO(), io.StringIO()
-        status = admin.run(["--db", self.db] + list(args), out, err)
+        with mock.patch.object(admin, "PAUSE_SECONDS", 0.0):                           # (the tests that are not about the pause do not wait for it)
+            status = admin.run(["--db", self.db] + list(args), out, err)
         return status, out.getvalue(), err.getvalue()
 
     def test_status_says_how_full_the_database_is(self):
         status, out, err = self.run_admin("status")
         self.assertEqual((status, err), (0, ""))
-        self.assertRegex(out, r"^database: 0\.\d MB of 64\.0 MB used \(0%\); 0\.0 MB free to reuse; no lines\n$")
+        self.assertRegex(out, r"^database: 0\.\d MB of 64\.0 MB used \(0%\), log file 0\.\d MB; 0\.0 MB free to reuse; no lines\n$")
         fill(self.store, 5000)
         self.store.checkpoint()
         status, out, err = self.run_admin("status")
         self.assertEqual((status, err), (0, ""))
-        self.assertRegex(out, r"^database: 1\.\d MB of 64\.0 MB used \(1%\); 0\.0 MB free to reuse; 5,000 lines, the oldest from 2027-01-15 \d\d:\d\d:\d\dZ\n$")
+        self.assertRegex(out, r"^database: 1\.\d MB of 64\.0 MB used \(1%\), log file 0\.0 MB; 0\.0 MB free to reuse; 5,000 lines, the oldest from 2027-01-15 \d\d:\d\d:\d\dZ\n$")
 
     def test_purge_frees_pages_down_to_the_hubs_lower_mark_and_says_so(self):
         limits = dataclasses.replace(limitmod.Limits(), **CLI)
@@ -676,9 +810,9 @@ class TheStaffTool(unittest.TestCase):
         self.assertEqual((status, err), (0, ""))
         lines = out.splitlines()
         self.assertEqual(len(lines), 3)
-        self.assertRegex(lines[0], r"^database: 1\.[89] MB of 2\.0 MB used \(9\d%\); 0\.0 MB free to reuse; ")
+        self.assertRegex(lines[0], r"^database: 1\.[89] MB of 2\.0 MB used \(9\d%\), log file 0\.0 MB; 0\.0 MB free to reuse; ")
         self.assertRegex(lines[1], r"^[\d,]+ lines deleted$")
-        self.assertRegex(lines[2], r"^database: 1\.[56] MB of 2\.0 MB used \((7\d|80)%\); \d+\.\d MB free to reuse; ")
+        self.assertRegex(lines[2], r"^database: 1\.[56] MB of 2\.0 MB used \((7\d|80)%\), log file \d\.\d MB; \d+\.\d MB free to reuse; ")
         after = self.store.usage()
         self.assertLessEqual(after.bytes, limits.prune_to_bytes)
         self.assertGreater(after.bytes, limits.prune_to_bytes - 300 * 400)             # (it stops at the lower mark, within a chunk)
@@ -702,6 +836,84 @@ class TheStaffTool(unittest.TestCase):
         self.assertNotIn("a moderator", [r[4] for r in rows])                          # (the newest 200 only, whoever said them)
         self.assertEqual(self.run_admin("purge", "--keep-lines", "200")[::2], (1, "hub.admin: nothing to purge\n"))
 
+    def test_purge_says_that_a_reader_holds_the_log_file_and_stops_when_it_is_long(self):
+        limits = dataclasses.replace(limitmod.Limits(), **CLI)
+        fill_to(self.store, int(limits.db_max_bytes * 0.95), batch=50, accounts=500)
+        self.store.checkpoint()
+        reader = reader_holding(self, self.db)
+        with mock.patch.object(admin.limitmod, "Limits", lambda: limits), mock.patch.object(storemod.Store, "log_max_bytes", 500_000):
+            status, out, err = self.run_admin("purge")
+            self.assertEqual(status, 1)
+            self.assertRegex(err, r"^hub\.admin: a reader holds the log file ")
+            deleted = int(re.search(r"^([\d,]+) lines deleted$", out, re.M).group(1).replace(",", ""))
+            self.assertTrue(300 <= deleted <= 1200, deleted)                           # (chunks of 300 while the log file was short: not the five or six that reach the lower mark)
+            used = self.store.usage()
+            self.assertLess(used.log, 500_000 + 400_000)                               # (the log file did not grow without end)
+            self.assertLess(used.bytes, limits.db_max_bytes)
+            self.assertEqual(out.splitlines()[-1], "database: %s of 2.0 MB used (%d%%), log file %s; %s free to reuse; %s lines, the oldest from %s; at the limit (the log file counts): no new line is kept" % (
+                admin.megabytes(used.bytes), used.bytes * 100 // limits.db_max_bytes, admin.megabytes(used.log), admin.megabytes(used.free), format(used.lines, ","), admin.when(used.oldest)))
+            status, shown, err = self.run_admin("status")                              # (the status line tells the pages and the log file apart, and that the guard holds)
+            self.assertEqual((status, err), (0, ""))
+            self.assertEqual(shown, out.splitlines()[-1] + "\n")
+            reader.execute("COMMIT")
+            status, out, err = self.run_admin("purge")                                 # (the reader let go: the cut works, and the lines go down to the mark)
+            self.assertEqual((status, err), (0, ""))
+            self.assertLessEqual(self.store.usage().bytes, limits.prune_to_bytes)
+            self.assertEqual(self.store.usage().log, 0)
+
+    def test_a_cut_that_is_refused_for_a_moment_is_tried_again_before_a_reader_is_blamed(self):
+        class Stand:
+            """A store whose log file is held for a while: its cut is refused as many times as the test says."""
+
+            def __init__(self, refusals):
+                self.unsettled, self.refusals, self.cuts = True, refusals, 0
+
+            def usage(self):
+                return storemod.Usage(1000, 0, 5, 1_800_000_000, 0)
+
+            def make_room(self, target, chunk, keep):
+                return 0
+
+            def checkpoint(self):
+                self.cuts += 1
+                self.unsettled = self.cuts <= self.refusals
+                return not self.unsettled
+
+        limits = limitmod.Limits()
+        for refusals, status, said, cuts in ((2, 1, "hub.admin: nothing to purge\n", 3), (99, 1, None, 5)):
+            store, waits, out, err = Stand(refusals), [], io.StringIO(), io.StringIO()
+            self.assertEqual(admin.purge(store, limits, None, out, err, sleep=waits.append), status)
+            self.assertEqual(store.cuts, cuts)
+            self.assertEqual(waits, [admin.PAUSE_SECONDS] * cuts if said is None else [admin.PAUSE_SECONDS] * (cuts - 1))
+            if said is None:
+                self.assertRegex(err.getvalue(), r"^hub\.admin: a reader holds the log file ")
+            else:
+                self.assertEqual(err.getvalue(), said)
+
+    def test_purge_waits_between_the_chunks_and_holds_no_lock_while_it_waits(self):
+        self.assertEqual(admin.PAUSE_SECONDS, 0.1)
+        limits = dataclasses.replace(limitmod.Limits(), **CLI)
+        fill(self.store, 3000)
+        self.store.checkpoint()
+        hub = storemod.Store(self.db, clock=self.wall, busy_ms=30)                      # (the hub's own connection: it waits 30 ms at the most for the tool)
+        self.addCleanup(hub.close)
+        chunks, waits = [], []
+        real = self.store.make_room
+        self.store.make_room = lambda *args: chunks.append(real(*args)) or chunks[-1]
+
+        def wait(seconds):
+            waits.append(seconds)
+            if len(waits) <= 5:                                                        # (a line of the hub for the first five pauses; a line for each would make one more line to delete for ever)
+                hub.add_line("1", "hub", "a line of the hub between two chunks", False)      # (a StoreError if the tool held the write lock while it waits)
+
+        out, err = io.StringIO(), io.StringIO()
+        self.assertEqual(admin.purge(self.store, limits, 100, out, err, sleep=wait), 0, err.getvalue())
+        deleted = [c for c in chunks if c]
+        self.assertGreaterEqual(len(deleted), 9)
+        self.assertEqual(waits, [admin.PAUSE_SECONDS] * len(deleted))                  # (a pause after each chunk, and none for the call that finds nothing more)
+        self.assertEqual(self.store.usage().lines, 100)
+        self.assertEqual(len([r for r in self.store.lines(10 ** 6) if r[3] == "hub"]), 5)             # (the hub's five lines are among the newest 100: they stay)
+
     def test_the_help_of_every_command_can_be_printed_on_any_python(self):
         # (a "%" in a help string is a format of argparse's own: Python 3.14 and later look at it when the parser is made, the older ones when the help is printed)
         for argv in (["--help"], ["list", "--help"], ["mute", "--help"], ["status", "--help"], ["purge", "--help"]):
@@ -715,7 +927,7 @@ class TheStaffTool(unittest.TestCase):
 
     def test_purge_never_takes_what_a_screen_may_show(self):
         fill(self.store, 500)
-        for keep in ("99", "0", "-5", "x"):
+        for keep in ("99", "0", "-5", "x", str(2 ** 62), str(2 ** 63), "99999999999999999999"):         # (a number that is too big for the database is a wrong use, not a traceback)
             status, out, err = self.run_admin("purge", "--keep-lines", keep)
             self.assertEqual(status, 2, keep)
             self.assertEqual(out, "", keep)
@@ -742,7 +954,7 @@ class TheStaffTool(unittest.TestCase):
         who = room.person(1)
         before = room.store.lines(1)[0][0]
         out, err = io.StringIO(), io.StringIO()
-        with mock.patch.object(admin.limitmod, "Limits", lambda: room.limits):
+        with mock.patch.object(admin.limitmod, "Limits", lambda: room.limits), mock.patch.object(admin, "PAUSE_SECONDS", 0.0):
             self.assertEqual(admin.run(["--db", room.path, "purge", "--keep-lines", "300"], out, err), 0, err.getvalue())
         room.say(who, "after the tool")                                                # (the hub's own connection sees the lines gone and takes a new one)
         self.assertEqual(who.codes(), [])
@@ -795,8 +1007,8 @@ class TheToolAndTheHubWriteAtTheSameTime(unittest.TestCase):
                 thread.join(30)
         self.assertEqual(errors, [])
         self.assertTrue(results)
-        for code, err in results:
-            self.assertIn((code, err), ((0, ""), (1, "hub.admin: nothing to purge\n"), (1, "hub.admin: the database refused it (StoreError)\n")))
+        for code, err in results:                                                      # (the hub is a reader, too, for the moment of each of its statements: the tool may find the log file held, and says so)
+            self.assertTrue((code, err) in ((0, ""), (1, "hub.admin: nothing to purge\n"), (1, "hub.admin: the database refused it (StoreError)\n")) or (code == 1 and err.startswith("hub.admin: a reader holds the log file")), (code, err))
         self.assertEqual(room.store.db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
         ids = [r[0] for r in room.store.lines(10 ** 6)][::-1]
         self.assertEqual(ids, sorted(set(ids)))
@@ -860,6 +1072,7 @@ class TheDocumentsSayWhatTheCodeDoes(unittest.TestCase):
         self.assertEqual((d.prune_from_bytes, d.prune_to_bytes), (64 * 1024 * 1024 * 9 // 10, 64 * 1024 * 1024 * 8 // 10))
         for needle in ("a budget of 200 lines for the hour and 1,000 for the day", "one line every 18 seconds, one every 86.4", "answered `quota`", "The budgets are kept in memory", "From 90% of 64 MB", "down to 80%",
                        "2,000 lines a second", "the moderators' lines and the lines that a moderator deleted last", "the newest 1,000 never", "`quota` (the account has said the lines of its hour or of its day)", "and a `quota`, are not the client's doing",
+                       "a tenth of a second between two chunks", "\"a reader holds the log file\"", "database_full_a_reader_holds_the_log_file", "is over 16 MB the hub deletes no more lines",
                        "python -m hub.admin status", "python -m hub.admin purge [--keep-lines N]", "`--keep-lines N` (100 or more", "\"nothing to purge\"", "database_full_and_no_line_to_delete",
                        "tests/scripts/test_hub_room.py", "tests/data/hub_room_mutants.json"):
             self.assertIn(needle.replace("tests/scripts/", "").replace("tests/data/", ""), self.doc, needle)

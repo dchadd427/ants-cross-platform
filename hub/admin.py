@@ -25,6 +25,7 @@ from . import config, limits as limitmod, store as storemod, text
 BY = "command line"
 MAX_MINUTES = 525600                    # a year
 MIN_KEEP_LINES = 100                    # what a page shows: purge never takes a line that may be on a screen
+PAUSE_SECONDS = 0.1                     # between two chunks of purge: SQLite's wait for the write lock is not fair, and a tool that takes the lock again at once keeps the hub from its own writes
 
 
 def when(epoch):
@@ -59,14 +60,17 @@ def megabytes(count):
 
 
 def show_usage(store, limit, out):
-    """The status line: what is in use of the limit, what deleted lines left free to reuse, and the lines that are kept."""
+    """The status line: the pages that hold something, of the limit; the log file, which counts for the limit as well and is told on its own, so that a long one is seen; what deleted lines left
+    free to reuse; and the lines that are kept."""
     used = store.usage()
-    out.write("database: %s of %s used (%d%%); %s free to reuse; %s\n" % (megabytes(used.bytes), megabytes(limit), used.bytes * 100 // limit, megabytes(used.free),
-                                                                       "%s lines, the oldest from %s" % (format(used.lines, ","), when(used.oldest)) if used.lines else "no lines"))
+    out.write("database: %s of %s used (%d%%), log file %s; %s free to reuse; %s%s\n" % (
+        megabytes(used.bytes), megabytes(limit), used.bytes * 100 // limit, megabytes(used.log), megabytes(used.free),
+        "%s lines, the oldest from %s" % (format(used.lines, ","), when(used.oldest)) if used.lines else "no lines",
+        "; at the limit (the log file counts): no new line is kept" if used.bytes + used.log >= limit else ""))
 
 
-def purge(store, limits, keep_lines, out, err):
-    """Delete the oldest lines a chunk at a time (the hub keeps writing between the chunks): down to the hub's lower mark, or all but the newest `keep_lines`."""
+def purge(store, limits, keep_lines, out, err, sleep=time.sleep):
+    """Delete the oldest lines a chunk at a time, with a pause between two chunks so that the hub's own writes go on: down to the hub's lower mark, or all but the newest `keep_lines`."""
     target, keep = (limits.prune_to_bytes, limits.keep_lines) if keep_lines is None else (0, keep_lines)
     show_usage(store, limits.db_max_bytes, out)
     gone = 0
@@ -75,11 +79,20 @@ def purge(store, limits, keep_lines, out, err):
         if not chunk:
             break
         gone += chunk
+        sleep(PAUSE_SECONDS)
+    for attempt in range(5):                # (the last cut of the log file was refused: the hub itself may be in the middle of a statement, and lets go in a moment)
+        if not store.unsettled or store.checkpoint():
+            break
+        sleep(PAUSE_SECONDS)
+    if gone:
+        out.write("%s lines deleted\n" % format(gone, ","))
+        show_usage(store, limits.db_max_bytes, out)
+    if store.unsettled:                     # (still refused: a program has hub.db open for reading, and what went is in the log file until it lets go)
+        err.write("hub.admin: a reader holds the log file (another program has hub.db open); the lines that went are in it until the reader lets go, and no more go while it is long\n")
+        return 1
     if not gone:
         err.write("hub.admin: nothing to purge\n")
         return 1
-    out.write("%s lines deleted\n" % format(gone, ","))
-    show_usage(store, limits.db_max_bytes, out)
     return 0
 
 

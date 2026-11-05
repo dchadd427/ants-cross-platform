@@ -244,10 +244,10 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.store.make_room(0, 100, 0), 5)
         self.assertGreater(self.say(9).id, last)                            # (the screens and the hub's memory go by the numbers: one is never used twice)
 
-    def test_usage_is_the_size_what_is_free_to_reuse_the_lines_and_the_oldest(self):
+    def test_usage_is_the_bytes_in_use_what_is_free_to_reuse_the_lines_the_oldest_and_the_log(self):
         empty = self.store.usage()
         self.assertEqual((empty.lines, empty.oldest), (0, 0))
-        self.assertEqual(empty.bytes, self.store.size())
+        self.assertEqual(empty.bytes + empty.log, self.store.size())
         first = self.say(1)
         self.clock.now += 100
         for n in range(300):
@@ -255,7 +255,7 @@ class Contract(unittest.TestCase):
         used = self.store.usage()
         self.assertEqual((used.lines, used.oldest), (301, first.at))
         self.assertGreater(used.bytes, empty.bytes)
-        self.assertEqual(used.bytes, self.store.size())
+        self.assertEqual(used.bytes + used.log, self.store.size())
         self.store.make_room(0, 1000, 10)
         after = self.store.usage()
         self.assertEqual(after.lines, 10)

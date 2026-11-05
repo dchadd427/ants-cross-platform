@@ -306,10 +306,11 @@ class Hub:
                 self.next_room = now + self.limits.tick_seconds
                 if gone:
                     self.log.event("prune", lines=gone)
-                elif self.store.size() >= self.limits.prune_from_bytes:           # (nothing went and it is still over the mark: no line may go, and it is not asked again at every tick)
-                    self.next_room = now + self.limits.purge_failure_seconds
+                elif self.store.size() >= self.limits.prune_from_bytes:           # (nothing went and it is still over the mark: it is not asked again at every tick)
+                    held = self.store.unsettled                                    # (make_room has just tried to cut the log file: if that was refused, a reader holds the database)
+                    self.next_room = now + (self.limits.checkpoint_retry_seconds if held else self.limits.purge_failure_seconds)
                     if self.store.size() >= self.limits.db_max_bytes:
-                        self.log.event("warning", what="database_full_and_no_line_to_delete")
+                        self.log.event("warning", what="database_full_a_reader_holds_the_log_file" if held else "database_full_and_no_line_to_delete")
         if now >= self.next_crowded:
             self.next_crowded = now + self.limits.crowded_log_seconds
             biggest = max(self.per_address.counts.values(), default=0)

@@ -7,7 +7,7 @@ here: they stay on that backend's class. tests/scripts/test_hub_store_contract.p
 import collections
 
 Line = collections.namedtuple("Line", "id at account name text mod")
-Usage = collections.namedtuple("Usage", "bytes free lines oldest")         # (see StoreBase.usage)
+Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 
 
 class StoreError(Exception):
@@ -72,11 +72,12 @@ class StoreBase:
     def make_room(self, target, chunk=2000, keep=1000):
         """Delete up to `chunk` of the oldest lines to bring the bytes in use down to `target` (the log file of a backend that has one is cut afterwards, so that size() is no more than that). Never the
         newest `keep` lines (a page shows 100 at most), and the moderators' lines and the lines that a moderator deleted only when no other line may go. Mutes, bans, the counter of deletions and the logins are not touched. Returns how many
-        lines went: 0 when the store is at or under `target` already, or when no line may go."""
+        lines went: 0 when the store is at or under `target` already, or when no line may go (also when the log file cannot be cut because a reader holds it, and it is long already)."""
         raise NotImplementedError
 
     def usage(self):
-        """Usage(bytes, free, lines, oldest) for the command line: size(), the bytes that deleted lines left free to be reused, the lines kept, and the time of the oldest one (0 for none)."""
+        """Usage(bytes, free, lines, oldest, log) for the command line: the bytes in use by what is kept, the bytes that deleted lines left free to be reused, the lines kept, the time of the oldest
+        one (0 for none), and the bytes of the log file that a backend may have (0 for none). size() is bytes + log."""
         raise NotImplementedError
 
     def forget(self, account, since=0):
