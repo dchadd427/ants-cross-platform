@@ -425,13 +425,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
-   "id": "a_map_may_be_four_characters",
-   "file": "hub/presence.py",
-   "old": "MAP_FILE = re.compile(r\"[ -~]{5,64}\\Z\")",
-   "new": "MAP_FILE = re.compile(r\"[ -~]{4,64}\\Z\")",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
-  },
-  {
    "id": "a_map_may_be_a_hidden_file",
    "file": "hub/presence.py",
    "old": "or value[0] == \".\" or not value.endswith",

@@ -294,7 +294,7 @@ function rig(o) {
     const lateErr = rig(); lateErr.live(W({ you: YOU })); lateErr.dock.say('hello'); lateErr.clock.advance(9000); lateErr.s().recv({ t: 'err', code: 'rate' });
     same('(a line that had no answer for 8 s is not waited for: a late err is nobody\'s)', [lateErr.note(), lateErr.field().value], ['', '']);
     const badCommand = rig(); badCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); badCommand.dock.say('/mute nobody 5'); badCommand.s().recv({ t: 'err', code: 'bad' });
-    same('a moderator\'s command that the hub refuses is told, with nothing put in the field, and the dock stays live: it is in flight for a few seconds', [badCommand.note(), badCommand.field().value, badCommand.dock.state()], ['That line could not be sent', '', 'live']);
+    same('a moderator\'s command that the hub refuses is told, with nothing put in the field, no code of the dock throws, and the dock stays live: it is in flight for a few seconds', [badCommand.note(), badCommand.field().value, badCommand.dock.state(), badCommand.errors.length], ['That line could not be sent', '', 'live', 0]);
     const oldCommand = rig(); oldCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); oldCommand.dock.say('/mute nobody 5'); oldCommand.clock.advance(9000); oldCommand.s().recv({ t: 'err', code: 'bad' });
     same('... and not 8 s later', oldCommand.note(), '');
     const d = rig(); d.live(W({ you: YOU })); d.dock.say('hello'); d.s().recv({ t: 'err', code: 'rate' });

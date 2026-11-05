@@ -7,9 +7,10 @@ other window. It speaks through the chat dock's socket, is loaded by web/home/ho
   - the page and the other pages: web/lobby.html does not link the list, no other file names it, and the hub's door is still the dock's script alone;
   - the loader in home.js: the two files, once, after the dock is mounted, mounted when BOTH have come, given the parts of the bar that it needs, inert with the bars during the hand-off, and what goes wrong stays;
   - the folder: its own budgets (raw and gzipped), plain ES5, no markup made from text, no link, no storage, no socket of its own, the kinds of element it makes;
-  - the style: the breakpoint of the script, the sizes of the approved pictures (260 px, 280 from 1600 x 900), the room that the Games list leaves for it (the arithmetic), nothing of Home's own changes until the
-    list is there (every rule that reaches the bar or the Games list starts with the class that the script puts on Home), every target at least 44 px, the sheet clears a phone's system bar, the layers, nothing
-    loaded from another site;
+  - the style: the breakpoint of the script, the sizes of the approved pictures (260 px, 280 from 1600 x 900), the room that the Games list leaves for it under 1280 px (the arithmetic; from 1280 px the
+    list's own rule centers it, and no rule of this file says where it is), the labels of the bar's button (the picture, the word and the number from 411 px, the word and the number from 381 px, the picture and
+    the number under that, closer under 360 px: so that \"99+\" is cut off nowhere from 320 to 639 px), nothing of Home's own changes until the list is there (every rule that reaches the bar or the Games list
+    starts with the class that the script puts on Home), every target at least 44 px, the sheet clears a phone's system bar, the layers, nothing loaded from another site;
   - the way into the image: the CI's list of the image's files carries the two files, the Dockerfile and the local web build copy the folder;
   - the code RUNS in node: tests/scripts/web_home_players_check.js (a fake dock and a fake clock: the pure parts, the phases, what the page tells the hub, what is drawn, Join, the sheet, hostile frames, the page);
   - tests/data/home_players_mutants.json changes one thing at a time in a COPY of the files (a count that is zero, a status that is not checked, a code for a private room, a flood of rows, a second socket, markup,

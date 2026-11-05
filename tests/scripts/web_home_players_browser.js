@@ -9,7 +9,11 @@
 //   3. the states: nobody else (the note and the Host button), the hub gone ("Players list is off right now", the chat says it too) and back by itself, a person who comes, goes and changes what they do;
 //   4. Join: the Games list's own Join of that room is pressed (also from the sheet and the drawer);
 //   5. a hub that has no list (an older one): nothing shows, and Home is the same as with the list's two files not there at all, but for a few pixels at the edges of rounded buttons that Chromium draws either way (five sizes);
-//   6. the Room: the list is not on it, and it is back on Home.
+//   6. the Room: the list is not on it, and it is back on Home;
+//   7. the bar of a phone at any count (13, 99, 100, 226, 480 people on the real hub, 9999 from a fake one) at 320, 360, 370, 375, 380, 390 and 412 px: nothing is cut off, nothing covers the logo or another
+//      button, the Menu keeps room at the edge, the button says 99+ over 99 and the sheet shows the whole number;
+//   8. the Games list that the live site docks in the Yard, at 1280 x 800, 1366 x 768, 1536 x 864, 1920 x 1080 and 2560 x 1440 with the list absent, open and folded and the chat dock open and folded: the
+//      Games list is centered in the window (to 1 px), clear of both panels, and no Join is under anything else.
 //   --shots DIR takes the pictures of the built page (built_*.png), the ones to put beside the approved pictures.
 //
 //   node tests/scripts/web_home_players_browser.js [--web DIR] [--shots DIR] [--only 1,3]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -184,6 +188,7 @@ const LAYOUT = () => {
     if (bar && logo && logo.r > bar.l - 4) out.push('the bar\'s button covers the logo');
     const kids = [...document.querySelectorAll('.hbar .hright > *')].filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect());
     if (kids.some((k) => k.left < 0 || k.right > iw + 0.5)) out.push('a button of the bar is cut off');
+    for (let i = 0; i < kids.length; i++) for (let j = i + 1; j < kids.length; j++) if (kids[i].left < kids[j].right - 0.5 && kids[j].left < kids[i].right - 0.5 && kids[i].top < kids[j].bottom - 0.5 && kids[j].top < kids[i].bottom - 0.5) out.push('two buttons of the bar overlap');
     const covered = [...document.querySelectorAll('.gjoin, .pl-join, .gcode input, .pl-host')].filter((e) => {
         if (!e.getClientRects().length) return false;
         const q = e.getBoundingClientRect(), box = e.closest('.gpop, .pl-list, .pl-body'), bq = box && box.getBoundingClientRect();
@@ -435,6 +440,90 @@ async function main() {
                 }
             } finally { fake.close(); }
         }
+        // ---- 7. the bar of a phone at any count: nothing is cut off from 320 to 639 px, whatever the count ------------------------------------------------------------------------------------------------------
+        if (want(7)) {
+            const WIDTHS = [320, 360, 370, 375, 380, 390, 412];
+            const pillOf = (n) => (n > 99 ? '99+' : String(n));
+            const atWidths = async (page, count, who) => {
+                for (const w of WIDTHS) {
+                    await page.setViewportSize({ width: w, height: 740 });
+                    await sleep(120);
+                    const m = await page.evaluate(LAYOUT);
+                    const bar = await page.evaluate(() => { const b = document.querySelector('.pl-bar'), menu = document.querySelector('.hbar .hright > :last-child'), pill = b && b.querySelector('.pill'); return { visible: !!b && b.getClientRects().length > 0, text: pill && !pill.hidden ? pill.textContent : null, slack: menu ? innerWidth - menu.getBoundingClientRect().right : null, high: document.querySelector('.hbar').getBoundingClientRect().height }; });
+                    check(who + ', ' + count + ' people at ' + w + ' px: nothing of the bar is cut off, nothing covers the logo or another button, no sideways scroll', m.out.length === 0, JSON.stringify(m.out));
+                    check('... the button says ' + pillOf(count) + ', the Menu keeps 8 px at the edge, and the bar keeps its three rows (184 px)', bar.visible && bar.text === pillOf(count) && bar.slack >= 8 && Math.abs(bar.high - 184) < 0.5, JSON.stringify(bar));
+                }
+            };
+            const sheetAt = async (page, count, w) => {
+                await page.setViewportSize({ width: w, height: 740 });
+                await sleep(150);
+                await page.click('.pl-bar');
+                await until('the sheet is open', () => page.evaluate(() => document.getElementById('players').getAttribute('data-sheet') === 'true'), 3000);
+                await sleep(150);
+                const o = await page.evaluate(LAYOUT);
+                const head = await page.evaluate(() => { const c = document.querySelector('.pl-count'), q = document.querySelector('.pl-head').getBoundingClientRect(), x = document.querySelector('.pl-close').getBoundingClientRect(), t = c && c.getBoundingClientRect(); return { text: c && !c.hidden ? c.textContent : null, inside: !!t && t.left >= q.left && t.right <= x.left + 0.5 }; });
+                check('the sheet at ' + w + ' px with ' + count + ' people: inside the window, the header says the whole number (500+ over 500) and it stays clear of the Close button', o.out.filter((x) => x.indexOf('under something') === -1).length === 0 && head.text === (count > 500 ? '500+' : String(count)) && head.inside, JSON.stringify([o.out, head]));
+                await shot(page, 'bar_' + count + '_sheet_' + w);
+                await page.keyboard.press('Escape');
+                await sleep(100);
+            };
+            for (const count of [13, 99, 100, 226, 480]) {
+                await crowd(r, [], count - 1);
+                const page = await openPage(r, ['bar', 390, 740, true], '1000_maple', { noGames: true });
+                await until('the list says ' + count, () => page.evaluate((n) => { const b = document.querySelector('.pl-bar .pill'); return !!b && !b.hidden && b.textContent === (n > 99 ? '99+' : String(n)); }, count), 15000);
+                check('(the chat says the same number: ' + count + ')', (await countsAgree(page)).chat === String(count));
+                await atWidths(page, count, 'the hub');
+                if (count === 226) for (const w of [320, 375, 390, 412]) { await page.setViewportSize({ width: w, height: 740 }); await sleep(150); await shot(page, 'bar_226_' + w); }
+                if (count === 226 || count === 480) { await sheetAt(page, count, 320); await sheetAt(page, count, 375); }
+                await page.context().close();
+            }
+            await crowd(r, [], 0);
+            const many = await startFakeSite({ mode: 'custom' });                // a count that no hub has (it lets 500 sockets in): the page takes what a hub says
+            try {
+                const page = await openPage(many, ['bar', 390, 740, true], '1000_maple', { noGames: true });
+                await until('the fake hub has the page', () => many.hub.peers.length > 0, 10000);
+                const peer = many.hub.peers[0];
+                many.hub.send(peer, { t: 'welcome', v: 1, you: { name: 'maple', mod: false }, login: true, presence: true, me: 1, online: 9999, history: [] });
+                many.hub.send(peer, { t: 'who', full: true, n: 9999, g: 9998, more: 0, rows: [{ i: 1, name: 'maple', at: 'look' }] });
+                await until('the list says 99+', () => page.evaluate(() => { const b = document.querySelector('.pl-bar .pill'); return !!b && !b.hidden && b.textContent === '99+'; }), 10000);
+                await atWidths(page, 9999, 'a fake hub');
+                await sheetAt(page, 9999, 320);
+                await page.context().close();
+            } finally { many.close(); }
+        }
+
+        // ---- 8. the Games list that the live site docks in the Yard: centered in the window and clear of both panels, from 1280 px ----------------------------------------------------------------------------
+        if (want(8)) {
+            const BIG = [['w1280', 1280, 800], ['w1366', 1366, 768], ['w1536', 1536, 864], ['w1920', 1920, 1080], ['w2560', 2560, 1440]];
+            const where = () => {
+                const R = (e) => { if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { l: q.left, r: q.right, t: q.top, b: q.bottom }; };
+                const list = R(document.querySelector('.gdock')), panel = R(document.getElementById('players')), chat = R(document.getElementById('gchat'));
+                const meet = (a, c) => !!a && !!c && a.l < c.r - 0.5 && c.l < a.r - 0.5 && a.t < c.b - 0.5 && c.t < a.b - 0.5;
+                return { mid: list ? (list.l + list.r) / 2 : null, win: innerWidth / 2, list, overPanel: meet(list, panel), overChat: meet(list, chat), gap: list && panel ? panel.l - list.r : null };
+            };
+            for (const [what, people, guests] of [['3 others', PICTURE.slice(0, 3), 1], ['12 others', PICTURE, 4]]) {
+                for (const state of ['absent', 'open', 'folded']) {
+                    r.blocked = state === 'absent';
+                    await crowd(r, people, guests);
+                    for (const size of BIG) {
+                        const page = await openPage(r, [size[0], size[1], size[2], false], '1000_maple');
+                        if (state !== 'absent') await listShows(page, people[0][0].split(':')[1]);
+                        if (state === 'folded') { await page.click('.pl-fold:not(.pl-close)'); await sleep(150); }
+                        for (const chat of ['open', 'folded']) {
+                            if (chat === 'folded') { await page.evaluate(() => document.querySelector('#gchat .gc-fold').click()); await sleep(200); }
+                            await sleep(250);
+                            const m = await page.evaluate(where), lay = await page.evaluate(LAYOUT);
+                            const label = what + ', the list ' + state + ', the chat ' + chat + ', ' + size[1] + ' x ' + size[2];
+                            check(label + ': the Games list is centered in the window (to 1 px)', !!m.list && Math.abs(m.mid - m.win) <= 1, JSON.stringify(m));
+                            check('... and clear of the players panel and the chat dock, no Join or field under anything else, nothing sideways', !m.overPanel && !m.overChat && lay.out.length === 0 && (state === 'absent' || m.gap === null || m.gap >= 100), JSON.stringify([m, lay.out]));
+                            if (what === '12 others') await shot(page, 'center_' + size[1] + 'x' + size[2] + '_' + state + '_chat_' + chat);
+                        }
+                        await page.context().close();
+                    }
+                }
+            }
+            r.blocked = false;
+        }
         check('no script error in any page', errors.length === 0, errors.join(' | '));
     } finally {
         await browser.close();
@@ -443,7 +532,7 @@ async function main() {
 }
 
 // a site that has the old kind of hub (no list): tests/scripts/fake_hub.js behind the same files
-async function startFakeSite() {
+async function startFakeSite(hubOptions) {
     const site = { blocked: false };
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://x');
@@ -457,8 +546,10 @@ async function startFakeSite() {
         res.end(type.startsWith('text/html') ? fs.readFileSync(full, 'utf8').replace(/@@SITE_TITLE@@/g, '').replace(/@@SITE_FOOTER@@/g, '').replace(/@@GAME_VERSION@@/g, '0.13.0').replace(/@@BUILD_ID@@/g, 'players').replace(/@@BUILD_DATE@@/g, '2026-11-01 00:00').replace(/@@BUILD_TIMESTAMP@@/g, '2026-11-01') : fs.readFileSync(full));
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const hub = await startFakeHub({ server, login: true, you: { name: 'maple', mod: false }, online: 7, history: [{ id: 1, at: 1700000001, who: 'pebble', text: 'anyone up for Islands?', mod: false }] });
+    const hub = await startFakeHub(Object.assign({ server, login: true, you: { name: 'maple', mod: false }, online: 7, history: [{ id: 1, at: 1700000001, who: 'pebble', text: 'anyone up for Islands?', mod: false }] }, hubOptions));
+    site.hub = hub;
     site.url = 'http://127.0.0.1:' + server.address().port;
+    site.origin = site.url;
     site.close = () => { hub.drop(); server.close(); };
     return site;
 }

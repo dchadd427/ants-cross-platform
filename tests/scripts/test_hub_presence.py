@@ -843,6 +843,20 @@ class WhatIsSent(WorldTest):
         late = self.w.watch(self.w.join(None)).update()
         self.assertEqual((sorted(r["name"] for r in late.rows.values()), late.n, late.g), (["p2", "p3", "p4"], 4, 1), "not the list of hours ago")
 
+    def test_the_clock_does_not_look_at_the_list_when_nobody_watches(self):
+        self.w.join(person(1))
+        looked = []
+        view = self.w.presence.view
+        self.w.presence.view = lambda: (looked.append(1), view())[1]
+        for _ in range(100):
+            self.w.advance(1.0)
+        self.assertEqual(looked, [], "nobody asked: the list is not made")
+        watcher = self.w.watch(self.w.join(None))
+        self.assertEqual(len(looked), 1, "the first page to ask gets it made, once")
+        self.w.advance(2.5)
+        self.assertGreater(len(looked), 1, "and while somebody watches the clock looks")
+        self.assertEqual(len(watcher.update().rows), 1)
+
     def test_a_watcher_that_closed_is_not_kept_while_nothing_changes(self):
         a = self.w.watch(self.w.join(person(1)))
         b = self.w.watch(self.w.join(person(2)))
