@@ -22,6 +22,7 @@ The tool replays the Dockerfile on this machine and serves the result with nginx
   - the command line: a work folder that a shell would read apart is refused, --reuse takes a finished build only, a failure that is not the tool's own is a message
 """
 import contextlib
+import gzip
 import http.client
 import io
 import json
@@ -312,6 +313,9 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))
         with open(self.html("plain", "index.html"), "rb") as a, open(self.html("plain", "play.html"), "rb") as b:
             self.assertEqual(a.read(), b.read(), "play.html is a copy of index.html")
+        for name in ("index.data", "index.wasm", "index.js"):                                    # (the image build compresses the three big files once; nginx's gzip_static sends the copy: tests/scripts/test_nginx_headers.py)
+            with open(self.html("plain", name), "rb") as plain, open(self.html("plain", name + ".gz"), "rb") as packed:
+                self.assertEqual(gzip.decompress(packed.read()), plain.read(), name + ".gz is the file, compressed")
         with open(os.path.join(self.site["plain"], "etc", "nginx", "conf.d", "default.conf"), encoding="utf-8") as a:
             self.assertEqual(a.read(), read("docker", "nginx.conf"))
 
@@ -568,7 +572,7 @@ class TheSiteConfiguration(Scratch):
         self.assertIn("log_format ants_noquery ", text, "but the log format stays, a location that is left would not know it")
         self.assertGreater(text.count("resolver 127.0.0.11"), 10)
         self.assertEqual(text.count("resolver_timeout 1s;"), text.count("resolver 127.0.0.11"), "a game server that is not there is not waited for for 30 seconds where Docker's resolver is not")
-        self.assertEqual(text.count("access_log off;"), 14)          # (the four paths that logged to the image's output: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the three answers that they share, which log nothing at all: their addresses hold a code)
+        self.assertEqual(text.count("access_log off;"), 15)          # (the server block, which logs every path to the image's output, and the four paths that say so again: the submissions, their single ids, the admin API and the test maps; and the hub's door and its answer for a hub that is not there, which have none of their own; and the five pages of the hub's login with the three answers that they share, which log nothing at all: their addresses hold a code)
 
     def test_the_list_of_maps_is_answered_from_a_file_and_the_rest_of_the_conf_is_as_it_was(self):
         plain = wd.site_config(read("docker", "nginx.conf"), "/w/fs", "/w/cache", 1234)
