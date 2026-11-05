@@ -193,7 +193,8 @@ COPY web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 
-# Copy custom Nginx configuration, and the list of the reverse proxies whose X-Forwarded-For is believed (none: the address of the connection counts; a mounted file of the same name replaces it)
+# Copy custom Nginx configuration, and the list of the reverse proxies whose X-Forwarded-For is believed (the private addresses that a proxy connects from, docs/SERVER.md "Behind a reverse proxy"; the stack files
+# can mount a list of the operator's own in /etc/nginx/ants-trusted-proxies.d/, which replaces this one)
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/trusted-proxies.conf /etc/nginx/ants-trusted-proxies/proxies.conf
 
