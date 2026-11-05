@@ -415,7 +415,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.120 - 2026-10-23 - A Buy me a coffee button at the bottom of the front page
 
 **For players:**
-- **A "Buy me a coffee" button at the bottom of the front page.** If you enjoy the game you can support its owner: the yellow button, centered in the footer, opens the owner's Buy Me a Coffee page in a new tab. The repository has a Sponsor button for the same page.
+- **A "Buy me a coffee" button at the bottom of the front page.** If you enjoy the game you can support its maintainer: the yellow button, centered in the footer, opens the maintainer's Buy Me a Coffee page in a new tab. The repository has a Sponsor button for the same page.
 - The button is a picture that your browser fetches from Buy Me a Coffee's own server, so that server sees your address as any website does; the Legal page says so. Nothing else on the front page is loaded from another company.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the front page only).
