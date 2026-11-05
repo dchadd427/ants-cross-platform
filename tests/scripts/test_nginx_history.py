@@ -6,7 +6,7 @@ the live ones (--replay-port: no secret; the records hold the names that the pla
 forwards the two addresses like /replays and /live (tests/scripts/test_nginx_replays.py, test_nginx_live.py), as the one request each takes and nothing else:
 
   - /history is an exact location and /history/ a prefix location, the only ones of the name (the named location of /replays answers when the server has no such door);
-  - only a GET goes through (405 otherwise: the admin's delete is the control interface's and is never offered here); the item takes no query and an id of the wrong shape is 404 here and never reaches the
+  - only a GET goes through (405 otherwise: the operator's delete is the control interface's and is never offered here); the item takes no query and an id of the wrong shape is 404 here and never reaches the
     server (the history decides which exist); the list takes the query of its filters, of the characters that the filters are made of and 400 characters at most (400 otherwise), so that no other byte
     reaches the server or its log, and the server refuses by name what it does not know;
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
@@ -447,7 +447,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         before = self.stub_lines()
         for path in ("/history", "/history/" + ITEM_ID):
             for method in ("POST", "PUT", "DELETE", "PATCH", "OPTIONS"):
-                self.assertEqual(self.ask(method, path, body=b"" if method in ("POST", "PUT", "PATCH") else None)[0], 405, (method, path))      # (the admin's delete is not offered to the visitors)
+                self.assertEqual(self.ask(method, path, body=b"" if method in ("POST", "PUT", "PATCH") else None)[0], 405, (method, path))      # (the operator's delete is not offered to the visitors)
             self.assertEqual(self.ask("HEAD", path)[0], 405, path)
         for query in ("?x=1", "?x", "?limit=5", "?a=b&c=d"):
             self.assertEqual(self.ask("GET", "/history/" + ITEM_ID + query)[0], 404, query)    # a query is no request for a match
