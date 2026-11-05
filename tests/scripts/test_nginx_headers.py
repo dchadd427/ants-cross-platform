@@ -10,8 +10,8 @@ A second nginx has no server behind it, for the answers of the named locations (
     players' maps, the doors of the game server and the hub, the answers for a server that is not there, a refused connection) and what each sends: the Content-Security-Policy, the rule for framing, the referrer
     policy, the permissions policy, Strict-Transport-Security and the cross-origin headers, none of them twice. The two policies are read apart, directive by directive. The page headers are sent for a document
     only; the cross-origin headers and nosniff are what they always were on every answer that had them.
-  - THE ORIGIN OF A GAME CONNECTION: real handshakes at /ws with no Origin, the site's own (http, https, with a port, the host in capital letters, an address in brackets) and every kind of other (another site, "null",
-    the name with something added before or after it, a path, a user name, a second Origin, another scheme, a capital letter): 101 or 403, and the stand-in is asked only when the answer is 101. The chat hub's door
+  - THE ORIGIN OF A GAME CONNECTION: real handshakes at /ws with no Origin, the site's own (http, https, with a port, the host in capital letters, an address in brackets, a fully qualified name with its final dot) and every kind of other (another site, "null",
+    the name with something added before or after it, a path, a user name, a second Origin, another scheme, a capital letter, two dots, a dot next to a port): 101 or 403, and the stand-in is asked only when the answer is 101. The chat hub's door
     still passes the Origin on, for the hub to judge.
   - WHAT THE GAME SERVER IS GIVEN: the headers of the handshake and the address nginx sees, and nothing else, whatever the visitor sent (cookies, Authorization, forwarding headers, an address header of the
     visitor's own); /busy is given the Host.
@@ -47,8 +47,8 @@ HEAD = CONF[:CONF.index("server {")]
 DOCKERFILE = stats.read("Dockerfile")
 
 SITE = "beta.playants.org"
-HSTS = "max-age=31536000"
-HSTS_LINE = 'add_header Strict-Transport-Security "max-age=31536000" always;'
+HSTS = "max-age=604800"
+HSTS_LINE = 'add_header Strict-Transport-Security "max-age=604800" always;'
 PERMISSIONS = ("camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), interest-cohort=()")
 ADMIN_PERMISSIONS = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
 PAGE_HEADERS = ("content-security-policy", "x-frame-options", "referrer-policy", "permissions-policy")
@@ -158,6 +158,7 @@ class TheText(unittest.TestCase):
         text = stats.read("docs", "BUILD_AND_RUN.md")
         for needle in ("Strict-Transport-Security", "ants_noquery", "gzip_static", "test_nginx_headers.py"):
             self.assertIn(needle, text, needle)
+        self.assertIn("`Strict-Transport-Security: %s`" % HSTS, text)                              # (the time that the file sends is the one that the document names)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------------------ the run
@@ -611,7 +612,22 @@ class TheFileRuns(unittest.TestCase):
             ("the host in capital letters in the request, the Origin as a browser writes it", "Beta.PlayAnts.org", [site], 101),
             ("localhost, as a developer runs the site", "localhost:19980", ["http://localhost:19980"], 101),
             ("an address in brackets", "[::1]:19980", ["http://[::1]:19980"], 101),
+            ("a fully qualified name: the final dot in the request and in the Origin", SITE + ".", [site + "."], 101),
+            ("the final dot in the Origin only", SITE, [site + "."], 101),
+            ("the final dot in the request only", SITE + ".", [site], 101),
+            ("the final dot, over http", SITE + ".", ["http://" + SITE + "."], 101),
+            ("the final dot, the host in capital letters in the request", "Beta.PlayAnts.org.", [site + "."], 101),
+            ("the final dot of localhost", "localhost.", ["http://localhost."], 101),
             ("another site", SITE, ["https://evil.example"], 403),
+            ("another site, with a final dot", SITE + ".", ["https://evil.example."], 403),
+            ("the final dot, but another host asked for", "other.example.", [site + "."], 403),
+            ("two dots at the end, one in the request", SITE + ".", [site + ".."], 403),
+            ("two dots at the end, none in the request", SITE, [site + ".."], 403),
+            ("a dot before the host", SITE, ["https://." + SITE], 403),
+            ("a dot before a port", SITE + ":8443", [site + ".:8443"], 403),
+            ("a dot after a port", SITE + ":8443", [site + ":8443."], 403),
+            ("the final dot in capital letters", SITE + ".", ["https://" + SITE.upper() + "."], 403),
+            ("the final dot with a path", SITE + ".", [site + "./"], 403),
             ("another site that has the name inside its own", SITE, ["https://" + SITE + ".evil.example"], 403),
             ("another site that begins with the name", SITE, ["https://" + SITE + "-evil.example"], 403),
             ("a site that ends with the name", SITE, ["https://evil" + SITE], 403),

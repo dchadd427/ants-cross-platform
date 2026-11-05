@@ -421,8 +421,8 @@
   {
    "id": "fallback_without_nosniff",
    "file": "docker/nginx.conf",
-   "old": "        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=31536000\" always;\n        return 404 '{\"error\":\"lobbies_off\"}';",
-   "new": "        add_header Strict-Transport-Security \"max-age=31536000\" always;\n        return 404 '{\"error\":\"lobbies_off\"}';"
+   "old": "        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n        return 404 '{\"error\":\"lobbies_off\"}';",
+   "new": "        add_header Strict-Transport-Security \"max-age=604800\" always;\n        return 404 '{\"error\":\"lobbies_off\"}';"
   }
  ]
 }
