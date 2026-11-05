@@ -1,6 +1,6 @@
 // Tests of the rules numbers that go with the loader's fire wall (ants_replay/replay.hpp, docs/REPLAYS.md "Which files play: sim_rules", docs/reverse_engineering/map_loader_fidelity.md section 8): a fire wall of a
 // map file loads as the original loads it, with no obstacle overlay from its dictionary entry, from the rules number 9 (the original's game) and 10 (game mode 187) on. The numbers 5, 8 (the original's game) and
-// 6, 7 (187) keep the old loader, and every number belongs to one mode. This build plays all six.
+// 6, 7 (187) keep the old loader, and every number belongs to one mode. This build plays all seven (5, 8 and 9; 6, 7, 10 and 11).
 //   RP14.1  the numbers: what a build plays, what a head may say, what a match is recorded under, which numbers have the loader, what a refusal says, a number nobody plays
 //   RP14.2  the recordings of the old numbers (8 and 7), made in code on a map with a named fire wall, play to the hashes that the build before the number made of them
 //   RP14.3  the same match recorded under the new numbers (9 and 10) is another match from the first hash; the files play to their pinned hashes

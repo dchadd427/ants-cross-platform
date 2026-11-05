@@ -1177,13 +1177,16 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(o.ran && o.ok && o.complete && o.turns == 310u && o.hash == first.hash && o.hashes_checked == 3u);       // (the ledger of hashes the file holds is matched at every period)
     } TEST_END();
 
-    TEST_CASE("RP2.13 A Map Of More Than 256 A Side Plays And Replays: TINY Grown To 400 x 400 And 512 x 512 (Rules 1), Orders Of 100 To 200 Tiles, Also To Column 120 Row 90, 300 Ticks Twice To The Same Hash, The Replay Verifies, A Copy Of The Engine Has The Hash") {
-        for (const uint32_t side : {400u, 512u}) {
+    TEST_CASE("RP2.13 A Map Of More Than 256 A Side Plays And Replays: TINY Grown To 400 x 400 And 512 x 512 (Rules 2 As Made, And Rules 1), Orders Of 100 To 200 Tiles, Also To Column 120 Row 90, 300 Ticks Twice To The Same Hash, The Replay Verifies, A Copy Of The Engine Has The Hash") {
+        for (const uint32_t side_and_rules : {4002u, 5122u, 4001u, 5121u}) {                          // (400 and 512 a side, at rules 2 as made and at rules 1)
+            const uint32_t side = side_and_rules / 10;
+            const bool rules_one = side_and_rules % 10 == 1;
             const std::string bytes = grown_tiny(side, side);
             ASSERT_FALSE(bytes.empty());
             Map big;
             ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), big.level, nullptr, assets::LevelLimits::for_play_extended()));
-            ASSERT_TRUE(big.level.version == 9u && big.level.width() == side && big.level.height() == side && big.level.rules == assets::LVL_RULES_EXTENDED);
+            ASSERT_TRUE(big.level.version == 9u && big.level.width() == side && big.level.height() == side && big.level.rules == assets::LVL_RULES_LONG_ORDERS);   // (a new map with a side above 256 asks for rules 2)
+            if (rules_one) big.level.rules = assets::LVL_RULES_EXTENDED;
             const Played first = play_scripted(big, 31, 300, 0x0F, sim::StartTeams{}, false, nullptr, 0, big_orders_at);
             const Played second = play_scripted(big, 31, 300, 0x0F, sim::StartTeams{}, false, nullptr, 0, big_orders_at);
             ASSERT_FALSE(first.file.empty());

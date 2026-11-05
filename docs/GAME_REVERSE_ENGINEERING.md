@@ -1828,9 +1828,9 @@ random walks; the models and the remake agree on every path tile and on every po
   non-optimal paths and even false "no path"), failure when a popped node has f >= 8000, path = start .. goal.
 
 - **Remake-only: past the original's limits.** The original stops at a 14-bit cost, a 13-bit estimate, the first popped node with f >= 8000 (a blocked step costs 8000) and 1000 expansions every 50 ms:
-  about 400 grass tiles (286 on a diagonal) fail. Rules 0 and 1 play that. Rules word 2 (the wide search of `path_planner.cpp`, off until the next release) goes past it, only there: the same A*, neighbour order, live f, tie-breaks and "pushed at most
+  about 400 grass tiles (286 on a diagonal) fail. Rules 0 and 1 play that. Rules word 2 (a map's word; the wide search of `path_planner.cpp`) goes past it, only there: the same A*, neighbour order, live f, tie-breaks and "pushed at most
   once", a 24-bit cost, a computed estimate, a blocked node dropped once a node has passed f = 8000, and 1000 expansions a run until such a node is popped. Every search the
-  original finishes is the same, pop for pop and run for run.
+  original finishes is the same, pop for pop and run for run. After that pop a run takes max(1000, cells / 64) expansions. Past 512 tiles of distance the 13-bit estimate wraps and rules 1 and 2 differ (no original map is so wide).
 
 - Step cost `FUN_01020951`: `(C(a)+C(b)) >> 1` orthogonally, `trunc((double)(C(a)+C(b)) * 1.4) >> 1` diagonally;
   8000 for enemy or waiting / idle-without-order team-mates, other teams' hill tiles and queue tiles, solid objects

@@ -209,10 +209,6 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     }
 }
 
-void SimulationEngine::allow_rules_two_for_tests() {
-    impl_->grid_.allow_rules_two_for_tests();
-}
-
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms, uint16_t rules) {
     impl_->roster_mask_ = 0x0Fu;
     impl_->dropped_mask_ = 0;
@@ -256,7 +252,7 @@ void SimulationEngine::tick() {
         return;
     }
 
-    // 187: a team that has no ant, egg or hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
+    // 187: a team that has no ant, no egg that can hatch and no hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
     if (impl_->game_mode_ == GameMode::Kills187) impl_->announce_out_of_ants_187();
 
     // 1. CHECKGO (Ants.exe 0x1024839, period 200 ms, first run at once): the time warnings and the end of the match

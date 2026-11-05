@@ -17,10 +17,12 @@
 //                                                            a new map of plain ground, R x C (1 to 256 each), its dictionary by the rule of the original maps (names from ants.chd)
 //   lvl_tool blank OUT --extended --rows R --columns C [--chd FILE]
 //                                                            a new Extended map (version 9) of plain ground: at most 1,024 a side and 262,144 cells (LevelLimits::for_extended_maps)
-//   lvl_tool convert FILE --to extended|classic -o OUT [--rows R --columns C]
+//   lvl_tool convert FILE --to extended|classic -o OUT [--rows R --columns C] [--rules 2]
 //                                                            a COPY of the map as an Extended map (always) or a Classic map (when it fits; else the reasons are listed and nothing is
 //                                                            written); FILE is kept, OUT must be another file. With --rows and --columns (Extended only) the copy is grown to
-//                                                            that size by plain ground at the right and below: a big map that works, for the tests of the server and the site
+//                                                            that size by plain ground at the right and below: a big map that works, for the tests of the server and the site.
+//                                                            With --rules 2 (Extended only) the copy has the long-order rules (docs/MAP_FORMAT.md "Orders on a big map");
+//                                                            a new map with a side above 256 (blank --extended, or a copy grown by --rows and --columns) gets rules 2 even without --rules 2
 //       --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15)
 //       --new-map      hold the file to the limits of a new Classic map (LevelLimits::for_new_maps): at most 90 rows, 130 columns and 10,000 cells, a file of at most 512 KB is read and
 //                      a canonical file of at most 144 KB written
@@ -72,7 +74,7 @@ void usage(std::ostream& out) {
            "       lvl_tool rewrite IN OUT [--roster MASK] [--new-map]\n"
            "       lvl_tool blank OUT --rows R --columns C [--chd FILE] [--new-map]\n"
            "       lvl_tool blank OUT --extended --rows R --columns C [--chd FILE]\n"
-           "       lvl_tool convert FILE --to extended|classic -o OUT [--rows R --columns C]\n"
+           "       lvl_tool convert FILE --to extended|classic -o OUT [--rows R --columns C] [--rules 2]\n"
            "       lvl_tool --selftest\n"
            "  check    whether the file loads and plays for the teams of the roster, and every finding\n"
            "           (with --original: whether the map works in the original game, every finding with its code;\n"
@@ -81,7 +83,9 @@ void usage(std::ostream& out) {
            "  rewrite  reads IN, checks it and writes its canonical bytes to OUT (another file than IN); says what differs\n"
            "  blank    writes a new map of plain ground, R rows x C columns (1 to 256 each), its dictionary by the rule of the original maps\n"
            "  convert  writes a copy of the map as an Extended map (version 9, always) or a Classic map (version 8, when it fits: else the reasons are listed); FILE is kept\n"
-           "           (with --rows and --columns the Extended copy is grown to that size by plain ground at the right and below, to make a big map that works)\n"
+           "           (with --rows and --columns the Extended copy is grown to that size by plain ground at the right and below, to make a big map that works;\n"
+           "           with --rules 2 the Extended copy has the long-order rules: the wide search of the path finder, for orders the original gives up on;\n"
+           "           a new map (blank --extended, or a copy grown with --rows and --columns) with a side above 256 gets rules 2 by itself, without --rules 2)\n"
            "  --extended     blank: a new Extended map, at most 1,024 a side and 262,144 cells (rows and columns 1 to 2,048 are read, the limits refuse more)\n"
            "                 check: the checker per kind, for a Classic or an Extended map (the limits of an Extended map)\n"
            "  --roster MASK  the teams that play: bit 0 green, 1 red, 2 blue, 3 black (1 .. 15; default 15)\n"
@@ -194,6 +198,7 @@ struct Options {
     std::string output;
     uint32_t rows{0};
     uint32_t columns{0};
+    uint32_t rules{0};         // --rules 2 (0: not given)
     std::string chd;
 };
 
@@ -222,6 +227,9 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
             const uint32_t most = o.extended || args[0] == "convert" ? LVL_FORMAT_CEILING_SIDE : LVL_MAX_GRID_SIDE;
             if (!has_value || !number(args[++i], 1, most, v)) { why = a + " takes a number from 1 to " + std::to_string(most); return false; }
             (a == "--rows" ? o.rows : o.columns) = v;
+        } else if (a == "--rules") {
+            if (!has_value || !number(args[++i], 2, 2, v)) { why = "--rules takes 2 (the long-order rules)"; return false; }
+            o.rules = v;
         } else if (a == "--chd") {
             if (!has_value) { why = "--chd takes a file"; return false; }
             o.chd = args[++i];
@@ -442,7 +450,7 @@ int info(const Options& o, std::ostream& out, std::ostream& err) {
         std::snprintf(flags, sizeof flags, "0x%X", level.format_flags);
         out << "Kind:          Extended map (version 9; new version only)\n"
             << "Format flags:  " << flags << (level.format_flags == 0 ? " (none)" : "") << "\n"
-            << "Rules:         " << level.rules << (level.rules == LVL_RULES_ORIGINAL ? " (the original's rules)" : " (extended rules)") << "\n";
+            << "Rules:         " << level.rules << (level.rules == LVL_RULES_ORIGINAL ? " (the original's rules)" : level.rules == LVL_RULES_LONG_ORDERS ? " (extended rules, long orders)" : " (extended rules)") << "\n";
     }
     out << "Description:   \"" << escaped(level.description) << "\" (" << level.description.size() << " bytes)\n"
         << "Minutes:       " << level.default_minutes << "\n"
@@ -544,7 +552,11 @@ int convert(const Options& o, std::ostream& out, std::ostream& err) {
         return 1;
     }
     const bool to_extended = o.to == "extended";
-    const LevelConversion c = to_extended ? convert_to_extended(level) : convert_to_classic(level);
+    if (o.rules != 0 && !to_extended) {
+        err << "lvl_tool: --rules goes with --to extended only\n";
+        return 2;
+    }
+    const LevelConversion c = to_extended ? (o.rules == LVL_RULES_LONG_ORDERS ? convert_to_long_orders(level) : convert_to_extended(level)) : convert_to_classic(level);
     if (!c.ok) {
         out << name << ": cannot be " << (to_extended ? "an Extended" : "a Classic") << " map:\n";
         for (const std::string& r : c.reasons) out << "  " << r << "\n";
@@ -573,6 +585,7 @@ int convert(const Options& o, std::ostream& out, std::ostream& err) {
                 grown.layer2_interactive[static_cast<size_t>(y) * o.columns + x] = c.level.layer2_interactive[static_cast<size_t>(y) * c.level.width() + x];
             }
         }
+        grown.rules = std::max(grown.rules, c.level.rules);   // (the blank map's own rules word for its size, or the source's when that is higher: --rules 2 stays)
         grown.anthill_spawns = c.level.anthill_spawns;
         grown.food_schedules = c.level.food_schedules;
         grown.waypoints = c.level.waypoints;
@@ -591,7 +604,7 @@ int convert(const Options& o, std::ostream& out, std::ostream& err) {
         return 2;
     }
     out << name << " -> " << file_name(o.output) << ": " << (level.version == c.level.version ? "already " : "converted to ") << (to_extended ? "an Extended map (version 9)" : "a Classic map (version 8)")
-        << ", " << w.bytes.size() << " bytes written to a new file; " << name << " is kept\n";
+        << (to_extended && result.rules != LVL_RULES_ORIGINAL ? ", rules " + std::to_string(result.rules) : std::string()) << ", " << w.bytes.size() << " bytes written to a new file; " << name << " is kept\n";
     for (const std::string& n : c.notes) out << "  note: " << n << "\n";
     return 0;
 }
@@ -656,8 +669,8 @@ int run_tool(const std::vector<std::string>& args, std::ostream& out, std::ostre
     } else if (ok && o.extended && command == "check" && (o.original || o.roster_given || o.new_map)) {
         why = "--extended takes no --original, --roster or --new-map (the checker per kind holds the map to all four teams, with the limits of an Extended map)";
         ok = false;
-    } else if (ok && (!o.to.empty() || !o.output.empty()) && command != "convert") {
-        why = "--to and -o go with convert only";
+    } else if (ok && (!o.to.empty() || !o.output.empty() || o.rules != 0) && command != "convert") {
+        why = "--to, -o and --rules go with convert only";
         ok = false;
     } else if (ok && o.original && command != "check") {
         why = "--original goes with check only";
@@ -1053,13 +1066,43 @@ int selftest() {
                     run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("half.lvl"), "--rows", "300"}).status == 2 &&
                     run_words({"convert", tiny_path, "--to", "classic", "-o", dir.file("cl.lvl"), "--rows", "300", "--columns", "300"}).status == 2,
                 "convert --rows --columns: a size smaller than the map is exit 1, one side alone or a Classic copy is exit 2");
+        // --rules 2: the copy asks for the long-order rules (docs/MAP_FORMAT.md "Orders on a big map"); a grown copy keeps it; the word needs --to extended and is 2 or nothing
+        {
+            const std::string two_path = dir.file("tiny_rules2.lvl");
+            const Run two = run_words({"convert", tiny_path, "--to", "extended", "-o", two_path, "--rules", "2"});
+            LevelData two_level;
+            std::vector<uint8_t> two_bytes;
+            t.check(two.status == 0 && has(two.out, ", rules 2, ") && read_whole(two_path, two_bytes) && two_level.load_from_memory(two_bytes.data(), two_bytes.size(), nullptr, LevelLimits::for_extended_maps()) &&
+                        two_level.version == 9u && two_level.rules == LVL_RULES_LONG_ORDERS,
+                    "convert --rules 2: the copy is a version 9 map of rules 2: " + two.out);
+            const Run two_info = run_words({"info", two_path});
+            t.check(two_info.status == 0 && has(two_info.out, "Rules:         2 (extended rules, long orders)\n"), "info of a map of rules 2: " + two_info.out);
+            const std::string two_grown = dir.file("tiny_rules2_grown.lvl");
+            LevelData grown_two;
+            std::vector<uint8_t> grown_two_bytes;
+            t.check(run_words({"convert", tiny_path, "--to", "extended", "-o", two_grown, "--rows", "40", "--columns", "40", "--rules", "2"}).status == 0 && read_whole(two_grown, grown_two_bytes) &&
+                        grown_two.load_from_memory(grown_two_bytes.data(), grown_two_bytes.size(), nullptr, LevelLimits::for_extended_maps()) && grown_two.rules == LVL_RULES_LONG_ORDERS && grown_two.height() == 40u,
+                    "convert --rules 2 --rows --columns: the grown copy keeps rules 2");
+            const std::string auto_two = dir.file("tiny_grown_300.lvl");
+            LevelData auto_level;
+            std::vector<uint8_t> auto_bytes;
+            t.check(run_words({"convert", tiny_path, "--to", "extended", "-o", auto_two, "--rows", "300", "--columns", "300"}).status == 0 && read_whole(auto_two, auto_bytes) &&
+                        auto_level.load_from_memory(auto_bytes.data(), auto_bytes.size(), nullptr, LevelLimits::for_extended_maps()) && auto_level.rules == LVL_RULES_LONG_ORDERS,
+                    "convert --rows 300 --columns 300 without --rules: a side above 256 gets rules 2 by itself");
+            const Run back_down = run_words({"convert", two_path, "--to", "classic", "-o", dir.file("tiny_rules2_back.lvl")});
+            t.check(back_down.status == 0 && has(back_down.out, "note: the map asks for the long-order rules (rules 2)"), "convert a map of rules 2 --to classic: written, with the note that the rules are dropped: " + back_down.out);
+            t.check(run_words({"convert", tiny_path, "--to", "classic", "-o", dir.file("r2c.lvl"), "--rules", "2"}).status == 2 && run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r1.lvl"), "--rules", "1"}).status == 2 &&
+                        run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r3.lvl"), "--rules", "3"}).status == 2 && run_words({"convert", tiny_path, "--to", "extended", "-o", dir.file("r0.lvl"), "--rules"}).status == 2 &&
+                        run_words({"check", tiny_path, "--rules", "2"}).status == 2,
+                    "convert --rules: only 2, only with --to extended, a number is needed, and only on convert: exit 2");
+        }
         const std::string wide = dir.file("wide_ext.lvl");
         const Run big = run_words({"blank", wide, "--extended", "--rows", "300", "--columns", "400"});
         t.check(big.status == 0 && has(big.out, "wide_ext.lvl: a blank Extended map of 300 rows x 400 columns, ") && fs::exists(wide), "blank --extended: 300 x 400 is an Extended map: " + big.out);
         const Run wide_info = run_words({"info", wide});
-        t.check(wide_info.status == 0 && has(wide_info.out, "Rules:         1 (extended rules)\n") && has(wide_info.out, "Classic map:   does not fit:\n") &&
+        t.check(wide_info.status == 0 && has(wide_info.out, "Rules:         2 (extended rules, long orders)\n") && has(wide_info.out, "Classic map:   does not fit:\n") &&
                     has(wide_info.out, "this map is 400 columns wide; a Classic map has at most 256 columns\n") && has(wide_info.out, "this map is 300 rows tall; a Classic map has at most 256 rows\n"),
-                "info of a wide Extended map: rules 1 and why it is not a Classic map: " + wide_info.out);
+                "info of a wide Extended map: rules 2 and why it is not a Classic map: " + wide_info.out);
         const Run no_fit = run_words({"convert", wide, "--to", "classic", "-o", dir.file("no_fit.lvl")});
         t.check(no_fit.status == 1 && has(no_fit.out, "wide_ext.lvl: cannot be a Classic map:\n  this map is 400 columns wide") && has(no_fit.out, "nothing written\n") && !fs::exists(dir.file("no_fit.lvl")),
                 "convert --to classic: a map that does not fit lists why and writes nothing: " + no_fit.out);

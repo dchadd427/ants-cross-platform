@@ -89,7 +89,7 @@ std::string check_writable(const LevelData& level, const LevelLimits& limits) {
         if ((level.format_flags & ~LVL_KNOWN_FORMAT_FLAGS) != 0) {
             return "the format flags are 0x" + hex(level.format_flags) + ": this writer knows no flag bit (0x" + hex(LVL_KNOWN_FORMAT_FLAGS) + "), and a reader refuses a file with any other";
         }
-        if (level.rules > LVL_RULES_EXTENDED) return "the rules word is " + num(level.rules) + ": only 0 (the original's rules) and 1 (extended rules) are known";
+        if (level.rules > LVL_RULES_MOST) return "the rules word is " + num(level.rules) + ": only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders) are known";
     } else if (level.format_flags != 0 || level.rules != 0) {
         return "a version 8 file has no format flags and no rules word, the level holds flags 0x" + hex(level.format_flags) + " and rules " + num(level.rules);
     }
@@ -599,8 +599,11 @@ std::vector<Reason> classic_reasons(const LevelData& level, std::vector<Reason>*
                                                    " (29 characters end with the zero byte that the original needs)"});
     }
     if (level.format_flags != 0) why.push_back({"format_flags_set", "the map has format flags (0x" + hex(level.format_flags) + "); a Classic map has none"});
-    if (level.rules > LVL_RULES_EXTENDED) {
-        why.push_back({"rules_unknown", "the rules word is " + num(level.rules) + ": only 0 and 1 are known"});
+    if (level.rules > LVL_RULES_MOST) {
+        why.push_back({"rules_unknown", "the rules word is " + num(level.rules) + ": only 0, 1 and 2 are known"});
+    } else if (level.rules == LVL_RULES_LONG_ORDERS && notes != nullptr) {
+        notes->push_back({"rules_long_orders_dropped", "the map asks for the long-order rules (rules 2); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
+                                                       "and a path order of about 400 tiles can fail)"});
     } else if (level.rules == LVL_RULES_EXTENDED && notes != nullptr) {
         notes->push_back({"rules_extended_dropped", "the map asks for the extended rules (rules 1); a Classic map has the original's rules only, so it may play differently (ants cannot cross tile row 90, "
                                                     "and a long path order can fail)"});
@@ -694,6 +697,20 @@ LevelConversion convert_to_extended(const LevelData& level) {
         result = LevelConversion{};
         result.reasons.push_back("the map cannot be converted (out of memory)");
         result.reason_codes.push_back("out_of_memory");
+    }
+    return result;
+}
+
+LevelConversion convert_to_long_orders(const LevelData& level) {
+    LevelConversion result = convert_to_extended(level);
+    if (!result.ok) return result;
+    result.level.rules = LVL_RULES_LONG_ORDERS;               // the copy plays by the long-order rules; its cells are the source's
+    const LevelWriteResult check = write_level(result.level, conversion_limits(true));
+    if (!check.ok) {
+        result.ok = false;
+        result.reasons.push_back("the map cannot be written as an Extended map of rules 2: " + check.error);
+        result.reason_codes.push_back("not_writable_as_extended");
+        result.level = LevelData{};
     }
     return result;
 }
@@ -812,8 +829,9 @@ LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::st
 
 LevelData blank_extended_level(uint32_t rows, uint32_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits) {
     LevelData level = blank_of_version(LVL_EXTENDED_VERSION, rows, columns, tile_names, limits);
-    // a map taller than 90 rows or wider than 256 is not one the original's rules play (the row-90 wall, the 8 bit anchors): it asks for the extended rules
-    level.rules = (rows > LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE) ? LVL_RULES_EXTENDED : LVL_RULES_ORIGINAL;
+    // a map taller than 90 rows is not one the original's rules play (the row-90 wall): it asks for the extended rules; one with a side beyond 256 (the 8 bit anchors, and orders
+    // that the original's path finder gives up on) asks for the long-order rules, which are the extended rules and the wide search
+    level.rules = (rows > LVL_MAX_GRID_SIDE || columns > LVL_MAX_GRID_SIDE) ? LVL_RULES_LONG_ORDERS : rows > LVL_ORIGINAL_RULES_MOST_ROWS ? LVL_RULES_EXTENDED : LVL_RULES_ORIGINAL;
     return level;
 }
 

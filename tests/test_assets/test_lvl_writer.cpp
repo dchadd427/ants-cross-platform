@@ -1485,13 +1485,15 @@ void w7_extended_maps() {
         CHECK(std::equal(c.bytes.begin() + 42, c.bytes.begin() + 42 + 44, expected.begin() + 18 + 130 + 2));
     });
 
-    run_case("W7.1b What The Writer Refuses In A Version 9 Level: Flags It Does Not Know, A Rules Word Above 1, Flags Or Rules In A Version 8 Level, A Description Of 256 Bytes Or With A Zero Byte", [] {
+    run_case("W7.1b What The Writer Refuses In A Version 9 Level: Flags It Does Not Know, A Rules Word Above 2, Flags Or Rules In A Version 8 Level, A Description Of 256 Bytes Or With A Zero Byte", [] {
         LevelData l = extended_level();
         l.format_flags = 0x10;
         CHECK_MSG(refused_with(write_level(l, extended_limits()), "the format flags are 0x10: this writer knows no flag bit"), write_level(l, extended_limits()).error);
         l = extended_level();
+        l.rules = 3;
+        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the rules word is 3: only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders) are known"), write_level(l, extended_limits()).error);
         l.rules = 2;
-        CHECK_MSG(refused_with(write_level(l, extended_limits()), "the rules word is 2: only 0 (the original's rules) and 1 (extended rules) are known"), write_level(l, extended_limits()).error);
+        CHECK_MSG(write_level(l, extended_limits()).ok, "a rules word of 2 is written");
         l = extended_level();
         l.version = 8;
         l.description = "short";
@@ -1511,12 +1513,12 @@ void w7_extended_maps() {
         CHECK(refused_with(write_level(l, extended_limits()), "version 10: the writer writes version 8, the only one the original reads, and version 9"));
     });
 
-    run_case("W7.2 Read, Write, Read Of 1,500 Random Extended Levels (Rules 0 And 1, Descriptions Of 0 To 255 Bytes): The Same Level, Written Twice The Same Bytes", [] {
+    run_case("W7.2 Read, Write, Read Of 1,500 Random Extended Levels (Rules 0, 1 And 2, Descriptions Of 0 To 255 Bytes): The Same Level, Written Twice The Same Bytes", [] {
         Lcg r(0xE17E4DEDu);
         for (int i = 0; i < 1500; ++i) {
             LevelData l = random_level(r);
             l.version = 9;
-            l.rules = static_cast<uint16_t>(r.below(2));
+            l.rules = static_cast<uint16_t>(r.below(3));
             l.description.clear();
             const size_t len = r.below(256);
             for (size_t k = 0; k < len; ++k) l.description += static_cast<char>(1 + r.below(255));
@@ -1663,6 +1665,20 @@ void w7_extended_maps() {
         CHECK_MSG(c.ok, c.reasons.empty() ? "" : c.reasons[0]);
         CHECK(c.notes.size() == 1u && c.notes[0].find("rules 1") != std::string::npos);
         CHECK(c.level.version == 8u && c.level.rules == 0u);
+        // rules 2 is dropped the same way, with a note of its own; convert_to_long_orders makes the copy rules 2 (and nothing else of it differs)
+        LevelData two = base;
+        two.rules = 2;
+        c = convert_to_classic(two);
+        CHECK(c.ok && c.note_codes == std::vector<std::string>{"rules_long_orders_dropped"} && c.notes[0].find("rules 2") != std::string::npos && c.level.rules == 0u);
+        const LevelConversion long_orders = convert_to_long_orders(base);
+        CHECK(long_orders.ok && long_orders.level.rules == 2u && long_orders.level.version == 9u && long_orders.reasons.empty());
+        LevelData same_but_rules = long_orders.level;
+        same_but_rules.rules = base.rules;
+        CHECK(same_level(same_but_rules, base));
+        CHECK(convert_to_long_orders(convert_to_classic(base).level).level.rules == 2u && convert_to_long_orders(convert_to_classic(base).level).level.version == 9u);
+        LevelData broken = base;
+        broken.layer1_terrain.resize(3);
+        CHECK(!convert_to_long_orders(broken).ok);
         LevelData d = base;
         d.description = std::string(31, 'x');
         c = convert_to_classic(d);
@@ -1692,9 +1708,9 @@ void w7_extended_maps() {
         c = convert_to_classic(flags);
         CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0].find("format flags (0x10)") != std::string::npos);
         LevelData rules = base;
-        rules.rules = 2;
+        rules.rules = 3;
         c = convert_to_classic(rules);
-        CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0] == "the rules word is 2: only 0 and 1 are known");
+        CHECK(!c.ok && c.reasons.size() == 1u && c.reasons[0] == "the rules word is 3: only 0, 1 and 2 are known");
         // an anchor that no byte holds: a map of 300 columns, an object at column 290 anchored at column 289; the map is too wide as well
         LevelData wide = base;
         wide.height.val = 1;
@@ -1843,8 +1859,9 @@ void w7_extended_maps() {
                   write_level(extended_level(), fits).error);
         // the ceiling is the format's: the writer refuses 2049 whatever the limits
         CHECK_MSG(refused_with(write_level(blank_extended_level(2049, 1, names), huge), "2049 rows x 1 columns, more than the 2048 x 2048 allowed here"), "2049");
-        // the blank Extended map: rules 1 from 91 rows or 257 columns on
-        CHECK(blank_extended_level(90, 256, names).rules == 0u && blank_extended_level(91, 5, names).rules == 1u && blank_extended_level(5, 257, names).rules == 1u);
+        // the blank Extended map: rules 1 from 91 rows on, rules 2 (long orders) when a side is beyond 256
+        CHECK(blank_extended_level(90, 256, names).rules == 0u && blank_extended_level(91, 5, names).rules == 1u && blank_extended_level(256, 256, names).rules == 1u);
+        CHECK(blank_extended_level(5, 257, names).rules == 2u && blank_extended_level(257, 5, names).rules == 2u && blank_extended_level(512, 512, names).rules == 2u && blank_extended_level(90, 257, names).rules == 2u);
         CHECK(blank_extended_level(5, 5, names).version == 9u && blank_extended_level(5, 5, names).format_flags == 0u);
         // a grid beyond the limits gets no cell and nothing of its size is allocated
         LevelData none;
@@ -1974,7 +1991,7 @@ void w7_extended_maps() {
         CHECK(!level.load_from_memory(empty.data(), empty.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::GridEmpty));
     });
 
-    run_case("W7.9 Hostile Fields: Every Unknown Flag Bit, A Rules Word Above 1, A Description Of 256 Bytes Or More Than The File Holds, A Zero Byte In It; The Dictionary And The Blocks", [] {
+    run_case("W7.9 Hostile Fields: Every Unknown Flag Bit, A Rules Word Above 2, A Description Of 256 Bytes Or More Than The File Holds, A Zero Byte In It; The Dictionary And The Blocks", [] {
         // the flags: each of the 32 bits alone, and all of them
         for (int bit = 0; bit < 33; ++bit) {
             const uint32_t flags = bit == 32 ? 0xFFFFFFFFu : (1u << bit);
@@ -1984,14 +2001,14 @@ void w7_extended_maps() {
             CHECK_MSG(!level.load_from_memory(file.data(), file.size(), &v, extended_limits()) && has_fatal(v, LevelProblemKind::FormatFlagsUnknown) && is_empty_level(level), "flags bit " + std::to_string(bit));
             CHECK_MSG(mentions(v, "bits that this reader does not know") && mentions(v, "0x"), v.reason());
         }
-        // the rules: 0 and 1 are the two; every other word is refused
+        // the rules: 0, 1 and 2 are the three; every other word is refused
         for (const uint32_t word : {0u, 1u, 2u, 3u, 255u, 256u, 0x8000u, 0xFFFFu}) {
             const std::vector<uint8_t> file = v9_bytes(0, word, "x", 1, 1, 1);
             LevelData level;
             LevelValidation v;
             const bool loaded = level.load_from_memory(file.data(), file.size(), &v, extended_limits());
-            CHECK_MSG(loaded == (word <= 1), "rules " + std::to_string(word));
-            if (word > 1) CHECK_MSG(has_fatal(v, LevelProblemKind::RulesOutOfRange) && mentions(v, "only 0 (the original's rules) and 1 (extended rules)"), v.reason());
+            CHECK_MSG(loaded == (word <= 2), "rules " + std::to_string(word));
+            if (word > 2) CHECK_MSG(has_fatal(v, LevelProblemKind::RulesOutOfRange) && mentions(v, "only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders)"), v.reason());
             if (loaded) CHECK(level.rules == word);
         }
         // the description: 255 bytes are the most; 256 and the words above are refused before the bytes are looked for; a length that the file cannot hold is a cut file

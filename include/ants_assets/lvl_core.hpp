@@ -64,7 +64,7 @@ Result profile_limits(Profile profile);
 Result convert_to_extended(const uint8_t* data, size_t size);
 
 /// The bytes made a Classic map (convert_to_classic) when they fit: both sides at most 256, at most 90 rows for an Extended map, the dictionary at most 1,344 names, the description
-/// at most 30 bytes, no format flags, rules 0 or 1 (a note when 1), every anchor inside a byte, and the copy within the limits of `profile` (a new Classic map: Profile::NewMap). The file
+/// at most 30 bytes, no format flags, rules 0, 1 or 2 (a note when 1 or 2), every anchor inside a byte, and the copy within the limits of `profile` (a new Classic map: Profile::NewMap). The file
 /// is read as an Extended place reads one. The payload is that of convert_to_extended. Status 1 when the file does not load or the profile does not exist.
 Result convert_to_classic(const uint8_t* data, size_t size, Profile profile);
 
@@ -73,7 +73,7 @@ Result convert_to_classic(const uint8_t* data, size_t size, Profile profile);
 Result needs_extended(const uint8_t* data, size_t size, Profile profile);
 
 /// A new Extended map (version 9, blank_extended_level) of plain `ground_tile` ground, `rows` x `columns` cells, `minutes` long, `eggs` for each team, no hill and no start marker
-/// yet; the canonical bytes, under the limits of Profile::Extended. Its rules word is 1 when the map is taller than 90 rows or wider than 256 columns, else 0. Status 1 for an
+/// yet; the canonical bytes, under the limits of Profile::Extended. Its rules word is 2 when a side is beyond 256, else 1 when the map is taller than 90 rows, else 0. Status 1 for an
 /// argument out of range or a grid beyond the Extended limits (1,024 a side, 262,144 cells).
 Result blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes);
 
