@@ -1,0 +1,30 @@
+{
+ "note": "Entries of the server's GET /maps (format 1) as it answers for the maps of Community-Maps/: the file name and the \"thumb\" address that the server gives (map_store.cpp: /maps/previews/ and the picture's name percent-encoded, which previews.json names). A few names that need care: spaces, dots, dashes, !, #, $, &, ', ~, capitals, an ending in .LVL. tests/scripts/web_home_games_check.js: the Games list draws the same address from the row's file name alone.",
+ "maps": [
+  {"file": "POPcOrN.lvl", "thumb": "/maps/previews/POPcOrN.webp"},
+  {"file": "BarnEy PoPCORN 2.lvl", "thumb": "/maps/previews/BarnEy%20PoPCORN%202.webp"},
+  {"file": "Popcorn 3.0.lvl", "thumb": "/maps/previews/Popcorn%203.0.webp"},
+  {"file": "ANTS WORLD....lvl", "thumb": "/maps/previews/ANTS%20WORLD....webp"},
+  {"file": "Fire v.s. Water.lvl", "thumb": "/maps/previews/Fire%20v.s.%20Water.webp"},
+  {"file": "ANTS_PARTY-V.3.0.5.lvl", "thumb": "/maps/previews/ANTS_PARTY-V.3.0.5.webp"},
+  {"file": "PoPcOrN-2.lvl", "thumb": "/maps/previews/PoPcOrN-2.webp"},
+  {"file": "!-Midz-!.lvl", "thumb": "/maps/previews/%21-Midz-%21.webp"},
+  {"file": "Combo-bombo.lvl", "thumb": "/maps/previews/Combo-bombo.webp"},
+  {"file": "!!!!aLkAtRaZ_cOmBaN!!!!.lvl", "thumb": "/maps/previews/%21%21%21%21aLkAtRaZ_cOmBaN%21%21%21%21.webp"},
+  {"file": "!!!!!!~Water Maze~.lvl", "thumb": "/maps/previews/%21%21%21%21%21%21~Water%20Maze~.webp"},
+  {"file": "#A Bomb Master.lvl", "thumb": "/maps/previews/%23A%20Bomb%20Master.webp"},
+  {"file": "FunOnBomb$.lvl", "thumb": "/maps/previews/FunOnBomb%24.webp"},
+  {"file": "A&E.lvl", "thumb": "/maps/previews/A%26E.webp"},
+  {"file": "'s 4 Player Royal.lvl", "thumb": "/maps/previews/%27s%204%20Player%20Royal.webp"},
+  {"file": "Ant's Island.lvl", "thumb": "/maps/previews/Ant%27s%20Island.webp"},
+  {"file": "~FeaR The FirE~.lvl", "thumb": "/maps/previews/~FeaR%20The%20FirE~.webp"},
+  {"file": "~~PlAyEr'S_rEvEnGe2.lvl", "thumb": "/maps/previews/~~PlAyEr%27S_rEvEnGe2.webp"},
+  {"file": "Killing Spree.LVL", "thumb": "/maps/previews/Killing%20Spree.webp"},
+  {"file": "Grid.LVL", "thumb": "/maps/previews/Grid.webp"},
+  {"file": "1v1TREASURE.LVL", "thumb": "/maps/previews/1v1TREASURE.webp"},
+  {"file": "!!!!!!!!!!!!!!!! Danger_World!_II!!!.lvl", "thumb": "/maps/previews/%21%21%21%21%21%21%21%21%21%21%21%21%21%21%21%21%20Danger_World%21_II%21%21%21.webp"},
+  {"file": "Arena31.lvl", "thumb": "/maps/previews/Arena31.webp"},
+  {"file": "popcorn5.lvl", "thumb": "/maps/previews/popcorn5.webp"},
+  {"file": "HeLLRaiSeR V3.1.lvl", "thumb": "/maps/previews/HeLLRaiSeR%20V3.1.webp"}
+ ]
+}
