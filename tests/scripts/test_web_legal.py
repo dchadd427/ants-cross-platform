@@ -160,7 +160,7 @@ class TheLegalPage(unittest.TestCase):
     def test_the_panel_of_the_chat_says_what_is_kept_for_how_long_the_cookies_and_how_to_leave(self):
         start = self.main.index('<section class="panel" id="chat-login">')
         panel = plain(self.main[start:self.main.index("</section>", start)])
-        for words in ("Discord id and username", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for 7 days", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
+        for words in ("Discord id and username", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for up to 7 days", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
                       "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username", "a ban or a mute, if there is one, stays",
                       "Reading the chat and playing need no login"):
             self.assertIn(words, panel, words)
