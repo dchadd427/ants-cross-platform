@@ -517,6 +517,66 @@
     "test_server"
    ],
    "test": "ANTS_TEST_FILTER=\"S3.258\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "late_referee_word_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return;",
+   "new": "if (false) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "late_report_of_a_seat_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return out;",
+   "new": "if (false) return out;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turns_that_every_seat_passed_not_remembered",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "    passed_ = std::max(passed_, low);\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "report_of_the_turn_every_seat_just_ran_not_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return out;",
+   "new": "if (uint64_t{turn} + 1 <= passed_) return out;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "referee_word_of_the_turn_every_seat_just_ran_not_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return;",
+   "new": "if (uint64_t{turn} + 1 <= passed_) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turn_that_is_let_go_is_judged_again",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "this one is let go\n            it = suspect_.erase(it);\n",
+   "new": "this one is let go\n            ++it;\n",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.57\" ./build/tests/test_net/test_lockstep"
   }
  ]
 }

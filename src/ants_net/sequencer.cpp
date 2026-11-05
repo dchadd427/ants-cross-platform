@@ -58,6 +58,7 @@ void Sequencer::resume(uint32_t next_turn) {
     reports_.clear();
     have_report_.clear();
     referee_.clear();
+    passed_ = 0;
     acked_.fill(0);
     joined_.fill(0);
     active_.fill(false);                             // the new host activates the peers that follow it, one by one
@@ -77,6 +78,7 @@ void Sequencer::on_ack(uint8_t player, uint32_t turn) {
     for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) {
         if (active_[p]) low = std::min(low, acked_[p]);
     }
+    passed_ = std::max(passed_, low);
     // (a turn on which a report differs from the referee's is kept until judge_hashes has answered it: the acknowledgements that pass it may come in the same pass as the report)
     for (auto it = reports_.begin(); it != reports_.end();) {
         if (it->first + 1 < low && suspect_.count(it->first) == 0) {
@@ -96,6 +98,7 @@ void Sequencer::on_referee_hash(uint32_t turn, const sim::StateHash& hash) {
     if (host_player_ < sim::MAX_PLAYERS) return;                          // a host with a seat reports through on_hash like everybody else
     if (turn >= next_turn_ || !hashed_turn(turn)) return;                 // the referee only executed turns that were sealed, and reports the hashed ones
     if (turn + kRefereeWindowTurns < next_turn_) return;                  // (a turn that is long past: nothing is waiting for it)
+    if (uint64_t{turn} + 1 < passed_) return;                             // every seat has passed the turn: what the seats said of it is forgotten, so this word has nothing to be weighed against and must not wait for a report that comes later
     referee_[turn] = hash;
     const auto found = reports_.find(turn);
     const auto have = have_report_.find(turn);
@@ -111,6 +114,7 @@ std::vector<DesyncMsg> Sequencer::on_hash(uint8_t player, uint32_t turn, const s
     if (turn >= next_turn_) return out;                                   // only a turn that was sealed can be reported: a hostile client cannot make the maps grow with turns of the future
     if (host_player_ >= sim::MAX_PLAYERS) {                               // a host without a seat: the referee's report is the reference, and judge_hashes() weighs the seats' against it
         if (!hashed_turn(turn)) return out;                               // (nobody hashes any other turn: a report of one is not kept)
+        if (uint64_t{turn} + 1 < passed_) return out;                     // (every seat has passed the turn: what the others said of it is forgotten, so this report would stand alone)
         bool& have = have_report_[turn][player];
         if (have) return out;                                             // the first report of a seat for a turn is its report: a repeat says nothing new
         reports_[turn][player] = hash;

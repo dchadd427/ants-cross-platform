@@ -660,7 +660,7 @@ void run_hash_tests() {
             const HashVerdict v = r.seq.judge_hashes(7);
             ASSERT_TRUE(v.kind == Kind::Drop && seats_of(v) == 2 && v.seats[0].turn == 99);
         }
-        {   // nor is a seat's report that comes after that: it cannot pair with the referee's word that was late, with seats 0 and 2 at the table the room is not stopped by a report that nothing can be weighed against
+        {   // nor is a seat's report that comes after that: it cannot pair with the referee's late word, so a seat that speaks alone does not stop a room that has seats 0 and 2 at the table
             JudgeRig r;
             r.report(0, 19, 0);
             for (uint8_t p = 0; p < 3; ++p) r.seq.on_ack(p, 70);                     // every seat has run on: the reports of turn 19 are forgotten

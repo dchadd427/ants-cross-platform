@@ -69,15 +69,15 @@ public:
     /// A state hash report of `player` after `turn`. A host with a seat: returns the desync found by comparing it with the host's report of the same turn (the host is
     /// `host_player`, reported through the same call), if any. A host without a seat (a dedicated server): nothing is returned, the report is kept for judge_hashes() against
     /// the referee's; only a hashed turn (kHashEveryTurns) is kept, and the first report of a seat for a turn is its report (a repeat adds nothing). Reports are kept until
-    /// the turn is acknowledged by everybody.
+    /// the turn is acknowledged by everybody (a report of a turn that everybody has acknowledged is not kept).
     std::vector<DesyncMsg> on_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash);
     void set_host_player(uint8_t player) noexcept { host_player_ = player; }
     /// A host without a seat (a dedicated server) plays no player but runs the match on its own engine: its report is the reference (judge_hashes() weighs the seats' against it)
     void on_referee_hash(uint32_t turn, const sim::StateHash& hash);
     /// A host without a seat: the referee's word on the seats of `seated` (a bit for each: the people who are at the table now) whose report of a turn differs from the referee's; `held` are the seats
     /// that are away and may come back (a lost link, in a room that holds seats). The decision depends on the reports and the acknowledgements alone, never on the clock. A turn is judged when the referee's
-    /// report and a seat's are both in before every seat has passed it (the reports of a turn that all have passed are forgotten): a referee's report that comes later judges nothing, the next hashed turn
-    /// does. For the oldest turn that has such a seat and an answer:
+    /// report and a seat's are both in before every seat has passed it (the reports of a turn that all have passed are forgotten): a report of either kind that comes later is not kept and judges nothing,
+    /// the next hashed turn does. For the oldest turn that has such a seat and an answer:
     ///   - a seat of `seated` agrees with the referee: the seats that differ are to be dropped (Drop), the referee has a witness;
     ///   - no seat agrees and a seat that has not executed the turn yet may still report it: Nothing, the answer is awaited (a seat that is stuck is dropped by the lag policy);
     ///   - no seat agrees and none can, but a seat is away or came to the table after the turn was sealed (it was not there to run it, and says nothing of it; it can say of the turns that follow):
@@ -118,6 +118,7 @@ private:
     std::map<uint32_t, std::array<sim::StateHash, sim::MAX_PLAYERS>> reports_;
     std::map<uint32_t, std::array<bool, sim::MAX_PLAYERS>> have_report_;
     std::map<uint32_t, sim::StateHash> referee_;               // the seatless host's own reports, by turn
+    uint32_t passed_{0};                                       // the lowest acknowledgement of the seats at the table at the last acknowledgement (it never goes down): the reports of the turns before passed_ - 1 are forgotten, and a report of one is not kept
     std::set<uint32_t> suspect_;                               // the seatless host's turns on which a report differs from the referee's and judge_hashes() has not answered yet
 };
 
