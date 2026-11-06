@@ -278,10 +278,14 @@ SubmitOutcome SubmissionStore::submit(const SubmitInput& in, int64_t now) {
     const core::Result info = core::read_report(reinterpret_cast<const uint8_t*>(canonical.data()), canonical.size(), profile);
     JsonValue meta;
     if (info.status != 0 || !parse_big_json(info.payload, meta) || !meta.get("loaded").as_bool_or(false)) return refuse(400, "not_a_map", "This map could not be read.");
-    uint64_t start_ants = 0;                                       // (the start markers of the four colors added up, as OnlineLimits::start_ants counts them: from the canonical file, never a number that the sender gave)
-    for (size_t s = 0; s < 4 && s < meta.get("teams").size(); ++s) start_ants += static_cast<uint64_t>(std::max<int64_t>(0, meta.get("teams").at(s).get("start_markers").as_int_or(0)));
-    if (!OnlineLimits::allows_ants(start_ants)) {          // (a map that no room plays is not sent for approval: it would be on the list with nothing to play online)
-        return refuse(422, "map_too_many_ants_online", "This map starts too many ants to play online (1,000 at most, all colors together). You can still play it against bots on this computer.");
+    // every number that the limits of a room look at, from the canonical file's own reading: never a number that the sender gave. A map that no room plays is not sent for approval: it would be on the list with
+    // nothing to play online. The size is judged above (fits_the_place): a bigger map of this kind stays on the list and is played on the player's own device
+    MapCounts counts = OnlineLimits::counts_of_report(meta);
+    counts.cells = 0;
+    const Term over = OnlineLimits::first_over(counts);
+    if (over != Term::None) {
+        const TermInfo& why = OnlineLimits::info(over);
+        return refuse(422, why.code, (std::string("This map ") + why.phrase + why.tail + " (" + why.limit + "). You can still play it against bots on this computer.").c_str());
     }
     int64_t players = 0;
     for (size_t i = 0; i < meta.get("teams").size(); ++i) players += meta.get("teams").at(i).get("start_markers").as_int_or(0) > 0 ? 1 : 0;

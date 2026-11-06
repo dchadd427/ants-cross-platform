@@ -181,8 +181,14 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
             m.minutes = static_cast<uint32_t>(d.get("minutes").as_int_or(0));
             m.players = static_cast<uint32_t>(d.get("players").as_int_or(0));
             m.description = d.get("description").str();
-            assets::LevelData counted;                                  // (maps.json does not know the ants: they are counted from the file, so that the list can mark a heavy map)
-            if (counted.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) m.start_ants = OnlineLimits::start_ants(counted);
+            assets::LevelData counted;                                  // (maps.json does not know the ants or the pairs: they are counted from the file, so that the list can mark a heavy or too-big-online map)
+            if (counted.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) {
+                const MapCounts c = OnlineLimits::counts_of(counted);
+                m.start_ants = c.start_ants;
+                m.pairs = c.pairs;
+                m.food_objects = c.food_objects;
+                m.power_ups = c.power_ups;
+            }
         } else {
             if (community && known != described.end()) note("maps.json describes " + name + " with another hash than the file has: the file's own header is used");
             assets::LevelData level;
@@ -196,7 +202,11 @@ size_t MapStore::scan(std::vector<std::string>* notes) {
                 if (a.team_id < 4) teams.insert(a.team_id);
             }
             m.players = teams.empty() ? 4u : static_cast<uint32_t>(teams.size());
-            m.start_ants = OnlineLimits::start_ants(level);
+            const MapCounts c = OnlineLimits::counts_of(level);
+            m.start_ants = c.start_ants;
+            m.pairs = c.pairs;
+            m.food_objects = c.food_objects;
+            m.power_ups = c.power_ups;
         }
         if (m.original) {
             m.thumb = std::string(kOriginalPreviewDir) + original->second;
@@ -245,6 +255,9 @@ void MapStore::add_approved_to_listing() {
         m.minutes = a.minutes;
         m.players = a.players;
         m.start_ants = a.start_ants;
+        m.pairs = a.pairs;
+        m.food_objects = a.food_objects;
+        m.power_ups = a.power_ups;
         m.description = a.description;
         m.approved = true;
         m.maker = a.maker;
@@ -259,18 +272,32 @@ void MapStore::add_approved_to_listing() {
     std::sort(extended_listing_.begin(), extended_listing_.end(), [](const MapListing& a, const MapListing& b) { return a.file < b.file; });
 }
 
-// The start ants of an approved file: counted from the file, kept by path, size and hash (an approved file never changes, and the list is rebuilt at every approval and take-down)
-uint64_t MapStore::start_ants_of_file(const std::string& path, uint64_t size, uint64_t hash) {
+// The start ants and the pairs of a plant and a waypoint of an approved file: counted from the file (one load), kept by path, size and hash (an approved file never changes, and the list is rebuilt at
+// every approval and take-down)
+MapStore::Counted MapStore::counts_of_file(const std::string& path, uint64_t size, uint64_t hash) {
     const auto kept = counted_.find(path);
-    if (kept != counted_.end() && kept->second.size == size && kept->second.hash == hash) return kept->second.ants;
+    if (kept != counted_.end() && kept->second.size == size && kept->second.hash == hash) return kept->second;
     assets::LevelData level;
-    const uint64_t ants = level.load_from_file(path, nullptr, assets::LevelLimits::for_play_extended()) ? OnlineLimits::start_ants(level) : 0u;          // (a file that does not load starts none: the room's own load says no)
-    counted_[path] = Counted{size, hash, ants};
-    return ants;
+    Counted c{size, hash, 0, 0, 0, 0};
+    if (level.load_from_file(path, nullptr, assets::LevelLimits::for_play_extended())) {          // (a file that does not load counts nothing: the room's own load says no)
+        const MapCounts counts = OnlineLimits::counts_of(level);
+        c.ants = counts.start_ants;
+        c.pairs = counts.pairs;
+        c.food = counts.food_objects;
+        c.power_ups = counts.power_ups;
+    }
+    counted_[path] = c;
+    return c;
 }
 
 void MapStore::count_start_ants() {
-    for (ApprovedMap& a : approved_) a.start_ants = start_ants_of_file(a.path, a.size, a.hash);
+    for (ApprovedMap& a : approved_) {
+        const Counted c = counts_of_file(a.path, a.size, a.hash);
+        a.start_ants = c.ants;
+        a.pairs = c.pairs;
+        a.food_objects = c.food;
+        a.power_ups = c.power_ups;
+    }
     for (auto it = counted_.begin(); it != counted_.end();) {          // (a file that is no longer held is forgotten)
         const bool held = std::any_of(approved_.begin(), approved_.end(), [&](const ApprovedMap& a) { return a.path == it->first; });
         it = held ? std::next(it) : counted_.erase(it);
@@ -324,89 +351,68 @@ const ApprovedMap* MapStore::test_map(const std::string& file_name) const {
     return nullptr;
 }
 
-namespace {
-uint64_t cells_in(uint32_t width, uint32_t height) { return static_cast<uint64_t>(width) * height; }
-}  // namespace
-
 std::string MapStore::listed_name(const std::string& name) const {
     for (const MapListing& m : listing_) {
-        if (m.file == name && OnlineLimits::allows_ants(m.start_ants)) return m.file;
+        if (m.file == name && OnlineLimits::allows(m.counts())) return m.file;
     }
     const std::string folded = lower(name);
     for (const MapListing& m : extended_listing_) {
-        if (m.file == name && OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) return m.file;
+        if (m.file == name && OnlineLimits::allows(m.counts())) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (t.name == name && OnlineLimits::allows(cells_in(t.width, t.height), t.start_ants)) return t.name;
+        if (t.name == name && OnlineLimits::allows(t.counts())) return t.name;
     }
     for (const MapListing& m : listing_) {
-        if (lower(m.file) == folded && OnlineLimits::allows_ants(m.start_ants)) return m.file;
+        if (lower(m.file) == folded && OnlineLimits::allows(m.counts())) return m.file;
     }
     for (const MapListing& m : extended_listing_) {
-        if (lower(m.file) == folded && OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) return m.file;
+        if (lower(m.file) == folded && OnlineLimits::allows(m.counts())) return m.file;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (lower(t.name) == folded && OnlineLimits::allows(cells_in(t.width, t.height), t.start_ants)) return t.name;
+        if (lower(t.name) == folded && OnlineLimits::allows(t.counts())) return t.name;
     }
     return std::string();
 }
 
-bool MapStore::too_big_online(const std::string& name) const {
-    const std::string folded = lower(name);
-    for (const MapListing& m : extended_listing_) {
-        if (lower(m.file) == folded && !OnlineLimits::allows(cells_in(m.width, m.height))) return true;
-    }
-    for (const ApprovedMap& t : test_maps_) {
-        if (lower(t.name) == folded && !OnlineLimits::allows(cells_in(t.width, t.height))) return true;
-    }
-    return false;
-}
-
-bool MapStore::too_many_ants_online(const std::string& name) const {
+bool MapStore::over_limit(const std::string& name, Term term) const {
     const std::string folded = lower(name);
     for (const MapListing& m : listing_) {
-        if (lower(m.file) == folded && !OnlineLimits::allows_ants(m.start_ants)) return true;
+        if (lower(m.file) == folded && OnlineLimits::over(m.counts(), term)) return true;
     }
     for (const MapListing& m : extended_listing_) {
-        if (lower(m.file) == folded && !OnlineLimits::allows_ants(m.start_ants)) return true;
+        if (lower(m.file) == folded && OnlineLimits::over(m.counts(), term)) return true;
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (lower(t.name) == folded && !OnlineLimits::allows_ants(t.start_ants)) return true;
+        if (lower(t.name) == folded && OnlineLimits::over(t.counts(), term)) return true;
     }
     return false;
 }
 
 std::string MapStore::online_refusal(const std::string& name) const {
-    if (too_big_online(name)) return net::kNoticeMapTooBig;
-    if (too_many_ants_online(name)) return net::kNoticeMapTooManyAnts;
+    for (const Term term : kTerms) {          // (in the order of Term: the first limit that the map is over)
+        if (over_limit(name, term)) return OnlineLimits::info(term).notice;
+    }
     return std::string();
 }
 
-uint64_t MapStore::start_ants_of(const std::string& name) const {
+MapCounts MapStore::counts_of(const std::string& name) const {
     for (const MapListing& m : listing_) {
-        if (m.file == name) return m.start_ants;
+        if (m.file == name) return m.counts();
     }
     for (const MapListing& m : extended_listing_) {
-        if (m.file == name) return m.start_ants;
+        if (m.file == name) return m.counts();
     }
     for (const ApprovedMap& t : test_maps_) {
-        if (t.name == name) return t.start_ants;
+        if (t.name == name) return t.counts();
     }
-    return 0;
+    return MapCounts{0, 0, 0, 0, 0};
 }
 
-uint64_t MapStore::cells_of(const std::string& name) const {
-    for (const MapListing& m : listing_) {
-        if (m.file == name) return cells_in(m.width, m.height);
-    }
-    for (const MapListing& m : extended_listing_) {
-        if (m.file == name) return cells_in(m.width, m.height);
-    }
-    for (const ApprovedMap& t : test_maps_) {
-        if (t.name == name) return cells_in(t.width, t.height);
-    }
-    return 0;
-}
+uint64_t MapStore::start_ants_of(const std::string& name) const { return counts_of(name).start_ants; }
+
+uint64_t MapStore::pairs_of(const std::string& name) const { return counts_of(name).pairs; }
+
+uint64_t MapStore::cells_of(const std::string& name) const { return counts_of(name).cells; }
 
 std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_extended) const {
     std::map<std::pair<std::string, std::string>, int64_t> counts;
@@ -434,9 +440,15 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
         if (m.original) o.set("original", ctl::JsonValue::make_bool(true));
         if (m.approved) o.set("maker", ctl::JsonValue::make_string(m.maker));
         if (with_extended) o.set("kind", ctl::JsonValue::make_string(m.kind));
-        if (with_extended && !OnlineLimits::allows(cells_in(m.width, m.height), m.start_ants)) {       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
+        if (with_extended && !OnlineLimits::allows(m.counts())) {       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
             o.set("online", ctl::JsonValue::make_bool(false));
-            if (!OnlineLimits::allows_ants(m.start_ants)) o.set("online_why", ctl::JsonValue::make_string("ants"));       // (the picker says which limit: only the ants one is named, the size one is as it was)
+            // (the picker says which limit, the first of the ants, the pairs, the food objects and the power-ups that the map is over; the size one is as it was, with no reason named)
+            for (const Term term : kTerms) {
+                if (*OnlineLimits::info(term).why != '\0' && OnlineLimits::over(m.counts(), term)) {
+                    o.set("online_why", ctl::JsonValue::make_string(OnlineLimits::info(term).why));
+                    break;
+                }
+            }
         }
         if (with_extended && OnlineLimits::heavy(m.start_ants)) {          // (a game on it may run slowly: the Map Maker warns; such a map is over the cap of ants too, the line above)
             o.set("ants", ctl::JsonValue::make_int(static_cast<int64_t>(m.start_ants)));

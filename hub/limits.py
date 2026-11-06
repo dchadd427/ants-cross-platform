@@ -43,7 +43,7 @@ class Limits:
     purge_chunk: int = 2000             # lines deleted at a time when they are past their 7 days
     purge_failure_seconds: float = 60.0         # how soon a purge that failed (a locked or full database) is tried again
     checkpoint_retry_seconds: float = 10.0      # how soon the database's log file is cut again when a reader held it
-    crowded_sockets: int = 6            # more sockets than this from one address group is logged (all visitors may share one address, docs/HUB.md)
+    crowded_sockets: int = 6            # more sockets than this from one address group is logged (docs/HUB.md)
     crowded_log_seconds: float = 60.0
     login_burst: int = 10               # /hub/login and /hub/callback: for each client address a burst of 10, then one every 6 seconds (10 a minute; nginx has the same numbers in front)
     login_refill_seconds: float = 6.0

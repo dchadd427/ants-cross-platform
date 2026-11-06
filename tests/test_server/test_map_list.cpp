@@ -6,6 +6,7 @@
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <tuple>
 
 #include "../common/test_assert.hpp"
 #include "ants_net/protocol.hpp"
@@ -512,13 +513,14 @@ int main() {
         const ctl::JsonValue* wide = entry_of(newest, "Wide 410.lvl");
         ASSERT_TRUE(fits != nullptr && wide != nullptr);
         ASSERT_TRUE(fits->get("online").is_null() && wide->get("online").as_bool_or(true) == false);
+        ASSERT_TRUE(fits->get("online_why").is_null() && wide->get("online_why").is_null());                 // (the size names no reason)
         ASSERT_TRUE(entry_of(newest, "TINY.LVL") != nullptr && entry_of(newest, "TINY.LVL")->get("online").is_null());
         ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, false)), "Fits 256.lvl") == nullptr && store.list_json(nullptr, false).find("online") == std::string::npos);
         ASSERT_TRUE(store.list_json(nullptr, true).find("0badf00d") == std::string::npos);     // (a test map is on no list)
         // the constant and its sentence
         ASSERT_TRUE(OnlineLimits::weight(1) == 1 && OnlineLimits::weight(10000) == 1 && OnlineLimits::weight(10001) == 2 && OnlineLimits::weight(65536) == 7 && OnlineLimits::weight(262144) == 27);        // the places a match takes
         ASSERT_EQ(OnlineLimits::weight(0), 1u);                                                      // (never less than a place)
-        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::kCellsPerPlace == 10000u && OnlineLimits::allows(65536) && !OnlineLimits::allows(65537));
+        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::kCellsPerPlace == 10000u && OnlineLimits::allows(online_counts(65536)) && !OnlineLimits::allows(online_counts(65537)));
         // the public door sends a big map's file whole (HttpResponse::file) and a picture or an error as every other answer
         {
             ctl::HttpRequest request;
@@ -580,7 +582,8 @@ int main() {
                 ASSERT_TRUE(m.start_ants >= 12 && m.start_ants <= 32);                         // (TINY starts 12, ISLANDS 32)
             }
             ASSERT_TRUE(m.start_ants > 0);                                            // (every map of the library has start markers, so a count of 0 would mean a file that did not load)
-            ASSERT_TRUE(OnlineLimits::allows(static_cast<uint64_t>(m.width) * m.height, m.start_ants) && store.online_refusal(m.file).empty());          // (none of the 540 is refused online for its ants or its size)
+            ASSERT_TRUE(m.pairs <= 12768u);                                           // (the largest known is 112 x 114 = 12,768, far under the cap of 1,000,000)
+            ASSERT_TRUE(OnlineLimits::allows(m.counts()) && store.online_refusal(m.file).empty());          // (none of the 540 is refused online for its ants, its pairs or its size)
             ASSERT_EQ(OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height, m.start_ants), OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height));        // (and none weighs more than before: at most 248 ants is one place, the cells decide)
             ASSERT_EQ(OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height, m.start_ants), store.start_ants_of(m.file) > 0 ? OnlineLimits::weight(store.cells_of(m.file), store.start_ants_of(m.file)) : 0u);
             if (m.file == "TREASURE.LVL") ASSERT_EQ(OnlineLimits::weight(store.cells_of(m.file), store.start_ants_of(m.file)), 1u);
@@ -652,6 +655,219 @@ int main() {
             ASSERT_TRUE(entry_of(shown, "TINY.LVL")->get("heavy").as_bool_or(false) && entry_of(shown, "TINY.LVL")->get("ants").as_int_or(0) == 2800);        // (an original is counted like any map: the list says what the file holds)
             ASSERT_TRUE(entry_of(shown, "Plain.lvl")->get("heavy").as_bool_or(false) && entry_of(shown, "Plain.lvl")->get("ants").as_int_or(0) == 2800);
             ASSERT_TRUE(own.listed_name("Plain.lvl").empty() && own.listed_name("TINY.LVL").empty());      // (over the cap whichever folder the file is in: a room does not play it)
+        }
+    } TEST_END();
+
+    TEST_CASE("ML4.7 The pairs of a plant and a waypoint of a map: counted from the file; a map above the cap of 1,000,000 is refused online (the lobby does not choose it, the list says \"online\": false, \"online_why\": \"pairs\"), one at the cap is not; a map over both the ants cap and the pairs cap says \"ants\" (the picker's own order)") {
+        TempDir dir;
+        // kind "classic" exercises MapStore::listing_ (tiny_with_pairs keeps TINY's own Classic version, the real one); kind "extended" exercises extended_listing_ (MapStore
+        // never re-checks an approved file's version against its own label, so the same bytes serve both: the point here is the two lists' code, not the file's own version word)
+        const auto keep = [&](const std::string& name, uint32_t plants, uint32_t waypoints, const char* kind) {
+            const std::string bytes = tiny_with_pairs(plants, waypoints);
+            const fs::path path = dir.path / (name + ".bin");
+            { std::ofstream out(path, std::ios::binary); out << bytes; }
+            ApprovedMap a;
+            a.name = name;
+            a.path = path.string();
+            a.size = bytes.size();
+            a.width = 31;
+            a.height = 31;
+            a.minutes = 10;
+            a.players = 4;
+            a.maker = "Mia";
+            a.kind = kind;
+            a.pairs = 5;                                                                 // (a number the caller gives is not believed: the store counts the file)
+            net::hash_file(a.path, a.hash);
+            return a;
+        };
+        MapStore store(maps_dir(), community_dir());
+        store.scan();
+        store.set_approved({keep("Pairs 1000000.lvl", 1000, 1000, "classic"), keep("Pairs 1001000.lvl", 1001, 1000, "classic"), keep("Pairs Huge.lvl", 65500, 65535, "extended")});
+        const ctl::JsonValue newest = parse_text(store.list_json(nullptr, true));
+        for (const char* fine : {"Pairs 1000000.lvl"}) {
+            const ctl::JsonValue* e = entry_of(newest, fine);
+            ASSERT_TRUE(e != nullptr && e->get("online").is_null() && e->get("online_why").is_null());             // (at the cap: no mark)
+        }
+        for (const char* over : {"Pairs 1001000.lvl", "Pairs Huge.lvl"}) {              // (one Classic, listing_; one Extended, extended_listing_)
+            const ctl::JsonValue* e = entry_of(newest, over);
+            ASSERT_TRUE(e != nullptr && e->get("online").as_bool_or(true) == false && e->get("online_why").str() == "pairs");
+            ASSERT_TRUE(store.listed_name(over).empty() && store.too_many_pairs_online(over) && !store.too_many_ants_online(over) && !store.too_big_online(over));
+            ASSERT_EQ(store.online_refusal(over), std::string(net::kNoticeMapTooManyPairs));
+        }
+        for (const char* over : {"pairs 1001000.LVL", "PAIRS HUGE.lvl"}) ASSERT_TRUE(store.listed_name(over).empty() && store.too_many_pairs_online(over));          // (any letter case, for both lists)
+        ASSERT_TRUE(!store.listed_name("pairs 1000000.LVL").empty() && !store.too_many_pairs_online("pairs 1000000.LVL"));
+        ASSERT_TRUE(!store.listed_name("Pairs 1000000.lvl").empty() && !store.too_many_pairs_online("Pairs 1000000.lvl"));
+        ASSERT_EQ(store.pairs_of("Pairs 1000000.lvl"), uint64_t{1000000});
+        ASSERT_EQ(store.pairs_of("Pairs Huge.lvl"), uint64_t{65500} * uint64_t{65535});
+        ASSERT_EQ(store.pairs_of("TINY.LVL"), store.pairs_of("TINY.LVL"));          // (a library map: some small number, never refused; a sanity call, not a fixed number)
+        {   // a community map that maps.json describes (the "known" branch of scan(), which does not read width/height/minutes/players from the file but still counts the pairs from it)
+            TempDir folder;
+            fs::create_directories(folder.path / "maps");
+            fs::create_directories(folder.path / "players");
+            const std::string heavy_pairs = tiny_with_pairs(1001, 1000);          // 1,001,000 pairs
+            { std::ofstream out(folder.path / "players" / "Known.lvl", std::ios::binary); out << heavy_pairs; }
+            MapEntry probe;
+            MapStore probing("", (folder.path / "players").string());
+            ASSERT_TRUE(probing.find("Known.lvl", probe));
+            std::ofstream(folder.path / "players" / "maps.json") << "{\"maps\":[{\"file\":\"Known.lvl\",\"hash\":\"" << map_hash_text(probe.hash)
+                                                                  << "\",\"width\":31,\"height\":31,\"minutes\":10,\"players\":4,\"description\":\"\"}]}";
+            MapStore own((folder.path / "maps").string(), (folder.path / "players").string());
+            own.scan();
+            const ctl::JsonValue shown = parse_text(own.list_json(nullptr, true));
+            const ctl::JsonValue* e = entry_of(shown, "Known.lvl");
+            ASSERT_TRUE(e != nullptr && e->get("online").as_bool_or(true) == false && e->get("online_why").str() == "pairs");          // (maps.json knows nothing of this; the store still counts it from the file)
+            ASSERT_TRUE(own.listed_name("Known.lvl").empty() && own.too_many_pairs_online("Known.lvl"));
+        }
+        {   // over both caps (4,800 ants and 1,002,001 pairs): the picker's chip names ants first (map_store.cpp's own order)
+            const std::string base = tiny_with_ants({1200, 1200, 1200, 1200});
+            assets::LevelData level;
+            ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), level, nullptr, assets::LevelLimits::for_extended_maps()));
+            for (int i = 0; i < 1001; ++i) {
+                assets::AnthillSpawn p;
+                p.tile_id = 404;
+                p.y = 1;
+                p.x = 1;
+                p.team_id = 255;
+                level.anthill_spawns.push_back(p);
+            }
+            level.waypoints.assign(1001, assets::Waypoint{});
+            const assets::LevelWriteResult written = assets::write_level(level, assets::LevelLimits::for_extended_maps());
+            ASSERT_TRUE(written.ok);
+            const std::string over_both(written.bytes.begin(), written.bytes.end());
+            const fs::path path = dir.path / "Over Both.bin";
+            { std::ofstream out(path, std::ios::binary); out << over_both; }
+            ApprovedMap a;
+            a.name = "Over Both.lvl";
+            a.path = path.string();
+            a.size = over_both.size();
+            a.width = 31;
+            a.height = 31;
+            a.kind = "extended";
+            net::hash_file(a.path, a.hash);
+            store.set_approved({a});
+            const ctl::JsonValue one = parse_text(store.list_json(nullptr, true));
+            ASSERT_EQ(entry_of(one, "Over Both.lvl")->get("online_why").str(), std::string("ants"));
+        }
+    } TEST_END();
+
+    TEST_CASE("ML4.8 The food objects and the power-ups of a map: counted from the file by the store and the same as what the engine holds when a match starts (the 540 maps of the library: none is over a limit); above 250 and 1,000 a map is refused online with the marker \"food\" or \"powerups\", in either list and in the maps.json branch; a map over several limits names the first") {
+        MapStore library(maps_dir(), community_dir());
+        library.scan();
+        ASSERT_EQ(library.listing().size(), size_t{540});
+        uint64_t most_food = 0, most_power_ups = 0, covered = 0;
+        for (const MapListing& m : library.listing()) {
+            assets::LevelData level;
+            MapEntry entry;
+            ASSERT_TRUE(library.find(m.file, entry) && level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()));
+            sim::SimulationEngine eng;
+            eng.init(level, 1u, 0x0F);
+            uint64_t grid_power_ups = 0;
+            for (const sim::TileCell& cell : eng.grid().cells()) {
+                if (cell.has_powerup() && cell.powerup_type >= 1 && cell.powerup_type <= 5) ++grid_power_ups;                 // (the cells that the bots' MapInfo lists)
+            }
+            ASSERT_EQ(m.food_objects, static_cast<uint64_t>(eng.grid().food_objects().size()));                           // (the objects of the engine's table at the start)
+            ASSERT_TRUE(m.power_ups >= grid_power_ups);                                                                   // (the power-ups that it marks: a food footprint over one takes it away, so never more than the file's)
+            covered += m.power_ups - grid_power_ups;
+            ASSERT_EQ(m.food_objects, OnlineLimits::food_objects(level));
+            ASSERT_EQ(m.power_ups, OnlineLimits::power_ups(level));
+            ASSERT_TRUE(OnlineLimits::allows(m.counts()) && library.online_refusal(m.file).empty() && library.listed_name(m.file) == m.file);
+            most_food = std::max(most_food, m.food_objects);
+            most_power_ups = std::max(most_power_ups, m.power_ups);
+        }
+        ASSERT_TRUE(covered <= 5u);                                                                                         // (power-ups under a food footprint: three maps of the library have one, the file's count is the bots' own or one above it)
+        ASSERT_EQ(most_food, uint64_t{84});                                                                                 // (the library's most: a quarter of the limit of 250)
+        ASSERT_EQ(most_power_ups, uint64_t{896});                                                                           // (and Desert Swimming's 896 power-ups: under the limit of 1,000)
+        TempDir dir;
+        // kind "classic" exercises MapStore::listing_, kind "extended" extended_listing_ (the store never re-checks an approved file's version against its own label)
+        const auto keep = [&](const std::string& name, const std::string& bytes, uint32_t side, const char* kind) {
+            const fs::path path = dir.path / (name + ".bin");
+            { std::ofstream out(path, std::ios::binary); out << bytes; }
+            ApprovedMap a;
+            a.name = name;
+            a.path = path.string();
+            a.size = bytes.size();
+            a.width = side;
+            a.height = side;
+            a.minutes = 10;
+            a.players = 4;
+            a.maker = "Mia";
+            a.kind = kind;
+            a.food_objects = 5;                                                                                           // (a number that the caller gives is not believed: the store counts the file)
+            a.power_ups = 5;
+            net::hash_file(a.path, a.hash);
+            return a;
+        };
+        MapStore store(maps_dir(), community_dir());
+        store.scan();
+        store.set_approved({keep("Food 250.lvl", tiny_with_food(250), 31, "classic"), keep("Food 251.lvl", tiny_with_food(251), 31, "classic"), keep("Food Huge.lvl", tiny_with_food(65514), 31, "extended"),
+                            keep("Pu 1000.lvl", tiny_with_power_ups(1000), 64, "extended"), keep("Pu 1001.lvl", tiny_with_power_ups(1001), 64, "classic"), keep("Pu Huge.lvl", tiny_with_power_ups(3000), 64, "extended")});
+        const ctl::JsonValue newest = parse_text(store.list_json(nullptr, true));
+        for (const char* fine : {"Food 250.lvl", "Pu 1000.lvl", "TINY.LVL", "Desert Swimming.lvl"}) {
+            const ctl::JsonValue* e = entry_of(newest, fine);
+            ASSERT_TRUE(e != nullptr && e->get("online").is_null() && e->get("online_why").is_null());                  // (at the limit: no mark)
+            ASSERT_TRUE(!store.listed_name(fine).empty() && store.online_refusal(fine).empty());
+        }
+        for (const auto& [file, why, term] : std::vector<std::tuple<const char*, const char*, Term>>{{"Food 251.lvl", "food", Term::FoodObjects}, {"Food Huge.lvl", "food", Term::FoodObjects},
+                                                                                                  {"Pu 1001.lvl", "powerups", Term::PowerUps}, {"Pu Huge.lvl", "powerups", Term::PowerUps}}) {
+            const ctl::JsonValue* e = entry_of(newest, file);
+            ASSERT_TRUE(e != nullptr && e->get("online").as_bool_or(true) == false && e->get("online_why").str() == why);
+            ASSERT_TRUE(store.listed_name(file).empty() && store.over_limit(file, term) && !store.over_limit(file, term == Term::FoodObjects ? Term::PowerUps : Term::FoodObjects) && !store.too_many_ants_online(file));
+            ASSERT_EQ(store.online_refusal(file), std::string(OnlineLimits::info(term).notice));
+        }
+        for (const char* over : {"food 251.LVL", "FOOD HUGE.lvl", "pu 1001.LVL", "PU HUGE.lvl"}) ASSERT_TRUE(store.listed_name(over).empty() && !store.online_refusal(over).empty());          // (any letter case, both lists)
+        ASSERT_EQ(store.counts_of("Food 250.lvl").food_objects, uint64_t{250});
+        ASSERT_EQ(store.counts_of("Food Huge.lvl").food_objects, uint64_t{65514});
+        ASSERT_EQ(store.counts_of("Pu 1000.lvl").power_ups, uint64_t{1000});
+        ASSERT_EQ(store.counts_of("Pu Huge.lvl").power_ups, uint64_t{3000});
+        ASSERT_EQ(store.counts_of("NOT-HERE.LVL").food_objects + store.counts_of("NOT-HERE.LVL").power_ups, uint64_t{0});
+        ASSERT_TRUE(store.list_json(nullptr, false).find("online") == std::string::npos);                                 // (the old list has no new keys)
+        {   // a community map that maps.json describes (the "known" branch of scan(), which does not read the numbers of the header from the file but still counts the objects from it)
+            TempDir folder;
+            fs::create_directories(folder.path / "maps");
+            fs::create_directories(folder.path / "players");
+            { std::ofstream out(folder.path / "players" / "Known.lvl", std::ios::binary); out << tiny_with_food(251); }
+            { std::ofstream out(folder.path / "players" / "Known Pu.lvl", std::ios::binary); out << tiny_with_power_ups(1001); }
+            MapEntry food_probe, pu_probe;
+            MapStore probing("", (folder.path / "players").string());
+            ASSERT_TRUE(probing.find("Known.lvl", food_probe) && probing.find("Known Pu.lvl", pu_probe));
+            std::ofstream(folder.path / "players" / "maps.json") << "{\"maps\":[{\"file\":\"Known.lvl\",\"hash\":\"" << map_hash_text(food_probe.hash)
+                                                                  << "\",\"width\":31,\"height\":31,\"minutes\":10,\"players\":4,\"description\":\"\"},{\"file\":\"Known Pu.lvl\",\"hash\":\"" << map_hash_text(pu_probe.hash)
+                                                                  << "\",\"width\":64,\"height\":64,\"minutes\":10,\"players\":4,\"description\":\"\"}]}";
+            MapStore own((folder.path / "maps").string(), (folder.path / "players").string());
+            own.scan();
+            const ctl::JsonValue shown = parse_text(own.list_json(nullptr, true));
+            const ctl::JsonValue* food = entry_of(shown, "Known.lvl");
+            const ctl::JsonValue* pu = entry_of(shown, "Known Pu.lvl");
+            ASSERT_TRUE(food != nullptr && food->get("online").as_bool_or(true) == false && food->get("online_why").str() == "food");          // (maps.json knows nothing of these; the store counts them from the file)
+            ASSERT_TRUE(pu != nullptr && pu->get("online").as_bool_or(true) == false && pu->get("online_why").str() == "powerups");
+            ASSERT_TRUE(own.listed_name("Known.lvl").empty() && own.listed_name("Known Pu.lvl").empty());
+        }
+        {   // over several limits (251 food objects and 1,001 power-ups, and 1,002,001 pairs of a plant and a waypoint): the marker names the first of the ants, the pairs, the food objects and the power-ups
+            const std::string base = tiny_with_power_ups(1001);
+            assets::LevelData level;
+            ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), level, nullptr, assets::LevelLimits::for_extended_maps()));
+            level.food_schedules.resize(251, level.food_schedules[0]);
+            assets::LevelData with_pairs = level;
+            for (int i = 0; i < 1001; ++i) {
+                assets::AnthillSpawn p;
+                p.tile_id = 404;
+                p.y = 1;
+                p.x = 1;
+                p.team_id = 255;
+                with_pairs.anthill_spawns.push_back(p);
+            }
+            with_pairs.waypoints.assign(1001, assets::Waypoint{});
+            const assets::LevelWriteResult both = assets::write_level(level, assets::LevelLimits::for_extended_maps());
+            const assets::LevelWriteResult three = assets::write_level(with_pairs, assets::LevelLimits::for_extended_maps());
+            ASSERT_TRUE(both.ok && three.ok);
+            MapStore several(maps_dir(), community_dir());
+            several.scan();
+            several.set_approved({keep("Food And Power-Ups.lvl", std::string(both.bytes.begin(), both.bytes.end()), 64, "extended"), keep("Pairs Food And Power-Ups.lvl", std::string(three.bytes.begin(), three.bytes.end()), 64, "extended")});
+            const ctl::JsonValue listed = parse_text(several.list_json(nullptr, true));
+            ASSERT_EQ(entry_of(listed, "Food And Power-Ups.lvl")->get("online_why").str(), std::string("food"));
+            ASSERT_EQ(entry_of(listed, "Pairs Food And Power-Ups.lvl")->get("online_why").str(), std::string("pairs"));
+            ASSERT_EQ(several.online_refusal("Food And Power-Ups.lvl"), std::string(net::kNoticeMapTooManyFood));
+            ASSERT_EQ(several.online_refusal("Pairs Food And Power-Ups.lvl"), std::string(net::kNoticeMapTooManyPairs));
         }
     } TEST_END();
 

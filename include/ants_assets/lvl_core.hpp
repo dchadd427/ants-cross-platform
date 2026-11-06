@@ -26,6 +26,8 @@ struct Result {
 
 /// Reads the bytes as a map file and reports on it (JSON, keys in a fixed order): "bytes", "profile", "loaded", "reason" (why it does not load, else ""), "version",
 /// "mode", "minutes", "description", "description_bytes", "rows", "columns", "dictionary_names", "tile_ids_used", "eggs", "default_type_tile", "food_piles", "waypoints",
+/// "plants" (block 1 records with the dropper-plant flag: test_lvl_core pins this count equal to sim::movement::is_dropper_plant_tile, which this module cannot link),
+/// "powerups" (layer-2 cells with a power-up tile, the ids 62 .. 66: test_lvl_core pins the ids equal to sim::movement::is_powerup_tile),
 /// "teams" (four: "team", "start_markers", "hill_cells"), "playable" (for all four teams) and "findings" (the reader's and the remake's checks: "severity" fatal, warning
 /// or note, "code", "message", "team", "count"). A file that does not load has "loaded": false, a "reason" and the findings that say why. Always status 0.
 Result read_report(const uint8_t* data, size_t size, Profile profile);
