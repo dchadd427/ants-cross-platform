@@ -333,6 +333,11 @@ void run_island_tests() {
         for (uint8_t t = 0; t < 4; ++t) {
             const IslandInfo info = IslandInfo::analyse(map, sim.grid(), t);
             ASSERT_EQ(info.channels().size(), 68u);
+            for (size_t i = 1; i < info.channels().size(); ++i) {                                          // (listed by the pair of islands: by a, then by b; the order in which a search finds them does not show)
+                const Channel& before = info.channels()[i - 1];
+                const Channel& after = info.channels()[i];
+                ASSERT_TRUE(before.a < after.a || (before.a == after.a && before.b < after.b));
+            }
             for (const Channel& ch : info.channels()) {
                 ASSERT_TRUE(ch.a >= 0 && ch.a < ch.b);
                 ASSERT_TRUE(ch.length() >= 1 && ch.length() <= IslandInfo::kMaxChannel);

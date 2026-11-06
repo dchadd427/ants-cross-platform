@@ -621,7 +621,7 @@
       "id": "online_refusal_tells_no_one",
       "file": "src/ants_server/map_store.cpp",
       "old": "        if (over_limit(name, term)) return OnlineLimits::info(term).notice;",
-      "new": "        if (false) return OnlineLimits::info(term).notice;",
+      "new": "        if (over_limit(name, term) && false) return OnlineLimits::info(term).notice;",
       "build": [
         "test_server",
         "test_map_list"

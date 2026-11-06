@@ -513,6 +513,7 @@ int main() {
         const ctl::JsonValue* wide = entry_of(newest, "Wide 410.lvl");
         ASSERT_TRUE(fits != nullptr && wide != nullptr);
         ASSERT_TRUE(fits->get("online").is_null() && wide->get("online").as_bool_or(true) == false);
+        ASSERT_TRUE(fits->get("online_why").is_null() && wide->get("online_why").is_null());                 // (the size names no reason)
         ASSERT_TRUE(entry_of(newest, "TINY.LVL") != nullptr && entry_of(newest, "TINY.LVL")->get("online").is_null());
         ASSERT_TRUE(entry_of(parse_text(store.list_json(nullptr, false)), "Fits 256.lvl") == nullptr && store.list_json(nullptr, false).find("online") == std::string::npos);
         ASSERT_TRUE(store.list_json(nullptr, true).find("0badf00d") == std::string::npos);     // (a test map is on no list)
