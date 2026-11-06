@@ -1,0 +1,582 @@
+{
+ "note": "Mutants of a dedicated server's verdict on the state hashes that its seats report (Sequencer::judge_hashes and what a HostSession does with it; docs/NETWORK_PORT.md, 'Sessions' and 'Room'), of the status that counts the seats it dropped, and of the codes that the control interface draws (draw_room_code), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/state_hash_mutants.json --keep-going --jobs 1. Every mutant must be caught, and by the tests its test command runs: test_lockstep S2.40 - S2.57 (the rule, whole matches, the seats that held their places, the guards of the verdict, the table that changes between a turn and its answer) and test_server S3.250 - S3.258 (rooms, results, replays, a room that holds seats) and S3.10c - S3.10d (the codes). Not listed on purpose: Sequencer::resume (a host with a seat never has a verdict to forget) and the lines that main.cpp writes to the program's own log (the lines that the rooms hand to RoomManager::take_notices are tested).",
+ "baseline": {
+  "build": [
+   "test_lockstep",
+   "test_server"
+  ],
+  "test": "ANTS_TEST_FILTER=\"S2.2 Dedicated\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.3 Dedicated\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.4\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.5\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.251\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.252\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.253\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.254\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.255\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.256\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.257\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.258\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.10c\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.10d\" ./build/tests/test_server/test_server"
+ },
+ "mutants": [
+  {
+   "id": "never_drop",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "verdict.kind = agree != 0 ? HashVerdict::Kind::Drop : HashVerdict::Kind::Fail;",
+   "new": "verdict.kind = HashVerdict::Kind::Fail;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "never_wait",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (agree == 0 && waiting != 0) {",
+   "new": "if (false && agree == 0 && waiting != 0) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.46\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "silent_seat_awaited_for_ever",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "} else if (acked_[p] <= turn) {",
+   "new": "} else if (true) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seat_not_at_the_table_judged",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if ((seated & bit(p)) == 0 || !active_[p]) continue;",
+   "new": "if (((seated | 0xFF) & bit(p)) == 0 || !active_[p]) continue;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "gone_seat_with_nothing_to_judge_answered",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (differ == 0) {",
+   "new": "if (differ == 0 && false) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "answered_twice",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        suspect_.erase(it);\n        return verdict;",
+   "new": "        return verdict;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turn_forgotten_before_it_is_answered",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (it->first + 1 < low && suspect_.count(it->first) == 0) {",
+   "new": "if (it->first + 1 < low) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.49\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "hashed_turn_off_by_one",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "(uint64_t{turn} + 1) % kHashEveryTurns == 0;",
+   "new": "uint64_t{turn} % kHashEveryTurns == 0;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.49\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "report_of_an_unhashed_turn_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        if (!hashed_turn(turn)) return out;",
+   "new": "        if (false) return out;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.49\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "referee_report_of_an_unhashed_turn_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (turn >= next_turn_ || !hashed_turn(turn)) return;",
+   "new": "if (turn >= next_turn_) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.49\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "last_report_of_a_turn_counts",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        if (have) return out;",
+   "new": "        if (false) return out;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.49\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "reports_of_a_seat_that_left_stay",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "for (auto& entry : have_report_) entry.second[player] = false;",
+   "new": "for (auto& entry : have_report_) (void)entry;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.49\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "dropped_as_a_drop_not_a_quit",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "    drop(d.player, true);",
+   "new": "    drop(d.player, false);",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.251\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.252\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "seat_not_told",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "if (conn != nullptr && conn->is_open()) conn->send(encode(d));",
+   "new": "(void)conn;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.40\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "everybody_told_of_a_drop",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "for (const DesyncMsg& d : verdict.seats) drop_diverged(d);",
+   "new": "for (const DesyncMsg& d : verdict.seats) {\n                broadcast(encode(d));\n                drop_diverged(d);\n            }",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.40\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "match_stopped_by_a_drop",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "for (const DesyncMsg& d : verdict.seats) drop_diverged(d);",
+   "new": "for (const DesyncMsg& d : verdict.seats) drop_diverged(d);\n            frozen_ = true;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.40\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "drops_not_counted",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "    ++diverged_drops_;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.40\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "failure_not_recorded",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "            desyncs_.push_back(d);\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.44\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "failure_not_told",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "            broadcast(encode(d));\n        }\n        frozen_ = true;",
+   "new": "        }\n        frozen_ = true;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.44\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "failure_does_not_stop_the_match",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "            broadcast(encode(d));\n        }\n        frozen_ = true;",
+   "new": "            broadcast(encode(d));\n        }",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.44\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "verdict_not_asked_for",
+   "file": "src/ants_net/session.cpp",
+   "old": "    if (seatless()) judge_hashes();\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.40\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "referee_report_not_given",
+   "file": "src/ants_net/session.cpp",
+   "old": "if (seatless()) sequencer_.on_referee_hash(e.turn, e.hash);",
+   "new": "if (seatless()) (void)e;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.40\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "room_does_not_say_who_nobody_agreed_with",
+   "file": "src/ants_server/room.cpp",
+   "old": "\" and no seat agreed with the referee\"",
+   "new": "\"\"",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.253\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "drops_not_in_the_status",
+   "file": "src/ants_server/room.cpp",
+   "old": "s.drops_by_state = session_->diverged_drops();",
+   "new": "s.drops_by_state = 0;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "drops_not_in_the_json",
+   "file": "src/ants_server/control.cpp",
+   "old": "    o.set(\"drops_by_state\", JsonValue::make_int(s.drops_by_state));\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.255\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "code_byte_threshold",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (byte < 256 - 256 % size) code.push_back",
+   "new": "if (byte <= 256 - 256 % size) code.push_back",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.10d\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "code_first_character_not_a_letter",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "const char* const alphabet = code.empty() ? kLetters : kAlphabet;",
+   "new": "const char* const alphabet = kAlphabet;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.10c\" ./build/tests/test_server/test_server && ANTS_TEST_FILTER=\"S3.10d\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "code_source_is_not_the_systems",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "code_source_(random_bytes)",
+   "new": "code_source_([](uint8_t* out, size_t n) {\n        for (size_t i = 0; i < n; ++i) out[i] = 0;\n        return true;\n    })",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.10d\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "taken_code_is_used",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (rooms_.find(code) == rooms_.end() && !restoring_has(code)) return code;",
+   "new": "return code;",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.10d\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "code_reads_of_the_source",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (++reads > 64 ||",
+   "new": "if (++reads > 1 ||",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.10d\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "seat_that_ran_the_turn_is_awaited",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "} else if (acked_[p] <= turn) {",
+   "new": "} else if (acked_[p] <= turn + 1) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turn_that_waits_holds_up_a_newer_one",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "            ++it;\n            continue;\n",
+   "new": "            return verdict;\n",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "report_of_a_seat_not_at_the_table_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (player >= sim::MAX_PLAYERS || !active_[player]) return out;",
+   "new": "if (player >= sim::MAX_PLAYERS) return out;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seat_that_leaves_takes_every_seats_reports",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "for (auto& entry : have_report_) entry.second[player] = false;",
+   "new": "for (auto& entry : have_report_) entry.second.fill(false);",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turn_of_the_return_not_remembered",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        joined_[player] = next_turn_;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.54\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.56\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seat_of_the_return_turn_counts_as_later",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "} else if (joined_[p] > turn) {",
+   "new": "} else if (joined_[p] >= turn) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.54\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seat_that_is_away_not_counted",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (agree == 0 && (later != 0 || held != 0)) {",
+   "new": "if (agree == 0 && (later != 0 || (held != 0 && false))) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.57\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turn_let_go_though_a_seat_vouches",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (agree == 0 && (later != 0 || held != 0)) {",
+   "new": "if (later != 0 || held != 0) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.54\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.57\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turn_let_go_before_a_seat_that_may_say_is_awaited",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (agree == 0 && waiting != 0) {",
+   "new": "if (agree == 0 && waiting != 0 && later == 0 && held == 0) {",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.54\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.57\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seats_that_are_away_not_given_to_the_sequencer",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "sequencer_.judge_hashes(seated, held)",
+   "new": "sequencer_.judge_hashes(seated, static_cast<uint8_t>(held & 0))",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.56\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "every_seat_counts_as_away",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "if (seat_held(p)) held = static_cast<uint8_t>(held | (1u << p));",
+   "new": "held = static_cast<uint8_t>(held | (1u << p));",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.44\" ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=\"S2.45\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "verdict_does_not_say_who_agreed",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        verdict.agree = agree;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.41\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "drop_not_told_to_the_room",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "if (on_diverged_) on_diverged_(",
+   "new": "if (false && on_diverged_) on_diverged_(",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.47\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seats_that_agreed_not_counted",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "seats_in(verdict.agree)",
+   "new": "seats_in(0)",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.47\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "seats_that_differed_counted_for_those_that_agreed",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "static_cast<uint8_t>(verdict.seats.size()), seats_in(verdict.agree)",
+   "new": "seats_in(verdict.agree), static_cast<uint8_t>(verdict.seats.size())",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.47\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "room_makes_no_line_of_a_drop",
+   "file": "src/ants_server/room.cpp",
+   "old": "        notes_.push_back(",
+   "new": "        (void)(",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "manager_does_not_take_the_lines_of_the_rooms",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "        for (std::string& line : it->second->take_notes()) room_notes_.push_back(std::move(line));\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "manager_does_not_hand_on_the_lines_of_the_rooms",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    for (std::string& line : room_notes_) notes.push_back(std::move(line));\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.250\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "machines_forget_the_turn_of_a_return",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        joined_[player] = next_turn_;\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.56\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "room_forgets_the_turn_of_a_return",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "        joined_[player] = next_turn_;\n",
+   "new": "",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.258\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "room_does_not_know_that_a_seat_is_away",
+   "file": "src/ants_net/session_hashes.cpp",
+   "old": "sequencer_.judge_hashes(seated, held)",
+   "new": "sequencer_.judge_hashes(seated, static_cast<uint8_t>(held & 0))",
+   "build": [
+    "test_server"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S3.258\" ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "late_referee_word_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return;",
+   "new": "if (false) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "late_report_of_a_seat_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return out;",
+   "new": "if (false) return out;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turns_that_every_seat_passed_not_remembered",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "    passed_ = std::max(passed_, low);\n",
+   "new": "",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "report_of_the_turn_every_seat_just_ran_not_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return out;",
+   "new": "if (uint64_t{turn} + 1 <= passed_) return out;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "referee_word_of_the_turn_every_seat_just_ran_not_kept",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "if (uint64_t{turn} + 1 < passed_) return;",
+   "new": "if (uint64_t{turn} + 1 <= passed_) return;",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.55\" ./build/tests/test_net/test_lockstep"
+  },
+  {
+   "id": "turn_that_is_let_go_is_judged_again",
+   "file": "src/ants_net/sequencer.cpp",
+   "old": "this one is let go\n            it = suspect_.erase(it);\n",
+   "new": "this one is let go\n            ++it;\n",
+   "build": [
+    "test_lockstep"
+   ],
+   "test": "ANTS_TEST_FILTER=\"S2.57\" ./build/tests/test_net/test_lockstep"
+  }
+ ]
+}

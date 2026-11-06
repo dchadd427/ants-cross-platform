@@ -90,6 +90,6 @@ add_executable(test_lvl_core
     ../../src/ants_assets/lvl_core_c.cpp
 )
 
-target_link_libraries(test_lvl_core PRIVATE ants_assets ants_test_paths)
+target_link_libraries(test_lvl_core PRIVATE ants_assets ants_sim ants_test_paths)      # ants_sim: the pin of lvl_core's dropper-plant tile list against sim::movement::is_dropper_plant_tile
 
 add_test(NAME test_lvl_core COMMAND test_lvl_core)

@@ -23,6 +23,30 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.13.2 - 2026-11-06 - Per-visitor limits, page headers and a chat store that keeps its size
+
+**For players:**
+- **Page headers and checks.** Every page sends a content policy, a framing rule, a referrer policy and a permissions policy; browsers are asked to use https for a week; a game connection from another site's page is refused; the access log keeps paths without queries; the three big game files are compressed once, at build time.
+- **Limits per visitor behind a reverse proxy.** The web image's default list of proxy addresses (the private and internal ranges) lets the limits count each visitor's own address behind a proxy at one of them. `ANTS_TRUSTED_PROXIES_FILE` names your own list for a proxy at another address; `ANTS_WEB_BIND_PREFIX` (for example `127.0.0.1:`) publishes the web port on one address. With neither set, nothing changes.
+- **Rooms on the server.** A seat whose game state differs from the referee's is dropped alone; the others play on. Room codes use the operating system's random generator. A match whose recording was not kept says why; result files are written whole, and a room named like the statistics file writes `<code>.room.json`.
+- **Online rooms play maps of at most 1,000 starting ants (was 8,000).** A room also limits the work that a map sets up (plants and waypoints, food objects, power-ups); every library map is within the limits. A map above a limit stays listed and plays on your own device. The two largest player maps (6,000 and 2,772 ants) are now offline-only; a restart record of a match on such a map is refused at server start. A test-map door switched off with `ANTS_TEST_MAP_PORT=0` comes back when that setting is removed.
+- **The chat store keeps its size.** When the database nears its limit the oldest lines go (moderators' lines last, the newest 1,000 never); a first start on an almost full store does the same once. Each account has an hourly and a daily line budget. Staff run `python -m hub.admin status` and `purge`. The Legal page says lines are kept up to 7 days.
+- **Project files.** `SECURITY.md` (how to report a problem privately), `CODEOWNERS`, tidier deployment notes, and a hygiene check that also looks at file names.
+
+**Rules / network:** none: network protocol 22 and the simulation rules are unchanged.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ad0a35d9...316b62a4)
+
+## v0.13.1 - 2026-11-03 - Home: the phone's chat strip is not cut off, and the first page shows the open games
+
+**For players:**
+- **The phone's bottom chat strip is no longer cut off.** On some phones the strip along the bottom of Home sat under the phone's own bottom bar and part of it was hidden; it now stays above it.
+- **The first page shows the open games right away.** Under the top bar, Home now lists the open games (host, map, seats, bots and **Join**, with **Join by code** at the bottom) without a press. The **Games** button stays and takes you to the list.
+
+**Rules / network:** none: network protocol 22 and the simulation rules are unchanged (the web page only).
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/7fa87f91...6b936a10)
+
 ## v0.13.0 - 2026-11-02 - Home, public rooms, the games list and the chat
 
 **For players:**
@@ -33,7 +57,7 @@ Work that is not released yet is written in the same template under a heading th
 - **Log in with Discord** to write in the chat. It asks for your Discord id and username only and keeps nothing else; **Log out** and **Forget me** (deletes your lines) are in the chat. A Discord account under 7 days old cannot write. Login works once the site's operator has set up the Discord application; until then the chat is read-only for everybody.
 - **Everybody needs the new version.** A game or page of v0.12 cannot join a v0.13 server: reload the page.
 
-**Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the host makes a lobby room public or private), and one new Room flag, public; a v0.12 game cannot play with a v0.13 one ([public rooms](docs/PUBLIC_ROOMS.md)). One rule fix: the layer-2 id 38 is no bridge any more, as in the original (a water tile that holds it stays water: only a swimmer can enter it, and anyone else put there drowns). No shipped or community map holds it and every state hash of the library is unchanged, so recordings play as before (rules number 5); only a player's own map that holds id 38 plays differently from v0.12. **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies` and the status of a lobby room has `"public"`; the site's nginx passes `/lobbies`, `/hub/ws` and the login's pages; the stack has a new container `ants-hub` and its volume (the staging stack gets its own, `ants-hub-staging` with the volume `ants-staging-hub-data`), with the `ANTS_HUB_*` settings, and the chat and the login must not go live behind a reverse proxy before `docker/trusted-proxies.conf` names it ([the chat hub](docs/HUB.md#behind-a-reverse-proxy-not-ready-for-the-public-until-this-is-set)).
+**Rules / network:** network protocol 22 (was 21): one new message, Visibility (type 35: the host makes a lobby room public or private), and one new Room flag, public; a v0.12 game cannot play with a v0.13 one ([public rooms](docs/PUBLIC_ROOMS.md)). One rule fix: the layer-2 id 38 is no bridge any more, as in the original (a water tile that holds it stays water: only a swimmer can enter it, and anyone else put there drowns). No shipped or community map holds it and every state hash of the library is unchanged, so recordings play as before (rules number 5); only a player's own map that holds id 38 plays differently from v0.12. **If you run a server:** the public door (`--replay-port`) answers `GET /lobbies` and the status of a lobby room has `"public"`; the site's nginx passes `/lobbies`, `/hub/ws` and the login's pages; the stack has a new container `ants-hub` and its volume (the staging stack gets its own, `ants-hub-staging` with the volume `ants-staging-hub-data`), with the `ANTS_HUB_*` settings, and the chat and the login must not go live behind a reverse proxy before `docker/trusted-proxies.conf` names it ([the chat hub](docs/HUB.md#behind-a-reverse-proxy)).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/354be26a...57c6f8ae)
 
@@ -391,7 +415,7 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.120 - 2026-10-23 - A Buy me a coffee button at the bottom of the front page
 
 **For players:**
-- **A "Buy me a coffee" button at the bottom of the front page.** If you enjoy the game you can support its owner: the yellow button, centered in the footer, opens the owner's Buy Me a Coffee page in a new tab. The repository has a Sponsor button for the same page.
+- **A "Buy me a coffee" button at the bottom of the front page.** If you enjoy the game you can support its maintainer: the yellow button, centered in the footer, opens the maintainer's Buy Me a Coffee page in a new tab. The repository has a Sponsor button for the same page.
 - The button is a picture that your browser fetches from Buy Me a Coffee's own server, so that server sees your address as any website does; the Legal page says so. Nothing else on the front page is loaded from another company.
 
 **Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the front page only).
@@ -476,49 +500,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/37aeace1...1291d49e)
 
-## v0.12.112 - 2026-10-23 - Hard computer players take the quick kill and stop sending ants where no walk goes
+## Older versions (v0.12.112 and before)
 
-**For players:**
-- **The Hard computer players shove more enemies into water, bombs and fire.** An enemy ant next to water, a bomb or a fire wall dies of one blow from the side away from it. A free Hard ant now walks round to that side and strikes; before, it only did so when it happened to stand in line. Over many maps they get a seventh to a quarter more kills.
-- **They waste about 40 percent fewer orders.** They no longer send ants at enemies across a lake, which the game used to answer with "Can't go there": about 31 of every 100 orders before and 19 now over the map library (23 and 13 in an independent check).
-- **On maps with no food they can reach (AntsTournament, Killing Spree), Hard players now go and fight** instead of waiting at home. Where the food lies over water or behind a gate, the ants keep that work.
-- **The ring of fire round an enemy gate is lit only when that team has food to bank.** Hard builds and puts out its other fire walls as often as before.
-- **This is not a stronger player.** Against the old Hard player it wins as often (about 50 of 100, with four players or with two), and against Medium as often as before. An enemy beside the water within reach is still left alone about 7 times in 10 (a Hard ant only goes for one that has stood still for a second), ants stand idle a little more because they no longer run pointless trips, and on one map, Acid Blood, the new kill made it play worse until the last ants were told to stay at their work. Easy and Medium are unchanged.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (computer players run on the server or the host and only send commands, so old recordings play as before).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/91a09a4b...a3899325), [the quick kill](docs/BOT_FIGHT.md)
-
-## v0.12.111 - 2026-10-23 - Map Maker: Start from a game map opens the six original maps
-
-**For players:**
-- **Map Maker (v1.5.3): "Start from a game map" now opens the six maps that came with the game.** Tiny, Small, Medium, Gauntlet, Treasure and Islands always said "The map file could not be downloaded. Check your connection and try again.", because the site had no copy of those six files to hand out (only the players' maps). It has them now. Pick one and the editor opens a copy of it under a free name, so you can edit and save it right away; the original is never changed.
-- **The message now tells the truth.** A map the site does not have says "This map is not available from the site right now." A site that answers badly says "The site could not send this map. Try again in a moment." "Check your connection" stays for a connection that really failed.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the site and the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/dc809cd5...588c0067)
-
-## v0.12.110 - 2026-10-23 - Pick up: a drag is put down when you let go of the mouse
-
-**For players:**
-- **Pick up: a drag now ends when you let go.** Drag a hill, object, food pile, plant or ant (or a whole group or area) in the Map Maker and let go of the mouse or lift your finger: it is put down where the see-through copy is, in one step that one Undo takes back. Before, the copy kept following the mouse after you let go until you pressed Enter or Done.
-- **A red place keeps it in your hand.** If you let go where it cannot go (on a mushroom, over the edge, in the water), nothing is changed, the copy stays red and says why, and you can drag it on to a free place.
-- **Escape takes it back.** Escape while you drag, a touch that is cancelled, or leaving the window, puts the thing back where it was. A plain click or tap still only places the copy, and the arrow buttons, Enter and Done work as before.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.2.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ea4ec07f...4c8c2434)
-
-## v0.12.109 - 2026-10-22 - A put-out fire leaves the screen on maps with fire walls
-
-**For players:**
-- **A fire that a Fire ant puts out now leaves the screen on maps that came with fire walls.** On a map made with the Map Maker's permanent Fire wall (and on five maps of the library), the Fire ant did its put-out move and the game agreed the fire was gone (the message "Fire put out." came, ants could walk there), but the picture of the fire stayed on the map. Now it disappears, as it does for a fire that was lit in the match.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; only the picture changed. Fire walls that the Map Maker puts on a map still burn until a Fire ant puts them out.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d7401fec...1ac880b2)
-
-## Older versions (v0.12.108 and before)
-
-Every release before v0.12.109, and the long notes of v0.12.108, v0.12.107, v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.113, and the long notes of v0.12.112, v0.12.111, v0.12.110, v0.12.109, v0.12.108, v0.12.107, v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

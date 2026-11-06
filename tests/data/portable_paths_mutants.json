@@ -1,0 +1,334 @@
+{
+ "note": "Mutants of tools/check_portable_paths.py, which fails for a tracked path that a Windows or macOS checkout cannot hold: each lets one kind of name through (a character, a trailing space or dot, a DOS device name, a path or a name that is too long, a name that is not UTF-8, a case or Unicode-form twin), or breaks the exit status, the quoting or the list. Each must be noticed by tests/scripts/test_portable_paths.py. No build: python3 tools/mutate.py tests/data/portable_paths_mutants.json --keep-going --jobs 1, from the repository folder (a few seconds for each mutant).",
+ "mutants": [
+  {
+   "id": "colon_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('<>\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "question_mark_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('<>:\"|*\\\\') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "star_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('<>:\"|?\\\\') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "double_quote_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('<>:|?*\\\\') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "less_than_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "greater_than_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('<:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "pipe_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('<>:\"?*\\\\') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "backslash_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "FORBIDDEN = set('<>:\"|?*\\\\') | {chr(c) for c in range(32)}",
+   "new": "FORBIDDEN = set('<>:\"|?*') | {chr(c) for c in range(32)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "control_characters_are_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "{chr(c) for c in range(32)}",
+   "new": "{chr(c) for c in range(0)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "character_31_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "{chr(c) for c in range(32)}",
+   "new": "{chr(c) for c in range(31)}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_trailing_space_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "name.endswith((\" \", \".\"))",
+   "new": "name.endswith(\".\")",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_trailing_dot_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "name.endswith((\" \", \".\"))",
+   "new": "name.endswith(\" \")",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_device_with_an_extension_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "name.split(\".\", 1)[0].rstrip(\" \").upper() in DEVICES",
+   "new": "name.rstrip(\" \").upper() in DEVICES",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_device_is_only_up_to_the_last_dot",
+   "file": "tools/check_portable_paths.py",
+   "old": "name.split(\".\", 1)[0].rstrip(\" \").upper() in DEVICES",
+   "new": "name.rsplit(\".\", 1)[0].rstrip(\" \").upper() in DEVICES",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_device_in_lower_case_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "name.split(\".\", 1)[0].rstrip(\" \").upper() in DEVICES",
+   "new": "name.split(\".\", 1)[0].rstrip(\" \") in DEVICES",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_space_before_the_dot_hides_a_device",
+   "file": "tools/check_portable_paths.py",
+   "old": "name.split(\".\", 1)[0].rstrip(\" \").upper() in DEVICES",
+   "new": "name.split(\".\", 1)[0].upper() in DEVICES",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "no_device_names",
+   "file": "tools/check_portable_paths.py",
+   "old": "if name.split(\".\", 1)[0].rstrip(\" \").upper() in DEVICES:",
+   "new": "if False:",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "com0_and_lpt0_are_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "\"0123456789\\u00b9\\u00b2\\u00b3\"",
+   "new": "\"123456789\\u00b9\\u00b2\\u00b3\"",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "com9_and_lpt9_are_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "\"0123456789\\u00b9\\u00b2\\u00b3\"",
+   "new": "\"012345678\\u00b9\\u00b2\\u00b3\"",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_superscript_digits_are_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "\"0123456789\\u00b9\\u00b2\\u00b3\"",
+   "new": "\"0123456789\"",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "conin_and_conout_are_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "\"NUL\", \"CONIN$\", \"CONOUT$\"}",
+   "new": "\"NUL\"}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "prn_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "{\"CON\", \"PRN\", \"AUX\", \"NUL\",",
+   "new": "{\"CON\", \"AUX\", \"NUL\",",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_name_may_have_256_bytes",
+   "file": "tools/check_portable_paths.py",
+   "old": "MAX_NAME_BYTES = 255",
+   "new": "MAX_NAME_BYTES = 256",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_name_of_255_bytes_is_refused",
+   "file": "tools/check_portable_paths.py",
+   "old": "MAX_NAME_BYTES = 255",
+   "new": "MAX_NAME_BYTES = 254",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_path_may_have_201_units",
+   "file": "tools/check_portable_paths.py",
+   "old": "MAX_PATH_UNITS = 200",
+   "new": "MAX_PATH_UNITS = 201",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_path_of_200_units_is_refused",
+   "file": "tools/check_portable_paths.py",
+   "old": "MAX_PATH_UNITS = 200",
+   "new": "MAX_PATH_UNITS = 199",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_path_is_counted_in_characters",
+   "file": "tools/check_portable_paths.py",
+   "old": "return len(text.encode(\"utf-16-le\", \"surrogatepass\")) // 2",
+   "new": "return len(text)",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "no_limit_for_the_path",
+   "file": "tools/check_portable_paths.py",
+   "old": "    if units > MAX_PATH_UNITS:",
+   "new": "    if False:",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "no_limit_for_a_name",
+   "file": "tools/check_portable_paths.py",
+   "old": "    if size > MAX_NAME_BYTES:",
+   "new": "    if False:",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_name_is_counted_in_characters",
+   "file": "tools/check_portable_paths.py",
+   "old": "size = len(name.encode(\"utf-8\", \"surrogatepass\"))",
+   "new": "size = len(name)",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "invalid_utf8_is_allowed",
+   "file": "tools/check_portable_paths.py",
+   "old": "return [\"is not valid UTF-8, and Windows and macOS names are Unicode\"]",
+   "new": "return []",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "case_is_not_folded",
+   "file": "tools/check_portable_paths.py",
+   "old": "return unicodedata.normalize(\"NFC\", text).casefold()",
+   "new": "return unicodedata.normalize(\"NFC\", text)",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "unicode_forms_are_not_folded",
+   "file": "tools/check_portable_paths.py",
+   "old": "return unicodedata.normalize(\"NFC\", text).casefold()",
+   "new": "return text.casefold()",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "folders_are_not_compared",
+   "file": "tools/check_portable_paths.py",
+   "old": "        for depth in range(1, len(parts) + 1):\n            prefix = \"/\".join(parts[:depth])\n            others = spellings[fold(prefix)] - {prefix}",
+   "new": "        for depth in range(len(parts), len(parts) + 1):\n            prefix = \"/\".join(parts[:depth])\n            others = spellings[fold(prefix)] - {prefix}",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_path_is_its_own_twin",
+   "file": "tools/check_portable_paths.py",
+   "old": "others = spellings[fold(prefix)] - {prefix}",
+   "new": "others = spellings[fold(prefix)]",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "twins_are_not_reported",
+   "file": "tools/check_portable_paths.py",
+   "old": "if shown[raw] in same and _is_utf8(raw):",
+   "new": "if False:",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_path_listed_twice_is_named_twice",
+   "file": "tools/check_portable_paths.py",
+   "old": "unique = sorted(set(raw_paths))",
+   "new": "unique = sorted(raw_paths)",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_exit_status_of_a_failure_is_0",
+   "file": "tools/check_portable_paths.py",
+   "old": "        print(\"  ... and %d more\" % (len(found) - MAX_LINES))\n    return 1\n",
+   "new": "        print(\"  ... and %d more\" % (len(found) - MAX_LINES))\n    return 0\n",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "an_option_that_is_none_is_a_pass",
+   "file": "tools/check_portable_paths.py",
+   "old": "return 2 if error.code else 0",
+   "new": "return 0",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_git_that_fails_is_a_pass",
+   "file": "tools/check_portable_paths.py",
+   "old": "        print(\"check_portable_paths: %s\" % error, file=sys.stderr)\n        return 2\n",
+   "new": "        print(\"check_portable_paths: %s\" % error, file=sys.stderr)\n        return 0\n",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_path_is_not_quoted",
+   "file": "tools/check_portable_paths.py",
+   "old": "print(\"  %s: %s\" % (quote(path), reason))",
+   "new": "print(\"  %s: %s\" % (path, reason))",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_quote_shows_any_character",
+   "file": "tools/check_portable_paths.py",
+   "old": "json.dumps(text, ensure_ascii=True)",
+   "new": "json.dumps(text, ensure_ascii=False)",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_list_is_not_cut",
+   "file": "tools/check_portable_paths.py",
+   "old": "for path, reason in found[:MAX_LINES]:",
+   "new": "for path, reason in found:",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_rest_is_counted_wrong",
+   "file": "tools/check_portable_paths.py",
+   "old": "(len(found) - MAX_LINES))\n    return 1",
+   "new": "(len(found)))\n    return 1",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "git_quotes_the_names",
+   "file": "tools/check_portable_paths.py",
+   "old": "[\"git\", \"-C\", root, \"ls-files\", \"-z\"]",
+   "new": "[\"git\", \"-C\", root, \"ls-files\"]",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "the_root_is_not_used",
+   "file": "tools/check_portable_paths.py",
+   "old": "[\"git\", \"-C\", root, \"ls-files\", \"-z\"]",
+   "new": "[\"git\", \"-C\", \".\", \"ls-files\", \"-z\"]",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  },
+  {
+   "id": "a_name_that_is_not_utf8_is_shown_wrong",
+   "file": "tools/check_portable_paths.py",
+   "old": "raw.decode(\"utf-8\", \"surrogateescape\")",
+   "new": "raw.decode(\"utf-8\", \"replace\")",
+   "test": "python3 tests/scripts/test_portable_paths.py"
+  }
+ ]
+}

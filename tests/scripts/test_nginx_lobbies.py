@@ -7,8 +7,8 @@ address, key or chat); the page's nginx forwards it like /live (tests/scripts/te
   - /lobbies is an exact location, the only one of its name: only a GET without a query goes through (405 and 404 otherwise), the checks come before the allowance, and the server is always asked
     for /lobbies, however the visitor spelled the address;
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
-  - an allowance of its own, a hundred a second with a burst of two hundred, 503 beyond (the key is the address nginx sees: the whole site's while the reverse proxy is not named in
-    docker/trusted-proxies.conf);
+  - an allowance of its own, a hundred a second with a burst of two hundred, 503 beyond (the key is the visitor's address as nginx settles on it:
+    docs/SERVER.md "Behind a reverse proxy");
   - one cache entry for everybody, TWO seconds long, in the cache of /stats: the server is asked about once in two seconds however many look; only a 200 is kept; an answer is served old only while
     a new one is being fetched, never because the server fails, hangs up or refuses (a game that is listed after it has begun or was closed is a card that fails when it is pressed); a server that
     HANGS holds one request for the read timeout (3 seconds) and the others get the old list meanwhile;
@@ -92,7 +92,7 @@ class TheText(unittest.TestCase):
         self.assertIn("resolver 127.0.0.11", BLOCK)                                       # (a variable and a resolver: the name is looked up per request, so the page starts without the server)
         self.assertEqual(len(re.findall(r"\bproxy_pass\b", BLOCK)), 1)
 
-    def test_the_allowance_is_the_whole_sites_and_a_zone_of_its_own_outside_the_server(self):
+    def test_the_allowance_is_a_zone_of_its_own_outside_the_server(self):
         zone = re.search(r"limit_req_zone \$binary_remote_addr zone=ants_lobbies:(\d+)m rate=(\d+)r/([sm]);", CONF)
         self.assertIsNotNone(zone)
         self.assertLess(CONF.index(zone.group(0)), CONF.index("server {"))                # http context: before the server block

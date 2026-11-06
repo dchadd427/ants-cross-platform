@@ -1,0 +1,109 @@
+{
+ "note": "Mutants of the expedition's walk through a row of tokens (src/ants_ai/island_expedition.cpp, ExpeditionTask::walk_of: a Hard bot orders the tokens by the steps of a walk from the entrance, the tokens that touch a token are looked up by their cells), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/island_expedition_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught by AI32.3 (the order from every end against a plain re-statement of the walk, the order of the other levels) or AI32.4 (the time of the walks from every entrance of a row of three thousand tokens).",
+ "mutants": [
+  {
+   "id": "walk_scans_every_token_for_each_one_reached",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "    const TokenCells cells(tiles);\n    for (size_t head = 0; head < queue.size(); ++head) {\n        const sim::TileCoord at = tiles[queue[head]];\n        for (int32_t dy = -1; dy <= 1; ++dy) {\n            for (int32_t dx = -1; dx <= 1; ++dx) {\n                cells.each_at(at.x + dx, at.y + dy, [&](size_t j) {\n                    if (steps[j] != kFar) return;\n                    steps[j] = steps[queue[head]] + 1;\n                    queue.push_back(j);\n                });\n            }\n        }\n    }\n",
+   "new": "    for (size_t head = 0; head < queue.size(); ++head) {\n        for (size_t j = 0; j < tiles.size(); ++j) {\n            if (steps[j] != kFar || tiles[j].chebyshev_dist(tiles[queue[head]]) > 1) continue;\n            steps[j] = steps[queue[head]] + 1;\n            queue.push_back(j);\n        }\n    }\n",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_skips_the_diagonal_neighbours",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "            for (int32_t dx = -1; dx <= 1; ++dx) {\n                cells.each_at(",
+   "new": "            for (int32_t dx = -1; dx <= 1; ++dx) {\n                if (dx != 0 && dy != 0) continue;\n                cells.each_at(",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_starts_two_cells_from_the_entrance",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "        if (tiles[i].chebyshev_dist(entrance.tile) > 1) continue;\n        steps[i] = 1;",
+   "new": "        if (tiles[i].chebyshev_dist(entrance.tile) > 2) continue;\n        steps[i] = 1;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_starts_from_every_token",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "        if (tiles[i].chebyshev_dist(entrance.tile) > 1) continue;\n        steps[i] = 1;",
+   "new": "        steps[i] = 1;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "cells_match_the_column_only",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "            if (t.x == x && t.y == y) visit(",
+   "new": "            if (t.x == x) visit(",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "cells_match_the_row_only",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "            if (t.x == x && t.y == y) visit(",
+   "new": "            if (t.y == y) visit(",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "cells_hash_ignores_the_row",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) | static_cast<uint32_t>(y);\n        return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> 32) & (slots - 1);",
+   "new": "        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) | (static_cast<uint32_t>(y) * 0u);\n        return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> 32) & (slots - 1);",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_a_step_may_cost_two",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "                    steps[j] = steps[queue[head]] + 1;\n                    queue.push_back(j);",
+   "new": "                    steps[j] = steps[queue[head]] + (j % 7 == 0 ? 2 : 1);\n                    queue.push_back(j);",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_ties_are_not_kept_in_the_order_of_the_row",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "    std::stable_sort(by.begin(), by.end(), [&](size_t a, size_t b) { return steps[a] < steps[b]; });",
+   "new": "    std::sort(by.begin(), by.end(), [&](size_t a, size_t b) { return steps[a] < steps[b]; });",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_never_goes_the_other_way_round",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "    if (entrance.member != 0) std::reverse(order.begin(), order.end());",
+   "new": "    if (entrance.member > 1000000u) std::reverse(order.begin(), order.end());",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_of_every_bot_is_timed",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "    if (!params_.timed_row) return order;",
+   "new": "    (void)params_;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_of_no_bot_is_timed",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "    if (!params_.timed_row) return order;",
+   "new": "    if (true) return order;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "walk_unreached_tokens_are_left_out",
+   "file": "src/ants_ai/island_expedition.cpp",
+   "old": "    for (const size_t i : by) out.push_back(order[i]);\n    return out;",
+   "new": "    for (const size_t i : by) {\n        if (steps[i] != kFar) out.push_back(order[i]);\n    }\n    return out;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  }
+ ]
+}

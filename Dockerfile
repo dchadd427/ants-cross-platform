@@ -30,6 +30,11 @@ RUN emcmake cmake -B build_web \
 
 RUN cmake --build build_web -j$(nproc)
 
+# The three big files of the game are compressed once, here, and nginx sends the compressed copy to a browser that accepts gzip (gzip_static in docker/nginx.conf; the plain files stay, for a browser that does not): compressing
+# index.data (14 MB) and index.wasm (4 MB) again for every request cost nginx half a second and a fifth of a second of one core each time. -9 makes them smaller than nginx's own level 6, -n leaves the name and the time out of the
+# file. The COPY of index.* below takes the .gz files with the rest. The build stops if one is missing or empty.
+RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k "$f" && test -s "$f.gz" || exit 1; done
+
 # Append dynamic build cache-buster to the index.js script tag (only a <script> tag: the page adds the ?v= to its own script address itself, and a sed over every `src=index.js`
 # gave that one a second ?v=) to prevent stale browser caching, and write the exact size of index.data into the page (the page refuses a download of another size: a captive portal's
 # web page that answers "200 OK"). The build stops if either did not work.
@@ -129,7 +134,7 @@ COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html
 # The players' maps for the browser (docs/SERVER.md "The list of maps"): the preview pictures (534 small WebP files) and the .lvl files themselves, served by docker/nginx.conf at /maps/previews/ and /maps/files/ from
 # a folder outside the web root, so that only those two locations can reach them. The six originals' pictures are the front page's own (web/front/): no second copy.
 # The six original maps (Original-Ants/Maps, read only) go into the same files folder, so that the Map Maker's "Start from a game map" can fetch them at /maps/files/ like any other map (the game server
-# serves only the players' maps that the owner approved, and the page's data package is the game's own). A test keeps their names apart from the players' (tests/scripts/test_nginx_original_maps.py).
+# serves only the players' maps that the maintainer approved, and the page's data package is the game's own). A test keeps their names apart from the players' (tests/scripts/test_nginx_original_maps.py).
 COPY Community-Maps/previews/ /srv/community-maps/previews/
 COPY Community-Maps/*.lvl Community-Maps/*.LVL /srv/community-maps/files/
 COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/
@@ -183,12 +188,13 @@ COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
 # Copy Asset Catalog & Viewer for reference on beta site
 COPY asset_catalog/ /usr/share/nginx/html/asset_catalog/
 
-# The owner's page (docs/MAP_SUBMISSIONS.md "The owner's page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
+# The admin page (docs/MAP_SUBMISSIONS.md "The admin page"): the address /admin is typed, nothing links to it; its API and the logon are paths of docker/nginx.conf
 COPY web/admin.html /usr/share/nginx/html/admin.html
 COPY web/admin.css /usr/share/nginx/html/admin.css
 COPY web/admin_page.js /usr/share/nginx/html/admin_page.js
 
-# Copy custom Nginx configuration, and the list of the reverse proxies whose X-Forwarded-For is believed (none: the address of the connection counts; a mounted file of the same name replaces it)
+# Copy custom Nginx configuration, and the list of the reverse proxies whose X-Forwarded-For is believed (the private addresses that a proxy connects from, docs/SERVER.md "Behind a reverse proxy"; the stack files
+# can mount a list of the operator's own in /etc/nginx/ants-trusted-proxies.d/, which replaces this one)
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/trusted-proxies.conf /etc/nginx/ants-trusted-proxies/proxies.conf
 
