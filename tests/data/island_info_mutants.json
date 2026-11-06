@@ -1,19 +1,11 @@
 {
- "note": "Mutants of the token groups of IslandInfo::analyse (src/ants_ai/island_info.cpp: the members of a group of touching power-ups are listed in the order of a walk from the first entrance, with a flag for each power-up that is listed already), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/island_info_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught by AI32.1 (the order of the members and the first entrance, against a plain re-statement of the walk) or AI32.2 (the time of one cluster of 3,000 power-ups: the mutant that searches the members again has the same output and the cube of the work).",
+ "note": "Mutants of the token groups of IslandInfo::analyse (src/ants_ai/island_info.cpp: the members of a group of touching power-ups are listed in the order of a walk from the first entrance, with a flag for each power-up that is listed already), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/island_info_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught by AI32.1 (the order of the members and the first entrance, against a plain re-statement of the walk) or AI32.2 (the time of one cluster of 3,000 power-ups: the mutant that searches the members again has the same output and the cube of the work). Not listed on purpose: a walk that does not flag the members it adds never ends (the list grows for ever), which a test run cannot judge.",
  "mutants": [
   {
    "id": "island_first_member_not_flagged",
    "file": "src/ants_ai/island_info.cpp",
    "old": "            listed[raw.front().power] = 1;\n",
    "new": "",
-   "build": "test_ai",
-   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
-  },
-  {
-   "id": "island_walk_member_not_flagged",
-   "file": "src/ants_ai/island_info.cpp",
-   "old": "                    g.members.push_back(m);\n                    listed[m] = 1;\n",
-   "new": "                    g.members.push_back(m);\n",
    "build": "test_ai",
    "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
   },

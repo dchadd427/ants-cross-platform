@@ -17,6 +17,21 @@ namespace {
 using namespace ants;
 using namespace ants::ai;
 
+// The first `count` power-ups in reading order, each with water on every cell round it that holds no power-up: no walker can enter at them, so the first entrance of their row leads to a later member
+void wall_off_first(sim::SimulationEngine& sim, const std::vector<sim::TileCoord>& cells, size_t count) {
+    std::vector<sim::TileCoord> order = cells;
+    std::sort(order.begin(), order.end(), [](const sim::TileCoord& a, const sim::TileCoord& b) { return a.y != b.y ? a.y < b.y : a.x < b.x; });
+    for (size_t k = 0; k < count && k < order.size(); ++k) {
+        for (int32_t dy = -1; dy <= 1; ++dy) {
+            for (int32_t dx = -1; dx <= 1; ++dx) {
+                bool token = false;
+                for (const sim::TileCoord& c : cells) token = token || (c.x == order[k].x + dx && c.y == order[k].y + dy);
+                if (!token) sim.grid_mut().set_terrain(order[k].x + dx, order[k].y + dy, sim::TERRAIN_WATER);
+            }
+        }
+    }
+}
+
 // A test world of 120 x 120 with the hill of team 0 in the corner and a power-up on each of the cells (the five kinds in turn)
 void world_with(sim::SimulationEngine& sim, const std::vector<sim::TileCoord>& cells) {
     sim.init_test_world(120, 120, 1, 720000);
@@ -50,12 +65,24 @@ std::vector<sim::TileCoord> layout(const std::string& kind, uint32_t n) {
                 cells.push_back(to);
             }
         }
+    } else if (kind == "vline") {                                                               // columns of 90 tokens (a single column up to 90): the tokens of a column share an x, so a lookup by cell has to tell them apart
+        for (uint32_t k = 0; k < n; ++k) cells.push_back(sim::TileCoord{static_cast<int32_t>(30 + k / 90), static_cast<int32_t>(20 + k % 90)});
     } else if (kind == "pair") {                                                                // two clusters, far apart: two rows with an entrance each
         const uint32_t w = 1 + static_cast<uint32_t>(std::sqrt(static_cast<double>(n / 2 + 1)));
         for (uint32_t k = 0; k < n; ++k) cells.push_back(sim::TileCoord{static_cast<int32_t>((k % 2 == 0 ? 30 : 75) + (k / 2) % w), static_cast<int32_t>(30 + (k / 2) / w)});
     } else {                                                                                    // "scatter": every second cell of every second row, none touches another
         for (uint32_t k = 0; k < n; ++k) cells.push_back(sim::TileCoord{static_cast<int32_t>(20 + 2 * (k % 40)), static_cast<int32_t>(20 + 2 * (k / 40))});
     }
+    return cells;
+}
+
+// The world of a layout. The kinds "walled" (a cluster) and "walled_line" (a line) have water all round their first power-up (the first six of the line), so that the first entrance of the row leads to a later member:
+// the walk does not start at the first member that the analysis finds, and the order of a walk differs from the order of the search
+std::vector<sim::TileCoord> make_world(sim::SimulationEngine& sim, const std::string& kind, uint32_t n) {
+    const std::vector<sim::TileCoord> cells = layout(kind == "walled" ? "cluster" : kind == "walled_line" ? "line" : kind, n);
+    world_with(sim, cells);
+    if (kind == "walled") wall_off_first(sim, cells, 1);
+    if (kind == "walled_line") wall_off_first(sim, cells, 6);
     return cells;
 }
 
@@ -136,11 +163,11 @@ ExpeditionTask::Params walk_params(bool timed) {
 }  // namespace
 
 void run_token_group_tests() {
-    TEST_CASE("AI32.1 The Members Of A Token Group Are In The Order Of A Walk From The First Entrance: Clusters, Lines, Diagonal Chains, Blobs And Scattered Cells Of 1 To 300 Power-Ups Agree With A Plain Re-Statement Of The Walk, Every Power-Up Is In One Group And Once") {
-        for (const char* kind : {"cluster", "line", "diagonal", "blob", "scatter"}) {
+    TEST_CASE("AI32.1 The Members Of A Token Group Are In The Order Of A Walk From The First Entrance: Clusters, Lines, Rows With Water Round Their First Power-Ups, Diagonal Chains, Blobs And Scattered Cells Of 1 To 300 Power-Ups Agree With A Plain Re-Statement Of The Walk, Every Power-Up Is In One Group And Once") {
+        for (const char* kind : {"cluster", "walled", "line", "walled_line", "diagonal", "blob", "scatter"}) {
             for (const uint32_t n : {1u, 2u, 3u, 9u, 50u, 150u, 300u}) {
                 sim::SimulationEngine sim;
-                world_with(sim, layout(kind, n));
+                make_world(sim, kind, n);
                 const MapInfo map(sim);
                 const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
                 const std::vector<PowerUpInfo>& powerups = map.powerups();
@@ -180,11 +207,11 @@ void run_token_group_tests() {
         ASSERT_TRUE(ms < 400.0);                                                                  // (the work must not grow with the cube of the size of the group)
     } TEST_END();
 
-    TEST_CASE("AI32.3 The Expedition's Walk Through A Row Is The Same From Every End: Clusters, Pairs Of Clusters, Lines, Diagonal Chains, Blobs And Scattered Cells Of 1 To 300 Tokens, Every Entrance (Or Sixty Of Them), A Hard Bot's Order Agrees With A Plain Re-Statement Of The Walk, The Others' Is The Analysis's") {
-        for (const char* kind : {"cluster", "pair", "line", "diagonal", "blob", "scatter"}) {
+    TEST_CASE("AI32.3 The Expedition's Walk Through A Row Is The Same From Every End: Clusters, Pairs Of Clusters, Lines, Rows With Water Round Their First Power-Ups, Columns, Diagonal Chains, Blobs And Scattered Cells Of 1 To 300 Tokens, Every Entrance (Or Sixty Of Them), A Hard Bot's Order Agrees With A Plain Re-Statement Of The Walk, The Others' Is The Analysis's") {
+        for (const char* kind : {"cluster", "walled", "pair", "line", "walled_line", "vline", "diagonal", "blob", "scatter"}) {
             for (const uint32_t n : {1u, 2u, 3u, 9u, 50u, 150u, 300u}) {
                 sim::SimulationEngine sim;
-                world_with(sim, layout(kind, n));
+                make_world(sim, kind, n);
                 const MapInfo map(sim);
                 const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
                 Tactics tactics;
@@ -206,15 +233,15 @@ void run_token_group_tests() {
                         ++walks;
                     }
                 }
-                ASSERT_TRUE(walks > 0);
-                if (n >= 50 && (std::string(kind) == "cluster" || std::string(kind) == "pair" || std::string(kind) == "blob")) ASSERT_TRUE(reordered > 0);
+                ASSERT_TRUE(walks > 0 || std::string(kind).rfind("walled", 0) == 0);                // (a walled row of a few power-ups has no entrance at all)
+                if (n >= 50 && (std::string(kind) == "cluster" || std::string(kind) == "pair" || std::string(kind) == "vline" || std::string(kind) == "blob")) ASSERT_TRUE(reordered > 0);
             }
         }
     } TEST_END();
 
     TEST_CASE("AI32.4 The Walks From Every Entrance Of One Row Of 3,000 Tokens Take A Time That A Scan Of All The Tokens For Every One That Is Reached Could Not Keep (Well Under The 400 Milliseconds That Is Allowed Here), And Three Of Them Are The Plain Walk's") {
         sim::SimulationEngine sim;
-        world_with(sim, layout("cluster", 3000));
+        world_with(sim, layout("vline", 3000));                                                   // (34 columns of 90: 3,000 tokens in one row, a column of them shares an x)
         const MapInfo map(sim);
         const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
         ASSERT_EQ(info.token_groups().size(), size_t{1});
@@ -229,5 +256,32 @@ void run_token_group_tests() {
         ASSERT_EQ(tokens, g.entrances.size() * 3000u);
         for (const size_t ei : {size_t{0}, g.entrances.size() / 2, g.entrances.size() - 1}) ASSERT_TRUE(hard.walk_of(map, g, g.entrances[ei]) == reference_walk(map.powerups(), g, g.entrances[ei]));
         ASSERT_TRUE(ms < 400.0);                                                                  // (the work of a walk must not grow with the square of the size of the row)
+    } TEST_END();
+
+    TEST_CASE("AI32.5 A Row That Is Not One Group (Made By Hand From Two): The Tokens That The Walk Does Not Reach Come Last, In The Order Of The Row, And The Rest Is The Plain Walk's, From The Near End And From The Far End") {
+        sim::SimulationEngine sim;
+        world_with(sim, layout("pair", 40));
+        const MapInfo map(sim);
+        const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
+        ASSERT_EQ(info.token_groups().size(), size_t{2});
+        const TokenGroup& a = info.token_groups()[0];
+        const TokenGroup& b = info.token_groups()[1];
+        TokenGroup both;                                                                          // (the analysis never makes one: the members of two rows that touch nothing, the entrances of the first)
+        both.members = a.members;
+        both.members.insert(both.members.end(), b.members.begin(), b.members.end());
+        both.entrances = a.entrances;
+        ASSERT_TRUE(!a.members.empty() && !b.members.empty() && !both.entrances.empty());
+        Tactics tactics;
+        const ExpeditionTask hard(1, tactics, walk_params(true));
+        bool near_end = false;
+        bool far_end = false;
+        for (const TokenGroup::Entrance& e : both.entrances) {
+            const std::vector<uint32_t> got = hard.walk_of(map, both, e);
+            ASSERT_EQ(got.size(), both.members.size());
+            ASSERT_TRUE(got == reference_walk(map.powerups(), both, e));
+            ASSERT_TRUE(std::is_permutation(got.end() - static_cast<std::ptrdiff_t>(b.members.size()), got.end(), b.members.begin(), b.members.end()));      // (the second row's tokens are last)
+            (e.member == 0 ? near_end : far_end) = true;
+        }
+        ASSERT_TRUE(near_end && far_end);
     } TEST_END();
 }

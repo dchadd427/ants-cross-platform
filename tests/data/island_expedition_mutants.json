@@ -53,7 +53,7 @@
    "id": "cells_hash_ignores_the_row",
    "file": "src/ants_ai/island_expedition.cpp",
    "old": "        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) | static_cast<uint32_t>(y);\n        return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> 32) & (slots - 1);",
-   "new": "        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32);\n        return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> 32) & (slots - 1);",
+   "new": "        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) | (static_cast<uint32_t>(y) * 0u);\n        return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> 32) & (slots - 1);",
    "build": "test_ai",
    "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
   },
