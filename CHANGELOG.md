@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 22 and the simulation rules are unchanged.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ad0a35d9...875c124d)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ad0a35d9...316b62a4)
 
 ## v0.13.1 - 2026-11-03 - Home: the phone's chat strip is not cut off, and the first page shows the open games
 
