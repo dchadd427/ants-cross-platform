@@ -1,6 +1,6 @@
 // Tests of the play count of the maps (HistoryStore::put and map_plays, table map_plays of schema version 3, docs/SERVER.md "The database"): only matches with a person that ran 30 seconds count (29 s does not,
 // 30 s does; a match of computer players only does not), a draw and a quit count as the history records them, one match is one play however often it is kept or the server restarts, the key is the map's file
-// name and hash, the count survives a reopened database, and real recordings are counted by the feeder (and not again by a second feeder on the same database). A server with no database keeps no count.
+// name and hash, the count survives a reopened database, and real recordings are counted by the feeder (and not again by a second feeder on the same database), a recording on a map over the cap of starting ants is not played by the feeder (MP2.3 for a new file, MP2.4 for the stats of an older record). A server with no database keeps no count.
 #include <cstdlib>
 #include <functional>
 #include <iomanip>
@@ -333,7 +333,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("MP2.3 A recording on a map that starts more ants than a room plays (8,000, the four colors added up) is not played by the feeder (one piece on the one thread, seconds for 40,000 ants): it is left out; one at the cap is counted as ever") {
+    TEST_CASE("MP2.3 A recording on a map that starts more ants than a room plays (1,000, the four colors added up) is not played by the feeder (one piece on the one thread, seconds for 40,000 ants): it is left out; one at the cap is counted as ever") {
         TempDir maps;
         const auto keep_map = [&](const char* name, uint32_t per_color) {
             const std::string bytes = tiny_with_ants({per_color, per_color, per_color, per_color});
@@ -341,7 +341,7 @@ int main() {
             out << bytes;
             return !bytes.empty() && static_cast<bool>(out);
         };
-        ASSERT_TRUE(keep_map("AT CAP.LVL", 2000) && keep_map("OVER CAP.LVL", 2001));                // (8,000 and 8,004)
+        ASSERT_TRUE(keep_map("AT CAP.LVL", 250) && keep_map("OVER CAP.LVL", 251));                  // (1,000 and 1,004)
         for (const bool over : {false, true}) {
             MatchSpec spec;
             spec.dir = maps.path.string();
@@ -358,6 +358,164 @@ int main() {
             rig.drain(8);
             if (rig.history.count() != (over ? 0u : 1u) || rig.feeder.left_out() != (over ? 1u : 0u)) std::cout << "[" << (over ? "over the cap" : "at the cap") << ": " << rig.history.count() << " counted, " << rig.feeder.left_out() << " left out] " << std::flush;
             ASSERT_TRUE(rig.history.count() == (over ? 0u : 1u) && rig.feeder.left_out() == (over ? 1u : 0u));
+        }
+    } TEST_END();
+
+    TEST_CASE("MP2.4 A counted match with no details yet whose recording is on a map that starts more ants than a room plays (1,000, the four colors added up) is not played again by the backfill: it gets no details and no marker (the next start tries again, as for a map that is not here), and one line says why") {
+        TempDir maps;
+        { std::ofstream out(maps.path / "OVER CAP.LVL", std::ios::binary); out << tiny_with_ants({251, 251, 251, 251}); }          // (1,004 ants)
+        MatchSpec spec;
+        spec.dir = maps.path.string();
+        spec.file = "OVER CAP.LVL";
+        spec.seed = 41;
+        spec.turns = 700;
+        spec.roster = 0x03;
+        spec.names = {"Ann", "Bob", "", ""};
+        const std::vector<uint8_t> played = record_match(spec);
+        ASSERT_TRUE(!played.empty());
+        Rig rig(maps.path.string());
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(played);
+        ASSERT_FALSE(id.empty());
+        HistoryRecord record = play_of(rig.now, "OVER CAP.LVL", 0, 700, {"Ann", "Bob"});          // (the match was counted by an older version, which had no details: made by hand, so that nothing plays the recording)
+        record.id = id;
+        std::string why;
+        ASSERT_TRUE(rig.history.put(record, why));
+        rig.drain(8);
+        HistoryRecord got;
+        ASSERT_TRUE(rig.history.find(id, got) && got.details.empty());                          // no details, and no marker either: a marker is for a recording that cannot be played at all
+        ASSERT_EQ(rig.feeder.backfilled(), size_t{0});
+        size_t told = 0;
+        for (const std::string& line : rig.history.take_notes()) told += line.find(id + " has no stats yet: the map starts more ants than a room plays online") != std::string::npos ? 1u : 0u;
+        ASSERT_EQ(told, size_t{1});
+        const int asked = rig.idle_asked;
+        rig.drain(8);
+        ASSERT_EQ(rig.idle_asked, asked);                                                       // (not tried again in this run, not told again)
+        HistoryFeeder later(rig.history, rig.replays, maps.path.string());                      // (the next start: the same answer, and still no marker)
+        uint32_t ms = 100000;
+        for (int i = 0; i < 8; ++i) later.step([] { return true; }, ms += 300);
+        ASSERT_TRUE(rig.history.find(id, got) && got.details.empty() && later.backfilled() == 0);
+    } TEST_END();
+
+    TEST_CASE("MP2.5 A recording on a map with more pairs of a plant and a waypoint than a room plays (1,000,000) is not played by the feeder (one piece on the one thread): it is left out; one at the cap is counted as ever") {
+        TempDir maps;
+        const auto keep_map = [&](const char* name, uint32_t plants, uint32_t waypoints) {
+            const std::string bytes = tiny_with_pairs(plants, waypoints);
+            std::ofstream out(maps.path / name, std::ios::binary);
+            out << bytes;
+            return !bytes.empty() && static_cast<bool>(out);
+        };
+        ASSERT_TRUE(keep_map("AT CAP.LVL", 1000, 1000) && keep_map("OVER CAP.LVL", 1001, 1000));          // (1,000,000 and 1,001,000 pairs)
+        for (const bool over : {false, true}) {
+            MatchSpec spec;
+            spec.dir = maps.path.string();
+            spec.file = over ? "OVER CAP.LVL" : "AT CAP.LVL";
+            spec.seed = 41;
+            spec.turns = 700;
+            spec.roster = 0x03;
+            spec.names = {"Ann", "Bob", "", ""};
+            const std::vector<uint8_t> played = record_match(spec);
+            ASSERT_TRUE(!played.empty());
+            Rig rig(maps.path.string());
+            ASSERT_TRUE(rig.open());
+            ASSERT_TRUE(!rig.keep(played).empty());
+            rig.drain(8);
+            ASSERT_TRUE(rig.history.count() == (over ? 0u : 1u) && rig.feeder.left_out() == (over ? 1u : 0u));
+        }
+    } TEST_END();
+
+    TEST_CASE("MP2.6 A counted match with no details yet whose recording is on a map with more pairs of a plant and a waypoint than a room plays (1,000,000) is not played again by the backfill: it gets no details and no marker (the next start tries again, as for a map that is not here), and one line says why") {
+        TempDir maps;
+        { std::ofstream out(maps.path / "OVER CAP.LVL", std::ios::binary); out << tiny_with_pairs(1001, 1000); }          // (1,001,000 pairs)
+        MatchSpec spec;
+        spec.dir = maps.path.string();
+        spec.file = "OVER CAP.LVL";
+        spec.seed = 41;
+        spec.turns = 700;
+        spec.roster = 0x03;
+        spec.names = {"Ann", "Bob", "", ""};
+        const std::vector<uint8_t> played = record_match(spec);
+        ASSERT_TRUE(!played.empty());
+        Rig rig(maps.path.string());
+        ASSERT_TRUE(rig.open());
+        const std::string id = rig.keep(played);
+        ASSERT_FALSE(id.empty());
+        HistoryRecord record = play_of(rig.now, "OVER CAP.LVL", 0, 700, {"Ann", "Bob"});          // (the match was counted by an older version, which had no details: made by hand, so that nothing plays the recording)
+        record.id = id;
+        std::string why;
+        ASSERT_TRUE(rig.history.put(record, why));
+        rig.drain(8);
+        HistoryRecord got;
+        ASSERT_TRUE(rig.history.find(id, got) && got.details.empty());                          // no details, and no marker either: a marker is for a recording that cannot be played at all
+        ASSERT_EQ(rig.feeder.backfilled(), size_t{0});
+        size_t told = 0;
+        for (const std::string& line : rig.history.take_notes()) told += line.find(id + " has no stats yet: the map has more pairs of a plant and a waypoint than a room plays online") != std::string::npos ? 1u : 0u;
+        ASSERT_EQ(told, size_t{1});
+        const int asked = rig.idle_asked;
+        rig.drain(8);
+        ASSERT_EQ(rig.idle_asked, asked);                                                       // (not tried again in this run, not told again)
+        HistoryFeeder later(rig.history, rig.replays, maps.path.string());                      // (the next start: the same answer, and still no marker)
+        uint32_t ms = 100000;
+        for (int i = 0; i < 8; ++i) later.step([] { return true; }, ms += 300);
+        ASSERT_TRUE(rig.history.find(id, got) && got.details.empty() && later.backfilled() == 0);
+    } TEST_END();
+
+    TEST_CASE("MP2.7 A recording on a map with more food objects (250) or more power-ups (1,000) than a room plays is not played by the feeder (one piece on the one thread): it is left out; one at the limit is counted as ever") {
+        TempDir maps;
+        const auto keep_map = [&](const char* name, const std::string& bytes) {
+            std::ofstream out(maps.path / name, std::ios::binary);
+            out << bytes;
+            return !bytes.empty() && static_cast<bool>(out);
+        };
+        ASSERT_TRUE(keep_map("FOOD AT.LVL", tiny_with_food(250)) && keep_map("FOOD OVER.LVL", tiny_with_food(251)) && keep_map("POWER AT.LVL", tiny_with_power_ups(1000, true)) && keep_map("POWER OVER.LVL", tiny_with_power_ups(1001, true)));
+        for (const char* file : {"FOOD AT.LVL", "FOOD OVER.LVL", "POWER AT.LVL", "POWER OVER.LVL"}) {
+            const bool over = std::string(file).find("OVER") != std::string::npos;
+            MatchSpec spec;
+            spec.dir = maps.path.string();
+            spec.file = file;
+            spec.seed = 41;
+            spec.turns = 700;
+            spec.roster = 0x03;
+            spec.names = {"Ann", "Bob", "", ""};
+            const std::vector<uint8_t> played = record_match(spec);
+            ASSERT_TRUE(!played.empty());
+            Rig rig(maps.path.string());
+            ASSERT_TRUE(rig.open());
+            ASSERT_TRUE(!rig.keep(played).empty());
+            rig.drain(8);
+            ASSERT_TRUE(rig.history.count() == (over ? 0u : 1u) && rig.feeder.left_out() == (over ? 1u : 0u));          // (the file: "FOOD OVER", "POWER OVER" are left out)
+        }
+    } TEST_END();
+
+    TEST_CASE("MP2.8 A counted match with no details yet whose recording is on a map with more food objects or more power-ups than a room plays is not played again by the backfill: it gets no details and no marker (the next start tries again), and one line says why") {
+        for (const Term term : {Term::FoodObjects, Term::PowerUps}) {
+            TempDir maps;
+            { std::ofstream out(maps.path / "OVER.LVL", std::ios::binary); out << (term == Term::FoodObjects ? tiny_with_food(251) : tiny_with_power_ups(1001, true)); }
+            MatchSpec spec;
+            spec.dir = maps.path.string();
+            spec.file = "OVER.LVL";
+            spec.seed = 41;
+            spec.turns = 700;
+            spec.roster = 0x03;
+            spec.names = {"Ann", "Bob", "", ""};
+            const std::vector<uint8_t> played = record_match(spec);
+            ASSERT_TRUE(!played.empty());
+            Rig rig(maps.path.string());
+            ASSERT_TRUE(rig.open());
+            const std::string id = rig.keep(played);
+            ASSERT_FALSE(id.empty());
+            HistoryRecord record = play_of(rig.now, "OVER.LVL", 0, 700, {"Ann", "Bob"});          // (counted by an older version, which had no details: made by hand, so that nothing plays the recording)
+            record.id = id;
+            std::string why;
+            ASSERT_TRUE(rig.history.put(record, why));
+            rig.drain(8);
+            HistoryRecord got;
+            ASSERT_TRUE(rig.history.find(id, got) && got.details.empty());                        // no details, and no marker either
+            ASSERT_EQ(rig.feeder.backfilled(), size_t{0});
+            size_t told = 0;
+            const std::string line = id + " has no stats yet: the map " + OnlineLimits::info(term).more + " than a room plays online";
+            for (const std::string& note : rig.history.take_notes()) told += note.find(line) != std::string::npos ? 1u : 0u;
+            ASSERT_EQ(told, size_t{1});
         }
     } TEST_END();
 

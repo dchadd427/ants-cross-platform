@@ -12,11 +12,24 @@
 #include <cstdint>
 #include <deque>
 #include <map>
+#include <set>
 #include <vector>
 
 #include "ants_net/protocol.hpp"
 
 namespace ants::net {
+
+/// What the referee of a dedicated server makes of the seats whose reported state differs from its own (Sequencer::judge_hashes)
+struct HashVerdict {
+    enum class Kind : uint8_t {
+        Nothing,    ///< no report differs, or the seats that may still say which state is right have not, or the turn is let go (nobody who was at the table for it can say)
+        Drop,       ///< the seats of `seats` differ and at least one seat agrees with the referee: those are out of the match, the others go on
+        Fail        ///< every seat that could say differs: nobody vouches for the referee, which may be the one that is wrong; nobody is blamed and the match stops
+    };
+    Kind kind{Kind::Nothing};
+    std::vector<DesyncMsg> seats;      ///< Drop, Fail: one for each seat that differs: the turn, the seat, the referee's hash (host) and the seat's (peer)
+    uint8_t agree{0};                  ///< Drop: the seats (a bit for each) that report the referee's state for that turn
+};
 
 class Sequencer {
 public:
@@ -53,13 +66,26 @@ public:
     void resume(uint32_t next_turn);
     void set_acked(uint8_t player, uint32_t next_to_execute);
 
-    /// A state hash report of `player` after `turn`. Returns the desync found by comparing it with the host's report of the same turn (the host is
-    /// `host_player`, reported through the same call), if any. Reports are kept until the turn is acknowledged by everybody.
+    /// A state hash report of `player` after `turn`. A host with a seat: returns the desync found by comparing it with the host's report of the same turn (the host is
+    /// `host_player`, reported through the same call), if any. A host without a seat (a dedicated server): nothing is returned, the report is kept for judge_hashes() against
+    /// the referee's; only a hashed turn (kHashEveryTurns) is kept, and the first report of a seat for a turn is its report (a repeat adds nothing). Reports are kept until
+    /// the turn is acknowledged by everybody (a report of a turn that everybody has acknowledged is not kept).
     std::vector<DesyncMsg> on_hash(uint8_t player, uint32_t turn, const sim::StateHash& hash);
     void set_host_player(uint8_t player) noexcept { host_player_ = player; }
-    /// A host without a seat (a dedicated server) plays no player but runs the match on its own engine: its report is the reference (`DesyncMsg::player` names the
-    /// client that differs, `host` is the referee's hash). Returns the desyncs found against the client reports of that turn that are in already.
-    std::vector<DesyncMsg> on_referee_hash(uint32_t turn, const sim::StateHash& hash);
+    /// A host without a seat (a dedicated server) plays no player but runs the match on its own engine: its report is the reference (judge_hashes() weighs the seats' against it)
+    void on_referee_hash(uint32_t turn, const sim::StateHash& hash);
+    /// A host without a seat: the referee's word on the seats of `seated` (a bit for each: the people who are at the table now) whose report of a turn differs from the referee's; `held` are the seats
+    /// that are away and may come back (a lost link, in a room that holds seats). The decision depends on the reports and the acknowledgements alone, never on the clock. A turn is judged when the referee's
+    /// report and a seat's are both in before every seat has passed it (the reports of a turn that all have passed are forgotten): a report of either kind that comes later is not kept and judges nothing,
+    /// the next hashed turn does. For the oldest turn that has such a seat and an answer:
+    ///   - a seat of `seated` agrees with the referee: the seats that differ are to be dropped (Drop), the referee has a witness;
+    ///   - no seat agrees and a seat that has not executed the turn yet may still report it: Nothing, the answer is awaited (a seat that is stuck is dropped by the lag policy);
+    ///   - no seat agrees and none can, but a seat is away or came to the table after the turn was sealed (it was not there to run it, and says nothing of it; it can say of the turns that follow):
+    ///     Nothing, the turn is let go and the next hashed turn decides;
+    ///   - no seat agrees and none can: Fail. The referee may be the one that is wrong (a bug that only its machine has), so nobody is blamed.
+    /// A report is answered once (a seat that reports a turn after it was answered gets its own verdict); a seat that is not in `seated` (gone, held, a bot, never reported) is no witness and is not judged.
+    /// Call it until it says Nothing.
+    HashVerdict judge_hashes(uint8_t seated, uint8_t held = 0);
 
     /// True unless an active peer's ack is more than max_lag_turns behind the next turn.
     bool can_seal() const noexcept;
@@ -83,6 +109,7 @@ private:
     Config cfg_;
     std::array<bool, sim::MAX_PLAYERS> active_{};
     std::array<uint32_t, sim::MAX_PLAYERS> acked_{};          // highest executed turn + 1 (0 = nothing executed yet)
+    std::array<uint32_t, sim::MAX_PLAYERS> joined_{};         // the turn at which the slot last became active (0: at the start): it was not at the table for the turns before it
     std::array<uint32_t, sim::MAX_PLAYERS> queued_by_{};
     std::vector<sim::Command> queue_;
     std::array<std::deque<sim::Command>, sim::MAX_PLAYERS> carry_;   // per player: the commands beyond max_commands_per_turn, in the order they came
@@ -91,6 +118,8 @@ private:
     std::map<uint32_t, std::array<sim::StateHash, sim::MAX_PLAYERS>> reports_;
     std::map<uint32_t, std::array<bool, sim::MAX_PLAYERS>> have_report_;
     std::map<uint32_t, sim::StateHash> referee_;               // the seatless host's own reports, by turn
+    uint32_t passed_{0};                                       // the lowest acknowledgement of the seats at the table at the last acknowledgement (it never goes down): the reports of the turns before passed_ - 1 are forgotten, and a report of one is not kept
+    std::set<uint32_t> suspect_;                               // the seatless host's turns on which a report differs from the referee's and judge_hashes() has not answered yet
 };
 
 }  // namespace ants::net

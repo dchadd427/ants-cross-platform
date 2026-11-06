@@ -268,10 +268,18 @@ void run_demo_tests() {
     } TEST_END();
 
     TEST_CASE("S3.10c The Codes That The Control Interface Draws Always Have A Capital (The First Character Is A Letter), Six Characters Of The Alphabet Without The Look-Alikes, So That A Visitor's Block, Which Takes Only A Code With No Capital, Never Takes The Name Of A Room That Is Yet To Be Made; net::public_room_code Is That Rule") {
-        std::mt19937 rng(20261008);
+        uint32_t state = 20261008;                                                    // (a source of bytes that the test controls: a generator of its own, the same bytes in every run)
+        const RandomBytes source = [&state](uint8_t* out, size_t n) {
+            for (size_t i = 0; i < n; ++i) {
+                state = state * 1664525u + 1013904223u;
+                out[i] = static_cast<uint8_t>(state >> 24);
+            }
+            return true;
+        };
         const std::string alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
         for (int i = 0; i < 20000; ++i) {
-            const std::string code = draw_room_code(rng);
+            std::string code;
+            ASSERT_TRUE(draw_room_code(code, source));
             ASSERT_EQ(code.size(), kDrawnRoomCodeChars);
             ASSERT_EQ(kDrawnRoomCodeChars, size_t{6});                                    // (as many as the codes that the game makes: the front page and the menu)
             ASSERT_TRUE(net::valid_room_code(code));
@@ -281,7 +289,11 @@ void run_demo_tests() {
         }
         {   // the draws are not all the same (a generator that is not asked)
             std::set<std::string> seen;
-            for (int i = 0; i < 200; ++i) seen.insert(draw_room_code(rng));
+            for (int i = 0; i < 200; ++i) {
+                std::string code;
+                ASSERT_TRUE(draw_room_code(code, source));
+                seen.insert(code);
+            }
             ASSERT_TRUE(seen.size() > 190);
         }
         // the rule: a valid code of one or more characters with no upper-case letter
@@ -289,6 +301,62 @@ void run_demo_tests() {
         for (const char* closed : {"", "ROOM-1", "k7m2Xq", "Aa", "a b", "a.b", "caf\xC3\xA9", "r\n"}) ASSERT_FALSE(net::public_room_code(closed));
         ASSERT_TRUE(net::public_room_code(std::string(net::kMaxRoomCodeChars, 'r')));
         ASSERT_FALSE(net::public_room_code(std::string(net::kMaxRoomCodeChars + 1, 'r')));
+    } TEST_END();
+
+    TEST_CASE("S3.10d The Codes Of The Control Interface Come From The Bytes Of The Operating System's Generator (A Source That A Test Controls Shows It): A Character Is Drawn From One Byte With No Lean (The Bytes Where The Alphabet Does Not Divide 256 Are Thrown Away), A Source That Fails Or Gives Nothing But Thrown-Away Bytes Draws No Code, A Taken Code Is Drawn Again, And A Room Is Not Made With A Code That Could Be Guessed When Nothing Can Be Drawn; The Default Source Gives Different Codes") {
+        const auto chunk = [](std::vector<uint8_t> bytes) {                          // a block of 32 bytes: what draw_room_code reads at a time
+            bytes.resize(32, uint8_t{0});
+            return bytes;
+        };
+        const auto source_of = [](std::vector<std::vector<uint8_t>> chunks, std::shared_ptr<size_t> calls) {       // gives the blocks in turn, then fails
+            auto next = std::make_shared<size_t>(0);
+            return RandomBytes([chunks, next, calls](uint8_t* out, size_t n) {
+                ++*calls;
+                if (*next >= chunks.size() || chunks[*next].size() != n) return false;
+                std::copy(chunks[*next].begin(), chunks[*next].end(), out);
+                ++*next;
+                return true;
+            });
+        };
+        const auto calls = std::make_shared<size_t>(0);
+        std::string code;
+        ASSERT_TRUE(draw_room_code(code, source_of({chunk({})}, calls)) && code == "A22222");                  // the first byte picks a letter, the others the alphabet
+        ASSERT_TRUE(draw_room_code(code, source_of({chunk({22, 30, 30, 30, 30, 30})}, calls)) && code == "ZZZZZZ");       // the last of each
+        ASSERT_TRUE(draw_room_code(code, source_of({chunk({252, 247, 247, 247, 247, 247})}, calls)) && code == "ZZZZZZ");       // the last byte that is not thrown away (252 of 23 letters, 247 of 31 characters)
+        ASSERT_TRUE(draw_room_code(code, source_of({chunk({253, 254, 255, 5, 248, 249, 250, 251, 252, 253, 254, 255, 7, 248, 249, 250, 251, 252, 253, 254, 255, 7, 255, 7, 255, 7, 255, 7})}, calls)) && code == "F99999");      // the bytes above are thrown away, each position takes the next one
+        ASSERT_TRUE(draw_room_code(code, source_of({std::vector<uint8_t>(32, uint8_t{0xFF}), chunk({3})}, calls)) && code == "D22222");       // a block of thrown-away bytes asks for another
+        ASSERT_FALSE(draw_room_code(code, source_of({}, calls)));                                                // the source fails
+        ASSERT_TRUE(code.empty());
+        ASSERT_FALSE(draw_room_code(code, RandomBytes()));                                                       // there is none
+        ASSERT_TRUE(code.empty());
+        const auto only_high = std::make_shared<size_t>(0);
+        ASSERT_FALSE(draw_room_code(code, RandomBytes([only_high](uint8_t* out, size_t n) {                      // nothing but bytes that are thrown away: it does not read for ever
+            ++*only_high;
+            for (size_t i = 0; i < n; ++i) out[i] = 0xFF;
+            return true;
+        })));
+        ASSERT_TRUE(code.empty() && *only_high >= 2 && *only_high <= 100);
+        {   // the manager draws from its source, draws again when a code is taken, and refuses the room when nothing can be drawn
+            RoomManager mgr{MapStore(maps_dir())};
+            const auto drawn = std::make_shared<size_t>(0);
+            mgr.set_code_source(source_of({chunk({}), chunk({}), chunk({1, 1, 1, 1, 1, 1})}, drawn));
+            const CreateResult first = mgr.create_room(spec_of(""), 0);
+            ASSERT_TRUE(first.ok && first.code == "A22222" && *drawn == 1);
+            const CreateResult second = mgr.create_room(spec_of(""), 0);                                         // the same bytes: the code is taken, the next block is the code
+            ASSERT_TRUE(second.ok && second.code == "B33333" && *drawn == 3);
+            const CreateResult third = mgr.create_room(spec_of(""), 0);                                          // the source has nothing more
+            ASSERT_TRUE(!third.ok && third.http_status == 503 && third.error.find("could not draw a room code") != std::string::npos);
+            ASSERT_EQ(mgr.room_count(), size_t{2});
+            ASSERT_TRUE(mgr.create_room(spec_of("NAMED-1"), 0).ok);                                              // a code that the caller names needs no draw
+        }
+        {   // the default is the operating system's generator: two managers, two different codes
+            RoomManager a{MapStore(maps_dir())};
+            RoomManager b{MapStore(maps_dir())};
+            const CreateResult x = a.create_room(spec_of(""), 0);
+            const CreateResult y = b.create_room(spec_of(""), 0);
+            ASSERT_TRUE(x.ok && y.ok && x.code.size() == kDrawnRoomCodeChars && y.code.size() == kDrawnRoomCodeChars && net::valid_room_code(x.code) && net::valid_room_code(y.code));
+            ASSERT_NE(x.code, y.code);
+        }
     } TEST_END();
 
     TEST_CASE("S3.23 A Create Block Can Choose Its Map: A File Name That The Server Lists Makes The Room On That Map, In Any Case; Every Other Name, And None, Keeps The Default Map; Without A List Nothing Changes") {

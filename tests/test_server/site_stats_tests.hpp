@@ -1,6 +1,6 @@
 // The tests of the site statistics (ants_server/site_stats.hpp): the counting rules, the window of 24 hours with a clock that the test moves, the cap on single-player reports, the file
-// (kept, atomic, put aside when it is no usable file), the JSON of GET /stats, a real room manager (a match that ran and ended counts once, a room that never began counts nothing) and the
-// door over real sockets. Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, Client); test_server.cpp calls run_site_stats_tests().
+// (kept, atomic, put aside when it is no usable file), the JSON of GET /stats, a real room manager (a match that ran and ended counts once, a room that never began counts nothing), the
+// door over real sockets, and the result file of an ended room that shares the results folder with the statistics file (S3.243: no room code gives the statistics file's name; S3.246: it is written whole, like the statistics file). Included by test_server_files.cpp, which holds (through server_fixtures.hpp) the harness (TEST_CASE, ASSERT_*, World, Client); test_server.cpp calls run_site_stats_tests().
 #pragma once
 
 namespace {
@@ -827,6 +827,167 @@ void run_site_stats_tests() {
         const mode_t mode_077 = st.st_mode & 0777;
         ::umask(old_mask);
         ASSERT_TRUE(mode_022 == 0644 && mode_077 == 0600);
+    } TEST_END();
+#endif
+
+    TEST_CASE("S3.243 The result file of an ended room is <code>.json in the results folder, and no code gives the name of the statistics file: the room named site-stats (in any letter case) writes <code>.room.json, the statistics file stays as it was and the log gets one line; a file of an earlier room is replaced whole; a code that is no room code writes nothing") {
+        const fs::path dir = temp_dir_for("result-file");
+        stats_write(dir / SiteStats::kFileName, stats_file_text());
+        const std::string statistics = stats_slurp(dir / SiteStats::kFileName);
+        const auto result_of = [](const RoomStatus& room) { return ctl::to_json(status_to_json(room)) + "\n"; };
+        const auto folded = [](std::string text) {
+            for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return text;
+        };
+        // an ordinary room: its file holds the status as JSON, replaces the file of an earlier room with the same code whole, and the log gets nothing
+        stats_write(dir / "ROOM-1.json", std::string(5000, 'x'));
+        const RoomStatus plain = ended_room("ROOM-1", RoomState::Finished, 700);
+        ASSERT_EQ(result_file_name("ROOM-1"), std::string("ROOM-1.json"));
+        ASSERT_EQ(write_result_file(dir, plain), std::string());
+        ASSERT_EQ(stats_slurp(dir / "ROOM-1.json"), result_of(plain));
+        ASSERT_EQ(stats_slurp(dir / SiteStats::kFileName), statistics);
+        // a code that starts like the statistics file's name, or ends like its rename, is an ordinary one
+        for (const char* code : {"site-stat", "site-statss", "site", "stats", "site_stats", "room", "site-stats-room"}) ASSERT_EQ(result_file_name(code), std::string(code) + ".json");
+        // the room named like the statistics file, in every letter case: a file of its own, the statistics as they were, one line that says where the result is
+        for (const char* code : {"site-stats", "Site-Stats", "SITE-STATS", "sItE-sTaTs"}) {
+            const RoomStatus room = ended_room(code, RoomState::Failed, 0);
+            ASSERT_EQ(result_file_name(code), std::string(code) + ".room.json");
+            const std::string line = write_result_file(dir, room);
+            ASSERT_MSG(line.find(std::string(code) + ".room.json") != std::string::npos && line.find("statistics file") != std::string::npos, line);
+            ASSERT_EQ(stats_slurp(dir / SiteStats::kFileName), statistics);
+            ASSERT_EQ(stats_slurp(dir / (std::string(code) + ".room.json")), result_of(room));
+        }
+        // the law: no room has the name of the statistics file (a file system may fold the case), and two codes never share a name
+        std::set<std::string> names;
+        const std::vector<std::string> codes = {"site-stats", "Site-stats", "site-stats-room", "site-stats_room", "site-stats.room", "a", "A", "0", "_", "-", "ROOM-1", "room-1", "x-y_z"};
+        for (const std::string& code : codes) {
+            const std::string name = result_file_name(code);
+            if (!net::valid_room_code(code)) {                                                   // ("site-stats.room" has a dot: no room has such a code)
+                ASSERT_EQ(name, std::string());
+                continue;
+            }
+            ASSERT_TRUE(!name.empty() && folded(name) != SiteStats::kFileName);
+            ASSERT_TRUE(names.insert(name).second);
+        }
+        // a code that is no room code (empty, a path, a space, a dot, longer than a code can be) writes nothing, in the folder or above it, and the log says so
+        const auto count_files = [&]() { size_t n = 0; for (const auto& entry : fs::directory_iterator(dir)) { (void)entry; ++n; } return n; };
+        const size_t before = count_files();
+        for (const char* code : {"", "../evil", "a/b", "a\\b", "a b", "a.b", ".."}) {
+            const std::string line = write_result_file(dir, ended_room(code, RoomState::Finished, 700));
+            ASSERT_MSG(result_file_name(code).empty() && line.find("not a room code") != std::string::npos, std::string("code '") + code + "': " + line);
+        }
+        ASSERT_TRUE(write_result_file(dir, ended_room(std::string(net::kMaxRoomCodeChars + 1, 'a'), RoomState::Finished, 700)).find("not a room code") != std::string::npos);
+        ASSERT_EQ(count_files(), before);
+        ASSERT_FALSE(fs::exists(dir.parent_path() / "evil.json"));
+        ASSERT_EQ(stats_slurp(dir / SiteStats::kFileName), statistics);
+        // no results folder: one line that says the result was not written (and why), nothing is made
+        const std::string nowhere = write_result_file(dir / "no-such-folder", ended_room("ROOM-3", RoomState::Finished, 700));
+        ASSERT_MSG(nowhere.find("ROOM-3") != std::string::npos && nowhere.find("not written") != std::string::npos && nowhere.find("cannot write") != std::string::npos, nowhere);
+        ASSERT_FALSE(fs::exists(dir / "no-such-folder"));
+    } TEST_END();
+
+#ifndef _WIN32
+    TEST_CASE("S3.246 The result file is written whole: the text goes to <name>.tmp, is fsync'ed (once) and only then renamed over the file, so that a file of an earlier room is the whole old text or the whole new one; a failure (a sync, a folder where the file or the temporary file goes) is one line in the log and nothing is lost or left behind, and the room named like the statistics file gets that line and not the line of its other name; a link named like the file is replaced, not followed, and a link, another name of a file or a pipe in the place of the temporary file is taken away, not written through") {
+        const fs::path dir = fs::canonical(temp_dir_for("result-whole"));
+        stats_write(dir / SiteStats::kFileName, stats_file_text());
+        const std::string statistics = stats_slurp(dir / SiteStats::kFileName);
+        const auto result_of = [](const RoomStatus& room) { return ctl::to_json(status_to_json(room)) + "\n"; };
+        const auto result_for = [&](const std::string& code) { return write_result_file(dir, ended_room(code, RoomState::Finished, 700)); };
+#ifdef ANTS_FSYNC_SPY
+        {   // the order: while the temporary file is synced it holds the whole new text and the file still has the old one
+            const RoomStatus first = ended_room("ROOM-1", RoomState::Failed, 0);
+            const RoomStatus second = ended_room("ROOM-1", RoomState::Finished, 700);
+            ASSERT_EQ(write_result_file(dir, first), std::string());
+            FsyncSpy::calls = 0;
+            FsyncSpy::fail = false;
+            FsyncSpy::interrupt_first = false;
+            FsyncSpy::watch = (dir / "ROOM-1.json.tmp").string();
+            FsyncSpy::beside = (dir / "ROOM-1.json").string();
+            FsyncSpy::armed = true;
+            const std::string line = write_result_file(dir, second);
+            FsyncSpy::armed = false;
+            ASSERT_EQ(line, std::string());
+            ASSERT_EQ(FsyncSpy::calls, 1);
+            ASSERT_TRUE(FsyncSpy::watched_text == result_of(second) && FsyncSpy::beside_text == result_of(first));
+            ASSERT_TRUE(stats_slurp(dir / "ROOM-1.json") == result_of(second) && !fs::exists(dir / "ROOM-1.json.tmp"));
+            // a sync that fails: the old file is whole, no temporary file is left, one line says where
+            FsyncSpy::calls = 0;
+            FsyncSpy::fail = true;
+            FsyncSpy::armed = true;
+            const std::string failed = write_result_file(dir, first);
+            FsyncSpy::armed = false;
+            FsyncSpy::fail = false;
+            ASSERT_EQ(FsyncSpy::calls, 1);
+            ASSERT_MSG(failed.find("ROOM-1") != std::string::npos && failed.find("not written") != std::string::npos && failed.find("cannot write") != std::string::npos && failed.find(".tmp") != std::string::npos, failed);
+            ASSERT_TRUE(stats_slurp(dir / "ROOM-1.json") == result_of(second) && !fs::exists(dir / "ROOM-1.json.tmp"));
+            // a sync that a signal interrupts is not a failure: it is asked again
+            FsyncSpy::calls = 0;
+            FsyncSpy::interrupt_first = true;
+            FsyncSpy::armed = true;
+            const std::string again = write_result_file(dir, first);
+            FsyncSpy::armed = false;
+            FsyncSpy::interrupt_first = false;
+            ASSERT_TRUE(again.empty() && FsyncSpy::calls == 2 && stats_slurp(dir / "ROOM-1.json") == result_of(first) && !fs::exists(dir / "ROOM-1.json.tmp"));
+        }
+#endif
+        // a temporary file that a crash left is written over, never added to
+        stats_write(dir / "ROOM-2.json.tmp", std::string(500, 'x'));
+        ASSERT_EQ(result_for("ROOM-2"), std::string());
+        ASSERT_TRUE(stats_slurp(dir / "ROOM-2.json") == result_of(ended_room("ROOM-2", RoomState::Finished, 700)) && !fs::exists(dir / "ROOM-2.json.tmp"));
+        // a link named like the file is replaced by the file, and what it pointed to (outside the folder) is not touched
+        const fs::path outside = fs::canonical(temp_dir_for("result-whole-outside"));
+        stats_write(outside / "target.txt", "outside");
+        fs::create_symlink(outside / "target.txt", dir / "LINK-1.json");
+        ASSERT_EQ(result_for("LINK-1"), std::string());
+        ASSERT_EQ(stats_slurp(outside / "target.txt"), std::string("outside"));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "LINK-1.json")) && stats_slurp(dir / "LINK-1.json") == result_of(ended_room("LINK-1", RoomState::Finished, 700)));
+        // what stands in the temporary file's place and is no folder is taken away, never written through: a link (what it points to stays as it was, and a link to a file that is not there makes none), another name of a file that has two (that file stays as it was) and a pipe (nothing waits for a reader)
+        const auto result_text = [&](const std::string& code) { return result_of(ended_room(code, RoomState::Finished, 700)); };
+        stats_write(outside / "victim.txt", "victim");
+        fs::create_symlink(outside / "victim.txt", dir / "SYM-1.json.tmp");
+        ASSERT_EQ(result_for("SYM-1"), std::string());
+        ASSERT_EQ(stats_slurp(outside / "victim.txt"), std::string("victim"));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "SYM-1.json")) && stats_slurp(dir / "SYM-1.json") == result_text("SYM-1") && !fs::exists(fs::symlink_status(dir / "SYM-1.json.tmp")));
+        fs::create_symlink(outside / "not-there.txt", dir / "SYM-2.json.tmp");
+        ASSERT_EQ(result_for("SYM-2"), std::string());
+        ASSERT_FALSE(fs::exists(fs::symlink_status(outside / "not-there.txt")));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "SYM-2.json")) && stats_slurp(dir / "SYM-2.json") == result_text("SYM-2"));
+        stats_write(outside / "shared.txt", "shared");
+        std::error_code linked;
+        fs::create_hard_link(outside / "shared.txt", dir / "HARD-1.json.tmp", linked);
+        ASSERT_MSG(!linked, linked.message());
+        ASSERT_EQ(result_for("HARD-1"), std::string());
+        ASSERT_EQ(stats_slurp(outside / "shared.txt"), std::string("shared"));
+        ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "HARD-1.json")) && stats_slurp(dir / "HARD-1.json") == result_text("HARD-1") && !fs::exists(fs::symlink_status(dir / "HARD-1.json.tmp")));
+        {   // the test holds the pipe open for reading and writing, so that a write through it cannot wait for a reader: it would fail on the sync and say so, and not hang the run
+            const std::string pipe = (dir / "PIPE-1.json.tmp").string();
+            ASSERT_EQ(::mkfifo(pipe.c_str(), 0600), 0);
+            struct Held {
+                int fd;
+                ~Held() {
+                    if (fd >= 0) ::close(fd);
+                }
+            } held{::open(pipe.c_str(), O_RDWR | O_NONBLOCK)};
+            ASSERT_TRUE(held.fd >= 0);
+            ASSERT_EQ(result_for("PIPE-1"), std::string());
+            ASSERT_TRUE(fs::is_regular_file(fs::symlink_status(dir / "PIPE-1.json")) && stats_slurp(dir / "PIPE-1.json") == result_text("PIPE-1") && !fs::exists(fs::symlink_status(dir / "PIPE-1.json.tmp")));
+        }
+        // a folder where the file goes: one line, the folder is as it was, no temporary file
+        fs::create_directories(dir / "DIR-1.json" / "inside");
+        const std::string no_name = result_for("DIR-1");
+        ASSERT_MSG(no_name.find("DIR-1") != std::string::npos && no_name.find("not written") != std::string::npos && no_name.find("cannot rename") != std::string::npos, no_name);
+        ASSERT_TRUE(fs::is_directory(dir / "DIR-1.json" / "inside") && !fs::exists(dir / "DIR-1.json.tmp"));
+        // a folder where the temporary file goes: one line, the old file whole, and the folder is not ours to remove
+        stats_write(dir / "TMP-1.json", "old");
+        fs::create_directories(dir / "TMP-1.json.tmp");
+        const std::string no_tmp = result_for("TMP-1");
+        ASSERT_MSG(no_tmp.find("TMP-1") != std::string::npos && no_tmp.find("not written") != std::string::npos && no_tmp.find("cannot write") != std::string::npos, no_tmp);
+        ASSERT_TRUE(stats_slurp(dir / "TMP-1.json") == "old" && fs::is_directory(dir / "TMP-1.json.tmp"));
+        // the room named like the statistics file: when its write fails the log has the failure and not "its result is in ..."; the statistics are as they were
+        fs::create_directories(dir / "site-stats.room.json" / "inside");
+        const std::string no_stats_room = result_for("site-stats");
+        ASSERT_MSG(no_stats_room.find("site-stats") != std::string::npos && no_stats_room.find("not written") != std::string::npos && no_stats_room.find("its result is in") == std::string::npos, no_stats_room);
+        ASSERT_TRUE(stats_slurp(dir / SiteStats::kFileName) == statistics && !fs::exists(dir / "site-stats.room.json.tmp"));
     } TEST_END();
 #endif
 

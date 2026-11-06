@@ -679,19 +679,16 @@ class Documents(unittest.TestCase):
         for name in ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)"):   # (the table of docs/TESTING.md has a row for each)
             self.assertIn("| " + name + " |", self.testing)
 
-    def test_the_secrets_and_the_switch_over_are_explained(self):
-        for needle in ("PORTAINER_WEBHOOK_URL", "PORTAINER_STAGING_WEBHOOK_URL", "deploy secret not set: skipped", "delete the repository webhook", "refs/heads/staging", "docker-compose.staging.yml"):
+    def test_the_deploy_and_its_skip_are_explained(self):
+        for needle in ("deploy secret not set: skipped", "the operator's own notes", "docker-compose.staging.yml"):    # (the secrets and variables are named in the workflow file, not in the documents)
             self.assertIn(needle, self.workflow)
-        self.assertIn("PORTAINER_WEBHOOK_URL", self.testing)
+        self.assertIn("deploy hook", self.testing)
 
-    def test_the_wait_and_every_variable_of_the_workflow_are_explained(self):
+    def test_the_wait_is_explained_and_the_variables_of_the_workflow_are_known(self):
         variables = set(re.findall(r"\bvars\.([A-Z_]+)\b", TEXT))
         self.assertEqual(variables, {"DEPLOY_BUSY_URL", "STAGING_BUSY_URL", "DEPLOY_MAX_WAIT_MINUTES"})
-        for variable in variables:
-            self.assertIn(variable, self.workflow)
-        for needle in ("/busy", "tools/deploy_wait.py", "DEPLOYING ANYWAY", "deploy-<branch>", "cancel-in-progress", "five minutes", "180"):
+        for needle in ("repository variable", "/busy", "tools/deploy_wait.py", "DEPLOYING ANYWAY", "deploy-<branch>", "cancel-in-progress", "five minutes", "180"):
             self.assertIn(needle, self.workflow)
-        self.assertIn("DEPLOY_MAX_WAIT_MINUTES", self.testing)
         self.assertIn("/busy", self.testing)
 
     def test_the_staging_ports_of_the_document_are_those_of_the_compose_file(self):
