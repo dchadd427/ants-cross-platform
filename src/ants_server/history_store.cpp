@@ -824,12 +824,16 @@ bool HistoryFeeder::load_map_of(const replay::Header& head, assets::LevelData& l
     return replay::load_map(head, map_dirs_, level, why);
 }
 
-// ... and a map that starts more ants than a room plays online is not played here either: a recording is played in one piece on the one thread, and setting up the ants of such a map would hold it for seconds
-// (no room makes such a recording; one from elsewhere may be one)
+// ... and a map that starts more ants, or has more pairs of a plant and a waypoint, than a room plays online is not played here either: a recording is played in one piece on the one thread, and setting
+// such a map up would hold it for seconds (no room makes such a recording; one from elsewhere may be one)
 bool HistoryFeeder::load_level(const replay::Header& head, assets::LevelData& level, std::string& why) const {
     if (!load_map_of(head, level, why)) return false;
     if (!OnlineLimits::allows_ants(OnlineLimits::start_ants(level))) {
         why = "the map starts more ants than a room plays online";
+        return false;
+    }
+    if (!OnlineLimits::allows_pairs(OnlineLimits::plant_waypoint_pairs(level))) {
+        why = "the map has more pairs of a plant and a waypoint than a room plays online";
         return false;
     }
     return true;

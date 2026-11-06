@@ -87,6 +87,26 @@ ApprovedMap ants_map(const fs::path& dir, const std::string& name, const std::ar
     return a;
 }
 
+// A map of the players for the server's store with `plants` dropper plants on one cell and `waypoints` waypoints on another (TINY otherwise, tiny_with_pairs): the file is written into `dir` under `name`
+ApprovedMap pairs_map(const fs::path& dir, const std::string& name, uint32_t plants, uint32_t waypoints, const char* kind = "extended", bool as_file = false) {
+    ApprovedMap a;
+    const std::string bytes = tiny_with_pairs(plants, waypoints);
+    if (bytes.empty()) return a;
+    a.name = name;
+    a.path = (dir / (name + ".bin")).string();
+    { std::ofstream out(a.path, std::ios::binary); out << bytes; }
+    if (as_file) { std::ofstream out(dir / name, std::ios::binary); out << bytes; }          // (the map's own name too: a machine of the newest version reads it there)
+    a.size = bytes.size();
+    a.width = 31;
+    a.height = 31;
+    a.minutes = 10;
+    a.players = 4;
+    a.maker = "Mia";
+    a.kind = kind;
+    net::hash_file(a.path, a.hash);
+    return a;
+}
+
 // The answer a Hello got at the door after 300 ms: the reason of its Reject, 0 when it was seated
 net::RejectReason door_answer(World& w, Client& c) {
     w.run(300);
@@ -705,7 +725,7 @@ void run_online_limit_tests() {
     TEST_CASE("S3.223 The cap of the starting ants (OnlineLimits::kMaxStartAnts = 1,000, all four colors together): 1,000 is in and 1,001 is out whichever color has the last ant; the weight of a match is the most of its cells' places and its ants' (one for every started 400 ants, rounded up)") {
         ASSERT_TRUE(OnlineLimits::kMaxStartAnts == 1000u && OnlineLimits::kAntsPerPlace == 400u);
         ASSERT_TRUE(OnlineLimits::allows_ants(0) && OnlineLimits::allows_ants(999) && OnlineLimits::allows_ants(1000) && !OnlineLimits::allows_ants(1001) && !OnlineLimits::allows_ants(8000) && !OnlineLimits::allows_ants(40000));
-        ASSERT_TRUE(OnlineLimits::allows(65536, 1000) && !OnlineLimits::allows(65536, 1001) && !OnlineLimits::allows(65537, 0) && !OnlineLimits::allows(65537, 1000) && OnlineLimits::allows(1, 0));          // (both limits hold)
+        ASSERT_TRUE(OnlineLimits::allows(65536, 1000, 0) && !OnlineLimits::allows(65536, 1001, 0) && !OnlineLimits::allows(65537, 0, 0) && !OnlineLimits::allows(65537, 1000, 0) && OnlineLimits::allows(1, 0, 0));          // (all three limits hold)
         const auto counted = [](const std::array<uint32_t, 4>& per_color) -> int64_t {
             const std::string bytes = tiny_with_ants(per_color);
             ants::assets::LevelData level;
@@ -825,6 +845,155 @@ void run_online_limit_tests() {
             Client& fits = v.connect_creating("Fits", "pub00602", block_of("Ants 1000.lvl", 2));
             ASSERT_EQ(door_answer(v, fits), static_cast<net::RejectReason>(0));
             ASSERT_EQ(v.status("pub00602").map, std::string("Ants 1000.lvl"));
+        }
+        fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.259 A Lobby Leader Who Chooses A Map Over The Cap Of Pairs Of A Plant And A Waypoint (OnlineLimits::kMaxPlantWaypointPairs = 1,000,000) Is Told So In One Sentence And The Room Keeps Its Map; 1,000,000 Is Taken, Any Letter Case, A Test Map Too; The List Marks It; The Control Interface Is A 422; A Visitor's Block Does Not Make A Room On It") {
+        ASSERT_TRUE(OnlineLimits::kMaxPlantWaypointPairs == 1000000u);
+        ASSERT_TRUE(OnlineLimits::allows_pairs(0) && OnlineLimits::allows_pairs(999999) && OnlineLimits::allows_pairs(1000000) && !OnlineLimits::allows_pairs(1000001) && !OnlineLimits::allows_pairs(uint64_t{65500} * uint64_t{65535}));
+        const fs::path dir = fresh_dir("s259");
+        World w(limits_with(48));
+        std::vector<ApprovedMap> approved = {pairs_map(dir, "Pairs 1000000.lvl", 1000, 1000), pairs_map(dir, "Pairs 1001000.lvl", 1001, 1000), pairs_map(dir, "Pairs Huge.lvl", 65500, 65535)};
+        ASSERT_TRUE(!approved[0].name.empty() && !approved[1].name.empty() && !approved[2].name.empty());
+        w.mgr.mutable_store().set_approved(approved);
+        const MapStore& store = w.mgr.store();
+        ASSERT_TRUE(store.pairs_of("Pairs 1000000.lvl") == 1000000u && store.pairs_of("Pairs 1001000.lvl") == 1001000u && store.pairs_of("Pairs Huge.lvl") == uint64_t{65500} * uint64_t{65535} &&
+                    store.pairs_of("NOT-HERE.LVL") == 0u);
+        Client& pia = w.connect_page("Pia", "prs00001", lobby_block_of());
+        w.run(300);
+        ASSERT_TRUE(pia.lobby->is_leader());
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Pairs 1001000.lvl")));
+        w.run(300);
+        ASSERT_EQ(w.status("prs00001").map, std::string("TINY.LVL"));                                // (the map stays)
+        ASSERT_EQ(said(pia.room_chat), (std::vector<std::string>{std::string("255||") + net::kNoticeMapTooManyPairs}));
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("pairs huge.LVL", {K::Open, K::Easy, K::Nobody, K::Nobody})));      // (any letter case; the rest of the plan is taken)
+        w.run(300);
+        ASSERT_EQ(w.status("prs00001").map, std::string("TINY.LVL"));
+        ASSERT_TRUE(pia.lobby->room().plan[1] == K::Easy);
+        ASSERT_EQ(said(pia.room_chat).size(), size_t{2});
+        ASSERT_TRUE(pia.lobby->request_plan(plan_for("Pairs 1000000.lvl")));
+        w.run(300);
+        ASSERT_EQ(w.status("prs00001").map, std::string("Pairs 1000000.lvl"));                       // (exactly the cap is in)
+        ASSERT_EQ(said(pia.room_chat).size(), size_t{2});                                            // (and no word about it)
+        ASSERT_TRUE(std::string(net::kNoticeMapTooManyPairs).find("1,000,000") != std::string::npos && std::string(net::kNoticeMapTooManyPairs).size() <= net::kMaxChatChars);
+        const LobbyServices services = w.mgr.lobby_services();
+        ASSERT_TRUE(services.choose_map("Pairs 1001000.lvl").empty() && services.choose_map("PAIRS 1001000.LVL").empty() && services.choose_map("Pairs Huge.lvl").empty() && !services.choose_map("Pairs 1000000.lvl").empty());
+        ASSERT_EQ(services.map_refusal("Pairs 1001000.lvl"), std::string(net::kNoticeMapTooManyPairs));
+        ASSERT_EQ(services.map_refusal("pairs huge.LVL"), std::string(net::kNoticeMapTooManyPairs));
+        ASSERT_TRUE(services.map_refusal("Pairs 1000000.lvl").empty() && services.map_refusal("TINY.LVL").empty() && services.map_refusal("NOT-HERE.LVL").empty());
+        ASSERT_TRUE(store.too_many_pairs_online("Pairs 1001000.lvl") && store.too_many_pairs_online("PAIRS HUGE.LVL") && !store.too_many_pairs_online("Pairs 1000000.lvl") && !store.too_many_pairs_online("TINY.LVL") &&
+                    !store.too_big_online("Pairs 1001000.lvl") && !store.too_many_ants_online("Pairs 1001000.lvl"));
+        {   // the room's own load of the file (what the START does when the plan has another map): a map over the cap is not loaded, 1,000,000 is
+            MapEntry entry;
+            ants::assets::LevelData level;
+            ASSERT_FALSE(services.load_map("Pairs 1001000.lvl", entry, level));
+            ASSERT_FALSE(services.load_map("Pairs Huge.lvl", entry, level));
+            ASSERT_TRUE(services.load_map("Pairs 1000000.lvl", entry, level) && OnlineLimits::plant_waypoint_pairs(level) == 1000000u);
+        }
+        {   // the list: "online": false and the reason "pairs" (the size's refusal names none, the ants reason wins when a map is over both); the new list only, a map at the cap has neither key
+            ctl::JsonValue v;
+            ASSERT_TRUE(ctl::parse_json(store.list_json(nullptr, true), v, nullptr, ctl::JsonLimits()));
+            const auto entry_of = [&](const char* file) -> const ctl::JsonValue* {
+                for (size_t i = 0; i < v.get("maps").size(); ++i) {
+                    if (v.get("maps").at(i).get("file").str() == file) return &v.get("maps").at(i);
+                }
+                return nullptr;
+            };
+            for (const char* over : {"Pairs 1001000.lvl", "Pairs Huge.lvl"}) {
+                ASSERT_TRUE(entry_of(over) != nullptr && entry_of(over)->get("online").as_bool_or(true) == false && entry_of(over)->get("online_why").str() == "pairs");
+            }
+            ASSERT_TRUE(entry_of("Pairs 1000000.lvl") != nullptr && entry_of("Pairs 1000000.lvl")->get("online").is_null() && entry_of("Pairs 1000000.lvl")->get("online_why").is_null());
+            ASSERT_TRUE(entry_of("TINY.LVL") != nullptr && entry_of("TINY.LVL")->get("online").is_null());
+            ASSERT_TRUE(store.list_json(nullptr, false).find("online") == std::string::npos);        // (the old list has no new keys)
+        }
+        {   // a page whose link names a test map: a draft that a room plays is the room's map, one with more pairs than the cap is not (the room keeps the server's own map)
+            ApprovedMap draft_over = pairs_map(dir, "Over Draft ~test-0badf00d.lvl", 1001, 1000);
+            ApprovedMap draft_fits = pairs_map(dir, "Fits Draft ~test-0badf00e.lvl", 1000, 1000);
+            draft_over.pairs = 1001000;                                                          // (the test store counts them from the canonical file it keeps: TestMapStore::submit)
+            draft_fits.pairs = 1000000;
+            w.mgr.mutable_store().set_test_maps({draft_over, draft_fits});
+            ASSERT_EQ(w.mgr.store().online_refusal("over draft ~TEST-0badf00d.lvl"), std::string(net::kNoticeMapTooManyPairs));
+            ASSERT_TRUE(services.choose_map("Over Draft ~test-0badf00d.lvl").empty() && services.choose_map("OVER DRAFT ~TEST-0BADF00D.LVL").empty());        // (the lobby's plan: a test map over the cap is not chosen, in any letter case)
+            ASSERT_TRUE(services.choose_map("Fits Draft ~test-0badf00e.lvl") == "Fits Draft ~test-0badf00e.lvl" && services.choose_map("fits draft ~TEST-0badf00e.lvl") == "Fits Draft ~test-0badf00e.lvl");
+            w.connect_page("Ann", "prs00002", lobby_block_of("Over Draft ~test-0badf00d.lvl"));
+            w.connect_page("Cat", "prs00003", lobby_block_of("Fits Draft ~test-0badf00e.lvl"));
+            w.run(300);
+            ASSERT_EQ(w.status("prs00002").map, std::string("TINY.LVL"));
+            ASSERT_EQ(w.status("prs00003").map, std::string("Fits Draft ~test-0badf00e.lvl"));
+        }
+        // the control interface
+        const size_t rooms = w.mgr.room_count();
+        const CreateResult refused = w.mgr.create_room(spec_of("ctl-pairs", 2, "Pairs 1001000.lvl"), w.now);
+        ASSERT_TRUE(!refused.ok && refused.http_status == 422 && refused.error.find("too many pairs") != std::string::npos && refused.error.find(net::kNoticeMapTooManyPairs) != std::string::npos);
+        ASSERT_FALSE(w.mgr.create_room(spec_of("ctl-huge", 2, "Pairs Huge.lvl"), w.now).ok);
+        ASSERT_EQ(w.mgr.room_count(), rooms);                                                         // (no room was made)
+        ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-edge", 2, "Pairs 1000000.lvl"), w.now).ok);
+        {   // a visitor's block that names a map the operator offers (--demo-maps) with 1,001,000 pairs: no room is made; the one at 1,000,000 is
+            ServerLimits offered = limits_with(48);
+            offered.demo_maps = {"TINY.LVL", "Pairs 1001000.lvl", "Pairs 1000000.lvl"};
+            World v(offered, dir.string());
+            v.mgr.mutable_store().set_approved(approved);
+            Client& over = v.connect_creating("Over", "pub00701", block_of("Pairs 1001000.lvl", 2));
+            ASSERT_TRUE(door_answer(v, over) != static_cast<net::RejectReason>(0));
+            ASSERT_EQ(v.mgr.room_count(), size_t{0});
+            Client& fits = v.connect_creating("Fits", "pub00702", block_of("Pairs 1000000.lvl", 2));
+            ASSERT_EQ(door_answer(v, fits), static_cast<net::RejectReason>(0));
+            ASSERT_EQ(v.status("pub00702").map, std::string("Pairs 1000000.lvl"));
+        }
+        fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.260 The Last Door Before The Engine: A Room Whose Map Has More Pairs Than The Cap (Made Here By Hand, As No Door Of The Manager Makes One) Refuses To Bring A Match Back From A Record, With The Reason, Before It Looks At Anything Else; A Restart Record Of Such A Match Is Not Restored; The Weight Of A Match (Its Places) Does Not Change With Its Pairs") {
+        const fs::path dir = fresh_dir("s260");
+        {   // the last door: a Room made by hand (as S3.228 does for ants) with a map over the pairs cap refuses to bring a match back from a record
+            const std::string bytes = tiny_with_pairs(65500, 65535);
+            ASSERT_FALSE(bytes.empty());
+            const fs::path file = dir / "MANYPAIRS.LVL";
+            { std::ofstream f(file, std::ios::binary); f << bytes; }
+            MapEntry entry;
+            std::string problem;
+            ASSERT_TRUE(MapStore(dir.string()).find("MANYPAIRS.LVL", entry, &problem));
+            assets::LevelData level;
+            ASSERT_TRUE(level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()));
+            ASSERT_EQ(OnlineLimits::plant_waypoint_pairs(level), uint64_t{65500} * uint64_t{65535});
+            RoomSpec spec = spec_of("many-pairs-r01", 2);
+            spec.reconnect = true;
+            Room room(spec, entry, std::move(level), 1u, 5000u);
+            ASSERT_TRUE(room.map_plant_waypoint_pairs() == uint64_t{65500} * uint64_t{65535} && room.map_places() == 1u);          // (31 x 31, 12 ants: one place, as any small map; only the pairs are over)
+            std::string why;
+            RestartLoaded nothing;                                                                   // (no record at all: whatever else is wrong, the pairs come first)
+            ASSERT_TRUE(room.begin_replay(nothing, 0, why) == Room::ReplayBegin::Refused);
+            ASSERT_MSG(why.find("more pairs of a plant and a waypoint than a room plays") != std::string::npos, why);
+        }
+        {   // a restart record of a match on such a map is not restored
+            const fs::path maps = fs::path(temp_dir_for("online-259")) / "Maps";
+            fs::create_directories(maps);
+            fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
+            const std::string huge = tiny_with_pairs(65500, 65535);
+            ASSERT_FALSE(huge.empty());
+            { std::ofstream out(maps / "HUGEPAIRS.LVL", std::ios::binary); out << huge; }
+            uint64_t huge_hash = 0;
+            ASSERT_TRUE(net::hash_file((maps / "HUGEPAIRS.LVL").string(), huge_hash));
+            PWorld w("online-259a", ServerLimits(), maps.string());
+            w.start_server(500);
+            crash_with_record_of(w, "PR-1", 8000);
+            rewrite_head(w, "PR-1", [&](RestartHead& h) { h.map = "HUGEPAIRS.LVL"; h.map_hash = huge_hash; h.start.map_name = "HUGEPAIRS.LVL"; h.start.map_hash = huge_hash; });
+            w.start_server(500);
+            ASSERT_TRUE(w.report.items.size() == 1);
+            ASSERT_MSG(w.report.items[0].outcome == RestoreItem::Outcome::Ended && w.report.items[0].note.find("pairs of a plant and a waypoint to play online now") != std::string::npos, w.report.items[0].note);          // (map_refusal's own wording: begin_replay's redundant check says it differently, "than a room plays")
+            std::error_code ignore;
+            fs::remove_all(maps.parent_path(), ignore);
+        }
+        {   // weight/places: unaffected by pairs (only cells and start ants count), even far over the pairs cap
+            const uint64_t cells = 961, ants = 12;
+            ASSERT_EQ(OnlineLimits::weight(cells, ants), OnlineLimits::weight(cells, ants));          // (sanity: deterministic)
+            ApprovedMap huge_pairs = pairs_map(dir, "Weight Huge.lvl", 65500, 65535);
+            ASSERT_FALSE(huge_pairs.name.empty());
+            World w(limits_with(8));
+            w.mgr.mutable_store().set_approved({huge_pairs});
+            ASSERT_EQ(w.mgr.store().cells_of("Weight Huge.lvl"), cells);                              // (TINY's own grid, 31 x 31)
+            ASSERT_EQ(OnlineLimits::weight(w.mgr.store().cells_of("Weight Huge.lvl"), w.mgr.store().start_ants_of("Weight Huge.lvl")), 1u);          // (one place, as any small map: the pairs are not in the formula)
         }
         fs::remove_all(dir);
     } TEST_END();

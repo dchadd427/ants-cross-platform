@@ -36,6 +36,7 @@ struct MapListing {
     uint32_t minutes{0};
     uint32_t players{0};
     uint64_t start_ants{0};    // the start markers of the four colors added up, counted from the file by the store itself (OnlineLimits::start_ants); 0 when the file does not load
+    uint64_t pairs{0};         // pairs of a plant and a waypoint, counted from the file by the store itself (OnlineLimits::plant_waypoint_pairs); 0 when the file does not load
     std::string description;
     bool original{false};      // one of the six maps of the original game
     std::string thumb;         // the address of its preview picture on the site, "" when it has none
@@ -52,6 +53,7 @@ struct ApprovedMap {
     uint64_t size{0};
     uint32_t width{0}, height{0}, minutes{0}, players{0};
     uint64_t start_ants{0};    // filled in by MapStore::set_approved from the file (never from the caller's number); a test map's is counted by TestMapStore from the canonical file it keeps (the room needs it: OnlineLimits)
+    uint64_t pairs{0};         // pairs of a plant and a waypoint, filled in the same way (a test map's by TestMapStore, the same canonical file)
     std::string description, maker, kind;
 };
 
@@ -82,15 +84,20 @@ public:
     bool too_big_online(const std::string& name) const;
     /// Whether `name` (exactly, or in another letter case) is a listed, approved or test map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts)
     bool too_many_ants_online(const std::string& name) const;
-    /// The sentence for the leader who chose a map that a room does not play (net::kNoticeMapTooBig, net::kNoticeMapTooManyAnts), "" when the map is not refused or not known
+    /// Whether `name` (exactly, or in another letter case) is a listed, approved or test map with more pairs of a plant and a waypoint than a room plays (OnlineLimits::kMaxPlantWaypointPairs)
+    bool too_many_pairs_online(const std::string& name) const;
+    /// The sentence for the leader who chose a map that a room does not play (net::kNoticeMapTooBig, net::kNoticeMapTooManyAnts, net::kNoticeMapTooManyPairs), "" when the map is not refused or not known
     std::string online_refusal(const std::string& name) const;
     /// The starting ants (the four colors added up) of the list's or the approved or test map `name` (exact name), 0 when it is not known: what a match on it costs with its cells (OnlineLimits::weight)
     uint64_t start_ants_of(const std::string& name) const;
+    /// The pairs of a plant and a waypoint of the list's or the approved or test map `name` (exact name), 0 when it is not known
+    uint64_t pairs_of(const std::string& name) const;
     /// The cells (rows times columns) of the list's or the approved or test map `name` (exact name), 0 when it is not known: what a match on it costs (OnlineLimits::weight)
     uint64_t cells_of(const std::string& name) const;
     /// The body of GET /maps: {"format":1,"maps":[{file,width,height,minutes,players,description,plays,thumb[,original][,maker]}]}. `plays` is how many times each map was played (map_plays of the database, keyed
     /// by file name and hash); null when the server keeps none: every count is 0 then. With `with_extended` (GET /maps/all, for the newest version only) the body is format 2: every entry also has "kind",
-    /// and the approved Extended maps are in it, which GET /maps leaves out for older pages; a map that is too big for a room carries "online": false (online_limits.hpp).
+    /// and the approved Extended maps are in it, which GET /maps leaves out for older pages; a map that is too big for a room, or over its caps of starting ants or of pairs of a plant and a waypoint, carries
+    /// "online": false (online_limits.hpp), with "online_why" naming "ants" or "pairs" (not the size reason).
     std::string list_json(const std::vector<MapPlays>* plays, bool with_extended = false) const;
 
     /// The approved maps of the submissions store (both Classic and Extended maps can be chosen and found by name; Classic ones join GET /maps, and Extended ones join GET /maps/all). Replaces the set that was given before;
@@ -116,14 +123,16 @@ private:
     bool scanned_{false};
     void add_approved_to_listing();
     void sort_listing();
-    // The start ants of an approved file (OnlineLimits::start_ants of the loaded map; 0 when it does not load), kept by path, size and hash so that a list that is rebuilt at every approval and take-down loads a file once
+    // The start ants and the pairs of a plant and a waypoint of an approved file (OnlineLimits::start_ants and OnlineLimits::plant_waypoint_pairs of the loaded map; both 0 when it does not load), kept by
+    // path, size and hash so that a list that is rebuilt at every approval and take-down loads a file once
     struct Counted {
         uint64_t size{0};
         uint64_t hash{0};
         uint64_t ants{0};
+        uint64_t pairs{0};
     };
     std::map<std::string, Counted> counted_;
-    uint64_t start_ants_of_file(const std::string& path, uint64_t size, uint64_t hash);
+    Counted counts_of_file(const std::string& path, uint64_t size, uint64_t hash);
     void count_start_ants();
 };
 

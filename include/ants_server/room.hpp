@@ -385,6 +385,8 @@ public:
     uint64_t map_cells() const noexcept { return static_cast<uint64_t>(level_.width()) * level_.height(); }
     /// The starting ants of the map that the room has loaded (the start markers of the four colors, counted from the loaded map: OnlineLimits::start_ants)
     uint64_t map_start_ants() const { return OnlineLimits::start_ants(level_); }
+    /// The pairs of a plant and a waypoint of the map that the room has loaded (counted from the loaded map: OnlineLimits::plant_waypoint_pairs)
+    uint64_t map_plant_waypoint_pairs() const { return OnlineLimits::plant_waypoint_pairs(level_); }
     /// The places that a match on the room's map takes (OnlineLimits::weight of its cells and its ants)
     uint32_t map_places() const { return OnlineLimits::weight(map_cells(), map_start_ants()); }
     /// Whether the room has this map (file name) as its map or as its plan's map: a test map that a room has is not dropped to make room for another

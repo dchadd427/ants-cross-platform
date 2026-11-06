@@ -99,6 +99,34 @@ namespace {
     return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 
+// TINY (an Extended map, its own grid and start markers) with `plants` extra block-1 records of a dropper-plant tile (404, a clover; team 255) on one cell, and `waypoints` block-4 waypoint records (no
+// trigger: flag 0) on another: a map whose plants times waypoints is `plants * waypoints`, the pairs that SimulationEngine::init's lookup looks at (OnlineLimits::plant_waypoint_pairs). Both block 1 and
+// block 4 hold at most 65,535 records (a 16-bit count in the file), whatever the grid's own size. "" when it cannot be made (more than 65,535 of either).
+[[maybe_unused]] std::string tiny_with_pairs(uint32_t plants, uint32_t waypoints) {
+    using namespace ants::assets;
+    if (plants > 65535 || waypoints > 65535) return std::string();
+    const std::string base = big_tiny_bytes();
+    LevelData t;
+    if (!LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), t, nullptr, LevelLimits::for_extended_maps())) return std::string();
+    if (t.anthill_spawns.size() + plants > 65535) return std::string();
+    for (uint32_t i = 0; i < plants; ++i) {
+        AnthillSpawn p;
+        p.tile_id = 404;          // a clover: sim::movement::is_dropper_plant_tile
+        p.y = 1;
+        p.x = 1;
+        p.team_id = 255;
+        t.anthill_spawns.push_back(p);
+    }
+    std::vector<Waypoint> wps(waypoints);
+    for (Waypoint& w : wps) {
+        w.y = 2;
+        w.x = 2;
+    }
+    t.waypoints = std::move(wps);
+    const LevelWriteResult w = write_level(t, LevelLimits::for_extended_maps());
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+}
+
 // The same map as `bytes` (made by tiny_with_ants) with its last start marker of a color turned into a plant record (team 255): one ant fewer and a file of the same size with other bytes. "" when it cannot be made.
 [[maybe_unused]] std::string with_one_marker_made_a_plant(const std::string& bytes) {
     using namespace ants::assets;

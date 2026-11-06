@@ -459,6 +459,59 @@ int main() {
         ASSERT_EQ(files_in(t.config.dir), size_t{1});
     } TEST_END();
 
+    TEST_CASE("TM1.7c A map with more pairs of a plant and a waypoint than a room plays (OnlineLimits::kMaxPlantWaypointPairs = 1,000,000) is refused as a test map with one plain sentence (422 map_too_many_pairs_online) before it is kept; 1,000,000 is kept and the store counts the pairs from the canonical file; a map with 0 plants or 0 waypoints is never refused for its pairs") {
+        Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
+        const auto step = [&]() { t.now_ms += 20000; };
+        // A map with many waypoints or many plants is a few hundred KB (each waypoint record 8 bytes, each block-1 record 6): an Extended map's body may be up to 2 MiB, a Classic one only 512 KB, so the
+        // boundary cases (small numbers) go as Classic maps and the ones with 65,535 of something go as Extended maps (upload_as converts bytes to Extended first, as the sender's own tool would).
+        const auto upload_as = [&](const std::string& bytes, const char* name, const char* address, bool extended) -> HttpResponse {
+            std::string sent = bytes;
+            if (extended) {
+                ants::assets::LevelData level;
+                if (!ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, ants::assets::LevelLimits::for_extended_maps())) return HttpResponse{};
+                const ants::assets::LevelConversion conv = ants::assets::convert_to_extended(level);
+                if (!conv.ok) return HttpResponse{};
+                const ants::assets::LevelWriteResult w = ants::assets::write_level(conv.level, ants::assets::LevelLimits::for_extended_maps());
+                if (!w.ok) return HttpResponse{};
+                sent.assign(w.bytes.begin(), w.bytes.end());
+            }
+            return t.upload(sent, name, address, extended ? "extended" : "classic");
+        };
+        const std::string at_cap = tiny_with_pairs(1000, 1000);
+        ASSERT_TRUE(!at_cap.empty());
+        HttpResponse r = upload_as(at_cap, "At Pairs Cap", "203.0.113.40", false);
+        ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+        ASSERT_EQ(t.store->maps(t.now).size(), size_t{1});
+        step();
+        for (const auto& pw : {std::make_pair(uint32_t{1001}, uint32_t{1000}), std::make_pair(uint32_t{1000}, uint32_t{1001})}) {
+            const std::string over = tiny_with_pairs(pw.first, pw.second);
+            ASSERT_TRUE(!over.empty());
+            r = upload_as(over, "Over Pairs Cap", "203.0.113.41", false);
+            ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_pairs_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+            const std::string said = parse_text(r.body).get("message").str();
+            ASSERT_TRUE(said.find("1,000,000") != std::string::npos && said.find("against bots") != std::string::npos);
+            step();
+        }
+        {   // close to the most that a map file can hold: 65,500 plants on one cell and 65,535 waypoints on another, 4.3 billion pairs
+            const std::string huge = tiny_with_pairs(65500, 65535);
+            ASSERT_TRUE(!huge.empty());
+            r = upload_as(huge, "Huge Pairs", "203.0.113.44", true);
+            ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_pairs_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+            step();
+        }
+        {   // 0 plants, or 0 waypoints, is 0 pairs: never refused for pairs, however many waypoints or plants alone
+            const std::string no_plants = tiny_with_pairs(0, 65535);
+            ASSERT_TRUE(!no_plants.empty());
+            r = upload_as(no_plants, "No Plants", "203.0.113.42", true);
+            ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+            step();
+            const std::string no_waypoints = tiny_with_pairs(65500, 0);          // (65,535 would overflow block 1 with TINY's own 12 markers already in it)
+            ASSERT_TRUE(!no_waypoints.empty());
+            r = upload_as(no_waypoints, "No Waypoints", "203.0.113.43", true);
+            ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+        }
+    } TEST_END();
+
     TEST_CASE("TM1.8 The store of test maps: at most kMaxTestMaps (the oldest goes), at most kMaxTestPerAddress for one address (its own oldest goes), a map that a room has or that is under two minutes old never goes - the upload is refused instead - so a burst cannot push out the map of a room that has not started") {
         {   // the 64: 70 uploads from 70 addresses, each 3 minutes after the last
             Door t;

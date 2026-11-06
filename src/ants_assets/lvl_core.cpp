@@ -36,6 +36,12 @@ bool limits_of(Profile profile, LevelLimits& limits) {
 
 const char* profile_name(Profile profile) { return profile == Profile::NewMap ? "new_map" : profile == Profile::Game ? "game" : "extended"; }
 
+// Whether a block-1 tile id is one of the 14 dropper plants that the simulation's flower dropper task tests (sim::movement::is_dropper_plant_tile: the clovers 404 .. 408, the flowers 410 .. 416, 420, 421).
+// This module builds for the browser too (no simulation code), so the ids are listed again here; test_lvl_core pins this list equal to the simulation's own table, every id.
+constexpr bool is_dropper_plant_tile_id(uint16_t id) noexcept {
+    return (id >= 404 && id <= 408) || (id >= 410 && id <= 416) || id == 420 || id == 421;
+}
+
 Result refused(const std::string& sentence) { return Result{1, sentence}; }
 
 // JSON text, built by hand: the keys in a fixed order, a string with every byte outside printable ASCII written as \u00XX (so the text is valid whatever the file held)
@@ -116,8 +122,10 @@ Result read_report_impl(const uint8_t* data, size_t size, Profile profile) {
     const LevelValidation v = level.validate(0x0F, limits);
     std::array<uint32_t, 4> markers{};
     std::array<uint32_t, 4> hills{};
+    uint64_t plants = 0;
     for (const AnthillSpawn& sp : level.anthill_spawns) {
         if (sp.team_id < 4) ++markers[sp.team_id];
+        if (is_dropper_plant_tile_id(sp.tile_id)) ++plants;
     }
     for (const MapCell& c : level.layer2_interactive) {
         const int team = hill_team_of_id(c.tile_index);
@@ -150,6 +158,8 @@ Result read_report_impl(const uint8_t* data, size_t size, Profile profile) {
     put_number(out, "food_piles", static_cast<long long>(level.food_schedules.size()));
     out += ',';
     put_number(out, "waypoints", static_cast<long long>(level.waypoints.size()));
+    out += ',';
+    put_number(out, "plants", static_cast<long long>(plants));          // block 1 records with the dropper-plant flag: plants x waypoints is the cost of setting the map up (OnlineLimits::kMaxPlantWaypointPairs)
     out += ",\n";
     put_key(out, "teams");
     out += '[';
