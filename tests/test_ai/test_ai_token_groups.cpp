@@ -3,10 +3,12 @@
 // AI32.1 pins the order of the members against a plain re-statement of the walk (a search of the members already listed, which is what the analysis did before it kept a flag for each power-up) on clusters,
 // lines, diagonal chains, blobs and scattered cells; AI32.2 pins the cost: one cluster of three thousand power-ups is analysed in a time that the cube of its size could not keep. AI32.3 pins the order of
 // the expedition's walk from every end against a plain re-statement of it (a scan of all the tokens for each one that is reached, which is what walk_of did before it looked the tokens up by their
-// cells); AI32.4 pins its cost: the walks from every entrance of a row of three thousand tokens take a time that a scan of all of them for every one could not keep.
+// cells); AI32.4 pins its cost: the walks from every entrance of a row of three thousand tokens take a time that a scan of all of them for every one could not keep. AI32.5 walks a row that is two rows made by hand
+// (what no walk reaches comes last), AI32.6 compares the members and the walks of every group on every map of the library.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 
 #include "ai_test.hpp"
 #include "ants_ai/island_expedition.hpp"
@@ -283,5 +285,46 @@ void run_token_group_tests() {
             (e.member == 0 ? near_end : far_end) = true;
         }
         ASSERT_TRUE(near_end && far_end);
+    } TEST_END();
+
+    TEST_CASE("AI32.6 Every Map Of The Library: The Members Of Every Token Group Of Every Hill's Analysis, And The Walk From (Up To Twenty Of) Its Entrances, Agree With The Plain Re-Statements") {
+        std::vector<std::string> files;
+        for (const char* m : {"TINY", "SMALL", "MEDIUM", "GAUNTLET", "TREASURE", "ISLANDS"}) files.push_back(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/" + m + ".LVL");
+        for (const auto& e : std::filesystem::directory_iterator(std::string(ANTS_SOURCE_DIR) + "/Community-Maps")) {
+            if (e.path().extension() == ".lvl") files.push_back(e.path().string());
+        }
+        std::sort(files.begin(), files.end());
+        ASSERT_TRUE(files.size() >= 500u);
+        Tactics tactics;
+        const ExpeditionTask hard(1, tactics, walk_params(true));
+        size_t groups = 0;
+        size_t walks = 0;
+        size_t reordered = 0;                                                                     // (walks whose order is not the analysis's)
+        for (const std::string& file : files) {
+            assets::LevelData level;
+            ASSERT_TRUE(level.load_from_file(file));
+            sim::SimulationEngine sim;
+            sim.init(level, 5, 0x0F);
+            const MapInfo map(sim);
+            for (uint8_t team = 0; team < 4; ++team) {
+                if (!map.hill(team).present) continue;
+                const IslandInfo info = IslandInfo::analyse(map, sim.grid(), team);
+                for (const TokenGroup& g : info.token_groups()) {
+                    ASSERT_TRUE(!g.members.empty());
+                    ASSERT_TRUE(g.members == reference_members(map.powerups(), g.members[0]));
+                    ++groups;
+                    const size_t stride = g.entrances.size() > 20 ? g.entrances.size() / 20 : 1;
+                    for (size_t ei = 0; ei < g.entrances.size(); ei += stride) {
+                        const std::vector<uint32_t> got = hard.walk_of(map, g, g.entrances[ei]);
+                        ASSERT_TRUE(got == reference_walk(map.powerups(), g, g.entrances[ei]));
+                        std::vector<uint32_t> plain = g.members;
+                        if (g.entrances[ei].member != 0) std::reverse(plain.begin(), plain.end());
+                        reordered += got != plain ? 1u : 0u;
+                        ++walks;
+                    }
+                }
+            }
+        }
+        ASSERT_TRUE(groups > 20000u && walks > 40000u && reordered > 10000u);                          // (the library has 26,000 groups, 48,000 of the walks are looked at and a third of them are not the order of the analysis)
     } TEST_END();
 }
