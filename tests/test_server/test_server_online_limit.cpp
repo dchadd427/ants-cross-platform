@@ -724,15 +724,15 @@ void run_online_limit_tests() {
     } TEST_END();
     TEST_CASE("S3.223 The cap of the starting ants (OnlineLimits::kMaxStartAnts = 1,000, all four colors together): 1,000 is in and 1,001 is out whichever color has the last ant; the weight of a match is the most of its cells' places and its ants' (one for every started 400 ants, rounded up)") {
         ASSERT_TRUE(OnlineLimits::kMaxStartAnts == 1000u && OnlineLimits::kAntsPerPlace == 400u);
-        ASSERT_TRUE(OnlineLimits::allows_ants(0) && OnlineLimits::allows_ants(999) && OnlineLimits::allows_ants(1000) && !OnlineLimits::allows_ants(1001) && !OnlineLimits::allows_ants(8000) && !OnlineLimits::allows_ants(40000));
-        ASSERT_TRUE(OnlineLimits::allows(65536, 1000, 0) && !OnlineLimits::allows(65536, 1001, 0) && !OnlineLimits::allows(65537, 0, 0) && !OnlineLimits::allows(65537, 1000, 0) && OnlineLimits::allows(1, 0, 0));          // (all three limits hold)
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(1, 0)) && OnlineLimits::allows(online_counts(1, 999)) && OnlineLimits::allows(online_counts(1, 1000)) && !OnlineLimits::allows(online_counts(1, 1001)) && !OnlineLimits::allows(online_counts(1, 8000)) && !OnlineLimits::allows(online_counts(1, 40000)));
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(65536, 1000, 0)) && !OnlineLimits::allows(online_counts(65536, 1001, 0)) && !OnlineLimits::allows(online_counts(65537, 0, 0)) && !OnlineLimits::allows(online_counts(65537, 1000, 0)) && OnlineLimits::allows(online_counts(1, 0, 0)));          // (all three limits hold)
         const auto counted = [](const std::array<uint32_t, 4>& per_color) -> int64_t {
             const std::string bytes = tiny_with_ants(per_color);
             ants::assets::LevelData level;
             if (bytes.empty() || !ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, ants::assets::LevelLimits::for_play_extended())) return -1;
             return static_cast<int64_t>(OnlineLimits::start_ants(level));
         };
-        const auto fits = [&](const std::array<uint32_t, 4>& per_color) { return OnlineLimits::allows_ants(static_cast<uint64_t>(counted(per_color))); };
+        const auto fits = [&](const std::array<uint32_t, 4>& per_color) { return OnlineLimits::allows(online_counts(1, static_cast<uint64_t>(counted(per_color)))); };
         ASSERT_EQ(counted({250, 250, 250, 250}), int64_t{1000});
         ASSERT_TRUE(fits({250, 250, 250, 250}));                                                 // (the cap itself)
         ASSERT_EQ(counted({250, 250, 250, 251}), int64_t{1001});
@@ -851,7 +851,7 @@ void run_online_limit_tests() {
 
     TEST_CASE("S3.259 A Lobby Leader Who Chooses A Map Over The Cap Of Pairs Of A Plant And A Waypoint (OnlineLimits::kMaxPlantWaypointPairs = 1,000,000) Is Told So In One Sentence And The Room Keeps Its Map; 1,000,000 Is Taken, Any Letter Case, A Test Map Too; The List Marks It; The Control Interface Is A 422; A Visitor's Block Does Not Make A Room On It") {
         ASSERT_TRUE(OnlineLimits::kMaxPlantWaypointPairs == 1000000u);
-        ASSERT_TRUE(OnlineLimits::allows_pairs(0) && OnlineLimits::allows_pairs(999999) && OnlineLimits::allows_pairs(1000000) && !OnlineLimits::allows_pairs(1000001) && !OnlineLimits::allows_pairs(uint64_t{65500} * uint64_t{65535}));
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(1, 0, 0)) && OnlineLimits::allows(online_counts(1, 0, 999999)) && OnlineLimits::allows(online_counts(1, 0, 1000000)) && !OnlineLimits::allows(online_counts(1, 0, 1000001)) && !OnlineLimits::allows(online_counts(1, 0, uint64_t{65500} * uint64_t{65535})));
         const fs::path dir = fresh_dir("s259");
         World w(limits_with(48));
         std::vector<ApprovedMap> approved = {pairs_map(dir, "Pairs 1000000.lvl", 1000, 1000), pairs_map(dir, "Pairs 1001000.lvl", 1001, 1000), pairs_map(dir, "Pairs Huge.lvl", 65500, 65535)};

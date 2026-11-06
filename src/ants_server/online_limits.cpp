@@ -1,6 +1,10 @@
 #include "ants_server/online_limits.hpp"
 
+#include <algorithm>
+
 #include "ants_assets/lvl_parser.hpp"
+#include "ants_ctl/json.hpp"
+#include "ants_net/protocol.hpp"
 #include "ants_sim/movement_tables.hpp"
 
 namespace ants::server {
@@ -24,6 +28,63 @@ uint64_t OnlineLimits::plant_waypoint_pairs(const assets::LevelData& level) {
         if (sim::movement::is_dropper_plant_tile(spawn.tile_id)) ++plants;
     }
     return plants * static_cast<uint64_t>(level.waypoints.size());
+}
+
+// The table of block 2 that Grid::init_from_level copies into the engine's food table (one object for every record that the loader kept, in file order), which the lookups of a food cell look through
+uint64_t OnlineLimits::food_objects(const assets::LevelData& level) {
+    return static_cast<uint64_t>(level.food_schedules.size());
+}
+
+// The cells of layer 2 that Grid::init_from_level marks as power-ups: a tile that is not empty and has the power-up flag (the ids 62 to 66); the bots' MapInfo lists the cells that are still marked when the match
+// starts. One pass over the cells that the loader kept (at most as many as its limits allow).
+uint64_t OnlineLimits::power_ups(const assets::LevelData& level) {
+    uint64_t found = 0;
+    for (const assets::MapCell& cell : level.layer2_interactive) {
+        if (sim::movement::is_powerup_tile(cell.tile_index)) ++found;
+    }
+    return found;
+}
+
+MapCounts OnlineLimits::counts_of(const assets::LevelData& level) {
+    MapCounts counts;
+    counts.cells = static_cast<uint64_t>(level.width()) * level.height();
+    counts.start_ants = start_ants(level);
+    counts.pairs = plant_waypoint_pairs(level);
+    counts.food_objects = food_objects(level);
+    counts.power_ups = power_ups(level);
+    return counts;
+}
+
+// The same numbers from the map core's reading of the canonical file (the doors that take a file have no loaded level): the start markers of the four colors added up, the plants times the waypoints, the food piles
+// and the power-ups, every one counted by the core from the file itself, never a number that the sender gave
+MapCounts OnlineLimits::counts_of_report(const ctl::JsonValue& report) {
+    const auto number = [&](const char* key) { return static_cast<uint64_t>(std::max<int64_t>(0, report.get(key).as_int_or(0))); };
+    MapCounts counts;
+    counts.cells = number("rows") * number("columns");
+    for (size_t s = 0; s < 4 && s < report.get("teams").size(); ++s) counts.start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get("teams").at(s).get("start_markers").as_int_or(0)));
+    counts.pairs = number("plants") * number("waypoints");
+    counts.food_objects = number("food_piles");
+    counts.power_ups = number("powerups");
+    return counts;
+}
+
+const TermInfo& OnlineLimits::info(Term term) noexcept {
+    static const TermInfo kNone{"", "", "", "", "", "", ""};
+    static const TermInfo kCells{"", "map_too_big_online", "is too big", " to play online yet", "65,536 cells at most, like 256 x 256", "is bigger", net::kNoticeMapTooBig};
+    static const TermInfo kAnts{"ants", "map_too_many_ants_online", "starts too many ants", " to play online", "1,000 at most, all colors together", "starts more ants", net::kNoticeMapTooManyAnts};
+    static const TermInfo kPairs{"pairs", "map_too_many_pairs_online", "has too many pairs of a plant and a waypoint", " to play online", "1,000,000 at most", "has more pairs of a plant and a waypoint",
+                                 net::kNoticeMapTooManyPairs};
+    static const TermInfo kFood{"food", "map_too_many_food_online", "has too many food objects", " to play online", "250 at most", "has more food objects", net::kNoticeMapTooManyFood};
+    static const TermInfo kPowerUps{"powerups", "map_too_many_powerups_online", "has too many power-ups", " to play online", "2,000 at most", "has more power-ups", net::kNoticeMapTooManyPowerUps};
+    switch (term) {
+        case Term::None: return kNone;
+        case Term::Cells: return kCells;
+        case Term::StartAnts: return kAnts;
+        case Term::Pairs: return kPairs;
+        case Term::FoodObjects: return kFood;
+        case Term::PowerUps: return kPowerUps;
+    }
+    return kNone;
 }
 
 }  // namespace ants::server

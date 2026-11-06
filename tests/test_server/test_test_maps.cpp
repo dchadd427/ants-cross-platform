@@ -397,7 +397,7 @@ int main() {
     } TEST_END();
 
     TEST_CASE("TM1.7 A map over the size limit of a room (65,536 cells) is refused as a test map with one plain sentence, whatever its kind allows; 256 x 256 is the most; the numbers are OnlineLimits'") {
-        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::allows(65536u) && !OnlineLimits::allows(65537u));          // the limit of a room
+        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::allows(online_counts(65536u)) && !OnlineLimits::allows(online_counts(65537u)));          // the limit of a room
         Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
         const auto step = [&]() { t.now_ms += 20000; };
         const std::string fits = grown_tiny(256, 256);

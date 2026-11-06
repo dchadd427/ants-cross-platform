@@ -16,6 +16,7 @@
 //   C12 the crop (interface version 4): the whole window is the canonical file, every other window is held to an independent reading of the rules (an object whole or not at all, the solid bits
 //       that go with it, the records that move) on the whole library as Classic and as Extended maps, the stored answers, the refusals, bounds before anything is allocated
 //   C13 the dropper-plant tile list of read_report's "plants" count: every one of the 1,344 tile ids agrees with sim::movement::is_dropper_plant_tile, which this module cannot link
+//   C14 the power-up tile list of read_report's "powerups" count: every one of the 1,344 tile ids agrees with sim::movement::is_powerup_tile, which this module cannot link
 // `test_lvl_core --write-expected` writes the expectation again (after a change of the core that is meant), `--print-tile-names` prints src/ants_assets/lvl_tile_names.inc.
 #include "ants_assets/chd_parser.hpp"
 #include "ants_assets/lvl_checker.hpp"
@@ -1368,6 +1369,33 @@ void c13_plant_tiles() {
     }
 }
 
+// ---- C14 ----
+// read_report's "powerups" counts the layer-2 cells whose tile is a power-up (the ids 62 .. 66), with a list of its own: this module builds for the browser, so it cannot link the simulation's table. Every tile id of the
+// dictionary, as the only cell of a map, is counted exactly when sim::movement::is_powerup_tile says it is one, and a map of several cells counts every cell
+void c14_power_up_tiles() {
+    for (uint32_t id = 0; id < 1344; ++id) {
+        LevelData level = blank_extended_level(1, 1, lvl_core::tile_names());
+        level.layer2_interactive[0].tile_index = static_cast<uint16_t>(id);
+        const LevelWriteResult w = write_level(level, LevelLimits::for_extended_maps());
+        CHECK_MSG(w.ok, "tile " + std::to_string(id) + ": a one-cell map writes");
+        if (!w.ok) continue;
+        const lvl_core::Result r = lvl_core::read_report(w.bytes.data(), w.bytes.size(), lvl_core::Profile::Extended);
+        const bool core_says_power_up = r.status == 0 && contains(r.payload, "\"powerups\":1");
+        const bool core_says_none = r.status == 0 && contains(r.payload, "\"powerups\":0");
+        const bool sim_says_power_up = ants::sim::movement::is_powerup_tile(static_cast<uint16_t>(id));
+        CHECK_MSG(core_says_power_up == sim_says_power_up && core_says_power_up != core_says_none,
+                  "tile " + std::to_string(id) + ": lvl_core's power-up list agrees with the simulation's (core " + std::to_string(core_says_power_up) + ", sim " + std::to_string(sim_says_power_up) + ")");
+    }
+    LevelData many = blank_extended_level(4, 4, lvl_core::tile_names());
+    for (size_t i = 0; i < many.layer2_interactive.size(); ++i) many.layer2_interactive[i].tile_index = static_cast<uint16_t>(62 + i % 5);          // (all sixteen cells, the five kinds in turn)
+    const LevelWriteResult w = write_level(many, LevelLimits::for_extended_maps());
+    CHECK_MSG(w.ok, "a map of sixteen power-ups writes");
+    if (w.ok) {
+        const lvl_core::Result r = lvl_core::read_report(w.bytes.data(), w.bytes.size(), lvl_core::Profile::Extended);
+        CHECK_MSG(r.status == 0 && contains(r.payload, "\"powerups\":16"), "sixteen power-up cells are counted as sixteen");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -1400,6 +1428,7 @@ int main(int argc, char* argv[]) {
     run_case("C11 the properties", c11_properties);
     run_case("C12 the crop", c12_crop);
     run_case("C13 the dropper-plant tile list", c13_plant_tiles);
+    run_case("C14 the power-up tile list", c14_power_up_tiles);
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

@@ -11,9 +11,21 @@
 #include "ants_assets/lvl_core.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
+#include "ants_server/online_limits.hpp"
 #include "ants_test_paths.hpp"
 
 namespace {
+
+// The counts of a map by the numbers that the limits of a room look at (cells, starting ants, pairs, food objects, power-ups); 0 for what a test does not look at
+[[maybe_unused]] ants::server::MapCounts online_counts(uint64_t cells, uint64_t start_ants = 0, uint64_t pairs = 0, uint64_t food_objects = 0, uint64_t power_ups = 0) {
+    ants::server::MapCounts c;
+    c.cells = cells;
+    c.start_ants = start_ants;
+    c.pairs = pairs;
+    c.food_objects = food_objects;
+    c.power_ups = power_ups;
+    return c;
+}
 
 [[maybe_unused]] std::string big_tiny_bytes() {
     std::ifstream in(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL", std::ios::binary);

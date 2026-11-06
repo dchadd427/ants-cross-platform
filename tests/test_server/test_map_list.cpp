@@ -518,7 +518,7 @@ int main() {
         // the constant and its sentence
         ASSERT_TRUE(OnlineLimits::weight(1) == 1 && OnlineLimits::weight(10000) == 1 && OnlineLimits::weight(10001) == 2 && OnlineLimits::weight(65536) == 7 && OnlineLimits::weight(262144) == 27);        // the places a match takes
         ASSERT_EQ(OnlineLimits::weight(0), 1u);                                                      // (never less than a place)
-        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::kCellsPerPlace == 10000u && OnlineLimits::allows(65536) && !OnlineLimits::allows(65537));
+        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::kCellsPerPlace == 10000u && OnlineLimits::allows(online_counts(65536)) && !OnlineLimits::allows(online_counts(65537)));
         // the public door sends a big map's file whole (HttpResponse::file) and a picture or an error as every other answer
         {
             ctl::HttpRequest request;
@@ -581,7 +581,7 @@ int main() {
             }
             ASSERT_TRUE(m.start_ants > 0);                                            // (every map of the library has start markers, so a count of 0 would mean a file that did not load)
             ASSERT_TRUE(m.pairs <= 12768u);                                           // (the largest known is 112 x 114 = 12,768, far under the cap of 1,000,000)
-            ASSERT_TRUE(OnlineLimits::allows(static_cast<uint64_t>(m.width) * m.height, m.start_ants, m.pairs) && store.online_refusal(m.file).empty());          // (none of the 540 is refused online for its ants, its pairs or its size)
+            ASSERT_TRUE(OnlineLimits::allows(m.counts()) && store.online_refusal(m.file).empty());          // (none of the 540 is refused online for its ants, its pairs or its size)
             ASSERT_EQ(OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height, m.start_ants), OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height));        // (and none weighs more than before: at most 248 ants is one place, the cells decide)
             ASSERT_EQ(OnlineLimits::weight(static_cast<uint64_t>(m.width) * m.height, m.start_ants), store.start_ants_of(m.file) > 0 ? OnlineLimits::weight(store.cells_of(m.file), store.start_ants_of(m.file)) : 0u);
             if (m.file == "TREASURE.LVL") ASSERT_EQ(OnlineLimits::weight(store.cells_of(m.file), store.start_ants_of(m.file)), 1u);

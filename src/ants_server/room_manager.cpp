@@ -156,19 +156,10 @@ std::unique_ptr<Room> RoomManager::build_room(RoomSpec spec, uint32_t now_ms, Cr
         r.error = "the map '" + spec.map + "' cannot be played by this engine";
         return nullptr;
     }
-    if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) {      // (a room is online: the size limit of OnlineLimits holds for the control interface's rooms too)
+    const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));
+    if (over != Term::None) {          // (a room is online: every limit of OnlineLimits holds for the control interface's rooms too; checked before the room, and so before its engine, is made: a map over one would hold the one thread for seconds)
         r.http_status = 422;
-        r.error = std::string("the map '") + spec.map + "' is too big for a room: " + net::kNoticeMapTooBig;
-        return nullptr;
-    }
-    if (!OnlineLimits::allows_ants(OnlineLimits::start_ants(level))) {                      // (checked before the room, and so before its engine, is made: the ants of such a map would hold the one thread for seconds)
-        r.http_status = 422;
-        r.error = std::string("the map '") + spec.map + "' starts too many ants for a room: " + net::kNoticeMapTooManyAnts;
-        return nullptr;
-    }
-    if (!OnlineLimits::allows_pairs(OnlineLimits::plant_waypoint_pairs(level))) {           // (the same door, for a map whose plants times waypoints would hold the one thread just as long)
-        r.http_status = 422;
-        r.error = std::string("the map '") + spec.map + "' has too many pairs of a plant and a waypoint for a room: " + net::kNoticeMapTooManyPairs;
+        r.error = std::string("the map '") + spec.map + "' " + OnlineLimits::info(over).phrase + " for a room: " + OnlineLimits::info(over).notice;
         return nullptr;
     }
     uint32_t seed = spec.seed;
@@ -312,7 +303,7 @@ bool RoomManager::make_lobby_room(const std::string& code, const net::CreateBloc
     if (!lobby_place(now_ms)) return false;
     std::string map = public_choice_of(block, limits_).map;
     if (!block.map_name.empty() && store_.test_map(block.map_name) != nullptr &&
-        OnlineLimits::allows(store_.cells_of(block.map_name), store_.start_ants_of(block.map_name), store_.pairs_of(block.map_name)))
+        OnlineLimits::allows(store_.counts_of(block.map_name)))
         map = store_.test_map(block.map_name)->name;
     return create_room(lobby_spec(code, map), now_ms).ok;      // (the map of the block when the server offers it; the plan changes it)
 }
@@ -421,7 +412,7 @@ LobbyServices RoomManager::lobby_services() {
     };
     s.load_map = [this](const std::string& file, MapEntry& entry, assets::LevelData& level) {
         return store_.find(file, entry) && level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()) &&
-               OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height(), OnlineLimits::start_ants(level), OnlineLimits::plant_waypoint_pairs(level));
+               OnlineLimits::allows(OnlineLimits::counts_of(level));
     };
     s.match_place = [this](uint32_t now_ms, uint64_t cells, uint64_t start_ants) { return take_match_place(now_ms, cells, start_ants); };
     s.map_refusal = [this](const std::string& name) { return store_.online_refusal(name); };
@@ -743,7 +734,7 @@ bool RoomManager::enable_history(db::Database& database, std::string& why, Histo
         history_feeder_ = std::make_unique<HistoryFeeder>(*history_, *replays_, store_.directory(), std::function<uint64_t()>(), store_.community_directory());
         history_feeder_->set_approved_map_path([this](const std::string& name) {          // (the matches on an approved map of the players are counted too; one that a room could not play online is not: its recording would hold the one thread for seconds)
             const ApprovedMap* map = store_.approved(name);
-            return map != nullptr && OnlineLimits::allows(static_cast<uint64_t>(map->width) * map->height, map->start_ants, map->pairs) ? map->path : std::string();
+            return map != nullptr && OnlineLimits::allows(map->counts()) ? map->path : std::string();
         });
     }
     return true;
@@ -881,9 +872,8 @@ std::string RoomManager::map_refusal(const RestartHead& head, MapEntry& entry, a
     if (!store_.find(head.map, entry, &why)) return "ended by a restart of the server: the map " + head.map + " is not on this server (" + why + ")";
     if (entry.hash != head.map_hash) return "ended by a restart of the server: the map file " + head.map + " is not the one that the match was played on";
     if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return "ended by a restart of the server: the map " + head.map + " cannot be played by this engine";
-    if (!OnlineLimits::allows(static_cast<uint64_t>(level.width()) * level.height())) return "ended by a restart of the server: the map " + head.map + " is too big to play online now (" + net::kNoticeMapTooBig + ")";      // (a record of a match from before the limit: a room is online, whatever its record says; judge_record and the replay both come here)
-    if (!OnlineLimits::allows_ants(OnlineLimits::start_ants(level))) return "ended by a restart of the server: the map " + head.map + " starts too many ants to play online now (" + net::kNoticeMapTooManyAnts + ")";      // (the same for a record of a match from before the limit; checked before the engine is made)
-    if (!OnlineLimits::allows_pairs(OnlineLimits::plant_waypoint_pairs(level))) return "ended by a restart of the server: the map " + head.map + " has too many pairs of a plant and a waypoint to play online now (" + net::kNoticeMapTooManyPairs + ")";      // (the same for a record of a match from before the cap; checked before the engine is made)
+    const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));
+    if (over != Term::None) return "ended by a restart of the server: the map " + head.map + " " + OnlineLimits::info(over).phrase + " to play online now (" + OnlineLimits::info(over).notice + ")";      // (a record of a match from before a limit: a room is online, whatever its record says; judge_record and the replay both come here; checked before the engine is made)
     if (!level.validate(head.start.roster, assets::LevelLimits::for_play_extended()).playable) return "ended by a restart of the server: the map cannot be played by the seats of the match";
     return std::string();
 }
