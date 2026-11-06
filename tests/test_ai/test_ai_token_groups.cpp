@@ -1,11 +1,15 @@
-// AI32: the token groups of IslandInfo (docs/BOTS.md, "Islands"): power-ups that touch each other (8-connected) form a group whose members are listed in the order of a walk from the first entrance.
-// AI32.1 pins that order against a plain re-statement of the walk (a search of the members already listed, which is what the analysis did before it kept a flag for each power-up) on clusters,
-// lines, diagonal chains, blobs and scattered cells; AI32.2 pins the cost: one cluster of three thousand power-ups is analysed in a time that the cube of its size could not keep.
+// AI32: the token groups of IslandInfo (docs/BOTS.md, "Islands"): power-ups that touch each other (8-connected) form a group whose members are listed in the order of a walk from the first entrance, and the
+// expedition walks a row of them from every one of its entrances (ExpeditionTask::walk_of).
+// AI32.1 pins the order of the members against a plain re-statement of the walk (a search of the members already listed, which is what the analysis did before it kept a flag for each power-up) on clusters,
+// lines, diagonal chains, blobs and scattered cells; AI32.2 pins the cost: one cluster of three thousand power-ups is analysed in a time that the cube of its size could not keep. AI32.3 pins the order of
+// the expedition's walk from every end against a plain re-statement of it (a scan of all the tokens for each one that is reached, which is what walk_of did before it looked the tokens up by their
+// cells); AI32.4 pins its cost: the walks from every entrance of a row of three thousand tokens take a time that a scan of all of them for every one could not keep.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 
 #include "ai_test.hpp"
+#include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_info.hpp"
 
 namespace {
@@ -46,6 +50,9 @@ std::vector<sim::TileCoord> layout(const std::string& kind, uint32_t n) {
                 cells.push_back(to);
             }
         }
+    } else if (kind == "pair") {                                                                // two clusters, far apart: two rows with an entrance each
+        const uint32_t w = 1 + static_cast<uint32_t>(std::sqrt(static_cast<double>(n / 2 + 1)));
+        for (uint32_t k = 0; k < n; ++k) cells.push_back(sim::TileCoord{static_cast<int32_t>((k % 2 == 0 ? 30 : 75) + (k / 2) % w), static_cast<int32_t>(30 + (k / 2) / w)});
     } else {                                                                                    // "scatter": every second cell of every second row, none touches another
         for (uint32_t k = 0; k < n; ++k) cells.push_back(sim::TileCoord{static_cast<int32_t>(20 + 2 * (k % 40)), static_cast<int32_t>(20 + 2 * (k / 40))});
     }
@@ -91,6 +98,41 @@ std::vector<uint32_t> reference_members(const std::vector<PowerUpInfo>& powerups
     return members;
 }
 
+// The tokens of a row in the order of a walk from an entrance, as a Hard bot takes it, restated plainly: the members in the order of the analysis (the other way round for the far end), the ones
+// within a step of the entrance first, then from every token that is reached the ones that touch it, found by a scan of all of the tokens; then the tokens by their steps, ties in the order of the row
+std::vector<uint32_t> reference_walk(const std::vector<PowerUpInfo>& powerups, const TokenGroup& group, const TokenGroup::Entrance& entrance) {
+    std::vector<uint32_t> order = group.members;
+    if (entrance.member != 0) std::reverse(order.begin(), order.end());
+    const int32_t kFar = 1 << 20;
+    std::vector<int32_t> steps(order.size(), kFar);
+    std::vector<size_t> queue;
+    for (size_t i = 0; i < order.size(); ++i) {
+        if (powerups[order[i]].tile.chebyshev_dist(entrance.tile) > 1) continue;
+        steps[i] = 1;
+        queue.push_back(i);
+    }
+    for (size_t head = 0; head < queue.size(); ++head) {
+        for (size_t j = 0; j < order.size(); ++j) {
+            if (steps[j] != kFar || powerups[order[j]].tile.chebyshev_dist(powerups[order[queue[head]]].tile) > 1) continue;
+            steps[j] = steps[queue[head]] + 1;
+            queue.push_back(j);
+        }
+    }
+    std::vector<size_t> by(order.size());
+    for (size_t i = 0; i < by.size(); ++i) by[i] = i;
+    std::stable_sort(by.begin(), by.end(), [&](size_t a, size_t b) { return steps[a] < steps[b]; });
+    std::vector<uint32_t> out;
+    for (const size_t i : by) out.push_back(order[i]);
+    return out;
+}
+
+// The expedition of a Hard bot (timed_row: the walk by steps) or of the others (the order of the analysis)
+ExpeditionTask::Params walk_params(bool timed) {
+    ExpeditionTask::Params p;
+    p.timed_row = timed;
+    return p;
+}
+
 }  // namespace
 
 void run_token_group_tests() {
@@ -107,7 +149,7 @@ void run_token_group_tests() {
                 size_t listed = 0;
                 for (const TokenGroup& g : info.token_groups()) {
                     ASSERT_TRUE(!g.members.empty());
-                    ASSERT_MSG(g.members == reference_members(powerups, g.members[0]), std::string(kind) + " " + std::to_string(n) + ": the members are the walk's order");
+                    ASSERT_TRUE(g.members == reference_members(powerups, g.members[0]));                  // (the members are the walk's order)
                     for (const uint32_t m : g.members) {
                         ASSERT_TRUE(m < powerups.size());
                         ++times[m];
@@ -135,6 +177,57 @@ void run_token_group_tests() {
         ASSERT_EQ(info.token_groups().size(), size_t{1});
         ASSERT_EQ(info.token_groups()[0].members.size(), size_t{3000});
         ASSERT_TRUE(info.token_groups()[0].members == reference_members(map.powerups(), info.token_groups()[0].members[0], false));
-        ASSERT_MSG(ms < 400.0, "the analysis of 3,000 touching power-ups took " + std::to_string(ms) + " ms: the work must not grow with the cube of the group");
+        ASSERT_TRUE(ms < 400.0);                                                                  // (the work must not grow with the cube of the size of the group)
+    } TEST_END();
+
+    TEST_CASE("AI32.3 The Expedition's Walk Through A Row Is The Same From Every End: Clusters, Pairs Of Clusters, Lines, Diagonal Chains, Blobs And Scattered Cells Of 1 To 300 Tokens, Every Entrance (Or Sixty Of Them), A Hard Bot's Order Agrees With A Plain Re-Statement Of The Walk, The Others' Is The Analysis's") {
+        for (const char* kind : {"cluster", "pair", "line", "diagonal", "blob", "scatter"}) {
+            for (const uint32_t n : {1u, 2u, 3u, 9u, 50u, 150u, 300u}) {
+                sim::SimulationEngine sim;
+                world_with(sim, layout(kind, n));
+                const MapInfo map(sim);
+                const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
+                Tactics tactics;
+                const ExpeditionTask hard(1, tactics, walk_params(true));
+                const ExpeditionTask others(2, tactics, walk_params(false));
+                size_t walks = 0;
+                size_t reordered = 0;                                                             // (walks whose order is not the analysis's: the steps do something)
+                for (const TokenGroup& g : info.token_groups()) {
+                    const size_t stride = g.entrances.size() > 60 ? g.entrances.size() / 60 : 1;
+                    for (size_t ei = 0; ei < g.entrances.size(); ei += stride) {
+                        const TokenGroup::Entrance& e = g.entrances[ei];
+                        const std::vector<uint32_t> got = hard.walk_of(map, g, e);
+                        ASSERT_TRUE(got == reference_walk(map.powerups(), g, e));
+                        ASSERT_TRUE(std::is_permutation(got.begin(), got.end(), g.members.begin(), g.members.end()));
+                        std::vector<uint32_t> plain = g.members;
+                        if (e.member != 0) std::reverse(plain.begin(), plain.end());
+                        ASSERT_TRUE(others.walk_of(map, g, e) == plain);
+                        reordered += got != plain ? 1u : 0u;
+                        ++walks;
+                    }
+                }
+                ASSERT_TRUE(walks > 0);
+                if (n >= 50 && (std::string(kind) == "cluster" || std::string(kind) == "pair" || std::string(kind) == "blob")) ASSERT_TRUE(reordered > 0);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI32.4 The Walks From Every Entrance Of One Row Of 3,000 Tokens Take A Time That A Scan Of All The Tokens For Every One That Is Reached Could Not Keep (Well Under The 400 Milliseconds That Is Allowed Here), And Three Of Them Are The Plain Walk's") {
+        sim::SimulationEngine sim;
+        world_with(sim, layout("cluster", 3000));
+        const MapInfo map(sim);
+        const IslandInfo info = IslandInfo::analyse(map, sim.grid(), 0);
+        ASSERT_EQ(info.token_groups().size(), size_t{1});
+        const TokenGroup& g = info.token_groups()[0];
+        ASSERT_TRUE(g.entrances.size() >= 200u);                                                  // (the tokens along the rim of the cluster: the plan walks the row from each of them)
+        Tactics tactics;
+        const ExpeditionTask hard(1, tactics, walk_params(true));
+        size_t tokens = 0;
+        const auto before = std::chrono::steady_clock::now();
+        for (const TokenGroup::Entrance& e : g.entrances) tokens += hard.walk_of(map, g, e).size();
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - before).count();
+        ASSERT_EQ(tokens, g.entrances.size() * 3000u);
+        for (const size_t ei : {size_t{0}, g.entrances.size() / 2, g.entrances.size() - 1}) ASSERT_TRUE(hard.walk_of(map, g, g.entrances[ei]) == reference_walk(map.powerups(), g, g.entrances[ei]));
+        ASSERT_TRUE(ms < 400.0);                                                                  // (the work of a walk must not grow with the square of the size of the row)
     } TEST_END();
 }
