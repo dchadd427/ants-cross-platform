@@ -15,6 +15,7 @@
 #include "ants_server/crypto.hpp"
 #include "ants_server/map_names.hpp"
 #include "ants_server/submissions.hpp"
+#include "big_map_fixtures.hpp"
 #include "history_fixtures.hpp"
 
 static int g_test_count = 0;
@@ -340,6 +341,39 @@ int main() {
             ASSERT_FALSE(no_waypoints.bytes.empty());
             ASSERT_TRUE(rig.store->submit(no_waypoints, rig.now).ok);
         }
+    } TEST_END();
+
+    TEST_CASE("SUB1.2e A map with more food objects (OnlineLimits::kMaxFoodObjects = 250) or more power-ups (OnlineLimits::kMaxPowerUps = 1,000) than a room plays is refused with one plain sentence (422 map_too_many_food_online, map_too_many_powerups_online) and nothing is kept or counted against the sender; the limit itself is sent for approval") {
+        Sub rig;
+        const auto as_extended = [](const std::string& bytes) {
+            assets::LevelData level;
+            if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, assets::LevelLimits::for_extended_maps())) return std::string();
+            const assets::LevelConversion conv = assets::convert_to_extended(level);
+            if (!conv.ok) return std::string();
+            const assets::LevelWriteResult w = assets::write_level(conv.level, assets::LevelLimits::for_extended_maps());
+            return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+        };
+        const auto refused = [&](const std::string& bytes, const char* name, const char* kind, const char* code, const char* number) {
+            SubmitInput in = rig.input(bytes, name);
+            in.kind = kind;
+            ASSERT_FALSE(in.bytes.empty());
+            const SubmitOutcome o = rig.store->submit(in, rig.now);
+            ASSERT_EQ(o.fail.code, std::string(code));
+            ASSERT_TRUE(!o.ok && o.fail.status == 422 && o.fail.message.find(number) != std::string::npos && o.fail.message.find("against bots") != std::string::npos);
+        };
+        refused(tiny_with_food(251), "Too Many Food", "classic", "map_too_many_food_online", "250 at most");
+        refused(as_extended(tiny_with_food(65514)), "Huge Food", "extended", "map_too_many_food_online", "250 at most");
+        refused(tiny_with_power_ups(1001), "Too Many Power-Ups", "extended", "map_too_many_powerups_online", "1,000 at most");
+        refused(tiny_with_power_ups(3000), "Huge Power-Ups", "extended", "map_too_many_powerups_online", "1,000 at most");
+        ASSERT_TRUE(rig.files().empty());
+        ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions"), std::string("0"));
+        ASSERT_EQ(rig.text("SELECT COUNT(*) FROM submission_limits"), std::string("0"));          // (the refusals cost the sender nothing of the three a day)
+        const SubmitOutcome food = rig.store->submit(rig.input(tiny_with_food(250), "Food At Cap"), rig.now);
+        ASSERT_TRUE(food.ok);
+        SubmitInput power = rig.input(tiny_with_power_ups(1000), "Power-Ups At Cap");
+        power.kind = "extended";
+        const SubmitOutcome fine = rig.store->submit(power, rig.now);
+        ASSERT_TRUE(fine.ok);
     } TEST_END();
 
     TEST_CASE("SUB1.3 A map that does not pass the server's check is refused with the findings, and nothing is kept: no file, no row, and no use of the day's three") {

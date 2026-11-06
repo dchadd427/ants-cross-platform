@@ -11,9 +11,15 @@
 #include "ants_assets/lvl_core.hpp"
 #include "ants_assets/lvl_parser.hpp"
 #include "ants_assets/lvl_writer.hpp"
+#include "ants_server/online_limits.hpp"
 #include "ants_test_paths.hpp"
 
 namespace {
+
+// The counts of a map by the numbers that the limits of a room look at (cells, starting ants, pairs, food objects, power-ups); 0 for what a test does not look at
+[[maybe_unused]] ants::server::MapCounts online_counts(uint64_t cells, uint64_t start_ants = 0, uint64_t pairs = 0, uint64_t food_objects = 0, uint64_t power_ups = 0) {
+    return ants::server::MapCounts{cells, start_ants, pairs, food_objects, power_ups};
+}
 
 [[maybe_unused]] std::string big_tiny_bytes() {
     std::ifstream in(std::string(ORIGINAL_ASSETS_DIR) + "/Maps/TINY.LVL", std::ios::binary);
@@ -124,6 +130,60 @@ namespace {
     }
     t.waypoints = std::move(wps);
     const LevelWriteResult w = write_level(t, LevelLimits::for_extended_maps());
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+}
+
+// TINY (an Extended map, its own grid and start markers) with `total` food objects in all: its own 14 and, up to `total`, one-stage piles of tile 340 (a one-cell food tile) stacked on one cell, so that block 2
+// holds exactly `total` records (OnlineLimits::food_objects); a total under TINY's 14 keeps the first ones. "" when it cannot be made (block 2 holds at most 65,535).
+[[maybe_unused]] std::string tiny_with_food(uint32_t total) {
+    using namespace ants::assets;
+    if (total > 65535) return std::string();
+    const std::string base = big_tiny_bytes();
+    LevelData t;
+    if (!LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), t, nullptr, LevelLimits::for_extended_maps())) return std::string();
+    while (t.food_schedules.size() < total) {
+        FoodSchedule f;
+        f.x = 2;
+        f.y = 2;
+        f.initial_delay = 10;
+        f.respawn_interval = 30;
+        f.variants.resize(2);
+        f.variants[0].weight = 10;
+        f.variants[0].tile_id = 340;
+        f.variants[1].weight = 0;
+        f.variants[1].tile_id = LVL_EMPTY_TILE;
+        t.food_schedules.push_back(f);
+    }
+    t.food_schedules.resize(total);
+    const LevelWriteResult w = write_level(t, LevelLimits::for_extended_maps());
+    return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+}
+
+// TINY grown to 64 x 64 (an Extended map, 4,096 cells) with `n` power-ups: the first n blank cells of layer 2 outside TINY's own corner, in reading order, get a power-up tile (the ids 62 to 66 in turn), so that
+// OnlineLimits::power_ups is exactly n (as a Classic map when `classic`). "" when it cannot be made (3,135 blank cells are left).
+[[maybe_unused]] std::string tiny_with_power_ups(uint32_t n, bool classic = false) {
+    using namespace ants::assets;
+    const std::string grown = grown_tiny(64, 64);
+    LevelData level;
+    if (grown.empty() || !LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(grown.data()), grown.size(), level, nullptr, LevelLimits::for_extended_maps())) return std::string();
+    uint32_t placed = 0;
+    for (uint32_t y = 0; y < 64 && placed < n; ++y) {
+        for (uint32_t x = 0; x < 64 && placed < n; ++x) {
+            if (x < 31 && y < 31) continue;
+            MapCell& cell = level.layer2_interactive[static_cast<size_t>(y) * 64 + x];
+            if (cell.tile_index != LVL_EMPTY_TILE) continue;
+            cell.tile_index = static_cast<uint16_t>(62 + placed % 5);
+            ++placed;
+        }
+    }
+    if (placed != n) return std::string();
+    if (classic) {                                                                                    // (a Classic map of 64 rows: the files that the replay tools and the history load are Classic)
+        const LevelConversion c = convert_to_classic(level);
+        if (!c.ok) return std::string();
+        const LevelWriteResult w = write_level(c.level, LevelLimits{});
+        return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+    }
+    const LevelWriteResult w = write_level(level, LevelLimits::for_extended_maps());
     return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
 }
 

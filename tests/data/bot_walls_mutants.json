@@ -111,8 +111,8 @@
   {
    "id": "trip_candidates_everywhere",
    "file": "src/ants_ai/standard_tasks.cpp",
-   "old": "const size_t limit = tactics_.gate_map ? cands.size() : std::min<size_t>(3, cands.size());",
-   "new": "const size_t limit = true ? cands.size() : std::min<size_t>(3, cands.size());",
+   "old": "const size_t limit = std::min(cands.size(), tactics_.gate_map ? gate_candidates(static_cast<uint64_t>(grid.width()) * grid.height()) : size_t{3});",
+   "new": "const size_t limit = std::min(cands.size(), true ? gate_candidates(static_cast<uint64_t>(grid.width()) * grid.height()) : size_t{3});",
    "test": "timeout 600 env ANTS_TEST_FILTER=AI27.11 ./build/tests/test_ai/test_ai",
    "expect": "AI27.11"
   },

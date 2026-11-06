@@ -460,6 +460,65 @@ int main() {
         ASSERT_TRUE(rig.history.find(id, got) && got.details.empty() && later.backfilled() == 0);
     } TEST_END();
 
+    TEST_CASE("MP2.7 A recording on a map with more food objects (250) or more power-ups (1,000) than a room plays is not played by the feeder (one piece on the one thread): it is left out; one at the limit is counted as ever") {
+        TempDir maps;
+        const auto keep_map = [&](const char* name, const std::string& bytes) {
+            std::ofstream out(maps.path / name, std::ios::binary);
+            out << bytes;
+            return !bytes.empty() && static_cast<bool>(out);
+        };
+        ASSERT_TRUE(keep_map("FOOD AT.LVL", tiny_with_food(250)) && keep_map("FOOD OVER.LVL", tiny_with_food(251)) && keep_map("POWER AT.LVL", tiny_with_power_ups(1000, true)) && keep_map("POWER OVER.LVL", tiny_with_power_ups(1001, true)));
+        for (const char* file : {"FOOD AT.LVL", "FOOD OVER.LVL", "POWER AT.LVL", "POWER OVER.LVL"}) {
+            const bool over = std::string(file).find("OVER") != std::string::npos;
+            MatchSpec spec;
+            spec.dir = maps.path.string();
+            spec.file = file;
+            spec.seed = 41;
+            spec.turns = 700;
+            spec.roster = 0x03;
+            spec.names = {"Ann", "Bob", "", ""};
+            const std::vector<uint8_t> played = record_match(spec);
+            ASSERT_TRUE(!played.empty());
+            Rig rig(maps.path.string());
+            ASSERT_TRUE(rig.open());
+            ASSERT_TRUE(!rig.keep(played).empty());
+            rig.drain(8);
+            ASSERT_TRUE(rig.history.count() == (over ? 0u : 1u) && rig.feeder.left_out() == (over ? 1u : 0u));          // (the file: "FOOD OVER", "POWER OVER" are left out)
+        }
+    } TEST_END();
+
+    TEST_CASE("MP2.8 A counted match with no details yet whose recording is on a map with more food objects or more power-ups than a room plays is not played again by the backfill: it gets no details and no marker (the next start tries again), and one line says why") {
+        for (const Term term : {Term::FoodObjects, Term::PowerUps}) {
+            TempDir maps;
+            { std::ofstream out(maps.path / "OVER.LVL", std::ios::binary); out << (term == Term::FoodObjects ? tiny_with_food(251) : tiny_with_power_ups(1001, true)); }
+            MatchSpec spec;
+            spec.dir = maps.path.string();
+            spec.file = "OVER.LVL";
+            spec.seed = 41;
+            spec.turns = 700;
+            spec.roster = 0x03;
+            spec.names = {"Ann", "Bob", "", ""};
+            const std::vector<uint8_t> played = record_match(spec);
+            ASSERT_TRUE(!played.empty());
+            Rig rig(maps.path.string());
+            ASSERT_TRUE(rig.open());
+            const std::string id = rig.keep(played);
+            ASSERT_FALSE(id.empty());
+            HistoryRecord record = play_of(rig.now, "OVER.LVL", 0, 700, {"Ann", "Bob"});          // (counted by an older version, which had no details: made by hand, so that nothing plays the recording)
+            record.id = id;
+            std::string why;
+            ASSERT_TRUE(rig.history.put(record, why));
+            rig.drain(8);
+            HistoryRecord got;
+            ASSERT_TRUE(rig.history.find(id, got) && got.details.empty());                        // no details, and no marker either
+            ASSERT_EQ(rig.feeder.backfilled(), size_t{0});
+            size_t told = 0;
+            const std::string line = id + " has no stats yet: the map " + OnlineLimits::info(term).more + " than a room plays online";
+            for (const std::string& note : rig.history.take_notes()) told += note.find(line) != std::string::npos ? 1u : 0u;
+            ASSERT_EQ(told, size_t{1});
+        }
+    } TEST_END();
+
     TEST_CASE("MP3.1 A server with no database or no history keeps no count and nothing fails: the match path and the routes are as before") {
         Server none;
         ASSERT_TRUE(none.open(false));                                                               // (a replay store, no history)

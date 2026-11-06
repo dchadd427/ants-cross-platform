@@ -99,6 +99,9 @@ public:
     uint32_t bomber_of(size_t leg) const noexcept { return leg < legs_.size() ? legs_[leg].bomber : 0u; }
     /// The flight of the leg as it is chosen now; null before one is
     const Flight* flight_of(size_t leg) const noexcept { return leg < legs_.size() && legs_[leg].chosen ? &legs_[leg].flight : nullptr; }
+    /// The tokens of a row (the members of `group`, MapInfo::powerups() indices) in the order of a walk from the end of it that `entrance` leads to: the order of the analysis, or the reverse of it for the
+    /// other end, and for a Hard bot (`timed_row`) the tokens by the steps of a walk through the row from the entrance, the work of which grows with the size of the row, not with its square
+    std::vector<uint32_t> walk_of(const MapInfo& map, const TokenGroup& group, const TokenGroup::Entrance& entrance) const;
 
 private:
     struct Leg {
@@ -127,7 +130,6 @@ private:
         static constexpr int32_t kThroat = 3;   // fewer steps than this from the entrance
     };
 
-    std::vector<uint32_t> walk_of(const MapInfo& map, const TokenGroup& group, const TokenGroup::Entrance& entrance) const;
     bool plan(TaskContext& context);
     void stations(const TaskContext& context, Stations& out) const;
     void drive_leg(TaskContext& context, size_t leg);

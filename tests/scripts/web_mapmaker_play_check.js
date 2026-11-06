@@ -43,14 +43,14 @@ const NAMES = ['Green', 'Red', 'Blue', 'Black'];
 function finding(code, severity, team, message, count) { return { severity, code, message, row: -1, column: -1, team, count: count || 1, place_limit: false }; }
 // teams: for each color [ants, hill cells]; extra findings are added as they are
 function answers(opts) {
-    const o = Object.assign({ kind: 'classic', rows: 31, columns: 31, teams: [[3, 16], [3, 16], [3, 16], [3, 16]], extra: [], judged: true, loaded: true, plants: 0, waypoints: 0 }, opts || {});
+    const o = Object.assign({ kind: 'classic', rows: 31, columns: 31, teams: [[3, 16], [3, 16], [3, 16], [3, 16]], extra: [], judged: true, loaded: true, plants: 0, waypoints: 0, food_piles: 0, powerups: 0 }, opts || {});
     const findings = [];
     o.teams.forEach(([ants, cells], t) => {
         if (!cells) findings.push(finding('hill_missing', 'warning', t, NAMES[t] + ' has no hill'));
         if (!ants) findings.push(finding('starting_ants_missing', 'warning', t, NAMES[t] + ' has no starting ants (no start marker, tile 154)'));
     });
     return { check: { kind: o.kind, judged: o.judged, works: !findings.length, headline: 'x', badge: '', findings: findings.concat(o.extra) },
-             read: { loaded: o.loaded, rows: o.rows, columns: o.columns, plants: o.plants, waypoints: o.waypoints, teams: o.teams.map(([ants, cells], t) => ({ team: NAMES[t].toLowerCase(), start_markers: ants, hill_cells: cells })) } };
+             read: { loaded: o.loaded, rows: o.rows, columns: o.columns, plants: o.plants, waypoints: o.waypoints, food_piles: o.food_piles, powerups: o.powerups, teams: o.teams.map(([ants, cells], t) => ({ team: NAMES[t].toLowerCase(), start_markers: ants, hill_cells: cells })) } };
 }
 function verdictOf(opts) { const a = answers(opts); return Play.verdict(a.check, a.read); }
 const usable = (v) => v.seats.map((s) => (s.usable ? 1 : 0)).join('');
@@ -72,6 +72,26 @@ function verdictChecks() {
     check(v.ok && v.pairs === 65500 * 65535 && v.online === false, 'a map of 65,500 plants and 65,535 waypoints is far over the cap');
     v = verdictOf({ plants: 0, waypoints: 65535 });
     check(v.ok && v.pairs === 0 && v.online === true, '0 plants is 0 pairs, however many waypoints: online');
+    // food objects (the engine's lookup of a food cell looks at every object) and power-ups (the bots group the ones that touch): two more numbers that a room limits
+    v = verdictOf({ food_piles: 250 });
+    check(v.ok && v.food === 250 && v.online === true, '250 food objects are exactly the cap: online');
+    v = verdictOf({ food_piles: 251 });
+    check(v.ok && v.food === 251 && v.online === false, '251 food objects: over the cap, offline (ants and pairs alone would allow it)');
+    v = verdictOf({ food_piles: 65514 });
+    check(v.ok && v.food === 65514 && v.online === false, 'a map of 65,514 food objects is far over the cap');
+    v = verdictOf({ powerups: 1000 });
+    check(v.ok && v.powerups === 1000 && v.online === true, '1,000 power-ups are exactly the cap: online');
+    v = verdictOf({ powerups: 1001 });
+    check(v.ok && v.powerups === 1001 && v.online === false, '1,001 power-ups: over the cap, offline');
+    v = verdictOf({ powerups: 896 });
+    check(v.ok && v.powerups === 896 && v.online === true, 'the most power-ups of a map of the library (896): online');
+    {   // a reading without the two keys (a map core that does not know them yet) counts 0 of each: online
+        const older = answers();
+        delete older.read.food_piles;
+        delete older.read.powerups;
+        v = Play.verdict(older.check, older.read);
+        check(v.ok && v.food === 0 && v.powerups === 0 && v.online === true, 'a reading without the two keys counts 0 of each (an older core): online');
+    }
     v = verdictOf();
     equal(v.seats.map((s) => [s.seat, s.name, s.ants, s.hills]), [[0, 'Green', 3, 1], [1, 'Red', 3, 1], [2, 'Blue', 3, 1], [3, 'Black', 3, 1]], 'the seats are the game\'s own: Green 0, Red 1, Blue 2, Black 3, with their ants and hills');
     check(verdictOf({ rows: 90 }).ok && !verdictOf({ rows: 91 }).ok, 'Classic: ninety rows play, ninety-one do not');
@@ -537,6 +557,24 @@ function dialogChecks() {
         const no = all(p, '.play-panel-friends .play-status');
         check(no.length === 2 && no[0].textContent.indexOf('ants') > 0 && no[1].textContent.indexOf('pairs') > 0, 'over both caps: the ants note, then the pairs note, both shown');
     }
+    {   // a map over the food and power-up caps shows each note, and the numbers are written with thousands separators (600 food objects are over the food cap and under the power-up cap, so a row judged by the other's number is seen)
+        p = pageOf();
+        const many = answers({ food_piles: 600, powerups: 3000 });
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: many.check }), readReport: () => ({ status: 0, json: many.read }) } }));
+        all(p, '.play-tab')[1].click();
+        const no = all(p, '.play-panel-friends .play-status');
+        check(no.length === 2 && no[0].textContent.indexOf('600 food objects') > 0 && no[0].textContent.indexOf('at most 250') > 0 && no[1].textContent.indexOf('3,000 power-ups') > 0 && no[1].textContent.indexOf('at most 1,000') > 0, 'over the food and power-up caps: both notes, with the numbers');
+        check(no.every((n) => n.className === 'play-status no' && n.getAttribute('role') === 'status'), 'the food and power-up notes have the warning classes of the dialog and are announced as a status');
+        p = pageOf();
+        const fine = answers({ food_piles: 250, powerups: 1000 });
+        Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: fine.check }), readReport: () => ({ status: 0, json: fine.read }) } }));
+        all(p, '.play-tab')[1].click();
+        check(all(p, '.play-panel-friends .play-status').length === 0, 'at the food and power-up caps: no refusal is shown');
+    }
+    check(Play.MAX_ONLINE_FOOD === 250 && Play.MAX_ONLINE_POWERUPS === 1000, 'the food cap is 250 and the power-up cap is 1,000');
+    check(Play.onlineFoodText(1500).indexOf('so it cannot host this map. You can still play it against bots on this device.') > 0 && Play.onlinePowerUpsText(3000).indexOf('so it cannot host this map. You can still play it against bots on this device.') > 0,
+          'the food and power-up notes say that a room cannot host the map and that it can be played against bots');
+    check(Play.onlineFoodText(1500).indexOf('1,500 food objects') > 0 && Play.onlinePowerUpsText(3000).indexOf('3,000 power-ups') > 0, 'the numbers of the two notes are written with thousands separators');
     check(Play.MAX_ONLINE_PAIRS === 1000000 && Play.onlinePairsText(1001000).indexOf('1,001,000 pairs') > 0 && Play.onlinePairsText(1001000).indexOf('at most 1,000,000') > 0, 'the pairs cap is 1,000,000 and the words write the number with thousands separators');
     equal(digest(bytes), before, 'at the end the open file is still as it was');
 }
