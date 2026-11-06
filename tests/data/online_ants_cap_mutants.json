@@ -274,8 +274,8 @@
   {
    "id": "message_of_the_leader_without_the_number",
    "file": "include/ants_net/protocol.hpp",
-   "old": "(1,000 at most): choose another map.\"",
-   "new": "(too many): choose another map.\"",
+   "old": "ants to play online (1,000 at most): choose another map.\"",
+   "new": "ants to play online (too many): choose another map.\"",
    "build": [
     "test_server",
     "test_map_list",

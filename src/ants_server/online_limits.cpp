@@ -115,7 +115,7 @@ const TermInfo& OnlineLimits::info(Term term) noexcept {
     static const TermInfo kPairs{"pairs", "map_too_many_pairs_online", "has too many pairs of a plant and a waypoint", " to play online", "1,000,000 at most", "has more pairs of a plant and a waypoint",
                                  net::kNoticeMapTooManyPairs};
     static const TermInfo kFood{"food", "map_too_many_food_online", "has too many food objects", " to play online", "250 at most", "has more food objects", net::kNoticeMapTooManyFood};
-    static const TermInfo kPowerUps{"powerups", "map_too_many_powerups_online", "has too many power-ups", " to play online", "2,000 at most", "has more power-ups", net::kNoticeMapTooManyPowerUps};
+    static const TermInfo kPowerUps{"powerups", "map_too_many_powerups_online", "has too many power-ups", " to play online", "1,000 at most", "has more power-ups", net::kNoticeMapTooManyPowerUps};
     switch (term) {
         case Term::None: return kNone;
         case Term::Cells: return kCells;

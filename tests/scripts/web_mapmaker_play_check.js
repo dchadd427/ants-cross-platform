@@ -79,10 +79,10 @@ function verdictChecks() {
     check(v.ok && v.food === 251 && v.online === false, '251 food objects: over the cap, offline (ants and pairs alone would allow it)');
     v = verdictOf({ food_piles: 65514 });
     check(v.ok && v.food === 65514 && v.online === false, 'a map of 65,514 food objects is far over the cap');
-    v = verdictOf({ powerups: 2000 });
-    check(v.ok && v.powerups === 2000 && v.online === true, '2,000 power-ups are exactly the cap: online');
-    v = verdictOf({ powerups: 2001 });
-    check(v.ok && v.powerups === 2001 && v.online === false, '2,001 power-ups: over the cap, offline');
+    v = verdictOf({ powerups: 1000 });
+    check(v.ok && v.powerups === 1000 && v.online === true, '1,000 power-ups are exactly the cap: online');
+    v = verdictOf({ powerups: 1001 });
+    check(v.ok && v.powerups === 1001 && v.online === false, '1,001 power-ups: over the cap, offline');
     v = verdictOf({ powerups: 896 });
     check(v.ok && v.powerups === 896 && v.online === true, 'the most power-ups of a map of the library (896): online');
     {   // a reading without the two keys (a map core that does not know them yet) counts 0 of each: online
@@ -557,21 +557,21 @@ function dialogChecks() {
         const no = all(p, '.play-panel-friends .play-status');
         check(no.length === 2 && no[0].textContent.indexOf('ants') > 0 && no[1].textContent.indexOf('pairs') > 0, 'over both caps: the ants note, then the pairs note, both shown');
     }
-    {   // a map over the food and power-up caps shows each note, and the numbers are written with thousands separators
+    {   // a map over the food and power-up caps shows each note, and the numbers are written with thousands separators (600 food objects are over the food cap and under the power-up cap, so a row judged by the other's number is seen)
         p = pageOf();
-        const many = answers({ food_piles: 1500, powerups: 3000 });
+        const many = answers({ food_piles: 600, powerups: 3000 });
         Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: many.check }), readReport: () => ({ status: 0, json: many.read }) } }));
         all(p, '.play-tab')[1].click();
         const no = all(p, '.play-panel-friends .play-status');
-        check(no.length === 2 && no[0].textContent.indexOf('1,500 food objects') > 0 && no[0].textContent.indexOf('at most 250') > 0 && no[1].textContent.indexOf('3,000 power-ups') > 0 && no[1].textContent.indexOf('at most 2,000') > 0, 'over the food and power-up caps: both notes, with the numbers');
+        check(no.length === 2 && no[0].textContent.indexOf('600 food objects') > 0 && no[0].textContent.indexOf('at most 250') > 0 && no[1].textContent.indexOf('3,000 power-ups') > 0 && no[1].textContent.indexOf('at most 1,000') > 0, 'over the food and power-up caps: both notes, with the numbers');
         check(no.every((n) => n.className === 'play-status no' && n.getAttribute('role') === 'status'), 'the food and power-up notes have the warning classes of the dialog and are announced as a status');
         p = pageOf();
-        const fine = answers({ food_piles: 250, powerups: 2000 });
+        const fine = answers({ food_piles: 250, powerups: 1000 });
         Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: fine.check }), readReport: () => ({ status: 0, json: fine.read }) } }));
         all(p, '.play-tab')[1].click();
         check(all(p, '.play-panel-friends .play-status').length === 0, 'at the food and power-up caps: no refusal is shown');
     }
-    check(Play.MAX_ONLINE_FOOD === 250 && Play.MAX_ONLINE_POWERUPS === 2000, 'the food cap is 250 and the power-up cap is 2,000');
+    check(Play.MAX_ONLINE_FOOD === 250 && Play.MAX_ONLINE_POWERUPS === 1000, 'the food cap is 250 and the power-up cap is 1,000');
     check(Play.onlineFoodText(1500).indexOf('so it cannot host this map. You can still play it against bots on this device.') > 0 && Play.onlinePowerUpsText(3000).indexOf('so it cannot host this map. You can still play it against bots on this device.') > 0,
           'the food and power-up notes say that a room cannot host the map and that it can be played against bots');
     check(Play.onlineFoodText(1500).indexOf('1,500 food objects') > 0 && Play.onlinePowerUpsText(3000).indexOf('3,000 power-ups') > 0, 'the numbers of the two notes are written with thousands separators');

@@ -141,7 +141,7 @@ void doors_of_a_limit(const std::string& tag, const std::string& code, Term term
     const uint64_t cap = OnlineLimits::limit_of(term);
     const TermInfo& info = OnlineLimits::info(term);
     const std::string notice = info.notice;
-    const std::string cap_text = cap >= 1000 ? std::to_string(cap / 1000) + "," + (cap % 1000 < 100 ? "0" : "") + (cap % 1000 < 10 ? "0" : "") + std::to_string(cap % 1000) : std::to_string(cap);          // (250, 2,000)
+    const std::string cap_text = cap >= 1000 ? std::to_string(cap / 1000) + "," + (cap % 1000 < 100 ? "0" : "") + (cap % 1000 < 10 ? "0" : "") + std::to_string(cap % 1000) : std::to_string(cap);          // (250, 1,000)
     ASSERT_TRUE(!notice.empty() && notice.size() <= net::kMaxChatChars && notice.find("(" + cap_text + " at most)") != std::string::npos && std::string(info.limit) == cap_text + " at most");
     const fs::path dir = fresh_dir(("s26x" + code).c_str());
     const std::string at_cap = "At " + tag + " Cap.lvl", over = "Over " + tag + ".lvl", huge = "Huge " + tag + ".lvl";
@@ -1166,21 +1166,21 @@ void run_online_limit_tests() {
         doors_of_a_limit("Food", "fod", Term::FoodObjects, [](uint64_t n) { return tiny_with_food(static_cast<uint32_t>(n)); }, 31);
     } TEST_END();
 
-    TEST_CASE("S3.262 The Doors Of A Room For The Power-Ups Of A Map (OnlineLimits::kMaxPowerUps = 2,000): The Same Doors As For The Food Objects, With The Marker \"powerups\", And 2,000 Is Taken At Every Door And 2,001 Is Not") {
-        ASSERT_TRUE(OnlineLimits::kMaxPowerUps == 2000u && std::string(OnlineLimits::info(Term::PowerUps).why) == "powerups");
-        ASSERT_TRUE(OnlineLimits::allows(online_counts(1, 0, 0, 0, 0)) && OnlineLimits::allows(online_counts(1, 0, 0, 0, 2000)) && !OnlineLimits::allows(online_counts(1, 0, 0, 0, 2001)) && !OnlineLimits::allows(online_counts(1, 0, 0, 0, 60000)));
+    TEST_CASE("S3.262 The Doors Of A Room For The Power-Ups Of A Map (OnlineLimits::kMaxPowerUps = 1,000): The Same Doors As For The Food Objects, With The Marker \"powerups\", And 1,000 Is Taken At Every Door And 1,001 Is Not") {
+        ASSERT_TRUE(OnlineLimits::kMaxPowerUps == 1000u && std::string(OnlineLimits::info(Term::PowerUps).why) == "powerups");
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(1, 0, 0, 0, 0)) && OnlineLimits::allows(online_counts(1, 0, 0, 0, 1000)) && !OnlineLimits::allows(online_counts(1, 0, 0, 0, 1001)) && !OnlineLimits::allows(online_counts(1, 0, 0, 0, 60000)));
         doors_of_a_limit("Powerups", "pwr", Term::PowerUps, [](uint64_t n) { return tiny_with_power_ups(static_cast<uint32_t>(n)); }, 64);
     } TEST_END();
 
     TEST_CASE("S3.263 The Limits Are Judged As One Set: The First Limit A Map Is Over Is The Reason (Size, Ants, Pairs, Food, Power-Ups, In That Order), A Map Over Several Names The First, Every Term Has Its Own Sentence, Code And Marker, And No Sentence Is Longer Than A Chat Line") {
         ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(1))), static_cast<int>(Term::None));
-        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65537, 1001, 1000001, 251, 2001))), static_cast<int>(Term::Cells));
-        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1001, 1000001, 251, 2001))), static_cast<int>(Term::StartAnts));
-        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000001, 251, 2001))), static_cast<int>(Term::Pairs));
-        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 251, 2001))), static_cast<int>(Term::FoodObjects));
-        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 250, 2001))), static_cast<int>(Term::PowerUps));
-        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 250, 2000))), static_cast<int>(Term::None));
-        ASSERT_TRUE(OnlineLimits::allows(online_counts(65536, 1000, 1000000, 250, 2000)));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65537, 1001, 1000001, 251, 1001))), static_cast<int>(Term::Cells));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1001, 1000001, 251, 1001))), static_cast<int>(Term::StartAnts));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000001, 251, 1001))), static_cast<int>(Term::Pairs));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 251, 1001))), static_cast<int>(Term::FoodObjects));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 250, 1001))), static_cast<int>(Term::PowerUps));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 250, 1000))), static_cast<int>(Term::None));
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(65536, 1000, 1000000, 250, 1000)));
         std::set<std::string> codes, whys, notices;
         for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {
             const TermInfo& info = OnlineLimits::info(term);

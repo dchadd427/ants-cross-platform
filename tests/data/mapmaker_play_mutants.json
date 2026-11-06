@@ -1360,17 +1360,17 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_powerups_cap_2001",
+      "id": "play_powerups_cap_1001",
       "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_ONLINE_POWERUPS = 2000;",
-      "new": "var MAX_ONLINE_POWERUPS = 2001;",
+      "old": "var MAX_ONLINE_POWERUPS = 1000;",
+      "new": "var MAX_ONLINE_POWERUPS = 1001;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_powerups_cap_1999",
+      "id": "play_powerups_cap_999",
       "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_ONLINE_POWERUPS = 2000;",
-      "new": "var MAX_ONLINE_POWERUPS = 1999;",
+      "old": "var MAX_ONLINE_POWERUPS = 1000;",
+      "new": "var MAX_ONLINE_POWERUPS = 999;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {

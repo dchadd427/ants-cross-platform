@@ -460,14 +460,14 @@ int main() {
         ASSERT_TRUE(rig.history.find(id, got) && got.details.empty() && later.backfilled() == 0);
     } TEST_END();
 
-    TEST_CASE("MP2.7 A recording on a map with more food objects (250) or more power-ups (2,000) than a room plays is not played by the feeder (one piece on the one thread): it is left out; one at the limit is counted as ever") {
+    TEST_CASE("MP2.7 A recording on a map with more food objects (250) or more power-ups (1,000) than a room plays is not played by the feeder (one piece on the one thread): it is left out; one at the limit is counted as ever") {
         TempDir maps;
         const auto keep_map = [&](const char* name, const std::string& bytes) {
             std::ofstream out(maps.path / name, std::ios::binary);
             out << bytes;
             return !bytes.empty() && static_cast<bool>(out);
         };
-        ASSERT_TRUE(keep_map("FOOD AT.LVL", tiny_with_food(250)) && keep_map("FOOD OVER.LVL", tiny_with_food(251)) && keep_map("POWER AT.LVL", tiny_with_power_ups(2000, true)) && keep_map("POWER OVER.LVL", tiny_with_power_ups(2001, true)));
+        ASSERT_TRUE(keep_map("FOOD AT.LVL", tiny_with_food(250)) && keep_map("FOOD OVER.LVL", tiny_with_food(251)) && keep_map("POWER AT.LVL", tiny_with_power_ups(1000, true)) && keep_map("POWER OVER.LVL", tiny_with_power_ups(1001, true)));
         for (const char* file : {"FOOD AT.LVL", "FOOD OVER.LVL", "POWER AT.LVL", "POWER OVER.LVL"}) {
             const bool over = std::string(file).find("OVER") != std::string::npos;
             MatchSpec spec;
@@ -490,7 +490,7 @@ int main() {
     TEST_CASE("MP2.8 A counted match with no details yet whose recording is on a map with more food objects or more power-ups than a room plays is not played again by the backfill: it gets no details and no marker (the next start tries again), and one line says why") {
         for (const Term term : {Term::FoodObjects, Term::PowerUps}) {
             TempDir maps;
-            { std::ofstream out(maps.path / "OVER.LVL", std::ios::binary); out << (term == Term::FoodObjects ? tiny_with_food(251) : tiny_with_power_ups(2001, true)); }
+            { std::ofstream out(maps.path / "OVER.LVL", std::ios::binary); out << (term == Term::FoodObjects ? tiny_with_food(251) : tiny_with_power_ups(1001, true)); }
             MatchSpec spec;
             spec.dir = maps.path.string();
             spec.file = "OVER.LVL";

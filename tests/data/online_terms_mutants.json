@@ -8,13 +8,9 @@
       "new": "        case Term::Cells: return kMaxCells + 1;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "limit_of_startants_one_more",
@@ -23,13 +19,9 @@
       "new": "        case Term::StartAnts: return kMaxStartAnts + 1;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "limit_of_pairs_one_more",
@@ -38,13 +30,9 @@
       "new": "        case Term::Pairs: return kMaxPlantWaypointPairs + 1;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "limit_of_foodobjects_one_more",
@@ -53,13 +41,9 @@
       "new": "        case Term::FoodObjects: return kMaxFoodObjects + 1;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "limit_of_powerups_one_more",
@@ -68,13 +52,9 @@
       "new": "        case Term::PowerUps: return kMaxPowerUps + 1;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "count_of_cells_reads_another_field",
@@ -83,13 +63,9 @@
       "new": "        case Term::Cells: return c.start_ants;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "count_of_startants_reads_another_field",
@@ -98,13 +74,9 @@
       "new": "        case Term::StartAnts: return c.cells;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "count_of_pairs_reads_another_field",
@@ -113,13 +85,9 @@
       "new": "        case Term::Pairs: return c.start_ants;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "count_of_foodobjects_reads_another_field",
@@ -128,13 +96,9 @@
       "new": "        case Term::FoodObjects: return c.power_ups;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "count_of_powerups_reads_another_field",
@@ -143,13 +107,9 @@
       "new": "        case Term::PowerUps: return c.food_objects;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "over_at_the_limit_is_over",
@@ -158,13 +118,9 @@
       "new": "    return term != Term::None && count_of(c, term) >= limit_of(term);",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "allows_never_refuses",
@@ -173,13 +129,9 @@
       "new": "    return true;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "first_over_forgets_cells",
@@ -188,13 +140,9 @@
       "new": "    for (const Term term : {Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "first_over_forgets_startants",
@@ -203,13 +151,9 @@
       "new": "    for (const Term term : {Term::Cells, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "first_over_forgets_pairs",
@@ -218,13 +162,9 @@
       "new": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::FoodObjects, Term::PowerUps}) {",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "first_over_forgets_foodobjects",
@@ -233,13 +173,9 @@
       "new": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::PowerUps}) {",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "first_over_forgets_powerups",
@@ -248,13 +184,9 @@
       "new": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects}) {",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "first_over_names_the_pairs_before_the_ants",
@@ -263,13 +195,9 @@
       "new": "    for (const Term term : {Term::Cells, Term::Pairs, Term::StartAnts, Term::FoodObjects, Term::PowerUps}) {",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "counts_of_forgets_the_cells",
@@ -277,14 +205,9 @@
       "old": "    counts.cells = static_cast<uint64_t>(level.width()) * level.height();",
       "new": "    counts.cells = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.2 timeout 1500 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.21 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "counts_of_forgets_the_start_ants",
@@ -292,14 +215,9 @@
       "old": "    counts.start_ants = start_ants(level);",
       "new": "    counts.start_ants = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.2 timeout 1500 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.22 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "counts_of_forgets_the_pairs",
@@ -307,14 +225,9 @@
       "old": "    counts.pairs = plant_waypoint_pairs(level);",
       "new": "    counts.pairs = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.2 timeout 1500 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.259 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "counts_of_forgets_the_food_objects",
@@ -322,14 +235,9 @@
       "old": "    counts.food_objects = food_objects(level);",
       "new": "    counts.food_objects = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.2 timeout 1500 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "counts_of_forgets_the_power_ups",
@@ -337,14 +245,9 @@
       "old": "    counts.power_ups = power_ups(level);",
       "new": "    counts.power_ups = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.2 timeout 1500 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.262 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "power_ups_counts_one_kind_only",
@@ -352,12 +255,7 @@
       "old": "        if (sim::movement::is_powerup_tile(cell.tile_index)) ++found;",
       "new": "        if (cell.tile_index == 62) ++found;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
       "test": "./build/tests/test_server/test_map_list"
     },
@@ -367,12 +265,7 @@
       "old": "    return static_cast<uint64_t>(level.food_schedules.size());",
       "new": "    return static_cast<uint64_t>(level.food_schedules.size() / 2);",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
       "test": "./build/tests/test_server/test_map_list"
     },
@@ -382,12 +275,8 @@
       "old": "    counts.food_objects = number(\"food_piles\");",
       "new": "    counts.food_objects = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
@@ -397,12 +286,8 @@
       "old": "    counts.power_ups = number(\"powerups\");",
       "new": "    counts.power_ups = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
@@ -412,12 +297,8 @@
       "old": "    counts.pairs = number(\"plants\") * number(\"waypoints\");",
       "new": "    counts.pairs = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
@@ -427,12 +308,8 @@
       "old": "    counts.pairs = number(\"plants\") * number(\"waypoints\");",
       "new": "    counts.pairs = number(\"plants\");",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
@@ -442,12 +319,8 @@
       "old": "    for (size_t s = 0; s < 4 && s < report.get(\"teams\").size(); ++s) counts.start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get(\"teams\").at(s).get(\"start_markers\").as_int_or(0)));",
       "new": "    for (size_t s = 0; s < 1 && s < report.get(\"teams\").size(); ++s) counts.start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get(\"teams\").at(s).get(\"start_markers\").as_int_or(0)));",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
@@ -457,12 +330,7 @@
       "old": "    counts.cells = number(\"rows\") * number(\"columns\");",
       "new": "    counts.cells = number(\"rows\");",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_test_maps"
       ],
       "test": "./build/tests/test_server/test_test_maps"
     },
@@ -472,29 +340,19 @@
       "old": "    static const TermInfo kFood{\"food\", \"map_too_many_food_online\", \"has too many food objects\", \" to play online\", \"250 at most\", \"has more food objects\", net::kNoticeMapTooManyFood};",
       "new": "    static const TermInfo kFood{\"powerups\", \"map_too_many_food_online\", \"has too many food objects\", \" to play online\", \"250 at most\", \"has more food objects\", net::kNoticeMapTooManyFood};",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "info_power_ups_marker_is_the_food",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    static const TermInfo kPowerUps{\"powerups\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"2,000 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
-      "new": "    static const TermInfo kPowerUps{\"food\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"2,000 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
+      "old": "    static const TermInfo kPowerUps{\"powerups\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"1,000 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
+      "new": "    static const TermInfo kPowerUps{\"food\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"1,000 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.262 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "info_food_limit_text_is_wrong",
@@ -502,27 +360,19 @@
       "old": "    static const TermInfo kFood{\"food\", \"map_too_many_food_online\", \"has too many food objects\", \" to play online\", \"250 at most\", \"has more food objects\", net::kNoticeMapTooManyFood};",
       "new": "    static const TermInfo kFood{\"food\", \"map_too_many_food_online\", \"has too many food objects\", \" to play online\", \"25 at most\", \"has more food objects\", net::kNoticeMapTooManyFood};",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
     {
       "id": "info_power_ups_limit_text_is_wrong",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    static const TermInfo kPowerUps{\"powerups\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"2,000 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
-      "new": "    static const TermInfo kPowerUps{\"powerups\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"200 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
+      "old": "    static const TermInfo kPowerUps{\"powerups\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"1,000 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
+      "new": "    static const TermInfo kPowerUps{\"powerups\", \"map_too_many_powerups_online\", \"has too many power-ups\", \" to play online\", \"100 at most\", \"has more power-ups\", net::kNoticeMapTooManyPowerUps};",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
@@ -532,14 +382,9 @@
       "old": "    static const TermInfo kFood{\"food\", \"map_too_many_food_online\", \"has too many food objects\", \" to play online\", \"250 at most\", \"has more food objects\", net::kNoticeMapTooManyFood};",
       "new": "    static const TermInfo kFood{\"food\", \"map_too_many_food_online\", \"has too many food objects\", \" to play online\", \"250 at most\", \"has more food objects\", net::kNoticeMapTooManyPowerUps};",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "info_food_code_is_the_pairs",
@@ -547,12 +392,8 @@
       "old": "    static const TermInfo kFood{\"food\", \"map_too_many_food_online\", \"has too many food objects\", \" to play online\", \"250 at most\", \"has more food objects\", net::kNoticeMapTooManyFood};",
       "new": "    static const TermInfo kFood{\"food\", \"map_too_many_pairs_online\", \"has too many food objects\", \" to play online\", \"250 at most\", \"has more food objects\", net::kNoticeMapTooManyFood};",
       "build": [
-        "test_server",
-        "test_map_list",
         "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_test_maps && ./build/tests/test_server/test_submissions"
     },
@@ -562,14 +403,9 @@
       "old": "    }\n    const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));",
       "new": "    }\n    const Term over = Term::None;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "restart_map_refusal_ignores_the_limits",
@@ -577,14 +413,9 @@
       "old": "    if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return \"ended by a restart of the server: the map \" + head.map + \" cannot be played by this engine\";\n    const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));",
       "new": "    if (!level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended())) return \"ended by a restart of the server: the map \" + head.map + \" cannot be played by this engine\";\n    const Term over = Term::None;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "lobby_page_block_takes_any_test_map",
@@ -592,14 +423,9 @@
       "old": "        OnlineLimits::allows(store_.counts_of(block.map_name)))",
       "new": "        true)",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "lobby_load_ignores_the_limits",
@@ -607,14 +433,9 @@
       "old": "               OnlineLimits::allows(OnlineLimits::counts_of(level));",
       "new": "               true;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "begin_replay_ignores_the_limits",
@@ -622,14 +443,9 @@
       "old": "    const Term over = OnlineLimits::first_over(map_counts());",
       "new": "    const Term over = Term::None;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_server"
       ],
-      "test": "ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "history_load_level_ignores_the_limits",
@@ -637,12 +453,7 @@
       "old": "    const Term over = OnlineLimits::first_over(OnlineLimits::counts_of(level));",
       "new": "    const Term over = Term::None;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_plays"
       ],
       "test": "./build/tests/test_server/test_map_plays"
     },
@@ -652,12 +463,7 @@
       "old": "    const Term over = OnlineLimits::first_over(counts);",
       "new": "    const Term over = Term::None;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_test_maps"
       ],
       "test": "./build/tests/test_server/test_test_maps"
     },
@@ -667,12 +473,7 @@
       "old": "    m.food_objects = counts.food_objects;",
       "new": "    m.food_objects = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_test_maps"
       ],
       "test": "./build/tests/test_server/test_test_maps"
     },
@@ -682,12 +483,7 @@
       "old": "    m.power_ups = counts.power_ups;",
       "new": "    m.power_ups = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_test_maps"
       ],
       "test": "./build/tests/test_server/test_test_maps"
     },
@@ -697,12 +493,7 @@
       "old": "    const Term over = OnlineLimits::first_over(counts);",
       "new": "    const Term over = Term::None;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_submissions"
     },
@@ -712,12 +503,7 @@
       "old": "    counts.cells = 0;",
       "new": "    (void)counts.cells;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_submissions"
       ],
       "test": "./build/tests/test_server/test_submissions"
     },
@@ -728,13 +514,9 @@
       "new": "    for (const MapListing& m : listing_) {\n        if (m.file == name && true) return m.file;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "lobby_takes_an_extended_map_over_a_limit",
@@ -743,13 +525,9 @@
       "new": "    for (const MapListing& m : extended_listing_) {\n        if (m.file == name && true) return m.file;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "lobby_takes_a_test_map_over_a_limit",
@@ -758,13 +536,9 @@
       "new": "        if (t.name == name && true) return t.name;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "lobby_takes_a_classic_map_over_a_limit_in_other_case",
@@ -773,13 +547,9 @@
       "new": "    for (const MapListing& m : listing_) {\n        if (lower(m.file) == folded && true) return m.file;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "lobby_takes_an_extended_map_over_a_limit_in_other_case",
@@ -788,13 +558,9 @@
       "new": "    for (const MapListing& m : extended_listing_) {\n        if (lower(m.file) == folded && true) return m.file;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "lobby_takes_a_test_map_over_a_limit_in_other_case",
@@ -803,13 +569,9 @@
       "new": "        if (lower(t.name) == folded && true) return t.name;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "over_limit_ignores_the_classic_list",
@@ -818,13 +580,9 @@
       "new": "    for (const MapListing& m : listing_) {\n        if (lower(m.file) == folded && false) return true;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "over_limit_ignores_the_extended_list",
@@ -833,13 +591,9 @@
       "new": "    for (const MapListing& m : extended_listing_) {\n        if (lower(m.file) == folded && false) return true;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "over_limit_ignores_the_test_maps",
@@ -848,13 +602,9 @@
       "new": "        if (lower(t.name) == folded && false) return true;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "online_refusal_tells_no_one",
@@ -863,13 +613,9 @@
       "new": "        if (false) return OnlineLimits::info(term).notice;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "list_does_not_say_online_false",
@@ -878,13 +624,9 @@
       "new": "        if (with_extended && false) {       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "list_names_no_reason",
@@ -893,13 +635,9 @@
       "new": "                    o.set(\"online_why\", ctl::JsonValue::make_string(\"\"));",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "scan_known_branch_forgets_the_food_objects",
@@ -907,12 +645,7 @@
       "old": "                m.pairs = c.pairs;\n                m.food_objects = c.food_objects;",
       "new": "                m.pairs = c.pairs;\n                m.food_objects = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
       "test": "./build/tests/test_server/test_map_list"
     },
@@ -922,12 +655,7 @@
       "old": "                m.food_objects = c.food_objects;\n                m.power_ups = c.power_ups;",
       "new": "                m.food_objects = c.food_objects;\n                m.power_ups = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
       "test": "./build/tests/test_server/test_map_list"
     },
@@ -937,12 +665,7 @@
       "old": "            m.pairs = c.pairs;\n            m.food_objects = c.food_objects;",
       "new": "            m.pairs = c.pairs;\n            m.food_objects = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
       "test": "./build/tests/test_server/test_map_list"
     },
@@ -952,12 +675,7 @@
       "old": "            m.food_objects = c.food_objects;\n            m.power_ups = c.power_ups;",
       "new": "            m.food_objects = c.food_objects;\n            m.power_ups = 0;",
       "build": [
-        "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
       "test": "./build/tests/test_server/test_map_list"
     },
@@ -968,13 +686,9 @@
       "new": "        c.food = 0;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "counted_file_forgets_the_power_ups",
@@ -983,13 +697,9 @@
       "new": "        c.power_ups = 0;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "approved_map_forgets_the_food",
@@ -998,13 +708,9 @@
       "new": "        a.food_objects = 0;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "approved_map_forgets_the_power_ups",
@@ -1013,13 +719,9 @@
       "new": "        a.power_ups = 0;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "listing_of_an_approved_map_forgets_the_food",
@@ -1028,13 +730,9 @@
       "new": "        m.food_objects = 0;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     },
     {
       "id": "listing_of_an_approved_map_forgets_the_power_ups",
@@ -1043,13 +741,9 @@
       "new": "        m.power_ups = 0;",
       "build": [
         "test_server",
-        "test_map_list",
-        "test_test_maps",
-        "test_submissions",
-        "test_map_plays",
-        "test_history_store"
+        "test_map_list"
       ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.26 timeout 900 ./build/tests/test_server/test_server"
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
     }
   ]
 }

@@ -343,7 +343,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("SUB1.2e A map with more food objects (OnlineLimits::kMaxFoodObjects = 250) or more power-ups (OnlineLimits::kMaxPowerUps = 2,000) than a room plays is refused with one plain sentence (422 map_too_many_food_online, map_too_many_powerups_online) and nothing is kept or counted against the sender; the limit itself is sent for approval") {
+    TEST_CASE("SUB1.2e A map with more food objects (OnlineLimits::kMaxFoodObjects = 250) or more power-ups (OnlineLimits::kMaxPowerUps = 1,000) than a room plays is refused with one plain sentence (422 map_too_many_food_online, map_too_many_powerups_online) and nothing is kept or counted against the sender; the limit itself is sent for approval") {
         Sub rig;
         const auto as_extended = [](const std::string& bytes) {
             assets::LevelData level;
@@ -363,14 +363,14 @@ int main() {
         };
         refused(tiny_with_food(251), "Too Many Food", "classic", "map_too_many_food_online", "250 at most");
         refused(as_extended(tiny_with_food(65514)), "Huge Food", "extended", "map_too_many_food_online", "250 at most");
-        refused(tiny_with_power_ups(2001), "Too Many Power-Ups", "extended", "map_too_many_powerups_online", "2,000 at most");
-        refused(tiny_with_power_ups(3000), "Huge Power-Ups", "extended", "map_too_many_powerups_online", "2,000 at most");
+        refused(tiny_with_power_ups(1001), "Too Many Power-Ups", "extended", "map_too_many_powerups_online", "1,000 at most");
+        refused(tiny_with_power_ups(3000), "Huge Power-Ups", "extended", "map_too_many_powerups_online", "1,000 at most");
         ASSERT_TRUE(rig.files().empty());
         ASSERT_EQ(rig.text("SELECT COUNT(*) FROM map_submissions"), std::string("0"));
         ASSERT_EQ(rig.text("SELECT COUNT(*) FROM submission_limits"), std::string("0"));          // (the refusals cost the sender nothing of the three a day)
         const SubmitOutcome food = rig.store->submit(rig.input(tiny_with_food(250), "Food At Cap"), rig.now);
         ASSERT_TRUE(food.ok);
-        SubmitInput power = rig.input(tiny_with_power_ups(2000), "Power-Ups At Cap");
+        SubmitInput power = rig.input(tiny_with_power_ups(1000), "Power-Ups At Cap");
         power.kind = "extended";
         const SubmitOutcome fine = rig.store->submit(power, rig.now);
         ASSERT_TRUE(fine.ok);

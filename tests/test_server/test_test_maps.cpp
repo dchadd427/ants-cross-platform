@@ -512,7 +512,7 @@ int main() {
         }
     } TEST_END();
 
-    TEST_CASE("TM1.7d A map with more food objects (OnlineLimits::kMaxFoodObjects = 250) or more power-ups (OnlineLimits::kMaxPowerUps = 2,000) than a room plays is refused as a test map with one plain sentence (422 map_too_many_food_online, map_too_many_powerups_online) before it is kept; the limit itself is kept, and what is kept carries its counts") {
+    TEST_CASE("TM1.7d A map with more food objects (OnlineLimits::kMaxFoodObjects = 250) or more power-ups (OnlineLimits::kMaxPowerUps = 1,000) than a room plays is refused as a test map with one plain sentence (422 map_too_many_food_online, map_too_many_powerups_online) before it is kept; the limit itself is kept, and what is kept carries its counts") {
         Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
         const auto step = [&]() { t.now_ms += 20000; };
         const auto as_extended = [](const std::string& bytes) {          // (a map with 65,514 food objects is over the 512 KB of a Classic body: it goes as Extended, as the sender's own tool would)
@@ -533,12 +533,12 @@ int main() {
         r = t.upload(as_extended(tiny_with_food(65514)), "Huge Food", "203.0.113.52", "extended");
         ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_food_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
         step();
-        r = t.upload(tiny_with_power_ups(2000), "At Power Cap", "203.0.113.53", "extended");
+        r = t.upload(tiny_with_power_ups(1000), "At Power Cap", "203.0.113.53", "extended");
         ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
         step();
-        r = t.upload(tiny_with_power_ups(2001), "Over Power Cap", "203.0.113.54", "extended");
+        r = t.upload(tiny_with_power_ups(1001), "Over Power Cap", "203.0.113.54", "extended");
         ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_powerups_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
-        ASSERT_TRUE(parse_text(r.body).get("message").str().find("2,000 at most") != std::string::npos && parse_text(r.body).get("message").str().find("against bots") != std::string::npos);
+        ASSERT_TRUE(parse_text(r.body).get("message").str().find("1,000 at most") != std::string::npos && parse_text(r.body).get("message").str().find("against bots") != std::string::npos);
         step();
         r = t.upload(tiny_with_power_ups(3000), "Huge Power", "203.0.113.55", "extended");
         ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_powerups_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
@@ -546,7 +546,7 @@ int main() {
         ASSERT_EQ(kept.size(), size_t{2});                                                              // (only the two at their limits were kept)
         for (const ApprovedMap& m : kept) {
             if (m.name.rfind("At Food Cap", 0) == 0) ASSERT_TRUE(m.food_objects == 250u && m.power_ups == 0u);
-            else if (m.name.rfind("At Power Cap", 0) == 0) ASSERT_TRUE(m.power_ups == 2000u && m.food_objects == 14u);
+            else if (m.name.rfind("At Power Cap", 0) == 0) ASSERT_TRUE(m.power_ups == 1000u && m.food_objects == 14u);
             else ASSERT_MSG(false, "an unexpected test map: " + m.name);
         }
     } TEST_END();

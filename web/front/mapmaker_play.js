@@ -23,7 +23,7 @@
 
     var MAX_ONLINE_ANTS = 1000;                                                         // a room plays no map above this many start ants: the server's OnlineLimits::kMaxStartAnts (a test keeps them equal)
     var MAX_ONLINE_FOOD = 250;                                                          // nor above this many food objects: the server's OnlineLimits::kMaxFoodObjects (a test keeps them equal)
-    var MAX_ONLINE_POWERUPS = 2000;                                                     // nor above this many power-ups: the server's OnlineLimits::kMaxPowerUps (a test keeps them equal)
+    var MAX_ONLINE_POWERUPS = 1000;                                                     // nor above this many power-ups: the server's OnlineLimits::kMaxPowerUps (a test keeps them equal)
     var MAX_ONLINE_PAIRS = 1000000;                                                     // nor above this many pairs of a plant and a waypoint: the server's OnlineLimits::kMaxPlantWaypointPairs (a test keeps them equal)
 
     function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }

@@ -68,10 +68,11 @@ struct OnlineLimits {
     /// up to 65,535 of them whatever the grid's size). 250 is three times the largest map of the library (84).
     static constexpr uint64_t kMaxFoodObjects = 250;
 
-    /// The most power-ups (cells of layer 2 that hold a power-up tile) of a map that a room plays (`MAX_ONLINE_POWERUPS` in mapmaker_play.js is the Map Maker's copy, pinned equal by a test). The bots group the
-    /// power-ups that touch each other when they first look at a map with more than one walkable part, and that work grew with the cube of the largest group before it was made linear in it; what is left
-    /// grows with the square of their number. 2,000 is more than twice the largest map of the library (896).
-    static constexpr uint64_t kMaxPowerUps = 2000;
+    /// The most power-ups (cells of layer 2 that hold a power-up tile) of a map that a room plays (`MAX_ONLINE_POWERUPS` in mapmaker_play.js is the Map Maker's copy, pinned equal by a test). A bot groups the
+    /// power-ups that touch each other when it first looks at a map with more than one walkable part, and plans a walk through a group from every one of its entrances, so what it does grows faster than
+    /// the number of power-ups (a layer 2 holds as many as the grid has cells). 1,000 is above every map of the library (at most 896); a map above it stays on the lists and is played on the player's own
+    /// device, as for the other limits.
+    static constexpr uint64_t kMaxPowerUps = 1000;
 
     /// The limit of a term (0 for None)
     static uint64_t limit_of(Term term) noexcept;
