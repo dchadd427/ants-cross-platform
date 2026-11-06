@@ -240,6 +240,9 @@ public:
     // Input task (Ants.exe INPUT, every 50 ms): edge scrolling with the pointer and the minimap drag; see edge_scroll.hpp. `map_w` / `map_h`
     // are the map's size in tiles. Returns true when the view moved. Nothing happens while a dialog is open or the left button is captured.
     bool input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int32_t mouse_x, int32_t mouse_y);
+    /// The Yard's edge dwell starts over: a pointer that has been out of the picture (or whose input ticks were skipped) waits its 250 ms again at the edge it comes back to (docs/YARD.md).
+    /// Only the Yard's layout reads the count, so this changes nothing in any other layout.
+    void reset_yard_edge_dwell() noexcept { yard_edge_ticks_ = 0; }
     /// The countdown card is the only dialog that is up (protocol 21): the chat is open behind it
     bool countdown_takes_chat() const noexcept {
         return show_match_start_modal_ && match_countdown_ && !options_.is_open() && !show_quit_dialog_ && !show_quick_help_ && alliance_dialog_ == AllianceDialog::None;
@@ -496,6 +499,18 @@ private:
     void render_pedestal_glow(IRenderer& renderer, const assets::AssetArchive& assets, int pedestal_idx);
     /// Places every rectangle of the layout (the buttons of the top bar and the panel, the pedestal slots); run by init() and set_layout()
     void apply_layout();
+    // THE YARD (hud_yard.cpp, docs/YARD.md): what the HUD does when the layout is ScreenLayout::map_only; every use is behind `layout_.yard`, which no other layout has
+    /// The buttons that the Yard does not have are given no size, so that nothing that is not drawn can be hit (run by apply_layout)
+    void apply_yard_layout();
+    /// All that is drawn of the HUD in the Yard: the minimap and, while the left button drags one, the rubber band
+    void render_yard(IRenderer& renderer, const assets::AssetArchive& assets, const sim::WorldState& world, const ViewportCamera& camera);
+    /// The keys that the Yard keeps: Esc and, with Ctrl (or Cmd), A, N, P and S. There is no chat, no help, no options, no quit and no home hill.
+    static bool yard_takes_key(int32_t key, bool ctrl) noexcept;
+    /// The view moves at the edge only after the pointer has stayed where it scrolls for kYardEdgeDwellTicks input ticks (250 ms): the Yard is a part of a page, and the pointer passes its
+    /// edge on its way to the page's own controls. Takes the step that the edge gives and returns the step to make.
+    EdgeScroll yard_edge_dwell(EdgeScroll step) noexcept;
+    static constexpr uint32_t kYardEdgeDwellTicks = 5;      // 5 ticks of the 50 ms input task
+    uint32_t yard_edge_ticks_{0};
     /// Is the point on pedestal slot 0 (Move / hatch / ally), 1 (ability) or 2 (Stop)? The slots are the three pedestal buttons' rectangles (FUN_01028d30, half-open)
     bool in_slot(int slot, int32_t x, int32_t y) const noexcept;
 

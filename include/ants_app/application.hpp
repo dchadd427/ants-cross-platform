@@ -55,6 +55,7 @@
 #include "ants_app/screen_layout.hpp"
 #include "ants_app/view_zoom.hpp"
 #include "ants_app/window_layout.hpp"
+#include "ants_app/yard_sink.hpp"
 
 namespace ants::app {
 
@@ -185,6 +186,10 @@ struct ApplicationConfig {
     /// holds but waits there, and ReplayControl::Extend reads the file again when the page has put a longer copy of the same match in it; ReplayControl::LiveOver says that no more will come. The game stays kLiveHoldTurns
     /// behind the newest turn. Only a file that is not complete is followed.
     bool replay_live{false};
+    /// --yard (docs/YARD.md): the game is the Yard: a picture of the map alone (--window-size gives its size, 960 x 540 without it), in a world that is never ticked and that the batches of the Yard's
+    /// server rewrite; --map names the Yard's map, which needs no start markers and no hills. There is no music, no start dialog, no frame-rate plate and no chat. It cannot be combined with a
+    /// match, a room, bots or a replay (parse_arguments says so). No page passes it before the Yard is switched on.
+    bool yard{false};
     /// --teams ffa | A+B (docs/BOTS.md, "Alliances"): ffa (the default) is free for all; A+B (two seats, 0 - 3) makes them a team, the two others too when both play. Made at the match start with the
     /// original's commands: in a game on this computer by Application::form_start_teams (a pair that cannot be made starts the game without teams and says why), in a room (protocol 13) by every machine
     /// from the Start message, which the room's START puts them into: this player's START (the leader of a server's room, the host of a room on the local network) carries the choice.
@@ -285,6 +290,30 @@ public:
     const std::vector<uint8_t>& last_replay() const noexcept { return last_replay_; }
     /// What that file is called when it is saved or downloaded ("ants-TREASURE-20261006-143209.antsrep")
     const std::string& last_replay_name() const noexcept { return last_replay_name_; }
+    /// THE YARD (docs/YARD.md, application_yard.cpp; ApplicationConfig::yard): the game with a picture of the map alone, of any size from 320 x 240, in a world that is never ticked and that the batches of
+    /// the Yard's server rewrite. start_yard puts a game that is up into it (the flag --yard does it at the start); set_yard_size follows the page's box: the window becomes the canvas times the whole
+    /// number `scale` (1 .. 3), so that SDL scales the canvas by a whole number and no bar or seam appears. yard_apply and yard_set_hills are the server's word, yard_take_intents the visitor's orders on
+    /// their way to it. Every one of them refuses (false, 0, nothing) in a game that is not the Yard.
+    bool start_yard(int32_t width, int32_t height, int32_t scale = 1);
+    bool set_yard_size(int32_t width, int32_t height, int32_t scale = 1);
+    bool yard_mode() const noexcept { return yard_mode_; }
+    int32_t yard_scale() const noexcept { return yard_scale_; }
+    /// The world as the batch says (YardPuppet::apply; what the HUD's selection points at keeps its slot); returns how many ants are shown
+    size_t yard_apply(const yard::Batch& batch);
+    /// The places with an open game (YardPuppet::set_hills); returns how many are set
+    size_t yard_set_hills(const std::vector<yard::Hill>& hills);
+    /// The orders that the visitor has given since the last call, the oldest first (YardSink)
+    std::vector<yard::Intent> yard_take_intents();
+    /// The view puts the world pixel in its middle (the camera keeps to the map)
+    void yard_center_on(int32_t world_x, int32_t world_y);
+    /// ... on the middle of the visitor's own ants (the page does it when they first come); false when none is shown
+    bool yard_show_own();
+    /// What a page reads of the Yard as numbers (ants_yard_probe): 0 the canvas's width, 1 its height, 2 the scale, 3 the ants that are shown, 4 the visitor's own, 5 the places with an open game,
+    /// 6 the ants that are selected, 7 the orders that wait to be taken, 8 the zoom times 100, 9 and 10 the world pixel in the middle of the view (x, y), 11 the tick of the last batch; -1 for anything else
+    /// and in a game that is not the Yard
+    int yard_value(int what) const;
+    const YardPuppet* yard_puppet() const noexcept { return yard_puppet_.get(); }
+    YardSink* yard_sink() noexcept { return yard_sink_.get(); }
     /// Watching a replay (ApplicationConfig::replay_path; docs/REPLAYS.md "Watching"). The page's bar asks and reads through these (ants_replay_do and ants_replay_get).
     bool replay_mode() const noexcept { return replay_mode_; }
     ReplayState replay_state() const noexcept;
@@ -694,6 +723,14 @@ private:
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
     bool replay_mode_{false};                             // --replay: the game shows a recording
+    bool yard_mode_{false};                               // the Yard (application_yard.cpp)
+    int32_t yard_scale_{1};                               // ... the window is its canvas times this
+    uint32_t yard_tick_{0};                               // ... the tick of the server's world that the last batch described
+    std::unique_ptr<YardPuppet> yard_puppet_;             // ... its world: the engine's units, rewritten from the batches
+    std::unique_ptr<YardSink> yard_sink_;                 // ... where the HUD's orders go (it holds the puppet: declared after it)
+    void run_yard(float dt);                              // a frame of the Yard: the HUD's clock steps, nothing ticks
+    void prepare_yard_world();                            // the Yard's world: nobody plays, and no hill, start marker or ant of the map file counts
+    bool start_yard_from_config();                        // --yard: start_yard in the size of --window-size (960 x 540 without it)
     game_menu::MenuSettings menu_settings_;               // Master volume, Mute and the hit point numbers (application_game_menu.cpp)
     std::function<void()> on_game_menu_{nullptr};
     std::string game_menu_json_;                          // what ants_menu_describe hands to the page (it stays until the next call)
