@@ -2457,6 +2457,13 @@
    "old": "pop.hidden = !docked;",
    "new": "pop.hidden = true;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
+  },
+  {
+   "id": "switch_row_aligned_on_the_baseline",
+   "file": "web/home/games.css",
+   "old": ".vbtn { min-height: 44px; display: block; padding: 5px 14px 3px; font-size: 17px; }",
+   "new": ".vbtn { min-height: 44px; display: inline-flex; gap: 8px; align-items: baseline; padding: 5px 14px 3px; font-size: 17px; }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsTheYardsOnAUnlabelledSite"
   }
  ]
 }

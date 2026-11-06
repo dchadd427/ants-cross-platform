@@ -164,7 +164,7 @@
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
 
-        // ---- the Public | Private switch of the Room's card (a guest reads the state; the leader changes it) ----
+        // ---- the Public | Private switch of the Room's card (a guest reads it; the leader changes it) ----
         var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn'), visPublic = el('button', 'btn vbtn'), visTag = el('span', 'vistag'), visNote = el('p', 'visnote');
         visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visTag.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
         [visPrivate, visPublic].forEach(function (b) { b.type = 'button'; visBox.appendChild(b); });
@@ -237,7 +237,7 @@
             else if (c.isLeader() && !room.starting) notice('idle', TEXT.idle, 'warn', [{ text: TEXT.makePublic, run: function () { var k = client(); return !!k && k.setPublic(true); } }]);
         }
 
-        // ---- the repeat that keeps a public room public: every 10 minutes, while the leader looks at the Room and the tab is visible ----
+        // ---- the repeat that keeps a public room public: every 10 minutes while the leader looks at the Room and the tab shows ----
         function wantRefresh() {
             var c = client(), room = c && c.room;
             return !!(!gone && room && room.lobby && room.isPublic && !room.starting && c.isLeader() && c.canAct() && visible() && !onHome() && now() - lastInput < ACTIVE_MS);
@@ -464,7 +464,7 @@
         }
         function closeAll() { closeAsk(false); closeList(false); }
 
-        // ---- Join: the page's probe (a second client that only joins: the old room is let go of when the new one welcomes it) and the words of what it says ----
+        // ---- Join: the page's probe (a second client that only joins: the old room goes when the new one welcomes it) and the words of what it says ----
         function needsAsk(c) {                             // somebody is in the room that this page leaves: a guest always (the host is there), the leader when others are
             return !!(c && c.room && c.room.lobby && (!c.isLeader() || others(c).length > 0));
         }
