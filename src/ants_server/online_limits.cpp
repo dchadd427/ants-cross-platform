@@ -68,6 +68,46 @@ MapCounts OnlineLimits::counts_of_report(const ctl::JsonValue& report) {
     return counts;
 }
 
+uint64_t OnlineLimits::limit_of(Term term) noexcept {
+    switch (term) {
+        case Term::None: return 0;
+        case Term::Cells: return kMaxCells;
+        case Term::StartAnts: return kMaxStartAnts;
+        case Term::Pairs: return kMaxPlantWaypointPairs;
+        case Term::FoodObjects: return kMaxFoodObjects;
+        case Term::PowerUps: return kMaxPowerUps;
+    }
+    return 0;
+}
+
+uint64_t OnlineLimits::count_of(const MapCounts& c, Term term) noexcept {
+    switch (term) {
+        case Term::None: return 0;
+        case Term::Cells: return c.cells;
+        case Term::StartAnts: return c.start_ants;
+        case Term::Pairs: return c.pairs;
+        case Term::FoodObjects: return c.food_objects;
+        case Term::PowerUps: return c.power_ups;
+    }
+    return 0;
+}
+
+// The one question every door asks. A limit is a line here and a case in limit_of, count_of and info: a limit that is added breaks the build of every switch that does not name it.
+bool OnlineLimits::allows(const MapCounts& c) noexcept {
+    return first_over(c) == Term::None;
+}
+
+Term OnlineLimits::first_over(const MapCounts& c) noexcept {
+    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {
+        if (over(c, term)) return term;
+    }
+    return Term::None;
+}
+
+bool OnlineLimits::over(const MapCounts& c, Term term) noexcept {
+    return term != Term::None && count_of(c, term) > limit_of(term);
+}
+
 const TermInfo& OnlineLimits::info(Term term) noexcept {
     static const TermInfo kNone{"", "", "", "", "", "", ""};
     static const TermInfo kCells{"", "map_too_big_online", "is too big", " to play online yet", "65,536 cells at most, like 256 x 256", "is bigger", net::kNoticeMapTooBig};

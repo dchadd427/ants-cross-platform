@@ -74,44 +74,15 @@ struct OnlineLimits {
     static constexpr uint64_t kMaxPowerUps = 2000;
 
     /// The limit of a term (0 for None)
-    static constexpr uint64_t limit_of(Term term) noexcept {
-        switch (term) {
-            case Term::None: return 0;
-            case Term::Cells: return kMaxCells;
-            case Term::StartAnts: return kMaxStartAnts;
-            case Term::Pairs: return kMaxPlantWaypointPairs;
-            case Term::FoodObjects: return kMaxFoodObjects;
-            case Term::PowerUps: return kMaxPowerUps;
-        }
-        return 0;
-    }
+    static uint64_t limit_of(Term term) noexcept;
     /// The number of a term in a map's counts (0 for None)
-    static constexpr uint64_t count_of(const MapCounts& c, Term term) noexcept {
-        switch (term) {
-            case Term::None: return 0;
-            case Term::Cells: return c.cells;
-            case Term::StartAnts: return c.start_ants;
-            case Term::Pairs: return c.pairs;
-            case Term::FoodObjects: return c.food_objects;
-            case Term::PowerUps: return c.power_ups;
-        }
-        return 0;
-    }
+    static uint64_t count_of(const MapCounts& c, Term term) noexcept;
     /// Whether a room plays a map with these counts: every limit holds
-    static constexpr bool allows(const MapCounts& c) noexcept {
-        return c.cells <= kMaxCells && c.start_ants <= kMaxStartAnts && c.pairs <= kMaxPlantWaypointPairs && c.food_objects <= kMaxFoodObjects && c.power_ups <= kMaxPowerUps;
-    }
+    static bool allows(const MapCounts& c) noexcept;
     /// The first limit (in the order of Term) that a map with these counts is over; Term::None when a room plays it
-    static constexpr Term first_over(const MapCounts& c) noexcept {
-        if (c.cells > kMaxCells) return Term::Cells;
-        if (c.start_ants > kMaxStartAnts) return Term::StartAnts;
-        if (c.pairs > kMaxPlantWaypointPairs) return Term::Pairs;
-        if (c.food_objects > kMaxFoodObjects) return Term::FoodObjects;
-        if (c.power_ups > kMaxPowerUps) return Term::PowerUps;
-        return Term::None;
-    }
+    static Term first_over(const MapCounts& c) noexcept;
     /// Whether the map is over this one limit (whatever the others say)
-    static constexpr bool over(const MapCounts& c, Term term) noexcept { return term != Term::None && count_of(c, term) > limit_of(term); }
+    static bool over(const MapCounts& c, Term term) noexcept;
     /// What a door says about a limit (all fields empty for Term::None)
     static const TermInfo& info(Term term) noexcept;
 

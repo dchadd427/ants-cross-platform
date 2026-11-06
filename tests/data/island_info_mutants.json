@@ -1,0 +1,61 @@
+{
+ "note": "Mutants of the token groups of IslandInfo::analyse (src/ants_ai/island_info.cpp: the members of a group of touching power-ups are listed in the order of a walk from the first entrance, with a flag for each power-up that is listed already), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/island_info_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught by AI32.1 (the order of the members and the first entrance, against a plain re-statement of the walk) or AI32.2 (the time of one cluster of 3,000 power-ups: the mutant that searches the members again has the same output and the cube of the work).",
+ "mutants": [
+  {
+   "id": "island_first_member_not_flagged",
+   "file": "src/ants_ai/island_info.cpp",
+   "old": "            listed[raw.front().power] = 1;\n",
+   "new": "",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "island_walk_member_not_flagged",
+   "file": "src/ants_ai/island_info.cpp",
+   "old": "                    g.members.push_back(m);\n                    listed[m] = 1;\n",
+   "new": "                    g.members.push_back(m);\n",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "island_walk_flag_inverted",
+   "file": "src/ants_ai/island_info.cpp",
+   "old": "if (listed[m] != 0) continue;",
+   "new": "if (listed[m] == 0) continue;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "island_walk_adjacency_inverted",
+   "file": "src/ants_ai/island_info.cpp",
+   "old": "if (powerups[g.members[head]].tile.chebyshev_dist(powerups[m].tile) != 1) continue;",
+   "new": "if (powerups[g.members[head]].tile.chebyshev_dist(powerups[m].tile) == 1) continue;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "island_walk_searches_the_members_again",
+   "file": "src/ants_ai/island_info.cpp",
+   "old": "if (listed[m] != 0) continue;",
+   "new": "if (std::find(g.members.begin(), g.members.end(), m) != g.members.end()) continue;",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "island_walk_starts_from_the_first_found",
+   "file": "src/ants_ai/island_info.cpp",
+   "old": "            g.members.push_back(raw.front().power);\n",
+   "new": "            g.members.push_back(found.front());\n",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  },
+  {
+   "id": "island_walk_visits_the_heads_backwards",
+   "file": "src/ants_ai/island_info.cpp",
+   "old": "for (size_t head = 0; head < g.members.size(); ++head) {\n                for (const uint32_t m : found) {",
+   "new": "for (size_t head = 0; head < g.members.size(); ++head) {\n                for (const uint32_t m : std::vector<uint32_t>(found.rbegin(), found.rend())) {",
+   "build": "test_ai",
+   "test": "ANTS_TEST_FILTER=AI32 timeout 900 ./build/tests/test_ai/test_ai"
+  }
+ ]
+}

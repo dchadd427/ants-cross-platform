@@ -24,6 +24,7 @@ add_executable(test_ai
     test_ai_island_expedition.cpp
     test_ai_island_ferry.cpp
     test_ai_island_small.cpp
+    test_ai_token_groups.cpp
     test_ai_merge.cpp
     test_ai_cantgo.cpp
     test_ai_flowers.cpp

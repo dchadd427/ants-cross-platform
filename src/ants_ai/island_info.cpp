@@ -210,6 +210,7 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
 
     // ---- the token groups --------------------------------------------------------------------------------------------------------------------------------
     std::vector<int> group_of(powerups.size(), -1);
+    std::vector<char> listed(powerups.size(), 0);                                    // a power-up that is in `members` of its group already (no two groups share a member, so a flag is never taken back)
     for (size_t i = 0; i < powerups.size(); ++i) {
         if (group_of[i] >= 0) continue;
         std::vector<uint32_t> found{static_cast<uint32_t>(i)};                       // the group by 8-adjacency (indices of MapInfo::powerups())
@@ -247,10 +248,13 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
         TokenGroup g;
         if (!raw.empty()) {                                                          // the members in the order of a walk from the first entrance (a row of tokens is walked from its end)
             g.members.push_back(raw.front().power);
+            listed[raw.front().power] = 1;
             for (size_t head = 0; head < g.members.size(); ++head) {
                 for (const uint32_t m : found) {
-                    if (std::find(g.members.begin(), g.members.end(), m) != g.members.end()) continue;
-                    if (powerups[g.members[head]].tile.chebyshev_dist(powerups[m].tile) == 1) g.members.push_back(m);
+                    if (listed[m] != 0) continue;                        // (a flag, not a search of g.members: that made the work grow with the cube of the size of the group)
+                    if (powerups[g.members[head]].tile.chebyshev_dist(powerups[m].tile) != 1) continue;
+                    g.members.push_back(m);
+                    listed[m] = 1;
                 }
             }
         }

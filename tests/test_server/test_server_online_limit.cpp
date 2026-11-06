@@ -9,6 +9,9 @@
 #define ANTS_ONLINE_LIMIT_GETPID getpid
 #endif
 
+#include <functional>
+#include <set>
+
 #include "big_map_fixtures.hpp"
 #include "server_fixtures.hpp"
 #include "ants_server/online_limits.hpp"
@@ -111,6 +114,165 @@ ApprovedMap pairs_map(const fs::path& dir, const std::string& name, uint32_t pla
 net::RejectReason door_answer(World& w, Client& c) {
     w.run(300);
     return c.lobby->phase() == net::ClientLobby::Phase::Rejected ? c.lobby->reject_reason() : static_cast<net::RejectReason>(0);
+}
+
+// An approved or test map record for a file of `bytes` (width x height as the record says; the store counts everything else from the file)
+ApprovedMap bytes_map(const fs::path& dir, const std::string& name, const std::string& bytes, uint32_t side) {
+    ApprovedMap a;
+    if (bytes.empty()) return a;
+    a.name = name;
+    a.path = (dir / (name + ".bin")).string();
+    { std::ofstream out(a.path, std::ios::binary); out << bytes; }
+    a.size = bytes.size();
+    a.width = side;
+    a.height = side;
+    a.minutes = 10;
+    a.players = 4;
+    a.maker = "Mia";
+    a.kind = "extended";
+    net::hash_file(a.path, a.hash);
+    return a;
+}
+
+// The doors of a room for one of the limits of OnlineLimits that came after the first three (food objects, power-ups): the store's count and its marker in the list, the lobby's plan and its sentence (any letter case, a
+// test map too), the room's own load of the file, the control interface, a visitor's block, and the last door before the engine with a restart record; at each of them the limit itself is taken and one more is
+// refused. `bytes(n)` is a file that has exactly n of what the limit counts, `side` its rows and columns, `code` three letters for the room codes.
+void doors_of_a_limit(const std::string& tag, const std::string& code, Term term, const std::function<std::string(uint64_t)>& bytes, uint32_t side) {
+    const uint64_t cap = OnlineLimits::limit_of(term);
+    const TermInfo& info = OnlineLimits::info(term);
+    const std::string notice = info.notice;
+    const std::string cap_text = cap >= 1000 ? std::to_string(cap / 1000) + "," + (cap % 1000 < 100 ? "0" : "") + (cap % 1000 < 10 ? "0" : "") + std::to_string(cap % 1000) : std::to_string(cap);          // (250, 2,000)
+    ASSERT_TRUE(!notice.empty() && notice.size() <= net::kMaxChatChars && notice.find("(" + cap_text + " at most)") != std::string::npos && std::string(info.limit) == cap_text + " at most");
+    const fs::path dir = fresh_dir(("s26x" + code).c_str());
+    const std::string at_cap = "At " + tag + " Cap.lvl", over = "Over " + tag + ".lvl", huge = "Huge " + tag + ".lvl";
+    const uint64_t huge_n = term == Term::FoodObjects ? 65514u : 3000u;
+    World w(limits_with(48));
+    std::vector<ApprovedMap> approved = {bytes_map(dir, at_cap, bytes(cap), side), bytes_map(dir, over, bytes(cap + 1), side), bytes_map(dir, huge, bytes(huge_n), side)};
+    ASSERT_TRUE(!approved[0].name.empty() && !approved[1].name.empty() && !approved[2].name.empty());
+    w.mgr.mutable_store().set_approved(approved);
+    const MapStore& store = w.mgr.store();
+    ASSERT_TRUE(OnlineLimits::count_of(store.counts_of(at_cap), term) == cap && OnlineLimits::count_of(store.counts_of(over), term) == cap + 1 && OnlineLimits::count_of(store.counts_of(huge), term) == huge_n);
+    ASSERT_TRUE(OnlineLimits::count_of(store.counts_of("NOT-HERE.LVL"), term) == 0u);
+    // the store: over the limit is over only that limit, at it is not; any letter case; the refusal names the sentence
+    ASSERT_TRUE(store.over_limit(over, term) && store.over_limit("OVER " + tag + ".LVL", term) && store.over_limit(huge, term) && !store.over_limit(at_cap, term) && !store.over_limit("TINY.LVL", term));
+    ASSERT_EQ(store.online_refusal(over), notice);
+    ASSERT_EQ(store.online_refusal("over " + tag + ".LVL"), notice);
+    ASSERT_TRUE(store.online_refusal(at_cap).empty() && store.online_refusal("TINY.LVL").empty() && store.online_refusal("NOT-HERE.LVL").empty());
+    ASSERT_TRUE(store.listed_name(over).empty() && store.listed_name(huge).empty() && !store.listed_name(at_cap).empty() && !store.listed_name("at " + tag + " cap.LVL").empty());
+    // the lobby's plan
+    Client& pia = w.connect_page("Pia", code + "00001", lobby_block_of());
+    w.run(300);
+    ASSERT_TRUE(pia.lobby->is_leader());
+    ASSERT_TRUE(pia.lobby->request_plan(plan_for(over)));
+    w.run(300);
+    ASSERT_EQ(w.status(code + "00001").map, std::string("TINY.LVL"));                              // (the map stays)
+    ASSERT_EQ(said(pia.room_chat), (std::vector<std::string>{std::string("255||") + notice}));
+    ASSERT_TRUE(pia.lobby->request_plan(plan_for("HUGE " + tag + ".lvl", {K::Open, K::Easy, K::Nobody, K::Nobody})));          // (any letter case; the rest of the plan is taken)
+    w.run(300);
+    ASSERT_EQ(w.status(code + "00001").map, std::string("TINY.LVL"));
+    ASSERT_TRUE(pia.lobby->room().plan[1] == K::Easy);
+    ASSERT_EQ(said(pia.room_chat).size(), size_t{2});
+    ASSERT_TRUE(pia.lobby->request_plan(plan_for(at_cap)));
+    w.run(300);
+    ASSERT_EQ(w.status(code + "00001").map, at_cap);                                               // (exactly the limit is in)
+    ASSERT_EQ(said(pia.room_chat).size(), size_t{2});                                              // (and no word about it)
+    const LobbyServices services = w.mgr.lobby_services();
+    ASSERT_TRUE(services.choose_map(over).empty() && services.choose_map("OVER " + tag + ".LVL").empty() && services.choose_map(huge).empty() && !services.choose_map(at_cap).empty());
+    ASSERT_EQ(services.map_refusal(over), notice);
+    ASSERT_TRUE(services.map_refusal(at_cap).empty() && services.map_refusal("TINY.LVL").empty());
+    {   // the room's own load of the file (what the START does when the plan has another map): a map over the limit is not loaded, the limit itself is
+        MapEntry entry;
+        ants::assets::LevelData level;
+        ASSERT_FALSE(services.load_map(over, entry, level));
+        ASSERT_FALSE(services.load_map(huge, entry, level));
+        ASSERT_TRUE(services.load_map(at_cap, entry, level) && OnlineLimits::count_of(OnlineLimits::counts_of(level), term) == cap);
+    }
+    {   // the list: "online": false and the marker of the limit; the new list only; a map at the limit has neither key
+        ctl::JsonValue v;
+        ASSERT_TRUE(ctl::parse_json(store.list_json(nullptr, true), v, nullptr, ctl::JsonLimits()));
+        const auto entry_of = [&](const std::string& file) -> const ctl::JsonValue* {
+            for (size_t i = 0; i < v.get("maps").size(); ++i) {
+                if (v.get("maps").at(i).get("file").str() == file) return &v.get("maps").at(i);
+            }
+            return nullptr;
+        };
+        for (const std::string& o : {over, huge}) ASSERT_TRUE(entry_of(o) != nullptr && entry_of(o)->get("online").as_bool_or(true) == false && entry_of(o)->get("online_why").str() == info.why);
+        ASSERT_TRUE(entry_of(at_cap) != nullptr && entry_of(at_cap)->get("online").is_null() && entry_of(at_cap)->get("online_why").is_null());
+        ASSERT_TRUE(store.list_json(nullptr, false).find("online") == std::string::npos);          // (the old list has no new keys)
+    }
+    {   // a page whose link names a test map: a draft over the limit is not the room's map (the room keeps the server's own), one at the limit is
+        ApprovedMap draft_over = bytes_map(dir, "Over Draft ~test-0badf00d.lvl", bytes(cap + 1), side);
+        ApprovedMap draft_fits = bytes_map(dir, "Fits Draft ~test-0badf00e.lvl", bytes(cap), side);
+        draft_over.food_objects = term == Term::FoodObjects ? cap + 1 : 0;                          // (the test store counts them from the canonical file it keeps: TestMapStore::submit)
+        draft_over.power_ups = term == Term::PowerUps ? cap + 1 : 0;
+        draft_fits.food_objects = term == Term::FoodObjects ? cap : 0;
+        draft_fits.power_ups = term == Term::PowerUps ? cap : 0;
+        w.mgr.mutable_store().set_test_maps({draft_over, draft_fits});
+        ASSERT_EQ(w.mgr.store().online_refusal("over draft ~TEST-0badf00d.lvl"), notice);
+        ASSERT_TRUE(services.choose_map("Over Draft ~test-0badf00d.lvl").empty() && services.choose_map("OVER DRAFT ~TEST-0BADF00D.LVL").empty());
+        ASSERT_TRUE(services.choose_map("Fits Draft ~test-0badf00e.lvl") == "Fits Draft ~test-0badf00e.lvl");
+        w.connect_page("Ann", code + "00002", lobby_block_of("Over Draft ~test-0badf00d.lvl"));
+        w.connect_page("Cat", code + "00003", lobby_block_of("Fits Draft ~test-0badf00e.lvl"));
+        w.run(300);
+        ASSERT_EQ(w.status(code + "00002").map, std::string("TINY.LVL"));
+        ASSERT_EQ(w.status(code + "00003").map, std::string("Fits Draft ~test-0badf00e.lvl"));
+    }
+    // the control interface
+    const size_t rooms = w.mgr.room_count();
+    const CreateResult refused = w.mgr.create_room(spec_of("ctl-" + code, 2, over.c_str()), w.now);
+    ASSERT_TRUE(!refused.ok && refused.http_status == 422 && refused.error.find(info.phrase) != std::string::npos && refused.error.find(notice) != std::string::npos);
+    ASSERT_FALSE(w.mgr.create_room(spec_of("ctl-" + code + "h", 2, huge.c_str()), w.now).ok);
+    ASSERT_EQ(w.mgr.room_count(), rooms);                                                          // (no room was made)
+    ASSERT_TRUE(w.mgr.create_room(spec_of("ctl-" + code + "e", 2, at_cap.c_str()), w.now).ok);
+    {   // a visitor's block that names a map the operator offers (--demo-maps) over the limit: no room is made; the one at the limit is
+        ServerLimits offered = limits_with(48);
+        offered.demo_maps = {"TINY.LVL", over, at_cap};
+        World v(offered, dir.string());
+        v.mgr.mutable_store().set_approved(approved);
+        Client& too_many = v.connect_creating("Over", code + "00701", block_of(over, 2));
+        ASSERT_TRUE(door_answer(v, too_many) != static_cast<net::RejectReason>(0));
+        ASSERT_EQ(v.mgr.room_count(), size_t{0});
+        Client& fits = v.connect_creating("Fits", code + "00702", block_of(at_cap, 2));
+        ASSERT_EQ(door_answer(v, fits), static_cast<net::RejectReason>(0));
+        ASSERT_EQ(v.status(code + "00702").map, at_cap);
+    }
+    {   // the last door before the engine: a Room made by hand with a map over the limit refuses to bring a match back from a record, with the reason, before it looks at anything else
+        const std::string file_bytes = bytes(huge_n);
+        const fs::path file = dir / "HUGELIMIT.LVL";
+        { std::ofstream f(file, std::ios::binary); f << file_bytes; }
+        MapEntry entry;
+        std::string problem;
+        ASSERT_TRUE(MapStore(dir.string()).find("HUGELIMIT.LVL", entry, &problem));
+        assets::LevelData level;
+        ASSERT_TRUE(level.load_from_file(entry.path, nullptr, assets::LevelLimits::for_play_extended()));
+        ASSERT_EQ(OnlineLimits::count_of(OnlineLimits::counts_of(level), term), huge_n);
+        RoomSpec spec = spec_of("many-" + code + "-r01", 2);
+        spec.reconnect = true;
+        Room room(spec, entry, std::move(level), 1u, 5000u);
+        ASSERT_EQ(OnlineLimits::count_of(room.map_counts(), term), huge_n);
+        std::string why;
+        RestartLoaded nothing;                                                                       // (no record at all: whatever else is wrong, the limit comes first)
+        ASSERT_TRUE(room.begin_replay(nothing, 0, why) == Room::ReplayBegin::Refused);
+        ASSERT_MSG(why.find(std::string(info.more) + " than a room plays") != std::string::npos, why);
+    }
+    {   // a restart record of a match on such a map is not restored
+        const fs::path maps = fs::path(temp_dir_for(("online-26x" + code).c_str())) / "Maps";
+        fs::create_directories(maps);
+        fs::copy_file(maps_dir() + "/TINY.LVL", maps / "TINY.LVL", fs::copy_options::overwrite_existing);
+        { std::ofstream out(maps / "HUGELIMIT.LVL", std::ios::binary); out << bytes(huge_n); }
+        uint64_t huge_hash = 0;
+        ASSERT_TRUE(net::hash_file((maps / "HUGELIMIT.LVL").string(), huge_hash));
+        PWorld pw(("online-26x-" + code).c_str(), ServerLimits(), maps.string());
+        pw.start_server(500);
+        crash_with_record_of(pw, "LM-1", 8000);
+        rewrite_head(pw, "LM-1", [&](RestartHead& h) { h.map = "HUGELIMIT.LVL"; h.map_hash = huge_hash; h.start.map_name = "HUGELIMIT.LVL"; h.start.map_hash = huge_hash; });
+        pw.start_server(500);
+        ASSERT_TRUE(pw.report.items.size() == 1);
+        ASSERT_MSG(pw.report.items[0].outcome == RestoreItem::Outcome::Ended && pw.report.items[0].note.find(std::string(info.phrase) + " to play online now") != std::string::npos, pw.report.items[0].note);
+        std::error_code ignore;
+        fs::remove_all(maps.parent_path(), ignore);
+    }
+    fs::remove_all(dir);
 }
 
 }  // namespace
@@ -960,7 +1122,7 @@ void run_online_limit_tests() {
             RoomSpec spec = spec_of("many-pairs-r01", 2);
             spec.reconnect = true;
             Room room(spec, entry, std::move(level), 1u, 5000u);
-            ASSERT_TRUE(room.map_plant_waypoint_pairs() == uint64_t{65500} * uint64_t{65535} && room.map_places() == 1u);          // (31 x 31, 12 ants: one place, as any small map; only the pairs are over)
+            ASSERT_TRUE(room.map_counts().pairs == uint64_t{65500} * uint64_t{65535} && room.map_places() == 1u);          // (31 x 31, 12 ants: one place, as any small map; only the pairs are over)
             std::string why;
             RestartLoaded nothing;                                                                   // (no record at all: whatever else is wrong, the pairs come first)
             ASSERT_TRUE(room.begin_replay(nothing, 0, why) == Room::ReplayBegin::Refused);
@@ -996,6 +1158,49 @@ void run_online_limit_tests() {
             ASSERT_EQ(OnlineLimits::weight(w.mgr.store().cells_of("Weight Huge.lvl"), w.mgr.store().start_ants_of("Weight Huge.lvl")), 1u);          // (one place, as any small map: the pairs are not in the formula)
         }
         fs::remove_all(dir);
+    } TEST_END();
+
+    TEST_CASE("S3.261 The Doors Of A Room For The Food Objects Of A Map (OnlineLimits::kMaxFoodObjects = 250): The Store Counts Them From The File, The Lobby Says One Sentence And Keeps Its Map, The List Marks \"food\", The Control Interface Is A 422, A Visitor's Block Makes No Room, A Restart Record Is Not Restored; 250 Is Taken At Every Door And 251 Is Not") {
+        ASSERT_TRUE(OnlineLimits::kMaxFoodObjects == 250u && std::string(OnlineLimits::info(Term::FoodObjects).why) == "food");
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(1, 0, 0, 0)) && OnlineLimits::allows(online_counts(1, 0, 0, 250)) && !OnlineLimits::allows(online_counts(1, 0, 0, 251)) && !OnlineLimits::allows(online_counts(1, 0, 0, 65514)));
+        doors_of_a_limit("Food", "fod", Term::FoodObjects, [](uint64_t n) { return tiny_with_food(static_cast<uint32_t>(n)); }, 31);
+    } TEST_END();
+
+    TEST_CASE("S3.262 The Doors Of A Room For The Power-Ups Of A Map (OnlineLimits::kMaxPowerUps = 2,000): The Same Doors As For The Food Objects, With The Marker \"powerups\", And 2,000 Is Taken At Every Door And 2,001 Is Not") {
+        ASSERT_TRUE(OnlineLimits::kMaxPowerUps == 2000u && std::string(OnlineLimits::info(Term::PowerUps).why) == "powerups");
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(1, 0, 0, 0, 0)) && OnlineLimits::allows(online_counts(1, 0, 0, 0, 2000)) && !OnlineLimits::allows(online_counts(1, 0, 0, 0, 2001)) && !OnlineLimits::allows(online_counts(1, 0, 0, 0, 60000)));
+        doors_of_a_limit("Powerups", "pwr", Term::PowerUps, [](uint64_t n) { return tiny_with_power_ups(static_cast<uint32_t>(n)); }, 64);
+    } TEST_END();
+
+    TEST_CASE("S3.263 The Limits Are Judged As One Set: The First Limit A Map Is Over Is The Reason (Size, Ants, Pairs, Food, Power-Ups, In That Order), A Map Over Several Names The First, Every Term Has Its Own Sentence, Code And Marker, And No Sentence Is Longer Than A Chat Line") {
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(1))), static_cast<int>(Term::None));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65537, 1001, 1000001, 251, 2001))), static_cast<int>(Term::Cells));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1001, 1000001, 251, 2001))), static_cast<int>(Term::StartAnts));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000001, 251, 2001))), static_cast<int>(Term::Pairs));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 251, 2001))), static_cast<int>(Term::FoodObjects));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 250, 2001))), static_cast<int>(Term::PowerUps));
+        ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 250, 2000))), static_cast<int>(Term::None));
+        ASSERT_TRUE(OnlineLimits::allows(online_counts(65536, 1000, 1000000, 250, 2000)));
+        std::set<std::string> codes, whys, notices;
+        for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {
+            const TermInfo& info = OnlineLimits::info(term);
+            ASSERT_TRUE(std::string(info.code).find("_online") != std::string::npos && std::string(info.notice).size() <= net::kMaxChatChars && std::string(info.phrase).size() > 5 && std::string(info.more).size() > 5 &&
+                        std::string(info.tail).find("to play online") != std::string::npos && std::string(info.limit).find("at most") != std::string::npos);
+            ASSERT_TRUE(OnlineLimits::limit_of(term) > 0);
+            MapCounts one = online_counts(1);
+            if (term == Term::Cells) one.cells = OnlineLimits::limit_of(term) + 1;
+            if (term == Term::StartAnts) one.start_ants = OnlineLimits::limit_of(term) + 1;
+            if (term == Term::Pairs) one.pairs = OnlineLimits::limit_of(term) + 1;
+            if (term == Term::FoodObjects) one.food_objects = OnlineLimits::limit_of(term) + 1;
+            if (term == Term::PowerUps) one.power_ups = OnlineLimits::limit_of(term) + 1;
+            ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(one)), static_cast<int>(term));          // (each field is the one of its own term, and only that term is over)
+            for (const Term other : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) ASSERT_EQ(OnlineLimits::over(one, other), other == term);
+            codes.insert(info.code);
+            whys.insert(info.why);
+            notices.insert(info.notice);
+        }
+        ASSERT_TRUE(codes.size() == 5u && notices.size() == 5u && whys.size() == 5u && whys.count("") == 1u && whys.count("ants") == 1u && whys.count("pairs") == 1u && whys.count("food") == 1u && whys.count("powerups") == 1u);
+        ASSERT_TRUE(std::string(OnlineLimits::info(Term::None).code).empty() && std::string(OnlineLimits::info(Term::None).notice).empty());
     } TEST_END();
 
     TEST_CASE("S3.225 A Map Of 40,000 Ants Never Reaches The Engine: Every Door Refuses It Before Any Ant Is Set Up (No Room Is Made, Nothing Is Built, The Whole Round Takes Milliseconds, Not The Seconds That Setting Up 40,000 Ants Takes)") {
