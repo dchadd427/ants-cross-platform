@@ -94,7 +94,16 @@ size_t YardPuppet::apply(const std::vector<yard::AntRecord>& records, const std:
         taken[it->second] = true;
     }
 
-    // 3. A new one takes a free slot: not one that an ant that is shown has, and not one that the caller still points at. The search goes round the pool, so that a slot that was freed is the
+    // 3. The slots of the ants that are gone are free (and removed), before a newcomer looks for one: a slot that still names an ant of an earlier batch is never handed to another ant, which
+    // would leave that name in by_server_ for an ant that has no slot of its own
+    for (size_t j = 0; j < slots_.size(); ++j) {
+        if (taken[j] || slots_[j].server == 0) continue;
+        by_server_.erase(slots_[j].server);
+        slots_[j].server = 0;
+        engine_.get_unit(slots_[j].unit).removed = true;
+    }
+
+    // 4. A new one takes a free slot: not one that an ant that is shown has, and not one that the caller still points at. The search goes round the pool, so that a slot that was freed is the
     // last to be used again.
     const std::unordered_set<uint32_t> pointed_at(held.begin(), held.end());
     std::vector<size_t> free_slots;
@@ -112,14 +121,6 @@ size_t YardPuppet::apply(const std::vector<yard::AntRecord>& records, const std:
         place[i] = free_slots[next_free++];
         taken[place[i]] = true;
         cursor_ = (place[i] + 1) % slots_.size();
-    }
-
-    // 4. The slots of the ants that are gone are free (and removed)
-    for (size_t j = 0; j < slots_.size(); ++j) {
-        if (taken[j] || slots_[j].server == 0) continue;
-        by_server_.erase(slots_[j].server);
-        slots_[j].server = 0;
-        engine_.get_unit(slots_[j].unit).removed = true;
     }
 
     // 5. The ants that are shown are written into their units

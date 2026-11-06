@@ -127,6 +127,8 @@ void Application::handle_camera_panning(float dt) {
     input_accumulator_ += dt;
     while (input_accumulator_ >= 0.050f) {
         input_accumulator_ -= 0.050f;
+        const bool over_picture = mouse_screen_x_ >= 0 && mouse_screen_x_ < layout_.width && mouse_screen_y_ >= 0 && mouse_screen_y_ < layout_.height;
+        if (layout_.yard && (pointer_outside_ || !over_picture)) hud_.reset_yard_edge_dwell();      // (the Yard: a tick that does not look at the pointer starts the edge dwell over)
         if (state_ != AppState::Playing || !renderer_ || !mouse_has_moved_ || pointer_outside_ || catch_up_screen_active() || game_menu_open_) continue;
         if (mouse_screen_x_ < 0 || mouse_screen_x_ >= layout_.width || mouse_screen_y_ < 0 || mouse_screen_y_ >= layout_.height) continue;
         ViewportCamera& camera = renderer_->camera();

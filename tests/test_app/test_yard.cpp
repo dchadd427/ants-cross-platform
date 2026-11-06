@@ -33,6 +33,7 @@ int main(int argc, char* argv[]) {
         yard_app_groups();
         yard_command_line_group();
     }
+    remove_temp_files_kept();
     SDL_Quit();
     std::printf("\nyard: %d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

@@ -627,8 +627,8 @@
     {
       "id": "app_any_scale",
       "file": "src/ants_app/application_yard.cpp",
-      "old": "scale >= 1 && scale <= kYardMaxScale;",
-      "new": "scale >= 1 && scale <= 4;",
+      "old": "scale >= 1 && scale <= kYardMaxScale &&",
+      "new": "scale >= 1 && scale <= 4 &&",
       "build": [
         "test_yard"
       ],
@@ -726,7 +726,7 @@
     {
       "id": "app_yard_with_a_bot",
       "file": "src/ants_app/application.cpp",
-      "old": "if (cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.bots.empty() || cfg.alone || cfg.play_at_once || !cfg.replay_path.empty() || cfg.game_mode_given)) {\n            cfg.startup_error = \"--yard shows",
+      "old": "if (cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.net_room.empty() || cfg.net_create || cfg.lan_port != net::kLanDiscoveryPort || !cfg.bots.empty() || cfg.alone ||\n                                          cfg.play_at_once || !cfg.replay_path.empty() || cfg.game_mode_given)) {\n            cfg.startup_error = \"--yard shows",
       "new": "if (false) {\n            cfg.startup_error = \"--yard shows",
       "build": [
         "test_yard"
@@ -777,6 +777,171 @@
       ],
       "test": "./build/tests/test_app/test_yard",
       "expect": "FAIL [Q2]"
+    },
+    {
+      "id": "puppet_newcomer_takes_a_stale_slot",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "    // 3. The slots of the ants that are gone are free (and removed), before a newcomer looks for one: a slot that still names an ant of an earlier batch is never handed to another ant, which\n    // would leave that name in by_server_ for an ant that has no slot of its own\n    for (size_t j = 0; j < slots_.size(); ++j) {\n        if (taken[j] || slots_[j].server == 0) continue;\n        by_server_.erase(slots_[j].server);\n        slots_[j].server = 0;\n        engine_.get_unit(slots_[j].unit).removed = true;\n    }\n\n    // 4. A new one takes a free slot: not one that an ant that is shown has, and not one that the caller still points at. The search goes round the pool, so that a slot that was freed is the\n    // last to be used again.\n    const std::unordered_set<uint32_t> pointed_at(held.begin(), held.end());\n    std::vector<size_t> free_slots;\n    for (size_t n = 0; n < slots_.size(); ++n) {\n        const size_t j = (cursor_ + n) % slots_.size();\n        if (!taken[j] && pointed_at.count(slots_[j].unit) == 0) free_slots.push_back(j);\n    }\n    size_t next_free = 0;\n    for (size_t i = 0; i < shown.size(); ++i) {\n        if (place[i] != slots_.size()) continue;\n        if (next_free >= free_slots.size()) {\n            ++left_out_;\n            continue;\n        }\n        place[i] = free_slots[next_free++];\n        taken[place[i]] = true;\n        cursor_ = (place[i] + 1) % slots_.size();\n    }\n\n",
+      "new": "    // 3. A new one takes a free slot: not one that an ant that is shown has, and not one that the caller still points at. The search goes round the pool, so that a slot that was freed is the\n    // last to be used again.\n    const std::unordered_set<uint32_t> pointed_at(held.begin(), held.end());\n    std::vector<size_t> free_slots;\n    for (size_t n = 0; n < slots_.size(); ++n) {\n        const size_t j = (cursor_ + n) % slots_.size();\n        if (!taken[j] && pointed_at.count(slots_[j].unit) == 0) free_slots.push_back(j);\n    }\n    size_t next_free = 0;\n    for (size_t i = 0; i < shown.size(); ++i) {\n        if (place[i] != slots_.size()) continue;\n        if (next_free >= free_slots.size()) {\n            ++left_out_;\n            continue;\n        }\n        place[i] = free_slots[next_free++];\n        taken[place[i]] = true;\n        cursor_ = (place[i] + 1) % slots_.size();\n    }\n\n    // 4. The slots of the ants that are gone are free (and removed)\n    for (size_t j = 0; j < slots_.size(); ++j) {\n        if (taken[j] || slots_[j].server == 0) continue;\n        by_server_.erase(slots_[j].server);\n        slots_[j].server = 0;\n        engine_.get_unit(slots_[j].unit).removed = true;\n    }\n\n",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P3b]"
+    },
+    {
+      "id": "puppet_gone_name_kept",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "        by_server_.erase(slots_[j].server);\n",
+      "new": "",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P3]"
+    },
+    {
+      "id": "puppet_is_own_of_a_free_slot",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "slots_[it->second].server != 0 && slots_[it->second].color == yard::kColorMine",
+      "new": "slots_[it->second].color == yard::kColorMine",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P9]"
+    },
+    {
+      "id": "puppet_attack_target_ignores_the_row",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": " && slot.py / 32 == tile_y)",
+      "new": " && (slot.py / 32 == tile_y || true))",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P9]"
+    },
+    {
+      "id": "puppet_attack_target_ignores_the_column",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": " && slot.px / 32 == tile_x",
+      "new": " && (slot.px / 32 == tile_x || true)",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P9]"
+    },
+    {
+      "id": "puppet_hill_overhangs_east_by_one",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "static_cast<int32_t>(hill.x) + yard::kHillTiles > width",
+      "new": "static_cast<int32_t>(hill.x) + yard::kHillTiles > width + 1",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P8]"
+    },
+    {
+      "id": "puppet_hill_overhangs_south_by_one",
+      "file": "src/ants_app/yard_puppet.cpp",
+      "old": "static_cast<int32_t>(hill.y) + yard::kHillTiles > height",
+      "new": "static_cast<int32_t>(hill.y) + yard::kHillTiles > height + 1",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [P8]"
+    },
+    {
+      "id": "app_dwell_kept_when_outside",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "if (layout_.yard && (pointer_outside_ || !over_picture))",
+      "new": "if (layout_.yard && !over_picture)",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [E3]"
+    },
+    {
+      "id": "app_dwell_kept_past_the_canvas",
+      "file": "src/ants_app/application_view.cpp",
+      "old": "if (layout_.yard && (pointer_outside_ || !over_picture))",
+      "new": "if (layout_.yard && (pointer_outside_ || (!over_picture && false)))",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [E3]"
+    },
+    {
+      "id": "hud_yard_dwell_reset_does_nothing",
+      "file": "include/ants_app/hud.hpp",
+      "old": "void reset_yard_edge_dwell() noexcept { yard_edge_ticks_ = 0; }",
+      "new": "void reset_yard_edge_dwell() noexcept {}",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [E3]"
+    },
+    {
+      "id": "app_window_pixels_unbounded",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "int64_t{width} * scale * int64_t{height} * scale <= kYardMaxWindowPixels;",
+      "new": "int64_t{width} * scale * int64_t{height} * scale <= kYardMaxWindowPixels * 100;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [A3]"
+    },
+    {
+      "id": "app_window_pixels_one_short",
+      "file": "src/ants_app/application_yard.cpp",
+      "old": "int64_t{width} * scale * int64_t{height} * scale <= kYardMaxWindowPixels;",
+      "new": "int64_t{width} * scale * int64_t{height} * scale <= kYardMaxWindowPixels - 1;",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [A3]"
+    },
+    {
+      "id": "app_yard_with_a_room",
+      "file": "src/ants_app/application.cpp",
+      "old": "NetRole::None || !cfg.net_room.empty() || cfg.net_create",
+      "new": "NetRole::None || cfg.net_create",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [F1]"
+    },
+    {
+      "id": "app_yard_with_room_options",
+      "file": "src/ants_app/application.cpp",
+      "old": "|| cfg.net_create || cfg.lan_port != net::kLanDiscoveryPort",
+      "new": "|| cfg.lan_port != net::kLanDiscoveryPort",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [F1]"
+    },
+    {
+      "id": "app_yard_with_lan_options",
+      "file": "src/ants_app/application.cpp",
+      "old": "cfg.lan_port != net::kLanDiscoveryPort || !cfg.bots.empty()",
+      "new": "!cfg.bots.empty()",
+      "build": [
+        "test_yard"
+      ],
+      "test": "./build/tests/test_app/test_yard",
+      "expect": "FAIL [F1]"
     }
   ]
 }

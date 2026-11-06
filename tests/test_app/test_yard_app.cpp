@@ -85,7 +85,7 @@ void flag_cases() {
     check(yard_only.yard && yard_only.startup_error.empty() && !yard_only.start_in_map_select && !yard_only.start_menu, "the flag alone: no setup screen, no start menu");
     check(parse({"--map", "x.lvl", "--yard", "--map-select"}).start_in_map_select == false, "--map-select does not bring the setup screen back");
     for (const std::vector<std::string>& other : {std::vector<std::string>{"--host"}, {"--join", "localhost"}, {"--join-url", "ws://localhost:1/ws"}, {"--bot", "1:easy"}, {"--alone"}, {"--play"},
-                                                  {"--replay", "x.antsrep"}, {"--game-mode", "187"}}) {
+                                                  {"--replay", "x.antsrep"}, {"--game-mode", "187"}, {"--room", "ABC"}, {"--room-map", "treasure"}, {"--lan-port", "4002"}, {"--no-lan"}}) {
         std::vector<std::string> words = {"--yard"};
         words.insert(words.end(), other.begin(), other.end());
         const ApplicationConfig bad = parse(words);
@@ -132,9 +132,10 @@ std::string gauntlet_without_hills() {
         if (!level.load_lvl(maps_dir() + "GAUNTLET.LVL")) return std::string();
         const assets::LevelData bare = level.for_roster(0);
         const assets::LevelWriteResult written = assets::write_level(bare, assets::LevelLimits{});
-        const std::filesystem::path file = std::filesystem::temp_directory_path() / "ants_yard_test_gauntlet_bare.lvl";
+        const std::filesystem::path file = temp_file_of_this_run("ants_yard_test_gauntlet_bare", ".lvl");
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         if (written.ok) out.write(reinterpret_cast<const char*>(written.bytes.data()), static_cast<std::streamsize>(written.bytes.size()));
+        if (out) temp_files_kept().push_back(file.string());
         return written.ok && out ? file.string() : std::string();
     }();
     return path;
@@ -176,14 +177,16 @@ void refusal_cases() {
         const Picture before = r.frame();
         const LayoutRect picture = app.picture();
         for (const auto& s : std::vector<std::vector<int32_t>>{{319, 240, 1}, {320, 239, 1}, {0, 0, 1}, {-5, 600, 1}, {4097, 540, 1}, {960, 4097, 1}, {960, 540, 0}, {960, 540, 4}, {960, 540, -1},
-                                                              {100000, 100000, 1}}) {
+                                                              {100000, 100000, 1}, {2049, 2049, 2}, {4096, 4096, 2}, {4096, 4096, 3}, {3000, 2000, 2}}) {
             check(!app.set_yard_size(s[0], s[1], s[2]), "set_yard_size(" + std::to_string(s[0]) + ", " + std::to_string(s[1]) + ", " + std::to_string(s[2]) + ") is refused");
             check(!app.start_yard(s[0], s[1], s[2]), "start_yard with them is refused");
         }
         check(app.renderer().canvas_w() == 960 && app.renderer().canvas_h() == 540 && app.picture() == picture && app.yard_scale() == 1 && app.layout().view() == LayoutRect({0, 0, 960, 540}), "nothing changed");
         const Picture after = r.frame();
         check(before.px == after.px, "the picture is the same, pixel for pixel");
-        check(app.set_yard_size(320, 240, 1) && app.set_yard_size(4096, 4096, 3) && app.set_yard_size(960, 540, 1), "the smallest, the largest and the scale 3 are accepted");
+        check(app.set_yard_size(320, 240, 1) && app.set_yard_size(4096, 4096, 1) && app.set_yard_size(960, 540, 1), "the smallest and the largest canvas are accepted");
+        check(app.set_yard_size(2048, 2048, 2) && app.set_yard_size(390, 600, 3) && app.set_yard_size(1366, 768, 3) && app.set_yard_size(960, 540, 1),
+              "a window of exactly 4,096 x 4,096 pixels, an upright phone at the scale 3 and a laptop's canvas at the scale 3 are accepted");
     }
 }
 
@@ -644,6 +647,37 @@ void edge_cases() {
         r.frames(12, 0.05f);
         check(camera.x == x, "the pointer has left the page's canvas: no scroll");
     }
+
+    group("E3", "the pointer that comes back to an edge waits its dwell again, however full the count was: out of the picture, or where no input tick looks at it");
+    {
+        const auto frames_until_it_moves = [&](int most) {
+            const float was = camera.x;
+            for (int frame = 1; frame <= most; ++frame) {
+                r.frames(1, 0.05f);
+                if (camera.x != was) return frame;
+            }
+            return 0;
+        };
+        app.handle_window_event(YardRig::window_event(SDL_WINDOWEVENT_ENTER));
+        r.motion(480, 270);
+        r.frames(3, 0.05f);                                                         // (in the middle the count is 0)
+        camera.set_origin(1500.0, 1000.0, 128, 96);
+        r.motion(959, 270);
+        check(frames_until_it_moves(30) == 6, "a fresh dwell at the east edge: the view moves in the sixth frame");
+        r.frames(8, 0.05f);                                                         // (it goes on scrolling at the edge: the count is full)
+        app.handle_window_event(YardRig::window_event(SDL_WINDOWEVENT_LEAVE));
+        r.frames(20, 0.05f);
+        camera.set_origin(1500.0, 1000.0, 128, 96);
+        app.handle_window_event(YardRig::window_event(SDL_WINDOWEVENT_ENTER));
+        r.motion(959, 270);
+        check(frames_until_it_moves(30) == 6, "out of the picture for a second and back at the same edge: the sixth frame again, not the first");
+        r.frames(8, 0.05f);
+        r.motion(2000, 270);                                                        // (a pointer that is held outside the canvas, a drag that went past its edge: no tick looks at it)
+        r.frames(3, 0.05f);
+        camera.set_origin(1500.0, 1000.0, 128, 96);
+        r.motion(959, 270);
+        check(frames_until_it_moves(30) == 6, "a pointer that was past the canvas's edge and comes back: the sixth frame again");
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -721,6 +755,7 @@ void start_yard_cases() {
     if (!game.ok) return check(false, "the game is up");
     Application& g = game.app;
     g.hud().dismiss_match_start_modal();
+    check(!g.start_yard(2049, 2049, 2) && !g.start_yard(4096, 4096, 3) && !g.yard_mode() && !g.layout().yard, "a window of more pixels than 4,096 x 4,096 is refused, and the game stays a game");
     check(g.start_yard(390, 600, 2), "start_yard(390, 600, 2)");
     check(g.yard_mode() && g.layout().yard && g.renderer().canvas_w() == 390 && g.window_rect().w == 780 && g.window_rect().h == 1200 && g.yard_scale() == 2, "the Yard is up: 390 x 600 in a window of 780 x 1200");
     check(g.sim().get_world_state().ants.empty() && g.sim().roster_mask() == 0 && !g.hud().options().chat, "no ant of the match is left, no chat");
@@ -742,7 +777,7 @@ std::string file_text(const std::filesystem::path& file) {
 
 void settings_cases() {
     group("K1", "the Yard leaves the game's settings as they are: the zoom it remembers, the chat option, everything");
-    const std::filesystem::path file = std::filesystem::temp_directory_path() / "ants_yard_test_settings.ini";
+    const std::filesystem::path file = temp_file_of_this_run("ants_yard_test_settings", ".ini");
     const std::string original = "Participate In Chat=1\nzoom=0.5\nSound Volume=40\n";
     {
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
@@ -852,7 +887,7 @@ void yard_app_groups() {
 void yard_command_line_group() {
     group("F2", "--yard through init(argc, argv): the run-time flag as a page or a player passes it");
     const std::string map = yard_map_file();
-    const std::filesystem::path settings = std::filesystem::temp_directory_path() / "ants_yard_test_cmdline.ini";
+    const std::filesystem::path settings = temp_file_of_this_run("ants_yard_test_cmdline", ".ini");
     for (const bool sized : {true, false}) {
         std::vector<std::string> words = {"ants", "--headless", "--yard", "--map", map, "--settings", settings.string(), "--screenshot", "never_written.png", "--frames", "1000000"};
         if (sized) {

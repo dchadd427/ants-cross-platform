@@ -18,9 +18,11 @@ namespace {
 
 constexpr int32_t kYardMaxSide = 4096;       // a canvas of the Yard is at most this many pixels on a side (the least is ScreenLayout::kYardMinWidth x kYardMinHeight)
 constexpr int32_t kYardMaxScale = 3;         // ... and is shown at a whole scale of 1 .. 3
+constexpr int64_t kYardMaxWindowPixels = int64_t{4096} * 4096;      // ... in a window (the canvas times the scale) of at most as many pixels as one of 4,096 x 4,096
 
 bool yard_size_ok(int32_t width, int32_t height, int32_t scale) noexcept {
-    return width >= ScreenLayout::kYardMinWidth && height >= ScreenLayout::kYardMinHeight && width <= kYardMaxSide && height <= kYardMaxSide && scale >= 1 && scale <= kYardMaxScale;
+    return width >= ScreenLayout::kYardMinWidth && height >= ScreenLayout::kYardMinHeight && width <= kYardMaxSide && height <= kYardMaxSide && scale >= 1 && scale <= kYardMaxScale &&
+           int64_t{width} * scale * int64_t{height} * scale <= kYardMaxWindowPixels;
 }
 
 }  // namespace

@@ -5,15 +5,23 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
+
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
 
 #include "zoom_scene.hpp"
 
@@ -207,16 +215,41 @@ inline Picture read_output(Application& app) {
     return p;
 }
 
+/// A file in the temp folder that belongs to this run alone (the process id is in its name): two runs of this test at the same time, a suite beside a valgrind or two jobs, never share a file
+inline std::filesystem::path temp_file_of_this_run(const std::string& name, const std::string& extension) {
+#if defined(_WIN32)
+    const long pid = static_cast<long>(_getpid());
+#else
+    const long pid = static_cast<long>(getpid());
+#endif
+    return std::filesystem::temp_directory_path() / (name + "_" + std::to_string(pid) + extension);
+}
+
+/// The files that the test writes once and keeps for all its groups (its maps); main removes them at the end
+inline std::vector<std::string>& temp_files_kept() {
+    static std::vector<std::string> files;
+    return files;
+}
+
+inline void remove_temp_files_kept() {
+    for (const std::string& file : temp_files_kept()) {
+        std::error_code ec;
+        std::filesystem::remove(file, ec);
+    }
+    temp_files_kept().clear();
+}
+
 /// The map of the Yard's size, 128 x 96 tiles of plain ground (an Extended map: no start marker and no hill), as a file of the test's own: the file is written once and never read as a map of
 /// the library
 inline std::string yard_map_file() {
     static const std::string path = [] {
-        const std::filesystem::path file = std::filesystem::temp_directory_path() / "ants_yard_test_128x96.lvl";
+        const std::filesystem::path file = temp_file_of_this_run("ants_yard_test_128x96", ".lvl");
         const assets::LevelLimits limits = assets::LevelLimits::for_extended_maps();
         const assets::LevelData level = assets::blank_extended_level(96, 128, assets::lvl_core::tile_names(), limits);
         const assets::LevelWriteResult written = assets::write_level(level, limits);
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         if (written.ok) out.write(reinterpret_cast<const char*>(written.bytes.data()), static_cast<std::streamsize>(written.bytes.size()));
+        if (out) temp_files_kept().push_back(file.string());
         return written.ok && out ? file.string() : std::string();
     }();
     return path;

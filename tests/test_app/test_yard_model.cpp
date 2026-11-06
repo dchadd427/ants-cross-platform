@@ -151,6 +151,63 @@ void puppet_cases() {
         check(r.puppet->shown() == 0 && r.engine.get_world_state().ants.empty(), "an empty batch removes every ant");
     }
 
+    group("P3b", "a newcomer that takes the slot of an ant that is gone in the same batch: the old name goes with it, the world and shown() agree, an ant that comes back has a unit of its own");
+    {
+        sim::SimulationEngine engine;
+        engine.init_test_world(kTilesW, kTilesH, 1, 600000);
+        YardPuppet pool_of_four(engine, 4);                                                // (a pool of four slots: the search for a free slot has been round at once)
+        const auto rec = [](uint16_t id, int px) { return make_ant(id, 1, px, 100, walk_clip_of(3)); };
+        check(pool_of_four.apply({rec(1, 100), rec(2, 200), rec(3, 300), rec(4, 400)}) == 4 && pool_of_four.shown() == 4 && engine.get_world_state().ants.size() == 4, "four ants fill the pool");
+        check(pool_of_four.apply({rec(5, 500)}) == 1 && pool_of_four.shown() == 1 && engine.get_world_state().ants.size() == 1, "one ant comes and the four are gone: one is shown, one is in the world");
+        check(pool_of_four.slot_id(1) == 0 && pool_of_four.slot_id(2) == 0 && pool_of_four.slot_id(3) == 0 && pool_of_four.slot_id(4) == 0 && pool_of_four.slot_id(5) != 0, "the four have no slot, the newcomer has one");
+        check(pool_of_four.apply({rec(1, 150), rec(5, 550)}) == 2 && pool_of_four.shown() == 2 && engine.get_world_state().ants.size() == 2, "ant 1 comes back: two are shown and two are in the world");
+        check(pool_of_four.slot_id(1) != 0 && pool_of_four.slot_id(5) != 0 && pool_of_four.slot_id(1) != pool_of_four.slot_id(5), "two ants, two units");
+        const sim::AntSnapshot* back = find_ant(engine.get_world_state(), pool_of_four.slot_id(1));
+        const sim::AntSnapshot* stayed = find_ant(engine.get_world_state(), pool_of_four.slot_id(5));
+        check(back != nullptr && stayed != nullptr && back->px == 150 && stayed->px == 550, "each unit shows its own ant's place");
+    }
+
+    group("P3c", "churn: ants come and go in the same batch and the same ids come back; after every batch the names, the units of the world and shown() agree and no two ants share a unit");
+    {
+        PuppetRig r;
+        std::mt19937 rng(20260506u);
+        size_t batches = 0;
+        size_t disagreements = 0;
+        for (const size_t churn_percent : {size_t{2}, size_t{6}, size_t{15}}) {
+            std::vector<uint16_t> others;                                           // (the ids of the others' ants that are in view: about 110 of 200 that come and go)
+            while (others.size() < 110) {
+                const uint16_t id = static_cast<uint16_t>(200 + rng() % 200);
+                if (std::find(others.begin(), others.end(), id) == others.end()) others.push_back(id);
+            }
+            for (int round = 0; round < 300; ++round) {
+                const size_t leaving = std::max<size_t>(1, others.size() * churn_percent / 100);
+                for (size_t n = 0; n < leaving; ++n) others.erase(others.begin() + static_cast<std::ptrdiff_t>(rng() % others.size()));
+                while (others.size() < 110) {
+                    const uint16_t id = static_cast<uint16_t>(200 + rng() % 200);
+                    if (std::find(others.begin(), others.end(), id) == others.end()) others.push_back(id);
+                }
+                std::vector<yard::AntRecord> batch = {make_ant(1, 0, 100, 100, idle_clip_of(4)), make_ant(2, 0, 200, 100, idle_clip_of(4)), make_ant(3, 0, 300, 100, idle_clip_of(4))};
+                for (const uint16_t id : others) batch.push_back(make_ant(id, static_cast<uint8_t>(1 + id % 3), 100 + static_cast<int>(id) * 7, 200 + static_cast<int>(rng() % 500), walk_clip_of(3)));
+                const size_t expected = batch.size();
+                const size_t shown = r.puppet->apply(batch);
+                ++batches;
+                const sim::WorldState& world = r.engine.get_world_state();
+                bool agree = shown == expected && r.puppet->shown() == expected && world.ants.size() == expected;
+                std::vector<uint32_t> units;
+                for (const yard::AntRecord& rec : batch) {
+                    const uint32_t slot = r.puppet->slot_id(rec.id);
+                    const sim::AntSnapshot* a = slot == 0 ? nullptr : find_ant(world, slot);
+                    agree = agree && a != nullptr && r.puppet->server_id(slot) == rec.id && a->px == rec.px && a->player_id == rec.color && r.puppet->is_own(slot) == (rec.color == 0);
+                    units.push_back(slot);
+                }
+                std::sort(units.begin(), units.end());
+                agree = agree && std::adjacent_find(units.begin(), units.end()) == units.end();
+                if (!agree) ++disagreements;
+            }
+        }
+        check(batches == 900 && disagreements == 0, std::to_string(batches) + " batches at 2, 6 and 15 percent churn: " + std::to_string(disagreements) + " with names, world, shown() or units that disagree");
+    }
+
     group("P4", "a slot that the caller still points at is never given to another ant");
     {
         PuppetRig r;
@@ -278,6 +335,8 @@ void puppet_cases() {
         many.push_back(yard::Hill{1, 5, 5});
         check(r.puppet->set_hills(many) == 8 && r.engine.get_world_state().anthills.size() == 8, "at most eight, the ninth is left out");
         check(r.puppet->set_hills({}) == 0 && r.engine.get_world_state().anthills.empty(), "an empty list takes them all away");
+        check(r.puppet->set_hills({{1, 124, 10}}) == 1 && r.puppet->set_hills({{1, 10, 92}}) == 1 && r.puppet->set_hills({{1, 124, 92}}) == 1, "a hill that ends exactly at the map's east edge, at its south edge, at both: fits");
+        check(r.puppet->set_hills({{1, 125, 10}}) == 0 && r.puppet->set_hills({{1, 10, 93}}) == 0 && r.puppet->set_hills({{1, 125, 93}}) == 0, "one tile further, on either axis or both: does not");
     }
 
     group("P9", "the questions that the sink and the page ask");
@@ -288,12 +347,17 @@ void puppet_cases() {
         check(r.puppet->foreign_ant_at(1000 / 32, 1000 / 32) == 11, "two others' ants on a tile: the last of them");
         check(r.puppet->foreign_ant_at(1100 / 32, 1000 / 32) == 12 && r.puppet->foreign_ant_at(100 / 32, 200 / 32) == 0, "another tile; an own ant is nobody's target");
         check(r.puppet->foreign_ant_at(5, 5) == 0 && r.puppet->foreign_ant_at(-1, -1) == 0, "an empty tile, a tile off the map");
+        check(r.puppet->foreign_ant_at(1000 / 32, 5) == 0 && r.puppet->foreign_ant_at(5, 1000 / 32) == 0 && r.puppet->foreign_ant_at(1000 / 32, 1000 / 32 + 1) == 0 && r.puppet->foreign_ant_at(1000 / 32 + 1, 1000 / 32) == 0,
+              "a tile in the column or the row of another's ant is not its tile");
         int32_t x = 0;
         int32_t y = 0;
         check(r.puppet->own_center(x, y) && x == 200 && y == 300 && r.puppet->own_shown() == 2, "the middle of the visitor's own ants");
         check(r.puppet->on_map(0, 0) && r.puppet->on_map(127, 95) && !r.puppet->on_map(128, 0) && !r.puppet->on_map(0, 96) && !r.puppet->on_map(-1, 5), "the tiles of the map");
+        const uint32_t own_slot_1 = r.puppet->slot_id(1);
+        const uint32_t own_slot_2 = r.puppet->slot_id(2);
         r.puppet->apply({make_ant(10, 1, 1000, 1000, idle_clip_of(4))});
         check(!r.puppet->own_center(x, y) && r.puppet->own_shown() == 0, "no own ant: no middle");
+        check(own_slot_1 != 0 && own_slot_2 != 0 && !r.puppet->is_own(own_slot_1) && !r.puppet->is_own(own_slot_2) && r.puppet->server_id(own_slot_1) == 0, "the slots of two own ants that are gone are nobody's: not own, no server id");
     }
 
     group("P10", "a batch costs the client little");
@@ -400,6 +464,10 @@ void sink_cases() {
         check(nobody.status == sim::CommandResult::Status::Ignored && nobody.needing_order == 0 && sink.queued().empty(), "nobody stands there any more: an attack on nothing is not sent");
         const sim::CommandResult own_there = sink.submit(command(sim::CommandType::GroupAttack, 100 / 32, 100 / 32, {s101}));
         check(own_there.status == sim::CommandResult::Status::Ignored && sink.queued().empty(), "an own ant is not a target");
+        const sim::CommandResult same_column = sink.submit(command(sim::CommandType::GroupAttack, 400 / 32, 3, {s101}));
+        const sim::CommandResult same_row = sink.submit(command(sim::CommandType::GroupAttack, 3, 400 / 32, {s101}));
+        check(same_column.status == sim::CommandResult::Status::Ignored && same_row.status == sim::CommandResult::Status::Ignored && sink.queued().empty(),
+              "an empty tile in the column or the row of the ant 201 is not its tile: nothing is sent");
     }
 
     group("S5", "what the Yard does not have is refused");

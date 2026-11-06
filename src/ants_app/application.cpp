@@ -517,8 +517,9 @@ ApplicationConfig Application::parse_arguments(int argc, char* argv[]) {
     if (cfg.replay_live && cfg.replay_path.empty() && cfg.startup_error.empty()) cfg.startup_error = "--replay-live follows the file of --replay: it needs --replay FILE.";
     if (cfg.yard) {                                                            // the Yard starts straight into its picture, whatever else was asked for
         cfg.start_in_map_select = false;
-        if (cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.bots.empty() || cfg.alone || cfg.play_at_once || !cfg.replay_path.empty() || cfg.game_mode_given)) {
-            cfg.startup_error = "--yard shows the Yard: it cannot be combined with --host, --join, --join-url, --bot, --alone, --play, --replay or --game-mode.";
+        if (cfg.startup_error.empty() && (cfg.net_role != ApplicationConfig::NetRole::None || !cfg.net_room.empty() || cfg.net_create || cfg.lan_port != net::kLanDiscoveryPort || !cfg.bots.empty() || cfg.alone ||
+                                          cfg.play_at_once || !cfg.replay_path.empty() || cfg.game_mode_given)) {
+            cfg.startup_error = "--yard shows the Yard: it cannot be combined with --host, --join, --join-url, --room, --room-*, --lan-port, --no-lan, --bot, --alone, --play, --replay or --game-mode.";
         }
     }
     if (cfg.game_mode_given && cfg.startup_error.empty()) {      // the mode is the choice of whoever makes the game: this machine for a game of its own and for the room of --host, nobody else's
