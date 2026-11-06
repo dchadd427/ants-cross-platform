@@ -389,7 +389,7 @@ bool MapStore::over_limit(const std::string& name, Term term) const {
 }
 
 std::string MapStore::online_refusal(const std::string& name) const {
-    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {          // (in the order of Term: the first limit that the map is over)
+    for (const Term term : kTerms) {          // (in the order of Term: the first limit that the map is over)
         if (over_limit(name, term)) return OnlineLimits::info(term).notice;
     }
     return std::string();
@@ -405,7 +405,7 @@ MapCounts MapStore::counts_of(const std::string& name) const {
     for (const ApprovedMap& t : test_maps_) {
         if (t.name == name) return t.counts();
     }
-    return MapCounts{};
+    return MapCounts{0, 0, 0, 0, 0};
 }
 
 uint64_t MapStore::start_ants_of(const std::string& name) const { return counts_of(name).start_ants; }
@@ -443,8 +443,8 @@ std::string MapStore::list_json(const std::vector<MapPlays>* plays, bool with_ex
         if (with_extended && !OnlineLimits::allows(m.counts())) {       // (a room refuses it: the picker may say so; it can still be opened in the Map Maker)
             o.set("online", ctl::JsonValue::make_bool(false));
             // (the picker says which limit, the first of the ants, the pairs, the food objects and the power-ups that the map is over; the size one is as it was, with no reason named)
-            for (const Term term : {Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {
-                if (OnlineLimits::over(m.counts(), term)) {
+            for (const Term term : kTerms) {
+                if (*OnlineLimits::info(term).why != '\0' && OnlineLimits::over(m.counts(), term)) {
                     o.set("online_why", ctl::JsonValue::make_string(OnlineLimits::info(term).why));
                     break;
                 }

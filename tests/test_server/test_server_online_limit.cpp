@@ -1182,7 +1182,7 @@ void run_online_limit_tests() {
         ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(online_counts(65536, 1000, 1000000, 250, 1000))), static_cast<int>(Term::None));
         ASSERT_TRUE(OnlineLimits::allows(online_counts(65536, 1000, 1000000, 250, 1000)));
         std::set<std::string> codes, whys, notices;
-        for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {
+        for (const Term term : kTerms) {
             const TermInfo& info = OnlineLimits::info(term);
             ASSERT_TRUE(std::string(info.code).find("_online") != std::string::npos && std::string(info.notice).size() <= net::kMaxChatChars && std::string(info.phrase).size() > 5 && std::string(info.more).size() > 5 &&
                         std::string(info.tail).find("to play online") != std::string::npos && std::string(info.limit).find("at most") != std::string::npos);
@@ -1194,13 +1194,14 @@ void run_online_limit_tests() {
             if (term == Term::FoodObjects) one.food_objects = OnlineLimits::limit_of(term) + 1;
             if (term == Term::PowerUps) one.power_ups = OnlineLimits::limit_of(term) + 1;
             ASSERT_EQ(static_cast<int>(OnlineLimits::first_over(one)), static_cast<int>(term));          // (each field is the one of its own term, and only that term is over)
-            for (const Term other : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) ASSERT_EQ(OnlineLimits::over(one, other), other == term);
+            for (const Term other : kTerms) ASSERT_EQ(OnlineLimits::over(one, other), other == term);
             codes.insert(info.code);
             whys.insert(info.why);
             notices.insert(info.notice);
         }
-        ASSERT_TRUE(codes.size() == 5u && notices.size() == 5u && whys.size() == 5u && whys.count("") == 1u && whys.count("ants") == 1u && whys.count("pairs") == 1u && whys.count("food") == 1u && whys.count("powerups") == 1u);
+        ASSERT_TRUE(kTerms.size() == 5u && codes.size() == kTerms.size() && notices.size() == kTerms.size() && whys.size() == kTerms.size() && whys.count("") == 1u && whys.count("ants") == 1u && whys.count("pairs") == 1u && whys.count("food") == 1u && whys.count("powerups") == 1u);
         ASSERT_TRUE(std::string(OnlineLimits::info(Term::None).code).empty() && std::string(OnlineLimits::info(Term::None).notice).empty());
+        ASSERT_TRUE(std::string(OnlineLimits::info(Term::End).code).empty() && OnlineLimits::limit_of(Term::End) == 0u && !OnlineLimits::over(online_counts(1, 1, 1, 1, 1), Term::End));          // (End counts the limits, it is none)
     } TEST_END();
 
     TEST_CASE("S3.225 A Map Of 40,000 Ants Never Reaches The Engine: Every Door Refuses It Before Any Ant Is Set Up (No Room Is Made, Nothing Is Built, The Whole Round Takes Milliseconds, Not The Seconds That Setting Up 40,000 Ants Takes)") {

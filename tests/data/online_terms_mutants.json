@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the limits that a room puts on a map as one set (OnlineLimits: cells, starting ants, pairs of a plant and a waypoint, food objects, power-ups; one MapCounts, one allows / first_over, one table of sentences), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_terms_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit') or docs/MAP_SUBMISSIONS.md ('The online size limit'): a limit's value, the number that a door reads for it, the order in which the limits are judged, a door that leaves the limits out, a store that does not know a map's counts. The older files of this family (online_limit_mutants.json, online_ants_cap_mutants.json, online_pairs_cap_mutants.json) keep the mutants whose code is still there. Not listed on purpose, as for the ants: the second locks behind a first one that a test does reach (the check in Room::start_lobby and in the lobby's START behind choose_map, load_map and build_room: no door of the manager makes a Room on a map over a limit, so no test can start one; the check of the history's approved-map callback behind the feeder's own load_level). The web side is in tests/data/mapmaker_play_mutants.json (play_food_*, play_powerups_*, play_more_*).",
+  "note": "Mutants of the limits that a room puts on a map as one set (OnlineLimits: cells, starting ants, pairs of a plant and a waypoint, food objects, power-ups; one MapCounts, one allows / first_over, one table of sentences), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_terms_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks one rule of docs/SERVER.md ('Online size limit') or docs/MAP_SUBMISSIONS.md ('The online size limit'): a limit's value, the number that a door reads for it, the order in which the limits are judged, a door that leaves the limits out, a store that does not know a map's counts. The older files of this family (online_limit_mutants.json, online_ants_cap_mutants.json, online_pairs_cap_mutants.json) keep the mutants whose code is still there. Not listed on purpose, as for the ants: the second locks behind a first one that a test does reach (the check in Room::start_lobby and in the lobby's START behind choose_map, load_map and build_room: no door of the manager makes a Room on a map over a limit, so no test can start one; the check of the history's approved-map callback behind the feeder's own load_level). The web side is in tests/data/mapmaker_play_mutants.json (play_food_*, play_powerups_*, play_more_*). A limit that is left out of kTerms, or listed in another order, does not compile (the static_assert of online_limits.hpp), so there are no mutants of that list.",
   "mutants": [
     {
       "id": "limit_of_cells_one_more",
@@ -114,8 +114,8 @@
     {
       "id": "over_at_the_limit_is_over",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    return term != Term::None && count_of(c, term) > limit_of(term);",
-      "new": "    return term != Term::None && count_of(c, term) >= limit_of(term);",
+      "old": "    return term != Term::None && term != Term::End && count_of(c, term) > limit_of(term);",
+      "new": "    return term != Term::None && term != Term::End && count_of(c, term) >= limit_of(term);",
       "build": [
         "test_server",
         "test_map_list"
@@ -126,7 +126,7 @@
       "id": "allows_never_refuses",
       "file": "src/ants_server/online_limits.cpp",
       "old": "    return first_over(c) == Term::None;",
-      "new": "    return true;",
+      "new": "    return (void)c, true;",
       "build": [
         "test_server",
         "test_map_list"
@@ -134,10 +134,10 @@
       "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
-      "id": "first_over_forgets_cells",
+      "id": "first_over_skips_the_first_limit",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
-      "new": "    for (const Term term : {Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
+      "old": "    for (const Term term : kTerms) {",
+      "new": "    for (const Term term : std::array<Term, 4>{kTerms[1], kTerms[2], kTerms[3], kTerms[4]}) {",
       "build": [
         "test_server",
         "test_map_list"
@@ -145,43 +145,10 @@
       "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
     },
     {
-      "id": "first_over_forgets_startants",
+      "id": "first_over_skips_the_last_limit",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
-      "new": "    for (const Term term : {Term::Cells, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
-      "build": [
-        "test_server",
-        "test_map_list"
-      ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
-    },
-    {
-      "id": "first_over_forgets_pairs",
-      "file": "src/ants_server/online_limits.cpp",
-      "old": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
-      "new": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::FoodObjects, Term::PowerUps}) {",
-      "build": [
-        "test_server",
-        "test_map_list"
-      ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
-    },
-    {
-      "id": "first_over_forgets_foodobjects",
-      "file": "src/ants_server/online_limits.cpp",
-      "old": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
-      "new": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::PowerUps}) {",
-      "build": [
-        "test_server",
-        "test_map_list"
-      ],
-      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
-    },
-    {
-      "id": "first_over_forgets_powerups",
-      "file": "src/ants_server/online_limits.cpp",
-      "old": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
-      "new": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects}) {",
+      "old": "    for (const Term term : kTerms) {",
+      "new": "    for (const Term term : std::array<Term, 4>{kTerms[0], kTerms[1], kTerms[2], kTerms[3]}) {",
       "build": [
         "test_server",
         "test_map_list"
@@ -191,8 +158,19 @@
     {
       "id": "first_over_names_the_pairs_before_the_ants",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {",
-      "new": "    for (const Term term : {Term::Cells, Term::Pairs, Term::StartAnts, Term::FoodObjects, Term::PowerUps}) {",
+      "old": "    for (const Term term : kTerms) {",
+      "new": "    for (const Term term : std::array<Term, 5>{kTerms[0], kTerms[2], kTerms[1], kTerms[3], kTerms[4]}) {",
+      "build": [
+        "test_server",
+        "test_map_list"
+      ],
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.263 timeout 900 ./build/tests/test_server/test_server"
+    },
+    {
+      "id": "first_over_walks_the_limits_backwards",
+      "file": "src/ants_server/online_limits.cpp",
+      "old": "    for (const Term term : kTerms) {",
+      "new": "    for (size_t k = kTerms.size(); k-- > 0;) { const Term term = kTerms[k];",
       "build": [
         "test_server",
         "test_map_list"
@@ -202,8 +180,8 @@
     {
       "id": "counts_of_forgets_the_cells",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.cells = static_cast<uint64_t>(level.width()) * level.height();",
-      "new": "    counts.cells = 0;",
+      "old": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), food_objects(level), power_ups(level)};",
+      "new": "    return MapCounts{0, start_ants(level), plant_waypoint_pairs(level), food_objects(level), power_ups(level)};",
       "build": [
         "test_server"
       ],
@@ -212,8 +190,8 @@
     {
       "id": "counts_of_forgets_the_start_ants",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.start_ants = start_ants(level);",
-      "new": "    counts.start_ants = 0;",
+      "old": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), food_objects(level), power_ups(level)};",
+      "new": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), 0, plant_waypoint_pairs(level), food_objects(level), power_ups(level)};",
       "build": [
         "test_server"
       ],
@@ -222,8 +200,8 @@
     {
       "id": "counts_of_forgets_the_pairs",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.pairs = plant_waypoint_pairs(level);",
-      "new": "    counts.pairs = 0;",
+      "old": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), food_objects(level), power_ups(level)};",
+      "new": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), 0, food_objects(level), power_ups(level)};",
       "build": [
         "test_server"
       ],
@@ -232,8 +210,8 @@
     {
       "id": "counts_of_forgets_the_food_objects",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.food_objects = food_objects(level);",
-      "new": "    counts.food_objects = 0;",
+      "old": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), food_objects(level), power_ups(level)};",
+      "new": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), 0, power_ups(level)};",
       "build": [
         "test_server"
       ],
@@ -242,8 +220,8 @@
     {
       "id": "counts_of_forgets_the_power_ups",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.power_ups = power_ups(level);",
-      "new": "    counts.power_ups = 0;",
+      "old": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), food_objects(level), power_ups(level)};",
+      "new": "    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), food_objects(level), 0};",
       "build": [
         "test_server"
       ],
@@ -272,8 +250,8 @@
     {
       "id": "report_forgets_the_food",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.food_objects = number(\"food_piles\");",
-      "new": "    counts.food_objects = 0;",
+      "old": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\") * number(\"waypoints\"), number(\"food_piles\"), number(\"powerups\")};",
+      "new": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\") * number(\"waypoints\"), 0, number(\"powerups\")};",
       "build": [
         "test_test_maps",
         "test_submissions"
@@ -283,8 +261,8 @@
     {
       "id": "report_forgets_the_power_ups",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.power_ups = number(\"powerups\");",
-      "new": "    counts.power_ups = 0;",
+      "old": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\") * number(\"waypoints\"), number(\"food_piles\"), number(\"powerups\")};",
+      "new": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\") * number(\"waypoints\"), number(\"food_piles\"), 0};",
       "build": [
         "test_test_maps",
         "test_submissions"
@@ -294,8 +272,8 @@
     {
       "id": "report_forgets_the_pairs",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.pairs = number(\"plants\") * number(\"waypoints\");",
-      "new": "    counts.pairs = 0;",
+      "old": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\") * number(\"waypoints\"), number(\"food_piles\"), number(\"powerups\")};",
+      "new": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, 0, number(\"food_piles\"), number(\"powerups\")};",
       "build": [
         "test_test_maps",
         "test_submissions"
@@ -305,8 +283,8 @@
     {
       "id": "report_pairs_from_the_plants_only",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.pairs = number(\"plants\") * number(\"waypoints\");",
-      "new": "    counts.pairs = number(\"plants\");",
+      "old": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\") * number(\"waypoints\"), number(\"food_piles\"), number(\"powerups\")};",
+      "new": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\"), number(\"food_piles\"), number(\"powerups\")};",
       "build": [
         "test_test_maps",
         "test_submissions"
@@ -316,8 +294,8 @@
     {
       "id": "report_counts_the_first_color_only",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    for (size_t s = 0; s < 4 && s < report.get(\"teams\").size(); ++s) counts.start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get(\"teams\").at(s).get(\"start_markers\").as_int_or(0)));",
-      "new": "    for (size_t s = 0; s < 1 && s < report.get(\"teams\").size(); ++s) counts.start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get(\"teams\").at(s).get(\"start_markers\").as_int_or(0)));",
+      "old": "    for (size_t s = 0; s < 4 && s < report.get(\"teams\").size(); ++s) start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get(\"teams\").at(s).get(\"start_markers\").as_int_or(0)));",
+      "new": "    for (size_t s = 0; s < 1 && s < report.get(\"teams\").size(); ++s) start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get(\"teams\").at(s).get(\"start_markers\").as_int_or(0)));",
       "build": [
         "test_test_maps",
         "test_submissions"
@@ -327,8 +305,8 @@
     {
       "id": "report_cells_from_the_rows_only",
       "file": "src/ants_server/online_limits.cpp",
-      "old": "    counts.cells = number(\"rows\") * number(\"columns\");",
-      "new": "    counts.cells = number(\"rows\");",
+      "old": "    return MapCounts{number(\"rows\") * number(\"columns\"), start_ants, number(\"plants\") * number(\"waypoints\"), number(\"food_piles\"), number(\"powerups\")};",
+      "new": "    return MapCounts{number(\"rows\"), start_ants, number(\"plants\") * number(\"waypoints\"), number(\"food_piles\"), number(\"powerups\")};",
       "build": [
         "test_test_maps"
       ],
@@ -491,7 +469,7 @@
       "id": "submissions_ignore_the_limits",
       "file": "src/ants_server/submissions.cpp",
       "old": "    const Term over = OnlineLimits::first_over(counts);",
-      "new": "    const Term over = Term::None;",
+      "new": "    const Term over = ((void)counts, Term::None);",
       "build": [
         "test_submissions"
       ],
@@ -600,6 +578,39 @@
       "file": "src/ants_server/map_store.cpp",
       "old": "        if (lower(t.name) == folded && OnlineLimits::over(t.counts(), term)) return true;",
       "new": "        if (lower(t.name) == folded && false) return true;",
+      "build": [
+        "test_server",
+        "test_map_list"
+      ],
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
+    },
+    {
+      "id": "online_refusal_skips_the_first_limit",
+      "file": "src/ants_server/map_store.cpp",
+      "old": "    for (const Term term : kTerms) {          // (in the order of Term: the first limit that the map is over)",
+      "new": "    for (const Term term : std::array<Term, 4>{kTerms[1], kTerms[2], kTerms[3], kTerms[4]}) {          // (in the order of Term: the first limit that the map is over)",
+      "build": [
+        "test_server",
+        "test_map_list"
+      ],
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
+    },
+    {
+      "id": "online_refusal_skips_the_last_limit",
+      "file": "src/ants_server/map_store.cpp",
+      "old": "    for (const Term term : kTerms) {          // (in the order of Term: the first limit that the map is over)",
+      "new": "    for (const Term term : std::array<Term, 4>{kTerms[0], kTerms[1], kTerms[2], kTerms[3]}) {          // (in the order of Term: the first limit that the map is over)",
+      "build": [
+        "test_server",
+        "test_map_list"
+      ],
+      "test": "./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=S3.261 timeout 900 ./build/tests/test_server/test_server"
+    },
+    {
+      "id": "list_names_the_size_as_a_reason",
+      "file": "src/ants_server/map_store.cpp",
+      "old": "                if (*OnlineLimits::info(term).why != '\\0' && OnlineLimits::over(m.counts(), term)) {",
+      "new": "                if (OnlineLimits::over(m.counts(), term)) {",
       "build": [
         "test_server",
         "test_map_list"

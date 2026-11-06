@@ -5,9 +5,12 @@
 // a waypoint, kMaxFoodObjects food objects and kMaxPowerUps power-ups; a bigger approved or test map stays on the lists, can be opened and edited in the Map Maker and played against bots on the player's own
 // computer or in the browser's test game, but a room refuses it with one sentence (net::kNoticeMapTooBig, kNoticeMapTooManyAnts, kNoticeMapTooManyPairs, kNoticeMapTooManyFood, kNoticeMapTooManyPowerUps).
 // Above kHeavyStartAnts a map is also marked heavy, and the Map Maker warns that a game on a small device may run slowly (a room refuses such a map first, it is over the cap).
-// The numbers are here and nowhere else. Every door asks one question about a MapCounts (allows / first_over), so a door cannot leave a limit out; a new limit is a new field of MapCounts, a new Term, a row
-// of info() and a line of counts_of (and of counts_of_report): the compiler then points at every place that must say what to do with it.
+// The numbers are here and nowhere else. Every door asks one question about a MapCounts (allows / first_over), so a door cannot leave a limit out; a new limit is a new field of MapCounts (made from every
+// number, so every place that builds one stops compiling), a new Term (before End) in the list kTerms, a row of info() and a line of counts_of (and of counts_of_report): the compiler then points at every
+// place that must say what to do with it, and the places that walk through the limits all walk through kTerms.
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace ants::assets { class LevelData; }
@@ -16,17 +19,31 @@ namespace ants::ctl { class JsonValue; }
 namespace ants::server {
 
 /// What the limits look at in a map: one number per limit. A door gets all of it from one place (counts_of for a loaded map, counts_of_report for a file that the map core has read, a store's record for a
-/// listed one), never field by field.
+/// listed one), never field by field. There is no default: a MapCounts is made from every number, so a limit that is added makes every place that builds one fail to compile until it says what that
+/// limit counts.
 struct MapCounts {
-    uint64_t cells{0};             // rows times columns
-    uint64_t start_ants{0};        // the start markers of the four colors added up
-    uint64_t pairs{0};             // the plants (dropper plants of block 1) times the waypoints (block 4)
-    uint64_t food_objects{0};      // the food objects (block 2 records that the loader kept)
-    uint64_t power_ups{0};         // the cells of layer 2 that hold a power-up tile
+    constexpr MapCounts(uint64_t cells_, uint64_t start_ants_, uint64_t pairs_, uint64_t food_objects_, uint64_t power_ups_) noexcept
+        : cells(cells_), start_ants(start_ants_), pairs(pairs_), food_objects(food_objects_), power_ups(power_ups_) {}
+    uint64_t cells;                // rows times columns
+    uint64_t start_ants;           // the start markers of the four colors added up
+    uint64_t pairs;                // the plants (dropper plants of block 1) times the waypoints (block 4)
+    uint64_t food_objects;         // the food objects (block 2 records that the loader kept)
+    uint64_t power_ups;            // the cells of layer 2 that hold a power-up tile
 };
 
-/// The limits, in the order in which a map is judged: the first one that a map is over is the reason that a room gives
-enum class Term : uint8_t { None, Cells, StartAnts, Pairs, FoodObjects, PowerUps };
+/// The limits, in the order in which a map is judged: the first one that a map is over is the reason that a room gives. End is no limit: it counts them (kTerms has a place for each)
+enum class Term : uint8_t { None, Cells, StartAnts, Pairs, FoodObjects, PowerUps, End };
+
+/// Every limit once, in the order of Term: the one list that the judgement, the store's refusal and its list, and the tests walk through. A limit that is added to Term and not to this list does not compile
+/// (the size follows the enum, and the check below wants every place to hold the limit of its number)
+inline constexpr std::array<Term, static_cast<size_t>(Term::End) - 1> kTerms{Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps};
+constexpr bool terms_are_listed_in_order() noexcept {
+    for (size_t i = 0; i < kTerms.size(); ++i) {
+        if (kTerms[i] != static_cast<Term>(i + 1)) return false;
+    }
+    return true;
+}
+static_assert(terms_are_listed_in_order(), "kTerms lists every limit of Term (not None, not End) once, in the order of Term");
 
 /// What a door says about a limit that a map is over (plain sentences; the numbers are the limits' own)
 struct TermInfo {

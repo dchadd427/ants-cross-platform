@@ -46,31 +46,22 @@ uint64_t OnlineLimits::power_ups(const assets::LevelData& level) {
 }
 
 MapCounts OnlineLimits::counts_of(const assets::LevelData& level) {
-    MapCounts counts;
-    counts.cells = static_cast<uint64_t>(level.width()) * level.height();
-    counts.start_ants = start_ants(level);
-    counts.pairs = plant_waypoint_pairs(level);
-    counts.food_objects = food_objects(level);
-    counts.power_ups = power_ups(level);
-    return counts;
+    return MapCounts{static_cast<uint64_t>(level.width()) * level.height(), start_ants(level), plant_waypoint_pairs(level), food_objects(level), power_ups(level)};
 }
 
 // The same numbers from the map core's reading of the canonical file (the doors that take a file have no loaded level): the start markers of the four colors added up, the plants times the waypoints, the food piles
 // and the power-ups, every one counted by the core from the file itself, never a number that the sender gave
 MapCounts OnlineLimits::counts_of_report(const ctl::JsonValue& report) {
     const auto number = [&](const char* key) { return static_cast<uint64_t>(std::max<int64_t>(0, report.get(key).as_int_or(0))); };
-    MapCounts counts;
-    counts.cells = number("rows") * number("columns");
-    for (size_t s = 0; s < 4 && s < report.get("teams").size(); ++s) counts.start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get("teams").at(s).get("start_markers").as_int_or(0)));
-    counts.pairs = number("plants") * number("waypoints");
-    counts.food_objects = number("food_piles");
-    counts.power_ups = number("powerups");
-    return counts;
+    uint64_t start_ants = 0;
+    for (size_t s = 0; s < 4 && s < report.get("teams").size(); ++s) start_ants += static_cast<uint64_t>(std::max<int64_t>(0, report.get("teams").at(s).get("start_markers").as_int_or(0)));
+    return MapCounts{number("rows") * number("columns"), start_ants, number("plants") * number("waypoints"), number("food_piles"), number("powerups")};
 }
 
 uint64_t OnlineLimits::limit_of(Term term) noexcept {
     switch (term) {
-        case Term::None: return 0;
+        case Term::None:
+        case Term::End: return 0;
         case Term::Cells: return kMaxCells;
         case Term::StartAnts: return kMaxStartAnts;
         case Term::Pairs: return kMaxPlantWaypointPairs;
@@ -82,7 +73,8 @@ uint64_t OnlineLimits::limit_of(Term term) noexcept {
 
 uint64_t OnlineLimits::count_of(const MapCounts& c, Term term) noexcept {
     switch (term) {
-        case Term::None: return 0;
+        case Term::None:
+        case Term::End: return 0;
         case Term::Cells: return c.cells;
         case Term::StartAnts: return c.start_ants;
         case Term::Pairs: return c.pairs;
@@ -98,14 +90,14 @@ bool OnlineLimits::allows(const MapCounts& c) noexcept {
 }
 
 Term OnlineLimits::first_over(const MapCounts& c) noexcept {
-    for (const Term term : {Term::Cells, Term::StartAnts, Term::Pairs, Term::FoodObjects, Term::PowerUps}) {
+    for (const Term term : kTerms) {
         if (over(c, term)) return term;
     }
     return Term::None;
 }
 
 bool OnlineLimits::over(const MapCounts& c, Term term) noexcept {
-    return term != Term::None && count_of(c, term) > limit_of(term);
+    return term != Term::None && term != Term::End && count_of(c, term) > limit_of(term);
 }
 
 const TermInfo& OnlineLimits::info(Term term) noexcept {
@@ -117,7 +109,8 @@ const TermInfo& OnlineLimits::info(Term term) noexcept {
     static const TermInfo kFood{"food", "map_too_many_food_online", "has too many food objects", " to play online", "250 at most", "has more food objects", net::kNoticeMapTooManyFood};
     static const TermInfo kPowerUps{"powerups", "map_too_many_powerups_online", "has too many power-ups", " to play online", "1,000 at most", "has more power-ups", net::kNoticeMapTooManyPowerUps};
     switch (term) {
-        case Term::None: return kNone;
+        case Term::None:
+        case Term::End: return kNone;
         case Term::Cells: return kCells;
         case Term::StartAnts: return kAnts;
         case Term::Pairs: return kPairs;
