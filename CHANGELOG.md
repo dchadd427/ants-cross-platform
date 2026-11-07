@@ -23,16 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
-## Next
+## v0.14.0 - 2026-11-07 - New rules: 187's closed hill, the last side standing, fire walls and long orders
 
 **For players:**
-- **The game type 187 has a closed hill.** In a 187 match no ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there."), an ant at 1 hit point no longer walks home, and the computer players send none of their hurt ants home. Old 187 recordings still play as they were.
-- **A match ends when one side is left and no food can score.** In the original's game, when all sides but one have no ant, egg or hatch left and no food is left on the ground or in an ant's grip, it ends (before, it played on to the clock). The highest score wins, even for a team with no ant left; a tie for the top, or all scores 0, goes to the side that is still standing. Power-ups and bombs are not food. Screens, 187 and old recordings are unchanged.
-- **A fire wall in a map file is free ground once it is out.** In the original a fire wall that a map places (the Map Maker's permanent Fire wall) is blocked by the map's own solid bit only; the game here also blocked its cell for a dying ant's power-up and the computer players' bombs after a fire ant put it out, on the 5 maps whose list names it `wallup04`. It no longer does. Old recordings of those maps still play as they were.
-- **187 ends fairly in two rare cases.** A team that only has eggs it cannot hatch (no hill) no longer keeps a 187 match going, and a room with more seats than teams on the map no longer ends it at once. Old 187 recordings still play as they were.
-- **Very long orders on very big maps.** A map started with New map in the Map Maker with a side above 256 tiles gets the wide search: an order of 450 tiles finds its path (the original gives up at about 400). Maps made before, and maps made bigger with Resize, play as they did.
+- **A new game version; older ones cannot join.** A v0.13 game is refused, and a page that stayed open shows "A newer version of Ants is out. Reload the page to update."
+- **The game type 187 has a closed hill.** No ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there.") and an ant at 1 hit point no longer walks home. 187 also ends fairly in two rare cases: a team with only eggs it cannot hatch (no hill) no longer keeps a match going, and a room with more seats than teams no longer ends it at once.
+- **The original's game ends when one side is left and no food can score** (before, it played on to the clock). The highest score wins, even for a side with no ant left; a tie for the top, all 0 for example, goes to the side still standing. Power-ups and bombs are not food. It shows on the 29 library maps with no food, such as ARENA and FIGHT.
+- **Five fire-wall maps play a little differently** (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2): a fire wall that the map file places is free ground once it is put out, as in the original (a dying ant's power-up and the computer players' bombs can use its cell).
+- **Long orders on big maps.** The wide search finds a path for an order of 450 tiles, where the original gives up at about 400. The Map Maker (v1.8.0) gives it to a new Extended map by itself where the map plays like the original with it, and the side panel shows "Rules 2" (long orders). A map of the original's rules that is taller than 90 rows keeps its wall at row 90 when it is resized and stays taller (before, Resize took it down). Earlier game versions cannot open a Rules 2 map.
+- **Old recordings still play** under the rules they were made with. When the server is updated, matches still running end.
 
-**Rules / network:** network protocol 23 (was 22): no message changed, but a 187 match, the end of a match in the original's game and a fire wall of a map file play differently, so a v0.13 game cannot play with a game of this release. The rules number is 11 now for 187 (10, 7 and 6 before) and 9 for the original's game (8 and 5 before): new matches record them and recordings of the others still play as they were. The state hash of 5 library maps (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2) moves from tick 0 under the new numbers; the other 535 are unchanged. A map may carry the new rules word 2 (the wide search): earlier versions refuse it, and no rules number is taken.
+**Rules / network:** network protocol 23 (was 22): no message changed, but 187, the end of the original's game and the fire walls of map files play differently, so a v0.13 game cannot play with this one. The replay rules number is 9 for the original's game (was 5) and 11 for 187 (was 6); recordings of 5 and 6 play as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/76545ba9...b86dab0c)
 
 ## v0.13.2 - 2026-11-06 - Per-visitor limits, page headers and a chat store that keeps its size
 
