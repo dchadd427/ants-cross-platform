@@ -500,17 +500,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...feb90e21)
 
-## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
+## Older versions (v0.12.113 and before)
 
-**For players:**
-- **Pick up: drag a thing off the map and let go, and it goes back.** If you let go of the mouse or lift your finger outside the map (off its edge, over the side panel or over the bar), nothing changes and the thing is back where it was. While your pointer is off the map the see-through copy goes away and the bar says "Let go here and it goes back where it was."
-- **Enter or Done while you are still dragging no longer throws the pick away.** They now wait: you lift, and the thing is put down where the copy is.
-- A drag that ends on the map still puts the thing down in one step (or stays in your hand, red, with the reason, when the place is blocked); Escape and a click work as before.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.4.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/37aeace1...1291d49e)
-
-## Older versions (v0.12.112 and before)
-
-Every release before v0.12.113, and the long notes of v0.12.112 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.114, and the long notes of v0.12.113 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
