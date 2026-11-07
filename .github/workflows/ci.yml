@@ -83,7 +83,8 @@ jobs:
 
   linux_tests:
     name: Linux tests (${{ matrix.name }})
-    runs-on: ubuntu-latest
+    # pinned: the default image moved to Ubuntu 26.04 with GCC 15, which the code does not build with -Werror yet
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -216,7 +217,8 @@ jobs:
     name: Linux (GCC)
     needs: linux_tests
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    # pinned like linux_tests (its legs), for the same reason
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Did every Linux job pass?
