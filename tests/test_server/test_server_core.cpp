@@ -1187,7 +1187,8 @@ void run_leader_tests() {
         ASSERT_TRUE(s.state == RoomState::Running && s.ticks > 400 && s.seat_moves == 2 && s.leader == 255);
         ASSERT_FALSE(ann.session->desynced() || bob.session->desynced() || cat.session->desynced());
         size_t compared = 0;                                                               // the clients stand where each other stand: every tick that two of them ran has one state
-        for (const auto& pair : {std::make_pair(&ann, &bob), std::make_pair(&ann, &cat), std::make_pair(&bob, &cat)}) {
+        const std::pair<Client*, Client*> client_pairs[] = {{&ann, &bob}, {&ann, &cat}, {&bob, &cat}};
+        for (const auto& pair : client_pairs) {
             for (const auto& at : pair.first->hash_at) {
                 const auto other = pair.second->hash_at.find(at.first);
                 if (other == pair.second->hash_at.end()) continue;
