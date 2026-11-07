@@ -42,7 +42,7 @@
 // "reconnect": bool, "hold_vote_seconds", "max_pause_seconds", "max_catch_up_seconds", "resume_countdown_seconds", "countdown_seconds" (protocol 21), "paused": bool (the match is held: a seat is missing, or the countdown
 // after a pause runs), "resume_seconds" (the seconds that are left of that countdown, 0: none), "absent": [{"seat", "name", "state": "absent|catching_up", "away_seconds",
 // "progress"}] (the seats that are missing, longest away first), "vote": {"seat", "continue", "voters"} | null, "paused_seconds" (the match's total pause so far), "rejoins",
-// "drops_by_vote", "drops_by_cap", "rejoins_refused" (Hellos with a key that a budget refused), "catch_up_expired", "streamed_bytes" (the log, streamed to returning players), "log": {"turns", "bytes", "usable"} (the turn log that a returning player is given; it is freed when the match is over and keeps what it held),
+// "drops_by_vote", "drops_by_cap", "drops_by_state" (seats dropped for a state that differed from the referee's), "rejoins_refused" (Hellos with a key that a budget refused), "catch_up_expired", "streamed_bytes" (the log, streamed to returning players), "log": {"turns", "bytes", "usable"} (the turn log that a returning player is given; it is freed when the match is over and keeps what it held),
 // "record": {"kept": bool (a restart of the server would bring this match back: restart_record.hpp), "bytes", "note" (why not: the server keeps no records, the room holds no seats, the disk
 // refused, the turn log passed its limit, ...)}, "replay": {"kept": bool (the match is kept as a replay: replay_store.hpp), "file", "bytes", "note" (why not: the server keeps none, the room was made with "record": false,
 // the match was too short, ...; empty while the match may still be kept)}, "restored": {"turns", "replay_ms", "state_hash"} | null (the room came back from a restart record: the turns that were replayed, how long it took,
@@ -52,6 +52,7 @@
 // not bring back (another network protocol, a changed map, ...) is a FAILED room whose "reason" says so, from the moment the server has started.
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 #include "ants_ctl/http.hpp"
@@ -63,6 +64,13 @@ namespace ants::server {
 /// The status of a room as JSON. `in_list`: the entry of GET /rooms, which leaves out the room's `replay` object unless the match was kept (an answer is at most HttpServer::kMaxResponseBytes, 1 MiB, and a
 /// list of a thousand rooms, the restore check of tests/scripts/test_ants_server.sh, has little to spare: the note of a room that is not kept is in its own status).
 ctl::JsonValue status_to_json(const RoomStatus& status, bool in_list = false);
+/// The name of the file in the results folder (`--results-dir`) that an ended room's status is written to: `<code>.json`. A room whose code would give the name of the file of the site statistics (SiteStats::kFileName, in any
+/// letter case, as a file system may not tell them apart) gets `<code>.room.json` instead (a code has letters, digits, '_' and '-', no dot, so no code makes that name); "" for a code that is empty or no room code
+/// (valid_room_code): nothing is written for it.
+std::string result_file_name(const std::string& code);
+/// Writes the status of an ended room to its result file in `dir`, whole or not at all (write_whole_file: the file of an earlier room with the same code is replaced when the new one is whole, and a link of that name is
+/// replaced, not followed). A line for the server's log when the file has another name than `<code>.json` or was not written (and then only that), else "".
+std::string write_result_file(const std::filesystem::path& dir, const RoomStatus& status);
 /// Reads a RoomSpec from the JSON body of POST /rooms; false with a reason when a field is missing, of the wrong kind or out of its range. `out` holds the defaults when it is called (the
 /// server's own, RoomManager::default_spec; a fresh RoomSpec is the built-in ones): only what the body says is changed, and on failure `out` is left as it was.
 bool spec_from_json(const ctl::JsonValue& body, RoomSpec& out, std::string& error);

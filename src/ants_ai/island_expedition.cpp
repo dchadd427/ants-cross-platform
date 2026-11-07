@@ -54,6 +54,40 @@ std::vector<uint32_t> walk_order(const TokenGroup& group, const TokenGroup::Entr
     return order;
 }
 
+/// The tokens of a row by the cells they lie on, to find the ones on a cell without a look at every token: the cell hashed to a slot of a table with at least twice as many slots as tokens, the next slot
+/// when one is taken (tokens on one cell, which a map does not have, would simply take more slots)
+class TokenCells {
+public:
+    explicit TokenCells(const std::vector<sim::TileCoord>& tiles) : tiles_(tiles) {
+        size_t slots = 8;
+        while (slots < 2 * tiles.size()) slots *= 2;
+        slot_.assign(slots, kNone);
+        for (size_t i = 0; i < tiles.size(); ++i) {
+            size_t at = home(tiles[i].x, tiles[i].y, slots);
+            while (slot_[at] != kNone) at = (at + 1) & (slots - 1);
+            slot_[at] = static_cast<uint32_t>(i);
+        }
+    }
+    /// `visit` for the index of every token that lies on the cell (x, y), in no particular order
+    template <class Visit>
+    void each_at(int32_t x, int32_t y, Visit&& visit) const {
+        const size_t mask = slot_.size() - 1;
+        for (size_t at = home(x, y, slot_.size()); slot_[at] != kNone; at = (at + 1) & mask) {
+            const sim::TileCoord& t = tiles_[slot_[at]];
+            if (t.x == x && t.y == y) visit(static_cast<size_t>(slot_[at]));
+        }
+    }
+
+private:
+    static constexpr uint32_t kNone = 0xFFFFFFFFu;
+    static size_t home(int32_t x, int32_t y, size_t slots) noexcept {
+        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(x)) << 32) | static_cast<uint32_t>(y);
+        return static_cast<size_t>((key * 0x9E3779B97F4A7C15ull) >> 32) & (slots - 1);
+    }
+    const std::vector<sim::TileCoord>& tiles_;
+    std::vector<uint32_t> slot_;
+};
+
 /// Whether an ant of any team stands on the tile, other than `except`
 bool occupied(const BotView& v, sim::TileCoord t, uint32_t except = 0) noexcept {
     for (const AntView& a : v.mine()) {
@@ -84,11 +118,19 @@ std::vector<uint32_t> ExpeditionTask::walk_of(const MapInfo& map, const TokenGro
         steps[i] = 1;
         queue.push_back(i);
     }
+    // (the tokens that touch the one at the head of the queue are looked up by their cells, not found by a look at every token: a row can hold thousands, and the plan walks it from every one of its ends.
+    // The steps are the length of the shortest walk, whatever the order in which the tokens of one length are reached)
+    const TokenCells cells(tiles);
     for (size_t head = 0; head < queue.size(); ++head) {
-        for (size_t j = 0; j < tiles.size(); ++j) {
-            if (steps[j] != kFar || tiles[j].chebyshev_dist(tiles[queue[head]]) > 1) continue;
-            steps[j] = steps[queue[head]] + 1;
-            queue.push_back(j);
+        const sim::TileCoord at = tiles[queue[head]];
+        for (int32_t dy = -1; dy <= 1; ++dy) {
+            for (int32_t dx = -1; dx <= 1; ++dx) {
+                cells.each_at(at.x + dx, at.y + dy, [&](size_t j) {
+                    if (steps[j] != kFar) return;
+                    steps[j] = steps[queue[head]] + 1;
+                    queue.push_back(j);
+                });
+            }
         }
     }
     std::vector<size_t> by(order.size());

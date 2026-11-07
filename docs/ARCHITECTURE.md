@@ -19,8 +19,8 @@ ants-cross-platform/
 │   │                                   # ants::BUILD_ID at every build
 │   └── ants_test_paths.cpp.in          # Template of the generated file that tells the tests where the checkout is
 ├── docker/                             # Container deployment configuration
-│   ├── nginx.conf                      # nginx of the web image: game files revalidated (ETag, 304), cross-origin and
-│   │                                   # WASM headers, routes to the game server
+│   ├── nginx.conf                      # nginx of the web image: game files revalidated (ETag, 304) and compressed once,
+│   │                                   # cross-origin, security and WASM headers, routes to the game server
 │   └── resolve_build_id.sh             # The build id of a Docker image build (a build argument, else the clone's git
 │                                       # files, else the build time)
 ├── docs/                               # Guides, specifications and design notes
@@ -186,7 +186,7 @@ ants-cross-platform/
 │   │                                   # restarts the site
 │   ├── web_without_docker.py           # The web image without Docker (Linux): the Dockerfile's commands on
 │   │                                   # this machine, the pages served with nginx, for the browser checks
-│   ├── deploy_webhook.sh               # Calls the Portainer deploy webhook without ever printing its address
+│   ├── deploy_webhook.sh               # Calls the deploy hook without ever printing its address
 │   ├── ci_light.sh                     # Does a pull request need all of CI or only the light checks? (the first job
 │   │                                   # of ci.yml: pages, documents and page tests only)
 │   └── front_page_art/                 # Makes the front page's pictures in web/front/ from the game's own assets
@@ -203,6 +203,8 @@ ants-cross-platform/
 │   ├── favicon.ico                     # Site icon
 │   └── favicon.png                     # Site icon (PNG)
 ├── .github/
+│   ├── CODEOWNERS                      # Who reviews a change; the build, container, deployment and automation
+│   │                                   # files have lines of their own
 │   └── workflows/ci.yml                # Continuous integration (see TESTING.md)
 ├── .dockerignore                       # What stays out of the Docker build context
 ├── .editorconfig                       # Editor settings (UTF-8, LF, four spaces, no trailing blanks)
@@ -218,7 +220,7 @@ ants-cross-platform/
 │                                       # docker-compose.stack.yml
 ├── docker-compose.server.yml           # Example service of the dedicated game server
 ├── docker-compose.stack.yml            # The web game, the game server and the chat hub together as one stack
-│                                       # (Portainer, auto-deploy)
+│                                       # (the stack that the deploy job redeploys)
 ├── docker-compose.staging.yml          # The same three services as a second stack with its own names, ports, volumes
 │                                       # and network, for trying finished work
 ├── Dockerfile                          # Multi-stage Emscripten + Nginx build
@@ -236,6 +238,7 @@ ants-cross-platform/
 │                                       # covered)
 ├── THIRD_PARTY_NOTICES.md              # Third-party code and fonts in the repository or linked by the build, with
 │                                       # their licences
+├── SECURITY.md                         # How to report a problem privately, what is in scope and what to expect
 ├── VERSION                             # The one place the version is written (one line, MAJOR.MINOR.PATCH); the
 │                                       # build generates the C++ header from it
 └── AGENTS.md                           # Project rules for contributors and coding agents

@@ -21,18 +21,27 @@
     var TOAST_MS = 7000;
     var HEAVY_START_ANTS = 2400;                                                        // above this many start ants (all colors together) a map is heavy: the server's OnlineLimits::kHeavyStartAnts (include/ants_server/online_limits.hpp), which a test keeps equal to this
 
-    var MAX_ONLINE_ANTS = 8000;                                                         // a room plays no map above this many start ants: the server's OnlineLimits::kMaxStartAnts (a test keeps them equal)
+    var MAX_ONLINE_ANTS = 1000;                                                         // a room plays no map above this many start ants: the server's OnlineLimits::kMaxStartAnts (a test keeps them equal)
+    var MAX_ONLINE_FOOD = 250;                                                          // nor above this many food objects: the server's OnlineLimits::kMaxFoodObjects (a test keeps them equal)
+    var MAX_ONLINE_POWERUPS = 1000;                                                     // nor above this many power-ups: the server's OnlineLimits::kMaxPowerUps (a test keeps them equal)
+    var MAX_ONLINE_PAIRS = 1000000;                                                     // nor above this many pairs of a plant and a waypoint: the server's OnlineLimits::kMaxPlantWaypointPairs (a test keeps them equal)
 
     function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-    // The one warning for a heavy map, in both tabs: a warning only, nothing is refused and no button is turned off
+    // The one warning for a heavy map, in the Against bots tab: a warning only, nothing is refused and no button is turned off
     function heavyText(ants) { return 'This map starts with ' + commas(ants) + ' ants, so a game may run slowly, especially on phones and older computers.'; }
     // The refusal of a map that no online room plays, in the With other players tab (shown first, so that nothing is sent)
     function onlineText(ants) { return 'This map starts ' + commas(ants) + ' ants. An online room plays at most ' + commas(MAX_ONLINE_ANTS) + ', so it cannot host this map. You can still play it against bots on this device.'; }
+    // The refusal of a map whose plants times waypoints is too much set-up work for an online room (shown beside, or instead of, onlineText)
+    function onlinePairsText(pairs) { return 'This map has ' + commas(pairs) + ' pairs of a plant and a waypoint. An online room plays at most ' + commas(MAX_ONLINE_PAIRS) + ', so it cannot host this map. You can still play it against bots on this device.'; }
+    // The same for the food objects and the power-ups of a map (shown beside the others)
+    function onlineFoodText(food) { return 'This map has ' + commas(food) + ' food objects. An online room plays at most ' + commas(MAX_ONLINE_FOOD) + ', so it cannot host this map. You can still play it against bots on this device.'; }
+    function onlinePowerUpsText(powerups) { return 'This map has ' + commas(powerups) + ' power-ups. An online room plays at most ' + commas(MAX_ONLINE_POWERUPS) + ', so it cannot host this map. You can still play it against bots on this device.'; }
     function capital(text) { text = String(text); return text.charAt(0).toUpperCase() + text.slice(1); }
 
     // What the check and the first reading say of the open map, as the dialog needs it: { ok, title, text, note, list, convert, seats, ants, heavy }
     //   seats[seat] = { seat, name, dot, ants, hills, usable, why: [the check's own sentences about this color] }
     //   ants = the start markers of the four colors added up, as the server counts them; heavy = more than HEAVY_START_ANTS (the dialog warns; the map is played as any other)
+    //   pairs = the plants (the server's dropper-plant tiles) times the waypoints, as read.json's "plants" and "waypoints" count them; food = its "food_piles"; powerups = its "powerups"
     // A map is refused for the game when: the check could not judge it, a Classic map has more than 90 rows, an Extended map is bigger than 512 x 512 (262,144 cells, 1,024 a side), a finding that is about no color stops it, or fewer than
     // two colors have a hill and starting ants (one seat for you and one for a bot)
     function verdict(check, read) {
@@ -86,7 +95,10 @@
         out.ants = 0;
         for (var c = 0; c < 4; c++) out.ants += (teams[c] && teams[c].start_markers > 0) ? teams[c].start_markers : 0;
         out.heavy = out.ants > HEAVY_START_ANTS;
-        out.online = out.ants <= MAX_ONLINE_ANTS;                                      // (false: only a room is refused)
+        out.pairs = (read.plants || 0) * (read.waypoints || 0);
+        out.food = read.food_piles || 0;
+        out.powerups = read.powerups || 0;
+        out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;     // (false: only a room is refused)
         out.ok = true;
         return out;
     }
@@ -316,11 +328,22 @@
                 fcard.appendChild(el('p', 'play-ftext', 'Opens a room in a new tab with the map as it is right now (' + kbText(m.bytes.length) + '). Anyone with your room link or 6-character room code receives the map automatically when they join.'));
                 fcard.appendChild(el('p', 'play-fnote', 'Not added to the public map list and not submitted for approval. Your editor tab stays open as you left it.'));
                 friendsPanel.appendChild(fcard);
-                if (!v.online) {                                             // (the refusal takes the place of the slow-game warning)
+                if (v.ants > MAX_ONLINE_ANTS) {                              // (a heavy map is over the cap too: its only word)
                     var no = el('p', 'play-status no', onlineText(v.ants));
                     no.setAttribute('role', 'status');
                     friendsPanel.appendChild(no);
-                } else if (v.heavy) friendsPanel.appendChild(warning());
+                }
+                if (v.pairs > MAX_ONLINE_PAIRS) {
+                    var noPairs = el('p', 'play-status no', onlinePairsText(v.pairs));
+                    noPairs.setAttribute('role', 'status');
+                    friendsPanel.appendChild(noPairs);
+                }
+                [[v.food, MAX_ONLINE_FOOD, onlineFoodText], [v.powerups, MAX_ONLINE_POWERUPS, onlinePowerUpsText]].forEach(function (row) {
+                    if (row[0] <= row[1]) return;
+                    var noMore = el('p', 'play-status no', row[2](row[0]));
+                    noMore.setAttribute('role', 'status');
+                    friendsPanel.appendChild(noMore);
+                });
                 var usableCount = v.seats.filter(function (x) { return x.usable; }).length;
                 friendsPanel.appendChild(el('p', 'play-fhead', 'Colors available on this map (' + usableCount + ' of 4):'));
                 var flist = el('div', 'play-fseats');
@@ -345,5 +368,8 @@
         return ctl;
     }
 
-    return { verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, heavyText: heavyText, HEAVY_START_ANTS: HEAVY_START_ANTS, MAX_ONLINE_ANTS: MAX_ONLINE_ANTS, onlineText: onlineText, MAX_ROWS: MAX_ROWS, MAX_EXTENDED_SIDE: MAX_EXTENDED_SIDE, KEPT: KEPT, kept: function () { return kept; } };
+    return {
+        verdict: verdict, startable: startable, quick: quick, firstChoice: firstChoice, code: code, open: open, heavyText: heavyText, HEAVY_START_ANTS: HEAVY_START_ANTS, MAX_ONLINE_ANTS: MAX_ONLINE_ANTS,
+        onlineText: onlineText, MAX_ONLINE_PAIRS: MAX_ONLINE_PAIRS, onlinePairsText: onlinePairsText, MAX_ONLINE_FOOD: MAX_ONLINE_FOOD, onlineFoodText: onlineFoodText, MAX_ONLINE_POWERUPS: MAX_ONLINE_POWERUPS, onlinePowerUpsText: onlinePowerUpsText, MAX_ROWS: MAX_ROWS, MAX_EXTENDED_SIDE: MAX_EXTENDED_SIDE, KEPT: KEPT, kept: function () { return kept; }
+    };
 });

@@ -153,9 +153,9 @@ function rig(o) {
     same('lineOf: a name of nothing that shows (fillers, variation selectors, tag characters) is "?", a line of marks only is no line, an emoji with its selector is one', [P.lineOf({ id: 1, who: '\u3164\u2800\ufe0f\u180b\udb40\udc41', text: 'x' }).who, P.lineOf({ id: 1, who: 'a', text: '\ufe0f\u0301 ' }), P.lineOf({ id: 1, who: 'a', text: '\u3164\u2800' }), P.lineOf({ id: 1, who: 'a', text: '\u2764\ufe0f' }).text, P.lineOf({ id: 1, who: 'a', text: 'e\u0301' }).text], ['?', null, null, '\u2764\ufe0f', 'e\u0301']);
     same('lineOf: a name over 32 and a line over 200 code points are cut with "…"; a name with nothing left is "?"', [P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).who, P.lineOf({ id: 1, who: 'n'.repeat(60), text: 't'.repeat(5000) }).text.length, P.lineOf({ id: 1, who: '\u202e', text: 'x' }).who],
         ['n'.repeat(32) + '…', 201, '?']);
-    same('wordOf: the words of the codes; "log in" only where the hub has a login; an unknown code, or a name of Object, is the generic word', [P.wordOf('rate', true), P.wordOf('login', true), P.wordOf('login', false), P.wordOf('muted', false), P.wordOf('banned'), P.wordOf('long'), P.wordOf('empty'), P.wordOf('young'), P.wordOf('bad'),
+    same('wordOf: the words of the codes; "log in" only where the hub has a login; an unknown code, or a name of Object, is the generic word', [P.wordOf('rate', true), P.wordOf('login', true), P.wordOf('login', false), P.wordOf('muted', false), P.wordOf('banned'), P.wordOf('long'), P.wordOf('empty'), P.wordOf('young'), P.wordOf('bad'), P.wordOf('quota'),
         P.wordOf('what'), P.wordOf(undefined), P.wordOf(5), P.wordOf('constructor'), P.wordOf('__proto__'), P.wordOf('toString'), P.wordOf('hasOwnProperty')],
-        ['Slow down a little', 'Log in with Discord to chat', 'Chat is read-only for now', 'You cannot chat for a while', 'You cannot chat here', 'That line is too long', 'Write something first', 'Your account is too new to chat yet', 'That line could not be sent',
+        ['Slow down a little', 'Log in with Discord to chat', 'Chat is read-only for now', 'You cannot chat for a while', 'You cannot chat here', 'That line is too long', 'Write something first', 'Your account is too new to chat yet', 'That line could not be sent', 'You have chatted a lot, try again later',
          'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through', 'That did not go through']);
     same('delayOf at the low end of the spread: half a step, never under 1 s (steps of 1 s doubling to 60 s)', [0, 1, 2, 3, 4, 5, 6, 7, 20, 1000].map((n) => P.delayOf(n, 0)), [1000, 1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000]);
     same('... at the high end: one and a half steps, never over 60 s', [0, 1, 2, 3, 4, 5, 6, 7, 20, 1000].map((n) => P.delayOf(n, 1)), [1500, 3000, 6000, 12000, 24000, 48000, 60000, 60000, 60000, 60000]);
@@ -276,7 +276,7 @@ function rig(o) {
     check('a line that is gone is gone for good (a second del is nothing, the line cannot come back by itself)', r.rows().length === 98 && r.rowTexts().indexOf('u5: line number 999') === -1);
 }
 {   // the err codes, in words
-    const words = { rate: 'Slow down a little', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first', young: 'Your account is too new to chat yet', bad: 'That line could not be sent' };
+    const words = { rate: 'Slow down a little', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first', young: 'Your account is too new to chat yet', bad: 'That line could not be sent', quota: 'You have chatted a lot, try again later' };
     Object.keys(words).forEach((code) => {
         const r = rig(); r.live(W({ you: YOU, login: true }));
         r.s().recv({ t: 'err', code });

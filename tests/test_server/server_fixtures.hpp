@@ -1419,6 +1419,7 @@ inline void age_record(PWorld& w, const std::string& code, int seconds) { fs::la
 // The groups of cases, run by main() in test_server.cpp in this order
 void run_site_stats_tests();
 void run_replay_tests();
+void run_state_hash_tests();
 void run_bot_match_tests();
 void run_store_tests();
 void run_manager_tests();

@@ -147,8 +147,12 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
     }
 
     // ---- the channels: for every component the shortest chain of bridgeable water tiles to each component with a higher number -------------------------------------
-    std::vector<int32_t> dist(static_cast<size_t>(w) * static_cast<size_t>(h));
-    std::vector<int32_t> prev(static_cast<size_t>(w) * static_cast<size_t>(h));
+    std::vector<int32_t> dist(static_cast<size_t>(w) * static_cast<size_t>(h), -1);
+    std::vector<int32_t> prev(static_cast<size_t>(w) * static_cast<size_t>(h), -1);
+    std::vector<int32_t> best_len(static_cast<size_t>(n), -1);                         // (the arrays of one search are given back after it, only the tiles and components that it reached: a map of thousands of
+    std::vector<int> best_end(static_cast<size_t>(n), -1);                             // components does not clear the whole map and a list of all the components for each of them)
+    std::vector<int> written;
+    std::vector<int32_t> reached;
     const auto at = [&](int x, int y) { return static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x); };
     std::vector<std::vector<int>> shore_of(static_cast<size_t>(n));                    // the bridgeable water tiles that touch a component, in reading order: the seeds of its search (one pass over the map, not one per component)
     for (int y = 0; y < h; ++y) {
@@ -165,15 +169,12 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
         }
     }
     for (int32_t a = 0; a < n; ++a) {
-        std::fill(dist.begin(), dist.end(), -1);
-        std::fill(prev.begin(), prev.end(), -1);
         std::deque<int> queue;
         for (const int idx : shore_of[static_cast<size_t>(a)]) {
             dist[static_cast<size_t>(idx)] = 1;
+            written.push_back(idx);
             queue.push_back(idx);
         }
-        std::vector<int32_t> best_len(static_cast<size_t>(n), -1);
-        std::vector<int> best_end(static_cast<size_t>(n), -1);
         while (!queue.empty()) {
             const int idx = queue.front();
             queue.pop_front();
@@ -185,6 +186,7 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
                 if (c > a && best_len[static_cast<size_t>(c)] < 0) {               // the first chain found to a component is the shortest (the search goes by distance, in reading order)
                     best_len[static_cast<size_t>(c)] = du;
                     best_end[static_cast<size_t>(c)] = idx;
+                    reached.push_back(c);
                 }
             }
             if (du >= kMaxChannel) continue;
@@ -194,11 +196,12 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
                 if (!bridge_water(grid, sim::TileCoord{nx, ny}) || dist[at(nx, ny)] >= 0) continue;
                 dist[at(nx, ny)] = du + 1;
                 prev[at(nx, ny)] = idx;
+                written.push_back(ny * w + nx);
                 queue.push_back(ny * w + nx);
             }
         }
-        for (int32_t c = a + 1; c < n; ++c) {
-            if (best_len[static_cast<size_t>(c)] < 0) continue;
+        std::sort(reached.begin(), reached.end());                                      // (the channels of a component are listed in the order of the components that they reach)
+        for (const int32_t c : reached) {
             Channel ch;
             ch.a = a;
             ch.b = c;
@@ -206,10 +209,21 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
             std::reverse(ch.tiles.begin(), ch.tiles.end());
             out.channels_.push_back(std::move(ch));
         }
+        for (const int idx : written) {
+            dist[static_cast<size_t>(idx)] = -1;
+            prev[static_cast<size_t>(idx)] = -1;
+        }
+        for (const int32_t c : reached) {
+            best_len[static_cast<size_t>(c)] = -1;
+            best_end[static_cast<size_t>(c)] = -1;
+        }
+        written.clear();
+        reached.clear();
     }
 
     // ---- the token groups --------------------------------------------------------------------------------------------------------------------------------
     std::vector<int> group_of(powerups.size(), -1);
+    std::vector<char> listed(powerups.size(), 0);                                    // a power-up that is in `members` of its group already (no two groups share a member, so a flag is never taken back)
     for (size_t i = 0; i < powerups.size(); ++i) {
         if (group_of[i] >= 0) continue;
         std::vector<uint32_t> found{static_cast<uint32_t>(i)};                       // the group by 8-adjacency (indices of MapInfo::powerups())
@@ -247,10 +261,13 @@ IslandInfo IslandInfo::analyse(const MapInfo& map, const sim::Grid& grid, uint8_
         TokenGroup g;
         if (!raw.empty()) {                                                          // the members in the order of a walk from the first entrance (a row of tokens is walked from its end)
             g.members.push_back(raw.front().power);
+            listed[raw.front().power] = 1;
             for (size_t head = 0; head < g.members.size(); ++head) {
                 for (const uint32_t m : found) {
-                    if (std::find(g.members.begin(), g.members.end(), m) != g.members.end()) continue;
-                    if (powerups[g.members[head]].tile.chebyshev_dist(powerups[m].tile) == 1) g.members.push_back(m);
+                    if (listed[m] != 0) continue;                        // (a flag, not a search of g.members: that made the work grow with the cube of the size of the group)
+                    if (powerups[g.members[head]].tile.chebyshev_dist(powerups[m].tile) != 1) continue;
+                    g.members.push_back(m);
+                    listed[m] = 1;
                 }
             }
         }

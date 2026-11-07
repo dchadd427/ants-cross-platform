@@ -8,7 +8,7 @@ the two addresses like /replays (tests/scripts/test_nginx_replays.py), as the on
   - /live is an exact location and /live/ a prefix location, the only ones of the name (the named location of /replays answers when the server has no such door);
   - only a GET without a query goes through (405 and 404 otherwise); an id of the wrong shape is 404 here and never reaches the server (the board decides which exist);
   - nothing of the visitor's request is passed on but Host and Connection, and the connection is not kept;
-  - allowances of their own, sized for the whole site (behind a reverse proxy every visitor has the proxy's address) and not shared with the recorded matches': twenty a second for the list,
+  - allowances of their own, not shared with the recorded matches': twenty a second for the list,
     thirty for the snapshots (503 beyond);
   - both are cached for TWO seconds in the cache of /stats (the list in one entry, a snapshot in one entry for each id), only a 200 is kept, an answer is served old only while a new one is being fetched
     (never because the server does not answer: a snapshot that is repeated for minutes looks like a match that goes on), and a server that has no such door is answered 404 with a JSON body.
@@ -132,8 +132,7 @@ class TheLocations(unittest.TestCase):
 
 
 class TheAllowancesAndTheCache(unittest.TestCase):
-    def test_each_address_has_an_allowance_of_its_own_sized_for_the_whole_site_and_the_zones_are_outside_the_server(self):
-        # (behind a reverse proxy every visitor has the proxy's address; an allowance per visitor would be one for everybody)
+    def test_each_address_has_an_allowance_of_its_own_and_the_zones_are_outside_the_server(self):
         for zone_name, block, rate, burst in (("ants_live", LIST, 20, 100), ("ants_live_files", SNAPSHOT, 30, 60)):
             zone = re.search(r"limit_req_zone \$binary_remote_addr zone=%s:(\d+)m rate=(\d+)r/([sm]);" % zone_name, CONF)
             self.assertIsNotNone(zone, zone_name)
@@ -354,7 +353,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(len(self.stub_requests("/replays", replays + 1)) - replays, 1)       # the list of the recorded matches reached the server: it is not answered from the live list's entry
         self.assertEqual(len(self.stub_requests("/live", live + 1)) - live, 1)                # and the two asks of the live list were one request (the requests are counted by their access lines: the stand-in's error line for the file it has not is no request)
 
-    def test_the_list_may_be_asked_twenty_times_a_second_by_the_whole_site_with_a_burst_of_a_hundred_and_the_snapshots_have_an_allowance_of_their_own(self):
+    def test_the_list_may_be_asked_twenty_times_a_second_with_a_burst_of_a_hundred_and_the_snapshots_have_an_allowance_of_their_own(self):
         started = time.monotonic()
         codes = [self.ask("GET", "/live")[0] for _ in range(160)]
         took = time.monotonic() - started
@@ -364,7 +363,7 @@ class TheBlocksRun(stats.Rig, unittest.TestCase):
         self.assertEqual(codes[:101], [200] * 101)                                            # (the refusals come after the allowance, none between)
         self.assertEqual(self.ask("GET", "/live/" + SNAPSHOT_ID)[0], 200)                     # the snapshots are another zone: a flood of the list does not use their allowance
 
-    def test_thirty_snapshots_a_second_for_the_whole_site_with_a_burst_of_sixty_and_the_rest_is_503(self):
+    def test_thirty_snapshots_a_second_with_a_burst_of_sixty_and_the_rest_is_503(self):
         before = self.stub_lines()
         started = time.monotonic()
         codes = [self.ask("GET", "/live/" + SNAPSHOT_ID)[0] for _ in range(120)]

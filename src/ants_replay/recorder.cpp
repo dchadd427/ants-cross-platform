@@ -36,7 +36,7 @@ void Recorder::on_command(const sim::Command& command) {
     }
     bytes_ += 1 + sim::encoded_size(command);                   // (the gap is a byte or two: the count is about what the commands take in the file; encode() makes the final check. The embedded map is not counted: kMaxFileBytes is the match's, see max_file_bytes)
     if (bytes_ > kMaxFileBytes) {
-        fail("the match is too long to keep as a replay");
+        fail("the recording is over its size limit (" + std::to_string(kMaxFileBytes >> 20) + " MiB)");
         return;
     }
     if (replay_.head.recorder_seat != kNoSeat && command.issuer == replay_.head.recorder_seat) ++own_;

@@ -10,6 +10,7 @@ add_library(ants_net STATIC
     latency.cpp
     loopback.cpp
     session.cpp
+    session_hashes.cpp
     lobby.cpp
     netgame.cpp
 )

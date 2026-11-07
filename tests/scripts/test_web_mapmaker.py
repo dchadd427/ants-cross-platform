@@ -62,10 +62,12 @@ def read(*parts):
         return f.read()
 
 
-# The page names nothing private (AGENTS.md, rule 3), and this file is public too, so the words are kept as SHA-256 digests of their exact bytes (case counts) with their length, never spelled.
-# private_hits() slides a window of each length over a text and reports the offsets whose digest is on the list. The last entry is a harmless decoy that only the self-test uses.
+# The page names nothing private (AGENTS.md, rule 3), and this file is public too, so the words are kept as SHA-256 digests of their exact bytes (case counts) with their length, never spelled. The digests keep
+# the words out of a casual search and nothing more: a word that is easy to guess can be found again from its digest, whatever its length.
+# private_hits() slides a window of each length over a text and reports the offsets whose digest is on the list. An entry has PRIVATE_MIN_LENGTH characters or more, which private_hits() enforces (a shorter
+# one could be found again by trying every spelling). DECOY_DIGEST is a harmless decoy that only the self-test uses.
+PRIVATE_MIN_LENGTH = 9
 PRIVATE_DIGESTS = (
-    ("ee589f9ec0de40164a3c3bd6baf5ce74b776dc814f450c1c9b6049dd6a059663", 3),
     ("7a7bd3f4b15b42e706bdee964a4f6b9bd2088bb079a9f9e564e6166c35935e93", 9),
     ("41109810504e65405ce6c19dfe205f908b333cc4fd6fc4dc75edfefbc3d6d7e7", 9),
     ("d3e1947934b34a8026f3672c86f0c8caea2578ac1eed19c71a1c91d067449501", 11),
@@ -77,6 +79,8 @@ def private_hits(text, digests=PRIVATE_DIGESTS):
     """The offsets in text where a window has the digest and the length of an entry; the matched text is never returned."""
     by_length = {}
     for digest, length in digests:
+        if length < PRIVATE_MIN_LENGTH:
+            raise ValueError("an entry of %d characters: at least %d are needed" % (length, PRIVATE_MIN_LENGTH))
         by_length.setdefault(length, set()).add(digest)
     hits = []
     for length, wanted in sorted(by_length.items()):
@@ -993,9 +997,9 @@ class ThePage(unittest.TestCase):
 
     def test_a_player_never_publishes_and_nothing_can_be_replaced_by_the_script_that_sends_maps(self):
         submit = read("web", "front", "mapmaker_submit.js")
-        # the calls: a map goes to the owner's queue (POST /submissions), the list is read (GET), a waiting map is withdrawn: nothing else, nothing of the owner's side or the lobby's lists
+        # the calls: a map goes to the admin's queue (POST /submissions), the list is read (GET), a waiting map is withdrawn: nothing else, nothing of the admin's side or the lobby's lists
         self.assertEqual(sorted(re.findall(r"calls\('(GET|POST|PUT|DELETE|PATCH)', ([^,]+),", submit)), [("GET", "'/submissions'"), ("GET", "'/submissions'"), ("POST", "'/submissions' + q"), ("POST", "'/submissions/' + enc(rec.id) + '/withdraw'")])
-        self.assertNotRegex(submit, r"/admin|/maps|PUT|DELETE|PATCH|innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|localStorage|sessionStorage", "the owner's page and the lists are not touched, and text is text")
+        self.assertNotRegex(submit, r"/admin|/maps|PUT|DELETE|PATCH|innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function|localStorage|sessionStorage", "the admin page and the lists are not touched, and text is text")
         self.assertIn("function enc(t) { return encodeURIComponent(t); }", submit, "a space is %20 and a plus stays a plus")
         self.assertIn("var ready = works && !twin && !big && door !== 'off' && door !== 'checking' && !bad() && !sending;", submit, "the button works only for a map that the checker says works, when the door is on")
         self.assertIn("if (sending || bad() || !works) return;", submit)
@@ -1109,6 +1113,8 @@ class ThePage(unittest.TestCase):
         self.assertEqual(private_hits("", decoy), [])
         self.assertEqual(private_hits("decoyword", PRIVATE_DIGESTS), [], "the decoy is not on the real list")
         self.assertEqual(private_hits("x" * 5000), [], "a page of nothing special is clean")
+        with self.assertRaises(ValueError):
+            private_hits("x", (("0" * 64, PRIVATE_MIN_LENGTH - 1),))                                       # (an entry that is too short is refused, not used)
 
     def test_the_style_has_the_three_layouts_the_joined_tag_and_only_tokens_it_defines(self):
         self.assertIn("@media (max-width: 600px) {", self.css)
