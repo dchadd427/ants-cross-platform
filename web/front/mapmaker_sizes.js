@@ -1,5 +1,5 @@
 // The sizes of a new map on the map maker's pages (docs/MAP_EDITOR.md): the limits of each kind as the map core states them (`limits()` of web/lvl_core_api.js, never a copy of the numbers), the
-// live line under the size boxes (cells, file size), and the core's refusal of a size turned into a short sentence. A plain ES5 script that a page and node can load.
+// live line under the size boxes (cells, file size), the core's refusal of a size turned into a short sentence, and the rules word of a new Extended map. A plain ES5 script that a page and node can load.
 (function (root, factory) {
     'use strict';
     if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -68,5 +68,11 @@
         return { text: text, offersExtended: offers };
     }
 
-    return { number: number, blankBytes: blankBytes, sizeText: sizeText, limitsOf: limitsOf, limitLine: limitLine, wholeNumber: wholeNumber, liveLine: liveLine, refusal: refusal, cellsWord: cellsWord, mapFacts: mapFacts };
+    // The rules word of a NEW Extended map, the one place of the rule (docs/MAP_EDITOR.md, E4): 2 where the map plays like the original with long orders, else the word it has. `rules`: the word of the map it
+    // is made from (0 for a Classic map); `rows`: the rows of the new one
+    var WALL_ROWS = 90;        // the core's LVL_ORIGINAL_RULES_MOST_ROWS (a test keeps them equal)
+    function newRules(rules, rows) { return rules === 1 || rules === 2 || (rules === 0 && rows <= WALL_ROWS) ? 2 : rules; }
+    function resizedRules(rules, rowsBefore, rowsAfter) { return newRules(rules === 0 && rowsBefore <= WALL_ROWS && rowsAfter > WALL_ROWS ? 1 : rules, rowsAfter); }      // (rows gained below the wall have none)
+
+    return { number: number, blankBytes: blankBytes, sizeText: sizeText, limitsOf: limitsOf, limitLine: limitLine, wholeNumber: wholeNumber, liveLine: liveLine, refusal: refusal, cellsWord: cellsWord, mapFacts: mapFacts, WALL_ROWS: WALL_ROWS, newRules: newRules, resizedRules: resizedRules };
 });

@@ -20,7 +20,7 @@
         return reasons.slice().sort(function (a, b) { return rank(a) - rank(b); });
     }
 
-    // env: {doc, dialogs, core, limits, current() -> {name, bytes, file, kind, report}, thumb(file), tags(host, kind), onMade(bytes, name), crop(spec)}
+    // env: {doc, dialogs, core, limits, current() -> {name, bytes, file, kind, report}, thumb(file), tags(host, kind, rules), onMade(bytes, name), crop(spec)}
     function create(env) {
         var doc = env.doc, core = env.core, limits = env.limits, count = 0, dialogs = env.dialogs;
         function h(tag, cls, kids, attrs) {
@@ -40,7 +40,7 @@
         }
         function sourceCard(cur) {
             var pic = env.thumb(cur.file), tags = h('span', 'tags'), head = cur.report && cur.report.headline || '';
-            env.tags(tags, cur.kind);
+            env.tags(tags, cur.kind, cur.file.rules);
             return h('div', 'srccard', [pic ? h('span', 'cthumb', pic) : '', h('div', 'st', [h('div', 'sh', [h('span', 'sn', cur.name), tags]),
                 h('div', 'sl', cur.file.rows + ' x ' + cur.file.columns + (head ? ' · ' + head.charAt(0).toLowerCase() + head.slice(1) : ''))])]);
         }
@@ -75,6 +75,15 @@
         // a default name that is taken becomes the next free one
         function free(name, taken) { return taken(name) ? numbered(name, taken) : name; }
         function work(cur, name) { return { bytes: cur.bytes, sourceName: cur.name, name: name, crop: null }; }
+        // A copy of the same kind: the bytes in an array of their own, or where the rule says 2 (Sizes.newRules) the core's copy with the rules word 2; if the core cannot, the plain copy
+        function copyBytes(cur) {
+            var made;
+            if (cur.kind === 'extended' && cur.file.rules !== 2 && Sizes.newRules(cur.file.rules, cur.file.rows) === 2) {
+                made = core.convertToLongOrders(cur.bytes);
+                if (made.status === 0 && made.json.ok) return made.bytes;
+            }
+            return cur.bytes.slice();
+        }
 
         function copy(given) {                    // (a saved map of My maps is given: the open map is not the one that is copied)
             var cur = given || env.current(), ext = cur.kind === 'extended', choice = 'same', nm, cards = {}, ctl;
@@ -108,7 +117,7 @@
                 },
                 buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'make', text: 'Make new map', keepOpen: true, onClick: function (c) {
                     nm.check();
-                    if (choice === 'same') { if (nm.ok) { c.close(); env.onMade(cur.bytes.slice(), nm.name()); } return; }
+                    if (choice === 'same') { if (nm.ok) { c.close(); env.onMade(copyBytes(cur), nm.name()); } return; }
                     if (!nm.ok) return;
                     c.close();
                     if (ext) classic(work(cur, nm.edited ? nm.name() : null)); else startExtended(nm.edited ? nm.name() : null, cur);
@@ -132,7 +141,7 @@
                 buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'make', text: 'Make the new Extended map', keepOpen: true, onClick: function (c) {
                     nm.check();
                     if (!nm.ok) return;
-                    var made = core.convertToExtended(cur.bytes);
+                    var made = Sizes.newRules(0, cur.file.rows) === 2 ? core.convertToLongOrders(cur.bytes) : core.convertToExtended(cur.bytes);
                     c.close();
                     if (made.status !== 0 || !made.json.ok) return say('The Extended map could not be made', made.status !== 0 ? made.error : made.json.reasons[0].message);
                     env.onMade(made.bytes, nm.name());
@@ -151,13 +160,14 @@
 
         function fits(w, res) {
             var name = w.name || free(suffixed(w.sourceName, 'Classic'), takenFor(env.current())), cr = w.crop, r = core.readReport(w.bytes, 'extended').json, c = limits.classic;
-            var right = ['The copy keeps the limits of a Classic map: at most ' + c.rows + ' rows and ' + c.columns + ' columns.', 'The “New version only” badge goes away.'];
+            var longer = res.json.notes.some(function (n) { return n.code === 'rules_long_orders_dropped'; });
+            var right = ['The copy keeps the limits of a Classic map: at most ' + c.rows + ' rows and ' + c.columns + ' columns.', longer ? 'The “New version only” and “Rules 2” badges go away.' : 'The “New version only” badge goes away.'];
             if (cr) right.unshift('Only the part you chose is kept: rows ' + cr.row + ' to ' + (cr.row + cr.rows - 1) + ', columns ' + cr.column + ' to ' + (cr.column + cr.columns - 1) + '.');
             return dialogs.open({
                 title: 'Make a Classic map from this one?',
                 build: function (body) {
                     body.appendChild(h('p', 'lead', w.sourceName + (cr ? ', cropped to ' + r.rows + ' x ' + r.columns + ',' : ' (' + r.rows + ' x ' + r.columns + ', Extended map)') + ' fits a Classic map. The Classic map will be a new map.'));
-                    body.appendChild(two(['What stays the same', [cr ? 'How the map plays inside the part you chose.' : 'How the map plays.', 'Your Extended map. It is never touched.']], ['What changes', right]));
+                    body.appendChild(two(['What stays the same', [(cr ? 'How the map plays inside the part you chose' : 'How the map plays') + (longer ? ', except long orders.' : '.'), 'Your Extended map. It is never touched.']], ['What changes', right]));
                     (cr ? cr.notes : []).concat(res.json.notes).forEach(function (n) { body.appendChild(note('', 'i', sentence(n.message))); });
                 },
                 buttons: [{ id: 'cancel', text: 'Cancel', ghost: true }, { id: 'make', text: 'Make the new Classic map', onClick: function () { env.onMade(res.bytes, name); } }]

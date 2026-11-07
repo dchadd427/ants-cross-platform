@@ -5,7 +5,7 @@
 //   createLvlCore().then(function (module) { var core = LvlCore.wrap(module); var r = core.readReport(bytes); if (r.status === 0) console.log(r.json.findings); });
 //
 // Every call answers {status, text, bytes, json, error}: status 0 is the answer (`json` is the parsed report for readReport, checkOriginal, checkMap, needsExtended, limits and
-// sameLevel, `bytes` is the file for rewrite, blank and blankExtended, and for convertToExtended, convertToClassic, setProperties and crop when `json.ok`, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
+// sameLevel, `bytes` is the file for rewrite, blank and blankExtended, and for convertToExtended, convertToLongOrders, convertToClassic, setProperties and crop when `json.ok`, `text` is the JSON text as the core wrote it), 1 is a refusal and 2 a fault or no memory left (`error` is one sentence). Nothing is thrown by a bad input.
 // wrap() throws when the module is not the interface version the wrapper needs; after a call made the module throw (a trap) `isDead()` is true and every later call answers
 // status 2 until the module is created again. A sentence can hold text of the file: show it with textContent, never innerHTML.
 // `profile`: "new_map" (the default: the limits of a new Classic map, at most 90 rows, 130 columns and 10,000 cells, 512 KB read), "game" (the game's own limits) or "extended" (a place that also takes
@@ -20,7 +20,7 @@
     'use strict';
 
     var PROFILES = { new_map: 0, game: 1, extended: 2 };
-    var EXPECTED_INTERFACE = 4;     // lvl_interface_version() of the module this wrapper was written for
+    var EXPECTED_INTERFACE = 5;     // lvl_interface_version() of the module this wrapper was written for
 
     function profileOf(profile) {
         if (profile === undefined || profile === null) return 0;
@@ -132,6 +132,11 @@
             // that cannot be converted is status 0 with json.ok false and its reasons: it stays as it is. A file that does not load is status 1.
             convertToExtended: function (bytes) {
                 return withBuffers([bytes], function (ptr) { return take(module._lvl_convert_to_extended(ptr[0], bytes.length), 'conversion'); });
+            },
+            // The same as convertToExtended with the rules word 2 (long orders) in the new file (interface version 5): the same cells and records, byte 14 of the file is 2, and an Extended map comes back as
+            // its canonical bytes with the word set. The source is never touched.
+            convertToLongOrders: function (bytes) {
+                return withBuffers([bytes], function (ptr) { return take(module._lvl_convert_to_long_orders(ptr[0], bytes.length), 'conversion'); });
             },
             // The file as a Classic map when it fits (profile: the limits the new file must be within, "new_map" by default); the same answer as convertToExtended
             convertToClassic: function (bytes, profile) {

@@ -1314,7 +1314,7 @@ int main(int argc, char* argv[]) {
         };
         ASSERT_TRUE(failure_of(std::vector<uint8_t>{'n', 'o', 't', ' ', 'a', ' ', 'r', 'e', 'p', 'l', 'a', 'y'}, ReplayFailure::Unreadable));
         ASSERT_TRUE(failure_of(std::vector<uint8_t>{}, ReplayFailure::Unreadable));
-        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = static_cast<uint16_t>(replay::kSimRulesMode187 + 1); }), ReplayFailure::Newer));      // (rules 2 are the ones of game mode 187: the first number that no build plays)
+        ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = static_cast<uint16_t>(replay::kSimRulesNewest + 1); }), ReplayFailure::Newer));      // (the first number after the newest one that a build plays)
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 14; }), ReplayFailure::Older));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.sim_rules = 0; r.head.engine_rules = 200; }), ReplayFailure::Newer));
         ASSERT_TRUE(failure_of(edited([](replay::Replay& r) { r.head.map_hash ^= 1u; }), ReplayFailure::NoMap));

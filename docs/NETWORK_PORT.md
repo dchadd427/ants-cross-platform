@@ -903,8 +903,6 @@ A request (2026-10-09): the game gets a second set of rules, **187** ([`GAMEPLAY
 
 * **Restart records** embed the Start, so a record of protocol 17 carries the mode of its match and the restored room plays by it (S3.187); the Start of a record of protocol 12 .. 16 is read with the mode 0 added ("Restart records", above) and is refused for its protocol as all of them are.
 
-* The head field that carries the game mode, and the rules number of a replay, are described in [REPLAYS.md](REPLAYS.md#the-file).
-
 * **Not part of it.** No rule is against bots in mode 187: the computer players read the mode from their engine and fight ([BOT_187.md](BOT_187.md)); the bot arena plays the original's game unless given `--game-mode 187`.
 
 ## Protocol 18 and 19: the level loader
@@ -913,11 +911,15 @@ Nothing on the wire changed, the way a level is read did: 18 made the ids 129 ..
 
 ## Protocol 20: the names of the computer players
 
-No layout changed: a bot is named `Pip (bot, Hard)`, a lobby room's Room message shows a planned bot's name in its empty seat, and the decoders refuse a name on an empty seat that is no planned bot's and a reserved person's name in a Name message. All of it is in [`BOT_NAMES.md`](BOT_NAMES.md). A Hello of 19 is refused.
+No layout changed: a bot is named `Pip (bot, Hard)`; the Room message's planned names and the decoders' refusals are in [`BOT_NAMES.md`](BOT_NAMES.md). A Hello of 19 is refused.
 
 ## Protocol 21: [`MATCH_COUNTDOWN.md`](MATCH_COUNTDOWN.md)
 
 ## Protocol 22: [`PUBLIC_ROOMS.md`](PUBLIC_ROOMS.md)
+
+## Protocol 23: nothing on the wire
+
+187's hill is closed (rules number 7) and the original's game ends at one side left with no food to score (rules number 8): [`GAMEPLAY.md`](GAMEPLAY.md#the-last-side-standing); the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
 
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
