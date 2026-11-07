@@ -1679,6 +1679,20 @@ void w7_extended_maps() {
         LevelData broken = base;
         broken.layer1_terrain.resize(3);
         CHECK(!convert_to_long_orders(broken).ok);
+        // the copy has the verdict and the bytes of the plain one but byte 14: the writer reads the rules word for its range alone (0 to 2), so convert_to_long_orders makes no second check of the copy
+        for (const unsigned word : {0u, 1u, 2u, 3u, 9u}) {
+            LevelData w = base;
+            w.rules = static_cast<uint16_t>(word);
+            const LevelConversion plain = convert_to_extended(w);
+            const LevelConversion longer = convert_to_long_orders(w);
+            CHECK_MSG(longer.ok == plain.ok && longer.reasons == plain.reasons && longer.reason_codes == plain.reason_codes, "rules " + std::to_string(word) + ": the verdict of the plain copy");
+            CHECK_MSG(plain.ok == (word <= 2u), "rules " + std::to_string(word) + ": the plain copy is refused for a word above 2 and for no other reason");
+            if (!plain.ok) continue;
+            const LevelWriteResult a = write_level(plain.level, LevelLimits::format_ceiling());
+            const LevelWriteResult b = write_level(longer.level, LevelLimits::format_ceiling());
+            CHECK(a.ok && b.ok && a.bytes.size() == b.bytes.size() && b.bytes.size() > 18 && b.bytes[14] == 2 && b.bytes[15] == 0);
+            CHECK(std::equal(a.bytes.begin(), a.bytes.begin() + 14, b.bytes.begin()) && std::equal(a.bytes.begin() + 16, a.bytes.end(), b.bytes.begin() + 16));
+        }
         LevelData d = base;
         d.description = std::string(31, 'x');
         c = convert_to_classic(d);

@@ -367,12 +367,13 @@ void refuse_for_place(Converted& c, const std::string& error) {
     c.conversion.note_codes.clear();
 }
 
-// The file is read as a place that takes Extended maps reads it (a map of either kind), converted, and the copy written under `place`; false (with the sentence) when the file does not load
-bool convert_file(bool to_extended, const uint8_t* data, size_t size, const LevelLimits& place, Converted& c, std::string& why) {
+// The file is read as a place that takes Extended maps reads it (a map of either kind), converted, and the copy written under `place`; false (with the sentence) when the file does not load.
+// `long_orders` goes with `to_extended`: the copy has the rules word 2 (convert_to_long_orders), every cell and record as the source's
+bool convert_file(bool to_extended, const uint8_t* data, size_t size, const LevelLimits& place, Converted& c, std::string& why, bool long_orders = false) {
     LevelData level;
     if (!load(data, size, LevelLimits::for_extended_maps(), level, why)) return false;
     c.from_extended = level.version == LVL_EXTENDED_VERSION;
-    c.conversion = to_extended ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_classic(level);
+    c.conversion = to_extended ? (long_orders ? ants::assets::convert_to_long_orders(level) : ants::assets::convert_to_extended(level)) : ants::assets::convert_to_classic(level);
     // a new Classic map is held to fewer columns than the format's 256: the sentence names the limit that the place will apply
     const uint32_t most = place.columns_for(LVL_EXPECTED_VERSION);
     for (size_t i = 0; i < c.conversion.reasons.size() && i < c.conversion.reason_codes.size(); ++i) {
@@ -414,6 +415,13 @@ Result convert_to_extended_impl(const uint8_t* data, size_t size) {
     Converted c;
     std::string why;
     if (!convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why)) return refused(why);
+    return conversion_result(true, c);
+}
+
+Result convert_to_long_orders_impl(const uint8_t* data, size_t size) {
+    Converted c;
+    std::string why;
+    if (!convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why, true)) return refused(why);
     return conversion_result(true, c);
 }
 
@@ -764,6 +772,7 @@ Result read_report(const uint8_t* data, size_t size, Profile profile) { return g
 Result check_original(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return check_original_impl(data, size, profile); }); }
 Result check_map(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return check_map_impl(data, size, profile); }); }
 Result convert_to_extended(const uint8_t* data, size_t size) { return guarded([&] { return convert_to_extended_impl(data, size); }); }
+Result convert_to_long_orders(const uint8_t* data, size_t size) { return guarded([&] { return convert_to_long_orders_impl(data, size); }); }
 Result convert_to_classic(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return convert_to_classic_impl(data, size, profile); }); }
 Result needs_extended(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return needs_extended_impl(data, size, profile); }); }
 Result rewrite(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return rewrite_impl(data, size, profile); }); }
