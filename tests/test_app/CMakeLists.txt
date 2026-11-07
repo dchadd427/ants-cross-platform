@@ -1254,3 +1254,75 @@ endif()
 
 add_test(NAME test_map_fetch_app COMMAND test_map_fetch_app)
 set_tests_properties(test_map_fetch_app PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The Yard leaves the game as it was: the draw calls of HUD::render, the rectangles of apply_layout, the keys and the edge scroll of the original's picture and of the 16:9 one, pinned as numbers
+# that were made before the Yard came in (docs/YARD.md)
+add_executable(test_yard_isolation
+    test_yard_isolation.cpp
+)
+
+target_include_directories(test_yard_isolation PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_yard_isolation PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_yard_isolation PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_yard_isolation PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_yard_isolation PRIVATE ants_test_paths)
+
+add_test(NAME test_yard_isolation COMMAND test_yard_isolation)
+set_tests_properties(test_yard_isolation PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# The Yard's client: the picture of the map alone, the puppet world that a server's batches rewrite, the sink that turns the HUD's orders into intents, the HUD's gates and the application's Yard,
+# driven headless with made-up batches (docs/YARD.md)
+add_executable(test_yard
+    test_yard.cpp
+    test_yard_model.cpp
+    test_yard_app.cpp
+)
+
+target_include_directories(test_yard PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test_yard PRIVATE
+    ants_app
+    ants_ai
+    ants_net
+    ants_sim
+    ants_assets
+)
+
+if(APPLE)
+    target_link_libraries(test_yard PRIVATE
+        "-framework AudioToolbox"
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+endif()
+
+if(WIN32)
+    target_link_libraries(test_yard PRIVATE ws2_32 winmm)
+endif()
+
+target_link_libraries(test_yard PRIVATE ants_test_paths)
+
+add_test(NAME test_yard COMMAND test_yard)
+set_tests_properties(test_yard PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

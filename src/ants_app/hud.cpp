@@ -162,6 +162,7 @@ void HUD::apply_layout() {
     // The quit confirmation dialog's buttons: dyn_byes1 part (80, 160) + origin (100, 100), dyn_bno1 part (192, 160) + origin (100, 100). A picture of the original's screen
     place(yes_button_, 180, 260, 49, 24);
     place(no_button_, 292, 260, 49, 24);
+    if (lay.yard) apply_yard_layout();                    // the Yard has none of these buttons: they are given no size
 }
 
 bool HUD::in_slot(int slot, int32_t x, int32_t y) const noexcept {
@@ -353,6 +354,7 @@ void HUD::render_status_line(IRenderer& renderer) const {
 void HUD::render(IRenderer& renderer, const assets::AssetArchive& assets,
                  const sim::WorldState& world, const ViewportCamera& camera) {
     renderer.set_hud_team(local_player_id_);
+    if (layout_.yard) { render_yard(renderer, assets, world, camera); return; }      // the Yard: the minimap and the rubber band are all that is left of the HUD (hud_yard.cpp)
 
     // Base backing fill to ensure zero gaps between modular HUD tiles (Authentic index 10)
     static const assets::ColorRGBA hud_bg_colors[4] = {
@@ -1421,6 +1423,7 @@ bool HUD::input_tick(ViewportCamera& camera, uint32_t map_w, uint32_t map_h, int
     } else if (!is_input_captured()) {
         step = edge_step(camera, mouse_x, mouse_y, rate, static_cast<int32_t>(map_w), static_cast<int32_t>(map_h));
     }
+    if (layout_.yard && !is_radar_dragging_) step = yard_edge_dwell(step);          // the Yard: the view moves at the edge only after the pointer has stayed there (hud_yard.cpp)
     if (step.dx == 0 && step.dy == 0) return false;
     camera.scroll_screen(step.dx, step.dy, map_w, map_h);
     return true;
@@ -1481,6 +1484,7 @@ bool HUD::handle_key_down(int32_t key, sim::SimulationEngine& sim, ViewportCamer
     const bool ctrl = (mod & KMOD_CTRL) != 0 || (mod & KMOD_GUI) != 0;
     const auto& world = sim.get_world_state();
     if (view_only_ && ctrl && (key == 'a' || key == 'A' || key == 'h' || key == 'H' || key == 'n' || key == 'N' || key == 'p' || key == 'P' || key == 's' || key == 'S')) return true;     // (a replay picks nothing)
+    if (layout_.yard && !yard_takes_key(key, ctrl)) return true;                    // the Yard: no chat, no F keys, no options, no quit, no home hill (hud_yard.cpp)
 
     // The chat edit control is always active while chat is on: it takes 0x20 - 0x7E and Backspace unless Ctrl is held
     if (options_.state().chat && !ctrl) {
