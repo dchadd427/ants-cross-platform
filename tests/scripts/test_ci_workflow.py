@@ -8,7 +8,7 @@ is checked too):
   - the five required job names, MSVC 2022 for pull requests, pushes to main and manual runs and MSVC 2026 always, the triggers (no push to other branches)
   - the jobs behind the names "Linux (GCC)" and "macOS (Apple clang)": small jobs that pass only when every leg of the test job passed (run here against each result a leg can have), the
     legs (ctest in three parts that are every test once, the tool self-tests and script suites, the python tests in slices that are every test once; macOS: the system-dependent python tests)
-  - the image of the Linux jobs: Ubuntu 24.04 for the legs and for the small job behind "Linux (GCC)" (the default image has a newer compiler that the build does not accept under -Werror yet)
+  - the image of the Linux jobs: Ubuntu 24.04 for the legs and for the small job behind "Linux (GCC)" (so that the compiler under the required check changes only with the workflow)
   - the light checks of a pull request that changes pages, documents and page tests only: what skips (macOS and its legs at job level; the Windows jobs by step, because a skipped matrix job
     would not report the required names), what does not (Linux, the web job, a push, a manual run), and that no text of a pull request reaches a script
   - the deploy job: after every other job, only for a push to main or staging, secrets only in `env:` and never in an argument or a message, the file filter and the webhook
@@ -593,8 +593,8 @@ class TheJobsBehindTheRequiredNames(unittest.TestCase):
 
 
 class TheLinuxImage(unittest.TestCase):
-    """The Linux jobs run on Ubuntu 24.04 (GCC 13), not on `ubuntu-latest`: the default image has moved to Ubuntu 26.04 with GCC 15, and the build does not accept that compiler under -Werror yet.
-    The jobs that build and the small job behind "Linux (GCC)" stay on one image; this test changes together with the workflow when the build is clean on the newer compiler."""
+    """The Linux jobs run on Ubuntu 24.04 (GCC 13), not on `ubuntu-latest`, so that the compiler under the required check changes only with the workflow: the default image is Ubuntu 26.04 with GCC 15
+    now, which the code also builds with. The jobs that build and the small job behind "Linux (GCC)" stay on one image; moving to another is a change of the workflow and of this test."""
 
     def test_the_linux_jobs_run_on_ubuntu_24_04_and_not_on_the_default_image(self):
         for job in ("linux_tests", "linux"):
