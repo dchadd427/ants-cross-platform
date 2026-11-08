@@ -99,7 +99,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.victim_answers = true;
             p.defend_by_strength = true;
             p.defend_keep_percent = 60;          // a force of at least 60 percent of the enemy's near the target keeps the fight up; below that it is called off at the look
-            p.heal = true;                       // the heal batch (docs/BOT_PEOPLE.md): a hurt ant that is in danger and within 16 tiles of the hill walks home to heal
+            p.heal = false;                      // the heal batch (docs/BOT_PEOPLE.md): built and OFF at every level; `--tune heal=1` turns it on with these numbers (a hurt ant that is in danger and within 16 tiles of the hill walks home to heal)
             p.heal_hp = 4;
             p.heal_danger_tiles = 3;
             p.heal_recent_ticks = 60;

@@ -56,10 +56,10 @@ struct LevelPlan {
     uint32_t defend_extra{1};            // ... defenders wanted beyond the enemy ants there (at least the level's defenders)
     uint32_t defend_max{5};              // ... the most defenders of one fight (Hard 5, Medium 3)
     int32_t defend_reach{10};            // ... a defender comes from at most this many tiles from the target (and never from beyond leash_tiles) (Hard 10, Medium 8)
-    // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; src/ants_ai/heal_task.cpp): a hurt ant that is in danger walks into its own hill, which restores all its hit points. OFF in a plan made by hand and at Easy
-    // and Medium, ON at Hard; without_heal() puts a plan back as it was before. The game type 187 has a closed hill: the task does nothing there (BotView::hill_enterable)
+    // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; src/ants_ai/heal_task.cpp): a hurt ant that is in danger walks into its own hill, which restores all its hit points. Built and OFF in a plan made by hand and
+    // at every level (`--tune heal=1` turns it on with the level's numbers); without_heal() puts a plan back as it was before. The game type 187 has a closed hill: the task does nothing there (BotView::hill_enterable)
     bool heal{false};                    // the task runs
-    uint8_t heal_hp{4};                  // an ant with at most this many hit points may be sent home (Hard 4, Medium 3)
+    uint8_t heal_hp{4};                  // an ant with at most this many hit points may be sent home (Hard 4, Medium 3; the numbers of Hard are those the task has when it is turned on)
     int32_t heal_danger_tiles{3};        // ... when an enemy ant that can strike (it carries nothing, no ally's) stands within this many tiles of it ...
     uint32_t heal_recent_ticks{60};      // ... or it lost hit points within this many ticks ...
     int32_t heal_walk_tiles{16};         // ... and its walk home is at most this many tiles (Hard 16, Medium 12)

@@ -241,12 +241,12 @@
    "expect": "AI36.11"
   },
   {
-   "id": "heal_off_at_hard",
+   "id": "heal_on_in_the_shipped_plan",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "            p.heal = true; ",
-   "new": "            p.heal = false; ",
-   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.1 ' ./build/tests/test_ai/test_ai",
-   "expect": "AI36.1"
+   "old": "            p.heal = false; ",
+   "new": "            p.heal = true; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.6"
   },
   {
    "id": "nearer_counts_equal",

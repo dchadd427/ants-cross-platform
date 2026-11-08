@@ -1,14 +1,14 @@
-// The heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; include/ants_ai/heal_task.hpp): a hurt ant of a Hard bot that is in danger walks into its hill, which restores its hit points, and goes back to
-// its job. Medium has the task built and off, Easy is as it was, and in the game type 187 (a closed hill) the task does nothing. Hand-made worlds (b41_helpers.hpp), quick enough for suite 2.20. Two kinds of
-// case: the bot as a whole (a StandardBot with the plan that ships, through the rig: every other task plays, reach_fights and the kill batch included) and the task by hand (a HealTask that is looked at with the
+// The heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; include/ants_ai/heal_task.hpp): a hurt ant of a bot that has the task turned on walks into its hill when it is in danger, which restores its hit points, and
+// goes back to its job. The task is built and off in the shipped plan of every level, so the cases turn it on with the level's numbers (hard_plan(), with_heal); in the game type 187 (a closed hill) it does nothing. Hand-made worlds (b41_helpers.hpp), quick enough for suite 2.20. Two kinds of
+// case: the bot as a whole (a StandardBot with the plan that ships and the task turned on, through the rig: every other task plays, reach_fights and the kill batch included) and the task by hand (a HealTask that is looked at with the
 // real view and the real map, and the ledger and ranks of a standard bot), for the edges of each rule.
 //
-//   AI36.1   a Hard worker with 4 hit points and an enemy worker 2 tiles away, 8 tiles from home, enters its hill and has 10 hit points within 300 ticks; without the task it does not go
+//   AI36.1   a Hard worker with 4 hit points and an enemy worker 2 tiles away, 8 tiles from home, enters its hill and has 10 hit points within 300 ticks (the task turned on); without it it does not go
 //   AI36.2   the same ant with no enemy near: at 4 hit points, 8 tiles out, it does not go; at 2 hit points and 5 tiles out it goes, and at 2 hit points and 8 tiles out it does not
 //   AI36.3   who does not go: a Thief of the raid task near the raid tile of an enemy hill, the keeper of the walls while an enemy Thief stands within 4 tiles of the raid tile, an ant 20 tiles from home
 //   AI36.4   a carrier with 3 hit points that a blow hit banks its food and heals, and one order is made for it at a look, not two (the gate task and the carrier aid leave it to the task)
 //   AI36.5   the game type 187 has a closed hill: nothing is ordered (with or without the brawl); in a 187 match of the earlier rules the hill is open and the task works
-//   AI36.6   Medium and Easy as shipped are as before: the same counters and state hash whatever the numbers of the batch say; the shipped plans of every level pin the batch; Hard is not as before
+//   AI36.6   the task is off in the shipped plan of every level and the shipped bots play as before: the same counters and state hash as the plan without the task whatever the numbers of the batch say; with it on they do not
 //   AI36.7   the numbers of who is sent (heal_wanted): the hit points, the danger, the blow within the window, the calm top-up and its 6 tiles, the walk limit; the walk home in tiles; the enemy ants near
 //   AI36.8   the task by hand, who is taken: the hit points, the danger radius, the window of a blow, the top-up, the carriers, the ants that are held by tasks of each rank, the ones that are never taken
 //   AI36.9   the task by hand, who is not taken: a Thief of the raid task about to raid, the keeper of the walls, the island play, an ant that stands on a power-up, on the mound, in its hit clip, a hill
@@ -41,6 +41,13 @@ namespace {
 
 constexpr TileCoord kEntrance{5, 5};                       // the entrance of the hill of seat 0 (its hill is at (4, 4)); the three tiles of its queue row are (4..6, 3), cost 0: the tile (6 + k, 3) is k tiles from home
 constexpr uint64_t kGap = 40;                              // the gap between two orders to one ant
+
+// The plan of a level with the task turned on (it is off in every shipped plan): the numbers are the level's own
+LevelPlan with_heal(LevelPlan plan) {
+    plan.heal = true;
+    return plan;
+}
+LevelPlan hard_plan() { return with_heal(plan_for(Level::Hard)); }
 
 // A hurt ant of seat 0
 uint32_t hurt(sim::SimulationEngine& sim, sim::AntType type, int32_t x, int32_t y, unsigned hp) {
@@ -76,7 +83,7 @@ bool sent_home(const Orders& orders, uint32_t ant) {
 class Harness {
 public:
     sim::SimulationEngine sim;
-    LevelPlan plan = plan_for(Level::Hard);
+    LevelPlan plan = hard_plan();
     Tactics tactics;
     std::unique_ptr<MapInfo> map;
     std::unique_ptr<HealTask> task;
@@ -113,7 +120,7 @@ private:
 // A world of the four hills with the given plan: the ants are put, then begin() makes the map and the task; every look is the test's
 struct World {
     Harness h;
-    explicit World(const LevelPlan& plan = plan_for(Level::Hard), sim::GameMode mode = sim::GameMode::HighestScore, bool open_hill = false) {
+    explicit World(const LevelPlan& plan = hard_plan(), sim::GameMode mode = sim::GameMode::HighestScore, bool open_hill = false) {
         h.plan = plan;
         h.sim.set_game_mode(mode);
         if (open_hill) h.sim.set_hill_open_187(true);
@@ -143,14 +150,15 @@ Went first_look(const LevelPlan& plan, sim::AntType type, unsigned hp, int32_t x
 // The plan that ships at a level, as a bot plays it (no style, no variations)
 LevelPlan shipped(Level level, bool heal) {
     LevelPlan p = plan_for(level);
-    if (!heal) without_heal(p);
+    if (heal) p.heal = true;
+    else without_heal(p);
     return p;
 }
 
 }  // namespace
 
 void run_heal_tests() {
-    TEST_CASE("AI36.1 A Hard Worker With 4 Hit Points And An Enemy Worker 2 Tiles Away, 8 Tiles From Home, Walks Into Its Hill And Has 10 Hit Points Within 300 Ticks (The Shipped Plan, Every Other Task Playing); Without The Task It Does Not Go")
+    TEST_CASE("AI36.1 A Hard Worker With 4 Hit Points And An Enemy Worker 2 Tiles Away, 8 Tiles From Home, Walks Into Its Hill And Has 10 Hit Points Within 300 Ticks (The Task Turned On, Every Other Task Playing); Without The Task It Does Not Go")
     {
         for (const bool heal : {true, false}) {
             sim::SimulationEngine sim;
@@ -200,7 +208,7 @@ void run_heal_tests() {
             foe(sim, 45, 45);                                                                                // (the enemy team plays, far away)
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{44, 44});
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{45, 44});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 8);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(hard_plan()), 4, 8);
             ASSERT_EQ(walk_home_tiles(rig.map(), 0, TileCoord{k.x, 5}), k.walk);
             rig.run(260);
             if (k.goes) {
@@ -217,7 +225,7 @@ void run_heal_tests() {
     {
         // (a) the Thief of the raid task about to raid (the walk limit is raised: the raid tile of the enemy hill is far from home), in the task by hand
         for (const bool raiding : {true, false}) {
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.heal_walk_tiles = 400;
             World w(plan);
             const uint32_t thief = hurt(w.h.sim, sim::AntType::Thief, 50, 9, 4);                                 // 3 tiles from the raid tile of the hill of seat 1
@@ -229,7 +237,7 @@ void run_heal_tests() {
             ASSERT_EQ(w.h.ledger().owner(thief) == StandardBot::kHeal, !raiding);
         }
         {   // in its raid clip it takes no order at all: nothing is ordered whatever holds it
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.heal_walk_tiles = 400;
             World w(plan);
             w.h.begin();
@@ -252,7 +260,7 @@ void run_heal_tests() {
             foe(sim, thief_near ? 10 : 44, thief_near ? 6 : 8, sim::AntType::Thief);
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{44, 44});
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{45, 44});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 8);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(hard_plan()), 4, 8);
             rig.run(40);
             ASSERT_TRUE(rig.as<StandardBot>().tactics().wall_demand && rig.as<StandardBot>().tactics().wall_keeper == keeper);       // (the premise: it is the keeper while a thief threatens)
             sim.get_unit(keeper).hp = 4;
@@ -275,7 +283,7 @@ void run_heal_tests() {
             foe(sim, x + 1, 3);
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{44, 44});
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{45, 44});
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 8);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(hard_plan()), 4, 8);
             ASSERT_EQ(walk_home_tiles(rig.map(), 0, TileCoord{x, 3}), x - 6);
             rig.run(40);
             ASSERT_EQ(rig.as<StandardBot>().heal().started() != 0, x == 22);
@@ -293,7 +301,7 @@ void run_heal_tests() {
             const uint32_t enemy = foe(sim, 14, 3);
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{44, 44});
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{45, 44});
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.gate = gate;
             ASSERT_TRUE(plan.carrier_aid);
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 8);
@@ -330,7 +338,7 @@ void run_heal_tests() {
             foe(sim, 15, 5);
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{44, 44});
             sim.spawn_unit(0, sim::AntType::Worker, TileCoord{45, 44});
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.brawl187 = k.brawl;
             Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 8);
             ASSERT_EQ(sim.own_hill_enterable(), k.open_hill);
@@ -344,11 +352,11 @@ void run_heal_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI36.6 Medium And Easy As Shipped Are As Before: The Same Counters, The Same Commands And The Same State Hash On A Fixed Scene (Hurt Ants Beside Enemy Workers) Whatever The Numbers Of The Batch Say, And With It Taken Out; Medium With The Task Built Turned On Is Not As Before, And Neither Is Hard; The Shipped Plans Of Every Level Pin The Batch")
+    TEST_CASE("AI36.6 The Task Is Off In The Shipped Plan Of Every Level, And The Shipped Bots Play As Before: The Same Counters, The Same Commands And The Same State Hash On A Fixed Scene (Hurt Ants Beside Enemy Workers) As The Plan Without The Task And Whatever The Numbers Of The Batch Say (Easy, Medium And Hard); With The Task Turned On Medium And Hard Do Not Play As Before")
     {
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             const LevelPlan p = plan_for(level);
-            ASSERT_EQ(p.heal, level == Level::Hard);
+            ASSERT_FALSE(p.heal);                                                                             // (off at every level: `--tune heal=1` turns it on)
             ASSERT_EQ(p.heal_hp, level == Level::Medium ? 3u : 4u);
             ASSERT_EQ(p.heal_danger_tiles, 3);
             ASSERT_EQ(p.heal_recent_ticks, 60u);
@@ -380,7 +388,7 @@ void run_heal_tests() {
             const HealTask& h = rig.as<StandardBot>().heal();
             return Outcome{rig.proposed.size(), h.started(), h.orders(), sim.state_hash().total};
         };
-        for (const Level level : {Level::Medium, Level::Easy}) {
+        for (const Level level : {Level::Medium, Level::Easy, Level::Hard}) {
             const Outcome shipped = play(plan_for(level));
             ASSERT_EQ(shipped.started, 0u);
             ASSERT_EQ(shipped.orders, 0u);
@@ -400,14 +408,15 @@ void run_heal_tests() {
         const Outcome on = play(medium_on);
         ASSERT_TRUE(on.started >= 1u && on.orders >= 1u);
         ASSERT_FALSE(on == play(plan_for(Level::Medium)));
-        const Outcome hard_on = play(plan_for(Level::Hard));
+        const Outcome hard_on = play(hard_plan());
         ASSERT_TRUE(hard_on.started >= 1u);
+        ASSERT_FALSE(hard_on == play(plan_for(Level::Hard)));                                                // (the shipped Hard plan is not the plan with the task on)
         ASSERT_FALSE(hard_on == play(shipped(Level::Hard, false)));
     } TEST_END();
 
     TEST_CASE("AI36.7 The Numbers Of Who Is Sent (heal_wanted): The Hit Points At Most heal_hp, A Striker Near Or A Blow In The Window Or (No Danger) The Top-Up At Most heal_calm_hp With A Walk Of At Most 6 Tiles, And The Walk At Most heal_walk_tiles; The Walk Home In Tiles; The Enemy Ants That Are Near")
     {
-        const LevelPlan hard = plan_for(Level::Hard);
+        const LevelPlan hard = hard_plan();
         LevelPlan medium = plan_for(Level::Medium);
         medium.heal = true;
         // the hit points
@@ -493,7 +502,7 @@ void run_heal_tests() {
     {
         LevelPlan medium = plan_for(Level::Medium);
         medium.heal = true;
-        const LevelPlan hard = plan_for(Level::Hard);
+        const LevelPlan hard = hard_plan();
         // the hit points (Hard 4, Medium 3), the radius (3), the types
         ASSERT_TRUE(first_look(hard, sim::AntType::Worker, 4, 10, 3, 1).sent);
         ASSERT_FALSE(first_look(hard, sim::AntType::Worker, 5, 10, 3, 1).sent);
@@ -608,7 +617,7 @@ void run_heal_tests() {
         // the Thief of the raid task: 6 tiles from the raid tile (53, 6) of the hill of seat 1 it is about to raid, 7 tiles it is not; another task's Thief goes either way
         for (const int32_t x : {47, 46}) {
             for (const TaskId owner : {StandardBot::kRaids, StandardBot::kPowerUps}) {
-                LevelPlan plan = plan_for(Level::Hard);
+                LevelPlan plan = hard_plan();
                 plan.heal_walk_tiles = 400;
                 World w(plan);
                 const uint32_t thief = hurt(w.h.sim, sim::AntType::Thief, x, 6, 4);
@@ -684,7 +693,7 @@ void run_heal_tests() {
         }
         // the hill of the game type 187 is closed; with the rule of the earlier matches it is open; a seat with no hill has nowhere to go
         for (const int variant : {0, 1, 2}) {
-            World w(plan_for(Level::Hard), variant == 1 ? sim::GameMode::HighestScore : sim::GameMode::Kills187, variant == 2);
+            World w(hard_plan(), variant == 1 ? sim::GameMode::HighestScore : sim::GameMode::Kills187, variant == 2);
             const uint32_t ant = hurt(w.h.sim, sim::AntType::Worker, 10, 3, 4);
             foe(w.h.sim, 11, 3);
             w.begin();
@@ -705,7 +714,7 @@ void run_heal_tests() {
         }
         // a ring of fire walls round the gate shuts the hill: no click into it is carried out, so none is made and the ant is not held; without the check (cantgo_aware off) it is
         for (const bool aware : {true, false}) {
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.cantgo_aware = aware;
             World w(plan);
             const uint32_t ant = hurt(w.h.sim, sim::AntType::Worker, 14, 3, 4);
@@ -818,7 +827,7 @@ void run_heal_tests() {
         // (d3) an ant that a blow threw into a pocket that no walk joins to the hill (the map's walking costs say -1 there) is not ordered again: the order would be refused. It is given back after 600 ticks. (The
         // check of the walk as the map is now, cantgo_aware, would say the same: it is off here, so that the costs alone decide)
         {
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.cantgo_aware = false;
             World w(plan);
             for (int dy = -1; dy <= 1; ++dy) {
@@ -845,7 +854,7 @@ void run_heal_tests() {
         // (d4) an order that the engine refuses twice (the ant shows the can't-go reaction) ends the job: the map's costs and the walls of fire say that a walk exists, rocks that were not there at the start say
         // otherwise (the check of the walk is off here, so that the order is given at all)
         {
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.cantgo_aware = false;
             World w(plan);
             const uint32_t ant = hurt(w.h.sim, sim::AntType::Worker, 14, 12, 4);
@@ -955,7 +964,7 @@ void run_heal_tests() {
             const uint32_t struck = hurt(sim, sim::AntType::Worker, 12, 3, 6);
             for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{14 + i, 4});
             const uint32_t enemy = foe(sim, 12, 1);
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan_for(Level::Hard)), 4, 4);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(hard_plan()), 4, 4);
             rig.run(12);
             std::vector<TaskId> owners;                                                                      // the task that holds the struck ant at every tick at which a look was made
             size_t seen_looks = rig.looks.size();
@@ -980,7 +989,7 @@ void run_heal_tests() {
         for (const TaskId holder : {StandardBot::kHeal, StandardBot::kHarvest}) {
             sim::SimulationEngine sim;
             empty_field(sim, 373);
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             plan.guards = false;
             plan.combat_harvests = false;
             plan.sabotage = plan.raids = plan.assault = plan.raider_hunt = false;
@@ -1004,7 +1013,7 @@ void run_heal_tests() {
         }
         // (d) the carrier aid (it plays at Hard only without the gate): a carrier that a blow hit is clicked home 8 ticks later when it stands idle, unless the task holds it; the task's own order is the one
         for (const bool heal : {true, false}) {
-            LevelPlan plan = plan_for(Level::Hard);
+            LevelPlan plan = hard_plan();
             if (!heal) without_heal(plan);
             World w(plan);
             const uint32_t carrier = carrier_at(w.h.sim, 0, TileCoord{13, 3});

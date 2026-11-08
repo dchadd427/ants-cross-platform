@@ -1,7 +1,7 @@
 #pragma once
 
 // HealTask: a hurt ant that is in danger walks into its own hill, which restores all its hit points (the heal frame of its enter clip lasts (10 - hp) * 200 ms: under two seconds from 1 hit
-// point; docs/GAMEPLAY.md, "Anthill Enter, Heal, Hatch & Raid"), and goes back to its job. Hard plays it, Medium has it built and off (LevelPlan::heal); docs/BOT_PEOPLE.md, "Step 2: hurt ants heal",
+// point; docs/GAMEPLAY.md, "Anthill Enter, Heal, Hatch & Raid"), and goes back to its job. It is built and OFF at every level (LevelPlan::heal; `bot_arena --tune heal=1` turns it on); docs/BOT_PEOPLE.md, "Step 2: hurt ants heal",
 // has the measurements. The engine walks an ant home by itself only at 1 hit point; before this task an ant at 2 to 4 hit points went on with its job and was struck again.
 //
 //   who goes       an own ant that takes orders (not stunned) with at most `heal_hp` hit points, when an enemy ant that can strike stands within `heal_danger_tiles` of it, or it lost hit points within

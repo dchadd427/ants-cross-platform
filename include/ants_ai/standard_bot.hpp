@@ -13,13 +13,15 @@
 //                 that has points to take, is not shut by walls or bombs and can be reached (no level keeps away from a hill that an enemy Combat Ant stands near: measured, it is a worker
 //                 that fights, not a guard); a Thief that harvests is taken from its loop for a raid. Medium sends one ant, Hard two, to the contested middle of the map at the start
 //   Hard          also steals a second Thief (and a second Combat Ant once it is attacked) and guides every carrier at the hill's gate by hand (GateTask)
-//                 and sends a hurt ant that is in danger home to heal (HealTask: docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; Medium has it built and off)
 //   styles        a bot draws one per match from its own seat's generator (or the spec pins it) and plays it on top of its level: Aggressive adds the harassment squad (at Hard also the
 //                 sabotage of the best opponent's gate with a stolen Fire Ant and the strike when behind), Economic the efficient order, Raider the Thief first, Defensive the walls early
 //
 // What the tournaments measured as a loss is OFF in every shipped plan, and stays in the code behind a flag for the next round: the Combat Ant on a guard post, the interception of
 // thieves, hatching, the strict contest order, the strike and the wipe-out focus (the strike is part of the Hard Aggressive style), the ambush at a thief hole, the sabotage with a
 // single Fire Ant, the harassment squad (but in the Aggressive style) (docs/BOTS.md, "Aggression").
+//
+// The task that sends a hurt ant that is in danger home to heal (HealTask, docs/BOT_PEOPLE.md, "Step 2: hurt ants heal") is built and OFF in every plan: it did not move the numbers it was built for.
+// `bot_arena --tune heal=1` turns it on.
 //
 // THE STALL DETECTOR (every level): a seat that banks nothing for a while, or sends the same order again and again with nothing banked, plays the plain economy for a time
 // (docs/BOTS.md, "The stall detector"); it counts ticks of the views and of the release, nothing else.
