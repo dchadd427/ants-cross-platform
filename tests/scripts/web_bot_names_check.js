@@ -1,6 +1,6 @@
 // Runs the page's OWN code for the names of the computer players (web/front/bot_names.js) against the tables that the C++ code (include/ants_ai/bot_names.hpp,
 // tests/test_ai/test_ai_names.cpp) is held to as well: the golden picks and the two digests of 10,000 keys (tests/data/bot_names_golden.txt), the cases of the label, its parser,
-// the short form and the reserved-name rule (tests/data/bot_label_cases.tsv), and the list (shape, blocklist, the twelve names that the page offers a visitor).
+// the short form and the reserved-name rule (tests/data/bot_label_cases.tsv), and the list (shape, blocklist).
 // tests/scripts/test_bot_names.py runs this with node (the quick tier) and changes one thing at a time in a COPY of the library: the check must then fail.
 // usage: node web_bot_names_check.js web/front/bot_names.js REPO_ROOT [--print-golden]          (exit 0: every check holds; FAIL lines say what does not)
 'use strict';
@@ -71,10 +71,6 @@ const N = B.NAMES;
 check('240 to 260 names', N.length >= 240 && N.length <= 260 && B.count() === N.length, N.length);
 check('every name is a capital letter and 2 to 7 small ASCII letters (3 to 8 letters)', N.every((n) => /^[A-Z][a-z]{2,7}$/.test(n)));
 check('no two names are the same in any case', new Set(N.map((n) => n.toLowerCase())).size === N.length);
-const placeholders = /var NAMES = \[([^\]]*)\]/.exec(read('web', 'front', 'lobby_rules.js'));
-const web = placeholders ? placeholders[1].split(',').map((s) => s.trim().replace(/'/g, '')) : [];
-check('the page offers twelve names to a visitor who typed none (lobby_rules.js NAMES)', web.length === 12 && web.every((n) => /^[A-Z][a-z]+$/.test(n)), web.join());
-check('no bot name is one of those twelve', N.every((n) => web.indexOf(n) < 0), N.filter((n) => web.indexOf(n) >= 0).join());
 const block = read('tests', 'data', 'bot_names_blocklist.txt').split('\n').map((l) => l.trim()).filter((l) => l !== '' && l[0] !== '#');
 check('the blocklist is a real list (at least 100 words, whole-name and inside)', block.length >= 100 && block.some((w) => w[0] === '=') && block.some((w) => w[0] !== '='), block.length);
 const hits = [];

@@ -480,8 +480,8 @@
   {
    "id": "old_room_left_by_the_page_before_welcome",
    "file": "web/lobby.html",
-   "old": "            p.connect();\n            return p;",
-   "new": "            if (client) client.leave();\n            p.connect();\n            return p;",
+   "old": "            open(p, name);\n            return p;",
+   "new": "            if (client) client.leave();\n            open(p, name);\n            return p;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

@@ -11,7 +11,7 @@
 // tests/scripts/test_web_home_games.py runs this with node (the quick tier). usage: node web_home_games_quickjoin_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloRoom, grouped, RULES0, done, broke } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
@@ -71,7 +71,7 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     await press(env);
     check('Quick join with no room opens the card "Finding a game…" over Home (the four seats, a bar, the line that says how many rooms it looks through, a Cancel), and asks the list once', !!card(env) && title(env) === 'Finding a game…' && env.looks() === before + 1
           && lineOf(env) === 'Looking through 5 open games for the best one.' && !!first(card(env), 'gbar') && find(card(env), 'gdot').length === 4 && textOf(act(env, 'gstay')) === 'Cancel' && card(env).getAttribute('role') === 'dialog' && card(env).getAttribute('aria-modal') === 'true');
-    check('the second client asks for the BEST room (a Hello that only joins, with the name of the page), nothing else is opened, and the page asks the list again for nothing', env.sockets.length === 1 && hex(env.last().open().sent[0]) === hex(helloBytes('Maya', 'p4n8dz', { join: true })));
+    check('the second client asks for the BEST room (a Hello that only joins, with the name of the page), nothing else is opened, and the page asks the list again for nothing', env.sockets.length === 1 && hex(env.last().open().sent[0]) === hex(helloBytes(GUEST, 'p4n8dz', { join: true })));
     check('the page behind the card takes no key or tap (Home\'s bar, the Room, the strips)', env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert') && env.$('banner').hasAttribute('inert'));
     check('the card is the body\'s (over both screens), full over the window', card(env).parent.parent.parent === env.body || card(env).parent.parent === env.body);
     const probe = env.last();
