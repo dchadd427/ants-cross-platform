@@ -232,3 +232,4 @@ void run_brawl_tests();
 void run_kill_tests();
 void run_people_tests();
 void run_defence_tests();
+void run_heal_tests();

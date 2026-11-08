@@ -3492,7 +3492,7 @@ void GateTask::step(TaskContext& c) {
                 pending_free_at_ = static_cast<int64_t>(now) + params_.clip_ticks + params_.exit_ticks;
             }
         }
-        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.ledger.rank(c.ledger.owner(a.id)) < 6 && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
+        if (a.holding && a.state != sim::UnitState::EnteringBase && a.tile != g.entrance && c.ledger.owner(a.id) != kHealTaskId && c.ledger.rank(c.ledger.owner(a.id)) < 6 && (!params_.cantgo_aware || c.map.reaches_hill(now_, a.tile, a.type))) carriers.push_back(&a);          // (a thief with loot banks at the entrance too; an ant that no walk joins to the hill is not ours to place)
     }
     if (!ramp_standing) ramp_since_ = -1;
     else if (ramp_since_ < 0) ramp_since_ = static_cast<int64_t>(now);
@@ -3867,8 +3867,8 @@ void CarrierAidTask::step(TaskContext& c) {
     for (auto it = aid_.begin(); it != aid_.end();) {
         const AntView* a = find_ant(v.mine(), it->first);
         const bool carrying = a != nullptr && (a->holding || a->carried_points > 0);
-        if (a == nullptr || !carrying || it->second.tries >= 4 || now > it->second.hit + 800) {
-            it = aid_.erase(it);                                                         // gone, delivered (or dropped its food), or helped as often as it makes sense
+        if (a == nullptr || !carrying || it->second.tries >= 4 || now > it->second.hit + 800 || c.ledger.owner(it->first) == kHealTaskId) {
+            it = aid_.erase(it);                                                         // gone, delivered (or dropped its food), helped as often as it makes sense, or held by the healing task (its click is the same)
             continue;
         }
         // the blow's stun lasts about 12 ticks; an ant that is idle after it has lost its walk

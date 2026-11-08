@@ -428,11 +428,11 @@ int main() {
             using L4 = std::array<int64_t, 4>;
             uint32_t drowned = 0;
             for (const MatchStats::Kill& kl : st.kills) drowned += kl.drowned ? 1 : 0;
-            ASSERT_TRUE(st.kills.size() == 12 && drowned == 6 && st.raids.size() == 6);
-            ASSERT_TRUE(st.bombs_off == A4({0, 0, 0, 0}) && st.hatch_cost == L4({400, 0, 0, 200}) && st.banked == L4({415, 225, 200, 360}));
-            ASSERT_TRUE(st.food_trips == A4({14, 9, 8, 16}) && st.food_points == L4({395, 230, 205, 340}));
-            ASSERT_TRUE(st.damage_dealt == A4({37, 39, 60, 25}) && st.damage_taken == A4({75, 14, 3, 69}));
-            const std::array<std::array<uint32_t, 5>, 4> power = {{{1, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 2, 0}, {0, 1, 1, 1, 0}}};
+            ASSERT_TRUE(st.kills.size() == 12 && drowned == 7 && st.raids.size() == 5);
+            ASSERT_TRUE(st.bombs_off == A4({0, 0, 0, 0}) && st.hatch_cost == L4({200, 200, 200, 200}) && st.banked == L4({355, 315, 200, 405}));
+            ASSERT_TRUE(st.food_trips == A4({11, 13, 7, 18}) && st.food_points == L4({305, 350, 175, 385}));
+            ASSERT_TRUE(st.damage_dealt == A4({32, 24, 58, 37}) && st.damage_taken == A4({52, 27, 5, 67}));
+            const std::array<std::array<uint32_t, 5>, 4> power = {{{1, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 1, 0}}};
             ASSERT_TRUE(st.powerups == power);
             ASSERT_TRUE(st.wipes == A4({0, 0, 0, 0}) && st.samples.size() == 70 && st.samples.back().turn == 7000);
         }

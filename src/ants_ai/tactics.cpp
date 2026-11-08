@@ -57,6 +57,11 @@ LevelPlan plan_for(Level level) noexcept {
             p.defend_keep_percent = 120;         // (the defence batch is built and OFF here: `--tune defence=1` turns it on with these numbers; docs/BOT_PEOPLE.md)
             p.defend_max = 3;
             p.defend_reach = 8;
+            p.heal_hp = 3;                       // (the heal batch is built and OFF here: `--tune heal=1` turns it on with these numbers; docs/BOT_PEOPLE.md)
+            p.heal_danger_tiles = 3;
+            p.heal_recent_ticks = 60;
+            p.heal_walk_tiles = 12;
+            p.heal_calm_hp = 0;
             p.wall_trigger = WallTrigger::ThiefPossible;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
@@ -94,6 +99,12 @@ LevelPlan plan_for(Level level) noexcept {
             p.victim_answers = true;
             p.defend_by_strength = true;
             p.defend_keep_percent = 60;          // a force of at least 60 percent of the enemy's near the target keeps the fight up; below that it is called off at the look
+            p.heal = true;                       // the heal batch (docs/BOT_PEOPLE.md): a hurt ant that is in danger and within 16 tiles of the hill walks home to heal
+            p.heal_hp = 4;
+            p.heal_danger_tiles = 3;
+            p.heal_recent_ticks = 60;
+            p.heal_walk_tiles = 16;
+            p.heal_calm_hp = 2;
             p.wall_trigger = WallTrigger::Early;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
@@ -256,6 +267,8 @@ void without_defence_batch(LevelPlan& p) noexcept {
     p.victim_answers = false;
     p.defend_by_strength = false;
 }
+
+void without_heal(LevelPlan& p) noexcept { p.heal = false; }
 
 void without_war_batch(LevelPlan& p) noexcept {
     without_stand_batch(p);

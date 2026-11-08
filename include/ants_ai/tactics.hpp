@@ -56,6 +56,14 @@ struct LevelPlan {
     uint32_t defend_extra{1};            // ... defenders wanted beyond the enemy ants there (at least the level's defenders)
     uint32_t defend_max{5};              // ... the most defenders of one fight (Hard 5, Medium 3)
     int32_t defend_reach{10};            // ... a defender comes from at most this many tiles from the target (and never from beyond leash_tiles) (Hard 10, Medium 8)
+    // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; src/ants_ai/heal_task.cpp): a hurt ant that is in danger walks into its own hill, which restores all its hit points. OFF in a plan made by hand and at Easy
+    // and Medium, ON at Hard; without_heal() puts a plan back as it was before. The game type 187 has a closed hill: the task does nothing there (BotView::hill_enterable)
+    bool heal{false};                    // the task runs
+    uint8_t heal_hp{4};                  // an ant with at most this many hit points may be sent home (Hard 4, Medium 3)
+    int32_t heal_danger_tiles{3};        // ... when an enemy ant that can strike (it carries nothing, no ally's) stands within this many tiles of it ...
+    uint32_t heal_recent_ticks{60};      // ... or it lost hit points within this many ticks ...
+    int32_t heal_walk_tiles{16};         // ... and its walk home is at most this many tiles (Hard 16, Medium 12)
+    uint8_t heal_calm_hp{2};             // ... or, with no danger, when it has at most this many hit points and is at most 6 tiles from the hill (top up between jobs; Medium 0: never)
     // the economy
     bool contest_aware{false};           // the contest-aware pile order: the piles that several enemies reach first, then those that one reaches, the safe ones, those of the ally, the hopeless (HarvestTask::Params::contest_aware)
     uint32_t contest_low{70};            // an enemy whose cost to a pile is below this percentage of the own cost is there first
@@ -377,6 +385,8 @@ void without_kill_batch(LevelPlan& plan) noexcept;
 /// The plan without the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): the fights that answer a blow take the own default type and Combat Ants only, as many as the level's defenders, and
 /// end at the target's hit clip unless a kill is in reach. For `bot_arena --tune defence=0` and the tests whose subject is an older rule.
 void without_defence_batch(LevelPlan& plan) noexcept;
+/// The plan without the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): no ant is sent home to heal; the engine's own walk home at 1 hit point is all there is. For `bot_arena --tune heal=0` and the tests whose subject is an older rule.
+void without_heal(LevelPlan& plan) noexcept;
 /// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
 /// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
 void without_war_batch(LevelPlan& plan) noexcept;

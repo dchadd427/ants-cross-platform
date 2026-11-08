@@ -1,6 +1,6 @@
 # Bots against people: the yardstick
 
-A computer player is judged against people by what people do, not only by who wins. The win rate and the margin of `bot_arena` stay the check that a change did not cost strength ([BOTS.md](BOTS.md), "Running bots"); they say nothing about whether a player answers a blow, helps its own ants or brings a hurt ant home. This page holds what measures that: the **people numbers** of `bot_watch`, a bench bot named `gang` that plays like a small group of people, five scenes in which the standard bot is held to a rule against an opponent that a test scripts, and the numbers of the bot before and after the first change that was measured with them ([Step 1](#step-1-everyone-hits-back)). The yardstick itself changes no bot.
+A computer player is judged against people by what people do, not only by who wins. The win rate and the margin of `bot_arena` stay the check that a change did not cost strength ([BOTS.md](BOTS.md), "Running bots"); they say nothing about whether a player answers a blow, helps its own ants or brings a hurt ant home. This page holds what measures that: the **people numbers** of `bot_watch`, a bench bot named `gang` that plays like a small group of people, five scenes in which the standard bot is held to a rule against an opponent that a test scripts, and the numbers of the bot before and after the first two changes that were measured with them ([Step 1](#step-1-everyone-hits-back), [Step 2](#step-2-hurt-ants-heal)). The yardstick itself changes no bot.
 
 ## The people numbers
 
@@ -221,6 +221,105 @@ What the numbers say: against the gang at Hard the bot now answers in about 6 of
 
 **Tune keys that move the numbers** (Hard against `gang:hard`, the same 48 matches, one key at a time on top of the shipped plan; hit back, ticks to the first helper, ants lost and killed in the fights, mean score): the shipped plan 61.1%, 111, 20 and 44, 3,298; `dkeep=100` (the first draft of the plan) 61.9%, 100, 22 and 44, 3,391; `dkeep=0` (a fight is never called off for weakness) 80.5%, 96, 18 and 59, 3,283; `dkeep=40` 71.8%, 120, 22 and 46, 3,264; `dkeep=80` 57.9%, 109, 25 and 44, 3,312; `dkeep=120` 60.5%, 104, 22 and 41, 3,380; `dradius=4` 59.4%, 104, 20 and 42, 3,297; `dradius=6` 54.8%, 106, 22 and 37, 3,277; `dextra=0` 59.1%, 111, 21 and 43, 3,278; `dreach=14` 58.2%, 102, 29 and 41, 3,177; `dstr=0` (rules 1 and 2 only) 67.8%, 132, 23 and 34, 3,224; `dmax=4` is the shipped plan (no fight in these matches asked for more than 4). The rate of item 1 moves by a few points with any of them and not in step with the key: it is within the noise of 48 matches.
 
+## Step 2: hurt ants heal
+
+Hard now sends a hurt ant into its hill when it is in danger. The hill heals every ant that enters it (the heal frame of the enter clip lasts (10 - hit points) x 200 ms: under two seconds from 1 hit point, [GAMEPLAY.md](GAMEPLAY.md), "Anthill Enter, Heal, Hatch & Raid"), and the engine walks an ant home by itself only at 1 hit point; before this step an ant with 2 to 4 hit points went on with its job and was struck again. Medium has the same rules built and **off** (`heal=1` turns them on, with milder numbers); Easy is as it was; in the game type 187 the hill is closed and the task does nothing (the brawl keeps its own retreat). The code is `HealTask` (`include/ants_ai/heal_task.hpp`, `src/ants_ai/heal_task.cpp`), a task of its own in the standard bot's step order, after the fights.
+
+**The rules**
+
+| | rule | plan field (tune key) |
+|---|---|---|
+| 1 | *Who goes.* An own ant that takes orders and is not stunned, with at most `heal_hp` hit points, when an enemy ant that can strike (it carries nothing, is no ally's, any type) is within `heal_danger_tiles` tiles of it, or it lost hit points within `heal_recent_ticks` ticks, or (no danger) it has at most `heal_calm_hp` hit points and its walk home is at most 6 tiles; and its walk home (the hill's walking cost field, in tiles: 20 cost units, a diagonal step 28) is at most `heal_walk_tiles`. | `heal` (`heal`), `heal_hp` (`healhp`), `heal_danger_tiles` (`healdanger`), `heal_recent_ticks` (`healrecent`), `heal_walk_tiles` (`healwalk`), `heal_calm_hp` (`healcalm`) |
+| 2 | *Never.* A Thief in its raid clip, or one of the raid task within 6 tiles of the raid tile of an enemy hill (it is about to raid); the Fire Ant that keeps the walls while an enemy Thief is within 4 tiles of the raid tile of the own hill; an ant of the island play (the crew, the expedition); an ant of a task that this one cannot take from (a fight, the rush, the kill, a gate goal: rank 5 and above); an ant that stands on a power-up; an ant on the hill's mound; an ant that the engine already walks home (1 hit point, walking, nearer than at the last look); a hill that is closed or not there; a hill that a ring of fire walls shuts (no click into it would be carried out; `cantgo_aware`). | |
+| 3 | *Carriers.* A carrier goes too: its click onto the entrance banks the food and heals. It is the task's order alone: the gate task (Hard) and the carrier aid leave an ant that the task holds to it, so that one order is made for it at a look and not two. | |
+| 4 | *The order.* One group move onto the entrance, Urgent, for every ant that is due at a look. An ant that walks nearer (its walk fell since the last look, which is not older than 40 ticks) is held and not ordered again; an ant that stands idle or whose walk grew is ordered again after 40 ticks, at most 8 times in all. After 600 ticks the ant is given back and left alone for 600 more (an ant in its enter clip is waited for). | |
+| 5 | *Done.* The ant has all its hit points again (it entered and healed) or is gone: it is given back, and its task asks for it again. | |
+| 6 | *The other tasks.* The task has the rank of a fight (5, `StandardBot::kHeal`): it takes ants from the ranks 1 to 4 and never one from a fight, a rush, the kill or a gate goal; a fight never takes an ant that it holds, and an ant that a fight lets go (it fell below 3 hit points) is taken at the same look, since the task steps after the fights. The unjam of the ramp (Hard's gate) leaves a healing ant where it is: it moves only ants that nobody above the economy holds. | |
+
+Hard: `heal` on, `heal_hp` 4, `heal_danger_tiles` 3, `heal_recent_ticks` 60, `heal_walk_tiles` 16, `heal_calm_hp` 2. Medium: `heal` off, 3, 3, 60, 12, 0 (no top-up). Easy: `heal` off, the plan's own numbers. A plan made by hand has none of it. `heal=0` takes the task out of a plan and `heal=1` puts it on with the level's numbers (`bot_arena --tune K=V,...`, or `standard+K=V` for one seat; add `styled=1` to a tuned seat that is to keep the style and the variations of the registry's bot). `without_heal` in `tactics.hpp` does the same for the tests.
+
+**Ranks of the tasks** (the Step 2 line: the full list is in [BOTS.md](BOTS.md), "Task ranks"): economy 1, guard and ferry 2, power-ups, raids, sabotage, island task and expedition 3, walls, bombs, mines, strike and squad 4, **fights and the healing task 5**, gate goal and field breach 6. A higher rank takes from a lower one; ranks that are equal take nothing from each other.
+
+**The numbers after Step 2**, the same commands as before, on five sets of 24 seeds and two of 30 (the bot before is the bot of Step 1: a build of its merge; the report files are called `after_...`). The first acceptance set is seeds 1 to 24, Hard against `gang:hard`, both seats:
+
+| # | measure | before Step 1 | Step 1 | now | bar | on these seeds |
+|---|---|---|---|---|---|---|
+| 1 | deaths of ants that could have walked home | 57 | 25 | 27 | at most 10 (0.4 of Step 1; 0.3 of "before Step 1" is 17) | **not met** |
+| 2 | heals (hit points that rose) | 769 | 478 | 457 | at least 2,307 (3 times "before Step 1") | **not met** |
+| 3 | ants lost / killed in the fights | 37 / 25 | 20 / 44 | 19 / 45 | lost no more than Step 1; all ants lost at most 0.8 of Step 1 (1.00 a match) | fights met; all ants lost 1.00: **not met** |
+| 4 | mean score of the seat | 3308 | 3298 | 3370 | at least Step 1 minus 2 percent | met |
+| 5 | self-play win rate, Hard / Medium / Easy (1,080 matches, seeds 1 to 30) | .638 / .149 / .053 | 0.640 / 0.145 / 0.057 | 0.649 / 0.142 / 0.054 | Hard at most 3 points down, Medium and Easy within 1 point | met (and on seeds 31 to 60: 0.638 / 0.151 / 0.047 -> 0.632 / 0.152 / 0.050) |
+| 6 | can't-go reactions and the orders followed by one, Hard seats in the arena (360 seats a map, 1,080 in all) | | 59976 / 2229 | 58653 / 2310 | not above 5 percent more | met (-2.2 and +3.6 percent); filtered and rejected stay 0 |
+
+Items 1, 2 and the second half of item 3 are **not met** on these seeds, and not on the other four sets either (below). The numbers of the "before Step 1" column are those of the table "The numbers before Step 1" above; the Step 1 column is the bot of Step 1 measured again for this step.
+
+**Hard against `gang:hard`, TREASURE, both seats of each arrangement (48 matches a set)**
+
+| seeds | hit back | ants lost / killed in fights | deaths | could walk home / far / no warning | heals | mean score |
+|---|---|---|---|---|---|---|
+| 1 to 24 | 61.1% -> 58.4% | 20 / 44 -> 19 / 45 | 48 -> 48 | 25 / 7 / 16 -> 27 / 10 / 11 | 478 -> 457 | 3298 -> 3370 |
+| 25 to 48 | 59.1% -> 56.9% | 21 / 45 -> 14 / 49 | 55 -> 54 | 33 / 6 / 16 -> 27 / 6 / 21 | 457 -> 433 | 3263 -> 3248 |
+| 49 to 72 | 68.2% -> 63.4% | 18 / 47 -> 14 / 59 | 55 -> 48 | 28 / 10 / 17 -> 20 / 9 / 19 | 525 -> 508 | 3213 -> 3241 |
+| 73 to 96 | 57.3% -> 56.7% | 22 / 37 -> 19 / 42 | 57 -> 51 | 30 / 8 / 19 -> 28 / 8 / 15 | 501 -> 458 | 3125 -> 3211 |
+| 97 to 120 | 68.8% -> 54.8% | 16 / 42 -> 23 / 44 | 50 -> 60 | 27 / 5 / 18 -> 32 / 7 / 21 | 420 -> 477 | 3297 -> 3308 |
+| all 5 sets | 62.5% -> 58.1% | 97 / 215 -> 89 / 239 | 265 -> 261 | 143 / 36 / 86 -> 134 / 40 / 87 | 2381 -> 2333 | 3239 -> 3276 |
+
+Engine counts per seat and match, before -> after: ants killed 3.95 -> 3.89, ants lost 1.10 -> 1.09, ants left 4.9 -> 4.9. Mean score change over the 240 matches: +36 (standard error 32).
+Commands: orders per match 493 -> 494, can't-go reactions 1601 -> 1631, orders followed by one 237 -> 326.
+
+**Hard against `gang:medium`**
+
+| seeds | hit back | ants lost / killed in fights | deaths | could walk home / far / no warning | heals | mean score |
+|---|---|---|---|---|---|---|
+| 1 to 24 | 72.7% -> 69.7% | 7 / 30 -> 3 / 30 | 24 -> 24 | 8 / 2 / 14 -> 4 / 4 / 16 | 450 -> 446 | 3490 -> 3531 |
+| 25 to 48 | 62.3% -> 64.1% | 2 / 40 -> 5 / 34 | 16 -> 20 | 3 / 3 / 10 -> 6 / 2 / 12 | 421 -> 444 | 3566 -> 3552 |
+| 49 to 72 | 67.4% -> 68.0% | 4 / 39 -> 1 / 36 | 23 -> 19 | 4 / 3 / 16 -> 4 / 4 / 11 | 412 -> 414 | 3500 -> 3517 |
+| 73 to 96 | 75.2% -> 74.1% | 0 / 42 -> 1 / 44 | 22 -> 19 | 3 / 4 / 15 -> 3 / 2 / 14 | 402 -> 451 | 3499 -> 3439 |
+| 97 to 120 | 80.2% -> 75.4% | 2 / 28 -> 5 / 29 | 15 -> 17 | 4 / 1 / 10 -> 5 / 1 / 11 | 394 -> 431 | 3584 -> 3544 |
+| all 5 sets | 71.4% -> 70.2% | 15 / 179 -> 15 / 173 | 100 -> 99 | 22 / 13 / 65 -> 22 / 13 / 64 | 2079 -> 2186 | 3528 -> 3517 |
+
+Engine counts per seat and match, before -> after: ants killed 4.28 -> 4.35, ants lost 0.42 -> 0.41, ants left 5.6 -> 5.6. Mean score change over the 240 matches: -11 (standard error 15).
+Commands: orders per match 522 -> 525, can't-go reactions 1875 -> 1862, orders followed by one 278 -> 276.
+
+**Self-play, seeds 1 to 30** (win rate and margin as defined above; before -> after):
+
+| maps | bot | seats | win rate | margin | can't-go reactions | orders followed by one |
+|---|---|---|---|---|---|---|
+| all three | standard:hard | 1080 | 0.640 -> 0.649 | +221 -> +219 | 59976 -> 58653 | 2229 -> 2310 |
+| all three | standard:medium | 2160 | 0.145 -> 0.142 | -435 -> -436 | 83686 -> 82919 | 3069 -> 3091 |
+| all three | standard:easy | 1080 | 0.057 -> 0.054 | -756 -> -746 | 15742 -> 15301 | 775 -> 645 |
+| TREASURE | standard:hard | 360 | 0.869 -> 0.881 | +480 -> +474 | 52401 -> 52469 | 948 -> 973 |
+| TREASURE | standard:medium | 720 | 0.058 -> 0.056 | -754 -> -758 | 70719 -> 70077 | 1627 -> 1628 |
+| TREASURE | standard:easy | 360 | 0.008 -> 0.003 | -1523 -> -1501 | 2842 -> 2628 | 299 -> 282 |
+| SMALL | standard:hard | 360 | 0.544 -> 0.564 | +28 -> +31 | 5179 -> 3780 | 998 -> 1050 |
+| SMALL | standard:medium | 720 | 0.186 -> 0.178 | -209 -> -208 | 9863 -> 9719 | 957 -> 970 |
+| SMALL | standard:easy | 360 | 0.058 -> 0.053 | -271 -> -268 | 10763 -> 10331 | 415 -> 306 |
+| MEDIUM | standard:hard | 360 | 0.506 -> 0.503 | +154 -> +153 | 2396 -> 2404 | 283 -> 287 |
+| MEDIUM | standard:medium | 720 | 0.190 -> 0.193 | -344 -> -344 | 3104 -> 3123 | 485 -> 493 |
+| MEDIUM | standard:easy | 360 | 0.106 -> 0.106 | -473 -> -469 | 2137 -> 2342 | 61 -> 57 |
+
+**Self-play, seeds 31 to 60** (win rate and margin as defined above; before -> after):
+
+| maps | bot | seats | win rate | margin | can't-go reactions | orders followed by one |
+|---|---|---|---|---|---|---|
+| all three | standard:hard | 1080 | 0.638 -> 0.632 | +225 -> +221 | 60380 -> 57682 | 2339 -> 2377 |
+| all three | standard:medium | 2160 | 0.151 -> 0.152 | -452 -> -450 | 82419 -> 85350 | 2908 -> 2854 |
+| all three | standard:easy | 1080 | 0.047 -> 0.050 | -777 -> -773 | 17764 -> 19368 | 931 -> 992 |
+| TREASURE | standard:hard | 360 | 0.867 -> 0.856 | +493 -> +481 | 51685 -> 49446 | 969 -> 970 |
+| TREASURE | standard:medium | 720 | 0.064 -> 0.069 | -808 -> -799 | 68652 -> 70815 | 1656 -> 1607 |
+| TREASURE | standard:easy | 360 | 0.003 -> 0.000 | -1574 -> -1568 | 4007 -> 5096 | 333 -> 363 |
+| SMALL | standard:hard | 360 | 0.503 -> 0.508 | +5 -> +8 | 5276 -> 5082 | 1067 -> 1100 |
+| SMALL | standard:medium | 720 | 0.212 -> 0.207 | -196 -> -197 | 11109 -> 11832 | 991 -> 978 |
+| SMALL | standard:easy | 360 | 0.044 -> 0.053 | -267 -> -263 | 12797 -> 13154 | 541 -> 572 |
+| MEDIUM | standard:hard | 360 | 0.544 -> 0.533 | +177 -> +176 | 3419 -> 3154 | 303 -> 307 |
+| MEDIUM | standard:medium | 720 | 0.176 -> 0.181 | -353 -> -353 | 2658 -> 2703 | 261 -> 269 |
+| MEDIUM | standard:easy | 360 | 0.094 -> 0.097 | -490 -> -489 | 960 -> 1118 | 57 -> 57 |
+
+**What the numbers say.** The task takes few ants, about two a match, and for those it does what it is meant to do. In a counting build of the task (before its can't-go rule; the counters are not part of the repository), over the 240 matches against `gang:hard` of the table above it took 484 ants; 361 walked into the hill and came out healed, and 118 were killed on the way. A hurt ant that walks home is followed by the enemy that hurt it, and the gang strikes the ant that is hurt first. So the deaths did not fall: over the five sets against `gang:hard` the ants that died were 265 before and 261 now, those that "could have walked home" 143 before and 134 now (the bar was a fall to 0.4 of that), the heals 2381 before and 2333 now (most heals in a match are an ant of 9 or 8 hit points that banks its food), the ants killed in the fights 215 before and 239 now and the ants lost in them 97 and 89, and the mean score 3239 and 3276 (a paired difference of +36 points with a standard error of 32: no change). The hit-back share fell from 62.5 to 58.1 percent: a hurt ant leaves the fight that it was answering. Against the milder gang there is no change either way (a paired score difference of -11, standard error 15). In the Hard mirror (four Hard bots, 96 seats on seeds 1 to 24) the ants that died fall from 200 to 177, and the ants lost in the fights are 72 and 71; the mean score is 1918 and 1872.
+
+**Tune keys that move the numbers** (Hard against `gang:hard`, the five sets, 240 matches, one set of keys at a time on top of the shipped plan; deaths, deaths that could have walked home, heals, ants lost and killed in the fights, mean score): the bot of Step 1 (`heal=0`, the same state hashes) 265, 143, 2381, 97 and 215, 3239; the shipped plan 261, 134, 2333, 89 and 239, 3276. `healhp=5` 252, 125, 2434, 88 and 252, 3266; `healcalm=4` 280, 142, 2371, 94 and 233, 3235; `healwalk=24` 267, 143, 2397, 94 and 236, 3249; `healhp=6` 279, 144, 2489, 95 and 250, 3225; `healdanger=5` 268, 137, 2382, 90 and 236, 3252; `healhp=5,healdanger=5,healcalm=4` 272, 136, 2430, 99 and 250, 3231. None of them comes near the bars of items 1 and 2: the fewest deaths that could have walked home is 125 against 143 without the task (the noise of 240 matches is about 12).
+
+
 ## Commands
 
 ```
@@ -232,7 +331,10 @@ build/bot_watch --map TREASURE --seeds 1..8 --seat 0=standard:hard --seat 1=stan
 build/bot_arena --map TREASURE,SMALL,MEDIUM --seeds 1..30 --seat 0=standard:hard --seat 1=standard:medium --seat 2=standard:medium --seat 3=standard:easy --rotate --threads 2 --quiet --out before_arena.json
 ANTS_TEST_FILTER='AI34.' build/tests/test_ai/test_ai
 ANTS_TEST_FILTER='AI35.' build/tests/test_ai/test_ai
+ANTS_TEST_FILTER='AI36.' build/tests/test_ai/test_ai
 ```
+
+The numbers of Step 2 were taken with the same commands on the bot of Step 1 (a build of its merge, the report files `before_...`) and of this step (`after_...`), on five sets of seeds against both `gang` levels (`--seeds 1..24`, `25..48`, `49..72`, `73..96`, `97..120`), the mirror on `1..8` and `9..24`, and the arena on `1..30` and `31..60`; the tune keys with a seat such as `--seat 0=standard+styled=1,healhp=5:hard`. With `heal=0` the 48 matches of seeds 1 to 24 against `gang:hard` end on the same state hashes as the bot of Step 1. The mutants of the task are `tests/data/bot_heal_mutants.json` (`python3 tools/mutate.py tests/data/bot_heal_mutants.json --keep-going --jobs 1 --timeout 900`).
 
 The numbers of Step 1 were taken with the same four commands (the report files are called `after_...`); the other sets of seeds with `--seeds 25..48` and so on (the bot before Step 1 is a build of the base branch), the keys of the table with a seat such as `--seat 0=standard+styled=1,dkeep=80:hard`. The mutants of the batch are `tests/data/bot_defence_mutants.json` (`python3 tools/mutate.py tests/data/bot_defence_mutants.json --keep-going --jobs 1 --timeout 900`).
 
@@ -264,4 +366,7 @@ EOF
 - **Ants lost and killed are counted two ways.** In the fights where the seat was struck first (above) the standard bot loses more ants than it kills; over the whole match the engine's counts are close to even against `gang` at Hard, because about half of the standard bot's kills are ants that a blow threw into water: they drown, and the fights count only the blow that takes the last hit point.
 - **One map.** TREASURE is where the numbers were taken; the other maps change them.
 - **The hit-back share is a ratio of two moving numbers.** A bot that answers well is struck first in fewer fights, and the fights that are left are the ones that nobody could answer. Read it together with the ants lost and killed in the fights and with the engine's own counts.
+- **The "could have walked home" number does not measure what the task changes.** It asks whether the walk home was shorter than the time that the ant still lived. An ant that is hurt in the middle of a fight, with the enemy beside it, has the time and not the way: the enemy follows it, and a blow that lands during its walk stops it for a hit clip, so the walk home takes about as long as the ant has left. The gang does exactly this to the ant that it hurt (it strikes the same victim until it is dead or far away).
+- **The task orders an ant again after a blow, and the engine takes no order for an ant that is in its hit clip or engaged.** The ant stands idle for some ticks after a blow (about 12 for the order to be given and carried out, more for a second blow); gaps of 40, 20, 12 and 8 ticks between two orders were tried in a build with the gap as a switch (not part of the repository): the five sets gave 136, 122, 134 and 127 deaths that could have walked home against 143 without the task, which is within the noise of 240 matches. The gap that ships is 40.
+- **Orders followed by a can't-go reaction.** An ant that a blow throws into a tile that no walk joins to the hill is not ordered again, and two can't-go reactions end the job. One match of the 576 seat-matches of the tables above shows 98 orders followed by a reaction for one Fire Ant that stood in such a tile: they are the economy's harvest orders to that ant, which it repeats every 20 ticks or so (the ant cannot go anywhere); the task gave the ant up after the second reaction. The harvest task's loop is a separate matter and is not part of this step.
 - The people numbers of a recording (`bot_watch --replay`) are worked out the same way; no recording is part of the repository.

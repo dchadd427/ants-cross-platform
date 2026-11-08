@@ -746,6 +746,12 @@ void run_b41_style_tests() {
                 ASSERT_EQ(p.defend_all_types && p.victim_answers && p.defend_by_strength, level == Level::Hard);
                 ASSERT_EQ(p.defend_all_types || p.victim_answers || p.defend_by_strength, level == Level::Hard);
                 ASSERT_EQ(p.defend_keep_percent, level == Level::Medium ? 120u : level == Level::Hard ? 60u : 100u);
+                ASSERT_EQ(p.heal, level == Level::Hard);                                                         // the heal batch (AI36.6): Hard's, whatever the style and the variations of the bot's own
+                ASSERT_EQ(p.heal_hp, level == Level::Medium ? 3u : 4u);
+                ASSERT_EQ(p.heal_danger_tiles, 3);
+                ASSERT_EQ(p.heal_recent_ticks, 60u);
+                ASSERT_EQ(p.heal_walk_tiles, level == Level::Medium ? 12 : 16);
+                ASSERT_EQ(p.heal_calm_hp, level == Level::Medium ? 0u : 2u);
             }
         }
         const LevelPlan hard = plan_for(Level::Hard);

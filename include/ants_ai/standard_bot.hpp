@@ -13,6 +13,7 @@
 //                 that has points to take, is not shut by walls or bombs and can be reached (no level keeps away from a hill that an enemy Combat Ant stands near: measured, it is a worker
 //                 that fights, not a guard); a Thief that harvests is taken from its loop for a raid. Medium sends one ant, Hard two, to the contested middle of the map at the start
 //   Hard          also steals a second Thief (and a second Combat Ant once it is attacked) and guides every carrier at the hill's gate by hand (GateTask)
+//                 and sends a hurt ant that is in danger home to heal (HealTask: docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; Medium has it built and off)
 //   styles        a bot draws one per match from its own seat's generator (or the spec pins it) and plays it on top of its level: Aggressive adds the harassment squad (at Hard also the
 //                 sabotage of the best opponent's gate with a stolen Fire Ant and the strike when behind), Economic the efficient order, Raider the Thief first, Defensive the walls early
 //
@@ -37,6 +38,7 @@
 #include "ants_ai/brawl_task.hpp"
 #include "ants_ai/field_task.hpp"
 #include "ants_ai/gate_task.hpp"
+#include "ants_ai/heal_task.hpp"
 #include "ants_ai/island_expedition.hpp"
 #include "ants_ai/island_ferry.hpp"
 #include "ants_ai/island_tasks.hpp"
@@ -83,7 +85,8 @@ private:
           gate_goals_(kGateGoals, tactics_, gate_goal_params(plan)),
           field_(kField, tactics_),
           brawl_(kBrawl, plan.brawl),
-          opportunity_(kOpportunity, tactics_) {
+          opportunity_(kOpportunity, tactics_),
+          heal_(kHeal, tactics_) {
         island_.attach(&harvest_);
         expedition_.attach(&island_);
     }
@@ -120,6 +123,7 @@ public:
     const GateGoalTask& gate_goals() const noexcept { return gate_goals_; }
     const FieldTask& field() const noexcept { return field_; }
     const OpportunityTask& opportunity() const noexcept { return opportunity_; }
+    const HealTask& heal() const noexcept { return heal_; }
     /// Whether the bot plays the gate goals on this map (Medium and Hard, a walled map that the island play does not own; known after the first look)
     bool gate_map() const noexcept { return tactics_.gate_map; }
     /// The gate goal for a lab that changes its parameters or cancels it (AI27)
@@ -166,6 +170,7 @@ public:
     static constexpr TaskId kField = 20;
     static constexpr TaskId kBrawl = 21;
     static constexpr TaskId kOpportunity = 22;
+    static constexpr TaskId kHeal = kHealTaskId;                  // (23: tasks.hpp names it for the tasks that leave a carrier to it)
 
 private:
     static Tactics tactics_of(const LevelPlan& plan) {
@@ -300,6 +305,7 @@ private:
     FieldTask field_;
     BrawlTask brawl_;
     OpportunityTask opportunity_;
+    HealTask heal_;
     void note_repeat(const sim::Command& command, uint64_t tick);
     void update_progress(const BotView& view);
     bool detect_stall(const BotView& view);
