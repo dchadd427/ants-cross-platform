@@ -659,7 +659,7 @@
    "id": "discord_total_timeout_is_a_login",
    "file": "hub/discord.py",
    "old": "        except asyncio.TimeoutError:\n            raise DiscordError(\"down\")\n        finally:",
-   "new": "        except asyncio.TimeoutError:\n            return (\"261842000123456789\", \"maple.leaf\")\n        finally:",
+   "new": "        except asyncio.TimeoutError:\n            return (\"261842000123456789\", \"maple.leaf\", None)\n        finally:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
