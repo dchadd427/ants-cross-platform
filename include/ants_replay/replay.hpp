@@ -56,7 +56,7 @@ inline constexpr uint32_t kMaxEmbeddedStartAnts = 8000;
 /// from the first for the one on its cell (SimulationEngine::init), so the work is the number of plants times the number of waypoints, a second square that the ants do not show: 65,400 plants and 65,535 waypoints
 /// are 4.3 billion pairs, seconds natively and a minute on a phone. The plants are the records of block 1 whose tile has the plant flag (sim::movement::is_dropper_plant_tile: 404 .. 408, 410 .. 416, 420, 421), the waypoints
 /// all the records of block 4 that the loader keeps (LevelData::waypoints); 1,000,000 is 78 times the largest map of the library (112 plants and 114 waypoints: 12,768 pairs). Counted where kMaxEmbeddedStartAnts is, and by the
-/// page (web/map_files.js MAX_EMBEDDED_PAIRS, pinned equal). The rooms' limits (OnlineLimits) cap the cells and the starting ants and not these pairs, so nothing pins this number against a room: a writer that carries a map in a file must keep to it.
+/// page (web/map_files.js MAX_EMBEDDED_PAIRS, pinned equal). A room caps these pairs too (OnlineLimits::kMaxPlantWaypointPairs, the same 1,000,000), but nothing pins this number against it: a writer that carries a map in a file must keep to it.
 inline constexpr uint64_t kMaxEmbeddedPlantWaypointPairs = 1000000;
 /// The longest file that holds `embedded_map_bytes` bytes of map (0: no tmap chunk): the match's kMaxFileBytes plus the map's whole chunk
 constexpr size_t max_file_bytes(size_t embedded_map_bytes) noexcept { return kMaxFileBytes + (embedded_map_bytes == 0 ? size_t{0} : embedded_map_bytes + kChunkFrameBytes); }
