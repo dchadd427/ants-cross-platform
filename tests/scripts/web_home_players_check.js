@@ -469,6 +469,40 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     mine.live(); mine.who(FULL([row(1, 'maple'), row(2, 'maple', 'wait', { pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'c1v3rr' }), row(3, 'sage')], { n: 4 }));
     same('a person who has the visitor\'s name is not hidden (only the row that is the visitor\'s number is)', mine.names().sort(), ['maple', 'maple', 'sage'].sort());
 }
+{   // an original's name: the page's own table's (a closed set of six), and for a room that the Games list has, only if the list shows the same name
+    const NAMES = { 'TINY.LVL': 'Tiny', 'SMALL.LVL': 'Small', 'MEDIUM.LVL': 'Medium', 'GAUNTLET.LVL': 'Gauntlet', 'TREASURE.LVL': 'Treasure', 'ISLANDS.LVL': 'Islands' };
+    const waits = (map, code) => row(6, 'mallory', 'wait', { pub: true, map, n: 4, of: 4, code: code || 'f4k3f4' });
+    const liar = rig({ wide: true });
+    liar.live(); liar.who(FULL([row(1, 'maple'), waits('GAUNTLET.LVL')], { n: 3 }));
+    liar.listed('f4k3f4', 'Islands'); liar.tick(1000);
+    same('an original\'s name that the Games list does not confirm is not drawn: the list has the room under that code as Islands, the hub says Gauntlet (the line has the seats, and the Join is the list\'s own)', [liar.metaOf('mallory'), liar.joins().length], ['4 of 4', 1]);
+    liar.unlisted('f4k3f4'); liar.listed('f4k3f4', 'Gauntlet'); liar.tick(1000);
+    same('... the list has it under that name: drawn', liar.metaOf('mallory'), 'Gauntlet · 4 of 4');
+    liar.unlisted('f4k3f4'); liar.listed('f4k3f4', 'Free nitro at discord.gg-abc'); liar.tick(1000);
+    same('... the list has it under words that are not the original\'s: not drawn (and the list\'s words are not drawn by this panel either)', [liar.metaOf('mallory'), JSON.stringify(texts(liar.panel(), 'pl-card')).indexOf('nitro')], ['4 of 4', -1]);
+    liar.unlisted('f4k3f4'); liar.tick(1000);
+    same('... the list has no such room: an original\'s name is the page\'s own table\'s, as the hub says it', liar.metaOf('mallory'), 'Gauntlet · 4 of 4');
+    const cases = [];
+    Object.keys(NAMES).forEach((file) => [file, file.toLowerCase(), file.slice(0, -4) + '.lvl', file.charAt(0) + file.slice(1, -4).toLowerCase() + '.LVL'].forEach((spelling) => cases.push([spelling, NAMES[file]])));
+    const spelled = rig({ wide: true });
+    spelled.live(); spelled.who(FULL([row(1, 'maple')].concat(cases.map((c, i) => row(10 + i, 'p' + String(i).padStart(2, '0'), 'wait', { pub: true, map: c[0], n: 1, of: 4 }))), { n: cases.length + 1 }));
+    same('the six originals, in every spelling that the page\'s rule takes of the file name, are drawn by the table\'s name and nothing else', cases.map((c, i) => spelled.metaOf('p' + String(i).padStart(2, '0'))), cases.map((c) => c[1] + ' · 1 of 4'));
+    // a run of file names of any shape: what is drawn is never a word of the hub's, but the table's six names (the closed set) or, where the list confirms it, the list's own name
+    let seed = 20261108;
+    const chance = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-!@#$%^&()+=,;\'[]{}~';
+    const maps = [];
+    for (let i = 0; i < 160; i++) { let n = 1 + Math.floor(chance() * 40), t = ''; while (n--) t += chars.charAt(Math.floor(chance() * chars.length)); maps.push(t + (chance() < 0.5 ? '.lvl' : '.LVL')); }
+    const wild = rig({ wide: true });
+    const rows = maps.map((map, i) => (i % 2 ? row(10 + i, 'w' + i, 'wait', { pub: true, map, n: 1 + (i % 4), of: 4, code: 'c' + i }) : row(10 + i, 'w' + i, 'play', { pub: true, map, n: 1 + (i % 4) })));
+    wild.live(); wild.who(FULL([row(1, 'maple')].concat(rows), { n: rows.length + 1 }));
+    const SHAPES = /^(?:(?:Tiny|Small|Medium|Gauntlet|Treasure|Islands) · )?(?:\d of \d|\d players?)$/;
+    check('file names of any shape, in rooms that the Games list does not have: the line is the seats or the players, and a name before them is one of the six', rows.every((r) => SHAPES.test(wild.metaOf(r.name))), rows.map((r) => wild.metaOf(r.name)).filter((t) => !SHAPES.test(t)).join(' | '));
+    rows.forEach((r, i) => { if (i % 2) wild.listed('c' + i, i % 6 === 1 ? 'Treasure' : 'Another map'); });
+    wild.tick(1000);
+    check('... and in rooms that it has, under a name that is not what the hub\'s file is called: the seats only (no word of the hub\'s and none of the list\'s)', rows.every((r, i) => !(i % 2) || /^\d of \d$/.test(wild.metaOf(r.name))), rows.map((r, i) => (i % 2 ? wild.metaOf(r.name) : '')).filter((t) => t && !/^\d of \d$/.test(t)).join(' | '));
+    check('... a page that says a room of the players is the one that the list shows under the same name has that name drawn (by a map of that name, in a room of its own)', (() => { const q = rig({ wide: true }); q.live(); q.who(FULL([row(1, 'maple'), waits('Same Name.lvl', 'c0mm00')], { n: 3 })); q.listed('c0mm00', 'Same Name'); q.tick(1000); return q.metaOf('mallory') === 'Same Name · 4 of 4'; })());
+}
 {   // the visitor's own row is the one that the hub's welcome names, not a row with the visitor's name
     const youAnd = (r) => r.names().filter((n) => n === 'maple').length;
     const twins = [row(1, 'maple'), row(2, 'maple', 'wait'), row(3, 'sage')];

@@ -168,11 +168,11 @@
             var b = find('.gjoin[data-code="' + code + '"]'), item = b && b.parentNode, name = item && item.querySelector ? item.querySelector('.gmapname') : null;
             return b ? { name: name ? name.textContent : '' } : null;
         }
-        function named(row) {                                            // the row as it is drawn: `listed` when the Games list has that room (a Join is offered only then), and a community map's name only if that row shows the same
+        function named(row) {                                            // the row as it is drawn: `listed` when the Games list has that room (a Join is offered only then), and its map's name only if that row shows the same
             var game = row.code ? gameOf(row.code) : null, copy = {};
             for (var k in row) copy[k] = row[k];
             copy.listed = !!game;
-            if (!row.mapName && row.guess && game && game.name === row.guess) copy.mapName = row.guess;
+            if (game) copy.mapName = game.name === (row.mapName || row.guess) ? game.name : '';
             return copy;
         }
         function quick() { return env.quickHost; }
