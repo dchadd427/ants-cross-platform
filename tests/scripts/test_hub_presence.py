@@ -16,7 +16,8 @@ whole list once and then the changes, at most every two seconds. What this file 
     the last send whatever happens (a flapping person and a crowd that comes and asks are one change; an ask brings nothing forward), a change of more than 50 rows is the whole list, the first page to ask
     when nobody keeps the list current gets it as it is now (a random run against a model of the page);
   - memory only: nothing is added to the database, a socket that is gone leaves the list and the hub's own tables, the log of a real process holds no name, map or code of the list;
-  - the clock: the list's own work cannot stop the retention, and the log says sockets for the number of open sockets;
+  - the clock: the list's own work and the count of people cannot stop the retention, a failure that goes on is a line in the log now and then and not one for every tick, and the log says sockets for the
+    number of open sockets;
   - on real sockets (tests/scripts/hub_rig.py): the list over the wire, a name that is not a username is a guest, a guest's `here` is refused, a flood of `here` frames is no cheaper than a flood of
     anything else (the socket is closed).
 tests/data/hub_presence_mutants.json breaks the rules one at a time for tools/mutate.py (every one must be caught).
@@ -946,11 +947,72 @@ class TheClockAndTheList(WorldTest):
         hub.on_tick(100.0)
         self.assertEqual(done, ["deletions"], "the retention is done in that tick")
         self.assertGreater(hub.next_purge, 100.0)
-        line = [l for l in self.out.getvalue().splitlines() if " error " in l]
+        line = self.errors()
         self.assertEqual(len(line), 1)
         self.assertIn("kind=RuntimeError", line[0])
         self.assertIn("where=presence", line[0])
         self.assertNotIn("alice", self.out.getvalue())
+
+    def errors(self):
+        return [l for l in self.out.getvalue().splitlines() if " error " in l]
+
+    def test_a_count_of_people_that_fails_is_logged_like_a_list_that_fails_and_the_clock_does_the_rest(self):
+        hub = self.hub()
+        done = []
+
+        def broken():
+            raise RuntimeError("alice is in this message")
+        hub.chat.presence.people = broken
+        hub.chat.presence.flush = lambda now: done.append("flush")
+        hub.chat.sync_deletions = lambda: done.append("deletions")
+        hub.on_tick(100.0)
+        self.assertEqual(done, ["deletions"], "the retention is done in that tick, and it is the count that failed, not the retention")
+        self.assertGreater(hub.next_purge, 100.0)
+        line = self.errors()
+        self.assertEqual(len(line), 1, "one line, and the tick did not raise")
+        self.assertIn("kind=RuntimeError", line[0])
+        self.assertIn("where=presence", line[0])
+        self.assertNotIn("alice", self.out.getvalue())
+
+    def test_a_failure_that_goes_on_is_a_line_now_and_then_and_not_one_for_every_tick(self):
+        hub = self.hub()
+        hub.chat.sync_deletions = lambda: None
+
+        def broken(now):
+            raise RuntimeError("it goes on")
+        hub.chat.presence.flush = broken
+        for tick in range(100, 110):
+            hub.on_tick(float(tick))
+        hub.on_tick(109.9)
+        self.assertEqual(len(self.errors()), 1, "ten ticks and one more just before the window is over: one line")
+        hub.on_tick(110.0)
+        self.assertEqual(len(self.errors()), 2, "the window is over at exactly its end")
+        for tick in range(111, 120):
+            hub.on_tick(float(tick))
+        self.assertEqual(len(self.errors()), 2)
+        hub.chat.presence.flush = lambda now: (_ for _ in ()).throw(ValueError("another kind"))
+        hub.on_tick(120.0)
+        lines = self.errors()
+        self.assertEqual(len(lines), 3)
+        self.assertEqual([("kind=RuntimeError" in l, "kind=ValueError" in l) for l in lines], [(True, False), (True, False), (False, True)], "each line has the kind of the failure that it is for")
+
+    def test_the_count_and_the_list_share_the_limit_of_the_line(self):
+        hub = self.hub()
+        hub.chat.sync_deletions = lambda: None
+
+        def broken_count():
+            raise RuntimeError("the count")
+
+        def broken_flush(now):
+            raise RuntimeError("the list")
+        hub.chat.presence.people = broken_count
+        hub.on_tick(100.0)
+        hub.chat.presence.people = lambda: 0
+        hub.chat.presence.flush = broken_flush
+        hub.on_tick(105.0)
+        self.assertEqual(len(self.errors()), 1, "one line for what went wrong in the work of the list in a while, whichever part it was")
+        hub.on_tick(110.0)
+        self.assertEqual(len(self.errors()), 2)
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
