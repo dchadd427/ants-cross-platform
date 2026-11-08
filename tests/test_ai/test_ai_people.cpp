@@ -16,9 +16,8 @@
 // A known failure is a scene that the shipped bot fails today and that a later step of the bot work has to make pass: it runs, prints "KNOWN FAIL AI34.n (Step k)" with what it measured, and is green.
 // The day it passes the case turns red ("NOW PASSES"): the step that fixed it makes the case required.
 #include <algorithm>
-#include <array>
 #include <cstdint>
-#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -485,7 +484,6 @@ void run_people_tests() {
     TEST_CASE("AI34.8 Deaths That Could Have Walked Home: From The First Look At 4 Hit Points Or Fewer (At Most 1,200 Ticks Back, And Not Before A Heal) The Distance To The Hill's Entrance Divided By The Speed Of The Match's Walkers Against The Ticks The Ant Still Lived; Without A Warning Is Counted Apart; A Closed Hill (187) Counts None Of Them") {
         const auto play = [](bool closed) {
             auto people = std::make_unique<watch::People>(two_seats(closed));
-            std::vector<AntSnap> field;
             // the walkers of the match: one ant that goes 2 tiles every 20 ticks (0.1 tiles a tick)
             for (uint64_t t = 20; t <= 140; t += 20) {
                 std::vector<AntSnap> ants = {ant(50, 1, static_cast<int32_t>(20 + t / 10), 30, 10, sim::UnitState::Walking)};
