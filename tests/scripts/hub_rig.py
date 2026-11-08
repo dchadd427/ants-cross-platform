@@ -13,6 +13,7 @@ from hub import config, limits as limitmod, server, session, store  # noqa: E402
 from hub.log import Log  # noqa: E402
 
 SITE = "https://chat.example.org"
+WAIT = 30           # seconds that the test thread waits for the hub's thread to start, to run a function and to stop (a machine under load is slow, and a test must not fail for that)
 
 
 class Rig:
@@ -36,7 +37,7 @@ class Rig:
 
     def __enter__(self):
         self.thread.start()
-        self.port = asyncio.run_coroutine_threadsafe(self.start(), self.loop).result(10)
+        self.port = asyncio.run_coroutine_threadsafe(self.start(), self.loop).result(WAIT)
         return self
 
     async def start(self):
@@ -48,11 +49,11 @@ class Rig:
         """Run function(*args) on the hub's thread (the hub's own objects belong there) and return its result."""
         async def run():
             return function(*args)
-        return asyncio.run_coroutine_threadsafe(run(), self.loop).result(10)
+        return asyncio.run_coroutine_threadsafe(run(), self.loop).result(WAIT)
 
     def __exit__(self, *exc):
         try:
-            asyncio.run_coroutine_threadsafe(self.hub.stop(), self.loop).result(10)
+            asyncio.run_coroutine_threadsafe(self.hub.stop(), self.loop).result(WAIT)
             self.call(self.store.close)
         finally:
             self.loop.call_soon_threadsafe(self.loop.stop)
