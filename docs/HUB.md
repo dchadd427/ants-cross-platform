@@ -80,7 +80,7 @@ The list of the front page's players ([HOME_SCREEN.md](HOME_SCREEN.md#the-player
 
 ## Moderation
 
-Mutes, bans and deletions are kept by account id in `hub.db`, so they survive a restart, a new session and a rename. A banned account can still read.
+Mutes, bans and deletions are kept by account id in `hub.db`, so they survive a restart, a new session and a rename. A banned account can still read. Change bans and mutes only with `hub.admin` or the chat commands: a writer that does not raise the counter in `meta` (see Data) may go unseen by a running hub until the next counted change or a restart.
 
 From a terminal on the machine (no network door; run it as the image's own user, which `docker exec` does by default, so that the database files stay the hub's):
 

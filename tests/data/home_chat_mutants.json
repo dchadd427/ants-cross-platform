@@ -2697,6 +2697,13 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
+   "id": "the_hub_codes_miss_quota",
+   "file": "web/home/chat.js",
+   "old": "'young', 'quota', 'bad'];",
+   "new": "'young', 'bad'];",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
    "id": "a_wrong_command_is_the_oldest_sends_as_any_other",
    "file": "web/home/chat.js",
    "old": "var at = oldest(code === 'bad'),",
