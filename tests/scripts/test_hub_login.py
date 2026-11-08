@@ -663,6 +663,11 @@ class TheLimitsAreWhatTheDocsSay(unittest.TestCase):
         self.assertIn("10 seconds for Discord's two calls in all", row)
         self.assertIn("10 logins kept for an account and 100,000 in all (the oldest go)", row)
 
+    def test_the_cap_of_the_profiles_is_the_number_of_the_paragraph_on_the_data(self):
+        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
+            self.assertIn("the table keeps at most 100,000 (the ones refreshed longest ago go, as the logins do)", f.read())
+        self.assertEqual(limitmod.Limits().profiles_total, 100000)
+
 
 class TheSessionsAreKept(LoginTest):
     def test_an_expired_login_is_nobody_and_the_hub_cleans_up_after_it(self):
@@ -1036,6 +1041,33 @@ class TheDisplayName(LoginTest):
         self.assertEqual((query["scope"], query["prompt"]), ("identify", "none"))
         v.callback(v.at_discord(location))
         self.assertEqual([r[1] for r in self.fake.requests if r[1].startswith("/api/")], ["/api/v10/oauth2/token", "/api/v10/users/@me"])           # (one question: who is this)
+
+
+class TheCapOfProfiles(LoginTest):
+    """The table of profiles holds at most `profiles_total` of them: hub/login.py hands the limit to the store at every login. A login still works when the table is full, and the profile that goes
+    is the one that was refreshed longest ago; its person is shown by the username, as an account with no profile is."""
+    limits = dict(profiles_total=2)
+
+    def test_a_third_login_leaves_two_profiles_and_the_person_of_the_oldest_is_shown_by_the_username(self):
+        people = []
+        for n in range(3):
+            self.tick(10)                                                          # (the profiles are told apart by the time of their login)
+            account = fd.snowflake(960 + n)
+            self.fake.user = (account, "cap.user%d" % n, "Cap Person %d" % n)
+            v = self.visitor()
+            r = v.login()
+            self.assertEqual(r.status, 302, r.text()[:200])
+            people.append((account, v))
+            self.assertLessEqual(len(self.rows("profiles")), 2)
+        self.assertEqual(sorted(row[0] for row in self.rows("profiles")), sorted(account for account, _ in people[1:]))
+        shown = []
+        for _account, v in people:
+            c = self.socket(v)
+            shown.append(you_without_the_key(c.welcome["you"]))
+            c.close()
+        self.assertEqual(shown, [{"name": "cap.user0", "mod": False},
+                                 {"name": "Cap Person 1", "mod": False, "pick": "display", "other": "cap.user1"},
+                                 {"name": "Cap Person 2", "mod": False, "pick": "display", "other": "cap.user2"}])
 
 
 class TheTwoNamesAndTheModerators(LoginTest):

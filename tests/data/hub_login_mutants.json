@@ -1823,6 +1823,20 @@
    "old": "three things only",
    "new": "two things only",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "the_login_hands_the_store_no_cap_on_profiles",
+   "file": "hub/login.py",
+   "old": "self.store.set_profile(account, name, display, self.limits.profiles_total)",
+   "new": "self.store.set_profile(account, name, display, 10 ** 9)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfProfiles"
+  },
+  {
+   "id": "the_default_cap_of_profiles_is_a_billion",
+   "file": "hub/limits.py",
+   "old": "profiles_total: int = 100000",
+   "new": "profiles_total: int = 1000000000",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfProfiles tests.scripts.test_hub_login.TheLimitsAreWhatTheDocsSay"
   }
  ]
 }

@@ -216,8 +216,8 @@ class Chat:
             peer.send_text(moderators if who is not None and who.account_id in self.mods else everybody)
 
     def on_pick(self, peer, msg):
-        """Which of its two names the account is shown by. Refused (`pick`, a mistake of the socket) for a guest's, for anything but one of the two words, past the account's limit, and for an
-        account that has no display name. Done: stored, and every socket of the account is closed with the call that a logout uses, so that the pages connect again and read the new name in the
+        """Which of its two names the account is shown by. Refused (a mistake of the socket) with `login` for a guest and with `pick` for anything but one of the two words, past the account's
+        limit, and for an account that has no display name. Done: stored, and every socket of the account is closed with the call that a logout uses, so that the pages connect again and read the new name in the
         welcome (a socket's name is fixed at its handshake, as its identity is); lines that were written keep the name they were written with."""
         who = peer.identity
         if who is None:
