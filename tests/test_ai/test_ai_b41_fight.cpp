@@ -414,6 +414,13 @@ void run_b41_fight_tests() {
             ASSERT_EQ(p.defend_extra, 1u);
             ASSERT_EQ(p.defend_max, level == Level::Medium ? 3u : 5u);
             ASSERT_EQ(p.defend_reach, level == Level::Medium ? 8 : 10);
+            // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): built and off at every level; Hard's numbers are those it has when it is turned on, Medium's are milder, Easy keeps the plan's own
+            ASSERT_FALSE(p.heal);
+            ASSERT_EQ(p.heal_hp, level == Level::Medium ? 3u : 4u);
+            ASSERT_EQ(p.heal_danger_tiles, 3);
+            ASSERT_EQ(p.heal_recent_ticks, 60u);
+            ASSERT_EQ(p.heal_walk_tiles, level == Level::Medium ? 12 : 16);
+            ASSERT_EQ(p.heal_calm_hp, level == Level::Medium ? 0u : 2u);
         }
     } TEST_END();
 }

@@ -42,6 +42,9 @@ struct Strength {
 /// are no enemies. Hit points are on the view for every ant (a project decision).
 Strength enemy_strength(const BotView& view, sim::TileCoord centre, int32_t radius, uint32_t exclude, uint32_t cap);
 
+/// Whether `tile` is within 6 tiles of the raid tile of a hill of a team that is neither the seat nor its ally: a Thief of the raid task there is about to raid (the fights and the healing task leave it to its raid)
+bool near_raid_tile(const BotView& view, const MapInfo& map, sim::TileCoord tile) noexcept;
+
 /// Whether `ant` may be taken into a fight that answers a blow (the defence rules of the plan: defend_all_types). It must take orders (not be stunned), hold nothing, have at least 4 hit
 /// points and not stand on a power-up, and it must not be
 ///   the Fire Ant that keeps the walls of the own thief hole, while a thief threatens (tactics.wall_keeper, wall_demand);
