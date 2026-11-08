@@ -110,8 +110,6 @@
     @keyframes wait-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
     @media (prefers-reduced-motion: reduce) { .pstat.wait::before { animation: none; } }
     .pname input { min-width: 0; width: 100%; font-size: 24px; line-height: 1.1; color: var(--cream); background: #0b1117; border: 2px solid var(--frame-hi); border-radius: 3px; padding: 0 6px; }
-    .edit { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 2px; line-height: 1; }
-    .edit:hover { color: var(--cream); }
     /* the host's Remove button on another player's color: small, the color of a warning, and always followed by a question */
     .rm { flex: none; min-height: 30px; padding: 2px 12px; font-size: 14px; line-height: 1.1; cursor: pointer; color: #f6c9c0; background: #1f1011; border: 2px solid #7a3b34; border-radius: 6px; }
     .rm:hover { color: #ffe4de; background: #2c1514; border-color: #c4655a; }
@@ -194,8 +192,7 @@
     .name-step-title { display: block; margin-bottom: 14px; padding: 7px 16px; font-size: 22px; font-weight: 500; line-height: 1.1; text-align: left; color: var(--gold); text-shadow: 0 2px 0 #0b2a22; overflow-wrap: anywhere; background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
     .name-step label { display: block; font-size: 16px; margin-bottom: 6px; color: var(--ink); }
     .name-step-row { display: flex; gap: 14px; align-items: center; }
-    .name-step input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 8px 14px; font: inherit; font-size: 16px; color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
-    .name-step input::placeholder { color: #7f9c92; }
+    .name-step input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 8px 14px; font: inherit; font-size: 16px; color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); cursor: default; }
     .name-step-msg { margin-top: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: #ffe4de; background: #3b0d10; border: 2px solid var(--edge); border-left: 6px solid #ff7a6b; border-radius: 3px; }
     .name-step-msg:empty { display: none; }
     .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
@@ -278,8 +275,6 @@
     /* a long room code or name in a strip never runs over the edge of a phone */
     #rejoin-note, #banner-text { min-width: 0; overflow-wrap: anywhere; }
 
-    /* the pencil beside a player's own name is a small glyph; on a touch screen its hit area grows (no change of the layout) */
-    @media (pointer: coarse) { .edit { position: relative; } .edit::after { content: ""; position: absolute; inset: -14px -12px; } }
 
     </style>
 <link rel="stylesheet" href="front/map_picker.css"><link rel="stylesheet" href="front/lobby_chat.css"><link rel="stylesheet" href="front/rematch.css"><link rel="stylesheet" href="front/game_type.css"><link rel="stylesheet" href="home/home.css">
@@ -352,7 +347,7 @@
         <div class="name-step-title" id="name-step-title">Join the room</div>
         <label for="name-step-input">Your name</label>
         <div class="name-step-row">
-            <input type="text" id="name-step-input" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="name-step-msg name-step-hint">
+            <input type="text" id="name-step-input" readonly aria-describedby="name-step-msg name-step-hint">
             <button type="button" id="name-step-go" class="btn">Join</button>
         </div>
         <div class="name-step-msg" id="name-step-msg" role="alert"></div>
@@ -363,7 +358,7 @@
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script src="front/map_maker_link.js"></script><script src="front/lobby_rules.js"></script>
+<script src="front/map_maker_link.js"></script><script src="front/lobby_rules.js"></script><script src="front/player_name.js"></script>
 <script src="front/lobby_net.js"></script>
 <script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>
 <script src="front/map_picker.js"></script>
@@ -374,9 +369,9 @@
         var Rules = window.AntsLobbyRules;
         var Net = window.AntsLobbyNet;
         var Chat = window.AntsLobbyChat;
-        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;
+        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, PlayerName = window.AntsPlayerName, storage = null, newRoom = false, pendingMode = -1;
         try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }
-        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !window.AntsHome) {           // the scripts of front/ did not come: the page cannot do anything, and says so
+        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !PlayerName || !window.AntsHome) {           // the scripts of front/ did not come: the page cannot do anything, and says so
             document.getElementById('banner-text').textContent = 'This page could not load all of its parts. Reload it to try again.';
             document.getElementById('banner-x').hidden = true;
             document.getElementById('banner').className = 'banner warn';
@@ -401,12 +396,11 @@
         function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
-        // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
-        // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
-        // 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason; the same rule as ai::is_reserved_bot_name).
-        // An empty name is fine on the web: it means that none was chosen (the game's own "Player", or a random name where the page has seats to name). nameCheck(text) is { ok: true, name } or
-        // { ok: false, why }, why being a short line for the person. A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
-        var NAME_KEY = 'ants.name';
+        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js: it asks the site's own page for the
+        // login and keeps the guest name in this browser). It is still a name that the game takes, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only, the blanks at
+        // both ends cut off (a tab or a line end that a paste brings is dropped), at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer
+        // player is always shown as one, so a room would rename such a name). nameCheck(text) is { ok: true, name } or { ok: false, why }, why being a short line; front/player_name.js makes a login's name fit with it.
+        // A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
         var NAME_MAX = 32;
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
@@ -416,31 +410,25 @@
             if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE NAME STEP of a link that somebody else shared (requested: when joining a link from somebody else, the page asks you first what you want your name to be): the field is filled in with
-        // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
-        // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
-        // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).
-        function runNameStep(ui, store, onDone) {
-            var done = false;
-            var remembered = nameCheck(store.recall(NAME_KEY));
-            ui.input.value = remembered.ok ? remembered.name : '';
+        // THE WORDS under the name on the card: what the name is, and, for a login whose hub says that there is another name (the chat menu's switch between the display name and the username), where it is changed
+        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
+        // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join, and what is recorded): the field shows the name that the person plays under (person.ready, from
+        // front/player_name.js) and cannot be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it. ui is { input, button, message, said(text), show(), hide() }.
+        function runNameStep(ui, person, onDone) {
+            var done = false, pressed = false, chosen = null;
+            function go() { if (done || !pressed || chosen === null) return; done = true; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
+            ui.input.value = '';
             ui.show();
-            function confirm() {
-                if (done) return;
-                var checked = nameCheck(ui.input.value);
-                if (!checked.ok) { ui.message.textContent = checked.why; return; }
-                done = true;
-                ui.message.textContent = '';
-                store.remember(NAME_KEY, checked.name);
-                ui.hide();
-                onDone(checked.name);
-            }
+            person.ready(function (name, kind, swap) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind === 'login' && swap ? NAME_HINT.swap : '')); go(); });
+            function confirm() { pressed = true; go(); }
             ui.button.addEventListener('click', confirm);
             ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
-            ui.input.addEventListener('input', function () { ui.message.textContent = ''; });
             return confirm;
         }
         // NAME_END
+        // THE PERSON of this page (front/player_name.js): the site's own page for the login is asked once when the page opens, so that a button pressed soon after finds the answer (myName() and open() below)
+        var person = PlayerName.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random });
+        person.ask();
 
         // The level of a computer player in an address: only these three words, in any case (anything else is none; what comes back is the lower case word that was tested, it is never put into a link as it came)
         // FILL_BEGIN (tests/scripts/web_fill_check.js runs this function on a table of values)
@@ -573,8 +561,7 @@
         }
         $('rejoin-go').addEventListener('click', function () {
             if (!rejoinOffered) return;
-            var remembered = nameCheck(recall(NAME_KEY));
-            window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);
+            window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);
         });
         window.addEventListener('storage', function () { showRejoin(); });
 
@@ -604,7 +591,6 @@
         var fresh = {};                               // the colors that changed hands a moment ago (a short glow)
         var freshTimer = 0;
         var drag = null;                              // a color that is being dragged: { from, chip, x0, y0, moved, over, guard }
-        var editing = false;                          // the name of this page's color is being typed (the cards are not drawn again meanwhile)
         var dirty = false;                            // something changed while the cards could not be drawn
         var skipClick = false;
         var bannerKind = '';
@@ -613,7 +599,6 @@
         var lastParams = null;                        // what the client was made from, to make it again (Try again, Use this window)
         var fixSent = '';                             // the correction of the room's teams that was sent for this plan
         var toastTimer = 0;
-        var suggestion = Rules.pickName(Math.random());       // the name for a visitor who has none (the placeholder of the name card says it)
         var lis = {};                                 // the card of each color (by seat)
         var back = null;                              // the match that this tab came back from to its room (the rematch, front/rematch.js readBack): the strip at the top and the words of the colors, until START
         var backBar = Rematch.frontStrip({ doc: document, before: $('screen'), win: window, fetch: window.fetch ? function (u, i) { return window.fetch(u, i); } : null, later: function (fn, ms) { return setTimeout(fn, ms); } });
@@ -631,9 +616,10 @@
             clearTimeout(toastTimer);
             toastTimer = setTimeout(function () { t.hidden = true; }, 2800);
         }
-        function savedName() { var checked = nameCheck(recall(NAME_KEY)); return checked.ok ? checked.name : ''; }
-        // The name this page plays under: the one the room shows for it, else the one this browser remembers, else the suggestion
-        function myName() { return client && client.name ? client.name : savedName() || suggestion; }
+        // The name for the next seat that this page asks for (a room of its own, a room that is joined): the person's own (a guest name, or a site with no login), '' while that is not sure: a login is asked again at
+        // every seat, because a log out in the chat leaves this page where it is, and a question that is on its way is waited for (open() below). A seat that is held keeps its name: client.name, which a reload takes from
+        // the tab's session storage.
+        function myName() { return person.known(); }
         function newCode() {
             var buf = new Uint32Array(6);
             (window.crypto || window.msCrypto).getRandomValues(buf);
@@ -689,7 +675,7 @@
         function setText(node, text) { if (node.textContent !== text) node.textContent = text; }      // (a live region says its text again whenever it is written: only a line that changed is)
         var painted = {};
         function render() {
-            if (editing || (drag && drag.moved)) { dirty = true; return; }
+            if (drag && drag.moved) { dirty = true; return; }
             dirty = false;
             var m = model || blankModel();
             var v = Rules.viewOf(m, context());
@@ -754,14 +740,6 @@
             } else {
                 var who = el('span', 'pname');
                 card.who.forEach(function (w) { who.appendChild(el('span', w.cls, w.text)); });
-                if (card.pencil) {
-                    var pencil = el('button', 'edit', '✎');
-                    pencil.type = 'button';
-                    pencil.setAttribute('data-key', 'edit:' + seat);
-                    pencil.setAttribute('data-edit', String(seat));
-                    pencil.setAttribute('aria-label', 'Change your name');
-                    who.appendChild(pencil);
-                }
                 if (card.remove) {
                     var rm = el('button', 'rm', 'Remove');
                     rm.type = 'button';
@@ -980,8 +958,11 @@
             client = c;
             hook(c);
             render();
-            c.connect();
+            open(c, p.name);
         }
+        // A seat's Hello: at once for a seat that has its name, else when the person's name is there (front/player_name.js: a login is asked just now, a guest's is known) and, whatever happens, a short limit after the question
+        // began. A client that is let go of meanwhile (another room, Leave) does not connect: leave() closes it for good.
+        function open(c, name) { if (name) c.connect(); else person.ready(function (own) { c.name = own; c.connect(); }); }
         function tryAgain() { if (lastParams) { offline = 'none'; connect(lastParams); } }
         function takeBack() {
             var s = loadSession();
@@ -995,22 +976,21 @@
             var ui = {
                 input: freshNode('name-step-input'), button: freshNode('name-step-go'),
                 message: { get textContent() { return $('name-step-msg').textContent; }, set textContent(v) { $('name-step-msg').textContent = v; ui.input.setAttribute('aria-invalid', v ? 'true' : 'false'); } },
+                said: function (text) { $('name-step-hint').textContent = text; },
                 show: function () {
                     $('name-step-title').textContent = o.title;
                     ui.button.textContent = o.button;
-                    ui.input.placeholder = suggestion;
-                    $('name-step-hint').textContent = o.hint || 'The name the other players see. Leave it empty to be called ' + suggestion + '.';
                     $('who-notice').hidden = o.notice === false;
                     $('name-step-own').textContent = o.backText || 'Start a room of my own instead';
                     ui.message.textContent = o.message || '';
                     $('name-step').hidden = false;
-                    try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
+                    try { ui.button.focus(); } catch (e) { /* nothing to focus */ }
                 },
                 hide: function () { $('name-step').hidden = true; $('who-notice').hidden = false; }
             };
             var back = freshNode('name-step-own');
             back.addEventListener('click', function () { ui.hide(); o.back(); });
-            runNameStep(ui, { recall: recall, remember: remember }, function (name) { o.done(name || suggestion); });
+            runNameStep(ui, person, o.done);
         }
         // The same node without the listeners of an earlier use of the card
         function freshNode(id) {
@@ -1074,7 +1054,7 @@
         });
         // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds Home, and My room makes a room again.
         function startAlone() {
-            var address = soloAddress(model, myName(), pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
+            var address = soloAddress(model, client.name, pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
             handing = true; client.leave(); forgetSession();
             window.location.assign(new URL(address, window.location.href).href);
         }
@@ -1204,8 +1184,6 @@
                 } else removePerson(+rm.getAttribute('data-remove-yes'));
                 return;
             }
-            var edit = t.closest('[data-edit]');
-            if (edit) { editName(edit); return; }
             var grip = t.closest('.grip');
             if (grip) { if (e.detail === 0) tapSlot(+grip.getAttribute('data-grip')); return; }               // Enter or Space on the dots (a mouse or finger press is handled on pointerdown)
             var li = t.closest('.slot');
@@ -1217,32 +1195,6 @@
             if (client && name && client.remove(seat, removeGuard)) say(name + ' was removed. ' + COLORS[seat].name + ' is open again.');
             render();
         }
-        // The pencil: the name of this page's color becomes a field; Enter or leaving it asks the room to rename (a name that the rules refuse is explained and not taken)
-        function editName(pencil) {
-            var holder = pencil.parentNode, nm = holder.querySelector('.nm');
-            if (!nm || editing) return;
-            var input = document.createElement('input'), finished = false;
-            input.value = nm.textContent; input.maxLength = 32;
-            input.setAttribute('aria-label', 'Your name');
-            editing = true;
-            nm.replaceWith(input);
-            input.focus(); input.select();
-            function done() {
-                if (finished) return;
-                finished = true;
-                editing = false;
-                var checked = nameCheck(input.value);
-                if (!checked.ok) say(checked.why);
-                else if (checked.name && checked.name !== nm.textContent) {
-                    if (client && client.rename(checked.name)) remember(NAME_KEY, checked.name);
-                }
-                painted = {};
-                render();
-            }
-            input.addEventListener('blur', done);
-            input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') input.blur(); });
-        }
-
         // ---- the invitation ----
         function copyText(text, done) {
             function fallback() {
@@ -1318,7 +1270,7 @@
                 else if (e.reason === R.VersionMismatch) { showBanner('version'); failed('version', Rules.TEXT.version()); }
                 else failed('noroom', Rules.TEXT.noroom());
             });
-            p.connect();
+            open(p, name);
             return p;
         }
         // ---- how it works ----

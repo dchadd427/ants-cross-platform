@@ -2,7 +2,7 @@
 // clock and a scripted game server (FakeSocket: env.arrive() opens the newest socket and plays a Welcome and a Room), or any WebSocket that is handed in (options.WebSocket, with options.realTime: the
 // real clock; tests/scripts/web_lobby_server_check.js runs the page against a real ants_server this way). One page per runLobby(search, stored, options):
 //   search: the address's query; stored: what local storage holds (THROWS: a browser that refuses its storage); options: session (what this tab's session storage holds), noSession, clipboard (false:
-//   none), copyResult, share, fetch, noFetch, ua, random (what Math.random() says: 0.5), hash (the address's #...), innerHeight and innerWidth, historyThrows (a sandboxed frame: the history takes no
+//   none), copyResult, share, fetch, noFetch, me (what the hub's /hub/me answers, below: none, 'guest', a body, 'fail', 'hang' or a function), ua, random (what Math.random() says: 0.5), hash (the address's #...), innerHeight and innerWidth, historyThrows (a sandboxed frame: the history takes no
 //   entry), picker (the map list's script is loaded too), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
 //   its parts), label (the site label that the Dockerfile stamps into the footer, as a labelled build has it: Home then shows the Yard's stand-in; none, the production site: it does not), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
 //   fakeClock (Date.now() of the scripts that the page loads is the fake clock's: env.advance(ms) moves it, so the pace of the client's requests and the waits of web/home/games.js follow the clock that the
@@ -33,7 +33,7 @@ const CLOCK_START = 1700000000000;                      // (what the fake clock 
 const RULES0 = loadFront('lobby_rules.js', NOSCOPE).AntsLobbyRules;
 const NET0 = loadFront('lobby_net.js', NOSCOPE).AntsLobbyNet;
 const CHAT0 = loadFront('lobby_chat.js', NOSCOPE).AntsLobbyChat;
-const SUGGESTION = RULES0.pickName(0.5);               // the page's picked name when Math.random() says 0.5 (the fake page's does)
+const GUEST = 'Guest 550000';                           // the guest name of a fake page: its Math.random() says 0.5, which is the middle of the six digits (front/player_name.js)
 const hex = (bytes) => NET0.hexOf(bytes);
 
 // the messages of a game server, as the C++ server writes them (the check of the client, tests/scripts/web_lobby_client_check.js, runs the client against the same builders)
@@ -300,6 +300,7 @@ function runLobby(search, stored, options) {
         return c;
     };
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
+    win.AntsPlayerName = loadFront('player_name.js', scope).AntsPlayerName;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;
     win.AntsLobbyChat = loadFront('lobby_chat.js', scope).AntsLobbyChat;
     win.AntsRematch = loadFront('rematch.js', scope).AntsRematch;
@@ -316,7 +317,25 @@ function runLobby(search, stored, options) {
     // the site's answers (options.fetch(url, init) -> a promise of a response; the default is no network at all; options.noFetch is a browser that has no fetch)
     env.fetches = [];
     const network = options.fetch || (() => Promise.reject(new Error('the test has no network')));
-    const fetchSpy = options.noFetch ? undefined : (url, init) => { env.fetches.push({ url, init }); return network(url, init); };
+    // The hub's page for "who am I" (front/player_name.js asks it when the page opens, and at a seat while the answer was a login; not recorded in env.fetches, which are the site's other requests: env.meFetches). options.me says
+    // what it answers: nothing (the default: a site with no hub, 404), 'guest' (a hub, nobody logged in), an object (the body: { login: true, you: { name, mod } }), 'fail' (the request fails), 'hang' (no answer ever) or
+    // a function(call) that gives a response or a promise of one (a late answer). The answers of the first kinds are promises that are already kept: they run their callbacks at once, so that a page's seats stay synchronous.
+    env.meFetches = [];
+    const kept = (value) => ({ then(ok) { return ok ? ok(value) : undefined; } });
+    const reply = (status, body) => ({ ok: status >= 200 && status < 300, status, json: () => kept(body) });
+    const meAnswer = (call) => {
+        const me = options.me;
+        if (me === undefined || me === 'none') return kept(reply(404, null));
+        if (me === 'guest') return kept(reply(200, { login: true, you: null }));
+        if (me === 'fail') return { then(ok, no) { if (no) no(new Error('the test has no network')); } };
+        if (me === 'hang') return { then() {} };
+        return typeof me === 'function' ? me(call) : kept(reply(200, me));
+    };
+    const fetchSpy = options.noFetch ? undefined : (url, init) => {
+        if (url === '/hub/me') { const call = { url, init }; env.meFetches.push(call); return meAnswer(call); }
+        env.fetches.push({ url, init });
+        return network(url, init);
+    };
     if (options.picker) globalThis.AntsMapPicker = win.AntsMapPicker;       // (the page names the list's script as a global)
     if (!options.noFetch) win.fetch = fetchSpy;                             // (the map list, and the Games list of web/home/games.js, ask for fetch on window)
     new Function('window', 'document', 'history', 'navigator', 'setInterval', 'setTimeout', 'clearTimeout', 'fetch', 'BroadcastChannel', 'Math', lobbyScript)(win, doc, history, nav, () => 0, scope.setTimeout, scope.clearTimeout, fetchSpy, undefined, fakeMath);
@@ -353,6 +372,6 @@ function runLobby(search, stored, options) {
     return env;
 }
 
-return { lobbyText, lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, loadFile, loadFront, RULES0, NET0, CHAT0, SUGGESTION, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom,
+return { lobbyText, lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, loadFile, loadFront, RULES0, NET0, CHAT0, GUEST, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom,
          CODE, grouped, BLOCK_PARAMS, blockText, noBlockOf, El, THROWS, runLobby };
 };

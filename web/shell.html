@@ -506,8 +506,8 @@
             border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi);
             border-radius: 4px;
             box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow);
+            cursor: default;
         }
-        .name-step input::placeholder { color: #7f9c92; }
         .name-step-msg { margin-top: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
         .name-step-msg:empty { display: none; }
         .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
@@ -1215,11 +1215,11 @@
             <div class="name-step-title banner" id="name-step-title">Join the match</div>
             <label for="name-step-input">Your name</label>
             <div class="name-step-row">
-                <input type="text" id="name-step-input" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="name-step-msg">
+                <input type="text" id="name-step-input" readonly aria-describedby="name-step-msg name-step-hint">
                 <button type="button" id="name-step-go" class="btn">Join</button>
             </div>
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
-            <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
+            <div class="name-step-hint" id="name-step-hint">The name the other players see.</div>
             <div class="name-step-hint name-step-notice">Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public.</div>
             <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
@@ -1373,7 +1373,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1886,12 +1886,11 @@
         // ANTS_PAGE_END
         if (window.AntsRematch) AntsRematch.gamePage({ win: window, doc: document, Net: window.AntsLobbyNet, host: document.getElementById('rematch') });      // the rematch: when the match of a lobby room is over (window.antsMatchOver), the strip under the picture (web/front/rematch.js)
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
-        // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
-        // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
-        // 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason; the same rule as ai::is_reserved_bot_name).
-        // An empty name is fine on the web: it means that none was chosen (the game's own "Player", or a random name where the page has seats to name). nameCheck(text) is { ok: true, name } or
-        // { ok: false, why }, why being a short line for the person. A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
-        var NAME_KEY = 'ants.name';
+        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js: it asks the site's own page for the
+        // login and keeps the guest name in this browser). It is still a name that the game takes, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only, the blanks at
+        // both ends cut off (a tab or a line end that a paste brings is dropped), at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer
+        // player is always shown as one, so a room would rename such a name). nameCheck(text) is { ok: true, name } or { ok: false, why }, why being a short line; front/player_name.js makes a login's name fit with it.
+        // A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
         var NAME_MAX = 32;
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
@@ -1901,28 +1900,19 @@
             if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE NAME STEP of a link that somebody else shared (requested: when joining a link from somebody else, the page asks you first what you want your name to be): the field is filled in with
-        // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
-        // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
-        // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).
-        function runNameStep(ui, store, onDone) {
-            var done = false;
-            var remembered = nameCheck(store.recall(NAME_KEY));
-            ui.input.value = remembered.ok ? remembered.name : '';
+        // THE WORDS under the name on the card: what the name is, and, for a login whose hub says that there is another name (the chat menu's switch between the display name and the username), where it is changed
+        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
+        // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join, and what is recorded): the field shows the name that the person plays under (person.ready, from
+        // front/player_name.js) and cannot be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it. ui is { input, button, message, said(text), show(), hide() }.
+        function runNameStep(ui, person, onDone) {
+            var done = false, pressed = false, chosen = null;
+            function go() { if (done || !pressed || chosen === null) return; done = true; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
+            ui.input.value = '';
             ui.show();
-            function confirm() {
-                if (done) return;
-                var checked = nameCheck(ui.input.value);
-                if (!checked.ok) { ui.message.textContent = checked.why; return; }
-                done = true;
-                ui.message.textContent = '';
-                store.remember(NAME_KEY, checked.name);
-                ui.hide();
-                onDone(checked.name);
-            }
+            person.ready(function (name, kind, swap) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind === 'login' && swap ? NAME_HINT.swap : '')); go(); });
+            function confirm() { pressed = true; go(); }
             ui.button.addEventListener('click', confirm);
             ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
-            ui.input.addEventListener('input', function () { ui.message.textContent = ''; });
             return confirm;
         }
         // NAME_END
@@ -1978,9 +1968,9 @@
         // REJOINKEY_END
 
         // NAMEGATE_BEGIN (tests/scripts/web_name_check.js runs this block)
-        // The game of a link that somebody shared starts only when its player has chosen a name: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after the
-        // name step is done, which puts the name into the game's arguments (--name; none for an empty name: the game's own Player) and opens the gate. The game does not connect before it starts.
-        function makeNameGate(pending, args, ui, store) {
+        // The game of a link that somebody shared starts only when its player has seen the card and pressed Join: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after
+        // the name step is done, which puts the name that the card showed into the game's arguments (--name) and opens the gate. The game does not connect before it starts.
+        function makeNameGate(pending, args, ui, person) {
             var open = !pending;
             var waiting = [];
             var gate = {
@@ -1989,8 +1979,8 @@
                 open: function () { open = true; var run = waiting; waiting = []; run.forEach(function (fn) { fn(); }); }
             };
             if (pending) {
-                runNameStep(ui, store, function (name) {
-                    if (name) args.push('--name', name);
+                runNameStep(ui, person, function (name) {
+                    args.push('--name', name);
                     gate.open();
                 });
             }
@@ -2008,7 +1998,8 @@
         }
         // NAMEGATE_END
 
-        // The name step of a shared link (the gate above): a card in the loading screen, filled in with the name that this browser remembered. The address of a game that was opened with a name by
+        // The name step of a shared link (the gate above): a card in the loading screen that shows the name that the person plays under: their login's, else a guest name (front/player_name.js, which asks the site's own page for it
+        // and only when this card asks). The address of a game that was opened with a name by
         // web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
         var ANTS_NAME_GATE = (function () {
             var asks = ANTS_PAGE.asksForName(window.location.search);
@@ -2024,22 +2015,19 @@
                 input: document.getElementById('name-step-input'),
                 button: document.getElementById('name-step-go'),
                 message: document.getElementById('name-step-msg'),
+                said: function (text) { document.getElementById('name-step-hint').textContent = text; },
                 show: function () {
                     var room = '';
                     try { room = new URLSearchParams(window.location.search).get('room') || ''; } catch (e) { /* no address to read */ }
                     document.getElementById('name-step-title').textContent = 'Join the match ' + ANTS_PAGE.codeText(room);      // (text: the room code passed asksForName's rule; shown in two groups of three)
                     card.hidden = false;
-                    try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
+                    try { ui.button.focus(); } catch (e) { /* nothing to focus */ }
                 },
                 hide: function () {
                     card.hidden = true;
                 }
             };
-            var store = {
-                recall: function (key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } },
-                remember: function (key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
-            };
-            return makeNameGate(asks, ANTS_ARGS, ui, store);
+            return makeNameGate(asks, ANTS_ARGS, ui, asks ? AntsPlayerName.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : null);
         })();
 
         // ?prediction=on in the address turns on the prediction of the player's own orders in a match of the network (the game's --prediction on; net::Prediction: they show at once and the confirmed
