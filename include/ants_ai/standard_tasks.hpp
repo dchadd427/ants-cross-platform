@@ -157,6 +157,9 @@ public:
         uint32_t blacklist_ticks{900};       // an (ant, tile) pair that failed
         uint32_t tile_blacklist_ticks{300};  // a tile that was contested, blocked or gave a failure
         uint32_t field_ttl_ticks{100};       // a walking-cost field is used this long
+        uint32_t gate_search_cells{500000};  // on a gate map the bot looks at the nearest power-ups of a kind (elsewhere at the nearest 3) while the searches for them, each of which can flood every cell of the map, add up to this many cells: every power-up of the
+                                             // shipped maps fits (the most: 80 of one kind on a map of 961 cells), a map of 65,536 cells gets 7 ...
+        uint32_t gate_min_candidates{4};     // ... and never fewer than this many
         uint32_t call_back_tiles{3};         // an ant nearer than this to a power-up that changed kind takes it anyway
     };
     PowerUpTask(TaskId id, Tactics& tactics) : PowerUpTask(id, tactics, Params{}) {}
@@ -172,6 +175,10 @@ public:
     uint32_t failed() const noexcept { return failed_; }
     uint32_t contested() const noexcept { return contested_; }
     uint32_t called_back() const noexcept { return called_back_; }
+    /// The walking-cost searches made (a field that was not cached): a look at a gate map makes at most `gate_candidates(cells)` for each kind that it takes
+    uint64_t searches() const noexcept { return searches_; }
+    /// How many of the nearest power-ups of a kind a gate map's bot looks at on a map of `cells` cells
+    size_t gate_candidates(uint64_t cells) const noexcept { return std::max<size_t>(params_.gate_min_candidates, static_cast<size_t>(params_.gate_search_cells / std::max<uint64_t>(cells, 1))); }
     bool blacklisted(uint32_t ant, sim::TileCoord tile, uint64_t tick) const noexcept;
     bool tile_blacklisted(sim::TileCoord tile, uint64_t tick) const noexcept;
     /// The ants that are on their way and what for
@@ -232,6 +239,7 @@ private:
     uint32_t failed_{0};
     uint32_t contested_{0};
     uint32_t called_back_{0};
+    uint64_t searches_{0};
 };
 
 // ---- rank 4: the thief hole's fire walls ----------------------------------------------------------------------------------------------------------------------

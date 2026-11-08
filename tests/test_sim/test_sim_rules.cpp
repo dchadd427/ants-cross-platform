@@ -1052,8 +1052,10 @@ static void run_ticks(SimulationEngine& sim, int ticks) {
     for (int i = 0; i < ticks; ++i) sim.tick();
 }
 
-// A world in which nobody has anything left (no eggs, no ants): the tests give single teams something back
+// A world in which nobody has anything left (no eggs, no ants): the tests give single teams something back. The cases of this suite are the original's CHECKGO (the rules number 5), so the
+// last-side rule of the rules number 8 is off in this world; it has its own suite (test_last_side, 2.9.10), which plays the same states with the rule on.
 static void empty_world(SimulationEngine& sim) {
+    sim.set_last_side_rule(false);
     sim.init_test_world(60, 60, 1);
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) sim.stats_manager_mut().set_egg_count(p, 0);
 }

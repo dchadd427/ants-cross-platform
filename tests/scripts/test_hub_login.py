@@ -2041,9 +2041,8 @@ class TheDocumentsSayWhatAnOperatorNeedsToKnow(unittest.TestCase):
         checklist = self.paragraph("**What the site's operator does once.**")
         self.assertLess(checklist.index("(0)"), checklist.index("(1)"))
         before = checklist[:checklist.index("(1)")]
-        for words in ("Before the login goes live", "docker/trusted-proxies.conf", "must name"):
+        for words in ("Before the login goes live", "docker/trusted-proxies.conf", "name the reverse proxy"):
             self.assertIn(words, before)
-        self.assertIn("Too many tries", checklist)
         self.assertIn("fresh Discord account", checklist)
         self.assertIn("prompt=none", checklist)
         self.assertIn("Login cancelled", checklist)

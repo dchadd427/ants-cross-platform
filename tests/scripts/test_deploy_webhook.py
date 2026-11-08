@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests of tools/deploy_webhook.sh, the call that the deploy job of .github/workflows/ci.yml makes (run by ./run_tests.sh --fast and by the CI).
 
-A small web server on the loopback address plays the Portainer webhook. The address that the script is given (WEBHOOK_URL) is a SECRET: whatever happens, neither the address
+A small web server on the loopback address plays the deploy webhook. The address that the script is given (WEBHOOK_URL) is a SECRET: whatever happens, neither the address
 nor the host nor the port nor the secret part of the path may appear in anything that the script prints (the log of a public repository's workflow is public). Checked:
 
   - a webhook that answers is called with a POST, once, and the script says the status

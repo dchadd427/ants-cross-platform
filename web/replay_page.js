@@ -394,8 +394,420 @@
         return api;
     }
 
+    // ---- a replay file of the visitor's own (docs/REPLAYS.md "A file of your own") ----
+    // The page reads the file on this device and sends it nowhere. Before the game is loaded for it, the page asks the cheap questions that the game's own reader asks first (src/ants_replay/replay.cpp, decode):
+    // how big it is, the 8 bytes that open every replay, a HEAD chunk right after them that is not longer than a head can be and whose checksum is right. A file that fails them is no replay of ours and
+    // costs nothing (the game, 15 MB, is not even asked for). The rest (the rules that made it, the map, every other chunk) is the game's to judge: it reads the whole file again with its strict reader and
+    // says what it finds in a card.
+    var LOCAL_MAX_BYTES = 2097164;                                       // replay::kMaxFileBytesWithMap: 1 MiB for the match, 1 MiB for the map that it may carry, 12 bytes for the frame of the map's chunk
+    var HEAD_MAX_BYTES = 4096;                                           // replay::kMaxHeadBytes
+    var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];        // 89 "ARPL" 0D 0A 1A: a transfer that changes line ends spoils it, and a file of another kind never begins so
+    var HEAD_AT = 8;                                                     // the HEAD chunk follows the magic at once
+    var crcTable = null;
+
+    // CRC-32 (the one of zlib and PNG) of bytes[from, to), going on from `crc` (0 to start): the same function as replay::crc32, so crc32(crc32(tag), payload) is a chunk's checksum
+    function crc32(bytes, from, to, crc) {
+        if (!crcTable) {
+            crcTable = [];
+            for (var n = 0; n < 256; n++) {
+                var c = n;
+                for (var k = 0; k < 8; k++) c = c & 1 ? (0xedb88320 ^ (c >>> 1)) >>> 0 : c >>> 1;
+                crcTable.push(c);
+            }
+        }
+        var x = ~(crc || 0) >>> 0;
+        for (var i = from; i < to; i++) x = (crcTable[(x ^ bytes[i]) & 0xff] ^ (x >>> 8)) >>> 0;
+        return ~x >>> 0;
+    }
+    function u32(bytes, at) { return (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0; }
+
+    // May a file of this size (a File's own `size`: asked before one byte of it is read) be a replay? 0 is no replay, and nothing past the longest file there can be is one
+    function localSizeOk(size) { return typeof size === 'number' && isFinite(size) && size > 0 && size <= LOCAL_MAX_BYTES; }
+    // The verdict on the bytes of a file: { ok: true }, or { ok: false, kind: 'big' } (longer than a replay can be: asked again here, whatever the caller did) or { ok: false, kind: 'bad', why } (it does not
+    // start as a replay does, or its head is damaged, or it was cut inside its head; `why` is for a test and for nobody else: the card says one thing for all of them). A file that was cut LATER still plays up
+    // to the cut, as in the game, and passes. Nothing in the head's fields is read here.
+    function localCheck(bytes) {
+        function bad(why) { return { ok: false, kind: 'bad', why: why }; }
+        if (!bytes || typeof bytes.length !== 'number') return bad('nothing');
+        if (bytes.length > LOCAL_MAX_BYTES) return { ok: false, kind: 'big' };
+        if (bytes.length < HEAD_AT + 12) return bad('short');
+        for (var i = 0; i < MAGIC.length; i++) if (bytes[i] !== MAGIC[i]) return bad('magic');
+        if (bytes[HEAD_AT] !== 0x48 || bytes[HEAD_AT + 1] !== 0x45 || bytes[HEAD_AT + 2] !== 0x41 || bytes[HEAD_AT + 3] !== 0x44) return bad('first chunk');          // "HEAD"
+        var length = u32(bytes, HEAD_AT + 4), end = HEAD_AT + 8 + length;
+        if (length > HEAD_MAX_BYTES) return bad('head length');
+        if (end + 4 > bytes.length) return bad('head cut');
+        if (crc32(bytes, HEAD_AT + 8, end, crc32(bytes, HEAD_AT, HEAD_AT + 4, 0)) !== u32(bytes, end)) return bad('head checksum');          // (the checksum covers the tag and the payload, not the length between them)
+        return { ok: true };
+    }
+
+    // The name of a file as the page shows it: text, with what could hide or reorder the words around it taken out (controls, the zero-width and the bidirectional marks, the line and paragraph
+    // separators, the byte order mark), the ends trimmed and at most 100 characters; '' when nothing is left. It is only ever put in with textContent.
+    function ownName(name) {
+        var s = '';
+        for (var i = 0; typeof name === 'string' && i < name.length; i++) {
+            var c = name.charCodeAt(i);
+            if (c < 0x20 || (c >= 0x7f && c <= 0x9f) || (c >= 0x200b && c <= 0x200f) || (c >= 0x2028 && c <= 0x202e) || (c >= 0x2060 && c <= 0x206f) || c === 0xfeff) continue;
+            s += name.charAt(i);
+        }
+        s = s.replace(/^\s+|\s+$/g, '');
+        return s.length > 100 ? s.slice(0, 99) + String.fromCharCode(0x2026) : s;
+    }
+    // "14.2 MB" (binary megabytes, as the limit "2 MB" is)
+    function sizeText(bytes) {
+        var n = typeof bytes === 'number' && isFinite(bytes) && bytes > 0 ? bytes : 0;
+        if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB';
+        if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+        return Math.max(1, Math.round(n / 1024)) + ' KB';
+    }
+
+    // ---- the hand-off from the page that took the file to the player ----
+    // The Matches page cannot give a file to another page by an address (2 MB), and sends it nowhere, so it leaves it in the browser's own storage (IndexedDB) under a new random id and goes to
+    // play.html?local=<id>; the player reads it from there. ONE record at most: a second file takes the place of the first. The record stays after it was read (a reload of the player must still
+    // work) and is thrown away when it is older than a day (every page that opens it looks first: purge). A record that is not there (an old link, another tab took the place, the browser's data was
+    // cleared) is a card with a way to choose the file again, never a game that starts on something else. Every call can fail (a browser that keeps no site data has no IndexedDB, or refuses it,
+    // or the file does not fit): a failed call rejects and the page says so.
+    var OWN_DB = 'ants-own-replay', OWN_STORE = 'slot', OWN_KEY = 'file';
+    var OWN_ID_RE = /^[0-9a-f]{32}$/;
+    var OWN_KEEP_MS = 24 * 60 * 60 * 1000;                               // a record is kept about a day
+    var OWN_SKEW_MS = 60 * 1000;                                         // ... and a clock that was put back by up to a minute since it was written does not lose it
+
+    // The record that an address asks for (?local=<id>): the id when it has the shape that the page makes (32 hex digits), else null
+    function ownIdOf(search) {
+        var q;
+        try { q = new URLSearchParams(search); } catch (e) { return null; }
+        var id = q.get('local');
+        return typeof id === 'string' && OWN_ID_RE.test(id) ? id : null;
+    }
+    function ownFresh(rec, now) {
+        var age = now - rec.at;
+        return typeof rec.at === 'number' && age >= -OWN_SKEW_MS && age < OWN_KEEP_MS;
+    }
+    function ownRecord(rec) {
+        return !!rec && typeof rec === 'object' && typeof rec.id === 'string' && OWN_ID_RE.test(rec.id) && typeof rec.name === 'string' && !!rec.bytes && typeof rec.bytes.length === 'number';
+    }
+    // A new id: 32 hex digits from the browser's random source (an id is a name that makes an old link find nothing, not a secret: only pages of this site can read the storage)
+    function ownRandomId(win) {
+        var bytes = new Uint8Array(16), hex = '', crypto = win && (win.crypto || win.msCrypto);
+        if (crypto && typeof crypto.getRandomValues === 'function') crypto.getRandomValues(bytes);
+        else for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+        for (var j = 0; j < 16; j++) hex += (bytes[j] < 16 ? '0' : '') + bytes[j].toString(16);
+        return hex;
+    }
+    // `env`: indexedDB (or nothing), now() (ms since 1970) and random() (a new id). Returns { put(name, bytes) -> id, read(id) -> the record or null, purge() -> true / false } (promises).
+    function ownStore(env) {
+        var opened = null;
+        function open() {
+            if (opened) return opened;
+            opened = new Promise(function (resolve, reject) {
+                var request;
+                try { request = env.indexedDB.open(OWN_DB, 1); } catch (e) { reject(e); return; }
+                request.onupgradeneeded = function () { try { request.result.createObjectStore(OWN_STORE); } catch (e) { /* made already */ } };
+                request.onsuccess = function () { resolve(request.result); };
+                request.onerror = function () { reject(request.error || new Error('the storage did not open')); };
+                request.onblocked = function () { reject(new Error('the storage is blocked')); };
+            });
+            opened.then(null, function () { opened = null; });                       // (a failed opening is tried again by the next call)
+            return opened;
+        }
+        // one transaction: `work(store)` makes the request that is wanted; the answer is its result once the transaction has completed
+        function run(mode, work) {
+            return open().then(function (db) {
+                return new Promise(function (resolve, reject) {
+                    var tx, request;
+                    try { tx = db.transaction(OWN_STORE, mode); request = work(tx.objectStore(OWN_STORE)); } catch (e) { reject(e); return; }
+                    tx.oncomplete = function () { resolve(request ? request.result : undefined); };
+                    tx.onerror = tx.onabort = function () { reject(tx.error || new Error('the storage refused')); };
+                });
+            });
+        }
+        return {
+            put: function (name, bytes) {
+                var rec = { id: env.random(), name: name, at: env.now(), bytes: bytes };
+                return run('readwrite', function (store) { return store.put(rec, OWN_KEY); }).then(function () { return rec.id; });
+            },
+            read: function (id) {
+                if (typeof id !== 'string' || !OWN_ID_RE.test(id)) return Promise.resolve(null);
+                return run('readonly', function (store) { return store.get(OWN_KEY); }).then(function (rec) { return ownRecord(rec) && rec.id === id && ownFresh(rec, env.now()) ? rec : null; });
+            },
+            purge: function () {
+                return run('readwrite', function (store) {
+                    var got = store.get(OWN_KEY);
+                    got.onsuccess = function () { var rec = got.result; if (rec !== undefined && !(ownRecord(rec) && ownFresh(rec, env.now()))) store.delete(OWN_KEY); };
+                    return got;
+                }).then(function () { return true; }, function () { return false; });
+            }
+        };
+    }
+    // The store of a page (its IndexedDB, its clock, its random source). A browser that blocks site data can throw at the mere mention of window.indexedDB: the store is then one that fails every call, and the
+    // page says so when it is used.
+    function ownStoreOf(win) {
+        var idb = null;
+        try { idb = win.indexedDB; } catch (e) { idb = null; }
+        return ownStore({ indexedDB: idb, now: function () { return Date.now(); }, random: function () { return ownRandomId(win); } });
+    }
+
+    // The bytes of a File (or Blob): its own arrayBuffer() where there is one, else a FileReader
+    function ownBytes(env, file) {
+        return new Promise(function (resolve, reject) {
+            if (typeof file.arrayBuffer === 'function') { file.arrayBuffer().then(function (buffer) { resolve(new Uint8Array(buffer)); }, reject); return; }
+            var reader = new env.FileReader();
+            reader.onload = function () { resolve(new Uint8Array(reader.result)); };
+            reader.onerror = function () { reject(reader.error || new Error('the file could not be read')); };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+    // A file that the visitor chose or dropped, taken over: the size is asked from the File before a byte is read, the bytes are checked (localCheck), and only a file that passes is kept for the player.
+    // env: store (ownStore) and FileReader (when a File has no arrayBuffer()). Answers { ok: true, id, name, size } or { ok: false, kind, name, size } with kind 'big' (more than a replay can be),
+    // 'bad' (no replay of ours, empty or unreadable) or 'nostore' (the browser would not keep it for the player); `name` is the file's name as text (ownName). A file that fails leaves the record that
+    // was there as it was.
+    function ownOpen(env, file) {
+        var name = ownName(file && file.name), size = file && typeof file.size === 'number' ? file.size : 0;
+        function no(kind) { return { ok: false, kind: kind, name: name, size: size }; }
+        if (!file) return Promise.resolve(no('bad'));
+        if (!localSizeOk(size)) return Promise.resolve(no(size > LOCAL_MAX_BYTES ? 'big' : 'bad'));
+        return ownBytes(env, file).then(function (bytes) {
+            var verdict = localCheck(bytes);
+            if (!verdict.ok) return no(verdict.kind);
+            return env.store.put(name, bytes).then(function (id) { return { ok: true, id: id, name: name, size: size }; }, function () { return no('nostore'); });
+        }, function () { return no('bad'); });
+    }
+
+    // ---- the strip "Got a replay file?" of the Matches page (web/matches.html) ----
+    // A button that opens the browser's file chooser, a drop of a file anywhere on the page (a computer; a veil shows while a file is dragged over the page, and the strip lights up), and under the strip a
+    // card for a file that is refused. A file that passes goes to the player at once, in this tab. Nothing is sent: the file goes from the chooser or the drop into the browser's storage (ownOpen) and
+    // to the player. The words of the cards are the ones of the approved pictures.
+    var VEIL_MS = 900;                                                   // a drag that has said nothing for this long (a drag that was cancelled can leave without a word) takes the veil down
+    // The title and the sentence of the card for a refused file `r` ({ kind, size } as ownOpen answers)
+    function refusalWords(r) {
+        if (r && r.kind === 'big') return { title: 'That file is too big', text: 'A replay file is at most ' + Math.floor(LOCAL_MAX_BYTES / 1048576) + ' MB. This one is ' + sizeText(r.size) + ', so it is not a replay of a match.' };
+        if (r && r.kind === 'nostore') return { title: 'This browser will not keep the file for the player', text: 'The page hands the file to the player through the storage that the browser keeps for this site, and this browser does not let the site use it (private or blocked site data). Allow site data for this site and choose the file again.' };
+        return { title: 'That file is not a readable replay', text: 'It does not start like an Ants replay, or it is damaged (a download that stopped halfway, or a file that was changed).' };
+    }
+    function hasFiles(ev) {
+        var types = ev && ev.dataTransfer && ev.dataTransfer.types;
+        for (var i = 0; types && i < types.length; i++) if (types[i] === 'Files') return true;
+        return false;
+    }
+    // env: doc, win, store (ownStore), FileReader, go(url) (the page goes there), setTimeout / clearTimeout (the window's). The page's pieces (by id): opener (the strip), open-btn, open-file (the
+    // chooser, an <input type="file"> with no `accept`: a phone's chooser greys out a file of an ending that it does not know), dropveil, open-note.
+    function opener(env) {
+        var doc = env.doc, win = env.win;
+        function el(id) { return doc.getElementById(id); }
+        var strip = el('opener'), button = el('open-btn'), input = el('open-file'), veil = el('dropveil'), note = el('open-note');
+        var busy = false, depth = 0, timer = null;
+        function make(tag, className, text) {
+            var node = doc.createElement(tag);
+            if (className) node.className = className;
+            if (text !== undefined) node.textContent = text;
+            return node;
+        }
+        function hideNote() { note.textContent = ''; note.hidden = true; }
+        function choose() { hideNote(); input.click(); }
+        function showNote(r) {
+            var words = refusalWords(r), card = make('div', 'card bad'), row = make('div', 'row'), again = make('button', 'btn sm'), icon = make('span', 'ic');
+            card.setAttribute('role', 'alert');
+            card.appendChild(make('h3', '', words.title));
+            card.appendChild(make('p', '', words.text));
+            if (r && r.name) card.appendChild(make('p', 'fn', r.name));
+            icon.setAttribute('aria-hidden', 'true');
+            again.type = 'button'; again.appendChild(icon); again.appendChild(doc.createTextNode('Choose another file'));
+            again.addEventListener('click', choose);
+            row.appendChild(again); row.appendChild(make('span', 'lab', 'Nothing was sent anywhere'));
+            card.appendChild(row);
+            note.textContent = '';
+            note.appendChild(card);
+            note.hidden = false;
+        }
+        function veilOn(on) {
+            if (!on) { depth = 0; if (timer !== null) { env.clearTimeout.call(undefined, timer); timer = null; } }
+            veil.hidden = !on;
+            strip.classList.toggle('drag', !!on);
+        }
+        // a file that was chosen or dropped: the first one only; a second one while the first is on its way is ignored
+        function take(file) {
+            if (busy || !file) return;
+            busy = true;
+            hideNote();
+            ownOpen(env, file).then(function (r) {
+                if (r.ok) { env.go('/play.html?local=' + r.id); return; }                  // (the page is leaving: busy stays until it is shown again from the browser's memory, pageshow)
+                busy = false;
+                showNote(r);
+            });
+        }
+        return {
+            take: take,
+            wire: function () {
+                if (typeof win.File !== 'function' || typeof Promise !== 'function') return false;                  // (a browser that cannot read a file has no strip)
+                strip.hidden = false;
+                env.store.purge();
+                button.addEventListener('click', choose);
+                input.addEventListener('change', function () { var file = input.files && input.files[0]; input.value = ''; take(file); });
+                // a drag of a FILE over the page: the drop is the page's (preventDefault: else the browser leaves for the file), a drag of anything else is none of its business
+                doc.addEventListener('dragenter', function (ev) { if (!hasFiles(ev)) return; ev.preventDefault(); depth++; veilOn(true); });
+                doc.addEventListener('dragover', function (ev) {
+                    if (!hasFiles(ev)) return;
+                    ev.preventDefault();
+                    try { ev.dataTransfer.dropEffect = 'copy'; } catch (e) { /* a drag that cannot say */ }
+                    veilOn(true);
+                    if (timer !== null) env.clearTimeout.call(undefined, timer);
+                    timer = env.setTimeout.call(undefined, function () { timer = null; veilOn(false); }, VEIL_MS);
+                });
+                doc.addEventListener('dragleave', function (ev) { if (!hasFiles(ev)) return; depth = Math.max(0, depth - 1); if (!depth) veilOn(false); });
+                doc.addEventListener('drop', function (ev) {
+                    if (!hasFiles(ev)) return;
+                    ev.preventDefault();
+                    veilOn(false);
+                    take(ev.dataTransfer.files && ev.dataTransfer.files[0]);
+                });
+                win.addEventListener('pageshow', function (ev) { if (ev && ev.persisted) { busy = false; veilOn(false); } });
+                return true;
+            }
+        };
+    }
+
+    // ---- the player's own mode (web/shell.html at play.html?local=<id>) ----
+    // The page of a file of the visitor's own is the replay page with these differences: the file is read from the browser's storage (where the Matches page left it) and not fetched; the header says "Your
+    // file" and its name, and has no Copy link, Stats or Download (the link and the stats are those of the server's own recordings, and the file is on this device already); every card that could offer the
+    // file for download offers to open another one; and a card for a record that is not there (choose the file again). env: doc, win, store (ownStore), FileReader, search (the address's query), say(text) (a
+    // note on the page), go(url) (the page goes there), infoOf(bytes) (what the head says: { map, roster, names } or null: web/map_files.js infoOfReplay). Everything that comes from the file (its name, its map,
+    // the players) is put in as text.
+    function mk(doc, tag, className, text) {
+        var node = doc.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+    function ownPage(env) {
+        var doc = env.doc, id = ownIdOf(env.search), name = '', head = null, input = null, busy = false;
+        // Enter and Space press a button here ourselves: the game's key handling (SDL) takes the browser's own press of a focused button away on this page (as for the camera button)
+        function press(node, fn) {
+            node.type = 'button';
+            node.addEventListener('click', fn);
+            node.addEventListener('keydown', function (ev) {
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                ev.preventDefault();
+                if (!ev.repeat) node.click();
+            });
+            node.addEventListener('keyup', function (ev) { if (ev.key === ' ') ev.preventDefault(); });
+            return node;
+        }
+        // the chooser (made when first wanted), then the same way as the Matches page: the file is checked and kept, and the page goes to it; a file that is refused is a note
+        function pick() {
+            if (!input) {
+                input = mk(doc, 'input');
+                input.type = 'file';
+                input.tabIndex = -1;
+                input.setAttribute('aria-hidden', 'true');
+                input.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+                input.addEventListener('change', function () {
+                    var file = input.files && input.files[0];
+                    input.value = '';
+                    if (!file || busy) return;
+                    busy = true;
+                    ownOpen(env, file).then(function (r) {
+                        if (r.ok) { env.go('/play.html?local=' + r.id); return; }
+                        busy = false;
+                        env.say(refusalWords(r).title + '.');
+                    });
+                });
+                doc.body.appendChild(input);
+            }
+            input.click();
+        }
+        return {
+            id: id,
+            pick: pick,
+            // The file: { bytes, name } from the record of the address, or { error: 'again' } when there is none (no id, another id, too old, taken by another file) or { error: 'load', text } when the browser
+            // would not give it (the page then has a card with the reason). Old records are thrown away first; the bytes are checked again, whoever put them there.
+            read: function () {
+                function fail(text) { return { error: 'load', text: text }; }
+                if (!id) return Promise.resolve({ error: 'again' });
+                return env.store.purge().then(function () { return env.store.read(id); }).then(function (rec) {
+                    if (!rec) return { error: 'again' };
+                    var bytes = rec.bytes instanceof Uint8Array ? rec.bytes : Uint8Array.from(rec.bytes);
+                    if (!localCheck(bytes).ok) return fail('the file that this page kept is damaged');
+                    name = ownName(rec.name);
+                    head = env.infoOf ? env.infoOf(bytes) : null;
+                    return { bytes: bytes, name: name };
+                }, function () { return fail('this browser does not let the page read the file back (site data may be blocked)'); });
+            },
+            map: function () { return head && head.map ? head.map : ''; },
+            // Whether the game's reason for failure 4 is that the site has no such map: the folder's own words (player.cpp load_map: "the map X is not in ..."), which the game says only for a file that carries no map
+            // (load_map_or_embedded gives a carried map's own reasons). Anything else (a map that the game refuses: "the rules word is 2", "team green: 3 start marker(s) lie outside the 1 x 1 grid") is the game's reason, said as it is.
+            lacks: function (why) { return typeof why === 'string' && /^the map .+ is not in /.test(why); },
+            // the header of the page: the map, "Your file" and the file's name and length, the players (what the game reported, else what the file's head says: a file that the game never reads has them too)
+            header: function (info, seconds, cut) {
+                var title = doc.getElementById('r-title'), meta = doc.getElementById('r-meta'), small = mk(doc, 'small'), from = info && info.map ? info : head;
+                title.textContent = '';
+                meta.textContent = '';
+                title.appendChild(doc.createTextNode(mapTitle(from && from.map) || 'A match to watch'));
+                if (name || head) {                                                   // (no file, no "Your file": the card that asks for the file again has none to name)
+                    small.appendChild(mk(doc, 'span', 'pill own', 'Your file'));
+                    small.appendChild(doc.createTextNode(' '));
+                    if (name) small.appendChild(mk(doc, 'bdi', '', name));                  // (a unit: a name that reads right to left cannot take the length that follows it into its own order)
+                    if (seconds) small.appendChild(doc.createTextNode((name ? ' · ' : '') + lengthText(seconds)));
+                    if (cut) { small.appendChild(doc.createTextNode(' ')); small.appendChild(mk(doc, 'span', 'pill cut', 'Cut short')); }
+                    title.appendChild(small);
+                }
+                if (from && typeof from.roster === 'number') meta.appendChild(chipsOf(doc, playersOf(from.roster, from.names)));
+            },
+            // the header's buttons: the way back is "Matches" here, and a narrow window's More has a way to open another file
+            chrome: function () {
+                var back = doc.getElementById('all-btn'), list = doc.querySelector('.header-actions.rep-only .more-list');
+                if (back) back.textContent = '‹ Matches';
+                if (list) { var more = press(mk(doc, 'button', 'btn sm', 'Open another file'), pick); more.id = 'own-more'; list.appendChild(more); }
+            },
+            // The card of a kind that a file of your own has its own words for ('older', 'newer', 'nomap': the site has no such map, 'changed': it has another file of that name, 'again': no record, 'cant':
+            // the rest), or null. ctx: made (what made the file, "v0.11.0"), version (this page's), map (the name of the map), why (a reason, as text). { title, body (nodes), buttons (nodes) }
+            card: function (kind, ctx) {
+                var body = [], buttons = [], title = '', page = ctx.version || 'this version', made = ctx.made || 'a version of the game';
+                function para(parts, className) {
+                    var node = mk(doc, 'p', className);
+                    parts.forEach(function (part) { node.appendChild(typeof part === 'string' ? doc.createTextNode(part) : mk(doc, 'b', '', part.b)); });
+                    body.push(node);
+                }
+                function open(label) { buttons.push(press(mk(doc, 'button', 'btn', label), pick)); }
+                function all() { var a = mk(doc, 'a', 'btn', '‹ All matches'); a.href = '/matches.html'; buttons.push(a); }
+                var onMap = ctx.map || ctx.map === 0 ? ['This match was played on the map ', { b: ctx.map }, ', and a replay needs the same map file. '] : ['This match was played on a map, and a replay needs the same map file. '];
+                if (kind === 'older') {
+                    title = 'Recorded by an older version';
+                    para(['This match was played on ', { b: made }, '. The rules of the game have changed since, and a replay only plays on a version with the same rules, so this version (', { b: page }, ') can’t show it.']);
+                    open('Open another file'); all();
+                } else if (kind === 'newer') {
+                    title = 'Recorded by a newer version';
+                    para(['This match was played on ', { b: made }, ', and this page is ', { b: page }, '. Load the page again to get the newer version.']);
+                    var again = mk(doc, 'a', 'btn', 'Load the page again');
+                    again.href = '#';
+                    again.addEventListener('click', function (ev) { ev.preventDefault(); env.win.location.reload(); });
+                    open('Open another file'); buttons.push(again); all();
+                } else if (kind === 'nomap' || kind === 'changed') {
+                    title = 'This site doesn’t have the map';
+                    para(onMap.concat(kind === 'changed' ? 'The site has a map of that name, but it is not the same file (the map was changed after this match was played).'
+                                                         : 'The site no longer has it (a map that was taken off, or one that was only on the recorder’s own computer).'));
+                    open('Open another file'); all();
+                } else if (kind === 'again') {
+                    title = 'Choose the replay file again';
+                    para(['The file you opened is no longer here: this page keeps it for a day, and only one file at a time. Choose it again. It stays on this device: nothing is uploaded.']);
+                    open('Open a replay file'); all();
+                } else if (kind === 'cant') {
+                    title = 'This replay can’t be played here';
+                    para(['The match could not be set up on this page.']);
+                    if (typeof ctx.why === 'string' && ctx.why) para([ctx.why.charAt(0).toUpperCase() + ctx.why.slice(1) + (/[.!?]$/.test(ctx.why) ? '' : '.')], 'rm-why');
+                    open('Open another file'); all();
+                } else return null;
+                return { title: title, body: body, buttons: buttons };
+            }
+        };
+    }
+    function ownPageOf(win, extra) {
+        return ownPage({ doc: win.document, win: win, store: ownStoreOf(win), FileReader: win.FileReader, search: win.location.search, say: extra.say, go: function (url) { win.location.replace(url); }, infoOf: extra.infoOf });
+    }
+
     var api = { barPointer: barPointer, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
-                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf };
+                lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
+                LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
+                OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,
+                refusalWords: refusalWords, opener: opener, ownPage: ownPage, ownPageOf: ownPageOf };
     if (typeof module === 'object' && module && module.exports) module.exports = api;
     else root.AntsReplay = api;
 })(typeof window !== 'undefined' ? window : this);

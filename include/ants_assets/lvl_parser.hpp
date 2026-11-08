@@ -25,6 +25,8 @@ constexpr size_t   LVL_EXTENDED_MAX_DESCRIPTION = 255;       // bytes of a versi
 constexpr uint32_t LVL_KNOWN_FORMAT_FLAGS = 0;               // the `format flags` bits this reader knows (none yet): a file with any other bit set is refused
 constexpr uint16_t LVL_RULES_ORIGINAL = 0;                   // `rules` 0: the original's rules exactly
 constexpr uint16_t LVL_RULES_EXTENDED = 1;                   // `rules` 1: extended rules (the grid carries the word and the state hash mixes it when it is not 0; the simulation and the bots act on it: rules 1 has no wall at row 90)
+constexpr uint16_t LVL_RULES_LONG_ORDERS = 2;                // `rules` 2: extended rules and the wide search of the path finder (orders beyond the original's limits on a big map: docs/MAP_FORMAT.md "Orders on a big map")
+constexpr uint16_t LVL_RULES_MOST = LVL_RULES_LONG_ORDERS;   // the highest `rules` word this reader knows: a higher one is refused (rules_out_of_range)
 constexpr uint16_t LVL_BOMB_TILE_FIRST = 129;                // the original's bomb tiles 129 .. 132: the third word of their layer-2 cell is the owner, not an anchor
 constexpr uint16_t LVL_BOMB_TILE_LAST = 132;
 // Hills and start markers are TILE IDS, never dictionary names (Ants.exe FUN_0100ecac, the table at 0x1002468): the color ids are 0 black, 1 blue, 2 red, 3 green, the hill of a color is
@@ -161,7 +163,7 @@ enum class LevelProblemKind : uint8_t {
     // version 9 (the Extended map), which only a place with LevelLimits::allow_extended reads
     VersionNotSupported,     // a version 9 file or level where Extended maps are not accepted (LevelLimits::allow_extended is false): nothing of it is read
     FormatFlagsUnknown,      // a version 9 `format flags` dword with a bit this reader does not know: a later version of the format, so the file is refused
-    RulesOutOfRange,         // a version 9 `rules` word other than 0 (the original's rules) or 1 (extended rules)
+    RulesOutOfRange,         // a version 9 `rules` word above 2 (0 the original's rules, 1 extended rules, 2 extended rules with the wide search)
     DescriptionTooLong       // a version 9 description of more bytes than the limits allow (at most 255)
 };
 
@@ -258,7 +260,7 @@ class LevelData {
 public:
     uint32_t version{0};         // 8 (a Classic map) or 9 (an Extended map)
     uint32_t format_flags{0};    // version 9 only (0 in a Classic map): the file's `format flags` dword; the reader refuses any bit it does not know, so this is 0 today
-    uint16_t rules{0};           // version 9 only: 0 = the original's rules exactly, 1 = extended rules (the grid carries it; the simulation and the bots act on it: rules 1 has no wall at row 90)
+    uint16_t rules{0};           // version 9 only: 0 = the original's rules exactly, 1 = extended rules (the grid carries it; the simulation and the bots act on it: rules 1 has no wall at row 90), 2 = rules 1 and the wide search of the path finder
     uint32_t game_mode{0};       // 1 in the shipped maps (standard); the original stores it and never reads it again
     uint16_t default_minutes{0}; // Match duration (6, 8, 10, 12)
     std::string description;     // the description: at most 30 bytes in version 8 (the file's field), at most 255 in version 9

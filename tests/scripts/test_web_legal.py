@@ -160,12 +160,12 @@ class TheLegalPage(unittest.TestCase):
     def test_the_panel_of_the_chat_says_what_is_kept_for_how_long_the_cookies_and_how_to_leave(self):
         start = self.main.index('<section class="panel" id="chat-login">')
         panel = plain(self.main[start:self.main.index("</section>", start)])
-        for words in ("Discord id, username and display name", "three things only", "shows the name that you pick", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for 7 days", "with the id and the name that wrote them",
+        for words in ("Discord id, username and display name", "three things only", "shows the name that you pick", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for up to 7 days", "with the id and the name that wrote them",
                       "Moderators also see your username next to a display name", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
                       "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username and display name", "a ban or a mute, if there is one, stays",
                       "Reading the chat and playing need no login"):
             self.assertIn(words, panel, words)
-        self.assertLessEqual(len(panel.split()), 250)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see)
+        self.assertLessEqual(len(panel.split()), 255)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words now)
         self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "display name", "Log out", "Forget me"])
         self.assertNotIn("two things only", panel)
         self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)

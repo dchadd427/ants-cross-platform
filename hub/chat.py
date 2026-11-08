@@ -5,12 +5,12 @@ Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}   {"t":"who"}   {"t":"here",...}      (the last two: hub/presence.py)
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
-  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|muted|banned|long|empty|young|bad|pick"}
+  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick"}
 A name is not unique (Discord display names are not), so nothing that a moderator or a page does with a person goes by the name that is shown: a line and `you` carry `k`, a short key of the
 account that is made new with every start, and a moderator's `/mute` takes the username, the one name that is unique. The username of an author is sent only to moderators (`u` in a line,
 and only where it is not the name shown); the frame of everybody else never holds it.
 An `err` and every message that cannot be read count as a mistake of the socket (peer.strike()): twenty in a minute close it. A line is kept only if the account's own limit, the limit of
-all accounts together and the size of the database allow it (`rate` otherwise); a moderator's command is never refused for those.
+all accounts together and the size of the database allow it (`rate` otherwise; `quota` when the account has said its lines for the hour or for the day); a moderator's command is never refused for those.
 """
 import collections
 import hashlib
@@ -191,8 +191,11 @@ class Chat:
             return self.trouble(peer, e, "rate")
         if not self.global_limit.ready(now) or full:
             return self.mistake(peer, "rate", count=False)         # (the hub is busy or full: a client that tries again is not misbehaving)
-        if self.account_limits.check(who.account_id, line, now):
-            return self.mistake(peer, "rate")                      # (this check is the last: it is the one that counts the line as said)
+        why = self.account_limits.check(who.account_id, line, now)         # (this check is the last: it is the one that counts the line as said)
+        if why == "quota":
+            return self.mistake(peer, "quota", count=False)        # (the hour's or the day's lines are said: not a mistake, and the page tells it calmly)
+        if why:
+            return self.mistake(peer, "rate")
         self.global_limit.take(now)
         try:
             entry = self.store.add_line(who.account_id, who.name, line, mod)

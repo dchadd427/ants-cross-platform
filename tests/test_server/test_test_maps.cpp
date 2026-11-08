@@ -397,7 +397,7 @@ int main() {
     } TEST_END();
 
     TEST_CASE("TM1.7 A map over the size limit of a room (65,536 cells) is refused as a test map with one plain sentence, whatever its kind allows; 256 x 256 is the most; the numbers are OnlineLimits'") {
-        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::allows(65536u) && !OnlineLimits::allows(65537u));          // the limit of a room
+        ASSERT_TRUE(OnlineLimits::kMaxCells == 65536u && OnlineLimits::allows(online_counts(65536u)) && !OnlineLimits::allows(online_counts(65537u)));          // the limit of a room
         Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
         const auto step = [&]() { t.now_ms += 20000; };
         const std::string fits = grown_tiny(256, 256);
@@ -436,27 +436,119 @@ int main() {
         ASSERT_TRUE(std::string(ants::net::kNoticeMapTooBig).size() <= ants::net::kMaxChatChars);
     } TEST_END();
 
-    TEST_CASE("TM1.7b A map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts = 8,000, the four colors added up) is refused as a test map with one plain sentence (422 map_too_many_ants_online) before it is kept; 8,000 is kept and the store counts its ants from the canonical file; a 40,000-ant map is refused the same way") {
+    TEST_CASE("TM1.7b A map that starts more ants than a room plays (OnlineLimits::kMaxStartAnts = 1,000, the four colors added up) is refused as a test map with one plain sentence (422 map_too_many_ants_online) before it is kept; 1,000 is kept and the store counts its ants from the canonical file; a 40,000-ant map is refused the same way") {
         Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
         const auto step = [&]() { t.now_ms += 20000; };
-        const std::string at_cap = tiny_with_ants({2000, 2000, 2000, 2000});
+        const std::string at_cap = tiny_with_ants({250, 250, 250, 250});
         ASSERT_TRUE(!at_cap.empty());
         HttpResponse r = t.upload(at_cap, "At Cap", "203.0.113.30", "classic");
         ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
         ASSERT_EQ(t.store->maps(t.now).size(), size_t{1});
-        ASSERT_EQ(t.store->maps(t.now)[0].start_ants, uint64_t{8000});                           // (counted by the store from the file it keeps, never from the sender)
+        ASSERT_EQ(t.store->maps(t.now)[0].start_ants, uint64_t{1000});                           // (counted by the store from the file it keeps, never from the sender)
         step();
-        for (const std::array<uint32_t, 4>& per_color : {std::array<uint32_t, 4>{2000, 2000, 2000, 2001}, std::array<uint32_t, 4>{2001, 2000, 2000, 2000}, std::array<uint32_t, 4>{1, 8001, 1, 1}, std::array<uint32_t, 4>{10000, 10000, 10000, 10000}}) {
+        for (const std::array<uint32_t, 4>& per_color : {std::array<uint32_t, 4>{250, 250, 250, 251}, std::array<uint32_t, 4>{251, 250, 250, 250}, std::array<uint32_t, 4>{1, 1001, 1, 1}, std::array<uint32_t, 4>{10000, 10000, 10000, 10000}}) {
             const std::string over = tiny_with_ants(per_color);
             ASSERT_TRUE(!over.empty());
             r = t.upload(over, "Over Cap", "203.0.113.31", "classic");
             ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_ants_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
             const std::string said = parse_text(r.body).get("message").str();
-            ASSERT_TRUE(said.find("8,000") != std::string::npos && said.find("against bots") != std::string::npos);
+            ASSERT_TRUE(said.find("1,000") != std::string::npos && said.find("against bots") != std::string::npos);
             step();
         }
         ASSERT_EQ(t.store->maps(t.now).size(), size_t{1});                                       // (nothing of a refused map is kept: only the one at the cap)
         ASSERT_EQ(files_in(t.config.dir), size_t{1});
+    } TEST_END();
+
+    TEST_CASE("TM1.7c A map with more pairs of a plant and a waypoint than a room plays (OnlineLimits::kMaxPlantWaypointPairs = 1,000,000) is refused as a test map with one plain sentence (422 map_too_many_pairs_online) before it is kept; 1,000,000 is kept and the store counts the pairs from the canonical file; a map with 0 plants or 0 waypoints is never refused for its pairs") {
+        Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
+        const auto step = [&]() { t.now_ms += 20000; };
+        // A map with many waypoints or many plants is a few hundred KB (each waypoint record 8 bytes, each block-1 record 6): an Extended map's body may be up to 2 MiB, a Classic one only 512 KB, so the
+        // boundary cases (small numbers) go as Classic maps and the ones with 65,535 of something go as Extended maps (upload_as converts bytes to Extended first, as the sender's own tool would).
+        const auto upload_as = [&](const std::string& bytes, const char* name, const char* address, bool extended) -> HttpResponse {
+            std::string sent = bytes;
+            if (extended) {
+                ants::assets::LevelData level;
+                if (!ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, ants::assets::LevelLimits::for_extended_maps())) return HttpResponse{};
+                const ants::assets::LevelConversion conv = ants::assets::convert_to_extended(level);
+                if (!conv.ok) return HttpResponse{};
+                const ants::assets::LevelWriteResult w = ants::assets::write_level(conv.level, ants::assets::LevelLimits::for_extended_maps());
+                if (!w.ok) return HttpResponse{};
+                sent.assign(w.bytes.begin(), w.bytes.end());
+            }
+            return t.upload(sent, name, address, extended ? "extended" : "classic");
+        };
+        const std::string at_cap = tiny_with_pairs(1000, 1000);
+        ASSERT_TRUE(!at_cap.empty());
+        HttpResponse r = upload_as(at_cap, "At Pairs Cap", "203.0.113.40", false);
+        ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+        ASSERT_EQ(t.store->maps(t.now).size(), size_t{1});
+        step();
+        for (const auto& pw : {std::make_pair(uint32_t{1001}, uint32_t{1000}), std::make_pair(uint32_t{1000}, uint32_t{1001})}) {
+            const std::string over = tiny_with_pairs(pw.first, pw.second);
+            ASSERT_TRUE(!over.empty());
+            r = upload_as(over, "Over Pairs Cap", "203.0.113.41", false);
+            ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_pairs_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+            const std::string said = parse_text(r.body).get("message").str();
+            ASSERT_TRUE(said.find("1,000,000") != std::string::npos && said.find("against bots") != std::string::npos);
+            step();
+        }
+        {   // close to the most that a map file can hold: 65,500 plants on one cell and 65,535 waypoints on another, 4.3 billion pairs
+            const std::string huge = tiny_with_pairs(65500, 65535);
+            ASSERT_TRUE(!huge.empty());
+            r = upload_as(huge, "Huge Pairs", "203.0.113.44", true);
+            ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_pairs_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+            step();
+        }
+        {   // 0 plants, or 0 waypoints, is 0 pairs: never refused for pairs, however many waypoints or plants alone
+            const std::string no_plants = tiny_with_pairs(0, 65535);
+            ASSERT_TRUE(!no_plants.empty());
+            r = upload_as(no_plants, "No Plants", "203.0.113.42", true);
+            ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+            step();
+            const std::string no_waypoints = tiny_with_pairs(65500, 0);          // (65,535 would overflow block 1 with TINY's own 12 markers already in it)
+            ASSERT_TRUE(!no_waypoints.empty());
+            r = upload_as(no_waypoints, "No Waypoints", "203.0.113.43", true);
+            ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+        }
+    } TEST_END();
+
+    TEST_CASE("TM1.7d A map with more food objects (OnlineLimits::kMaxFoodObjects = 250) or more power-ups (OnlineLimits::kMaxPowerUps = 1,000) than a room plays is refused as a test map with one plain sentence (422 map_too_many_food_online, map_too_many_powerups_online) before it is kept; the limit itself is kept, and what is kept carries its counts") {
+        Door t([](TestMapApiConfig& c) { c.checks_per_address_window = 100; c.checks_per_window = 100; });
+        const auto step = [&]() { t.now_ms += 20000; };
+        const auto as_extended = [](const std::string& bytes) {          // (a map with 65,514 food objects is over the 512 KB of a Classic body: it goes as Extended, as the sender's own tool would)
+            ants::assets::LevelData level;
+            if (!ants::assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), level, nullptr, ants::assets::LevelLimits::for_extended_maps())) return std::string();
+            const ants::assets::LevelConversion conv = ants::assets::convert_to_extended(level);
+            if (!conv.ok) return std::string();
+            const ants::assets::LevelWriteResult w = ants::assets::write_level(conv.level, ants::assets::LevelLimits::for_extended_maps());
+            return w.ok ? std::string(w.bytes.begin(), w.bytes.end()) : std::string();
+        };
+        HttpResponse r = t.upload(tiny_with_food(250), "At Food Cap", "203.0.113.50", "classic");
+        ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+        step();
+        r = t.upload(tiny_with_food(251), "Over Food Cap", "203.0.113.51", "classic");
+        ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_food_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+        ASSERT_TRUE(parse_text(r.body).get("message").str().find("250 at most") != std::string::npos && parse_text(r.body).get("message").str().find("against bots") != std::string::npos);
+        step();
+        r = t.upload(as_extended(tiny_with_food(65514)), "Huge Food", "203.0.113.52", "extended");
+        ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_food_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+        step();
+        r = t.upload(tiny_with_power_ups(1000), "At Power Cap", "203.0.113.53", "extended");
+        ASSERT_MSG(r.status == 201, r.body.substr(0, 200));
+        step();
+        r = t.upload(tiny_with_power_ups(1001), "Over Power Cap", "203.0.113.54", "extended");
+        ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_powerups_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+        ASSERT_TRUE(parse_text(r.body).get("message").str().find("1,000 at most") != std::string::npos && parse_text(r.body).get("message").str().find("against bots") != std::string::npos);
+        step();
+        r = t.upload(tiny_with_power_ups(3000), "Huge Power", "203.0.113.55", "extended");
+        ASSERT_MSG(r.status == 422 && parse_text(r.body).get("error").str() == "map_too_many_powerups_online", std::to_string(r.status) + " " + r.body.substr(0, 200));
+        const std::vector<ApprovedMap> kept = t.store->maps(t.now);
+        ASSERT_EQ(kept.size(), size_t{2});                                                              // (only the two at their limits were kept)
+        for (const ApprovedMap& m : kept) {
+            if (m.name.rfind("At Food Cap", 0) == 0) ASSERT_TRUE(m.food_objects == 250u && m.power_ups == 0u);
+            else if (m.name.rfind("At Power Cap", 0) == 0) ASSERT_TRUE(m.power_ups == 1000u && m.food_objects == 14u);
+            else ASSERT_MSG(false, "an unexpected test map: " + m.name);
+        }
     } TEST_END();
 
     TEST_CASE("TM1.8 The store of test maps: at most kMaxTestMaps (the oldest goes), at most kMaxTestPerAddress for one address (its own oldest goes), a map that a room has or that is under two minutes old never goes - the upload is refused instead - so a burst cannot push out the map of a room that has not started") {

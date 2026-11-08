@@ -315,7 +315,7 @@ public:
     // Rules 0 (as ported): "none" is any row of 90 or more, or a negative row (the original's unsigned test `row < 90`), so no ant of a real map of at most 81 rows
     // ever has a tile in that range except the marker itself (a map of rules 0 with 91 or more rows can: that tile reads as "none" too, as in the original, and its hash is
     // the one it always had, see hash_ant in state_hash.cpp).
-    // Rules 1 (a new Extended map of more than 90 rows or more than 256 columns): rows of 90 and more are real, so "none" is the marker (-1, -1) outside every grid, and
+    // Rules 1 and 2 (a new Extended map of more than 90 rows or more than 256 columns): rows of 90 and more are real, so "none" is the marker (-1, -1) outside every grid, and
     // every tile of the grid, (column 120, row 90) included, is a real target (docs/MAP_FORMAT.md, "Rules").
     bool has_order_tile(uint16_t rules) const noexcept {
         if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y) < static_cast<uint16_t>(kClassicNoOrderTileY);

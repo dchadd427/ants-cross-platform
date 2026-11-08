@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the wide search of the path finder (map rules word 2; include/ants_sim/path_planner.hpp, docs/MAP_FORMAT.md 'Orders on a big map', docs/TESTING.md 2.3): the rules of when the search gives up, the flags and the 24-bit cost, the budget formula, the engine's gate on the rules word, and the copies. Run: python3 tools/mutate.py tests/data/rules_two_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Every mutant must be caught by the test named in its expect (a test of test_path_planner.cpp suite 9 or test_movement_golden.cpp suite 8). (The reader and writer of rules 2, the bots' limit and the editor come with the next release and have their own mutants.)",
+ "note": "Mutants of the wide search of the path finder (map rules word 2; include/ants_sim/path_planner.hpp, docs/MAP_FORMAT.md 'Orders on a big map', docs/TESTING.md 2.3): the rules of when the search gives up, the flags and the 24-bit cost, the budget formula, the engine's gate on the rules word, and the copies. Run: python3 tools/mutate.py tests/data/rules_two_mutants.json --keep-going --jobs 1 (do not commit the .report.json). Every mutant must be caught by the test named in its expect (a test of test_path_planner.cpp suite 9 or test_movement_golden.cpp suite 8). (The reader and writer of rules 2, the bots' limit and the Grid's word have their own mutants: tests/data/rules_word2_mutants.json.)",
  "mutants": [
   {
    "id": "taint_not_set_on_a_blocked_step",
@@ -245,19 +245,19 @@
    "expect": "7.2"
   },
   {
-   "id": "budget_divisor_31",
+   "id": "budget_divisor_63",
    "file": "include/ants_sim/path_planner.hpp",
-   "old": "kWideBudgetCellsPerStep = 32u;",
-   "new": "kWideBudgetCellsPerStep = 31u;",
+   "old": "kWideBudgetCellsPerStep = 64u;",
+   "new": "kWideBudgetCellsPerStep = 63u;",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "9.9"
   },
   {
-   "id": "budget_divisor_33",
+   "id": "budget_divisor_65",
    "file": "include/ants_sim/path_planner.hpp",
-   "old": "kWideBudgetCellsPerStep = 32u;",
-   "new": "kWideBudgetCellsPerStep = 33u;",
+   "old": "kWideBudgetCellsPerStep = 64u;",
+   "new": "kWideBudgetCellsPerStep = 65u;",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "9.9"
@@ -342,6 +342,24 @@
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "8.3"
+  },
+  {
+   "id": "budget_of_the_rows_twice",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "PathManager::wide_budget(grid_.height(), grid_.width())",
+   "new": "PathManager::wide_budget(grid_.height(), grid_.height())",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "8.7"
+  },
+  {
+   "id": "budget_of_the_columns_twice",
+   "file": "src/ants_sim/movement_system.cpp",
+   "old": "PathManager::wide_budget(grid_.height(), grid_.width())",
+   "new": "PathManager::wide_budget(grid_.width(), grid_.width())",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden",
+   "expect": "8.7"
   },
   {
    "id": "gate_wall_at_row_90_up_for_rules_two",
@@ -441,69 +459,6 @@
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "9.13"
-  },
-  {
-   "id": "grid_level_keeps_every_rules_word",
-   "file": "src/ants_sim/grid.cpp",
-   "old": "rules_ = rules_word_played(level.rules);",
-   "new": "rules_ = level.rules;",
-   "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip",
-   "expect": "switched off"
-  },
-  {
-   "id": "grid_world_by_hand_keeps_every_rules_word",
-   "file": "include/ants_sim/grid.hpp",
-   "old": "rules_ = rules_word_played(rules);",
-   "new": "rules_ = rules;",
-   "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip",
-   "expect": "switched off"
-  },
-  {
-   "id": "grid_hook_ignored",
-   "file": "include/ants_sim/grid.hpp",
-   "old": "word == 2u && rules_two_allowed_ ? word : uint16_t{1}",
-   "new": "word == 2u ? word : uint16_t{1}",
-   "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip",
-   "expect": "switched off"
-  },
-  {
-   "id": "grid_hook_lets_every_word_through",
-   "file": "include/ants_sim/grid.hpp",
-   "old": "(word == 2u && rules_two_allowed_ ? word : uint16_t{1})",
-   "new": "(rules_two_allowed_ ? word : uint16_t{1})",
-   "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip",
-   "expect": "the hook lets 2 through"
-  },
-  {
-   "id": "grid_word_above_one_plays_as_rules_zero",
-   "file": "include/ants_sim/grid.hpp",
-   "old": ": uint16_t{1}); }",
-   "new": ": uint16_t{0}); }",
-   "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip",
-   "expect": "switched off"
-  },
-  {
-   "id": "grid_word_three_passes",
-   "file": "include/ants_sim/grid.hpp",
-   "old": "word <= 1u ? word",
-   "new": "word <= 3u ? word",
-   "build": "test_map_roundtrip",
-   "test": "./build/tests/test_sim/test_map_roundtrip",
-   "expect": "switched off"
-  },
-  {
-   "id": "engine_test_hook_does_nothing",
-   "file": "src/ants_sim/sim_engine.cpp",
-   "old": "    impl_->grid_.allow_rules_two_for_tests();\n",
-   "new": "",
-   "build": "test_movement_golden",
-   "test": "./build/tests/test_sim/test_movement_golden",
-   "expect": "8.1"
   }
  ]
 }

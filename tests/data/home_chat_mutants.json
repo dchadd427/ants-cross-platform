@@ -2685,15 +2685,22 @@
   {
    "id": "the_hub_codes_miss_bad",
    "file": "web/home/chat.js",
-   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];",
-   "new": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young'];",
+   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];",
+   "new": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota'];",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "the_hub_codes_miss_muted",
    "file": "web/home/chat.js",
-   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];",
-   "new": "var SAID = ['rate', 'login', 'banned', 'long', 'empty', 'young', 'bad'];",
+   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];",
+   "new": "var SAID = ['rate', 'login', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_hub_codes_miss_quota",
+   "file": "web/home/chat.js",
+   "old": "'young', 'quota', 'bad'];",
+   "new": "'young', 'bad'];",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2930,8 +2937,8 @@
   {
    "id": "a_refused_switch_is_a_refused_line",
    "file": "web/home/chat.js",
-   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];",
-   "new": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad', 'pick'];",
+   "old": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];",
+   "new": "var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad', 'pick'];",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

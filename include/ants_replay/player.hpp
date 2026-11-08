@@ -30,9 +30,10 @@ bool load_map(const Header& head, const std::vector<std::string>& dirs, assets::
 bool load_map_file(const Header& head, const std::string& path, assets::LevelData& level, std::string& error);
 
 /// The map of `replay`: the file in the folders (load_map) when one of that name is there and is the head's, else the map that the file carries (its tmap chunk, replay.hpp), loaded the same way (the head's hash,
-/// LevelLimits::for_play_extended). A folder is never written. With no embedded map this is load_map and says what it says; with one and no usable file in the folders, `error` is the embedded map's.
+/// LevelLimits::for_play_extended). A folder is never written. With no embedded map this is load_map and says what it says; with one and no usable file in the folders, `error` is the embedded map's. A file that carries a
+/// map whose hash is the head's is held to kMaxEmbeddedStartAnts and kMaxEmbeddedPlantWaypointPairs whichever copy is read (the folder's file too: the web page writes the map there); a library map that the file does not carry is not counted.
 bool load_map_or_embedded(const Replay& replay, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error);
-/// The same for a replay with a map of its own only: the bytes of the replay's tmap chunk, which must be the file that the head's hash names, loaded as any map is.
+/// The same for a replay with a map of its own only: the bytes of the replay's tmap chunk, which must be the file that the head's hash names, loaded as any map is, and starting at most kMaxEmbeddedStartAnts ants and having at most kMaxEmbeddedPlantWaypointPairs pairs of a plant and a waypoint.
 bool load_embedded_map(const Replay& replay, assets::LevelData& level, std::string& error);
 
 /// Why this build does not play `head`'s match (its rules number and the game that made it): "recorded by v0.10.0 with simulation rules 0 ...". Only for a head that plays_here() says no to.
@@ -67,7 +68,7 @@ struct Outcome {
     std::array<int32_t, sim::MAX_PLAYERS> scores{};     // the score box of each seat when the replay ended (own score plus the ally's; 0 for a seat that does not play)
     /// What the results screen is built from, as the engine stood when the replay ended: the engine's own MatchResult (the value its world state carries, the one that the match's own screen gets), so each seat's
     /// counted numbers (`stats[seat]`: score, friendly_lost, enemy_killed, new_hatched, bombs_planted, bombs_defused, fires_lit), the alliances, the quitter, `present_mask` (the seats that play and did not drop)
-    /// and, in game mode 187, `standing` (the side left) and `ants_left`. Only meaningful when `ran`. food_deposited, food_stolen, food_lost and bridges_built are in the state hash and never counted, so they are 0 here.
+    /// and `standing` (game mode 187: the side left), `tie_standing` (the original's game under the rules number 8: the side left, which wins a tie for the top score) and, in 187 only, `ants_left`. Only meaningful when `ran`. food_deposited, food_stolen, food_lost and bridges_built are in the state hash and never counted, so they are 0 here.
     sim::MatchResult result;
     uint8_t dropped_mask{0};        // bit s: seat s left the match (quit, dropped, 60 s without a sign of life) before it ended; such a seat has no row in `result.rows()`
 };

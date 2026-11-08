@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "ants_net/netgame.hpp"
+#include "ants_sim/movement_tables.hpp"
 #include "ants_sim/start_teams.hpp"
 
 namespace ants::replay {
@@ -24,6 +25,39 @@ std::string hex64(uint64_t v) {
     std::string out(16, '0');
     for (int i = 15; i >= 0; --i, v >>= 4) out[static_cast<size_t>(i)] = digits[v & 0xFu];
     return out;
+}
+
+/// 65535 as "65,535" (the page says its numbers the same way)
+std::string with_commas(uint64_t n) {
+    std::string digits = std::to_string(n), out;
+    for (size_t i = 0; i < digits.size(); ++i) {
+        if (i != 0 && (digits.size() - i) % 3 == 0) out += ',';
+        out += digits[i];
+    }
+    return out;
+}
+
+/// Whether a map that a file carries is one that a replay is set up with: not more starting ants than kMaxEmbeddedStartAnts, and not more pairs of a plant and a waypoint than kMaxEmbeddedPlantWaypointPairs (both are
+/// the work of setting a match up: the second is SimulationEngine::init's lookup of the waypoint of every plant). False and one sentence in `error` when it is not. A stranger's file: the work of such a map holds the
+/// one thread for seconds natively and minutes in a browser, so it is refused before any match is made of it. The counts are those of the loader and of the engine: the start markers are the records of block 1 of a
+/// team of the four, the plants those whose tile has the plant flag, the waypoints the records of block 4 that the loader kept.
+bool fits_a_replay(const assets::LevelData& level, std::string& error) {
+    uint64_t ants = 0, plants = 0;
+    for (const assets::AnthillSpawn& spawn : level.anthill_spawns()) {
+        if (spawn.team_id < 4) ++ants;
+        if (sim::movement::is_dropper_plant_tile(spawn.tile_id)) ++plants;
+    }
+    if (ants > kMaxEmbeddedStartAnts) {
+        error = "the map in the replay starts " + with_commas(ants) + " ants (the start markers of the four colors), more than the " + with_commas(kMaxEmbeddedStartAnts) + " that a replay is set up with";
+        return false;
+    }
+    const uint64_t waypoints = level.waypoints.size();
+    if (plants * waypoints > kMaxEmbeddedPlantWaypointPairs) {
+        error = "the map in the replay has " + with_commas(plants) + " plants and " + with_commas(waypoints) + " waypoints, so setting it up looks at " + with_commas(plants * waypoints) + " pairs of them, more than the " +
+                with_commas(kMaxEmbeddedPlantWaypointPairs) + " that a replay is set up with";
+        return false;
+    }
+    return true;
 }
 
 /// The file of `maps_dir` called `name`: the name as written, else a file of the same name in another case ("" when there is none)
@@ -104,11 +138,16 @@ bool load_embedded_map(const Replay& replay, assets::LevelData& level, std::stri
         error = "the map in the replay cannot be loaded" + (verdict.first_fatal() ? ": " + verdict.reason() : std::string());
         return false;
     }
-    return true;
+    return fits_a_replay(level, error);
 }
 
 bool load_map_or_embedded(const Replay& replay, const std::vector<std::string>& dirs, assets::LevelData& level, std::string& error) {
-    if (load_map(replay.head, dirs, level, error)) return true;
+    if (load_map(replay.head, dirs, level, error)) {
+        // A file that carries its map is held to the same limits whichever copy is read: the page writes the map that a file carries into the maps folder under its name, so this is the way in for such a file on the web
+        const std::vector<uint8_t>& carried = replay.embedded_map;
+        if (!carried.empty() && carried.size() <= kMaxEmbeddedMapBytes && net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);
+        return true;
+    }
     if (replay.embedded_map.empty()) return false;                // (the folder's own words)
     return load_embedded_map(replay, level, error);
 }
@@ -126,6 +165,10 @@ std::string rules_refusal(const Header& head) {
 void begin_match(sim::SimulationEngine& engine, const Replay& replay, const assets::LevelData& level, bool fog) {
     engine.set_fog_of_war_enabled(fog);
     engine.set_game_mode(static_cast<sim::GameMode>(replay.head.mode));       // (before init, like every machine of the match did; plays_here and the head's checks have made sure that the mode is one this build knows)
+    engine.set_hill_open_187(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) == kSimRulesMode187Heal);       // (a 187 match recorded before the closed hill plays with the hill that works)
+    engine.set_end_fix_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));       // (a 187 match recorded before the end-rule fixes, 6, 7 or 10, counts the seats of the roster and any egg)
+    engine.set_last_side_rule(!(replay.head.mode == 0 && sim_rules_of(replay.head) == kSimRulesBeforeLastSide));       // (a match of the original's game recorded before the last-side rule ends by the original's CHECKGO alone)
+    engine.set_fire_wall_as_original(fire_wall_as_original_rules(sim_rules_of(replay.head)));       // (a match recorded before the loader of the original reads a named fire wall with the remake's obstacle overlay, in either mode)
     engine.init(level, replay.head.seed, replay.head.roster);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         engine.set_player_name(seat, ((replay.head.roster >> seat) & 1u) != 0 ? replay.head.names[seat] : std::string());

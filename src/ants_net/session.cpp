@@ -186,9 +186,9 @@ void HostSession::broadcast(const std::vector<uint8_t>& msg, uint8_t except) {
     }
 }
 
-void HostSession::announce_drop(uint8_t player) {
-    sim::Command gone;                               // FUN_0100d03b on every machine, in the same turn
-    gone.type = sim::CommandType::Drop;
+void HostSession::announce_drop(uint8_t player, bool as_quit) {
+    sim::Command gone;                               // FUN_0100d03b on every machine, in the same turn (as_quit: FUN_0101453f, the quit, which ranks the seat last and ends a match of two sides)
+    gone.type = as_quit ? sim::CommandType::Quit : sim::CommandType::Drop;
     gone.issuer = player;
     sequencer_.submit_system(std::move(gone));
     if (on_left_) on_left_(player);
@@ -202,14 +202,14 @@ void HostSession::end_lag_notice(uint8_t player) {
 }
 
 // The seat is gone for good: it left (Leave), was thrown out (violations, the lag policy) or its connection was lost in a room that cannot hold it. Its Drop travels in the turn stream.
-void HostSession::drop(uint8_t player) {
+void HostSession::drop(uint8_t player, bool as_quit) {
     if (player >= sim::MAX_PLAYERS || !clients_[player].present) return;
     end_lag_notice(player);
     attendance_.dropped(player, last_ms_);           // (Dropped is final: the key still tells its owner so)
     clients_[player].present = false;
     if (clients_[player].conn != nullptr && clients_[player].conn->is_open()) clients_[player].conn->close();
     sequencer_.set_active(player, false);
-    announce_drop(player);
+    announce_drop(player, as_quit);
     if (paused()) presence_dirty_ = true;            // the voters are fewer
 }
 
@@ -419,15 +419,8 @@ void HostSession::run_local(uint32_t dt_ms) {
         }
         if (!e.has_hash) continue;
         if (seatless() && on_referee_hash_) on_referee_hash_(e.turn, e.hash);         // (the restart record's checkpoint)
-        if (seatless()) {                                 // the referee: its own engine's hash is what every client is compared with
-            for (const DesyncMsg& d : sequencer_.on_referee_hash(e.turn, e.hash)) {
-                desyncs_.push_back(d);
-                broadcast(encode(d));
-                frozen_ = true;
-            }
-        } else {
-            report_hash(cfg_.host_player, e.turn, e.hash);
-        }
+        if (seatless()) sequencer_.on_referee_hash(e.turn, e.hash);                   // the referee: its own engine's hash is what every client is compared with (judge_hashes)
+        else report_hash(cfg_.host_player, e.turn, e.hash);
     }
 }
 
@@ -487,6 +480,7 @@ void HostSession::update(uint32_t now_ms) {
     }
     if (seatless() && started_ && !frozen_) police_laggards(now_ms);
     run_local(dt);
+    if (seatless()) judge_hashes();
 }
 
 // ---- reconnect: Presence, the door for a returning player, the stream of the log ---------------------------------------------------------------------------
