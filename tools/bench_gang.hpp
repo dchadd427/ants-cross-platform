@@ -86,7 +86,7 @@ public:
     static constexpr TaskId kRaid = 33;
 
 private:
-    static constexpr uint64_t kGangFromTick = 600;       // the opening (the power-up trips, the first loads of food) is the economy's
+    static constexpr uint64_t kGangFromTick = 300;       // the first orders (the harvest, the power-up trips) have left: the ants that are still free are the gang's
     static constexpr uint64_t kOpeningTicks = 1200;      // after this the Combat Ant and the Fire Ant are wanted whatever the Thief power-ups do
     static constexpr int32_t kTargetReach = 8;           // an enemy within this many tiles of the gang's centre is a target ...
     static constexpr int32_t kTargetLeash = 10;          // ... and stays one until it is farther than this
