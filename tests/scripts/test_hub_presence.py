@@ -55,6 +55,11 @@ def person(n, name=None, young=False):
 MOD = session.Identity("9001", "moddy", False)
 
 
+def shown(n, name="Maple Leaf"):
+    """An account that is shown by its display name: its username is its own, and the name that the list shows is not unique."""
+    return session.Identity(str(1100 + n), name, False, None, 0, "user.%d" % n, "display", "user.%d" % n)
+
+
 class FakePeer:
     def __init__(self, identity=None):
         self.identity = identity
@@ -459,7 +464,57 @@ class TheList(WorldTest):
             self.w.here(peer, "wait", pub=True, map="M" * 60 + ".lvl", n=3, of=4, code="c" * 32)
         watcher = self.w.watch(self.w.join(None))
         self.assertEqual(len(watcher.update().rows), 200)
-        self.assertTrue(40000 < max(watcher.peer.sizes) < 42000, "200 rows with the longest name, map and code that a row can have are about 41 KB: %d" % max(watcher.peer.sizes))
+        self.assertTrue(40000 < max(watcher.peer.sizes) < 42000, "200 rows with the longest username, map and code that a row can have are about 41 KB: %d" % max(watcher.peer.sizes))
+
+    def test_the_biggest_frame_of_names_that_are_shown_is_the_size_that_the_docs_say(self):
+        for n in range(1, 201):
+            peer = self.w.join(shown(n, "\U00020000" * 32))                                           # (a shown name is up to 32 code points of up to four bytes each, and names are not unique)
+            self.w.here(peer, "wait", pub=True, map="M" * 60 + ".lvl", n=3, of=4, code="c" * 32)
+        watcher = self.w.watch(self.w.join(None))
+        self.assertEqual(len(watcher.update().rows), 200)
+        self.assertTrue(59000 < max(watcher.peer.sizes) < 61500, "200 rows with the longest shown name, map and code that a row can have are about 60 KB: %d" % max(watcher.peer.sizes))
+        self.assertLess(max(watcher.peer.sizes), self.w.limits.write_buffer_max)
+
+    def test_two_accounts_that_show_the_same_name_are_two_rows_and_each_is_told_its_own_by_its_number(self):
+        a, b = self.w.join(shown(1)), self.w.join(shown(2))
+        watcher = self.w.watch(self.w.join(None)).update()
+        mine = (self.w.chat.welcome(a)["me"], self.w.chat.welcome(b)["me"])
+        self.assertEqual((sorted(self.names(watcher)), len(set(mine)), set(watcher.rows)), (["Maple Leaf", "Maple Leaf"], 2, set(mine)))
+        self.assertEqual(self.w.chat.welcome(a)["you"]["name"], self.w.chat.welcome(b)["you"]["name"])
+        self.assertNotEqual(self.w.chat.welcome(a)["me"], self.w.chat.welcome(b)["me"], "a name is not how the page knows its own row")
+        self.w.here(a, "wait")
+        self.w.advance(2.5)
+        self.assertEqual({r["i"]: r["at"] for r in watcher.update().rows.values()}, {mine[0]: "wait", mine[1]: "look"})
+
+    def test_the_rows_of_people_who_show_the_same_name_are_in_the_order_of_their_accounts_and_every_send_is_the_same_whoever_asks(self):
+        for n in (3, 1, 2):
+            self.w.join(shown(n))
+        first = self.w.watch(self.w.join(None))
+        second = self.w.watch(self.w.join(MOD))
+        self.assertEqual([r["i"] for r in first.update().peer.frames()[0]["rows"]][:3], sorted(r["i"] for r in first.rows.values() if r["name"] == "Maple Leaf"))
+        self.assertEqual(first.peer.frames()[0]["rows"], [r for r in second.update().peer.frames()[0]["rows"]])
+
+    def test_a_row_holds_the_name_that_is_shown_and_never_a_username_not_even_in_the_list_that_a_moderator_asks_for(self):
+        self.w.join(shown(1))
+        self.w.join(shown(2, "bbb Two"))
+        for asker in (self.w.join(None), self.w.join(person(9, "carol")), self.w.join(MOD)):
+            page = self.w.watch(asker).update()
+            wire = json.dumps(asker.frames())
+            self.assertNotIn("user.1", wire)
+            self.assertNotIn("user.2", wire)
+            self.assertEqual(sorted(self.names(page))[:2], ["Maple Leaf", "bbb Two"] if asker.identity is None else sorted(self.names(page))[:2])
+
+    def test_a_switch_of_the_name_is_a_new_name_in_the_row_when_the_sockets_come_back_and_the_row_keeps_its_number(self):
+        a = self.w.join(shown(1))
+        watcher = self.w.watch(self.w.join(None))
+        before = dict(watcher.update().rows)
+        self.assertEqual([r["name"] for r in before.values()], ["Maple Leaf"])
+        self.w.leave(a)
+        self.w.join(session.Identity("1101", "user.1", False, None, 0, "user.1", "username", "Maple Leaf"))          # (the page connects again after a switch: the welcome of the new socket)
+        self.w.advance(2.5)
+        after = watcher.update().rows
+        self.assertEqual([r["name"] for r in after.values()], ["user.1"])
+        self.assertEqual(list(after), list(before), "the same person: the same number")
 
     def test_the_number_of_a_row_stays_while_the_person_is_here_and_is_new_when_they_come_back(self):
         a = self.w.join(person(1, "alice"))

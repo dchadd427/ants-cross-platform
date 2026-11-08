@@ -3,20 +3,29 @@
 
 Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}   {"t":"who"}   {"t":"here",...}      (the last two: hub/presence.py)
-  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|muted|banned|long|empty|young|bad"}
+        {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
+                                                     the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
+  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|muted|banned|long|empty|young|bad|pick"}
+A name is not unique (Discord display names are not), so nothing that a moderator or a page does with a person goes by the name that is shown: a line and `you` carry `k`, a short key of the
+account that is made new with every start, and a moderator's `/mute` takes the username, the one name that is unique. The username of an author is sent only to moderators (`u` in a line,
+and only where it is not the name shown); the frame of everybody else never holds it.
 An `err` and every message that cannot be read count as a mistake of the socket (peer.strike()): twenty in a minute close it. A line is kept only if the account's own limit, the limit of
 all accounts together and the size of the database allow it (`rate` otherwise); a moderator's command is never refused for those.
 """
 import collections
+import hashlib
+import hmac
 import json
+import os
 import re
 
 from . import PROTOCOL, presence as presencemod, text as textrules
-from .limits import AccountLimits, TokenBucket
-from .store import StoreError
+from .limits import AccountLimits, RateByAccount, TokenBucket
+from .store import PICKS, StoreError
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
+PICK_REFUSED = "pick"                       # the code of the `err` for a `pick` that is not done (a page that reads the codes of its lines must not take it for one)
 
 
 def dumps(obj):
@@ -32,9 +41,12 @@ class Chat:
         self.login = login
         self.account_limits = AccountLimits(limits)
         self.global_limit = TokenBucket(limits.global_burst, limits.global_refill_seconds, clock())      # all accounts together: what the database is asked to keep
+        self.pick_limits = RateByAccount(limits.pick_burst, limits.pick_refill_seconds)               # an account's switches between its two names, across all its tabs
+        self.salt = os.urandom(16)                  # the key of an account (key_of) is made with this: it changes with every start, so it names nobody for longer than the hub runs
         self.peers = presencemod.Peers()
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
+        self.end_logins = None                      # end_logins(account=...): the hub's call that closes every socket of an account (a logout's and a forget's too); the hub sets it
         self.ring = collections.deque(maxlen=limits.history_lines)
         for line in store.recent_lines(limits.history_lines):
             self.ring.append(line)
@@ -49,17 +61,54 @@ class Chat:
             self.ring.remove(line)
         return list(self.ring)
 
+    def key_of(self, account):
+        """A short key of an account for the pages of this run of the hub (a keyed hash: it is made new with every start): a line is its author's by this key and not by its name, which
+        is not unique. It says nothing of the account to anybody who does not have the id."""
+        return hmac.new(self.salt, account.encode("utf-8"), hashlib.sha256).hexdigest()[:12]
+
+    def you_of(self, who):
+        """What a page is told of its own account (the welcome's `you`, and /hub/me): the name that is shown, `mod`, the key of its lines `k`; and, only where the account has a display name as
+        well and so can choose, `pick` (the name that is shown: "display" or "username") and `other` (the name that it is not shown by). Nothing else."""
+        you = {"name": who.name, "mod": who.account_id in self.mods, "k": self.key_of(who.account_id)}
+        if who.other:
+            you["pick"], you["other"] = who.pick, who.other
+        return you
+
     def welcome(self, peer):
         you = peer.identity
-        welcome = {"t": "welcome", "v": PROTOCOL, "you": {"name": you.name, "mod": you.account_id in self.mods} if you else None, "login": bool(self.login), "presence": True,
-                   "online": self.presence.people(), "history": [self.line_of(l) for l in self.recent()]}
+        lines = self.recent()
+        names = self.usernames([l.account for l in lines]) if you is not None and you.account_id in self.mods else None        # (only a moderator's welcome has the usernames)
+        welcome = {"t": "welcome", "v": PROTOCOL, "you": self.you_of(you) if you else None, "login": bool(self.login), "presence": True,
+                   "online": self.presence.people(), "history": [self.line_of(l, names) for l in lines]}
         if you:
             welcome["me"] = self.presence.row_id(you.account_id)       # (the number of the account's own row in the list: the page leaves that row out of its groups)
         return welcome
 
-    @staticmethod
-    def line_of(line):
-        return {"id": line.id, "at": line.at, "who": line.name, "text": line.text, "mod": bool(line.mod)}
+    def usernames(self, accounts):
+        """account -> username for those of `accounts` whose username is known, for a moderator's eyes: a socket of the account that is open now says it, else the account's profile (an account
+        with no profile, a purged one, has none: its lines go without)."""
+        here = {p.identity.account_id: p.identity.username for p in self.peers if p.identity is not None and not getattr(p, "closed", False)}
+        found = {}
+        for account in set(accounts):
+            name = here.get(account)
+            if name is None:
+                try:
+                    profile = self.store.profile(account)
+                except StoreError:
+                    profile = None
+                name = profile.username if profile else None
+            if name:
+                found[account] = name
+        return found
+
+    def line_of(self, line, names=None):
+        """A line as it goes to a page: `k` is its author's key (the page tells its own lines by it, since names are not unique). `names` (account -> username) is given only for a moderator's
+        copy: it adds `u`, the author's username, where that is not the name that the line shows."""
+        out = {"id": line.id, "at": line.at, "who": line.name, "text": line.text, "mod": bool(line.mod), "k": self.key_of(line.account)}
+        username = names.get(line.account) if names else None
+        if username and username != line.name:
+            out["u"] = username
+        return out
 
     def broadcast(self, obj):
         data = dumps(obj)
@@ -88,6 +137,8 @@ class Chat:
             self.presence.on_who(peer)
         elif kind == "here":
             self.presence.on_here(peer, msg)
+        elif kind == "pick":
+            self.on_pick(peer, msg)
         else:
             self.mistake(peer, "bad")
 
@@ -150,10 +201,38 @@ class Chat:
             self.global_limit.give_back()
             return self.trouble(peer, e, "rate")
         self.ring.append(entry)
-        self.broadcast(dict({"t": "line"}, **self.line_of(entry)))
+        self.send_line(entry, who.username)
+
+    def send_line(self, entry, username):
+        """A new line to everybody; a moderator gets it with its author's username (`u`) where that is not the name shown, and nobody else ever gets a username."""
+        frame = dict({"t": "line"}, **self.line_of(entry))
+        everybody = dumps(frame)
+        moderators = dumps(dict(frame, u=username)) if username and username != entry.name else everybody
+        for peer in list(self.peers):
+            who = peer.identity
+            peer.send_text(moderators if who is not None and who.account_id in self.mods else everybody)
+
+    def on_pick(self, peer, msg):
+        """Which of its two names the account is shown by. Refused (`pick`, a mistake of the socket) for a guest's, for anything but one of the two words, past the account's limit, and for an
+        account that has no display name. Done: stored, and every socket of the account is closed with the call that a logout uses, so that the pages connect again and read the new name in the
+        welcome (a socket's name is fixed at its handshake, as its identity is); lines that were written keep the name they were written with."""
+        who = peer.identity
+        if who is None:
+            return self.mistake(peer, "login")
+        pick = msg.get("pick")
+        if pick not in PICKS or not self.pick_limits.take(who.account_id, self.clock()):
+            return self.mistake(peer, PICK_REFUSED)
+        try:
+            done = self.store.set_pick(who.account_id, pick)
+        except StoreError as e:
+            return self.trouble(peer, e, PICK_REFUSED)
+        if not done:
+            return self.mistake(peer, PICK_REFUSED)
+        if self.end_logins:
+            self.end_logins(account=who.account_id)
 
     def command(self, peer, line):
-        """A moderator's /mute name minutes, /del id."""
+        """A moderator's /mute username minutes, /del id."""
         words = line.split(" ")
         me = peer.identity
         if words[0] == "/mute" and len(words) == 3 and NUMBER.match(words[2]) and 1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES:
@@ -168,13 +247,15 @@ class Chat:
         else:
             self.mistake(peer, "bad")
 
-    def account_named(self, name):
-        """The account that a moderator means by a name: the one that is here with it; of two that are here with it (a name is unique among Discord's accounts, but a test login or a rename can
-        make two) none, because it is not known which; when nobody is here with it, the account that last spoke under it."""
-        here = {p.identity.account_id for p in self.peers if p.identity is not None and p.identity.name == name}
+    def account_named(self, username):
+        """The account that a moderator means by a USERNAME (never by the name that is shown: those are not unique, and two accounts can show the same one): the one that is here with it; of two
+        that are here with it (a rename can make two) none, because it is not known which; when nobody is here with it, the one account whose profile has it, and none when several do."""
+        if not textrules.valid_name(username):
+            return None
+        here = {p.identity.account_id for p in self.peers if p.identity is not None and p.identity.username == username}
         if len(here) > 1:
             return None
-        return next(iter(here)) if here else self.store.account_of_name(name)
+        return next(iter(here)) if here else self.store.account_of_username(username)
 
     def drop_lines(self, ids):
         """Take lines off every screen at once (the lines of an account that forgot itself, the lines that were deleted from the command line). The number of frames is bounded, whatever the number

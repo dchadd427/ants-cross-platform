@@ -357,8 +357,8 @@
   {
    "id": "young_accounts_write",
    "file": "hub/login.py",
-   "old": "return session.Identity(row[0], row[1], self.young(row[0]), key, row[2])",
-   "new": "return session.Identity(row[0], row[1], False, key, row[2])",
+   "old": "young = self.young(account)\n",
+   "new": "young = False\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheSocket tests.scripts.test_hub_login.TheAgeSetting"
   },
   {
@@ -406,8 +406,8 @@
   {
    "id": "moderators_not_marked",
    "file": "hub/login.py",
-   "old": "who.account_id in self.cfg.mods} if who else None",
-   "new": "False} if who else None",
+   "old": "\"you\": self.hub.chat.you_of(who) if who else None",
+   "new": "\"you\": {\"name\": who.name, \"mod\": False} if who else None",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheMeOfAModerator"
   },
   {
@@ -819,7 +819,7 @@
   {
    "id": "reserved_names_taken",
    "file": "hub/login.py",
-   "old": "        if reserved(name):\n",
+   "old": "        if text.reserved(name):\n",
    "new": "        if False:\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
@@ -1414,7 +1414,7 @@
   {
    "id": "legal_forgets_to_say_what_is_kept",
    "file": "web/legal.html",
-   "old": "They are kept so that the site knows who you are, and for nothing else.",
+   "old": "They are kept so that the site knows who you are and shows the name that you pick, and for nothing else.",
    "new": "They are used.",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1435,7 +1435,7 @@
   {
    "id": "legal_forgets_to_say_how_to_forget",
    "file": "web/legal.html",
-   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username from the site&rsquo;s records; a ban or a mute, if there is one, stays.",
+   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username and display name from the site&rsquo;s records; a ban or a mute, if there is one, stays.",
    "new": "Ask us.",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1561,34 +1561,34 @@
   {
    "id": "lookalikes_of_reserved_names_pass",
    "file": "hub/login.py",
-   "old": "        if reserved(name):\n",
-   "new": "        if name in RESERVED:\n",
+   "old": "        if text.reserved(name):\n",
+   "new": "        if name in text.RESERVED:\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_squash_keeps_the_dots",
-   "file": "hub/login.py",
-   "old": "re.sub(r\"[._]\", \"\", name.lower())",
-   "new": "name.lower()",
+   "file": "hub/text.py",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower())",
+   "new": "plain.translate(SCRIPT_LOOKALIKE).lower()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_squash_strips_the_digits_at_the_end",
-   "file": "hub/login.py",
-   "old": "re.sub(r\"[._]\", \"\", name.lower()).translate(LOOKALIKE)",
-   "new": "re.sub(r\"[._]\", \"\", name.lower()).rstrip(\"0123456789\").translate(LOOKALIKE)",
+   "file": "hub/text.py",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)",
+   "new": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).rstrip(\"0123456789\").translate(LOOKALIKE)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_digits_are_not_letters",
-   "file": "hub/login.py",
-   "old": "re.sub(r\"[._]\", \"\", name.lower()).translate(LOOKALIKE)",
-   "new": "re.sub(r\"[._]\", \"\", name.lower())",
+   "file": "hub/text.py",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower()).translate(LOOKALIKE)",
+   "new": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", plain.translate(SCRIPT_LOOKALIKE).lower())",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
   },
   {
    "id": "reserved_lookalike_one_is_not_i",
-   "file": "hub/login.py",
+   "file": "hub/text.py",
    "old": "str.maketrans(\"013457\", \"oieast\")",
    "new": "str.maketrans(\"013457\", \"oleast\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCallbackWhenDiscordGoesWrong"
@@ -1732,6 +1732,97 @@
    "old": "self.store.forget(who.account_id, self.hub.chat.deleted_seq)",
    "new": "self.store.forget(who.account_id, 0)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheForgetOfAHugeBacklog"
+  },
+  {
+   "id": "a_display_name_that_cannot_be_cleaned_fails_the_login",
+   "file": "hub/login.py",
+   "old": "            display = text.clean_shown(shown)\n        except Exception as e:",
+   "new": "            display = text.clean_shown(shown)\n        except KeyError as e:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "the_display_name_is_kept_when_it_is_the_username",
+   "file": "hub/login.py",
+   "old": "return \"\" if display == username else display",
+   "new": "return display",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "the_login_makes_no_profile",
+   "file": "hub/login.py",
+   "old": "            self.store.set_profile(account, name, display, self.limits.profiles_total)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "a_display_name_is_asked_for_with_a_scope",
+   "file": "hub/discord.py",
+   "old": "(\"response_type\", \"code\"), (\"scope\", \"identify\")",
+   "new": "(\"response_type\", \"code\"), (\"scope\", \"identify email\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "the_display_name_is_not_read",
+   "file": "hub/discord.py",
+   "old": "return account, name, data.get(\"global_name\")",
+   "new": "return account, name, None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "the_pick_is_not_read_at_the_handshake",
+   "file": "hub/login.py",
+   "old": "        if profile.pick == \"display\":\n",
+   "new": "        if True:\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "a_profile_that_is_not_usable_is_believed",
+   "file": "hub/login.py",
+   "old": "display = profile.display if text.valid_shown(profile.display) else \"\"",
+   "new": "display = profile.display",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "the_profile_is_not_the_newer_of_the_two",
+   "file": "hub/login.py",
+   "old": "username = profile.username",
+   "new": "username = username",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "a_profile_with_no_username_is_believed",
+   "file": "hub/login.py",
+   "old": "if profile is None or not text.valid_name(profile.username):",
+   "new": "if profile is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "me_says_no_key",
+   "file": "hub/login.py",
+   "old": "\"you\": self.hub.chat.you_of(who) if who else None",
+   "new": "\"you\": {\"name\": who.name, \"mod\": who.account_id in self.hub.chat.mods} if who else None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
+  },
+  {
+   "id": "legal_forgets_the_display_name",
+   "file": "web/legal.html",
+   "old": "<strong>display name</strong>. They are kept",
+   "new": "<strong>name</strong>. They are kept",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_does_not_say_what_moderators_see",
+   "file": "web/legal.html",
+   "old": " Moderators also see your username next to a display name.",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_says_two_things_only",
+   "file": "web/legal.html",
+   "old": "three things only",
+   "new": "two things only",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   }
  ]
 }

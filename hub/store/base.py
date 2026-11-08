@@ -7,6 +7,9 @@ here: they stay on that backend's class. tests/scripts/test_hub_store_contract.p
 import collections
 
 Line = collections.namedtuple("Line", "id at account name text mod")
+Profile = collections.namedtuple("Profile", "username display pick")
+PICKS = ("display", "username")
+PROFILE_DAYS = 35                       # a profile that has not been refreshed by a login for this long belongs to nobody who is logged in (a login lasts 30 days): purge() deletes it
 
 
 class StoreError(Exception):
@@ -40,12 +43,8 @@ class StoreBase:
         """The newest `count` lines with their state, newest first: (id, at, account, name, text, deleted)."""
         raise NotImplementedError
 
-    def account_of_name(self, name):
-        """The account that last spoke under this name, or None."""
-        raise NotImplementedError
-
     def last_name(self, account):
-        """The name the account last spoke under, or ''."""
+        """The name the account last spoke under (the one that was shown then), or ''."""
         raise NotImplementedError
 
     def delete_line(self, line_id, by):
@@ -61,7 +60,7 @@ class StoreBase:
         raise NotImplementedError
 
     def purge(self, chunk=2000):
-        """Delete up to `chunk` lines past their time, the mutes that are over and the logins that ran out; returns how many lines went."""
+        """Delete up to `chunk` lines past their time, the mutes that are over, the logins that ran out and the profiles that no login has refreshed for PROFILE_DAYS; returns how many lines went."""
         raise NotImplementedError
 
     def size(self):
@@ -69,7 +68,7 @@ class StoreBase:
         raise NotImplementedError
 
     def forget(self, account, since=0):
-        """Remove the account's logins and lines and wipe its name from its mute and ban (which stay). Returns the ids of the lines that a screen may still show."""
+        """Remove the account's logins, profile and lines and wipe its name from its mute and ban (which stay). Returns the ids of the lines that a screen may still show."""
         raise NotImplementedError
 
     # ---- mutes and bans ----
@@ -117,6 +116,27 @@ class StoreBase:
 
     def delete_session(self, key):
         """End one login; True when there was one."""
+        raise NotImplementedError
+
+    # ---- profiles: who an account is, as its last login said ----
+
+    def set_profile(self, account, username, display, total):
+        """Keep what a login of the account just said: its `username` (the key of the account for a moderator) and its `display` name ('' when it has none that may be shown). The account's
+        pick stays as it was; a new profile picks the display name when there is one, else the username, and so does one that had no display name and now has one. At most `total` profiles are
+        kept: the ones that were refreshed longest ago go."""
+        raise NotImplementedError
+
+    def profile(self, account):
+        """The Profile (username, display, pick) of the account, or None when no login has made one (an account that logged in before profiles were kept)."""
+        raise NotImplementedError
+
+    def set_pick(self, account, pick):
+        """Choose which name the account is shown by, one of PICKS. False (nothing changed) when the account has no profile or no display name: there is nothing to choose between."""
+        raise NotImplementedError
+
+    def account_of_username(self, username):
+        """The account whose profile has this username, when exactly one has (usernames are unique at Discord, but a profile is as old as its last login, so a name that was given up and taken by
+        another account can be in two); None for none or for several: the caller never guesses which account is meant."""
         raise NotImplementedError
 
 

@@ -1,7 +1,7 @@
 {
  "note": "Mutants of the chat hub (hub/, Dockerfile.hub, its two stack services, its nginx block, the deploy filter and the wait of the test rig) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_*.py or test_nginx_hub.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_mutants.json --keep-going --jobs 1 --baseline-every 40. The tests use the real sockets of this machine and a real nginx program where one is installed (without one, the nginx mutants cannot be caught and show as survived).",
  "baseline": {
-  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_text tests.scripts.test_hub_ws tests.scripts.test_hub_core tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_nginx_hub tests.scripts.test_staging_stack tests.scripts.test_deploy_filter"
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_text tests.scripts.test_hub_ws tests.scripts.test_hub_core tests.scripts.test_hub_store_contract tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_nginx_hub tests.scripts.test_staging_stack tests.scripts.test_deploy_filter"
  },
  "mutants": [
   {
@@ -42,8 +42,8 @@
   {
    "id": "text_blank_looking_letters_kept",
    "file": "hub/text.py",
-   "old": "elif category in REMOVED_CATEGORIES or ch in FILLERS:",
-   "new": "elif category in REMOVED_CATEGORIES:",
+   "old": "marks = 0\n        elif category in REMOVED_CATEGORIES or ch in FILLERS:",
+   "new": "marks = 0\n        elif category in REMOVED_CATEGORIES:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
@@ -70,15 +70,15 @@
   {
    "id": "text_blanks_not_collapsed",
    "file": "hub/text.py",
-   "old": "if out and out[-1] != \" \":",
-   "new": "if out:",
+   "old": "if out and out[-1] != \" \":\n                out.append(\" \")\n            marks = 0",
+   "new": "if out:\n                out.append(\" \")\n            marks = 0",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
    "id": "text_edge_blank_not_trimmed",
    "file": "hub/text.py",
-   "old": ".strip(\" \")",
-   "new": ".strip(\"\")",
+   "old": "text = unicodedata.normalize(\"NFC\", \"\".join(out)).strip(\" \")",
+   "new": "text = unicodedata.normalize(\"NFC\", \"\".join(out)).strip(\"\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
   },
   {
@@ -203,8 +203,8 @@
   {
    "id": "rate_burst_4",
    "file": "hub/limits.py",
-   "old": "burst: int = 3 ",
-   "new": "burst: int = 4 ",
+   "old": "    burst: int = 3 ",
+   "new": "    burst: int = 4 ",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -455,8 +455,8 @@
   {
    "id": "welcome_never_says_mod",
    "file": "hub/chat.py",
-   "old": "\"mod\": you.account_id in self.mods}",
-   "new": "\"mod\": False}",
+   "old": "\"mod\": who.account_id in self.mods,",
+   "new": "\"mod\": False,",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -497,7 +497,7 @@
   {
    "id": "welcome_without_history",
    "file": "hub/chat.py",
-   "old": "\"history\": [self.line_of(l) for l in self.recent()]}",
+   "old": "\"history\": [self.line_of(l, names) for l in lines]}",
    "new": "\"history\": []}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -882,7 +882,7 @@
   {
    "id": "rubbish_identity_believed",
    "file": "hub/server.py",
-   "old": "if who is not None and configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.name):",
+   "old": "if who is not None and self.believable(who):",
    "new": "if who is not None:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
@@ -1414,8 +1414,8 @@
   {
    "id": "the_account_that_spoke_before_wins_over_the_one_here",
    "file": "hub/chat.py",
-   "old": "return next(iter(here)) if here else self.store.account_of_name(name)",
-   "new": "return self.store.account_of_name(name) or next(iter(here), None)",
+   "old": "return next(iter(here)) if here else self.store.account_of_username(username)",
+   "new": "return self.store.account_of_username(username) or next(iter(here), None)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1984,6 +1984,559 @@
    "old": "            self.db.execute(\"DELETE FROM mutes WHERE until <= ?\", (now,))\n",
    "new": "            self.db.execute(\"DELETE FROM mutes WHERE until <= ?\", (now,))\n            self.count_restriction()\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "shown_name_is_nfc_only",
+   "file": "hub/text.py",
+   "old": "unicodedata.normalize(\"NFKC\", raw).translate(FOLDED)",
+   "new": "unicodedata.normalize(\"NFC\", raw).translate(FOLDED)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_the_symbols_and_emoji",
+   "file": "hub/text.py",
+   "old": "elif ch in SHOWN_PUNCTUATION:",
+   "new": "elif ch in SHOWN_PUNCTUATION or category[0] == \"S\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_the_rest_of_the_punctuation",
+   "file": "hub/text.py",
+   "old": "elif ch in SHOWN_PUNCTUATION:",
+   "new": "elif ch in SHOWN_PUNCTUATION or category[0] == \"P\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_the_format_characters",
+   "file": "hub/text.py",
+   "old": "elif category[0] == \"L\" or category == \"Nd\":",
+   "new": "elif category[0] in \"LC\" or category == \"Nd\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_the_blank_looking_letters",
+   "file": "hub/text.py",
+   "old": "elif ch in FILLERS:",
+   "new": "elif False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_a_mark_that_has_no_letter",
+   "file": "hub/text.py",
+   "old": "elif category in (\"Mn\", \"Mc\") and after and marks",
+   "new": "elif category in (\"Mn\", \"Mc\") and marks",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_a_column_of_marks",
+   "file": "hub/text.py",
+   "old": " and marks < MAX_SHOWN_MARKS and ch not in INVISIBLE_MARKS:",
+   "new": " and ch not in INVISIBLE_MARKS:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_the_variation_selectors",
+   "file": "hub/text.py",
+   "old": " and marks < MAX_SHOWN_MARKS and ch not in INVISIBLE_MARKS:",
+   "new": " and marks < MAX_SHOWN_MARKS:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_keeps_the_marks_that_enclose",
+   "file": "hub/text.py",
+   "old": "elif category in (\"Mn\", \"Mc\") and after",
+   "new": "elif category[0] == \"M\" and after",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_blanks_are_not_one_space",
+   "file": "hub/text.py",
+   "old": "if out and out[-1] != \" \":\n                out.append(\" \")\n            marks, after = 0, False",
+   "new": "out.append(\" \")\n            marks, after = 0, False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_is_not_trimmed",
+   "file": "hub/text.py",
+   "old": "name = unicodedata.normalize(\"NFC\", \"\".join(out)).strip(\" \")",
+   "new": "name = unicodedata.normalize(\"NFC\", \"\".join(out)).strip(\"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_is_not_cut",
+   "file": "hub/text.py",
+   "old": "name = name[:MAX_SHOWN].rstrip(\" \")",
+   "new": "name = name",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_cut_is_not_trimmed_again",
+   "file": "hub/text.py",
+   "old": "name = name[:MAX_SHOWN].rstrip(\" \")",
+   "new": "name = name[:MAX_SHOWN].rstrip(\"\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_may_be_one_character",
+   "file": "hub/text.py",
+   "old": "MIN_SHOWN = 2 ",
+   "new": "MIN_SHOWN = 1 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_may_be_thirty_three",
+   "file": "hub/text.py",
+   "old": "MAX_SHOWN = 32 ",
+   "new": "MAX_SHOWN = 33 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_needs_no_letter_or_digit",
+   "file": "hub/text.py",
+   "old": " or not any(unicodedata.category(c)[0] == \"L\" or unicodedata.category(c) == \"Nd\" for c in name) or reserved(name):",
+   "new": " or reserved(name):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_reserved_is_shown",
+   "file": "hub/text.py",
+   "old": " or reserved(name):\n        return",
+   "new": " or False:\n        return",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_any_size_is_read",
+   "file": "hub/text.py",
+   "old": "len(raw) > MAX_SHOWN_RAW:",
+   "new": "len(raw) > 10 ** 9:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_not_text_is_read",
+   "file": "hub/text.py",
+   "old": "if not isinstance(raw, str) or len(raw) > MAX_SHOWN_RAW:",
+   "new": "if len(raw) > MAX_SHOWN_RAW:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_curly_apostrophes_are_dropped",
+   "file": "hub/text.py",
+   "old": "{\"\\u2018\": \"'\", \"\\u2019\": \"'\", ",
+   "new": "{",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_dashes_are_dropped",
+   "file": "hub/text.py",
+   "old": ", \"\\u2010\": \"-\", \"\\u2012\": \"-\", \"\\u2013\": \"-\", \"\\u2014\": \"-\", \"\\u2015\": \"-\"})",
+   "new": "})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_digits_are_ascii_only",
+   "file": "hub/text.py",
+   "old": "elif category[0] == \"L\" or category == \"Nd\":\n            out.append(ch)",
+   "new": "elif category[0] == \"L\" or (category == \"Nd\" and ch.isascii()):\n            out.append(ch)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "shown_name_letters_are_latin_only",
+   "file": "hub/text.py",
+   "old": "elif category[0] == \"L\" or category == \"Nd\":\n            out.append(ch)",
+   "new": "elif ch.isascii() and (category[0] == \"L\" or category == \"Nd\"):\n            out.append(ch)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "squash_keeps_the_accents",
+   "file": "hub/text.py",
+   "old": "plain = \"\".join(c for c in unicodedata.normalize(\"NFKD\", name) if not unicodedata.category(c).startswith(\"M\"))",
+   "new": "plain = name",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "squash_has_no_lookalikes_of_other_scripts",
+   "file": "hub/text.py",
+   "old": "plain.translate(SCRIPT_LOOKALIKE).lower()",
+   "new": "plain.lower()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "squash_keeps_the_spaces_hyphens_and_apostrophes",
+   "file": "hub/text.py",
+   "old": "re.sub(\"[ ._'\\u02bb\\u02bc-]\", \"\", ",
+   "new": "re.sub(\"[._]\", \"\", ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "squash_keeps_the_apostrophe_letters",
+   "file": "hub/text.py",
+   "old": "[ ._'\\u02bb\\u02bc-]",
+   "new": "[ ._'-]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "lookalikes_miss_the_cyrillic_a",
+   "file": "hub/text.py",
+   "old": "(\"a\", \"\\u0430\\u0410\\u03b1\\u0391\")",
+   "new": "(\"a\", \"\\u03b1\\u0391\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "lookalikes_miss_the_greek_omicron",
+   "file": "hub/text.py",
+   "old": "(\"o\", \"\\u043e\\u041e\\u03bf\\u039f\")",
+   "new": "(\"o\", \"\\u043e\\u041e\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text"
+  },
+  {
+   "id": "valid_shown_takes_any_text",
+   "file": "hub/text.py",
+   "old": "return isinstance(name, str) and name != \"\" and clean_shown(name) == name",
+   "new": "return isinstance(name, str) and name != \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_text tests.scripts.test_hub_server.TheShownNameIsCheckedToo"
+  },
+  {
+   "id": "pick_without_a_limit",
+   "file": "hub/chat.py",
+   "old": "if pick not in PICKS or not self.pick_limits.take(who.account_id, self.clock()):",
+   "new": "if pick not in PICKS:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_limit_is_for_the_socket",
+   "file": "hub/chat.py",
+   "old": "self.pick_limits.take(who.account_id, self.clock())",
+   "new": "self.pick_limits.take(id(peer), self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_does_not_end_the_logins",
+   "file": "hub/chat.py",
+   "old": "        if self.end_logins:\n            self.end_logins(account=who.account_id)",
+   "new": "        if False:\n            self.end_logins(account=who.account_id)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_ends_one_login_only",
+   "file": "hub/chat.py",
+   "old": "self.end_logins(account=who.account_id)",
+   "new": "self.end_logins(session=who.session)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_is_not_stored",
+   "file": "hub/chat.py",
+   "old": "done = self.store.set_pick(who.account_id, pick)",
+   "new": "done = True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_without_a_display_name_is_done",
+   "file": "hub/chat.py",
+   "old": "        if not done:\n            return self.mistake(peer, PICK_REFUSED)",
+   "new": "        if False:\n            return self.mistake(peer, PICK_REFUSED)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_of_a_reader_is_not_refused",
+   "file": "hub/chat.py",
+   "old": "        if who is None:\n            return self.mistake(peer, \"login\")\n        pick = msg.get(\"pick\")",
+   "new": "        pick = msg.get(\"pick\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_refusal_has_the_code_of_a_line",
+   "file": "hub/chat.py",
+   "old": "PICK_REFUSED = \"pick\" ",
+   "new": "PICK_REFUSED = \"bad\" ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "pick_refusal_is_no_mistake",
+   "file": "hub/chat.py",
+   "old": "if pick not in PICKS or not self.pick_limits.take(who.account_id, self.clock()):\n            return self.mistake(peer, PICK_REFUSED)",
+   "new": "if pick not in PICKS or not self.pick_limits.take(who.account_id, self.clock()):\n            return self.mistake(peer, PICK_REFUSED, count=False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_username_goes_to_everybody",
+   "file": "hub/chat.py",
+   "old": "peer.send_text(moderators if who is not None and who.account_id in self.mods else everybody)",
+   "new": "peer.send_text(moderators)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_username_goes_to_nobody",
+   "file": "hub/chat.py",
+   "old": "peer.send_text(moderators if who is not None and who.account_id in self.mods else everybody)",
+   "new": "peer.send_text(everybody)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_username_is_said_twice",
+   "file": "hub/chat.py",
+   "old": "if username and username != entry.name else everybody",
+   "new": "if username else everybody",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_history_has_the_usernames_for_everybody",
+   "file": "hub/chat.py",
+   "old": "if you is not None and you.account_id in self.mods else None",
+   "new": "if True else None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_history_has_no_username_for_a_moderator",
+   "file": "hub/chat.py",
+   "old": "if you is not None and you.account_id in self.mods else None",
+   "new": "if False else None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "a_line_has_no_key",
+   "file": "hub/chat.py",
+   "old": "\"mod\": bool(line.mod), \"k\": self.key_of(line.account)}",
+   "new": "\"mod\": bool(line.mod)}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_key_is_the_account",
+   "file": "hub/chat.py",
+   "old": "return hmac.new(self.salt, account.encode(\"utf-8\"), hashlib.sha256).hexdigest()[:12]",
+   "new": "return account",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_key_is_the_same_after_a_restart",
+   "file": "hub/chat.py",
+   "old": "self.salt = os.urandom(16) ",
+   "new": "self.salt = b'0' * 16 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_key_is_short",
+   "file": "hub/chat.py",
+   "old": ".hexdigest()[:12]",
+   "new": ".hexdigest()[:4]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "you_has_no_switch",
+   "file": "hub/chat.py",
+   "old": "        if who.other:\n            you[\"pick\"], you[\"other\"] = who.pick, who.other",
+   "new": "        if False:\n            you[\"pick\"], you[\"other\"] = who.pick, who.other",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "you_has_a_switch_for_everybody",
+   "file": "hub/chat.py",
+   "old": "        if who.other:\n            you[\"pick\"], you[\"other\"] = who.pick, who.other",
+   "new": "        if True:\n            you[\"pick\"], you[\"other\"] = who.pick, who.other",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "mute_takes_the_name_that_is_shown",
+   "file": "hub/chat.py",
+   "old": "p.identity.username == username}",
+   "new": "p.identity.name == username}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "two_here_with_one_username_are_a_target",
+   "file": "hub/chat.py",
+   "old": "        if len(here) > 1:\n            return None\n        return next(iter(here)) if here",
+   "new": "        if False:\n            return None\n        return next(iter(here)) if here",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "the_one_that_is_here_is_not_asked_for",
+   "file": "hub/chat.py",
+   "old": "return next(iter(here)) if here else self.store.account_of_username(username)",
+   "new": "return self.store.account_of_username(username)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
+  },
+  {
+   "id": "a_username_that_is_no_username_is_believed",
+   "file": "hub/server.py",
+   "old": "textrules.valid_name(who.username) and (",
+   "new": "(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "a_shown_name_that_is_not_clean_is_believed",
+   "file": "hub/server.py",
+   "old": "(who.name == who.username or textrules.valid_shown(who.name))",
+   "new": "True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "a_pick_that_is_not_one_is_believed",
+   "file": "hub/server.py",
+   "old": "return who.pick in (\"display\", \"username\") and",
+   "new": "return True and",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "an_other_name_that_is_not_clean_is_believed",
+   "file": "hub/server.py",
+   "old": "(who.other == who.username or textrules.valid_shown(who.other))",
+   "new": "True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "an_other_name_that_is_the_shown_one_is_believed",
+   "file": "hub/server.py",
+   "old": " and who.other != who.name\n",
+   "new": "\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
+  },
+  {
+   "id": "a_login_does_not_keep_the_pick",
+   "file": "hub/store/sqlite.py",
+   "old": "pick = CASE WHEN profiles.display = '' AND excluded.display != '' THEN 'display' ELSE profiles.pick END",
+   "new": "pick = excluded.pick",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_new_display_name_is_not_picked",
+   "file": "hub/store/sqlite.py",
+   "old": "pick = CASE WHEN profiles.display = '' AND excluded.display != '' THEN 'display' ELSE profiles.pick END",
+   "new": "pick = profiles.pick",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_new_profile_picks_the_username",
+   "file": "hub/store/sqlite.py",
+   "old": "\"display\" if display else \"username\"",
+   "new": "\"username\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_pick_needs_no_display_name",
+   "file": "hub/store/sqlite.py",
+   "old": "WHERE account = ? AND display != ''\", (pick, account))",
+   "new": "WHERE account = ?\", (pick, account))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_pick_may_be_any_word",
+   "file": "hub/store/sqlite.py",
+   "old": "        if pick not in PICKS:\n            return False\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "two_profiles_with_one_username_are_one_account",
+   "file": "hub/store/sqlite.py",
+   "old": "return rows[0][0] if len(rows) == 1 else None",
+   "new": "return rows[0][0] if rows else None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_login_does_not_refresh_the_username",
+   "file": "hub/store/sqlite.py",
+   "old": "ON CONFLICT (account) DO UPDATE SET username = excluded.username, ",
+   "new": "ON CONFLICT (account) DO UPDATE SET ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_login_does_not_refresh_the_display_name",
+   "file": "hub/store/sqlite.py",
+   "old": "\"display = excluded.display, updated = excluded.updated, pick = CASE",
+   "new": "\"updated = excluded.updated, pick = CASE",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_login_does_not_make_the_profile_newer",
+   "file": "hub/store/sqlite.py",
+   "old": "\"display = excluded.display, updated = excluded.updated, pick = CASE",
+   "new": "\"display = excluded.display, pick = CASE",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "the_profiles_are_not_capped",
+   "file": "hub/store/sqlite.py",
+   "old": "LIMIT -1 OFFSET ?)\", (total,)).rowcount\n        self.unsettled = self.unsettled or over > 0",
+   "new": "LIMIT -1 OFFSET ?)\", (10 ** 9,)).rowcount\n        self.unsettled = self.unsettled or over > 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "the_oldest_profiles_are_kept_at_the_cap",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT rowid FROM profiles ORDER BY updated DESC, rowid DESC LIMIT -1 OFFSET ?)",
+   "new": "SELECT rowid FROM profiles ORDER BY updated ASC, rowid ASC LIMIT -1 OFFSET ?)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "the_cap_of_profiles_does_not_ask_for_the_cut",
+   "file": "hub/store/sqlite.py",
+   "old": "self.unsettled = self.unsettled or over > 0",
+   "new": "self.unsettled = self.unsettled",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "forget_keeps_the_profile",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM profiles WHERE account = ?\", (account,))\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "purge_keeps_the_profiles",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM profiles WHERE updated < ?\", (now - PROFILE_DAYS * 86400,))\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "profiles_live_thirty_days",
+   "file": "hub/store/base.py",
+   "old": "PROFILE_DAYS = 35 ",
+   "new": "PROFILE_DAYS = 30 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "profiles_bump_the_schema",
+   "file": "hub/store/sqlite.py",
+   "old": "SCHEMA = 3\n",
+   "new": "SCHEMA = 4\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "the_profiles_table_is_made_only_for_an_older_schema",
+   "file": "hub/store/sqlite.py",
+   "old": "        if self.db.execute(\"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profiles'\").fetchone() is None:\n",
+   "new": "        if version < 3:\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "a_name_is_looked_up_in_the_lines",
+   "file": "hub/admin.py",
+   "old": "account = store.account_of_username(name)",
+   "new": "account = (store.db.execute('SELECT account FROM lines WHERE name = ? ORDER BY id DESC LIMIT 1', (name,)).fetchone() or [None])[0]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "an_id_is_named_by_its_last_line",
+   "file": "hub/admin.py",
+   "old": "return who, profile.username if profile else store.last_name(who)",
+   "new": "return who, store.last_name(who)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "the_listing_shows_the_shown_name_only",
+   "file": "hub/admin.py",
+   "old": "\" (%s)\" % usernames[account] if usernames[account] != name else \"\"",
+   "new": "\"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "the_clock_never_tidies_the_switch_buckets",
+   "file": "hub/server.py",
+   "old": "            self.chat.pick_limits.forget_idle(now)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   }
  ]
 }

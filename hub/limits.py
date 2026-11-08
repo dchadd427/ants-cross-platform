@@ -54,6 +54,9 @@ class Limits:
     session_seconds: float = 30 * 86400.0       # how long a login lasts (30 days)
     sessions_per_account: int = 10      # logins that one account keeps at a time (browsers, phones); the oldest go first
     sessions_total: int = 100000        # logins that the hub keeps in all (a crowd of throwaway accounts cannot make the table grow without end): the oldest go first
+    profiles_total: int = 100000        # profiles (the username and the display name of an account, from its last login) that the hub keeps in all: the ones refreshed longest ago go first
+    pick_burst: int = 3                 # switches between the display name and the username that an account may make at once (across all its tabs: a switch makes every page of the account connect again) ...
+    pick_refill_seconds: float = 30.0   # ... then one in this long
     discord_connect_seconds: float = 3.0        # to Discord: the connection ...
     discord_seconds: float = 6.0                # ... a whole call, from the first byte sent to the last byte read ...
     discord_total_seconds: float = 10.0         # ... and the two calls of a login together (nginx waits 15 seconds for the hub's answer)
@@ -145,6 +148,11 @@ class RateByAddress:
     def forget_idle(self, now):
         for key in [k for k, b in self.buckets.items() if b.ready(now) and b.tokens >= self.burst]:
             del self.buckets[key]
+
+
+class RateByAccount(RateByAddress):
+    """The same table of token buckets, one for each account id (the key is the id, not an address): what an account may do however many tabs it has open. A bucket that is full again is
+    forgotten by forget_idle()."""
 
 
 class Strikes:

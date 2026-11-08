@@ -52,6 +52,12 @@ def welcome_history(test):
     return client.recv_json()["history"]
 
 
+def without_the_key(you):
+    """`you` of a welcome without its key (made new at every start of the hub; its shape is what is checked)."""
+    assert you is not None and len(you["k"]) == 12, you
+    return {k: v for k, v in you.items() if k != "k"}
+
+
 def welcome(client):
     message = client.recv_json()
     assert message["t"] == "welcome", message
@@ -138,7 +144,7 @@ class TheHandshake(RigTest):
         self.assertNotIn("sec-websocket-extensions", client.reply_headers)
         self.assertNotIn("sec-websocket-protocol", client.reply_headers)
         message = client.recv_json()
-        self.assertEqual((message["t"], message["v"], message["login"], message["you"]), ("welcome", 1, True, {"name": "alice", "mod": False}))
+        self.assertEqual((message["t"], message["v"], message["login"], without_the_key(message["you"])), ("welcome", 1, True, {"name": "alice", "mod": False}))
 
     def test_the_origin_must_be_the_site_exactly(self):
         for origin in (None, "null", "", "https://evil.example", "http://chat.example.org", "https://chat.example.org:8443", "https://chat.example.org.evil.example", "https://evil.example/https://chat.example.org",
@@ -658,7 +664,55 @@ class TheBadIdentity(RigTest):
         self.rig.hub.sessions = Rubbish(session.Identity("1001", "alice", False))
         c = hc.Client(self.rig.port)
         self.clients.append(c)
-        self.assertEqual(c.recv_json()["you"], {"name": "alice", "mod": False})
+        you = c.recv_json()["you"]
+        self.assertEqual(({k: v for k, v in you.items() if k != "k"}, len(you["k"])), ({"name": "alice", "mod": False}, 12))
+
+
+class TheShownNameIsCheckedToo(RigTest):
+    """An identity has a username (`valid_name`: what a moderator addresses the account by) and the name that is shown (the username, or a display name that `valid_shown` leaves as it is), and for an
+    account that has both, which one is shown and the other: the hub believes the whole or none of it."""
+    rig_args = dict(sockets_per_address=50)
+
+    def serve(self, who):
+        class Fixed:
+            login = True
+
+            async def identify(self, headers):
+                return who
+        self.rig.hub.sessions = Fixed()
+        c = hc.Client(self.rig.port)
+        self.clients.append(c)
+        return c.recv_json()["you"]
+
+    def test_an_identity_that_is_a_username_or_a_clean_display_name_with_the_username_is_believed(self):
+        I = sessionmod.Identity
+        for who, name in ((I("1001", "alice", False), "alice"), (I("1001", "Alice Smith", False, None, 0, "alice", "display", "alice"), "Alice Smith"),
+                          (I("1001", "alice", False, None, 0, "alice", "username", "Alice Smith"), "alice"), (I("1001", "\u0645\u0631\u064a\u0645", False, None, 0, "alice", "display", "alice"), "\u0645\u0631\u064a\u0645"),
+                          (I("1001", "alice", False, None, 0, "alice", "username", "\u7530\u4e2d\u592a\u90ce"), "alice")):
+            you = self.serve(who)
+            self.assertEqual(you["name"], name, who)
+            self.assertEqual(sorted(you), ["k", "mod", "name"] if not who.other else ["k", "mod", "name", "other", "pick"])
+
+    def test_anything_else_is_a_reader(self):
+        I = sessionmod.Identity
+        for who in (I("1001", "Alice Smith", False),                                                    # (a display name with no username of its own: its username would be it, and it is not one)
+                    I("1001", "Alice Smith", False, None, 0, "Alice Smith", "display", "alice"),       # (a username that is not one)
+                    I("1001", "Alice Smith", False, None, 0, "alice", "display", "Alice Smith"),       # (the two names the same)
+                    I("1001", "Admin", False, None, 0, "alice", "display", "alice"),                   # (a shown name that is the hub's own voice)
+                    I("1001", "Alice  Smith", False, None, 0, "alice", "display", "alice"),            # (a shown name that is not clean)
+                    I("1001", "Alice Smith ", False, None, 0, "alice", "display", "alice"),
+                    I("1001", "Alice\u200b Smith", False, None, 0, "alice", "display", "alice"),
+                    I("1001", "x" * 33, False, None, 0, "alice", "display", "alice"),
+                    I("1001", "\U0001f600\U0001f600", False, None, 0, "alice", "display", "alice"),
+                    I("1001", "Alice Smith", False, None, 0, "alice", "both", "alice"),                # (a pick that is not one of the two)
+                    I("1001", "Alice Smith", False, None, 0, "alice", "", "alice"),                    # (an other name and no pick)
+                    I("1001", "Alice Smith", False, None, 0, "alice", "display", ""),                  # (a pick and no other name)
+                    I("1001", "Alice Smith", False, None, 0, "alice", "display", "<b>"),               # (the other name is not a name)
+                    I("1001", "alice", False, None, 0, "alice", "username", "Admin"),
+                    I("1001", "Alice Smith", False, None, 0, None, "display", "alice"),
+                    I("1001", "alice", False, None, 0, 5, "username", "Alice Smith"),
+                    I("1001", "alice", False, None, 0, "alice", 5, "Alice Smith")):
+            self.assertIsNone(self.serve(who), repr(who))
 
 
 class TheLoginLayerIsAskedAndMayBeSlow(RigTest):
@@ -799,6 +853,29 @@ class TheHubTidiesTheDatabase(unittest.TestCase):
         self.assertEqual(self.checkpoints, [1])                         # not before ten seconds have passed
         self.hub.on_tick(111.0)
         self.assertEqual(self.checkpoints, [1, 1])
+
+
+class TheHubTidiesTheLimits(unittest.TestCase):
+    """The per-account limits are tables that grow with the accounts that were here: the minute's tick drops the buckets that are full again (the lines', and the switch's between the two names)."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.store = storemod.Store(os.path.join(self.folder.name, "hub.db"))
+        self.addCleanup(self.store.close)
+        self.hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": hc.SITE}), self.store, sessionmod.NoLogin(), logmod.Log(io.StringIO()), limitmod.Limits(), clock=lambda: 0.0)
+        self.hub.next_purge = 10 ** 9                                 # (the purge is not what is looked at)
+
+    def test_the_idle_buckets_of_the_switch_and_of_the_lines_go_at_the_minute(self):
+        self.hub.chat.pick_limits.take("111111111111111111", 0.0)
+        self.hub.chat.account_limits.check("111111111111111111", "hello", 0.0)
+        self.hub.next_forget = float("-inf")
+        self.hub.on_tick(10.0)                                        # (not yet full again: they stay)
+        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.account_limits.accounts)), (1, 1))
+        self.hub.next_forget = float("-inf")
+        self.hub.on_tick(400.0)
+        self.assertEqual((len(self.hub.chat.pick_limits.buckets), len(self.hub.chat.account_limits.accounts)), (0, 0))
+        self.assertEqual(self.hub.next_forget, 460.0)                 # (and the next look is a minute on)
 
 
 class TheFailingPurge(unittest.TestCase):
@@ -1232,15 +1309,20 @@ class TheProcess(unittest.TestCase):
         db = env["ANTS_HUB_DB"]
         headers = {"X-Client-Address": "203.0.113.77", "Cookie": self.COOKIE}
         alice = self.client(port, login="6101:alice", headers=headers)
-        self.assertEqual(alice.recv_json()["you"], {"name": "alice", "mod": False})
+        self.assertEqual(without_the_key(alice.recv_json()["you"]), {"name": "alice", "mod": False})
         mod = self.client(port, login="5551234567:moddy", headers=headers)
-        self.assertEqual(mod.recv_json()["you"], {"name": "moddy", "mod": True})
+        self.assertEqual(without_the_key(mod.recv_json()["you"]), {"name": "moddy", "mod": True})
         chat_text = "canary chat text 41b7"
         alice.say(chat_text)
         line = next(m for m in mod.drain(0.5) if m["t"] == "line")
         self.assertEqual(line["text"], chat_text)
-        # the command line bans alice: from her next line she is refused, and a restart does not change that
+        # the command line bans alice: from her next line she is refused, and a restart does not change that (the command line takes a username from the profile that a login made: the test login makes none, so a second
+        # connection to the file makes it, as the login would)
         admin = lambda *a: subprocess.run([sys.executable, "-m", "hub.admin", *a], cwd=REPO, env=env, capture_output=True, text=True)
+        self.assertNotEqual(admin("ban", "alice").returncode, 0)
+        made = storemod.Store(db)
+        made.set_profile("6101", "alice", "", 100)
+        made.close()
         self.assertEqual(admin("ban", "alice").returncode, 0)
         alice.drain(0.1)
         alice.say("after the ban")

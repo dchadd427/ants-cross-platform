@@ -3,15 +3,18 @@
 The pages (nginx passes these five and /hub/ws to the hub, docker/nginx.conf):
   GET  /hub/login?next=home|room   a random state (128 bits, one use, 10 minutes) is kept here and in a short cookie, and the visitor is sent to Discord
   GET  /hub/callback               Discord sends the visitor back with a code: the state of the cookie, of the address and of this hub must be one, the code is exchanged (hub/discord.py),
-                                   the id and the username are kept (a login: the SHA-256 of a random cookie value, the id, the name, 30 days) and the visitor goes back to the front page
-  GET  /hub/me                     who the cookie says the visitor is (same origin only)
+                                   the id, the username and the display name are kept (a login: the SHA-256 of a random cookie value, the id, the username, 30 days; and the account's
+                                   profile, refreshed at every login: the username, the display name if it has a usable one, and which of the two the account is shown by) and the
+                                   visitor goes back to the front page
+  GET  /hub/me                     who the cookie says the visitor is: what the welcome's `you` says (same origin only)
   POST /hub/logout                 ends this login (same origin only: the Origin and Sec-Fetch-Site of a page of the site)
   POST /hub/forget                 ends every login of the account and deletes its chat lines (same origin only); a ban or a mute stays, by id, whatever the account does
 and, for a WebSocket, identify(): the login's cookie in the handshake is who the socket is for its whole life.
 
 Rules that the tests hold (tests/scripts/test_hub_login.py): the return address is one of two fixed words and never what the visitor wrote; a state is good for one callback whatever it
 ends in; the cookie of the state is `__Host-` (a sibling subdomain cannot set it), so is the login's; a Discord that fails costs the visitor a calm page and the readers nothing; no
-token, no code, no state, no cookie value, no id and no name is ever logged; a name is untrusted text (it is checked as a name and only ever written into a JSON body).
+token, no code, no state, no cookie value, no id and no name is ever logged; a name is untrusted text (the username is checked as a name and refuses the login if it is not one; the display
+name is cleaned by text.clean_shown and is never a reason to refuse or fail a login: one that cannot be shown is none, and the chat shows the username; both are only ever written into a JSON body).
 """
 import collections
 import hashlib
@@ -29,22 +32,6 @@ VALUE = re.compile(r"[0-9a-f]{32}\Z")
 CODE = re.compile(r"[\x21-\x7e]{1,512}\Z")
 NEXT = {"home": "/", "room": "/#room"}      # where the visitor goes back to: a fixed list, chosen by a word
 DISCORD_EPOCH_MS = 1420070400000            # the time that the first bits of a Discord id count from
-RESERVED = frozenset(("mod", "admin", "moderator", "administrator", "system", "server", "staff", "ants", "ants.bot", "hub", "everyone", "here"))      # (names that could pass for the hub's own voice)
-LOOKALIKE = str.maketrans("013457", "oieast")           # (0 o, 1 i, 3 e, 4 a, 5 s, 7 t: a digit for the letter that it looks like)
-
-
-def squash(name):
-    """What a name looks like at a glance: no dots or underscores, a digit for the letter that it looks like read as that letter ("adm1n", "admin.", "a.d.m.i.n", "system_" are all "admin" and
-    "system" to a reader). Digits at the end are not dropped: "system32", "hub99" and "ants1998" are names of real people, and a lookalike gains nothing (a moderator is the hub's `mod` flag, by
-    Discord id, never a name)."""
-    return re.sub(r"[._]", "", name.lower()).translate(LOOKALIKE)
-
-
-RESERVED_SQUASHED = frozenset(squash(n) for n in RESERVED)
-
-
-def reserved(name):
-    return name in RESERVED or squash(name) in RESERVED_SQUASHED
 MAX_QUERY = 1500
 
 PAGES = {                                   # kind -> (status, heading, line)
@@ -151,7 +138,18 @@ class DiscordLogin(session.Sessions):
         row = self.store.session(key)
         if row is None:
             return None
-        return session.Identity(row[0], row[1], self.young(row[0]), key, row[2])
+        account, username, expires = row
+        young = self.young(account)
+        profile = self.store.profile(account)
+        if profile is None or not text.valid_name(profile.username):
+            return session.Identity(account, username, young, key, expires)                     # (a login from before profiles were kept: the username, as it always was)
+        username = profile.username                                                              # (the profile is the newer of the two: it is from the account's last login)
+        display = profile.display if text.valid_shown(profile.display) else ""
+        if not display:
+            return session.Identity(account, username, young, key, expires, username)
+        if profile.pick == "display":
+            return session.Identity(account, display, young, key, expires, username, "display", username)
+        return session.Identity(account, username, young, key, expires, username, "username", display)
 
     async def identify(self, headers):
         return self.who_of(headers)
@@ -232,18 +230,20 @@ class DiscordLogin(session.Sessions):
         if not isinstance(code, str) or not CODE.match(code):
             return self.page("expired", back, gone)
         try:
-            account, name = await self.discord.who(code)
+            account, name, shown = await self.discord.who(code)
         except discordmod.DiscordError as e:
             self.log.event("login_failed", kind=e.kind, status=e.status, tag=self.log.tag(address))
             return self.page("rejected" if e.kind == "rejected" else "unavailable", back, gone)
         if not config.ACCOUNT_ID.match(account) or not text.valid_name(name):
             self.log.event("login_failed", kind="name", tag=self.log.tag(address))
             return self.page("name", back, gone)
-        if reserved(name):
+        if text.reserved(name):
             self.log.event("login_failed", kind="reserved", tag=self.log.tag(address))
             return self.page("reserved", back, gone)
+        display = self.display_of(shown, name)
         value = secrets.token_hex(16)
         try:
+            self.store.set_profile(account, name, display, self.limits.profiles_total)
             self.store.add_session(digest(value), account, name, self.limits.session_seconds, self.limits.sessions_per_account, self.limits.sessions_total)
             old = cookies.get(COOKIE)
             if old and VALUE.match(old):                                      # (a login that this browser had is over: a new one never takes over the value of an old one)
@@ -255,6 +255,16 @@ class DiscordLogin(session.Sessions):
         self.log.event("login", tag=self.log.tag(address))
         return http.response(302, headers=[("Location", NEXT[back]), ("Referrer-Policy", "no-referrer"), ("Set-Cookie", cookie_line(COOKIE, value, int(self.limits.session_seconds), "Strict")),
                                            ("Set-Cookie", gone[0])])
+
+    def display_of(self, shown, username):
+        """The display name to keep for what Discord said of it: what text.clean_shown makes of it, and none when that is the username itself (there is nothing to choose between). It never fails
+        and never refuses: a login is never refused or failed for a display name that is missing, null, not text, too long, empty once cleaned, or a lookalike of a reserved name."""
+        try:
+            display = text.clean_shown(shown)
+        except Exception as e:                                               # (a bug in the cleaner costs the person their display name, not their login)
+            self.log.event("login_note", kind="display", error=type(e).__name__)
+            return ""
+        return "" if display == username else display
 
     # ---- /hub/me, /hub/logout, /hub/forget -------------------------------------------------------------------------------------------------
 
@@ -278,7 +288,7 @@ class DiscordLogin(session.Sessions):
             who = self.who_of(request.headers)
         except StoreError:
             return self.fail(503, "busy")
-        return http.response(200, {"login": True, "you": {"name": who.name, "mod": who.account_id in self.cfg.mods} if who else None})
+        return http.response(200, {"login": True, "you": self.hub.chat.you_of(who) if who else None})
 
     async def logout(self, request, address):
         refused = self.guard(request, address, "POST")
