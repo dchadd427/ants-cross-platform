@@ -370,7 +370,7 @@ ArenaResult play_gang_match(watch::PeopleObserver* observer, uint64_t ticks, uin
 }  // namespace
 
 void run_people_tests() {
-    TEST_CASE("AI34.6 Blows And Fights: A Hit Ant With An Enemy In Its Attack Clip Within Two Tiles Was Struck By The Nearest One; Blows Of Two Sides Less Than 300 Ticks And 10 Tiles Apart Are One Fight; Hitting Back, Helping, The Crowd At The Fight, Ants Lost And Killed, And The Focus On A Victim Are Counted For The Seat That Was Struck First") {
+    TEST_CASE("AI34.6 Blows And Fights: A Hit Ant With An Enemy In Its Strike Clip Within Two Tiles Was Struck By The Nearest One; Blows Of Two Sides Less Than 300 Ticks And 10 Tiles Apart Are One Fight; Hitting Back, Helping, The Crowd At The Fight, Ants Lost And Killed, And The Focus On A Victim Are Counted For The Seat That Was Struck First") {
         watch::People people(two_seats());
         const AntSnap a0 = ant(1, 0, 20, 20), a1 = ant(2, 0, 23, 20), e1 = ant(11, 1, 21, 21), e2 = ant(12, 1, 23, 23);
         people.tick(snap(100, {a0, a1, e1, e2}));
@@ -379,7 +379,7 @@ void run_people_tests() {
         people.tick(snap(140, {ant(1, 0, 20, 20, 8), a1, ant(11, 1, 21, 21, 10, kHit), e2}));                    // blow 2
         people.tick(snap(150, {ant(1, 0, 20, 20, 8), ant(2, 0, 23, 20, 10, kHit), ant(11, 1, 21, 21, 9), e2}));  // blow 3: a1, an ant other than the first victim, strikes e1, two tiles away
         people.tick(snap(160, {ant(1, 0, 20, 20, 8), a1, ant(11, 1, 21, 21, 9), e2}));                           // (a sample of the crowd: 2 of seat 0 and 2 of seat 1 within 4 tiles of the last blow)
-        people.tick(snap(170, {ant(1, 0, 20, 20, 7), a1, ant(11, 1, 21, 21, 9), ant(12, 1, 23, 23, 10, kHit)}));  // a0 loses a hit point, the only ant in its attack clip is three tiles away: no blow
+        people.tick(snap(170, {ant(1, 0, 20, 20, 7), a1, ant(11, 1, 21, 21, 9), ant(12, 1, 23, 23, 10, kHit)}));  // a0 loses a hit point, the only ant in its strike clip is three tiles away: no blow
         people.tick(snap(400, {ant(1, 0, 20, 20, 6), a1, ant(11, 1, 21, 21, 9, kHit), e2}));                     // blow 4: 250 ticks after the last one, the same place: the same fight
         people.tick(snap(1000, {ant(1, 0, 20, 20, 6), ant(2, 0, 23, 20, 9), ant(11, 1, 21, 21, 9, kHit), e2}));   // blow 5: 600 ticks later: a new fight, a1 is struck first
         people.tick(snap(1030, {ant(1, 0, 20, 20, 6), ant(2, 0, 23, 20, 0), ant(11, 1, 21, 21, 9, kHit), e2}));   // blow 6 kills a1
@@ -414,7 +414,7 @@ void run_people_tests() {
         ASSERT_TRUE(json.find("\"help_ticks_median\":39") != std::string::npos);
         ASSERT_TRUE(json.find("\"focus_pct\":null") != std::string::npos);
         ASSERT_TRUE(s1.json().find("\"focus_pct\":66.67") != std::string::npos);
-        // the nearest ant in its attack clip struck, and of two that are equally near the one with the lower number
+        // the nearest ant in its strike clip struck, and of two that are equally near the one with the lower number
         {
             watch::People near(two_seats());
             near.tick(snap(10, {ant(1, 0, 10, 10), ant(14, 1, 11, 10), ant(15, 1, 12, 10), ant(16, 1, 9, 10)}));

@@ -6,7 +6,7 @@
 //   1. the economy   it harvests with the standard bot's own HarvestTask (every type of ant harvests when it has nothing else to do) and takes power-ups with the standard bot's PowerUpTask:
 //                    Thief power-ups first (up to three, the other sides' too), then one Combat Ant, then one Fire Ant. It has none of the standard bot's fight tasks.
 //   2. the raids     every Thief raids the hill whose score box is highest (at least 30 points) that is not shut, again and again, and harvests between raids.
-//   3. the gang      it keeps a gang of `gang_size` ants (four by default; every type of ant but a Thief; never an ant that carries food). The target is the enemy ant that carries nothing within eight
+//   3. the gang      from tick 300 it keeps a gang of `gang_size` ants (four by default; every type of ant but a Thief; never an ant that carries food). The target is the enemy ant that carries nothing within eight
 //                    tiles of the gang's centre: Thieves, Fire Ants and Bombers first, then the one with the fewest hit points. One strike order names every gang ant that is idle after its blow, again and
 //                    again, until the target is dead or more than ten tiles from the gang's centre; then it takes the next one. A gang ant with three hit points or fewer goes to its hill and rejoins
 //                    when it is healed. With no target in reach the gang walks to the pile that is nearest the victim's hill (the victim is the enemy with the highest score box) and waits there.
@@ -75,10 +75,6 @@ public:
         gang(view, orders, *map);
         harvest_.step(context);
     }
-
-    /// For the tests: the gang's ants now, and the hunter (0: none)
-    std::vector<uint32_t> gang_ants() const { return ledger_.ants_of(kGang); }
-    uint32_t hunter_ant() const noexcept { return hunter_; }
 
     static constexpr TaskId kGang = 30;
     static constexpr TaskId kHunter = 31;

@@ -55,7 +55,7 @@ struct Setup {
     bool hill_closed{false};
 };
 
-/// One blow: an ant lost hit points with an enemy ant in its attack clip within two tiles; that ant struck it
+/// One blow: an ant lost hit points with an enemy ant in its strike clip within two tiles; that ant struck it
 struct Blow {
     uint64_t tick{0};
     uint32_t victim{0};

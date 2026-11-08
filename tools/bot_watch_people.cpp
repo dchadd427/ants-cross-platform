@@ -13,7 +13,7 @@ namespace ants::watch {
 
 namespace {
 
-constexpr int32_t kStrikerRadius = 2;              // an enemy ant in its attack clip this near a hit ant struck the blow
+constexpr int32_t kStrikerRadius = 2;              // an enemy ant in its strike clip this near a hit ant struck the blow
 constexpr uint64_t kFightGapTicks = 300;           // the blows of one fight are at most this many ticks apart ...
 constexpr int32_t kFightGapTiles = 10;             // ... and at most this many tiles
 constexpr uint64_t kSamplePeriod = 20;             // the walking speed and the crowd at a fight are sampled every this many ticks
@@ -194,7 +194,7 @@ void People::tick(const Snapshot& s) {
         st.tile = a.tile;
     }
     std::sort(fell.begin(), fell.end(), [](const AntSnap* x, const AntSnap* y) { return x->id < y->id; });
-    // 2. the blows: a hit ant with an enemy ant in its attack clip within two tiles; the nearest such ant struck it
+    // 2. the blows: a hit ant with an enemy ant in its strike clip within two tiles; the nearest such ant struck it
     for (const AntSnap* v : fell) {
         const AntSnap* striker = nullptr;
         int32_t best = INT_MAX;

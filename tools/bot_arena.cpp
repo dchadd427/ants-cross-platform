@@ -11,7 +11,7 @@
 //   --seeds A..B      the engine and controller seeds: "3", "1..8", "1,4,9..12" (default 1)
 //   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE: KIND idle, worker, standard (or one of the
 //                     bench bots of tools/bench_aggressor.hpp, which are not bots of the game: aggressor, aggressor2 (a double-thief opening), rusher (the contested middle first),
-//                     saboteur, gang (harvests, raids and fights as a group), aggr1 .. aggr9 (an aggressor with that many attackers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
+//                     saboteur, gang (harvests, raids and fights as a group), aggr1 .. aggr9 (an aggressor with that many strikers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
 //                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
 //                     the keys of apply_tune (the tournaments' ablations).
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants. idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
