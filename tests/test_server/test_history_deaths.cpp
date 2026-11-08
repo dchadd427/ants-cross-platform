@@ -689,7 +689,7 @@ int main() {
 
     // ---- the sum of a map ---------------------------------------------------------------------------------------------------------------
 
-    TEST_CASE("DD5.1 The sum of a map adds up the fields of its matches: two real matches on TREASURE (11 ants lost in each), every ant counted once, per team and per cause; matches = how many; the name comes back as stored") {
+    TEST_CASE("DD5.1 The sum of a map adds up the fields of its matches: two real matches on TREASURE (12 and 14 ants lost), every ant counted once, per team and per cause; matches = how many; the name comes back as stored") {
         if (match_file(4).empty() || match_file(5).empty()) {
             std::cout << "SKIPPED (no map)\n";
             return;
@@ -869,7 +869,7 @@ int main() {
         ctl::HttpResponse r = server.door("GET", "/history/deaths", "map=TREASURE.LVL");
         ASSERT_TRUE(r.status == 200 && r.content_type == "application/json");
         JsonValue j = parse_text(r.body);
-        ASSERT_TRUE(j.get("map").str() == "TREASURE.LVL" && j.get("matches").as_int_or(0) == 2 && j.get("n").as_int_or(0) == 29);
+        ASSERT_TRUE(j.get("map").str() == "TREASURE.LVL" && j.get("matches").as_int_or(0) == 2 && j.get("n").as_int_or(0) == 26);
         ASSERT_EQ(server.control("GET", "/history/deaths", "map=treasure.lvl").body, r.body);
         ASSERT_EQ(server.door("GET", "/history/deaths", "map=treasure.lvl").body, r.body);
         const ctl::HttpResponse item = server.door("GET", "/history/" + id);

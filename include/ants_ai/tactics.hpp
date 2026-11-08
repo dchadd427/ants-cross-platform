@@ -52,7 +52,7 @@ struct LevelPlan {
     bool defend_by_strength{false};      // the defence is sized by the enemy ants near the target (defend_extra, defend_max, defend_reach), and kept up through the target's hit clips while the own strength
                                          // is at least defend_keep_percent of theirs, the target is within the leash and blows fall (keep_defence); called off at once when the force is weaker
     uint32_t defend_keep_percent{100};   // ... the own strength in percent of the enemy's that keeps the fight up (Hard 100, Medium 120)
-    int32_t defend_radius{4};            // ... the tiles round the target in which the enemy ants are counted and weighed
+    int32_t defend_radius{5};            // ... the tiles round the target in which the enemy ants are counted and weighed (5, Hard and Medium)
     uint32_t defend_extra{1};            // ... defenders wanted beyond the enemy ants there (at least the level's defenders)
     uint32_t defend_max{5};              // ... the most defenders of one fight (Hard 5, Medium 3)
     int32_t defend_reach{10};            // ... a defender comes from at most this many tiles from the target (and never from beyond leash_tiles) (Hard 10, Medium 8)

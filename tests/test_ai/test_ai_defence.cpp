@@ -389,7 +389,7 @@ void run_defence_tests() {
             ASSERT_EQ(p.defend_all_types, level == Level::Hard);
             ASSERT_EQ(p.victim_answers, level == Level::Hard);
             ASSERT_EQ(p.defend_by_strength, level == Level::Hard);
-            ASSERT_EQ(p.defend_radius, 4);
+            ASSERT_EQ(p.defend_radius, 5);
             ASSERT_EQ(p.defend_extra, 1u);
             ASSERT_EQ(p.defend_keep_percent, level == Level::Medium ? 120u : 100u);
             ASSERT_EQ(p.defend_max, level == Level::Medium ? 3u : 5u);

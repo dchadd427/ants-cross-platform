@@ -139,7 +139,7 @@ Hard now answers a blow the way a group of people does: every ant that can strik
 | 5 | *Focus.* All defenders strike the fight's target until it dies, runs (rule 4 fails) or leaves the leash. The escape rule (one hit point, walking home, a lead of two tiles) and the can't-go rule are as they were. | |
 | 6 | *The last ants* stay out of every fight (the reserve is unchanged), and a defender that falls below 3 hit points (4 beside an enemy Combat Ant) leaves, as before. | |
 
-Hard: the three flags on, `defend_keep_percent` 100, `defend_radius` 4, `defend_extra` 1, `defend_max` 5, `defend_reach` 10. Medium: the flags off, 120, 4, 1, 3, 8. Easy: the flags off. A plan made by hand has none of it. `defence=0` takes the batch out of a plan and `defence=1` puts the three rules on with the level's numbers (`bot_arena --tune K=V,...`, or `standard+K=V` for one seat; add `styled=1` to a tuned seat that is to keep the style and the variations of the registry's bot). `without_defence_batch` in `tactics.hpp` does the same for the tests.
+Hard: the three flags on, `defend_keep_percent` 100, `defend_radius` 5, `defend_extra` 1, `defend_max` 5, `defend_reach` 10. Medium: the flags off, 120, 5, 1, 3, 8. Easy: the flags off. (The radius is 5 where the first draft of the plan had 4: with 4 the hit-back rate of item 1 below was 59.8%, 54.8% and 56.7% on three sets of 24 seeds, with 5 it was 61.9%, 55.6% and 58.7%, and the score was higher on all three.) A plan made by hand has none of it. `defence=0` takes the batch out of a plan and `defence=1` puts the three rules on with the level's numbers (`bot_arena --tune K=V,...`, or `standard+K=V` for one seat; add `styled=1` to a tuned seat that is to keep the style and the variations of the registry's bot). `without_defence_batch` in `tactics.hpp` does the same for the tests.
 
 **What the engine allows.** An ant that is struck cannot take an order while the striker's clip runs and during its own hit clip: the engine refuses orders to an ant that is engaged or in flight, about 25 ticks of every blow. So the struck ant strikes back when the striker waits a moment or the others have been at it; most of the answer comes from the ants near it.
 
@@ -147,66 +147,66 @@ Hard: the three flags on, `defend_keep_percent` 100, `defend_radius` 4, `defend_
 
 | # | measure: Hard against `gang:hard`, TREASURE, seeds 1 to 24, both seats | before | after | bar |
 |---|---|---|---|---|
-| 1 | hit back / struck first | 115 / 444 = 25.9% | 128 / 214 = 59.8% | at least 60% |
-| 2 | ticks from the first blow to the first blow of a helper, median (p90) | 129 (366) | 112 (290) | median at most 120 |
-| 3 | ants lost / killed in the fights | 37 / 25 | 25 / 44 | at most 29.6 / at least 37.5 |
-| 4 | mean score of the seat | 3308 | 3361 | at least the before |
-| 5 | self-play win rate, all three maps: Hard / Medium / Easy | 0.638 / 0.149 / 0.053 | 0.643 / 0.146 / 0.049 | Hard at most 3 points down, Medium and Easy within 1 point |
+| 1 | hit back / struck first | 115 / 444 = 25.9% | 125 / 202 = 61.9% | at least 60% |
+| 2 | ticks from the first blow to the first blow of a helper, median (p90) | 129 (366) | 100 (246) | median at most 120 |
+| 3 | ants lost / killed in the fights | 37 / 25 | 22 / 44 | at most 29.6 / at least 37.5 |
+| 4 | mean score of the seat | 3308 | 3391 | at least the before |
+| 5 | self-play win rate, all three maps: Hard / Medium / Easy | 0.638 / 0.149 / 0.053 | 0.653 / 0.142 / 0.051 | Hard at most 3 points down, Medium and Easy within 1 point |
 
-Item 1 is the ratio of two numbers that both moved: the bot is struck first in 214 fights instead of 444, probably because its answers kill more of the ants that strike. Most of the fights that are left are ones in which nobody could answer. In a look at the 24 matches in which the bot sat at seat 0 (the same code), 41 of 143 fights had no answer, and in 23 of those the struck ant carried food; the other ants near it carried food too, or were held by another fight, or were further away than `defend_reach`. Item 1 is 0.2 points under its bar.
+Item 1 is the ratio of two numbers that both moved: the bot is struck first in 202 fights instead of 444, probably because its answers kill more of the ants that strike. Most of the fights that are left are ones in which nobody could answer: the struck ant carries food, and the ants near it carry food too, are held by another fight, or are further away than `defend_reach`. On the other seeds (not part of the acceptance) the rate is lower: 55.6% on seeds 25 to 48 (the bot before: 30.9%) and 58.7% on seeds 49 to 72, so the bar of item 1 is not reliably cleared: it is about 55 to 62 percent.
 
 **Fights in which the seat was struck first**
 
 | run | seat | seats | struck first | hit back | helped (median, p90 ticks) | strikers own / enemy | at the fight own / enemy | lost / killed in fights |
 |---|---|---|---|---|---|---|---|---|
-| hard vs gang:hard | standard:hard | 48 | 214 | 128 (60%) | 123 (112, 290) | 1.58 / 1.77 | 3.27 / 2.20 | 25 / 44 |
-| hard vs gang:hard | gang:hard | 48 | 142 | 81 (57%) | 52 (156, 445) | 1.10 / 1.94 | 2.09 / 3.30 | 43 / 3 |
-| hard vs gang:medium | standard:hard | 48 | 166 | 109 (66%) | 96 (78, 334) | 1.60 / 1.55 | 3.29 / 2.10 | 9 / 30 |
-| hard vs gang:medium | gang:medium | 48 | 246 | 101 (41%) | 80 (153, 536) | 0.90 / 2.03 | 2.15 / 3.28 | 67 / 1 |
-| four hard (mirror) | standard:hard | 32 | 313 | 72 (23%) | 62 (118, 284) | 0.42 / 1.38 | 2.02 / 2.14 | 16 / 7 |
+| hard vs gang:hard | standard:hard | 48 | 202 | 125 (62%) | 119 (100, 246) | 1.59 / 1.81 | 3.17 / 2.23 | 22 / 44 |
+| hard vs gang:hard | gang:hard | 48 | 132 | 75 (57%) | 54 (124, 450) | 1.20 / 2.03 | 2.21 / 3.36 | 50 / 4 |
+| hard vs gang:medium | standard:hard | 48 | 162 | 104 (64%) | 94 (69, 307) | 1.61 / 1.54 | 3.29 / 2.07 | 6 / 22 |
+| hard vs gang:medium | gang:medium | 48 | 278 | 115 (41%) | 83 (158, 468) | 0.82 / 2.03 | 2.06 / 3.24 | 76 / 1 |
+| four hard (mirror) | standard:hard | 32 | 333 | 84 (25%) | 72 (106, 318) | 0.46 / 1.29 | 2.10 / 2.17 | 26 / 6 |
 
 **Deaths, heals, Fire Ants, mines, blows**
 
 | run | seat | deaths | could walk home / far / no warning | heals | Fire Ants (died) | walls at enemy gates | home mines by 3,000 / 6,000 / 12,000 | away mines (hits) | blows struck | focus |
 |---|---|---|---|---|---|---|---|---|---|---|
-| hard vs gang:hard | standard:hard | 47 | 31 / 4 / 12 | 487 | 116 (23) | 457 | 0 / 0 / 0 | 0 (0) | 1823 | 63% |
-| hard vs gang:hard | gang:hard | 172 | 82 / 52 / 38 | 193 | 39 (31) | 0 | 0 / 0 / 0 | 0 (0) | 1500 | 60% |
-| hard vs gang:medium | standard:hard | 28 | 11 / 3 / 14 | 443 | 116 (12) | 540 | 0 / 0 / 0 | 0 (0) | 2098 | 64% |
-| hard vs gang:medium | gang:medium | 185 | 86 / 43 / 56 | 262 | 51 (43) | 0 | 0 / 0 / 0 | 0 (0) | 990 | 46% |
-| four hard (mirror) | standard:hard | 63 | 22 / 15 / 26 | 354 | 36 (8) | 40 | 0 / 0 / 3 | 436 (222) | 903 | 61% |
+| hard vs gang:hard | standard:hard | 44 | 26 / 5 / 13 | 473 | 115 (23) | 456 | 0 / 0 / 0 | 0 (0) | 1710 | 62% |
+| hard vs gang:hard | gang:hard | 172 | 83 / 45 / 44 | 177 | 46 (38) | 0 | 0 / 0 / 0 | 0 (0) | 1468 | 59% |
+| hard vs gang:medium | standard:hard | 25 | 8 / 4 / 13 | 450 | 117 (14) | 542 | 0 / 0 / 0 | 0 (0) | 2161 | 67% |
+| hard vs gang:medium | gang:medium | 197 | 87 / 44 / 66 | 276 | 52 (47) | 0 | 0 / 0 / 0 | 0 (0) | 915 | 44% |
+| four hard (mirror) | standard:hard | 61 | 21 / 20 / 20 | 378 | 36 (7) | 7 | 0 / 0 / 2 | 305 (144) | 916 | 59% |
 
 **Points and ants** (the engine's own counts, per seat and match)
 
 | run | seat | seats | score | ants killed | ants lost | ants left |
 |---|---|---|---|---|---|---|
-| hard vs gang:hard | standard:hard | 48 | 3361 | 3.58 | 0.98 | 5.0 |
-| hard vs gang:hard | gang:hard | 48 | 313 | 0.96 | 3.58 | 2.5 |
-| hard vs gang:medium | standard:hard | 48 | 3483 | 3.83 | 0.58 | 5.4 |
-| hard vs gang:medium | gang:medium | 48 | 193 | 0.58 | 3.83 | 2.3 |
-| four hard (mirror) | standard:hard | 32 | 1875 | 1.88 | 1.97 | 4.0 |
+| hard vs gang:hard | standard:hard | 48 | 3391 | 3.58 | 0.92 | 5.1 |
+| hard vs gang:hard | gang:hard | 48 | 325 | 0.90 | 3.58 | 2.4 |
+| hard vs gang:medium | standard:hard | 48 | 3497 | 4.08 | 0.52 | 5.5 |
+| hard vs gang:medium | gang:medium | 48 | 189 | 0.52 | 4.08 | 2.0 |
+| four hard (mirror) | standard:hard | 32 | 1953 | 1.81 | 1.81 | 4.1 |
 
 **Self-play**, the same 1,080 matches as above, before next to after (win rate and margin as defined there):
 
 | maps | bot | seats | win rate before | after | margin before | after |
 |---|---|---|---|---|---|---|
-| all three | standard:hard | 1080 | 0.638 | 0.643 | +213 | +221 |
-| all three | standard:medium | 2160 | 0.149 | 0.146 | -436 | -440 |
-| all three | standard:easy | 1080 | 0.053 | 0.049 | -784 | -769 |
-| TREASURE | standard:hard | 360 | 0.847 | 0.864 | +445 | +472 |
-| TREASURE | standard:medium | 720 | 0.074 | 0.058 | -739 | -760 |
-| TREASURE | standard:easy | 360 | 0.000 | 0.008 | -1601 | -1545 |
-| SMALL | standard:hard | 360 | 0.575 | 0.556 | +43 | +26 |
-| SMALL | standard:medium | 720 | 0.176 | 0.183 | -221 | -210 |
-| SMALL | standard:easy | 360 | 0.058 | 0.047 | -286 | -274 |
-| MEDIUM | standard:hard | 360 | 0.492 | 0.508 | +150 | +167 |
-| MEDIUM | standard:medium | 720 | 0.197 | 0.197 | -348 | -350 |
-| MEDIUM | standard:easy | 360 | 0.100 | 0.092 | -465 | -488 |
+| all three | standard:hard | 1080 | 0.638 | 0.653 | +213 | +219 |
+| all three | standard:medium | 2160 | 0.149 | 0.142 | -436 | -439 |
+| all three | standard:easy | 1080 | 0.053 | 0.051 | -784 | -765 |
+| TREASURE | standard:hard | 360 | 0.847 | 0.875 | +445 | +468 |
+| TREASURE | standard:medium | 720 | 0.074 | 0.057 | -739 | -765 |
+| TREASURE | standard:easy | 360 | 0.000 | 0.006 | -1601 | -1532 |
+| SMALL | standard:hard | 360 | 0.575 | 0.581 | +43 | +31 |
+| SMALL | standard:medium | 720 | 0.176 | 0.168 | -221 | -213 |
+| SMALL | standard:easy | 360 | 0.058 | 0.058 | -286 | -278 |
+| MEDIUM | standard:hard | 360 | 0.492 | 0.503 | +150 | +159 |
+| MEDIUM | standard:medium | 720 | 0.197 | 0.201 | -348 | -340 |
+| MEDIUM | standard:easy | 360 | 0.100 | 0.089 | -465 | -485 |
 
-The rest of the self-play check: the Hard mirror (four Hard bots, seeds 1 to 8): win rate 0.250 per seat (a fair share is .250; the seats are alike), mean score 1875 against 1869.
+The rest of the self-play check: the Hard mirror (four Hard bots, seeds 1 to 8): win rate 0.250 per seat (a fair share is .250; the seats are alike), mean score 1953 against 1869.
 
-What the numbers say: against the gang at Hard the bot now answers in about 6 of 10 fights (a quarter before), more of its ants strike (1.6 against 0.4) and the first helper strikes after 112 ticks instead of 129; it loses 25 ants in these fights instead of 37 and kills 44 instead of 25, and the engine counts 3.6 ants killed and 1.0 lost per match against 2.0 and 1.7. Against the milder gang it answers more often as well (66 percent, 62 before) and loses and kills more in the fights (9 and 30, 2 and 24 before), and its mean score is lower (3,483 against 3,682), most likely the food of the ants that fight. In the mirror the bot hits back less often (23 percent, 38 before), mostly because it calls off a fight in which the other side is the stronger instead of sending three ants into it, and it loses fewer ants in those fights than it kills (16 and 7, 21 and 2 before).
+What the numbers say: against the gang at Hard the bot now answers in about 6 of 10 fights (a quarter before), more of its ants strike (1.6 against 0.4) and the first helper strikes after 100 ticks instead of 129; it loses 22 ants in these fights instead of 37 and kills 44 instead of 25, and the engine counts 3.6 ants killed and 0.9 lost per match against 2.0 and 1.7. Against the milder gang it answers more often as well (64 percent, 62 before) and loses and kills more in the fights (6 and 22, 2 and 24 before), and its mean score is lower (3,497 against 3,682), most likely the food of the ants that fight. In the mirror the bot hits back less often (25 percent, 38 before), mostly because it calls off a fight in which the other side is the stronger instead of sending three ants into it, and it loses more ants in those fights than it kills (26 and 6, 21 and 2 before); its mean score is higher (1,953 against 1,869).
 
-**Tune keys that move the numbers** (Hard against `gang:hard`, the same 48 matches, each key alone on top of the shipped plan; the other numbers are in the report): `dkeep=80` hit back 57.1%, helper after 103 ticks, 22 lost and 42 killed, score 3,331; `dkeep=120` 55.9%, 104, 22 / 44, 3,294; `dradius=6` 59.6%, 102, 20 / 49, 3,335; `dreach=14` 53.3%, 104, 22 / 42, 3,206; `dextra=0` 58.6%, 110, 23 / 44, 3,383; `dstr=0` (rules 1 and 2 only) 67.8%, 132, 23 / 34, 3,224; `dmax=4` and `dmax=7` change nothing (no fight in these matches asked for more than 4). The rate of item 1 moves by a few points with any of them: it is within the noise of 48 matches.
+**Tune keys that move the numbers** (Hard against `gang:hard`, the same 48 matches, one key at a time on top of the shipped plan; hit back, ticks to the first helper, ants lost and killed in the fights, mean score): the shipped plan 61.9%, 100, 22 and 44, 3,391; `dradius=4` 59.8%, 112, 25 and 44, 3,361; `dradius=6` 59.6%, 102, 20 and 49, 3,335; `dkeep=80` 57.9%, 109, 25 and 44, 3,312; `dkeep=120` 60.5%, 104, 22 and 41, 3,380; `dextra=0` 56.2%, 96, 22 and 40, 3,380; `dreach=14` 58.3%, 97, 29 and 43, 3,280; `dstr=0` (rules 1 and 2 only) 67.8%, 132, 23 and 34, 3,224; `dmax=4` 61.4%, 100, 22 and 43, 3,392; `dmax=7` is the shipped plan (no fight in these matches asked for more than 5). The rate of item 1 moves by a few points with any of them: it is within the noise of 48 matches.
 
 ## Commands
 
