@@ -44,6 +44,10 @@ add_library(ants_app STATIC
     hud_input.cpp
     hud_radar.cpp
     hud_match_start.cpp
+    hud_alliance.cpp
+    hud_chat.cpp
+    hud_keys.cpp
+    hud_pointer.cpp
     minimap_tables.cpp
     map_preview.cpp
     wide_page.cpp

@@ -632,7 +632,7 @@
     },
     {
       "id": "esc_asks_with_a_repeat",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "if (nothing_to_cancel && !repeat && on_menu_request_) on_menu_request_();",
       "new": "if (nothing_to_cancel && on_menu_request_) on_menu_request_();",
       "build": [
@@ -642,7 +642,7 @@
     },
     {
       "id": "esc_asks_with_a_selection",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "const bool nothing_to_cancel = !has_selection() && !slot_latched_[0] && !slot_latched_[1];",
       "new": "const bool nothing_to_cancel = true;",
       "build": [
@@ -652,7 +652,7 @@
     },
     {
       "id": "esc_asks_with_a_latched_pedestal",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "const bool nothing_to_cancel = !has_selection() && !slot_latched_[0] && !slot_latched_[1];",
       "new": "const bool nothing_to_cancel = !has_selection();",
       "build": [
@@ -842,7 +842,7 @@
     },
     {
       "id": "option_scroll_not_taken",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "case OptionSetting::ScrollSpeed: state.scroll_speed = std::clamp<int32_t>(value, 0, 99); break;",
       "new": "case OptionSetting::ScrollSpeed: break;",
       "build": [
@@ -852,7 +852,7 @@
     },
     {
       "id": "option_not_applied",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "        default: return;\n    }\n    apply_option(setting);",
       "new": "        default: return;\n    }",
       "build": [
@@ -1002,7 +1002,7 @@
     },
     {
       "id": "scroll_not_held",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "state.scroll_speed = std::clamp<int32_t>(value, 0, 99);",
       "new": "state.scroll_speed = std::clamp<int32_t>(value, 0, 255);",
       "build": [
@@ -1214,7 +1214,7 @@
     },
     {
       "id": "ctrl_l_forgets_the_choice",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "health_.when == health::When::Off ? health_resume_ : health::When::Off",
       "new": "health_.when == health::When::Off ? health::When::Hurt : health::When::Off",
       "build": [
@@ -1224,7 +1224,7 @@
     },
     {
       "id": "ctrl_l_resets_the_look",
-      "file": "src/ants_app/hud.cpp",
+      "file": "src/ants_app/hud_keys.cpp",
       "old": "health::When::Off, health_.style});",
       "new": "health::When::Off, health::Style::Bar});",
       "build": [
