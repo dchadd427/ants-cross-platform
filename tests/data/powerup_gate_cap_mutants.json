@@ -1,9 +1,9 @@
 {
- "note": "Mutants of the limit that a gate map's bot has on the power-ups that it looks at (src/ants_ai/standard_tasks.cpp, PowerUpTask::try_start and field_for, include/ants_ai/standard_tasks.hpp, gate_candidates), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/powerup_gate_cap_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught by AI33 (the searches of one look on a map of 200 x 200 with 1,000 power-ups, the 101st power-up of a map of 60 x 60, the time that a field is kept). Not listed on purpose: a field that is searched again when its time is over inside field_for: the fields older than that are dropped at the start of every look, so it never happens there.",
+ "note": "Mutants of the limit that a gate map's bot has on the power-ups that it looks at (src/ants_ai/standard_tasks_powerup.cpp, PowerUpTask::try_start and field_for, include/ants_ai/standard_tasks.hpp, gate_candidates), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/powerup_gate_cap_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught by AI33 (the searches of one look on a map of 200 x 200 with 1,000 power-ups, the 101st power-up of a map of 60 x 60, the time that a field is kept). Not listed on purpose: a field that is searched again when its time is over inside field_for: the fields older than that are dropped at the start of every look, so it never happens there.",
  "mutants": [
   {
    "id": "gate_map_looks_at_every_power_up",
-   "file": "src/ants_ai/standard_tasks.cpp",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
    "old": "    const size_t limit = std::min(cands.size(), tactics_.gate_map ? gate_candidates(static_cast<uint64_t>(grid.width()) * grid.height()) : size_t{3});     // (a gate map's bot looks further, as far as the searches stay within a budget)\n",
    "new": "    const size_t limit = tactics_.gate_map ? cands.size() : std::min<size_t>(3, cands.size());\n",
    "build": "test_ai",
@@ -43,7 +43,7 @@
   },
   {
    "id": "fields_are_dropped_at_every_look",
-   "file": "src/ants_ai/standard_tasks.cpp",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
    "old": "    for (auto it = fields_.begin(); it != fields_.end();) it = now >= it->second.tick + params_.field_ttl_ticks ? fields_.erase(it) : std::next(it);",
    "new": "    for (auto it = fields_.begin(); it != fields_.end();) it = now >= it->second.tick ? fields_.erase(it) : std::next(it);",
    "build": "test_ai",
@@ -51,7 +51,7 @@
   },
   {
    "id": "searches_are_not_counted",
-   "file": "src/ants_ai/standard_tasks.cpp",
+   "file": "src/ants_ai/standard_tasks_powerup.cpp",
    "old": "        e.tick = now;\n        ++searches_;",
    "new": "        e.tick = now;",
    "build": "test_ai",
