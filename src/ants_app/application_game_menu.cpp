@@ -13,7 +13,7 @@
   #include <emscripten.h>
 
 extern "C" {
-// Esc found nothing to cancel: the page's panel opens (a page without it, or an embedded frame, has no function of this name and Esc stays what it was). EM_JS and not EM_ASM: see application.cpp.
+// Esc found nothing to cancel: the page's panel opens (a page without it, or an embedded frame, has no function of this name and Esc stays what it was). EM_JS and not EM_ASM: see application_sim.cpp.
 EM_JS(void, ants_ask_game_menu, (), {
     try { if (window.antsGameMenuAsk) window.antsGameMenuAsk(); } catch (e) {}
 });

@@ -2818,7 +2818,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src
 ### 5.45 Keyboard, Button Class and Chat (Capstone-Verified; Supersedes Earlier Hotkey, Chat Focus and Button Notes)
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD::handle_key_down`, `HUD::handle_text_input`, `HUD::send_chat`, `HUD::handle_mouse_down / up / motion` (`src/ants_app/hud*.cpp`) and
-`Application::handle_key_down` (`src/ants_app/application.cpp`, developer shortcuts and routing only). Checked by `tests/test_app/test_pointer_model.cpp` (`test_keyboard`, `test_buttons`) and the integration tests
+`Application::handle_key_down` (`src/ants_app/application*.cpp`, developer shortcuts and routing only). Checked by `tests/test_app/test_pointer_model.cpp` (`test_keyboard`, `test_buttons`) and the integration tests
 7.5, 9.7, 11.3, 12.58, 12.59, 12.75.
 
 * **Key ids** (`0x1031bbd`): Up 0xE, Down 0xF, Left 0x10, Right 0x11, F1 0x12, F9 - F12 0x13 - 0x16, Ctrl 0x17, Enter 0x18, Backspace 0x19, Esc 0x1a, Shift 0x1b, printable ASCII 0x20 - 0x7e (Ctrl is cleared before

@@ -812,7 +812,7 @@
     },
     {
       "id": "fingers_while_open",
-      "file": "src/ants_app/application.cpp",
+      "file": "src/ants_app/application_input.cpp",
       "old": "if (!game_menu_open_) feed_touch(event.tfinger);",
       "new": "feed_touch(event.tfinger);",
       "build": [
@@ -822,7 +822,7 @@
     },
     {
       "id": "gating_removed",
-      "file": "src/ants_app/application.cpp",
+      "file": "src/ants_app/application_input.cpp",
       "old": "        if (game_menu_takes(event)) continue;",
       "new": "        if (false) continue;",
       "build": [
@@ -832,7 +832,7 @@
     },
     {
       "id": "frame_never_ends_the_close",
-      "file": "src/ants_app/application.cpp",
+      "file": "src/ants_app/application_input.cpp",
       "old": "    end_game_menu_frame();\n}",
       "new": "}",
       "build": [
