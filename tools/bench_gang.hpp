@@ -19,7 +19,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <vector>
@@ -150,6 +152,7 @@ private:
     }
     // The pile with units left that the victim's hill reaches at the least cost (null: none)
     const PileView* victim_pile(const BotView& view, const MapInfo& map) const {
+        if (victim_ < 0) return nullptr;
         const PileView* best = nullptr;
         int32_t best_cost = 0;
         for (const PileView& p : view.piles()) {
