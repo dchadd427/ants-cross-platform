@@ -177,10 +177,10 @@ function rig(o) {
     same('a person with the visitor\'s name is not the visitor: only the row that is the visitor\'s number is left out', [P.listOf(twins, 2).look.map((r) => r.id), P.listOf(twins, 1).look.map((r) => r.id)], [[1, 3], [2, 3]]);
 
     const m = (o) => Object.assign({ at: 'look', pub: false, mapName: '', n: -1, of: -1 }, o);
-    same('the line under a name: nothing for one who looks (the visitor and a moderator are told where), a room by its map and seats or "Private room"', [
-        P.metaOf(m({}), false), P.metaOf(m({}), true), P.metaOf(m({ at: 'wait' }), false), P.metaOf(m({ at: 'wait', pub: true }), false), P.metaOf(m({ at: 'wait', pub: true, mapName: 'Treasure', n: 2, of: 4 }), false), P.metaOf(m({ at: 'wait', pub: true, mapName: 'Treasure' }), false), P.metaOf(m({ at: 'wait', pub: true, n: 1, of: 2 }), false)],
-        ['', 'Looking', 'Private room', 'Public room', 'Treasure · 2 of 4', 'Treasure', '1 of 2']);
-    same('... a match by its map and its players, "Private game" for one that is not public, "In a game" when nothing is known', [P.metaOf(m({ at: 'play', pub: true, mapName: 'Islands', n: 3 }), false), P.metaOf(m({ at: 'play', pub: true, mapName: 'Islands', n: 1 }), false), P.metaOf(m({ at: 'play', pub: true }), false), P.metaOf(m({ at: 'play' }), false), P.metaOf(m({ at: 'play', pub: true, n: 0 }), false)], ['Islands · 3 players', 'Islands · 1 player', 'In a game', 'Private game', '0 players']);
+    same('the line under a name: nothing for one who looks (the visitor and a moderator are told where), a room by its map and seats; "In a room" where the hub says nothing of the room (it keeps no details of a private room, nor of the room of an account that may not chat: it is not called private), and "Private room" only on the visitor\'s own row', [
+        P.metaOf(m({}), false), P.metaOf(m({}), true), P.metaOf(m({ at: 'wait' }), false), P.metaOf(m({ at: 'wait' }), true), P.metaOf(m({ at: 'wait' }), true, true), P.metaOf(m({ at: 'wait', pub: true }), false), P.metaOf(m({ at: 'wait', pub: true, mapName: 'Treasure', n: 2, of: 4 }), false), P.metaOf(m({ at: 'wait', pub: true, mapName: 'Treasure' }), false), P.metaOf(m({ at: 'wait', pub: true, n: 1, of: 2 }), false), P.metaOf(m({ at: 'wait', pub: true }), true, true)],
+        ['', 'Looking', 'In a room', 'In a room', 'Private room', 'Public room', 'Treasure · 2 of 4', 'Treasure', '1 of 2', 'Public room']);
+    same('... a match by its map and its players, "In a game" when nothing is known or the hub says nothing of it, and "Private game" only on the visitor\'s own row', [P.metaOf(m({ at: 'play', pub: true, mapName: 'Islands', n: 3 }), false), P.metaOf(m({ at: 'play', pub: true, mapName: 'Islands', n: 1 }), false), P.metaOf(m({ at: 'play', pub: true }), false), P.metaOf(m({ at: 'play' }), false), P.metaOf(m({ at: 'play' }), true), P.metaOf(m({ at: 'play' }), true, true), P.metaOf(m({ at: 'play', pub: true, n: 0 }), false)], ['Islands · 3 players', 'Islands · 1 player', 'In a game', 'In a game', 'In a game', 'Private game', '0 players']);
     same('a name in the possessive: "Sage’s", "Tess’" after an s', [P.possessive('sage'), P.possessive('tess'), P.possessive('Tess')], ['sage’s', 'tess’', 'Tess’']);
 
     const say = P.announceOf;
@@ -334,7 +334,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
         { g: 'mod', n: '1', names: ['tess'] }, { g: 'look', n: '3', names: ['basil', 'fern', 'sage'] }, { g: 'wait', n: '2', names: ['clover', 'juniper'] }, { g: 'play', n: '2', names: ['hazel', 'pebble'] }]);
     same('the headings of the groups', texts(r.panel(), 'pl-gh').map((t) => t.replace(/\d+$/, '')), ['Moderators', 'Looking', 'Waiting', 'Playing']);
     check('the visitor is first, apart, as "you" with the line that says where', one(r.panel(), 'pl-you') && texts(one(r.panel(), 'pl-you'), 'pl-nm').join() === 'maple' && texts(one(r.panel(), 'pl-you'), 'pl-tag').join() === 'you' && texts(one(r.panel(), 'pl-you'), 'pl-meta').join().indexOf('Looking') !== -1);
-    same('the lines under the names: a moderator is told where, those who look are not, a room by its map and seats, "Private room", a match by its map and players', ['tess', 'sage', 'clover', 'juniper', 'pebble', 'hazel'].map((n) => r.metaOf(n)), ['Looking: Looking', null, 'Treasure · 2 of 4', 'Private room', 'Islands · 3 players', 'Gauntlet · 2 players']);
+    same('the lines under the names: a moderator is told where, those who look are not, a room by its map and seats, "In a room" for a room that the hub says nothing of, a match by its map and players', ['tess', 'sage', 'clover', 'juniper', 'pebble', 'hazel'].map((n) => r.metaOf(n)), ['Looking: Looking', null, 'Treasure · 2 of 4', 'In a room', 'Islands · 3 players', 'Gauntlet · 2 players']);
     same('the mark of a moderator is before the name, and only there', [texts(r.panel(), 'pl-badge'), one(byClass(r.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === 'tess'), 'pl-badge') !== null], [['mod'], true]);
     same('"+ 4 guests, not logged in", twice (in the list for a short window, under it otherwise: the style shows one)', texts(r.panel(), 'pl-guests'), ['…+ 4 guestsnot logged in', '…+ 4 guestsnot logged in']);
     same('each card says its status for the style (the dot of its circle)', byClass(r.panel(), 'pl-card').map((c) => c.getAttribute('data-s')), ['look', 'look', 'look', 'look', 'look', 'wait', 'wait', 'play', 'play'].slice(0, 0).concat(['look', 'look', 'look', 'look', 'look', 'wait', 'wait', 'play', 'play']));
@@ -468,6 +468,45 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     const mine = rig({ wide: true });
     mine.live(); mine.who(FULL([row(1, 'maple'), row(2, 'maple', 'wait', { pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'c1v3rr' }), row(3, 'sage')], { n: 4 }));
     same('a person who has the visitor\'s name is not hidden (only the row that is the visitor\'s number is)', mine.names().sort(), ['maple', 'maple', 'sage'].sort());
+}
+{   // an original's name: the page's own table's (a closed set of six), and for a room that the Games list has, only if the list shows the same name
+    const NAMES = { 'TINY.LVL': 'Tiny', 'SMALL.LVL': 'Small', 'MEDIUM.LVL': 'Medium', 'GAUNTLET.LVL': 'Gauntlet', 'TREASURE.LVL': 'Treasure', 'ISLANDS.LVL': 'Islands' };
+    const waits = (map, code) => row(6, 'mallory', 'wait', { pub: true, map, n: 4, of: 4, code: code || 'f4k3f4' });
+    const liar = rig({ wide: true });
+    liar.live(); liar.who(FULL([row(1, 'maple'), waits('GAUNTLET.LVL')], { n: 3 }));
+    liar.listed('f4k3f4', 'Islands'); liar.tick(1000);
+    same('an original\'s name that the Games list does not confirm is not drawn: the list has the room under that code as Islands, the hub says Gauntlet (the line has the seats, and the Join is the list\'s own)', [liar.metaOf('mallory'), liar.joins().length], ['4 of 4', 1]);
+    liar.unlisted('f4k3f4'); liar.listed('f4k3f4', 'Gauntlet'); liar.tick(1000);
+    same('... the list has it under that name: drawn', liar.metaOf('mallory'), 'Gauntlet · 4 of 4');
+    liar.unlisted('f4k3f4'); liar.listed('f4k3f4', 'Free nitro at discord.gg-abc'); liar.tick(1000);
+    same('... the list has it under words that are not the original\'s: not drawn (and the list\'s words are not drawn by this panel either)', [liar.metaOf('mallory'), JSON.stringify(texts(liar.panel(), 'pl-card')).indexOf('nitro')], ['4 of 4', -1]);
+    liar.unlisted('f4k3f4'); liar.tick(1000);
+    same('... the list has no such room: an original\'s name is the page\'s own table\'s, as the hub says it', liar.metaOf('mallory'), 'Gauntlet · 4 of 4');
+    const cases = [];
+    Object.keys(NAMES).forEach((file) => [file, file.toLowerCase(), file.slice(0, -4) + '.lvl', file.charAt(0) + file.slice(1, -4).toLowerCase() + '.LVL'].forEach((spelling) => cases.push([spelling, NAMES[file]])));
+    const spelled = rig({ wide: true });
+    spelled.live(); spelled.who(FULL([row(1, 'maple')].concat(cases.map((c, i) => row(10 + i, 'p' + String(i).padStart(2, '0'), 'wait', { pub: true, map: c[0], n: 1, of: 4 }))), { n: cases.length + 1 }));
+    same('the six originals, in every spelling that the page\'s rule takes of the file name, are drawn by the table\'s name and nothing else', cases.map((c, i) => spelled.metaOf('p' + String(i).padStart(2, '0'))), cases.map((c) => c[1] + ' · 1 of 4'));
+    // a run of file names of any shape: what is drawn is never a word of the hub's, but the table's six names (the closed set) or, where the list confirms it, the list's own name
+    let seed = 20261108;
+    const chance = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-!@#$%^&()+=,;\'[]{}~';
+    const maps = [];
+    for (let i = 0; i < 160; i++) { let n = 1 + Math.floor(chance() * 40), t = ''; while (n--) t += chars.charAt(Math.floor(chance() * chars.length)); maps.push(t + (chance() < 0.5 ? '.lvl' : '.LVL')); }
+    const wild = rig({ wide: true });
+    const rows = maps.map((map, i) => (i % 2 ? row(10 + i, 'w' + i, 'wait', { pub: true, map, n: 1 + (i % 4), of: 4, code: 'c' + i }) : row(10 + i, 'w' + i, 'play', { pub: true, map, n: 1 + (i % 4) })));
+    wild.live(); wild.who(FULL([row(1, 'maple')].concat(rows), { n: rows.length + 1 }));
+    const SHAPES = /^(?:(?:Tiny|Small|Medium|Gauntlet|Treasure|Islands) · )?(?:\d of \d|\d players?)$/;
+    check('file names of any shape, in rooms that the Games list does not have: the line is the seats or the players, and a name before them is one of the six', rows.every((r) => SHAPES.test(wild.metaOf(r.name))), rows.map((r) => wild.metaOf(r.name)).filter((t) => !SHAPES.test(t)).join(' | '));
+    rows.forEach((r, i) => { if (i % 2) wild.listed('c' + i, i % 6 === 1 ? 'Treasure' : 'Another map'); });
+    wild.tick(1000);
+    check('... and in rooms that it has, under a name that is not what the hub\'s file is called: the seats only (no word of the hub\'s and none of the list\'s)', rows.every((r, i) => !(i % 2) || /^\d of \d$/.test(wild.metaOf(r.name))), rows.map((r, i) => (i % 2 ? wild.metaOf(r.name) : '')).filter((t) => t && !/^\d of \d$/.test(t)).join(' | '));
+    check('... a page that says a room of the players is the one that the list shows under the same name has that name drawn (by a map of that name, in a room of its own)', (() => { const q = rig({ wide: true }); q.live(); q.who(FULL([row(1, 'maple'), waits('Same Name.lvl', 'c0mm00')], { n: 3 })); q.listed('c0mm00', 'Same Name'); q.tick(1000); return q.metaOf('mallory') === 'Same Name · 4 of 4'; })());
+}
+{   // a room that the hub says nothing of is not called private: the hub keeps no details of a private room nor of the room of an account that may not chat
+    const r = rig({ wide: true });
+    r.live(); r.who(FULL([row(1, 'maple'), row(2, 'pat', 'wait'), row(3, 'quinn', 'play'), row(4, 'rae', 'wait', { pub: true, code: 'c0mm00' })], { n: 4 }));
+    same('in the lines under the names of others: "In a room" and "In a game", and no word "Private"', [r.metaOf('pat'), r.metaOf('quinn'), r.metaOf('rae'), JSON.stringify(texts(r.panel(), 'pl-card')).indexOf('Private')], ['In a room', 'In a game', 'Public room', -1]);
 }
 {   // the visitor's own row is the one that the hub's welcome names, not a row with the visitor's name
     const youAnd = (r) => r.names().filter((n) => n === 'maple').length;

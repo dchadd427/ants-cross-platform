@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the chat hub (hub/, Dockerfile.hub, its two stack services, its nginx block and the deploy filter) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_*.py or test_nginx_hub.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_mutants.json --keep-going --jobs 1 --baseline-every 40. The tests use the real sockets of this machine and a real nginx program where one is installed (without one, the nginx mutants cannot be caught and show as survived).",
+ "note": "Mutants of the chat hub (hub/, Dockerfile.hub, its two stack services, its nginx block, the deploy filter and the wait of the test rig) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_*.py or test_nginx_hub.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_mutants.json --keep-going --jobs 1 --baseline-every 40. The tests use the real sockets of this machine and a real nginx program where one is installed (without one, the nginx mutants cannot be caught and show as survived).",
  "baseline": {
   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_text tests.scripts.test_hub_ws tests.scripts.test_hub_core tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_nginx_hub tests.scripts.test_staging_stack tests.scripts.test_deploy_filter"
  },
@@ -1892,6 +1892,97 @@
    "file": "hub/store/sqlite.py",
    "old": "for _name in PUBLIC + (\"checkpoint\",):",
    "new": "for _name in PUBLIC[:-1] + (\"checkpoint\",):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "rig_wait_is_short",
+   "file": "tests/scripts/hub_rig.py",
+   "old": "WAIT = 30 ",
+   "new": "WAIT = 10 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheRigWaitsForTheHub"
+  },
+  {
+   "id": "rig_start_does_not_use_the_wait",
+   "file": "tests/scripts/hub_rig.py",
+   "old": "self.start(), self.loop).result(WAIT)",
+   "new": "self.start(), self.loop).result(10)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheRigWaitsForTheHub"
+  },
+  {
+   "id": "rig_call_does_not_use_the_wait",
+   "file": "tests/scripts/hub_rig.py",
+   "old": "run(), self.loop).result(WAIT)",
+   "new": "run(), self.loop).result(10)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheRigWaitsForTheHub"
+  },
+  {
+   "id": "rig_stop_does_not_use_the_wait",
+   "file": "tests/scripts/hub_rig.py",
+   "old": "self.hub.stop(), self.loop).result(WAIT)",
+   "new": "self.hub.stop(), self.loop).result(10)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheRigWaitsForTheHub"
+  },
+  {
+   "id": "store_a_ban_is_not_counted",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.count_restriction()\n            self.db.execute(\"INSERT OR REPLACE INTO bans",
+   "new": "            self.db.execute(\"INSERT OR REPLACE INTO bans",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_an_unban_is_not_counted",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.count_restriction()\n            return self.db.execute(\"DELETE FROM bans",
+   "new": "            return self.db.execute(\"DELETE FROM bans",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_a_mute_is_not_counted",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.count_restriction()\n            if minutes <= 0:",
+   "new": "            if minutes <= 0:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_the_count_of_restrictions_stays",
+   "file": "hub/store/sqlite.py",
+   "old": "UPDATE meta SET v = v + 1 WHERE k = 'restrict_seq'",
+   "new": "UPDATE meta SET v = v WHERE k = 'restrict_seq'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_the_count_of_restrictions_is_never_made",
+   "file": "hub/store/sqlite.py",
+   "old": "        self.db.execute(\"INSERT OR IGNORE INTO meta (k, v) VALUES ('restrict_seq', 0)\")\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_the_last_restriction_is_the_last_deletion",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT v FROM meta WHERE k = 'restrict_seq'",
+   "new": "SELECT v FROM meta WHERE k = 'del_seq'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_a_line_counts_as_a_restriction",
+   "file": "hub/store/sqlite.py",
+   "old": "        at = int(self.clock())\n        cur = self.db.execute(\"INSERT INTO lines",
+   "new": "        self.count_restriction()\n        at = int(self.clock())\n        cur = self.db.execute(\"INSERT INTO lines",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_forget_counts_as_a_restriction",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"UPDATE bans SET name = '' WHERE account = ?\", (account,))\n",
+   "new": "            self.db.execute(\"UPDATE bans SET name = '' WHERE account = ?\", (account,))\n            self.count_restriction()\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "store_a_purge_counts_as_a_restriction",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM mutes WHERE until <= ?\", (now,))\n",
+   "new": "            self.db.execute(\"DELETE FROM mutes WHERE until <= ?\", (now,))\n            self.count_restriction()\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   }
  ]

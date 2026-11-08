@@ -97,6 +97,37 @@ class RigTest(unittest.TestCase):
         return [line.split(" ")[1] for line in self.rig.log_text.getvalue().splitlines() if " " in line]
 
 
+class TheRigWaitsForTheHub(unittest.TestCase):
+    """The rig waits for the hub's thread to start, to run a function and to stop; on a machine under load that takes longer than on a quiet one, and a test must not fail for it: the wait is one
+    long constant, and every wait of the rig is that constant (here it is made short, and a hub that is slower than it is told by a TimeoutError)."""
+
+    def test_the_wait_is_long_and_every_wait_of_the_rig_is_that_constant(self):
+        self.assertGreaterEqual(hub_rig.WAIT, 30)
+        with open(hub_rig.__file__, encoding="utf-8") as f:
+            self.assertEqual(re.findall(r"\.result\(([^)]*)\)", f.read()), ["WAIT"] * 3, "to start, to run a function, to stop")
+
+    def test_a_hub_that_is_slower_to_start_than_the_wait_is_a_timeout_and_one_that_is_faster_is_waited_for(self):
+        async def slow_start(rig):
+            await asyncio.sleep(0.6)
+            return 0
+        slow = hub_rig.Rig()
+        self.addCleanup(slow.folder.cleanup)
+        with mock.patch.object(hub_rig.Rig, "start", slow_start), mock.patch.object(hub_rig, "WAIT", 0.2):
+            with self.assertRaises(TimeoutError):
+                slow.__enter__()
+        time.sleep(0.7)                                 # (the start that nobody waited for is over: no task is left in the loop that is closed here)
+        slow.loop.call_soon_threadsafe(slow.loop.stop)
+        slow.thread.join(5)
+        slow.loop.close()
+        patient = hub_rig.Rig()
+        self.addCleanup(patient.folder.cleanup)
+        with mock.patch.object(hub_rig.Rig, "start", slow_start), mock.patch.object(hub_rig, "WAIT", 3):
+            self.assertEqual(patient.__enter__().port, 0)
+        patient.loop.call_soon_threadsafe(patient.loop.stop)
+        patient.thread.join(5)
+        patient.loop.close()
+
+
 class TheHandshake(RigTest):
     def test_a_good_handshake_gets_the_welcome(self):
         client = hc.Client(self.rig.port, login="1001:alice")

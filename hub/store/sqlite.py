@@ -265,6 +265,7 @@ class Store(StoreBase):
     def mute(self, account, minutes, by, name=""):
         """Mute for `minutes` from now (0 lifts the mute). Returns the time it ends, or 0."""
         with self.transaction():
+            self.count_restriction()
             if minutes <= 0:
                 self.db.execute("DELETE FROM mutes WHERE account = ?", (account,))
                 return 0
@@ -280,10 +281,12 @@ class Store(StoreBase):
 
     def ban(self, account, by, name=""):
         with self.transaction():
+            self.count_restriction()
             self.db.execute("INSERT OR REPLACE INTO bans (account, at, by, name) VALUES (?, ?, ?, ?)", (account, int(self.clock()), by, name))
 
     def unban(self, account):
         with self.transaction():
+            self.count_restriction()
             return self.db.execute("DELETE FROM bans WHERE account = ?", (account,)).rowcount == 1
 
     def is_banned(self, account):
@@ -294,6 +297,16 @@ class Store(StoreBase):
 
     def bans(self):
         return self.db.execute("SELECT account, name, at, by FROM bans ORDER BY at").fetchall()
+
+    def count_restriction(self):
+        """Inside the transaction of a ban, an unban or a mute: one more on the counter that last_restriction() reads (a row of `meta`, as the deletions' is), so that every process that reads
+        it knows that the bans or the mutes changed."""
+        self.db.execute("INSERT OR IGNORE INTO meta (k, v) VALUES ('restrict_seq', 0)")
+        self.db.execute("UPDATE meta SET v = v + 1 WHERE k = 'restrict_seq'")
+
+    def last_restriction(self):
+        row = self.db.execute("SELECT v FROM meta WHERE k = 'restrict_seq'").fetchone()
+        return row[0] if row else 0
 
 
 for _name in PUBLIC + ("checkpoint",):          # (every operation of the contract, and the one that only this file has, speaks StoreError, whatever the file does)

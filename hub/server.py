@@ -112,6 +112,7 @@ class Hub:
         self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)
         self.chat.on_store_error = self.store_trouble
         self.next_trouble_log = float("-inf")
+        self.next_presence_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
         self.pending = 0
         self.server = None
@@ -246,6 +247,12 @@ class Hub:
             self.next_trouble_log = now + 10.0
             self.log.event("error", kind=type(error).__name__, where="store")
 
+    def presence_trouble(self, now, error):
+        """The list of the front page failed in the clock's work: one line in the log every ten seconds at the most, however long it goes on (the class of the error, never its text)."""
+        if now >= self.next_presence_log:
+            self.next_presence_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="presence")
+
     def end_logins(self, session=None, account=None):
         """The sockets of a login that was ended (its session key), or of every login of an account, are closed: a socket never outlives the login that it was let in with. The page
         connects again, as a reader."""
@@ -286,14 +293,14 @@ class Hub:
             elif now - peer.last_ping >= self.limits.ping_seconds:
                 peer.last_ping = now
                 peer.write(ws.encode_frame(ws.PING))
-        count = self.chat.presence.people()
-        if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
-            self.online_shown, self.online_at = count, now
-            self.chat.online()
-        try:
-            self.chat.presence.flush(now)                # (the list of the front page, on its own: a bug in it never stops the retention below, and a failing purge never stops the list)
+        try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)
+            count = self.chat.presence.people()
+            if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
+                self.online_shown, self.online_at = count, now
+                self.chat.online()
+            self.chat.presence.flush(now)
         except Exception as e:
-            self.log.event("error", kind=type(e).__name__, where="presence")
+            self.presence_trouble(now, e)
         if now >= self.next_deletions:
             self.next_deletions = now + self.limits.deletions_seconds
             self.chat.sync_deletions()
