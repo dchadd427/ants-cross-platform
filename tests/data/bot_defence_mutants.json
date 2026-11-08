@@ -151,6 +151,86 @@
    "new": "    const bool by_strength = defence && target != nullptr;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI35.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI35.6"
+  },
+  {
+   "id": "keep_since_blow_dropped",
+   "file": "src/ants_ai/defence.cpp",
+   "old": " && since_blow <= static_cast<uint64_t>(plan.fight_linger_ticks) * kLingerFactor;",
+   "new": " && (true || since_blow <= static_cast<uint64_t>(plan.fight_linger_ticks) * kLingerFactor);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "linger_factor_one",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "constexpr uint64_t kLingerFactor = 5;",
+   "new": "constexpr uint64_t kLingerFactor = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "walk_reach_dropped",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if ((plan.reach_fights && !walk_reaches(c.map, c.seat, a.tile, target.tile))",
+   "new": "if ((false && !walk_reaches(c.map, c.seat, a.tile, target.tile))",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "carrier_enemy_counts",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (e.id == exclude || e.holding || e.tile.chebyshev_dist(centre) > radius) continue;",
+   "new": "if (e.id == exclude || e.tile.chebyshev_dist(centre) > radius) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "guard_stance_ignored",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "const size_t level = plan.defenders + (guard_stance ? 1u : 0u);",
+   "new": "const size_t level = plan.defenders + (guard_stance && false ? 1u : 0u);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "victim_ignores_room",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (a != nullptr && room() && !listed(*a) && fit(*a, true)) join.push_back(a);",
+   "new": "if (a != nullptr && !listed(*a) && fit(*a, true)) join.push_back(a);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "frame_cap_wanted_only",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "static_cast<uint32_t>(out.wanted) + 2u",
+   "new": "static_cast<uint32_t>(out.wanted)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "victims_never_cleared",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    f.victims.clear();\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "own_hill_raid_tile_counts",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (team != view.seat() && team != view.ally() && hill.present",
+   "new": "if (team != view.ally() && hill.present",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "ally_raid_tile_counts",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (team != view.seat() && team != view.ally() && hill.present",
+   "new": "if (team != view.seat() && hill.present",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
   }
  ]
 }

@@ -20,11 +20,11 @@ const AntView* find_ant(const std::vector<AntView>& ants, uint32_t id) noexcept 
     return it != ants.end() && it->id == id ? &*it : nullptr;
 }
 
-// Whether `tile` is within kRaidNearTiles of the raid tile of a hill of another team
+// Whether `tile` is within kRaidNearTiles of the raid tile of a hill of a team that is neither the seat nor its ally (the hills that a Thief of the raid task can be about to raid)
 bool near_raid_tile(const BotView& view, const MapInfo& map, sim::TileCoord tile) noexcept {
     for (uint8_t team = 0; team < sim::MAX_PLAYERS; ++team) {
         const HillInfo& hill = map.hill(team);
-        if (team != view.seat() && hill.present && tile.chebyshev_dist(hill.raid) <= kRaidNearTiles) return true;
+        if (team != view.seat() && team != view.ally() && hill.present && tile.chebyshev_dist(hill.raid) <= kRaidNearTiles) return true;
     }
     return false;
 }

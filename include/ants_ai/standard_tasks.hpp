@@ -35,7 +35,7 @@ namespace ants::ai {
 ///               idle after their blow (one attack order is one blow), while the target stays within the leash of the place of the first blow.
 ///   a thief     (Medium and Hard) an enemy Thief ant that holds no loot and is within reach of the own raid tile: attacked the same way until it is gone or has raided.
 /// The fights that answer a blow follow the defence rules of the plan where they are on (defence.hpp; Hard): any ant that can strike answers, the struck one first, as many as the enemy has near the
-/// target and one more, and the fight is kept up through the target's hit clips while the force is as strong as the enemy's.
+/// target and one more, and the fight is kept up through the target's hit clips while the force is at least plan.defend_keep_percent of the enemy's.
 /// A fight ends when the target dies, leaves sight or the leash, stands on a power-up, or no blow has been seen for the level's linger time; an attack that was acknowledged and then
 /// shows "can't go" within a few ticks tells that the target is out of reach (it stands on something that no order reaches): that ant is left alone for 900 ticks. The ants go back
 /// to the pool when the fight ends.

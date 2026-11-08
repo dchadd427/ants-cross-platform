@@ -1,5 +1,5 @@
 // The defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"; include/ants_ai/defence.hpp): a Hard bot answers a blow of an enemy ant with every ant that can strike, the struck ant first, as many
-// as the enemy has near the target and one more, and keeps the fight up through the target's hit clips while its force is as strong as the enemy's. Medium and Easy are as they were. Hand-made worlds
+// as the enemy has near the target and one more, and keeps the fight up through the target's hit clips while its force is at least 60 percent as strong as the enemy's. Medium and Easy are as they were. Hand-made worlds
 // (b41_helpers.hpp), quick enough for suite 2.20.
 //
 //   AI35.1  a Thief, a Fire Ant and a Bomber (empty, 10 hit points) answer a blow on a neighbour, a job's ants only after the free ones, nobody from beyond the reach; without the batch they do not
@@ -8,6 +8,8 @@
 //   AI35.4  three enemy workers that strike one ant: four defenders (3 + 1); one: three; six weak ones: five (the cap)
 //   AI35.5  a fight at equal strength is kept through the target's hit clip and ends in a kill; one below the enemy's is called off at the look, before an ant is taken; one that falls below ends at the next look
 //   AI35.6  Medium and Easy as shipped are as before: the same counters and state hash whatever the numbers of the batch say; the shipped plans of every level pin the batch
+//   AI35.7  the edges: the silence that ends a fight (5 x the linger time), the walk check across a channel, carriers that are no fighters, victims beyond the number wanted, the raid tile of the own hill
+//            and of the ally's, the guard stance, the enemy ants that are weighed
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -330,7 +332,8 @@ void run_defence_tests() {
                 ASSERT_TRUE(alive(sim, enemy));
             }
         }
-        // (b) the boundary: 29 hit points of three ants (the struck one at 9) against 29 of three enemy workers is kept, against 30 it is called off at the first look, with no order and no ant taken
+        // (b) the boundary of the rule at 100 percent (set by hand: Hard's own number is 60, see (b2)): 29 hit points of three ants (the struck one at 9) against 29 of three enemy workers is kept, against 30 it
+        // is called off at the first look, with no order and no ant taken
         for (const unsigned enemy_hp_sum : {29u, 30u}) {
             sim::SimulationEngine sim;
             empty_field(sim, 358);
@@ -343,7 +346,9 @@ void run_defence_tests() {
                 const uint32_t e = sim.spawn_unit(1, sim::AntType::Worker, spots[i]);
                 sim.get_unit(e).hp = static_cast<uint8_t>(i == 0 ? enemy_hp_sum - 20u : 10u);
             }
-            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(defence_plan(Level::Hard)), 4, 4);
+            LevelPlan plan = defence_plan(Level::Hard);
+            plan.defend_keep_percent = 100;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
             rig.run(12);
             sim.get_unit(victim).hp = 9;
             const uint64_t blow = sim.current_tick();
@@ -359,7 +364,37 @@ void run_defence_tests() {
                 ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kFight), 0u);
             }
         }
-        // (c) a force that falls below the enemy's during the fight ends it at the next look: three enemy workers join the one that the force was beating
+        // (b2) the boundary at Hard's own 60 percent: three ants (29 hit points, strength 87) against six enemy workers that have 24 hit points between them (strength 144, 60 percent of it is 86.4: kept) or 25
+        // (150, 90: called off at the first look, with no order and no ant taken); the six are all that the bot counts, and it has no other ant to send
+        for (const unsigned enemy_hp_sum : {24u, 25u}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 362);
+            sim.set_player_eggs(0, 5);
+            const uint32_t victim = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 20});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{23, 22});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{21, 22});
+            for (unsigned i = 0; i < 6; ++i) {
+                const uint32_t e = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21 + static_cast<int32_t>(i % 3), 18 - static_cast<int32_t>(i / 3)});
+                sim.get_unit(e).hp = static_cast<uint8_t>(i == 0 ? enemy_hp_sum - 20u : 4u);
+            }
+            ASSERT_EQ(plan_for(Level::Hard).defend_keep_percent, 60u);
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(defence_plan(Level::Hard)), 4, 4);
+            rig.run(12);
+            sim.get_unit(victim).hp = 9;
+            const uint64_t blow = sim.current_tick();
+            rig.run(12);
+            const FightTask& fight = rig.as<StandardBot>().fight();
+            if (enemy_hp_sum == 24u) {
+                ASSERT_EQ(fight.fights(), 1u);
+                ASSERT_FALSE(proposed_since(rig, CommandType::GroupAttack, blow).empty());
+            } else {
+                ASSERT_EQ(fight.fights(), 0u);
+                ASSERT_TRUE(fight.fights_started() >= 1u);
+                ASSERT_TRUE(proposed_since(rig, CommandType::GroupAttack, blow).empty());
+                ASSERT_EQ(rig.as<StandardBot>().ledger().count(StandardBot::kFight), 0u);
+            }
+        }
+        // (c) a force that falls below the enemy's during the fight ends it at the next look: four enemy workers join the one that the force was beating
         {
             sim::SimulationEngine sim;
             empty_field(sim, 359);
@@ -373,7 +408,7 @@ void run_defence_tests() {
             sim.get_unit(victim).hp = 9;
             rig.run(24);
             ASSERT_EQ(rig.as<StandardBot>().fight().fights(), 1u);
-            for (const TileCoord t : {TileCoord{22, 17}, TileCoord{23, 17}, TileCoord{21, 17}}) sim.spawn_unit(1, sim::AntType::Worker, t);
+            for (const TileCoord t : {TileCoord{22, 17}, TileCoord{23, 17}, TileCoord{21, 17}, TileCoord{20, 17}}) sim.spawn_unit(1, sim::AntType::Worker, t);
             const uint64_t joined = sim.current_tick();
             rig.run(5);                                                                                     // (the look interval is 4)
             ASSERT_EQ(rig.as<StandardBot>().fight().fights(), 0u);
@@ -391,7 +426,7 @@ void run_defence_tests() {
             ASSERT_EQ(p.defend_by_strength, level == Level::Hard);
             ASSERT_EQ(p.defend_radius, 5);
             ASSERT_EQ(p.defend_extra, 1u);
-            ASSERT_EQ(p.defend_keep_percent, level == Level::Medium ? 120u : 100u);
+            ASSERT_EQ(p.defend_keep_percent, level == Level::Medium ? 120u : level == Level::Hard ? 60u : 100u);
             ASSERT_EQ(p.defend_max, level == Level::Medium ? 3u : 5u);
             ASSERT_EQ(p.defend_reach, level == Level::Medium ? 8 : 10);
             LevelPlan off = p;
@@ -476,5 +511,175 @@ void run_defence_tests() {
         const Outcome with = play(defence_plan(Level::Hard));
         const Outcome without = play(defence_plan(Level::Hard, false));
         ASSERT_FALSE(with == without);
+    } TEST_END();
+
+    TEST_CASE("AI35.7 The Edges: A Fight Whose Target Nobody Hurts Any More Ends 5 Times The Linger Time After The Last Blow, Not Before; With The Walk Check On The Ants Across A Channel Are Not Taken; An Enemy That Carries Food Is No Fighter For The Number Of Defenders; Victims Beyond The Number Wanted Wait And Are Forgotten; A Thief Near The Raid Tile Of The Own Hill Or Of The Ally's May Answer; The Guard Stance Asks One More; The Strongest Enemy Ants Are Weighed, Up To Two More Than Are Wanted")
+    {
+        // (a) the silence rule: the target is never seen hurt (its hit points are put back after every tick, so that no blow of the defenders shows on the view), so the last blow is the one on the struck ant,
+        // and the fight ends 5 x fight_linger_ticks after the look that saw it, not before. The blows throw the target away from the defenders: the leash is made too long to end the fight first
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 363);
+            sim.set_player_eggs(0, 5);
+            const uint32_t victim = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 20});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{23, 22});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{21, 22});
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 18});
+            LevelPlan plan = defence_plan(Level::Hard);
+            ASSERT_EQ(plan.fight_linger_ticks, 60u);
+            plan.leash_tiles = 60;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.after_sim_tick = [&]() { sim.get_unit(enemy).hp = 10; };
+            rig.run(12);
+            sim.get_unit(victim).hp = 9;
+            const uint64_t blow = sim.current_tick();
+            uint64_t ended = 0;
+            for (int t = 0; t < 500; ++t) {
+                rig.tick();
+                const FightTask& fight = rig.as<StandardBot>().fight();
+                if (ended == 0 && fight.fights_started() >= 1u && fight.fights() == 0) ended = sim.current_tick();
+            }
+            ASSERT_TRUE(ended != 0u);
+            ASSERT_TRUE(ended > blow + 5 * plan.fight_linger_ticks);                                          // (not before)
+            ASSERT_TRUE(ended <= blow + 5 * plan.fight_linger_ticks + 8);                                     // (a look after the blow, a look after the silence: a few ticks)
+        }
+        // (b) the walk check: the shipped plan has reach_fights on (defence_plan switches it off for the other cases): ants on the other shore of a channel are not taken, with it off they are
+        for (const bool reach : {true, false}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 364);
+            sim.set_player_eggs(0, 5);
+            for (int y = 0; y < 60; ++y) {
+                for (int x = 25; x <= 27; ++x) sim.set_terrain(x, y, sim::TERRAIN_WATER);
+            }
+            const uint32_t hit = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 30});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{20, 32});
+            std::vector<uint32_t> across;
+            for (int i = 0; i < 3; ++i) across.push_back(sim.spawn_unit(0, sim::AntType::Worker, TileCoord{30 + i, 30}));             // on the other shore, nearer to the enemy than the ants of this one
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21, 30});
+            LevelPlan plan = defence_plan(Level::Hard);
+            plan.reach_fights = reach;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(3);
+            Seen seen;
+            for (int t = 0; t < 120; ++t) {
+                keep_attacking(sim, 1, enemy, hit);
+                rig.tick();
+                watch_fight(rig, enemy, seen);
+            }
+            size_t from_across = 0;
+            for (const Command* c : proposed_since(rig, CommandType::GroupAttack, 0)) {
+                for (const uint32_t a : across) from_across += names(*c, a) ? 1u : 0u;
+            }
+            ASSERT_TRUE(seen.ever.count(hit) != 0);                                                           // (the ants of this shore answer)
+            if (reach) {
+                ASSERT_EQ(from_across, 0u);
+                ASSERT_TRUE(seen.ever.count(across[0]) == 0 && seen.ever.count(across[1]) == 0 && seen.ever.count(across[2]) == 0);
+            } else {
+                ASSERT_TRUE(from_across >= 1u);
+            }
+        }
+        // (c) an enemy that carries food is no fighter: next to the target it is not counted, for the number of defenders or for the strength that is weighed
+        for (const bool carrying : {true, false}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 365);
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 24});
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 18});
+            for (int i = 0; i < 2; ++i) {
+                const uint32_t e = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21 + 2 * i, 17});
+                sim.get_unit(e).holding = carrying ? 1 : 0;
+                sim.get_unit(e).carried_points = carrying ? 20 : 0;
+            }
+            const MapInfo map(sim);
+            const BotView view = BotView::build(sim, 0, &map);
+            const LevelPlan plan = defence_plan(Level::Hard);
+            const DefenceFrame frame = defence_frame(view, plan, TileCoord{22, 18}, false);
+            ASSERT_EQ(frame.theirs.n, carrying ? 1u : 3u);
+            ASSERT_EQ(frame.wanted, carrying ? 3u : 4u);
+            ASSERT_EQ(enemy_strength(view, TileCoord{22, 18}, plan.defend_radius, 0, 99).n, carrying ? 1u : 3u);
+        }
+        // (d) four ants are struck at once by one enemy worker: the level's three answer (the struck ants first); the fourth waits, and it is forgotten: when a defender leaves, the Combat Ant that stands
+        // by takes the place (a Combat Ant first, as for any ant), not the fourth
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 366);
+            sim.set_player_eggs(0, 5);
+            std::vector<uint32_t> struck;
+            for (const TileCoord t : {TileCoord{20, 18}, TileCoord{24, 18}, TileCoord{22, 20}, TileCoord{22, 16}}) struck.push_back(sim.spawn_unit(0, sim::AntType::Worker, t));       // (round the enemy, two tiles from it)
+            const uint32_t combat = sim.spawn_unit(0, sim::AntType::Combat, TileCoord{22, 25});
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 18});
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(defence_plan(Level::Hard)), 4, 4);
+            rig.run(12);
+            for (const uint32_t a : struck) sim.get_unit(a).hp = 9;
+            Seen seen;
+            for (int t = 0; t < 4; ++t) {                                                                    // (before the first blow: the ants are on their way)
+                rig.tick();
+                watch_fight(rig, enemy, seen);
+            }
+            ASSERT_EQ(seen.most, 3u);
+            ASSERT_TRUE(seen.ever.count(combat) == 0);
+            uint32_t waiting = 0;
+            uint32_t answering = 0;
+            for (const uint32_t a : struck) {
+                if (seen.ever.count(a) == 0) waiting = a;
+                else answering = a;
+            }
+            ASSERT_TRUE(waiting != 0u && answering != 0u);
+            ASSERT_TRUE(alive(sim, enemy));
+            sim.get_unit(answering).holding = 1;                                                              // (one of the three picks up food: it leaves the fight, a place is free)
+            sim.get_unit(answering).carried_points = 20;
+            for (int t = 0; t < 8; ++t) {
+                rig.tick();
+                watch_fight(rig, enemy, seen);
+            }
+            ASSERT_TRUE(seen.ever.count(combat) != 0);
+            ASSERT_TRUE(seen.ever.count(waiting) == 0);
+        }
+        // (e) the numbers: the level's defenders (one more in the last minute of a leader that guards); by strength as many as the enemy has and one more, at most 5; and the strongest enemy ants that are
+        // weighed are up to two more than are wanted (six enemy ants, five wanted: all six; nine: seven)
+        {
+            const LevelPlan hard = plan_for(Level::Hard);
+            ASSERT_EQ(defence_wanted(hard, 1, false), 3u);
+            ASSERT_EQ(defence_wanted(hard, 1, true), 4u);
+            ASSERT_EQ(defence_wanted(hard, 3, false), 4u);
+            ASSERT_EQ(defence_wanted(hard, 3, true), 4u);
+            ASSERT_EQ(defence_wanted(hard, 9, true), 5u);
+            LevelPlan level_only = hard;
+            level_only.defend_by_strength = false;
+            ASSERT_EQ(defence_wanted(level_only, 9, false), 3u);
+            ASSERT_EQ(defence_wanted(level_only, 9, true), 4u);
+            for (const size_t enemies : {size_t{6}, size_t{9}}) {
+                sim::SimulationEngine sim;
+                empty_field(sim, 367);
+                sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 26});
+                for (size_t i = 0; i < enemies; ++i) sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21 + static_cast<int32_t>(i % 3), 17 - static_cast<int32_t>(i / 3)});
+                const MapInfo map(sim);
+                const BotView view = BotView::build(sim, 0, &map);
+                const DefenceFrame frame = defence_frame(view, hard, TileCoord{22, 17}, false);
+                ASSERT_EQ(frame.wanted, 5u);
+                ASSERT_EQ(frame.theirs.n, enemies == 6 ? 6u : 7u);
+            }
+        }
+        // (f) the raid tile: a Thief of the raid task is about to raid only near the raid tile of the hill of an enemy; near that of the own hill, or of the ally's, it may answer
+        for (const bool allied : {false, true}) {
+            sim::SimulationEngine sim;
+            empty_field(sim, 368);
+            if (allied) sim.form_alliance(0, 1);
+            const MapInfo map(sim);
+            const uint32_t at_foe = sim.spawn_unit(0, sim::AntType::Thief, TileCoord{50, 9});                  // 3 tiles from the raid tile of the hill of seat 1
+            const uint32_t at_home = sim.spawn_unit(0, sim::AntType::Thief, map.hill(0).raid);
+            sim.spawn_unit(1, sim::AntType::Worker, TileCoord{50, 20});
+            const BotView view = BotView::build(sim, 0, &map);
+            ASSERT_EQ(view.ally(), allied ? 1 : sim::ALLIANCE_NONE);
+            ASSERT_TRUE(view_of(view, at_foe) != nullptr && view_of(view, at_foe)->tile.chebyshev_dist(map.hill(1).raid) <= 6);
+            ASSERT_TRUE(view_of(view, at_home) != nullptr && view_of(view, at_home)->tile.chebyshev_dist(map.hill(0).raid) <= 6);
+            AntLedger ledger;
+            ledger.set_rank(StandardBot::kFight, 5);
+            ledger.set_rank(StandardBot::kRaids, 3);
+            ASSERT_TRUE(ledger.claim(at_foe, StandardBot::kRaids));
+            ASSERT_TRUE(ledger.claim(at_home, StandardBot::kRaids));
+            const Tactics tactics;
+            ASSERT_TRUE(can_defend(view, *view_of(view, at_home), tactics, ledger, map));
+            ASSERT_EQ(can_defend(view, *view_of(view, at_foe), tactics, ledger, map), allied);
+        }
     } TEST_END();
 }

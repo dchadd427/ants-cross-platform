@@ -745,6 +745,7 @@ void run_b41_style_tests() {
                 const LevelPlan p = plan_in_match(level, Style::Random, seed, static_cast<uint8_t>(seed % 4));
                 ASSERT_EQ(p.defend_all_types && p.victim_answers && p.defend_by_strength, level == Level::Hard);
                 ASSERT_EQ(p.defend_all_types || p.victim_answers || p.defend_by_strength, level == Level::Hard);
+                ASSERT_EQ(p.defend_keep_percent, level == Level::Medium ? 120u : level == Level::Hard ? 60u : 100u);
             }
         }
         const LevelPlan hard = plan_for(Level::Hard);

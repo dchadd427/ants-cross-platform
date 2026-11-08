@@ -93,6 +93,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.defend_all_types = true;           // the defence batch (docs/BOT_PEOPLE.md): every ant that can strike answers a blow, the struck ant first, as many as the enemy has there and one more
             p.victim_answers = true;
             p.defend_by_strength = true;
+            p.defend_keep_percent = 60;          // a force of at least 60 percent of the enemy's near the target keeps the fight up; below that it is called off at the look
             p.wall_trigger = WallTrigger::Early;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;

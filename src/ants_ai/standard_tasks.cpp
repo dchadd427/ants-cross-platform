@@ -142,7 +142,7 @@ void FightTask::start_fights(TaskContext& c) {
         const auto it = fights_.find(best->id);
         if (it != fights_.end()) {
             it->second.last_alarm = now;
-            if (plan.victim_answers) it->second.victims.push_back(h.ant);
+            if (plan.victim_answers && !it->second.offence && !it->second.fire && !it->second.thief) it->second.victims.push_back(h.ant);   // (only a fight that answers a blow takes defenders)
             continue;
         }
         Fight f;
@@ -538,7 +538,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         end = true;                                                              // down to the last ants: they leave the fight
         return;
     }
-    // (the defence batch: defence.hpp) a fight that answers a blow is sized by the enemy ants near its target and kept up while the force is as strong as theirs (plan.defend_by_strength)
+    // (the defence batch: defence.hpp) a fight that answers a blow is sized by the enemy ants near its target and kept up while the force is at least plan.defend_keep_percent of theirs (plan.defend_by_strength)
     const bool defence = !f.offence && !f.fire && !f.thief;
     const bool by_strength = defence && plan.defend_by_strength && target != nullptr;
     const DefenceFrame frame = by_strength ? defence_frame(v, plan, target->tile, tactics_.guard_stance) : DefenceFrame{};

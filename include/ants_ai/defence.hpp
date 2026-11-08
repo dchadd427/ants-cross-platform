@@ -5,7 +5,7 @@
 //
 //   who answers   can_defend       any ant that can strike (LevelPlan::defend_all_types), apart from the few that a job of their own holds; the ant that was struck first of all (victim_answers)
 //   how many      defence_wanted   as many as the enemy has near the target, and defend_extra more, at most defend_max (defend_by_strength)
-//   how long      keep_defence     the fight is kept up through the target's hit clips while the force is as strong as the enemy's near the target, the target is within the leash and blows fall
+//   how long      keep_defence     the fight is kept up through the target's hit clips while the force is at least defend_keep_percent (Hard 60) of the enemy's near the target, the target is within the leash and blows fall
 //
 // Everything here reads what a person of the seat sees: the types, tiles and hit points of the ants on the view, the bot's own ledger of its tasks, and its plan.
 
