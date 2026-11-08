@@ -102,7 +102,7 @@ class ThePage(unittest.TestCase):
             self.assertLess(self.page.index(tag), self.page.index("</head>"), name)
 
     def test_the_script_is_loaded_after_the_client_and_before_the_map_list_and_the_pages_own_code(self):
-        self.assertIn('<script src="front/lobby_rules.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>', self.page)      # (the rematch's strip after it)
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>', self.page)      # (the rematch's strip after it)
         self.assertLess(self.page.index("front/lobby_chat.js"), self.page.index("AntsLobbyChat"), "loaded before the page's own code uses it")
 
     def test_the_page_stops_with_its_line_when_the_script_did_not_come(self):

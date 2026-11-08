@@ -35,13 +35,14 @@ LIGHT = ["web/index.js", "web/front/x.css", "web/a/b/c/d.html", "docs/WORKFLOW.m
 # TheSkippedJobsReadNoLightFile finds the reads in the sources; this table is what it compares them with, and each file here must be full in tools/ci_light.sh.
 RULES_JS, LOBBY_NET_JS = "web/front/lobby_rules.js", "web/front/lobby_net.js"
 NATIVE_READS = {
-    RULES_JS: "ctest: test_ai_names, test_start_menu_hosting; test_ants_server.sh (a grep, and the page harness)",
+    RULES_JS: "ctest: test_start_menu_hosting; test_ants_server.sh (a grep, and the page harness)",
     "web/front/preview_tiny.png": "ctest: test_map_list (the six original maps: tiny, small, medium, gauntlet, treasure, islands)",
     "web/front/preview_islands.png": "ctest: test_map_list",
     "web/lobby.html": "test_ants_server.sh (a grep, web_fill_check.js, the page harness)",
     "web/shell.html": "test_ants_server.sh (a grep, web_fill_check.js)",
     "web/shapes.js": "test_ants_server.sh: web_lobby_server_check.js",
     LOBBY_NET_JS: "test_ants_server.sh: web_lobby_server_check.js, web_lobby_handoff_check.js, the page harness",
+    "web/front/player_name.js": "test_ants_server.sh: the page harness",
     "web/front/lobby_chat.js": "test_ants_server.sh: the page harness",
     "web/front/rematch.js": "test_ants_server.sh: the page harness",
     "web/front/game_modes.js": "test_ants_server.sh: the page harness",
@@ -369,7 +370,6 @@ LIGHT_KIND = re.compile(r"^/?(web|docs)(/|$)|^/?(CHANGELOG|README)\.md$|^/?tests
 BASES = ("ANTS_SOURCE_DIR", "TEST_DATA_DIR", "ORIGINAL_ASSETS_DIR", "source_dir()")      # (what a test of C++ finds the checkout with: tests/common/ants_test_paths.hpp)
 # The C++ that reads a file of a light kind: (the source, the literals of the line after the base folder) -> a file to try the decision on
 CPP_READS = {
-    ("tests/test_ai/test_ai_names.cpp", "/web/front/lobby_rules.js"): RULES_JS,
     ("tests/test_app/test_start_menu_hosting.cpp", "/web/front/lobby_rules.js"): RULES_JS,
     ("tests/test_server/test_map_list.cpp", "web|front|preview_|.png"): "web/front/preview_tiny.png",
 }
