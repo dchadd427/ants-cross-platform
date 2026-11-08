@@ -34,10 +34,10 @@ def container_names(text):
 
 
 def host_ports(text):
-    """The host ports of the `ports:` entries, the ${NAME:-default} replaced by its default."""
+    """The host ports of the `ports:` entries, the ${NAME:-default} replaced by its default (the web page's may have ${ANTS_WEB_BIND_PREFIX:-} in front: tests/scripts/test_nginx_trusted_proxies.py)."""
     ports = []
     for line in code_lines(text):
-        m = re.match(r'^\s+- "(?:127\.0\.0\.1:)?(?:\$\{[A-Z_]+:-(\d+)\}|(\d+)):\d+"\s*$', line)
+        m = re.match(r'^\s+- "(?:\$\{ANTS_WEB_BIND_PREFIX:-\})?(?:127\.0\.0\.1:)?(?:\$\{[A-Z_]+:-(\d+)\}|(\d+)):\d+"\s*$', line)
         if m:
             ports.append(int(m.group(1) or m.group(2)))
     return ports

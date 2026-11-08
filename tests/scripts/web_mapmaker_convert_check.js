@@ -14,9 +14,15 @@
 //   D  Copy this map: a copy of the same kind, a name that is taken, the other kind (the dimmed choice and its reason, Next), and that the open map's bytes are never handed over as the new map
 //   E  Start an Extended map, Make a Classic map (when it fits, with what the core says to tell), and the reasons when it does not, with the ways out that the reasons call for
 //   F  Crop it to fit and Shorten the description as steps on a copy: the core is asked, the part goes through the conversion again, Cancel comes back to the reasons
+//   G  the rules word of a new Extended map: the table (the word of the map it comes from x its rows -> the word it gets), the rows of a Resize, and each way of making a new map from it (a copy, Start an
+//      Extended map): the core's copy with long orders where the table says 2, the plain bytes where it does not, the open map never touched; the Classic map made from a map of long orders (the short note
+//      of the core and the words that go with it)
+//   H  New map and Save as a new map: the page's own function that gives the word (taken out of mapmaker_app.js): the core is asked where the map has not the word that the rule gives, the very
+//      bytes come back where it has it, and a core that cannot give the copy (ok false, a refusal, a fault) never costs the map
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const argv = process.argv.slice(2);
 const FRONT = argv.includes('--front') ? path.resolve(argv[argv.indexOf('--front') + 1]) : path.resolve(__dirname, '..', '..', 'web', 'front');
@@ -176,7 +182,8 @@ function caseC() {
 
 // ---- a stand-in for the core: files that are a few numbers ----
 let serial = 0;
-function file(kind, rows, columns, desc) { const b = new Uint8Array(4); b[0] = ++serial; b.kind = kind; b.rows = rows; b.columns = columns; b.desc = desc || 'ok'; return b; }
+function file(kind, rows, columns, desc, rules) { const b = new Uint8Array(4); b[0] = ++serial; b.kind = kind; b.rows = rows; b.columns = columns; b.desc = desc || 'ok'; b.rules = kind === 'extended' ? rules || 0 : 0; return b; }
+const LONG_NOTE = 'the map has long orders (rules 2); a Classic map has the original\'s rules only, so a long path order can fail there';
 function standIn(log) {
     return {
         convertToClassic(b) {
@@ -187,14 +194,17 @@ function standIn(log) {
             if (b.desc.length > 30) reasons.push({ code: 'description_too_long', message: 'the description is ' + b.desc.length + ' bytes; a Classic map holds 30 (29 characters end with the zero byte that the original needs)' });
             if (b.flags) reasons.push({ code: 'format_flags_set', message: 'the map has format flags (0x1); a Classic map has none' });
             const notes = !reasons.length && b.desc.length === 30 ? [{ code: 'description_30_bytes', message: 'the description has 30 bytes: the original reads no zero byte that ends it (29 characters fit), and the original-safe check warns' }] : [];
+            if (!reasons.length && b.rules === 2) notes.push({ code: 'rules_long_orders_dropped', message: LONG_NOTE });
+            if (!reasons.length && b.rules === 1) notes.push({ code: 'rules_extended_dropped', message: 'the map asks for the extended rules (rules 1); a Classic map has the original\'s rules only, so it may play differently (ants cannot cross tile row 90, and a long path order can fail)' });
             return { status: 0, json: { ok: !reasons.length, reasons, notes }, bytes: reasons.length ? undefined : file('classic', b.rows, b.columns, b.desc) };
         },
-        convertToExtended(b) { log.push('toExtended'); return { status: 0, json: { ok: !b.refuse, reasons: b.refuse ? [{ code: 'not_writable_as_extended', message: 'the map cannot be written as an Extended map: no' }] : [], notes: [] }, bytes: b.refuse ? undefined : file('extended', b.rows, b.columns, b.desc) }; },
+        convertToExtended(b) { log.push('toExtended'); return { status: 0, json: { ok: !b.refuse, reasons: b.refuse ? [{ code: 'not_writable_as_extended', message: 'the map cannot be written as an Extended map: no' }] : [], notes: [] }, bytes: b.refuse ? undefined : file('extended', b.rows, b.columns, b.desc, b.kind === 'extended' ? b.rules : 0) }; },
+        convertToLongOrders(b) { log.push('toLongOrders'); return { status: 0, json: { ok: !b.refuse, reasons: b.refuse ? [{ code: 'not_writable_as_extended', message: 'the map cannot be written as an Extended map: no' }] : [], notes: [] }, bytes: b.refuse ? undefined : file('extended', b.rows, b.columns, b.desc, 2) }; },
         readReport(b) { return { status: 0, json: { loaded: true, rows: b.rows, columns: b.columns, version: b.kind === 'classic' ? 8 : 9, description: b.desc, minutes: 10, eggs: 6, default_type_tile: 0x7FFE } }; },
         crop(b, row, column, rows, columns, profile) {
             log.push(['crop', row, column, rows, columns, profile]);
             if (this.cropFails) return { status: 1, error: 'the part to keep is not inside the map', text: '' };
-            const out = file(b.kind, rows, columns, b.desc); out.cropped = { row, column };
+            const out = file(b.kind, rows, columns, b.desc, b.rules); out.cropped = { row, column };
             return { status: 0, json: { ok: true, removed_cells: 3, removed_records: 2, reasons: [], notes: [{ code: 'objects_cut', message: '3 cells of objects were taken out because the frame cuts the object (an object is kept whole or not at all)' }] }, bytes: out };
         }
     };
@@ -205,12 +215,12 @@ function page(cur) {
     const doc = makeDocument(), host = doc.createElement('div'), top = doc.createElement('header'), body = doc.createElement('div'), opener = doc.createElement('button');
     [host, top, body].forEach((n) => doc.body.appendChild(n));
     top.appendChild(opener); opener.focus();
-    const calls = [], made = [], crops = [], core = standIn(calls), dialogs = Dialog.create(doc, host, [top, body]);
-    const env = { doc, dialogs, core, limits: LIMITS, current: () => cur, thumb: () => null, tags: (el, kind) => { el.textContent = kind === 'extended' ? 'Extended map' : 'Classic map'; }, onMade: (bytes, name) => made.push({ bytes, name }), crop: (spec) => crops.push(spec) };
+    const calls = [], made = [], crops = [], tagCalls = [], core = standIn(calls), dialogs = Dialog.create(doc, host, [top, body]);
+    const env = { doc, dialogs, core, limits: LIMITS, current: () => cur, thumb: () => null, tags: (el, kind, rules) => { tagCalls.push([kind, rules]); el.textContent = kind === 'extended' ? 'Extended map' : 'Classic map'; }, onMade: (bytes, name) => made.push({ bytes, name }), crop: (spec) => crops.push(spec) };
     const convert = Convert.create(env);
     const q = (s) => host.querySelector(s), all = (s) => host.querySelectorAll(s);
     return {
-        doc, host, dialogs, core, calls, made, crops, convert, q, all,
+        doc, host, dialogs, core, calls, made, crops, tagCalls, convert, q, all,
         title: () => (q('h2') ? q('h2').textContent : ''), button: (label) => all('button').filter((b) => b.textContent === label)[0],
         type(value) { const box = q('input[type=text]') || all('input').filter((i) => i.getAttribute('type') === 'text')[0]; box.value = value; box.fire('input', {}); },
         name() { return all('input').filter((i) => i.getAttribute('type') === 'text')[0].value; },
@@ -267,12 +277,12 @@ function caseD() {
     p = page(cur); p.convert.copy(); p.button('Cancel').click();
     check(!p.dialogs.isOpen() && p.made.length === 0, 'Cancel too');
     // an Extended map that fits: the other choice is open
-    const sunny = file('extended', 80, 100, 'A sunny picnic for the ants!!!'), sc = { name: 'Sunny Picnic', bytes: sunny, file: { rows: 80, columns: 100 }, kind: 'extended', report: { headline: 'Works in the new version' } };
+    const sunny = file('extended', 80, 100, 'A sunny picnic for the ants!!!', 2), sc = { name: 'Sunny Picnic', bytes: sunny, file: { rows: 80, columns: 100, rules: 2 }, kind: 'extended', report: { headline: 'Works in the new version' } };
     p = page(sc); p.convert.copy();
     equal(p.all('.kind').map((l) => l.textContent), ['Extended map (same kind)New version onlyWorks in the new version only.', 'Classic map (convert)Works in the original game and in the new version.'], 'an Extended map that fits: the Classic choice is open');
     check(p.all('input').filter((i) => i.getAttribute('type') === 'radio').every((i) => !i.disabled), 'both can be chosen');
     // an Extended map that does not fit: dimmed, with the reason and a way in
-    const tall = file('extended', 120, 400, 'The tall valley has many ants!!'), tc = { name: 'Tall Valley', bytes: tall, file: { rows: 120, columns: 400 }, kind: 'extended', report: { headline: 'Works in the new version' } };
+    const tall = file('extended', 120, 400, 'The tall valley has many ants!!', 2), tc = { name: 'Tall Valley', bytes: tall, file: { rows: 120, columns: 400, rules: 2 }, kind: 'extended', report: { headline: 'Works in the new version' } };
     p = page(tc); p.convert.copy();
     equal(p.all('.kind')[1].textContent, 'Classic map (convert)Not yet: this map has 120 rows and a Classic map made now has at most 90. See why and what to do', 'the dimmed choice says why, and offers the reasons');
     check(p.all('.kind')[1].className === 'kind off' && p.all('input').filter((i) => i.getAttribute('type') === 'radio')[1].disabled, 'the Classic choice is dimmed and cannot be chosen');
@@ -298,7 +308,8 @@ function caseE() {
     p.type('Treasure Big');
     p.button('Make the new Extended map').click();
     check(p.made.length === 1 && p.made[0].name === 'Treasure Big' && p.made[0].bytes.kind === 'extended' && p.made[0].bytes !== treasure && treasure.kind === 'classic' && !p.dialogs.isOpen(), 'the Extended map is a new map from the core\'s conversion');
-    equal(p.calls, ['toExtended'], 'the core was asked once');
+    equal(p.calls, ['toLongOrders'], 'the core was asked once, for the conversion with long orders: a Classic map of 60 rows plays like the original with them');
+    equal(p.made[0].bytes.rules, 2, 'and the new map has rules 2');
     // the core refuses: a sentence, no map
     const odd = file('classic', 60, 60); odd.refuse = true;
     p = page({ name: 'Odd', bytes: odd, file: { rows: 60, columns: 60 }, kind: 'classic', report: null });
@@ -384,8 +395,130 @@ function caseF() {
     equal(p.all('.cbox')[1].textContent.split('.')[0], 'What changes\u2192Only the part you chose is kept: rows 15 to 104, columns 120 to 230', 'and the place is counted from the whole map');
 }
 
+// ---- G: the rules word of a new Extended map ----
+function caseG() {
+    const Sizes = require(path.join(FRONT, 'mapmaker_sizes.js'));
+    // the table, written out: the word of the map that a new map is made from (a Classic map has 0) and the rows of the new map -> the word it gets
+    const table = [[0, 1, 2], [0, 31, 2], [0, 89, 2], [0, 90, 2], [0, 91, 0], [0, 120, 0], [0, 1024, 0], [1, 1, 2], [1, 90, 2], [1, 91, 2], [1, 1024, 2], [2, 1, 2], [2, 91, 2], [2, 1024, 2]];
+    for (const [word, rows, wants] of table) equal(Sizes.newRules(word, rows), wants, 'rules ' + word + ', ' + rows + ' rows');
+    check(Sizes.WALL_ROWS === 90, 'the wall is at 90 rows (the core says the same: a test of the core reads it)');
+    for (const word of [3, 4, 255, 65535, -1, undefined, null, NaN, '2']) check(Object.is(Sizes.newRules(word, 40), word), 'a word that is not 0, 1 or 2 is not changed: ' + String(word));
+    // a Resize: the rows that a map of rules 0 gains below the wall have no wall, so it counts as rules 1 from there; a map that was walled already keeps its wall; rules 1 and 2 go to 2
+    const resized = [[0, 60, 60, 2], [0, 60, 90, 2], [0, 60, 91, 2], [0, 90, 91, 2], [0, 80, 120, 2], [0, 120, 130, 0], [0, 120, 91, 0], [0, 120, 90, 2], [0, 91, 90, 2], [0, 91, 1024, 0], [1, 60, 120, 2], [1, 120, 100, 2], [2, 60, 120, 2], [2, 120, 30, 2]];
+    for (const [word, before, after, wants] of resized) equal(Sizes.resizedRules(word, before, after), wants, 'a Resize of rules ' + word + ' from ' + before + ' to ' + after + ' rows');
+    check(Object.is(Sizes.resizedRules(3, 60, 120), 3) && Object.is(Sizes.resizedRules(undefined, 60, 120), undefined), 'a Resize leaves a word that is not 0, 1 or 2 as it is');
+
+    // a copy of the same kind, by the word and the rows of the map: the core's copy with long orders where the table says 2 and the map has no 2, the plain bytes in another array where it does not
+    const copies = [[0, 80, 'core'], [0, 90, 'core'], [0, 91, 'plain'], [0, 120, 'plain'], [1, 80, 'core'], [1, 91, 'core'], [1, 120, 'core'], [2, 80, 'plain'], [2, 120, 'plain']];
+    for (const [word, rows, how] of copies) {
+        const src = file('extended', rows, 60, 'ok', word), keep = Array.from(src), cur = { name: 'Valley', bytes: src, file: { rows, columns: 60, rules: word }, kind: 'extended', report: { headline: 'Works in the new version' } };
+        const p = page(cur);
+        p.convert.copy();
+        p.button('Make new map').click();
+        const out = p.made[0], asked = p.calls.filter((c) => c !== 'toClassic');            // (the dialog asks the core whether the map fits a Classic map, whatever it makes)
+        const wants = Sizes.newRules(word, rows);
+        check(p.made.length === 1 && out.name === 'Valley 2' && !p.dialogs.isOpen(), 'rules ' + word + ', ' + rows + ' rows: a copy is made under the next name');
+        if (how === 'core') {
+            equal(asked, ['toLongOrders'], 'rules ' + word + ', ' + rows + ' rows: the core is asked for the copy with long orders, once');
+            check(out.bytes.rules === 2 && out.bytes !== src && out.bytes.kind === 'extended' && wants === 2, 'rules ' + word + ', ' + rows + ' rows: the copy has rules 2');
+        } else {
+            equal(asked, [], 'rules ' + word + ', ' + rows + ' rows: the core is asked nothing for the copy');
+            check(out.bytes !== src && Buffer.compare(Buffer.from(out.bytes), Buffer.from(src)) === 0 && wants === word, 'rules ' + word + ', ' + rows + ' rows: the plain bytes, in an array of their own, so the word the map had (and the table says it keeps it)');
+        }
+        equal([Array.from(src), src.rules, src.rows], [keep, word, rows], 'rules ' + word + ', ' + rows + ' rows: the open map is as it was');
+        check(p.tagCalls.some((c) => c[0] === 'extended' && c[1] === word), 'rules ' + word + ', ' + rows + ' rows: the card of the map is given the map\'s word for its badge');
+    }
+    // a Classic map copied as a Classic map: no word, nothing asked of the core
+    const classicSrc = file('classic', 60, 60), classicCur = { name: 'Old', bytes: classicSrc, file: { rows: 60, columns: 60, rules: 0 }, kind: 'classic', report: null };
+    let p = page(classicCur); p.convert.copy(); p.button('Make new map').click();
+    check(p.calls.length === 0 && p.made[0].bytes !== classicSrc && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(classicSrc)) === 0, 'a Classic map copies as a Classic map: the same bytes in another array, the core is asked nothing');
+    // the core cannot make the copy: the plain copy is made (the person asked for a copy, not for the word)
+    const refusing = file('extended', 80, 60, 'ok', 0); refusing.refuse = true;
+    p = page({ name: 'Odd', bytes: refusing, file: { rows: 80, columns: 60, rules: 0 }, kind: 'extended', report: null }); p.convert.copy(); p.button('Make new map').click();
+    check(p.made.length === 1 && p.made[0].bytes !== refusing && Buffer.compare(Buffer.from(p.made[0].bytes), Buffer.from(refusing)) === 0 && p.calls.includes('toLongOrders') && !/could not be made/.test(p.title()), 'when the core cannot make the copy with long orders the plain copy is made');
+    // a copy of a saved map (not the open one) goes by the saved map's own word and rows
+    const saved = file('extended', 40, 40, 'ok', 1), open = { name: 'Open', bytes: file('classic', 31, 31), file: { rows: 31, columns: 31, rules: 0 }, kind: 'classic', report: null };
+    p = page(open); p.convert.copy({ name: 'Saved', bytes: saved, file: { rows: 40, columns: 40, rules: 1 }, kind: 'extended', report: null }); p.button('Make new map').click();
+    check(p.made.length === 1 && p.made[0].bytes.rules === 2 && p.made[0].name === 'Saved 2' && saved.rules === 1, 'a copy of a saved map of rules 1 has rules 2, and the saved map is as it was');
+
+    // Start an Extended map from a Classic map: rules 2 up to 90 rows, the original's wall kept above
+    for (const [rows, how] of [[1, 'toLongOrders'], [60, 'toLongOrders'], [90, 'toLongOrders'], [91, 'toExtended'], [120, 'toExtended'], [256, 'toExtended']]) {
+        const src = file('classic', rows, 40), keep = Array.from(src);
+        p = page({ name: 'Classic', bytes: src, file: { rows, columns: 40, rules: 0 }, kind: 'classic', report: null });
+        p.convert.convert(); p.button('Make the new Extended map').click();
+        equal(p.calls, [how], 'a Classic map of ' + rows + ' rows is converted by ' + how);
+        check(p.made.length === 1 && p.made[0].bytes.rules === (rows <= 90 ? 2 : 0) && p.made[0].bytes.kind === 'extended' && Buffer.compare(Buffer.from(src), Buffer.from(keep)) === 0, 'a Classic map of ' + rows + ' rows becomes an Extended map of rules ' + (rows <= 90 ? 2 : 0) + ', and the Classic bytes are as they were');
+    }
+    // the same through the Copy dialog's other card
+    const src2 = file('classic', 60, 60);
+    p = page({ name: 'Treasure', bytes: src2, file: { rows: 60, columns: 60, rules: 0 }, kind: 'classic', report: null });
+    p.convert.copy(); const radio = p.all('input').filter((i) => i.getAttribute('type') === 'radio')[1]; radio.checked = true; radio.fire('change', {});
+    p.button('Next: what changes').click(); p.button('Make the new Extended map').click();
+    check(equalTo(p.calls, ['toLongOrders']) && p.made.length === 1 && p.made[0].bytes.rules === 2, 'Copy, the Extended card, Next: the same conversion');
+
+    // the Classic map made from a map of long orders: the core's short note, the line "except long orders" and the two badges that go away; rules 1 and 0 as before
+    function classicOf(word, rows, extra) {
+        const src = file('extended', rows, 100, 'ok', word);
+        const q = page({ name: 'Jungle', bytes: src, file: { rows, columns: 100, rules: word }, kind: 'extended', report: { headline: 'Works in the new version' } });
+        q.convert.convert();
+        return q;
+    }
+    p = classicOf(2, 80);
+    equal(p.title(), 'Make a Classic map from this one?', 'a map of rules 2 that fits is offered as a Classic map');
+    equal(p.all('.cbox').map((b) => b.textContent), ['What stays the same✓How the map plays, except long orders.✓Your Extended map. It is never touched.', 'What changes→The copy keeps the limits of a Classic map: at most 90 rows and 130 columns.→The “New version only” and “Rules 2” badges go away.'], 'what stays and what changes, for long orders');
+    equal(p.all('.note').map((n) => n.textContent), ['iThe map has long orders (rules 2); a Classic map has the original\'s rules only, so a long path order can fail there.'], 'the short note of the core, with a capital and a full stop');
+    p = classicOf(1, 80);
+    equal(p.all('.cbox').map((b) => b.textContent), ['What stays the same✓How the map plays.✓Your Extended map. It is never touched.', 'What changes→The copy keeps the limits of a Classic map: at most 90 rows and 130 columns.→The “New version only” badge goes away.'], 'rules 1: the words as before');
+    check(p.all('.note').length === 1 && /extended rules \(rules 1\)/.test(p.all('.note')[0].textContent), 'and its own note');
+    p = classicOf(0, 80);
+    equal(p.all('.cbox').map((b) => b.textContent)[0], 'What stays the same✓How the map plays.✓Your Extended map. It is never touched.', 'rules 0: the words as before');
+    check(p.all('.note').length === 0, 'and no note');
+    // a part cropped out of a map of long orders: the same words, for the part
+    const wide = file('extended', 120, 400, 'short', 2);
+    p = page({ name: 'Wide', bytes: wide, file: { rows: 120, columns: 400, rules: 2 }, kind: 'extended', report: null });
+    p.convert.convert(); p.button('Crop it to fit...').click(); p.crops[0].onUse({ row: 15, column: 144, rows: 90, columns: 111 });
+    equal(p.all('.cbox').map((b) => b.textContent)[0], 'What stays the same✓How the map plays inside the part you chose, except long orders.✓Your Extended map. It is never touched.', 'a part of a map of long orders: the words for the part');
+    check(/“Rules 2” badges go away/.test(p.all('.cbox')[1].textContent), 'and both badges go');
+}
+function equalTo(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+// ---- H: New map and Save as a new map give the word through the page's own function (mapmaker_app.js, withLongOrders: the page needs a real canvas to run, so the function is taken out of the source) ----
+function caseH() {
+    const Sizes = require(path.join(FRONT, 'mapmaker_sizes.js'));
+    const found = /\n    function withLongOrders\(bytes\) \{\n[\s\S]*?\n    \}\n/.exec(fs.readFileSync(path.join(FRONT, 'mapmaker_app.js'), 'utf8'));
+    check(found !== null && found[0].split('\n').length <= 10, 'withLongOrders is in mapmaker_app.js and is a few lines');
+    if (!found) return;
+    function run(core, src) {
+        const dead = [], parse = (b) => ({ ok: b.unreadable !== true, kind: b.kind, rules: b.rules, rows: b.rows });
+        const withLongOrders = new Function('win', 'MapSizes', 'core', 'alive', found[0] + '\nreturn withLongOrders;')({ MapFile: { parse } }, Sizes, core, () => { dead.push('alive'); return true; });
+        return { out: withLongOrders(src), dead };
+    }
+    // where the map has not the word that the rule gives, the core is asked once and its copy is the map: a blank Extended map of rules 0 (up to the wall) or 1 (any size)
+    for (const [word, rows] of [[0, 1], [0, 90], [1, 1], [1, 91], [1, 512]]) {
+        const calls = [], src = file('extended', rows, 40, 'ok', word), r = run(standIn(calls), src);
+        check(equalTo(calls, ['toLongOrders']) && r.out !== src && r.out.rules === 2 && r.out.kind === 'extended' && r.dead.length === 0, 'rules ' + word + ', ' + rows + ' rows: the core is asked once and its copy has rules 2');
+    }
+    // where it has it, or the rule gives it no word: no call, the very bytes (rules 2, a Classic map, a map of rules 0 with a wall, a file that does not read)
+    const unreadable = file('extended', 40, 40, 'ok', 0);
+    unreadable.unreadable = true;
+    for (const [what, src] of [['rules 2', file('extended', 40, 40, 'ok', 2)], ['rules 2, 300 rows', file('extended', 300, 40, 'ok', 2)], ['a Classic map', file('classic', 40, 40)], ['rules 0 with a wall (91 rows)', file('extended', 91, 40, 'ok', 0)], ['rules 0, 400 rows', file('extended', 400, 40, 'ok', 0)], ['a file that does not read', unreadable]]) {
+        const calls = [], r = run(standIn(calls), src);
+        check(calls.length === 0 && r.out === src && r.dead.length === 0, what + ': the core is not asked and the bytes are the same ones');
+    }
+    // the core cannot give the copy: the map stays as it was, never lost for the word; and a core that has stopped for good is said to have (the page's alive() says it once)
+    const refused = file('extended', 40, 40, 'ok', 0);
+    refused.refuse = true;
+    let r = run(standIn([]), refused);
+    check(r.out === refused && r.dead.length === 0, 'an answer with ok false (the copy cannot be written): the map as it was, and the core is not taken for dead');
+    const plain = file('extended', 40, 40, 'ok', 1);
+    r = run({ convertToLongOrders: () => ({ status: 1, error: 'the file does not load' }) }, plain);
+    check(r.out === plain && r.dead.length === 0, 'a refusal (status 1): the map as it was, and the core is not taken for dead');
+    r = run({ convertToLongOrders: () => ({ status: 2, error: 'no memory' }) }, plain);
+    check(r.out === plain && r.dead.length === 1, 'a fault of the core (status 2): the map as it was, and the page is asked whether the core is alive');
+}
+
 function main() {
-    for (const [name, fn] of [['A the frame', caseA], ['B the names', caseB], ['C the Crop to fit screen', caseC], ['D Copy this map', caseD], ['E Start an Extended map, Make a Classic map, the reasons', caseE], ['F Crop it to fit', caseF]]) {
+    for (const [name, fn] of [['A the frame', caseA], ['B the names', caseB], ['C the Crop to fit screen', caseC], ['D Copy this map', caseD], ['E Start an Extended map, Make a Classic map, the reasons', caseE], ['F Crop it to fit', caseF], ['G the rules word of a new Extended map', caseG], ['H New map and Save as a new map', caseH]]) {
         process.stdout.write('RUNNING: ' + name + ' ... ');
         const before = failures;
         try { fn(); } catch (e) { failures++; console.log('\n    FAILED: threw ' + (e && e.stack ? e.stack : e)); }

@@ -79,8 +79,9 @@ Parts:
              the grip that drags the box (mouse and finger; no stroke, no looking around), the arrow keys, Home, two taps, Lock, a smaller window, a stored place that does not fit, the phone's size
   * foot     desktop windows from 800 x 500 to 1920 x 1080 (at 1 and 1.25 pixels a pixel) and phones (390 x 844, 360 x 640, 320 x 568) (tests/scripts/web_mapmaker_browser_foot.py, which says what it covers): the footer line
              lies inside the screen's frame, as the page opens, after a stroke and with the Pick up bar open, and the page has no scrollbar that it did not need; a phone held sideways has no footer
+  * rules    1280 x 800, 1280 x 720, 1280 x 960 and a phone (tests/scripts/web_mapmaker_browser_rules.py, which says what it covers): the rules word of a new Extended map (New map, Copy, Save as a new map, Resize, Start an Extended map: long orders where the map plays like the original with them) and its Rules 2 badge, never in the top bar, read from the bytes that Download hands over
   * convertwait  1280 x 800, the scripts of Copy, convert and Crop on a slow network (every request takes 1.5 s longer): a second press of Copy... during the load asks for nothing more (one tag for each script) and opens ONE dialog; a map opened, or an Open a map dialog opened, while the crop scripts load keeps the crop screen shut (it would be cut for the wrong map and limits)
-  * older    a map core of another interface version (the page is given a module that says it is version 3, the one before the crop): the page says so and offers a reload, and no button works.
+  * older    a map core of another interface version (the page is given a module that says it is version 4, the one before the long orders): the page says so and offers a reload, and no button works.
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down; 3: the check could not be made because the environment is not there (no browser, nothing answers at
 the address); 2 is the status of a bad command line.
@@ -99,11 +100,10 @@ from web_aspect_check import Browser, NotReachable, Tab                      # n
 from web_hidden_check import find_browser                                    # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants", "pickup", "line", "foot", "minimap", "convertwait")
+PARTS = ("desktop", "csp", "draw", "blocks", "bigger", "props", "convert", "save", "mine", "submit", "narrow", "panel", "layout", "phone", "older", "sprites", "layer", "edges", "play", "ants", "pickup", "line", "foot", "minimap", "rules", "convertwait")
 WITH_ATLAS = ("panel", "sprites", "layer", "edges", "play", "ants", "pickup")                  # the other parts read the canvas pixel by pixel and compare colors: they run with the atlas refused, so the page draws its flat colors (the "sprites" part has the pictures and the refusal)
 DIALOGS = []                      # the questions that the browser asked (the page asks before it is left with a map that was drawn on)
 VIOLATIONS = []                   # what the browser refused for the page's content security policy (the console's "Refused to ..." lines and the audit issues), kept for the part that is running
-
 
 def tiny_hill():
     """(row, column) of a cell of a hill in TINY.LVL, read here with struct (the layers hold six bytes a cell; a hill is tile 245 to 248 on layer 2)"""
@@ -116,7 +116,6 @@ def tiny_hill():
         if 245 <= struct.unpack_from("<H", data, layer2 + 6 * i)[0] <= 248:
             return i // columns, i % columns
     raise RuntimeError("TINY has no hill")
-
 
 def tiny_free(size=6):
     """(row, column) of the top left cell of a square of `size` cells in TINY.LVL where layer 2 is empty and no cell of layer 1 is solid, read here with struct"""
@@ -145,7 +144,6 @@ def tiny_free(size=6):
                    for i in range(size) for j in range(size)):
                 return r, c
     raise RuntimeError("TINY has no free square")
-
 
 def idb_read(page, store, key):
     """what the page's own database holds under a key, read from the page: None, or {name, kind, length} (the bytes are not carried over, only their length)"""
@@ -2221,6 +2219,8 @@ def run_part(part, tab, args, check, tiny, junk):
     elif part == "minimap":
         import web_mapmaker_browser_minimap as minimap_part                  # (the small map: its own file, this one is at the limit of lines)
         minimap_part.run_minimap(Page(tab, args.web), tab, args, check, {"wait_for": wait_for, "REPO": REPO}, edges_bytes, EDGES_JS)
+    elif part == "rules":
+        __import__("web_mapmaker_browser_rules").run_rules(Page(tab, args.web), tab, args, check, {"wait_for": wait_for, "REPO": REPO, "make_extended": make_extended}, edges_bytes, EDGES_JS)
     elif part == "pickup":
         import web_mapmaker_browser_pickup as pickup_part                  # (the Pick up tool: its own file, this one is at the limit of lines)
         env = {"wait_for": wait_for, "REPO": REPO}
@@ -2488,7 +2488,7 @@ def run_part(part, tab, args, check, tiny, junk):
         tab.emulate(1280, 800, 1)
         page = Page(tab, args.web)
         old = ("(function () { var real; Object.defineProperty(window, 'createLvlCore', { configurable: true, get: function () { return real && function () { "
-               "return real.apply(this, arguments).then(function (m) { m._lvl_interface_version = function () { return 3; }; return m; }); }; }, set: function (v) { real = v; } }); })();")
+               "return real.apply(this, arguments).then(function (m) { m._lvl_interface_version = function () { return 4; }; return m; }); }; }, set: function (v) { real = v; } }); })();")
         check(page.open(old), "the page answers")
         text = page.ev("document.getElementById('boot').textContent")
         check(not page.ev("document.getElementById('boot').hidden") and "out of date" in text and "Reload the page" in text, "it says that the map code is out of date and offers a reload: %r" % text)

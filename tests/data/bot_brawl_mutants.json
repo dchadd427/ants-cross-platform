@@ -30,7 +30,7 @@
   {
    "id": "brawl_no_retreat",
    "file": "src/ants_ai/brawl_task.cpp",
-   "old": "if (a.hp <= params_.retreat_hp) {",
+   "old": "if (a.hp <= params_.retreat_hp && v.hill_enterable()) {",
    "new": "if (false) {",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI30.6 ' ./build/tests/test_ai/test_ai",
    "expect": "AI30.6"

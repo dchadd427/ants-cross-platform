@@ -1552,22 +1552,23 @@ void run_suite_9_wide_search() {
         ASSERT_TRUE(d2->path == d1->path);
     } TEST_END();
 
-    TEST_CASE("9.9 The budget: a wide search that has passed the original's limit gets max(1000, cells / 32) steps a run, before that (and at every other rules word) 1,000") {
+    TEST_CASE("9.9 The budget: a wide search that has passed the original's limit gets max(1000, cells / 64) steps a run, before that (and at every other rules word) 1,000") {
         ASSERT_EQ(PathManager::wide_budget(60, 60), 1000u);
         ASSERT_EQ(PathManager::wide_budget(81, 129), 1000u);                 // the biggest map of the library
-        ASSERT_EQ(PathManager::wide_budget(250, 128), 1000u);                // 32,000 cells
-        ASSERT_EQ(PathManager::wide_budget(1, 32001), 1000u);                // 1,000.03
-        ASSERT_EQ(PathManager::wide_budget(1, 32032), 1001u);
-        ASSERT_EQ(PathManager::wide_budget(1, 32063), 1001u);
-        ASSERT_EQ(PathManager::wide_budget(1, 32064), 1002u);
-        ASSERT_EQ(PathManager::wide_budget(256, 256), 2048u);
-        ASSERT_EQ(PathManager::wide_budget(400, 400), 5000u);
-        ASSERT_EQ(PathManager::wide_budget(512, 512), 8192u);
-        ASSERT_EQ(PathManager::wide_budget(1024, 256), 8192u);
+        ASSERT_EQ(PathManager::wide_budget(250, 256), 1000u);                // 64,000 cells
+        ASSERT_EQ(PathManager::wide_budget(1, 64001), 1000u);                // 1,000.02
+        ASSERT_EQ(PathManager::wide_budget(1, 64063), 1000u);                // 1,000.98
+        ASSERT_EQ(PathManager::wide_budget(1, 64064), 1001u);
+        ASSERT_EQ(PathManager::wide_budget(1, 64127), 1001u);
+        ASSERT_EQ(PathManager::wide_budget(1, 64128), 1002u);
+        ASSERT_EQ(PathManager::wide_budget(256, 256), 1024u);
+        ASSERT_EQ(PathManager::wide_budget(400, 400), 2500u);
+        ASSERT_EQ(PathManager::wide_budget(512, 512), 4096u);
+        ASSERT_EQ(PathManager::wide_budget(1024, 256), 4096u);
         ASSERT_EQ(PathManager::wide_budget(2048, 2048), 65535u);             // (the manager's budget is 16 bits)
         ASSERT_EQ(static_cast<unsigned>(PathSearch::kDefaultBudget), 1000u);
-        // a search of 5,400 expansions that stays below f = 8,000 (the original's limit is not passed) takes 1,000 a run whatever it is given: owner's rule, a search that the original
-        // can finish is delivered in the run in which the original delivers it (before, it took the big budget from the first run on: 6 runs of 1,000 became one of 8,192)
+        // a search of 5,400 expansions that stays below f = 8,000 (the original's limit is not passed) takes 1,000 a run whatever it is given: a search that the original
+        // can finish is delivered in the run in which the original delivers it (before, it took the big budget from the first run on: 6 runs of 1,000 became one of 8,192, the budget of 512 x 512 at cells / 32)
         const TerrainMap open = TerrainMap::filled(512, 512);
         const PathManager::CostProvider provider = open.provider();
         for (const uint16_t budget : {uint16_t{1000}, uint16_t{2048}, uint16_t{8192}}) {
@@ -1682,41 +1683,41 @@ void run_suite_9_wide_search() {
         ASSERT_EQ(digest, 0x0a8341a6f46413bcull);   // the digest of the whole run, as in 9.1
     } TEST_END();
 
-    TEST_CASE("9.13 The budget schedule: 1,000 a run until the pop at which the original would have given up, the budget of the map after; a map of 190 x 190 delivers what the original can handle in the original's runs") {
-        // (a) 190 x 190 open grass, 36,100 cells: wide_budget is 1,128. Orders of 40 to 90 tiles take about 700 to 3,500 pops (48 to 50 tiles: 1,001 to 1,128); a run of 1,128 would deliver one that takes 1,001 to 1,128 a run
+    TEST_CASE("9.13 The budget schedule: 1,000 a run until the pop at which the original would have given up, the budget of the map after; a map of 300 x 300 delivers what the original can handle in the original's runs") {
+        // (a) 300 x 300 open grass, 90,000 cells: wide_budget is 1,406. Orders of 40 to 90 tiles take about 700 to 3,500 pops (about 48 to 55 tiles: 1,001 to 1,406); a run of 1,406 would deliver one that takes 1,001 to 1,406 a run
         // earlier than the original's 1,000 does.
-        const TerrainMap field = TerrainMap::filled(190, 190);
-        ASSERT_EQ(PathManager::wide_budget(190, 190), 1128u);
+        const TerrainMap field = TerrainMap::filled(300, 300);
+        ASSERT_EQ(PathManager::wide_budget(300, 300), 1406u);
         const PathManager::CostProvider provider = field.provider();
         int took_more_than_one_run = 0, in_the_window = 0;
         for (int dist = 40; dist <= 90; ++dist) {
             PathManager classic, wide;
-            classic.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, false);
-            wide.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, true);
+            classic.request(1, {20, 150}, {20 + dist, 150}, 300, 300, false, false);
+            wide.request(1, {20, 150}, {20 + dist, 150}, 300, 300, false, true);
             std::optional<PathManager::Delivery> dc, dw;
             int rc = 0, rw = 0;
             while (!dc && rc < 100) { dc = classic.run(provider, PathSearch::kDefaultBudget); ++rc; }
-            while (!dw && rw < 100) { dw = wide.run(provider, PathManager::wide_budget(190, 190)); ++rw; }
+            while (!dw && rw < 100) { dw = wide.run(provider, PathManager::wide_budget(300, 300)); ++rw; }
             ASSERT_TRUE(dc.has_value() && dw.has_value());
             ASSERT_FALSE(dc->path.empty());
             ASSERT_TRUE(dw->path == dc->path);
             ASSERT_EQ(rw, rc);
             if (rc > 1) ++took_more_than_one_run;
-            const PopCount pc = count_pops(190, 190, {20, 95}, {20 + dist, 95}, field.step_cost());
-            if (pc.pops > 1000 && pc.pops <= 1128) ++in_the_window;          // (the orders for which a run of 1,128 would have been one run too few)
+            const PopCount pc = count_pops(300, 300, {20, 150}, {20 + dist, 150}, field.step_cost());
+            if (pc.pops > 1000 && pc.pops <= 1406) ++in_the_window;          // (the orders for which a run of 1,406 would have been one run too few)
         }
         ASSERT_GT(took_more_than_one_run, 35);
         ASSERT_GE(in_the_window, 1);
         // (b) the same with a toll beside the way (the flag is set on the way, no pop reaches f = 8,000): the original's runs
-        const PathManager::CostProvider toll_provider = [&](uint32_t id, TileCoord a, TileCoord b) -> uint32_t { return b == TileCoord{50, 97} ? 7990u : provider(id, a, b); };
+        const PathManager::CostProvider toll_provider = [&](uint32_t id, TileCoord a, TileCoord b) -> uint32_t { return b == TileCoord{50, 152} ? 7990u : provider(id, a, b); };
         for (int dist = 40; dist <= 90; ++dist) {
             PathManager classic, wide;
-            classic.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, false);
-            wide.request(1, {20, 95}, {20 + dist, 95}, 190, 190, false, true);
+            classic.request(1, {20, 150}, {20 + dist, 150}, 300, 300, false, false);
+            wide.request(1, {20, 150}, {20 + dist, 150}, 300, 300, false, true);
             std::optional<PathManager::Delivery> dc, dw;
             int rc = 0, rw = 0;
             while (!dc && rc < 100) { dc = classic.run(toll_provider, PathSearch::kDefaultBudget); ++rc; }
-            while (!dw && rw < 100) { dw = wide.run(toll_provider, PathManager::wide_budget(190, 190)); ++rw; }
+            while (!dw && rw < 100) { dw = wide.run(toll_provider, PathManager::wide_budget(300, 300)); ++rw; }
             ASSERT_TRUE(dc.has_value() && dw.has_value() && !dc->path.empty() && dw->path == dc->path);
             ASSERT_EQ(rw, rc);
         }
@@ -1728,7 +1729,7 @@ void run_suite_9_wide_search() {
         ASSERT_GT(pc.limit_pop, static_cast<uint64_t>(10000));                   // (a long way of searching before the limit is met)
         ASSERT_GT(pc.pops, pc.limit_pop);
         const PathManager::CostProvider big_provider = big.provider();
-        for (const uint16_t budget : {uint16_t{1000}, uint16_t{2048}, uint16_t{8192}, uint16_t{30000}}) {
+        for (const uint16_t budget : {uint16_t{1000}, uint16_t{2048}, uint16_t{4096}, uint16_t{30000}}) {
             PathManager pm;
             pm.request(1, {20, 256}, {470, 256}, 512, 512, false, true);
             uint32_t runs = 0;
@@ -1737,17 +1738,17 @@ void run_suite_9_wide_search() {
             ASSERT_TRUE(d.has_value() && d->path.size() == 451);
             ASSERT_EQ(runs, scheduled_runs(pc.pops, pc.limit_pop, budget));
         }
-        ASSERT_LT(scheduled_runs(pc.pops, pc.limit_pop, 8192), scheduled_runs(pc.pops, 0, 8192) / 2);    // (the big budget does shorten the search)
-        ASSERT_GT(scheduled_runs(pc.pops, pc.limit_pop, 8192), (static_cast<uint32_t>(pc.pops) + 8191) / 8192);   // ... but it is not given from the first run
+        ASSERT_LT(scheduled_runs(pc.pops, pc.limit_pop, 4096), scheduled_runs(pc.pops, 0, 4096) / 2);    // (the big budget does shorten the search)
+        ASSERT_GT(scheduled_runs(pc.pops, pc.limit_pop, 4096), (static_cast<uint32_t>(pc.pops) + 4095) / 4096);   // ... but it is not given from the first run
         // (d) a copy of a manager made after the search has passed the limit (the constructor and the assignment) keeps the big budget: given the rest of the search as one budget, the
         // original and both copies deliver in the next run (a copy that forgot the limit would take 1,000 of it first and need a second run)
         {
-            const uint32_t runs_to_limit = static_cast<uint32_t>((pc.limit_pop + 999) / 1000);   // the run in which the first pop at f >= 8,000 happens; the run after it has 8,192
-            const uint64_t rest = pc.pops - static_cast<uint64_t>(runs_to_limit) * 1000 - 8192;
+            const uint32_t runs_to_limit = static_cast<uint32_t>((pc.limit_pop + 999) / 1000);   // the run in which the first pop at f >= 8,000 happens; the run after it has 4,096
+            const uint64_t rest = pc.pops - static_cast<uint64_t>(runs_to_limit) * 1000 - 4096;
             ASSERT_TRUE(rest > 2000 && rest < 65535);
             PathManager original;
             original.request(1, {20, 256}, {470, 256}, 512, 512, false, true);
-            for (uint32_t r = 0; r < runs_to_limit + 1; ++r) ASSERT_FALSE(original.run(big_provider, 8192).has_value());
+            for (uint32_t r = 0; r < runs_to_limit + 1; ++r) ASSERT_FALSE(original.run(big_provider, 4096).has_value());
             PathManager by_constructor(original);
             PathManager by_assignment;
             by_assignment = original;

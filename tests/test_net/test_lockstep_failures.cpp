@@ -26,22 +26,20 @@ void run_failure_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("S2.2 Dedicated Server: The Referee Names A Diverging Client Within A Second, With The Subsystem; The Server Plays And Chats As Nobody") {
+    TEST_CASE("S2.2 Dedicated Server: The Referee Names A Diverging Client Within A Second, With The Subsystem, To That Client Alone (It Is Dropped And The Others Go On, S2.40); The Server Plays And Chats As Nobody") {
         ServerMatch m(1, 4, {40, 10});
         m.run(3000);
         ASSERT_TRUE(m.host->desyncs().empty());
         m.sims[3]->get_unit(m.ids.ants[3][1]).hp = 3;                                // a hit point that no command explains
         const uint32_t before = m.now;
         m.run(2000, false);
-        ASSERT_FALSE(m.host->desyncs().empty());
+        ASSERT_TRUE(m.clients[3]->desynced());
         ASSERT_TRUE(m.now - before <= 2000);
-        const DesyncMsg& d = m.host->desyncs()[0];
+        const DesyncMsg& d = m.clients[3]->desync();
         ASSERT_EQ(d.player, 3);
         ASSERT_TRUE(d.peer.ants != d.host.ants);
         ASSERT_TRUE(d.peer.grid == d.host.grid && d.peer.players == d.host.players);
-        for (auto& c : m.clients) ASSERT_TRUE(c->desynced());                        // everybody is told
-        ASSERT_TRUE(m.host->frozen());
-        for (const auto& x : m.host->desyncs()) ASSERT_EQ(x.player, 3);              // only client 3 is blamed (the referee agrees with the others)
+        for (uint8_t p = 0; p < 3; ++p) ASSERT_FALSE(m.clients[p]->desynced());      // only client 3 is blamed and told (the referee agrees with the others)
         // a host without a seat has no commands and no chat of its own
         ServerMatch quiet(2, 2, {20, 5});
         quiet.run(500, false);
@@ -70,25 +68,32 @@ void run_failure_tests() {
             sim::StateHash bogus;
             for (uint32_t t = 100000; t < 100500; ++t) {
                 ASSERT_TRUE(seq.on_hash(1, t, bogus).empty());
-                ASSERT_TRUE(seq.on_referee_hash(t, bogus).empty());
+                seq.on_referee_hash(t, bogus);
             }
             ASSERT_EQ(seq.pending_reports(), size_t{0});                                  // nothing was sealed: nothing is kept
-            for (int i = 0; i < 20; ++i) seq.seal();                                      // turns 0 .. 19 exist now
+            for (int i = 0; i < 60; ++i) seq.seal();                                      // turns 0 .. 59 exist now (19, 39 and 59 are the hashed ones)
             sim::StateHash a;
             sim::StateHash b;
             b.total = 1;
             b.ants = 1;
             if (host_seat == kNoSeat) {
-                ASSERT_TRUE(seq.on_hash(1, 10, a).empty());                               // the client is first: waits for the referee
-                ASSERT_TRUE(seq.on_hash(2, 10, b).empty());
-                const auto d = seq.on_referee_hash(10, a);                                // the referee agrees with client 1 and not with client 2
-                ASSERT_EQ(d.size(), size_t{1});
-                ASSERT_EQ(d[0].player, 2);
-                ASSERT_TRUE(d[0].host == a && d[0].peer == b);
-                const auto late = seq.on_hash(2, 10, b);                                  // a repeated report of the same turn is compared again
-                ASSERT_EQ(late.size(), size_t{1});
-                ASSERT_TRUE(seq.on_hash(1, 11, a).empty() && seq.on_referee_hash(11, a).empty());      // agreement: nothing
-                ASSERT_EQ(seq.on_hash(2, 12, b).size() + seq.on_referee_hash(12, a).size(), size_t{1});   // the referee is first: the client is found as it reports
+                ASSERT_TRUE(seq.on_hash(1, 19, a).empty());                               // the client is first: waits for the referee
+                ASSERT_TRUE(seq.on_hash(2, 19, b).empty());
+                seq.on_referee_hash(19, a);                                               // the referee agrees with client 1 and not with client 2
+                HashVerdict v = seq.judge_hashes(0x06);                                   // (seats 1 and 2 are at the table)
+                ASSERT_TRUE(v.kind == HashVerdict::Kind::Drop && v.seats.size() == 1);
+                ASSERT_EQ(v.seats[0].player, 2);
+                ASSERT_TRUE(v.seats[0].host == a && v.seats[0].peer == b);
+                ASSERT_TRUE(seq.on_hash(2, 19, b).empty());                               // a repeated report of the same turn is not a new one: nothing more to say
+                ASSERT_TRUE(seq.judge_hashes(0x06).kind == HashVerdict::Kind::Nothing);
+                ASSERT_TRUE(seq.on_hash(1, 39, a).empty());
+                seq.on_referee_hash(39, a);
+                ASSERT_TRUE(seq.judge_hashes(0x06).kind == HashVerdict::Kind::Nothing);   // agreement: nothing
+                seq.on_referee_hash(59, a);                                               // the referee is first: the client is found as it reports
+                ASSERT_TRUE(seq.on_hash(2, 59, b).empty());
+                ASSERT_TRUE(seq.on_hash(1, 59, a).empty());
+                v = seq.judge_hashes(0x06);
+                ASSERT_TRUE(v.kind == HashVerdict::Kind::Drop && v.seats.size() == 1 && v.seats[0].player == 2 && v.seats[0].turn == 59);
             }
         }
         // on the wire: a hostile client sends hashes for the far future; the match goes on unharmed
@@ -1014,7 +1019,7 @@ void run_failure_tests() {
 
 void run_protocol11_tests() {
     TEST_CASE("N2.89 Protocol 11: StartRequest Carries A Fill Level (Every Level Round-Trips, Every Truncation, Trailing Byte And Level Above 3 Is Refused, The Names And Parsing Of The Levels), The Room's Notices Are Chat From Sender 255 (Round Trip, Limits), And 300000 Mutated StartRequests And Chat Lines Only Give Messages That Encode Back To The Same Bytes") {
-        ASSERT_EQ(kProtocolVersion, 22);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
+        ASSERT_EQ(kProtocolVersion, 23);                                 // (the Chat of protocol 11 is the Chat of protocol 17; the StartRequest grew in 13: a level for each seat and the teams, N2.100 has its rules, here the one level of protocol 11 is the same level in every seat)
         ASSERT_TRUE(kFillLevelLast == 3 && kRoomSender == 255 && static_cast<int>(MsgType::StartRequest) == 24 && static_cast<int>(MsgType::Chat) == 9);
         // every level
         const std::pair<FillLevel, const char*> levels[] = {{FillLevel::None, "none"}, {FillLevel::Easy, "easy"}, {FillLevel::Medium, "medium"}, {FillLevel::Hard, "hard"}};
@@ -1618,7 +1623,7 @@ void run_protocol12_tests() {
 
 void run_protocol17_tests() {
     TEST_CASE("N2.112 Protocol 17, The Game Mode: The Start, The Room And The Plan End With One Byte, 0 (The Original's Highest Score) Or 1 (187); Every Byte Above sim::kLastGameMode Is Refused In Each Of Them (Never Played As Another Mode), So Are The Layouts Of Protocol 16 (No Byte), A Byte More And Every Truncation; The Mode Is Not Part Of The Seating Hash; The Words Of The Modes Parse Exactly") {
-        ASSERT_TRUE(kProtocolVersion == 22 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
+        ASSERT_TRUE(kProtocolVersion == 23 && sim::kLastGameMode == 1 && sim::valid_game_mode(0) && sim::valid_game_mode(1) && !sim::valid_game_mode(2) && !sim::valid_game_mode(255));
         ASSERT_TRUE(static_cast<uint8_t>(sim::GameMode::HighestScore) == 0 && static_cast<uint8_t>(sim::GameMode::Kills187) == 1);
         // the Start: the last byte, after the platforms of the four seats
         {

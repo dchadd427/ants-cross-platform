@@ -147,6 +147,11 @@ bool BotController::allowed(const sim::SimulationEngine& sim, const Seat& s, con
     if (sim::is_group_order(c.type)) {
         if (!sim.grid().in_bounds(c.tile_x, c.tile_y)) return false;
         const sim::TileCoord tile{c.tile_x, c.tile_y};
+        if (!sim.own_hill_enterable()) {                                                    // 187 now: an ant cannot enter its hill, so no click names it (no task sends an ant home to heal)
+            for (const assets::AnthillSpawn& hill : sim.grid().anthills()) {
+                if (hill.team_id == s.seat && tile.x >= static_cast<int32_t>(hill.x) && tile.x <= static_cast<int32_t>(hill.x) + 3 && tile.y >= static_cast<int32_t>(hill.y) && tile.y <= static_cast<int32_t>(hill.y) + 3) return false;
+            }
+        }
         const bool powerup = sim.grid().has_powerup_at(tile);
         if (in.pickup && !powerup) return false;                                            // there is nothing to take on that tile (any more)
         if (powerup && !in.pickup) return false;                                            // a click on a power-up takes it: only a planned pick-up may name one (and no special order, no attack)

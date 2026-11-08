@@ -74,7 +74,7 @@ To guarantee authentic 1:1 behavioral parity with the 1998 original game, all sy
 
    - Always cross-referenced with Capstone to verify exact opcode behavior and eliminate decompilation ambiguity.
 
-**Both references are local copies, not part of the repository.** From the original game the repository holds only data and pictures made from it, never the program (the License section of `README.md` lists them); `docs/ORIGINAL_PROGRAM.md` says where your own copy of the program goes, what the tools need and how the tests run without it. The citations "Ants.exe.c line NNNN" in this document and in the code point at that local decompilation, the addresses at the program.
+**Both references are local copies, not part of the repository.** From the original game the repository holds only data and pictures made from it (the License section of `README.md` lists them); `docs/ORIGINAL_PROGRAM.md` says where your own copy of the program goes, what the tools need and how the tests run without it. The citations "Ants.exe.c line NNNN" in this document and in the code point at that local decompilation, the addresses at the program.
 
 ### 2.1 Binary Characteristics
 
@@ -1828,9 +1828,9 @@ random walks; the models and the remake agree on every path tile and on every po
   non-optimal paths and even false "no path"), failure when a popped node has f >= 8000, path = start .. goal.
 
 - **Remake-only: past the original's limits.** The original stops at a 14-bit cost, a 13-bit estimate, the first popped node with f >= 8000 (a blocked step costs 8000) and 1000 expansions every 50 ms:
-  about 400 grass tiles (286 on a diagonal) fail. Rules 0 and 1 play that. Rules word 2 (the wide search of `path_planner.cpp`, off until the next release) goes past it, only there: the same A*, neighbour order, live f, tie-breaks and "pushed at most
+  about 400 grass tiles (286 on a diagonal) fail. Rules 0 and 1 play that. Rules word 2 (a map's word; the wide search of `path_planner.cpp`) goes past it, only there: the same A*, neighbour order, live f, tie-breaks and "pushed at most
   once", a 24-bit cost, a computed estimate, a blocked node dropped once a node has passed f = 8000, and 1000 expansions a run until such a node is popped. Every search the
-  original finishes is the same, pop for pop and run for run.
+  original finishes is the same, pop for pop and run for run. After that pop a run takes max(1000, cells / 64) expansions. Past 512 tiles of distance the 13-bit estimate wraps and rules 1 and 2 differ (no original map is so wide).
 
 - Step cost `FUN_01020951`: `(C(a)+C(b)) >> 1` orthogonally, `trunc((double)(C(a)+C(b)) * 1.4) >> 1` diagonally;
   8000 for enemy or waiting / idle-without-order team-mates, other teams' hill tiles and queue tiles, solid objects
@@ -3210,7 +3210,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (image base 0x010000
 
 * **The library, before and after** (a folder of 586 files, 540 of which load; numbers only; the repository holds only the part of the maps that is in `Community-Maps/`). Block 3 names a power-up id on 99 maps (62 Combat: 56, 63 Thief: 17, 64 Bomber: 16, 65 Swimmer: 5, 66 Fire: 5); 416 maps say `0x7FFE`, 13 name a tile inside their dictionary that is no power-up (0, 16, 27 .. 30, 127, 164, 410: no default), and 12 name an index outside it (11 say 4094, one 38912: the original reads its heap there, the remake takes "no default"); 98 of the 99 place start ants, which are now of that type (the 99th places none, its default shows when its teams hatch). Power-up cells by tile id: 15,527 on 489 maps; the remake found 6,822 on 386 maps (390 maps differed, 103 lost every power-up), and finds all of them now (3,278 bombers, 2,463 fire, 1,873 thieves, 3,891 combat, 4,022 swimmers). Droppers: 154 on 87 maps before, 164 on 94 maps now. A headless sweep of the 540 maps (`map_sweep`, 2400 ticks, the default roster, every play repeated in the same process and in a second one) has no crash, hang, error or divergence before or after; 121 maps play hash-identical, 419 change (all of them by the causes above), and the six shipped maps are hash-identical at 2400 and at 14,400 ticks (the sweep's player never clicks power-ups on purpose, so no ant changes type in those plays; test 1.8's does, and five of its twelve plays differ, "What was wrong" (4)).
 
-* **Not changed there, changed in v0.12.10.** Food, hills, start markers, the `.` overlay and the terrain classes were still decided by the dictionary at that point; they are by tile id now, with the program's solid bits and `SetTile`'s refusal of graphic-less tiles ([the report](reverse_engineering/map_loader_fidelity.md)). Named objects (rocks, grass, flowers) keep the name-based overlay.
+* **Not changed there, changed in v0.12.10.** Food, hills, start markers, the `.` overlay and the terrain classes were still decided by the dictionary at that point; they are by tile id now, with the program's solid bits and `SetTile`'s refusal of graphic-less tiles ([the report](reverse_engineering/map_loader_fidelity.md)). Named objects (rocks, grass, flowers) keep the name-based overlay; a fire wall (134) does not since the rules numbers 9 and 10 (map_loader_fidelity.md, section 8).
 
 ### 5.63 The Start Menu Is the Remake's Own: What the Original Has Around It (Read From the Decompilation and Capstone; Used in the Desktop Start Menu)
 
@@ -3228,7 +3228,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe` (checked with Capsto
 
 ### 5.64 The Original's Recorder and Observer Playback (`-O` and `-I`; Capstone-Verified)
 
-Checked with Capstone on the local copy of `Ants.exe` (read only, nothing of the program is copied) and read in the local decompilation (never committed):
+Checked with Capstone on the local copy of `Ants.exe` (read only, nothing of the program is copied) and read in the local decompilation:
 
 * `-I<file>` (the case at **0x100ca69**) sets `[W+0x4ae4] = 1` (OBSERVER) and stores the argument (at most 0x104 characters) at `[W+0x4ff7]`; `-O<file>` stores the name without the flag.
 

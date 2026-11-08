@@ -367,11 +367,12 @@ struct SnapshotTap {
 using OrdersFn = std::vector<Command> (*)(const sim::SimulationEngine&, uint32_t);
 
 Played play_scripted(const Map& m, uint32_t seed, uint32_t turns, uint8_t roster = 0x0F, const sim::StartTeams& teams = sim::StartTeams{}, bool fog = false, SnapshotTap* tap = nullptr, uint8_t mode = 0,
-                     OrdersFn orders = nullptr, const std::vector<uint8_t>* embed = nullptr) {
+                     OrdersFn orders = nullptr, const std::vector<uint8_t>* embed = nullptr, bool hill_open_187 = false) {
     Played p;
     sim::SimulationEngine engine;
     engine.set_fog_of_war_enabled(fog);
     engine.set_game_mode(static_cast<sim::GameMode>(mode));                  // (before init, as every machine of a match does)
+    engine.set_hill_open_187(hill_open_187);                                 // (the rules of 187 before the closed hill; the file is still headed with the number of the build that plays it: only the hash is meant)
     engine.init(m.level, seed, roster);
     if (teams.set) sim::apply_start_teams(engine, teams);                    // (as a match begins: after init, before the first tick)
     Header head = head_for(m, "TINY", seed, roster);
@@ -858,7 +859,7 @@ int main(int argc, char* argv[]) {
 
     TEST_CASE("RP2.4 A Replay Of Other Simulation Rules Is Not Played: The Error Names Both Numbers And The Game That Made It; The Head Of Any Rules Still Reads; Another Protocol Number Alone Is No Reason") {
         Played p = play_scripted(tiny, 31, 150);
-        const uint16_t foreign = static_cast<uint16_t>(kSimRulesMode187 + 1);        // (a number that no build plays: 2 is the rules of game mode 187)
+        const uint16_t foreign = static_cast<uint16_t>(kSimRulesNewest + 1);        // (a number that no build plays: the one after the newest)
         p.replay.head.sim_rules = foreign;
         p.replay.head.game_version = "v0.1.2";
         const std::vector<uint8_t> bytes = encoded(p.replay);
@@ -866,7 +867,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(d.ok && d.replay.head.sim_rules == foreign);
         const Outcome o = play(d.replay, tiny.level);
         ASSERT_TRUE(!o.ran && !o.ok);
-        ASSERT_TRUE(contains(o.error, "simulation rules " + std::to_string(foreign)) && contains(o.error, "simulation rules " + std::to_string(kSimRules)) && contains(o.error, "v0.1.2"));
+        ASSERT_TRUE(contains(o.error, "simulation rules " + std::to_string(foreign)) && contains(o.error, "simulation rules " + played_rules_text()) && contains(o.error, "v0.1.2"));
         ASSERT_EQ(o.turns, 0u);
         // a protocol number that moved while the simulation did not: the file still plays (RP7.1)
         Played q = play_scripted(tiny, 31, 150);
@@ -983,18 +984,19 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(nobody.commands() == 5 && nobody.own_commands() == 0);
     } TEST_END();
 
-    TEST_CASE("RP2.7 Recorder: A Match Too Long To Keep Is Dropped (No File, A Reason) And The Recorder Stops Growing") {
+    TEST_CASE("RP2.7 Recorder: A Recording Over Its Size Limit Is Dropped (No File, The Reason Names The Limit) And The Recorder Stops Growing And Stops Counting Turns (So Its Turns Are Not The Length Of The Match)") {
         sim::SimulationEngine engine;
         engine.init(tiny.level, 1, 0x0F);
         Recorder rec(head_for(tiny, "TINY", 1, 0x0F));
         const Command big = make_command(CommandType::GroupMove, 0, 3, 3, std::vector<uint32_t>(32, 1u));
         for (int i = 0; i < 9000 && rec.failure().empty(); ++i) rec.on_command(big);
         ASSERT_FALSE(rec.failure().empty());
-        ASSERT_TRUE(rec.commands() == 0 && contains(rec.failure(), "too long"));
+        ASSERT_TRUE(rec.commands() == 0 && contains(rec.failure(), "size limit (1 MiB)"));
         engine.tick();
         rec.on_tick(engine);
+        ASSERT_EQ(rec.turns(), 0u);                                                 // (the tick of a recording that failed is not counted: the server asks its room how long the match ran)
         std::string error;
-        ASSERT_TRUE(rec.finish(engine, error).empty() && contains(error, "too long"));
+        ASSERT_TRUE(rec.finish(engine, error).empty() && contains(error, "size limit (1 MiB)"));
     } TEST_END();
 
     TEST_CASE("RP2.8 What the match began with is part of it: the teams made at the start and the Fog of War setting are set up as they were, and an order given after the last tick (a Quit that ends the match) is played too") {
@@ -1176,13 +1178,16 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(o.ran && o.ok && o.complete && o.turns == 310u && o.hash == first.hash && o.hashes_checked == 3u);       // (the ledger of hashes the file holds is matched at every period)
     } TEST_END();
 
-    TEST_CASE("RP2.13 A Map Of More Than 256 A Side Plays And Replays: TINY Grown To 400 x 400 And 512 x 512 (Rules 1), Orders Of 100 To 200 Tiles, Also To Column 120 Row 90, 300 Ticks Twice To The Same Hash, The Replay Verifies, A Copy Of The Engine Has The Hash") {
-        for (const uint32_t side : {400u, 512u}) {
+    TEST_CASE("RP2.13 A Map Of More Than 256 A Side Plays And Replays: TINY Grown To 400 x 400 And 512 x 512 (Rules 2 As Made, And Rules 1), Orders Of 100 To 200 Tiles, Also To Column 120 Row 90, 300 Ticks Twice To The Same Hash, The Replay Verifies, A Copy Of The Engine Has The Hash") {
+        for (const uint32_t side_and_rules : {4002u, 5122u, 4001u, 5121u}) {                          // (400 and 512 a side, at rules 2 as made and at rules 1)
+            const uint32_t side = side_and_rules / 10;
+            const bool rules_one = side_and_rules % 10 == 1;
             const std::string bytes = grown_tiny(side, side);
             ASSERT_FALSE(bytes.empty());
             Map big;
             ASSERT_TRUE(assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), big.level, nullptr, assets::LevelLimits::for_play_extended()));
-            ASSERT_TRUE(big.level.version == 9u && big.level.width() == side && big.level.height() == side && big.level.rules == assets::LVL_RULES_EXTENDED);
+            ASSERT_TRUE(big.level.version == 9u && big.level.width() == side && big.level.height() == side && big.level.rules == assets::LVL_RULES_LONG_ORDERS);   // (a new map with a side above 256 asks for rules 2)
+            if (rules_one) big.level.rules = assets::LVL_RULES_EXTENDED;
             const Played first = play_scripted(big, 31, 300, 0x0F, sim::StartTeams{}, false, nullptr, 0, big_orders_at);
             const Played second = play_scripted(big, 31, 300, 0x0F, sim::StartTeams{}, false, nullptr, 0, big_orders_at);
             ASSERT_FALSE(first.file.empty());
@@ -1905,7 +1910,7 @@ int main(int argc, char* argv[]) {
         uint16_t sim_rules;
         uint64_t hash;
     };
-    constexpr ReferenceHash kReferenceHashes[] = {{1, 0x7a96df7831c965e0ull}, {3, 0x7a96df7831c965e0ull}, {5, 0xaa55a2a4a1ec6beeull}};      // (3: the bombs of a map file; TINY has none, so the match ended where it did. 5: the loader as the original's: the hash holds the file's solid bit of every power-up, pile and fire wall cell, which moves it on every map)
+    constexpr ReferenceHash kReferenceHashes[] = {{1, 0x7a96df7831c965e0ull}, {3, 0x7a96df7831c965e0ull}, {5, 0xaa55a2a4a1ec6beeull}, {8, 0xaa55a2a4a1ec6beeull}, {9, 0xaa55a2a4a1ec6beeull}};      // (3: the bombs of a map file; TINY has none, so the match ended where it did. 5: the loader as the original's: the hash holds the file's solid bit of every power-up, pile and fire wall cell, which moves it on every map. 8: the last side standing: nothing in the reference match leaves one side with no food to score, so it ends where it did; the match that does is test_rules_last_side. 9: the loader's fire wall: TINY holds no fire wall, so the match ends where it did; the match that does is test_rules_fire_wall)
 
     TEST_CASE("RP7.3 The Reference Match Ends In The Hash That Its Rules Number Says: The Simulation Cannot Change Without kSimRules") {
         const Played p = play_scripted(tiny, 31, 1500);
@@ -1980,15 +1985,15 @@ int main(int argc, char* argv[]) {
         fields.push_back(HeadField{id, std::move(bytes)});
     };
 
-    TEST_CASE("RP7.4 A Match Of Game Mode 187 Carries Its Mode In Head Field 17 (Written Only For A Mode That Is Not 0) And The Rules Number 2 In Field 16: Read Back, Written The Same, Played To The Same End; A Match Of Mode 0 Has No Field 17 And Keeps Rules 1") {
+    TEST_CASE("RP7.4 A Match Of Game Mode 187 Carries Its Mode In Head Field 17 (Written Only For A Mode That Is Not 0) And The Rules Number 11 (10 Since The Fire Wall Loader, 7 Since The Closed Hill, 6 Before It) In Field 16: Read Back, Written The Same, Played To The Same End; A Match Of Mode 0 Has No Field 17 And Keeps Rules 1") {
         const Played p = play_scripted(tiny, 33, 300, 0x0F, sim::StartTeams{}, false, nullptr, k187);
         ASSERT_TRUE(!p.file.empty() && p.replay.complete);
-        ASSERT_TRUE(p.replay.head.mode == k187 && p.replay.head.sim_rules == kSimRulesMode187 && kSimRulesMode187 == 6 && kSimRules == 5);
-        ASSERT_TRUE(plays_here(p.replay.head) && sim_rules_of(p.replay.head) == 6u);
-        // the head: field 17 is one byte, 1, written right before field 16 (the last), which says 2
+        ASSERT_TRUE(p.replay.head.mode == k187 && p.replay.head.sim_rules == kSimRulesMode187 && kSimRulesMode187 == 11 && kSimRulesMode187BeforeEndFix == 10 && kSimRulesMode187BeforeFireWall == 7 && kSimRulesMode187Heal == 6 && kSimRulesBeforeLastSide == 5 && kSimRules == 9);
+        ASSERT_TRUE(plays_here(p.replay.head) && sim_rules_of(p.replay.head) == 11u);
+        // the head: field 17 is one byte, 1, written right before field 16 (the last), which says 11
         const std::vector<HeadField> fields = fields_of(chunks_of(p.file)[0].payload);
         ASSERT_TRUE(fields.size() >= 3 && fields[fields.size() - 2].id == 17 && fields.back().id == 16);
-        ASSERT_TRUE(fields[fields.size() - 2].bytes == std::vector<uint8_t>({1}) && fields.back().bytes == std::vector<uint8_t>({6, 0}));
+        ASSERT_TRUE(fields[fields.size() - 2].bytes == std::vector<uint8_t>({1}) && fields.back().bytes == std::vector<uint8_t>({11, 0}));
         // read back exactly, written again the same, and it plays out to the hash of the match that was played
         const Decoded d = decoded(p.file);
         ASSERT_TRUE(d.ok && same(d.replay, p.replay) && d.replay.head.mode == k187);
@@ -2020,7 +2025,7 @@ int main(int argc, char* argv[]) {
         ASSERT_TRUE(original.hash != p.hash);
         // a match of mode 0: no field 17, rules 1, whatever else; and its engine is the original's
         const std::vector<HeadField> plain = fields_of(chunks_of(original.file)[0].payload);
-        ASSERT_TRUE(find_field(plain, 17) == nullptr && plain.back().id == 16 && plain.back().bytes == std::vector<uint8_t>({5, 0}));
+        ASSERT_TRUE(find_field(plain, 17) == nullptr && plain.back().id == 16 && plain.back().bytes == std::vector<uint8_t>({9, 0}));
         ASSERT_TRUE(original.replay.head.mode == 0 && original.replay.head.sim_rules == kSimRules && plays_here(original.replay.head));
         // the recorder stamps the rules number that goes with the mode on a head that only named the mode (a head made by hand, a caller that forgot)
         Header unstamped = head_for(tiny, "TINY", 1, 0x03);
@@ -2135,10 +2140,10 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(o.ok && o.hash == p.hash);
         }
         // the table of the numbers: what plays here, mode by mode
-        ASSERT_TRUE(sim_rules_for_mode(0) == 5 && sim_rules_for_mode(1) == 6 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
+        ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 11 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);
         {
             struct Case { uint8_t mode; uint16_t rules; bool plays; };
-            for (const Case& c : {Case{0, 5, true}, Case{1, 6, true}, Case{0, 6, false}, Case{1, 5, false}, Case{0, 1, false}, Case{1, 2, false}, Case{0, 3, false}, Case{1, 4, false}, Case{0, 4, false}, Case{1, 3, false}, Case{0, 7, false}, Case{1, 7, false}, Case{2, 6, false}, Case{2, 5, false}, Case{2, 3, false}, Case{2, 4, false}, Case{2, 1, false}, Case{2, 2, false}, Case{2, 7, false}, Case{0, 0, false}, Case{1, 0, false}, Case{2, 0, false}, Case{3, 0, false}, Case{255, 0, false}}) {
+            for (const Case& c : {Case{0, 5, true}, Case{0, 8, true}, Case{0, 9, true}, Case{1, 9, false}, Case{1, 8, false}, Case{0, 12, false}, Case{1, 12, false}, Case{0, 11, false}, Case{1, 11, true}, Case{0, 10, false}, Case{1, 10, true}, Case{1, 6, true}, Case{1, 7, true}, Case{0, 6, false}, Case{1, 5, false}, Case{0, 1, false}, Case{1, 2, false}, Case{0, 3, false}, Case{1, 4, false}, Case{0, 4, false}, Case{1, 3, false}, Case{0, 7, false}, Case{1, 8, false}, Case{2, 6, false}, Case{2, 5, false}, Case{2, 3, false}, Case{2, 4, false}, Case{2, 1, false}, Case{2, 2, false}, Case{2, 7, false}, Case{0, 0, false}, Case{1, 0, false}, Case{2, 0, false}, Case{3, 0, false}, Case{255, 0, false}}) {
                 Header h = original.replay.head;
                 h.mode = c.mode;
                 h.sim_rules = c.rules;
@@ -2161,8 +2166,8 @@ int main(int argc, char* argv[]) {
             return rules;
         };
         const auto legacy_plays = [&](const std::vector<uint8_t>& file) { return legacy_rules(file) == 1; };       // (its kSimRules, and no mode to ask)
-        ASSERT_TRUE(legacy_rules(p.file) == 6 && !legacy_plays(p.file));
-        ASSERT_TRUE(legacy_rules(original.file) == 5 && !legacy_plays(original.file));          // (a reader of the release before the bombs of a map file plays rules 1 only: it refuses this build's files too, and this build refuses its 1)
+        ASSERT_TRUE(legacy_rules(p.file) == 11 && !legacy_plays(p.file));
+        ASSERT_TRUE(legacy_rules(original.file) == 9 && !legacy_plays(original.file));          // (a reader of the release before the bombs of a map file plays rules 1 only: it refuses this build's files too, and this build refuses its 1)
         // so the file of a mode must not be made with rules 1 by any writer of this build: nothing in this build writes a mode with rules 1 (RP7.5), and a file that did not get its mode (field 17 lost) is refused
         // by this reader too, because rules 2 means "a mode" and the head does not say which
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);
@@ -2178,7 +2183,7 @@ int main(int argc, char* argv[]) {
     } TEST_END();
 
     // The reference match of game mode 187, the same way as the one above: its rules number is kSimRulesMode187, and the hash it ends in changes only with a new number for the mode
-    constexpr ReferenceHash kReferenceHashes187[] = {{2, 0x309916fdf73aa5daull}, {4, 0x309916fdf73aa5daull}, {6, 0x309916fdf73aa5daull}};
+    constexpr ReferenceHash kReferenceHashes187[] = {{2, 0x309916fdf73aa5daull}, {4, 0x309916fdf73aa5daull}, {6, 0x309916fdf73aa5daull}, {7, 0xd458235c79cccbe5ull}, {10, 0xd458235c79cccbe5ull}, {11, 0xd458235c79cccbe5ull}};
 
     TEST_CASE("RP7.8 A Match Of Game Mode 187 That Began With Teams: The Head Holds The Mode And The Teams, The Alliances Stand When The Player Has Set The Engine Up (The Mode Before Init, The Teams After It, As The Referee And Every Machine Do), The File Plays To The Hash Of The Match, A File That Lost Its Teams Or Its Mode Does Not, And The Older Reader Still Refuses It") {
         const sim::StartTeams teams{true, 1, 3};
@@ -2231,7 +2236,7 @@ int main(int argc, char* argv[]) {
         for (const HeadField& f : fields) {
             if (f.id == 16) legacy_rules = static_cast<uint16_t>(f.bytes[0] | (f.bytes[1] << 8));
         }
-        ASSERT_TRUE(legacy_rules == 6 && legacy_rules != kSimRules);
+        ASSERT_TRUE(legacy_rules == 11 && legacy_rules != kSimRules);
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { drop_field(f, 17); })).ok);
         ASSERT_TRUE(!decoded(file_with_head(p, [&](std::vector<HeadField>& f) { set_field(f, 16, {5, 0}); })).ok);
         const Decoded unknown = decoded(file_with_head(p, [&](std::vector<HeadField>& f) { f.push_back(HeadField{18, {7}}); }));
@@ -2252,8 +2257,17 @@ int main(int argc, char* argv[]) {
         ASSERT_EQ(line->hash, p.hash);
         const Outcome o = play(p.replay, tiny.level);
         ASSERT_TRUE(o.ok && o.hash == line->hash);
+        // the line of rules number 6 (the hill works) is the hash it was before the closed hill: the same scripted match with the earlier rule ends there still, and it is another match than the closed hill's
+        const ReferenceHash* old_line = nullptr;
+        for (const ReferenceHash& r : kReferenceHashes187) {
+            if (r.sim_rules == kSimRulesMode187Heal) old_line = &r;
+        }
+        ASSERT_TRUE(old_line != nullptr && old_line->hash == 0x309916fdf73aa5daull);
+        const Played earlier = play_scripted(tiny, 31, 1500, 0x0F, sim::StartTeams{}, false, nullptr, k187, nullptr, nullptr, true);
+        ASSERT_EQ(earlier.hash, old_line->hash);
+        ASSERT_TRUE(earlier.hash != p.hash);
         // the original's line stays what it was, and its match ends there still (the 187 engine is not in its way)
-        ASSERT_TRUE(kReferenceHashes[0].sim_rules == 1 && kReferenceHashes[1].hash == 0x7a96df7831c965e0ull && kReferenceHashes[2].sim_rules == kSimRules && kReferenceHashes[2].hash == 0xaa55a2a4a1ec6beeull);
+        ASSERT_TRUE(kReferenceHashes[0].sim_rules == 1 && kReferenceHashes[1].hash == 0x7a96df7831c965e0ull && kReferenceHashes[2].sim_rules == kSimRulesBeforeLastSide && kReferenceHashes[2].hash == 0xaa55a2a4a1ec6beeull && kReferenceHashes[3].sim_rules == kSimRulesBeforeFireWall && kReferenceHashes[3].hash == kReferenceHashes[2].hash && kReferenceHashes[4].sim_rules == kSimRules && kReferenceHashes[4].hash == kReferenceHashes[2].hash);
         const Played original = play_scripted(tiny, 31, 1500);
         ASSERT_EQ(original.hash, 0xaa55a2a4a1ec6beeull);
     } TEST_END();

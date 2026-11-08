@@ -58,8 +58,10 @@ inline std::vector<LibraryMap> library() {
 
 // The full state hash at the start and after every game second of a play of `level` (the four teams, the map sweep's scripted players and seeds): the entry k is the
 // state at tick 20 k (the last one at tick `ticks` when that is not a whole second, or where the match ended)
-inline std::vector<ants::sim::StateHash> play_hashes(const ants::assets::LevelData& level, uint32_t ticks) {
+// (`fire_wall_as_original` false plays the map by the loader of the rules numbers 5 to 8: a fire wall with a named dictionary entry also gets the remake's obstacle overlay)
+inline std::vector<ants::sim::StateHash> play_hashes(const ants::assets::LevelData& level, uint32_t ticks, bool fire_wall_as_original = true) {
     ants::sim::SimulationEngine engine;
+    engine.set_fire_wall_as_original(fire_wall_as_original);
     engine.init(level, kLibrarySeed, 0x0F);
     ScriptedPlayers script(level, 0x0F, kLibraryScriptSeed, true);
     std::vector<ants::sim::StateHash> hashes{engine.state_hash()};
@@ -123,13 +125,14 @@ inline std::string rules_one_difference(const ants::sim::SimulationEngine& zero,
     return "";
 }
 
-// (Also for rules 2, the wide search of the path finder, with `rules` = 2: a map of the library is at most 10,449 cells, so its budget is the original's 1,000 and nothing may change either; the engine needs its test hook for a word of 2.)
-inline RulesOneComparison play_hashes_rules_one(const ants::assets::LevelData& level, uint32_t ticks, uint16_t rules = 1) {
+// (Also for rules 2, the wide search of the path finder, with `rules` = 2: a map of the library is at most 10,449 cells, so its budget is the original's 1,000 and nothing may change either.)
+inline RulesOneComparison play_hashes_rules_one(const ants::assets::LevelData& level, uint32_t ticks, uint16_t rules = 1, bool fire_wall_as_original = true) {
     ants::assets::LevelData forced = level;
     forced.rules = rules;
     ants::sim::SimulationEngine zero;
     ants::sim::SimulationEngine one;
-    if (rules == 2) one.allow_rules_two_for_tests();                          // (the test hook: without it a word of 2 plays as 1, Grid::allow_rules_two_for_tests)
+    zero.set_fire_wall_as_original(fire_wall_as_original);
+    one.set_fire_wall_as_original(fire_wall_as_original);
     zero.init(level, kLibrarySeed, 0x0F);
     one.init(forced, kLibrarySeed, 0x0F);
     ScriptedPlayers script_zero(level, 0x0F, kLibraryScriptSeed, true);       // (a script also acts on its engine directly, so each engine has its own, with the same seed)

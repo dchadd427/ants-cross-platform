@@ -191,6 +191,9 @@ StateHash SimulationEngine::state_hash() const {
         // the rules of the match decide every later tick, so a mode other than the original's is state; it is mixed in only then, so that every match of
         // the original's rules keeps the hash that it always had
         if (e.game_mode_ != GameMode::HighestScore) h.u8(static_cast<uint8_t>(e.game_mode_));
+        // 187 with the hill closed (the rule now) is a rule of its own: one more byte, so that a peer or a file that plays the earlier rule of 187 (the hill works) has another hash from the first tick.
+        // The earlier rule and the original's game hash exactly as they did.
+        if (e.hill_closed()) h.u8(1);
         h.u32(e.quitter_);
         h.u64(e.current_tick_);
         h.u32(e.match_limit_ms_);

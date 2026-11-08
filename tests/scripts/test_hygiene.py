@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests of tools/check_hygiene.py: each check on small synthetic trees, and the real repository (which must pass)."""
+import hashlib
 import os
 import re
 import shutil
@@ -90,27 +91,78 @@ class Reachable(Tree):
 
 
 class Forbidden(Tree):
+    DECOY = (hashlib.sha256(b"decoy-notes.md").hexdigest(), 14)      # (a made-up name: the real ones are on PRIVATE_NAME_DIGESTS and are spelled nowhere)
+
     def test_each_string_is_found(self):
-        for i, s in enumerate(["implementation_plan", "ants-plans", "DECISIONS.md", "claude.ai/code", "Co-Authored-By", "Claude-Session", "Project Thread", "THE OTHER THREAD"]):
+        for i, s in enumerate(["claude.ai/code", "Co-Authored-By", "Claude-Session", "Project Thread", "THE OTHER THREAD"]):
             self.put("src/f%d.cpp" % i, "// see %s here\n" % s)
         out = ch.check_forbidden(self.root, self.files(), allowed=set())
-        self.assertEqual(len(out), 8)
+        self.assertEqual(len(out), 5)
         self.assertTrue(out[0].startswith("src/f0.cpp:1:"))
 
+    def test_a_private_name_is_found_by_its_digest_in_any_case_and_inside_a_longer_run(self):
+        self.put("src/a.cpp", "int x;\n// see Decoy-Notes.md here\n")
+        self.put("docs/b.md", "[x](DECOY-NOTES.MD) and mydecoy-notes.mdx\n")
+        self.put("src/c.cpp", "// decoy notes.md, decoy_notes.md, decoy-notes.m, ecoy-notes.md, a decoy\n")        # near misses
+        out = ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))
+        self.assertEqual([o.split(" ")[0] for o in out], ["docs/b.md:1:", "src/a.cpp:2:"])
+
+    def test_a_finding_about_a_private_name_does_not_repeat_the_name(self):
+        self.put("src/a.cpp", "// decoy-notes.md\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))
+        self.assertEqual(len(out), 1)
+        self.assertNotIn("decoy", out[0].lower())
+
+    def test_the_names_on_the_list_are_digests_that_pass_the_minimum(self):
+        self.assertEqual(len(ch.PRIVATE_NAME_DIGESTS), len(set(ch.PRIVATE_NAME_DIGESTS)))
+        for digest, length in ch.PRIVATE_NAME_DIGESTS:
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+            self.assertGreaterEqual(length, ch.PRIVATE_NAME_MIN_LENGTH)
+        ch.private_name_matcher()                                                            # (the real list is accepted)
+
+    def test_a_short_entry_is_refused_when_the_check_starts(self):
+        short = (hashlib.sha256(b"x" * (ch.PRIVATE_NAME_MIN_LENGTH - 1)).hexdigest(), ch.PRIVATE_NAME_MIN_LENGTH - 1)
+        with self.assertRaises(ValueError):
+            ch.private_name_matcher((short,))
+        with self.assertRaises(ValueError):
+            ch.check_forbidden(self.root, self.files(), digests=(self.DECOY, short))
+
     def test_allowlist_binary_maps_and_previews_are_skipped(self):
-        self.put("AGENTS.md", "DECISIONS.md\n")
-        self.put("Community-Maps/m.lvl", "implementation_plan\n")
-        self.put("previews/p.txt", "ants-plans\n")
+        self.put("AGENTS.md", "Claude-Session\n")
+        self.put("Community-Maps/m.lvl", "Co-Authored-By decoy-notes.md\n")
+        self.put("previews/p.txt", "claude.ai/code decoy-notes.md\n")
         self.put("third_party/sqlite/sqlite3.c", "/* the other thread */\n")
         self.put("third_party/sqlite/sqlite3.h", "/* the other thread */\n")
         with open(os.path.join(self.root, "b.bin"), "wb") as f:
-            f.write(b"\0\0claude.ai/code")
+            f.write(b"\0\0claude.ai/code decoy-notes.md")
         self.put("docs/ok.md", "plain words\n")
-        self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}), [])
+        self.assertEqual(ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}, digests=(self.DECOY,)), [])
+        self.assertEqual(len(ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))), 1)
+
+    def test_the_allow_list_is_for_the_trailers_and_not_for_the_names(self):
+        self.put("AGENTS.md", "Claude-Session\n// see decoy-notes.md\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed={"AGENTS.md"}, digests=(self.DECOY,))
+        self.assertEqual([o.split(" ")[0] for o in out], ["AGENTS.md:2:"])                       # (the trailer on line 1 is allowed there, the name on line 2 is not)
+
+    def test_the_name_of_a_tracked_file_is_looked_at_too(self):
+        self.put("notes/Decoy-Notes.md", "innocent words\n")                                      # (any case; the text is clean: only the name of the file is private)
+        self.put("docs/mydecoy-notes.mdx.txt", "x\n")                                             # (inside a longer run)
+        self.put("docs/decoy notes.md", "x\n")                                                    # (near misses)
+        self.put("docs/decoy-notes", "x\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed=set(), digests=(self.DECOY,))
+        self.assertEqual([o.split(":")[0] for o in out], ["docs/my**************x.txt", "notes/**************"])
+        self.assertFalse(any("decoy" in o.lower() for o in out), "a finding about a path does not repeat the name")
+
+    def test_the_name_of_a_file_in_the_allow_list_or_in_a_skipped_folder_is_looked_at_too(self):
+        self.put("tests/decoy-notes.md", "x\n")
+        self.put("previews/x-decoy-notes.md", "x\n")
+        self.put("Community-Maps/decoy-notes.md", "x\n")
+        out = ch.check_forbidden(self.root, self.files(), allowed={"tests/decoy-notes.md"}, digests=(self.DECOY,))
+        self.assertEqual(len(out), 3)
 
     def test_our_own_files_in_third_party_are_checked(self):
-        self.put("third_party/sqlite/README.md", "see implementation_plan\n")
-        self.put("third_party/sqlite/CMakeLists.txt", "# DECISIONS.md\n")
+        self.put("third_party/sqlite/README.md", "see Claude-Session\n")
+        self.put("third_party/sqlite/CMakeLists.txt", "# Co-Authored-By\n")
         out = ch.check_forbidden(self.root, self.files(), allowed=set())
         self.assertEqual(len(out), 2)
 
@@ -228,7 +280,7 @@ class Cli(Tree):
     def test_findings_are_one_line_each_with_exit_1(self):
         self.put("README.md", "hello\n")
         self.put("docs/A.md", "orphan\n")
-        self.put("src/x.cpp", "// ants-plans\n")
+        self.put("src/x.cpp", "// Claude-Session\n")
         done = self.run_tool("--root", self.root)
         self.assertEqual(done.returncode, 1)
         lines = done.stdout.splitlines()
@@ -320,6 +372,17 @@ class Spelling(Tree):
 
 
 class RealRepository(unittest.TestCase):
+    def test_the_policy_files_are_there_and_say_what_they_should(self):
+        with open(os.path.join(ROOT, "SECURITY.md"), encoding="utf-8") as f:
+            policy = f.read()
+        self.assertIn("Report a vulnerability", policy)
+        self.assertNotRegex(policy, r"[\w.+-]+@[\w-]+\.[\w.]+", "no address: a report goes through GitHub's private reporting")
+        with open(os.path.join(ROOT, ".github", "CODEOWNERS"), encoding="utf-8") as f:
+            rules = [line.split() for line in f.read().splitlines() if line.strip() and not line.startswith("#")]
+        self.assertTrue(rules and all(len(r) >= 2 and all(who.startswith("@") for who in r[1:]) for r in rules), "every rule names a reviewer")
+        for pattern in ("*", "/.github/", "/docker/", "/Dockerfile*", "/docker-compose*.yml", "/tools/"):
+            self.assertIn(pattern, [r[0] for r in rules])
+
     def test_repository_passes(self):
         done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", ROOT], capture_output=True, text=True)
         self.assertEqual((done.returncode, done.stdout), (0, ""), done.stdout + done.stderr)

@@ -1,5 +1,5 @@
-# The whole site in one stack: the web game (ants-beta) and the dedicated game server (ants-server). For Portainer: Stacks -> Add stack -> Repository,
-# compose path "docker-compose.stack.yml"; the values below are set in the stack's "Environment variables" (they are NOT part of the repository):
+# The whole site in one stack: the web game (ants-beta) and the dedicated game server (ants-server). The values below are set
+# in the stack's "Environment variables" (they are NOT part of the repository):
 #
 #   ANTS_SERVER_SECRET=<a long random secret>       the bearer secret of the control interface (optional: without it the server makes one the first time it
 #                                                   starts, prints it once in its log and keeps it in the file /results/control-secret of the volume
@@ -9,6 +9,12 @@
 #                                                   update that changes those six, remove that volume; to add maps, copy them into it. The players' maps are not in this volume: the image holds them in /community-maps
 #                                                   and the server lists them, GET /maps)
 #   ANTS_PORT=19980                                 the host port of the web page (optional)
+#   ANTS_TRUSTED_PROXIES_FILE=/path/on/the/host/proxies.conf    a list of reverse proxies of your own (optional). Without it the web image's list is used, which trusts a reverse proxy that connects from a private
+#                                                   address (docs/SERVER.md "Behind a reverse proxy"); set this only for a proxy that connects from a PUBLIC address, or to name your proxy exactly. The file REPLACES the image's list: copy
+#                                                   docker/trusted-proxies.conf and change it. Give the FULL path of a file on the host: a relative path does not work in a stack that a deployment tool builds from a repository, whose files are not on the host.
+#                                                   The path must name an existing FILE: for a path that does not exist Docker makes a directory there and nginx stops with "Is a directory"
+#   ANTS_WEB_BIND_PREFIX=127.0.0.1:                 put in front of the host port of the web page (optional; empty by default: the port is published as before). An address of this machine and a colon, such as 127.0.0.1:,
+#                                                   publishes it on that address only, so a reverse proxy on another machine, or one that reaches this machine by its public address, would no longer reach it (docs/SERVER.md "Behind a reverse proxy")
 #   ANTS_SERVER_PORT=4001                           the public TCP game port of native clients (optional; the browser page does not use it)
 #   ANTS_BUILD_ID=<text>                            which build this is (the page's footer, the changelog pages, `ants_server --version`); optional: without it the images
 #                                                   take the commit that the clone's .git/HEAD and .git/refs name, and the UTC build time when the clone has no such files
@@ -41,13 +47,13 @@
 #                                                   to POST /test-maps, which docker/nginx.conf passes here; it works with the submissions door OFF (it has no database, no accounts and no other route). Leave it at
 #                                                   4031, the one that nginx passes to, or set 0, which switches test rooms off (the site then says so). Not published on the host. The maps live in the folder test-maps of the
 #                                                   volume ants-server-results (at most 64 MiB, 6 hours each) and are wiped at every start.
-#   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the sign-in cookie of the owner's page (a long random text: openssl rand -hex 32). Without it every /admin/api path answers 404.
+#   ANTS_ADMIN_SESSION_SECRET=<32+ characters>      the secret that signs the sign-in cookie of the admin page (a long random text: openssl rand -hex 32). Without it every /admin/api path answers 404.
 #                                                   The accounts are made on the server, not here: docs/MAP_SUBMISSIONS.md, "Deploying" (docker exec -it ants-server ants_server --admin-create <username> --db /results/ants.db)
 #
 #   ANTS_HUB_PUBLIC_URL=https://beta.playants.org   the chat hub (service ants-hub, docs/HUB.md): the address of this site, the one Origin that a chat socket may come from, and the base of the Discord login's way back
 #                                                   (<this address>/hub/callback; optional; this is the default). Empty or wrong: the hub refuses every socket and the page says "Chat is offline"
 #   ANTS_HUB_DISCORD_CLIENT_ID, ANTS_HUB_DISCORD_CLIENT_SECRET    the Discord application of the chat's login (docs/HUB.md, "Login": the site's operator makes the application, adds the redirect
-#                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment (Portainer) and never from a file of
+#                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment and never from a file of
 #                                                   the repository; without them the chat is read-only for everybody and says so. The secret is read by the hub and printed nowhere
 #   ANTS_HUB_MIN_ACCOUNT_DAYS=7                     a Discord account younger than this many days cannot write in the chat (0 lets every account write; optional; this is the default)
 #   ANTS_HUB_MODS=<account id>,<account id>         the accounts that may type /mute name minutes and /del id in the chat (optional; digits only, comma separated; none by default; the account
@@ -55,9 +61,7 @@
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
-# The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all. Every container of that network can reach the control port (behind the secret)
-# and the replay port (read only, no secret): do not put a container there that you do not trust. The same holds for the chat hub (port 4040, not published): the site's nginx passes /hub/ws to it and
-# tells it the visitor's address in X-Client-Address, which it believes.
+# The replay port (the site's nginx passes /replays to it over the network below) is not published on the host at all. The services on the network below trust each other, so put only containers you trust on it (the stack's services and the proxy). The chat hub (port 4040, not published) is on it too: the site's nginx passes /hub/ws to it.
 services:
   ants-beta:
     build:
@@ -67,10 +71,14 @@ services:
         # optional: which build this is (page footer, --version); without it the image takes the commit from the clone's .git files, else the build time
         ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}
     container_name: ants-beta
-    # Behind a reverse proxy, mount a file over /etc/nginx/ants-trusted-proxies/proxies.conf of this container (the proxy's address, docker/trusted-proxies.conf, docs/MAP_SUBMISSIONS.md "Deploying"): without it every visitor has the proxy's address and every limit per address (map sends, sign-in tries, map files) becomes one limit for the whole site.
     restart: unless-stopped
+    # A list of reverse proxies of your own (ANTS_TRUSTED_PROXIES_FILE, see the header), or nothing: /dev/null is an empty file, which changes nothing (the web image's list is used). The path must name an existing FILE:
+    # for a path that does not exist Docker makes a directory there and nginx stops with "Is a directory". The image's list names a reverse proxy at a private address, so that the limits per address (map sends,
+    # sign-in tries, map files) count each visitor's own address; a proxy at a public address goes in a list of your own.
+    volumes:
+      - ${ANTS_TRUSTED_PROXIES_FILE:-/dev/null}:/etc/nginx/ants-trusted-proxies.d/own.conf:ro
     ports:
-      - "${ANTS_PORT:-19980}:80"
+      - "${ANTS_WEB_BIND_PREFIX:-}${ANTS_PORT:-19980}:80"
     networks:
       - proxy-network
     security_opt: ["no-new-privileges:true"]
@@ -92,7 +100,7 @@ services:
     stop_grace_period: 15s
     # The page web/lobby.html (the front page) makes rooms of its own: its Hello carries a create block (the map, the seats, the teams) and a code of six lower-case letters and digits: demo rooms are ON here, at most ANTS_DEMO_ROOMS at a time
     # (default 48) on the map ANTS_DEMO_MAP (default TREASURE.LVL) unless the block names one of ANTS_DEMO_MAPS (the page's choice; the maps folder must hold them
-    # all). A code with an upper-case letter makes no such room (the control interface draws those). Whoever reaches a game port (the site, or TCP port 4001) can fill these rooms; rooms of the control interface keep their own places.
+    # all). A code with an upper-case letter makes no such room (the control interface draws those). Demo rooms are open to anyone who can reach a game port (the site, or TCP port 4001), so their number is bounded; rooms of the control interface keep their own places.
     # ANTS_DEMO_ROOMS is 1 to 255 (see the header). To switch them off, delete the three demo options. A demo room waits ten minutes for its players; its first player can start it earlier with START (two players at least, or one alone with bots).
     # --log-mb 4: one room's turn log (what a returning player is given) is at most 4 MiB (a busy 30-minute match logs 0.65 MB), so that the demo rooms alone cannot use up the 256 MiB that
     # all the logs share (docs/NETWORK_PORT.md). Keep ANTS_DEMO_ROOMS times --log-mb under 256 (tests/scripts/test_default_map.py checks it).
@@ -103,7 +111,7 @@ services:
     command: ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010", "--demo-rooms", "${ANTS_DEMO_ROOMS:-48}", "--demo-map", "${ANTS_DEMO_MAP:-TREASURE.LVL}", "--demo-maps", "${ANTS_DEMO_MAPS:-TINY.LVL,SMALL.LVL,MEDIUM.LVL,GAUNTLET.LVL,TREASURE.LVL,ISLANDS.LVL}", "--log-mb", "4", "--bot-match-every-min", "${ANTS_BOT_MATCH_EVERY_MIN:-60}", "--submit-port", "${ANTS_SUBMIT_PORT:-0}", "--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}", "--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]
     environment:
       ANTS_SERVER_SECRET: ${ANTS_SERVER_SECRET:-}
-      # the owner's page (docs/MAP_SUBMISSIONS.md): the secret that signs the sign-in cookie; without it every /admin/api path answers 404
+      # the admin page (docs/MAP_SUBMISSIONS.md): the secret that signs the sign-in cookie; without it every /admin/api path answers 404
       ANTS_ADMIN_SESSION_SECRET: ${ANTS_ADMIN_SESSION_SECRET:-}
     volumes:
       - ${ANTS_MAPS_DIR:-ants-maps}:/maps:ro

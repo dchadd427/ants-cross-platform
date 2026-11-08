@@ -64,7 +64,7 @@ std::vector<RewriteChange> describe_rewrite(const uint8_t* source, size_t size, 
 /// `reasons` and `notes` (the same length and order): the stable code of each, so that the editor can key on it without reading the sentence. The codes of a reason:
 /// level_version_unknown, grid_empty, columns_beyond_classic, rows_beyond_classic, rows_beyond_wall (an Extended map of more than 90 rows: a new Classic map has at most 90),
 /// layers_not_grid, dictionary_too_large, description_too_long, format_flags_set, rules_unknown, anchor_beyond_byte, not_writable_as_classic, not_writable_as_extended,
-/// out_of_memory; of a note: description_30_bytes, rules_extended_dropped.
+/// out_of_memory; of a note: description_30_bytes, rules_extended_dropped, rules_long_orders_dropped.
 struct LevelConversion {
     bool ok{false};
     LevelData level;
@@ -79,8 +79,12 @@ struct LevelConversion {
 /// copied as it is. `reasons` only for a level that is no map (another version, layers that are not rows x columns, a level the writer cannot write).
 LevelConversion convert_to_extended(const LevelData& level);
 
+/// The same as convert_to_extended, with rules 2 (the long-order rules: the extended rules and the wide search of the path finder, docs/MAP_FORMAT.md "Orders on a big map") in the copy. For
+/// the person's own copy of a map: a map of rules 1 plays as it did except for orders that the original's search gives up on; a map of rules 0 also loses the wall at row 90.
+LevelConversion convert_to_long_orders(const LevelData& level);
+
 /// The level as a Classic map (version 8), when it fits: both sides at most 256, the dictionary at most 1,344 names, the description at most 30 bytes (the file's field), no
-/// format flags, rules 0 or 1 (rules 1 is dropped, with a note), every object anchor inside a byte (0 .. 255), and, for an Extended map, at most 90 rows: the conversion makes a NEW
+/// format flags, rules 0, 1 or 2 (rules 1 and 2 are dropped, each with a note), every object anchor inside a byte (0 .. 255), and, for an Extended map, at most 90 rows: the conversion makes a NEW
 /// Classic map, and a new Classic map has at most 90 rows (the original's path finder never enters tile row 90; `rows_beyond_wall` tells the person to crop first). Else `reasons`
 /// list every way in which it does not. A level that is already Classic is copied as it is, whatever its rows (a map of the library, read and written again, is not made now).
 LevelConversion convert_to_classic(const LevelData& level);
@@ -117,8 +121,8 @@ constexpr uint32_t LVL_ORIGINAL_RULES_MOST_ROWS = 90;
 /// a cell) gets no cell: nothing of its size is allocated, and write_level refuses the level with the sentence of its grid.
 LevelData blank_level(uint16_t rows, uint16_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits = LevelLimits{});
 
-/// A new Extended map (version 9) of `rows` x `columns` cells: the same plain ground and defaults as blank_level, format flags 0, rules 1 when the map is taller than 90 rows or
-/// wider than 256 columns (rules 0 otherwise). A grid beyond `limits` gets no cell, as for blank_level. `limits` should allow Extended maps (allow_extended), else write_level
+/// A new Extended map (version 9) of `rows` x `columns` cells: the same plain ground and defaults as blank_level, format flags 0, rules 2 (the long-order rules) when a side is beyond 256, rules 1 when it is
+/// taller than 90 rows (rules 0 otherwise). A grid beyond `limits` gets no cell, as for blank_level. `limits` should allow Extended maps (allow_extended), else write_level
 /// refuses the level.
 LevelData blank_extended_level(uint32_t rows, uint32_t columns, const std::vector<std::string>& tile_names, const LevelLimits& limits = LevelLimits::for_extended_maps());
 

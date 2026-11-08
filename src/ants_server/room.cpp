@@ -306,6 +306,16 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     hc.max_log_bytes = spec_.max_log_bytes;
     hc.log_budget = log_budget_;
     session_ = std::make_unique<net::HostSession>(*sim_, hc);
+    session_->set_on_diverged([this](uint32_t turn, uint8_t differ, uint8_t agree) {       // (the line at the end of the room counts the drops; this one says when, and how many agreed)
+        const auto seats = [](uint8_t n) { return std::to_string(static_cast<unsigned>(n)) + (n == 1 ? " seat" : " seats"); };
+        notes_.push_back("room " + spec_.code + ": " + seats(differ) + " dropped at turn " + std::to_string(turn) + " for a state that differed from the referee's; " + seats(agree) + " agreed with it");
+    });
+}
+
+std::vector<std::string> Room::take_notes() {
+    std::vector<std::string> out;
+    out.swap(notes_);
+    return out;
 }
 
 namespace {
@@ -425,7 +435,7 @@ uint8_t Room::roster_with(const std::vector<std::pair<uint8_t, net::FillLevel>>&
 // The match is started from the waiting room: the bots of the fill sit down, the teams that were asked for count when the seats that play can make them (else the match starts without them and everybody in
 // the room is told why, once it has started), and the lobby sends the Start. False, and the room is as it was (the bots go again), when the lobby refuses.
 bool Room::start_lobby(uint32_t now_ms, uint8_t roster, const std::vector<std::pair<uint8_t, net::FillLevel>>& fill_seats, const sim::StartTeams& wanted) {
-    if (!OnlineLimits::allows_ants(map_start_ants())) return false;          // (every start of a room comes through here: no match is made on a map that starts more ants than a room plays, whatever door the map came by)
+    if (!OnlineLimits::allows(map_counts())) return false;          // (every start of a room comes through here: no match is made on a map that is over a limit of a room, whatever door the map came by)
     sim::StartTeams teams;
     std::string no_teams;
     if (wanted.set) {
@@ -518,9 +528,10 @@ void Room::lobby_waiting_pass(uint32_t now_ms, uint8_t asked_by, const std::arra
     const std::vector<std::pair<uint8_t, net::FillLevel>> fill_seats = net::plan_fill_seats(net::FillPlan(asked_fill), lobby_.room(), spec_.players);
     const uint8_t roster = roster_with(fill_seats);
     if (!level_.validate(roster, assets::LevelLimits::for_play_extended()).playable) return lobby_.end_start(net::kNoticeMapColors);
-    const uint64_t start_ants = map_start_ants();
-    if (!OnlineLimits::allows_ants(start_ants)) return lobby_.end_start(net::kNoticeMapTooManyAnts);          // (the last door before the engine is made: setting up the ants of such a map would hold the one thread for seconds; the plan's own door is choose_map)
-    if (!services_.match_place || !services_.match_place(now_ms, map_cells(), start_ants)) return lobby_.end_start(net::kNoticeNoPlace);
+    const MapCounts counts = map_counts();
+    const Term over = OnlineLimits::first_over(counts);
+    if (over != Term::None) return lobby_.end_start(OnlineLimits::info(over).notice);          // (the last door before the engine is made: setting up the ants of such a map would hold the one thread for seconds; the plan's own door is choose_map)
+    if (!services_.match_place || !services_.match_place(now_ms, counts.cells, counts.start_ants)) return lobby_.end_start(net::kNoticeNoPlace);
     if (!start_lobby(now_ms, roster, fill_seats, sim::start_teams_for(spec_.teams, true, asked_teams))) lobby_.end_start(std::string());
 }
 
@@ -629,9 +640,11 @@ void Room::update(uint32_t now_ms) {
             sim_->clear_news_events();                                   // the screen's queues: nobody on a server reads them, and they would only grow
             sim_->clear_audio_events();
         }
-        if (!session_->desyncs().empty()) {
-            const net::DesyncMsg& d = session_->desyncs().front();
-            return fail("the simulation of seat " + std::to_string(static_cast<int>(d.player)) + " diverged at turn " + std::to_string(d.turn), now_ms);
+        if (!session_->desyncs().empty()) {                              // every seat at the table differed from the referee (HostSession::judge_hashes): it may be the one that is wrong, so none was dropped
+            const std::vector<net::DesyncMsg>& desyncs = session_->desyncs();
+            std::string seats = desyncs.size() == 1 ? "seat " : "seats ";
+            for (size_t i = 0; i < desyncs.size(); ++i) seats += (i == 0 ? "" : i + 1 == desyncs.size() ? " and " : ", ") + std::to_string(static_cast<int>(desyncs[i].player));
+            return fail("the simulation of " + seats + " diverged at turn " + std::to_string(desyncs.front().turn) + " and no seat agreed with the referee", now_ms);
         }
         if (sim_ && sim_->is_match_over()) {
             ended_by_rules_ = true;                                      // (the rules ended it: every machine shows the results, and a lobby room's people may have their rematch)
@@ -831,13 +844,15 @@ void Room::replay_end() {
     live_end(kept);                                              // (the recorder goes at the end of this function: the live board lets go of it first)
 }
 
-// The file's name when the match was kept, else empty (and the status says why)
+// The file's name when the match was kept, else empty (and the status says why). How long the match ran is the recorder's count of turns, unless the recording failed: it stops counting there, so the room's own count
+// says (a match that ran 30 seconds or more whose recording failed is told by the recording's reason, with a line in the log; one that ran less than that says so, as ever)
 std::string Room::replay_keep(replay::Recorder& recorder) {
-    if (recorder.turns() == 0) {
+    const uint32_t ran = recorder.failure().empty() ? recorder.turns() : last_ticks_;
+    if (ran == 0) {
         replay_note_ = "no match was played";
         return std::string();
     }
-    if (recorder.turns() < kReplayMinTurns) {
+    if (ran < kReplayMinTurns) {
         replay_note_ = "the match ran less than " + std::to_string(kReplayMinTurns / net::kTurnsPerSecond) + " seconds, so it is not kept";
         return std::string();
     }
@@ -911,8 +926,9 @@ std::unique_ptr<Room> Room::refused(const RestartHead& head, const std::string& 
 Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_vote_after_ms, std::string& why) {
     why.clear();
     const RestartHead& h = rec.head;
-    if (!OnlineLimits::allows_ants(map_start_ants())) {          // (RoomManager::map_refusal says so first; this is the last door before the engine is made)
-        why = "the map starts more ants than a room plays";
+    const Term over = OnlineLimits::first_over(map_counts());
+    if (over != Term::None) {          // (RoomManager::map_refusal says so first; this is the last door before the engine is made)
+        why = std::string("the map ") + OnlineLimits::info(over).more + " than a room plays";
         return ReplayBegin::Refused;
     }
     if (state_ != RoomState::Waiting || session_ != nullptr || !spec_.reconnect || restart_store_ == nullptr || h.code != spec_.code || !rec.ok()) {
@@ -1251,6 +1267,7 @@ RoomStatus Room::status(uint32_t now_ms) const {
         s.rejoins = a.rejoins();
         s.drops_by_vote = a.drops_by_vote();
         s.drops_by_cap = a.drops_by_cap();
+        s.drops_by_state = session_->diverged_drops();
         s.rejoins_refused = a.rejoins_refused();
         s.catch_up_expired = a.catch_up_expired();
         s.streamed_bytes = a.streamed_bytes();
