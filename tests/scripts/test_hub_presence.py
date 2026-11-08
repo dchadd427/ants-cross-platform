@@ -9,6 +9,8 @@ whole list once and then the changes, at most every two seconds. What this file 
   - the list: the people by their account's name (never an id), moderators marked, the one that does the most of an account's sockets is its row, the order, the cap (200 rows and a count of the rest),
     a guest counted and never named, the numbers of a row stay while the person is here, and the welcome says which row is the account's own (`me`);
   - who may chat: a banned account is a guest in the list (counted, never named), a muted or too new account is named and has none of the room's details, whatever its page said;
+  - the bans and the mutes that the list keeps: read again only when the store's number of its last change of them is another or the soonest mute has run out (a look that finds nothing changed is
+    one small read), and the answers are those of reading both at every look, on random data (a second connection to the file as the command line, mutes that run out, a store that refuses);
   - what a page may say: nothing but looking, waiting and playing, with a map's file name (exactly what the game takes: every map of the repository, and the game's own list of good and bad names), seats and a
     room's code only for a room that the page calls public (a private room, a match, a visitor who is looking carry none of it, and a code is never relayed for a room that is not announced as public), every
     field checked for its kind and size, a guest cannot say anything, a `here` that is refused has a code of its own;
@@ -128,12 +130,12 @@ class Page:
 class World:
     """A chat with a store in a temporary folder, a clock that the test moves, and peers."""
 
-    def __init__(self, limits=LIMITS, mods=MODS):
+    def __init__(self, limits=LIMITS, mods=MODS, store_clock=lambda: 1_800_000_000.0):
         self.folder = tempfile.TemporaryDirectory()
         self.db = os.path.join(self.folder.name, "hub.db")
         self.now = 1000.0
         self.limits = limits
-        self.store = storemod.Store(self.db, clock=lambda: 1_800_000_000.0, retention_days=limits.retention_days)
+        self.store = storemod.Store(self.db, clock=store_clock, retention_days=limits.retention_days)
         self.chat = chatmod.Chat(self.store, frozenset(mods), limits, lambda: self.now, True)
         self.presence = self.chat.presence
 
@@ -666,8 +668,16 @@ class WhoMayChat(WorldTest):
             raise storemod.StoreError("locked")
         self.w.store.bans = self.w.store.mutes = broken
         self.w.join(person(3, "carol"))
-        self.assertEqual(sorted(self.rows()), ["alice", "carol"], "bob is still a guest, alice still has none of the details")
+        self.w.store.ban("1003", "9001", "carol")                      # (a change that the list has to read, and cannot)
+        self.assertEqual(sorted(self.rows()), ["alice", "carol"], "bob is still a guest, alice still has none of the details, and carol, banned meanwhile, is not known to be")
         self.assertNotIn("code", self.rows()["alice"])
+        del self.w.store.bans, self.w.store.mutes                      # (the store answers again)
+        self.assertEqual(sorted(self.rows()), ["alice"], "carol is a guest from the first look that the store answers")
+        self.w.store.last_restriction = broken                         # (a store that refuses refuses all of it: the number too)
+        self.w.store.unban("1003")
+        self.assertEqual(sorted(self.rows()), ["alice"], "the change is not known yet")
+        del self.w.store.last_restriction
+        self.assertEqual(sorted(self.rows()), ["alice", "carol"])
 
     def test_the_accounts_that_may_speak_are_as_they_were(self):
         a = self.w.join(person(1, "alice"))
@@ -675,6 +685,172 @@ class WhoMayChat(WorldTest):
         self.w.store.mute("1002", 10, "9001", "bob")
         self.w.store.ban("1003", "9001", "carol")
         self.assertEqual(self.rows()["alice"], {"name": "alice", "at": "wait", **self.ROOM})
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# the bans and the mutes that the list keeps (hub/presence.py restricted; hub/store: last_restriction)
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def read_at_every_look(store, last):
+    """What Presence.restricted() answered before it kept the two lists, as a model: both read at every look, and a store that does not answer leaves what it said last."""
+    try:
+        return frozenset(row[0] for row in store.bans()), frozenset(row[0] for row in store.mutes())
+    except storemod.StoreError:
+        return last
+
+
+class TheBansAndTheMutesThatTheListKeeps(unittest.TestCase):
+    def setUp(self):
+        self.stamp = [1_800_000_000.0]
+        self.w = World(store_clock=lambda: self.stamp[0])
+        self.addCleanup(self.w.close)
+        self.store = self.w.store
+        self.other = storemod.Store(self.w.db, clock=lambda: self.stamp[0])      # (the command line: another process that opens the same file)
+        self.addCleanup(self.other.close)
+        self.reads, self.failing = [], False
+        for name in ("bans", "mutes", "last_restriction"):
+            def method(name=name, real=getattr(storemod.Store, name)):
+                if self.failing:
+                    raise storemod.StoreError("locked")
+                if name != "last_restriction":
+                    self.reads.append(name)
+                return real(self.store)
+            setattr(self.store, name, method)
+
+    def look(self):
+        return self.w.presence.restricted()
+
+    def test_a_look_that_finds_nothing_changed_is_one_small_read_whatever_the_number_of_bans_and_mutes(self):
+        for n in range(300):
+            self.store.ban("%d" % (5000 + n), "me", "n%d" % n)
+            self.store.mute("%d" % (6000 + n), 600, "me", "m%d" % n)
+        self.reads.clear()
+        banned, muted = self.look()
+        self.assertEqual((len(banned), len(muted)), (300, 300))
+        self.assertEqual(self.reads, ["bans", "mutes"], "the first look reads both lists")
+        for _ in range(200):
+            self.assertEqual(self.look(), (banned, muted))
+        self.assertEqual(self.reads, ["bans", "mutes"], "two hundred looks that find nothing changed read nothing more")
+
+    def test_what_makes_the_list_read_again_is_a_change_of_the_bans_or_the_mutes_and_nothing_else(self):
+        self.look()
+        reads = [len(self.reads)]
+
+        def reads_again(what):
+            self.look()
+            reads.append(len(self.reads))
+            self.assertEqual(reads[-1] - reads[-2], 2, what + ": both lists are read again, once")
+            self.look()
+            self.assertEqual(len(self.reads), reads[-1], what + ": and not again at the look after")
+
+        def reads_nothing(what):
+            self.look()
+            self.assertEqual(len(self.reads), reads[-1], what)
+        self.store.ban("1001", "me", "alice")
+        reads_again("a ban made here")
+        self.assertEqual(self.look()[0], {"1001"})
+        self.other.mute("1002", 10, "command line", "bob")
+        reads_again("a mute made by another process")
+        self.assertEqual(self.look()[1], {"1002"})
+        self.other.unban("1001")
+        reads_again("a ban lifted by another process")
+        self.store.mute("1002", 0, "me")
+        reads_again("a mute lifted here")
+        self.assertEqual(self.look(), (frozenset(), frozenset()))
+        self.store.add_line("1001", "alice", "a line", False)
+        self.store.delete_line(1, "me")
+        self.store.forget("1001")
+        self.store.purge()
+        self.store.is_banned("1001")
+        self.store.muted_until("1001")
+        reads_nothing("a line, a deletion, forget, a purge and the reads of one account")
+
+    def test_a_mute_that_runs_out_is_read_again_at_the_second_it_ends_and_the_next_one_after_it(self):
+        self.store.mute("1001", 1, "me", "alice")                      # (60 seconds)
+        self.store.mute("1002", 2, "me", "bob")                        # (120 seconds)
+        start = self.stamp[0]
+        self.reads.clear()
+        self.assertEqual(self.look()[1], {"1001", "1002"})
+        self.stamp[0] = start + 59.9
+        self.assertEqual(self.look()[1], {"1001", "1002"})
+        self.assertEqual(self.reads, ["bans", "mutes"], "nothing has run out yet: no read")
+        self.stamp[0] = start + 60.0
+        self.assertEqual(self.look()[1], {"1002"})
+        self.assertEqual(self.reads, ["bans", "mutes"] * 2, "the first mute ends at exactly its end, and the lists are read again")
+        self.stamp[0] = start + 119.5
+        self.assertEqual(self.look()[1], {"1002"})
+        self.assertEqual(len(self.reads), 4)
+        self.stamp[0] = start + 120.0
+        self.assertEqual(self.look()[1], frozenset())
+        self.assertEqual(len(self.reads), 6)
+        self.stamp[0] = start + 10 ** 6
+        self.look()
+        self.assertEqual(len(self.reads), 6, "no mute at all: no reason to read again")
+
+    def test_a_change_that_lands_while_the_lists_are_read_is_read_at_the_next_look(self):
+        """The number is read before the lists, so that a ban that another process makes between the two is not kept under the number that it did not change."""
+        real = self.store.bans
+
+        def while_reading():
+            rows = real()
+            self.other.ban("1004", "command line", "dave")             # (it lands after the list was read)
+            return rows
+        self.store.bans = while_reading
+        self.assertEqual(self.look()[0], frozenset(), "this look has the list as it was read")
+        self.store.bans = real
+        self.assertEqual(self.look()[0], {"1004"}, "the next look reads again: the number that the list was kept under is not the number now")
+
+    def test_the_answers_are_those_of_reading_both_lists_at_every_look_on_random_data(self):
+        accounts = ["%d" % (2000 + n) for n in range(7)]
+        ops = ("ban", "unban", "mute", "mute", "unmute", "other_ban", "other_unban", "other_mute", "other_unmute", "advance", "advance", "advance", "line", "forget", "purge", "fail", "fail", "recover", "look", "look")
+        compared = changed = 0
+        for seed in range(30):
+            self.stamp[0] = 1_800_000_000.0 + seed
+            self.failing = False
+            rng = random.Random(seed)
+            for account in accounts:                                    # (the tables are as the last seed left them: the lists are read again at the first look)
+                self.other.mute(account, 0, "me")
+                self.other.unban(account)
+            model = read_at_every_look(self.store, None)
+            self.assertEqual(self.look(), model, "each seed starts from what the store says, with nothing banned or muted")
+            for step in range(120):
+                op, account = rng.choice(ops), rng.choice(accounts)
+                if op == "ban":
+                    self.store.ban(account, "me", "n" + account)
+                elif op == "unban":
+                    self.store.unban(account)
+                elif op == "mute":
+                    self.store.mute(account, rng.choice((1, 2, 5, 30)), "me", "n" + account)
+                elif op == "unmute":
+                    self.store.mute(account, 0, "me")
+                elif op == "other_ban":
+                    self.other.ban(account, "command line", "n" + account)
+                elif op == "other_unban":
+                    self.other.unban(account)
+                elif op == "other_mute":
+                    self.other.mute(account, rng.choice((1, 2, 5, 30)), "command line", "n" + account)
+                elif op == "other_unmute":
+                    self.other.mute(account, 0, "command line")
+                elif op == "advance":
+                    self.stamp[0] += rng.choice((0.5, 1, 30, 59, 60, 61, 119, 120, 600, 4000))
+                elif op == "line":
+                    self.store.add_line(account, "n" + account, "line %d" % step, False)
+                elif op == "forget":
+                    self.store.forget(account)
+                elif op == "purge":
+                    self.store.purge()
+                elif op == "fail":
+                    self.failing = True                                 # (a store that refuses refuses all of it)
+                elif op == "recover":
+                    self.failing = False
+                for _ in range(rng.choice((1, 1, 2))):
+                    before = model
+                    model = read_at_every_look(self.store, model)
+                    answer = self.look()
+                    compared += 1
+                    changed += model != before
+                    self.assertEqual(answer, model, "seed %d, step %d (%s %s), the store %s" % (seed, step, op, account, "refuses" if self.failing else "answers"))
+        self.assertGreater(changed, 300, "the run changed the lists often enough to mean something (%d of %d looks)" % (changed, compared))
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

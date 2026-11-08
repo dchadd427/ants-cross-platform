@@ -100,6 +100,11 @@ class StoreBase:
         """The bans: (account, name, at, by), oldest first."""
         raise NotImplementedError
 
+    def last_restriction(self):
+        """The number of the last change of the bans or the mutes: a ban or a mute made, lifted or made again, by this process or by another that shares the data (the command line). It only goes up, so a
+        reader that keeps the two lists reads them again when it is another number. A mute that runs out changes nothing here: its end is in `mutes()`."""
+        raise NotImplementedError
+
     # ---- logins ----
 
     def add_session(self, key, account, name, seconds, keep, total):

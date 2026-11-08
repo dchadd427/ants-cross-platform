@@ -116,6 +116,8 @@ class Presence:
         self.sent_bytes = None          # ... as one frame, for the next page that asks
         self.sent_at = float("-inf")    # when the list was last sent: the next send is `who_seconds` after that at the soonest, whatever happens
         self.limited = (frozenset(), frozenset())       # the accounts that are banned and muted, as the store last said
+        self.limited_seq = None                         # ... the store's number of its last change of them when it said so (None: it has not said yet)
+        self.limited_until = float("inf")               # ... and when the soonest of those mutes runs out
         self.counted = 0                # the number of people, and the version of the sockets that it was counted for
         self.counted_version = None
 
@@ -151,10 +153,17 @@ class Presence:
         return ident
 
     def restricted(self):
-        """The accounts that are banned and the accounts that are muted now, as the store says (a store that does not answer leaves what it said last)."""
+        """The accounts that are banned and the accounts that are muted now, as the store says. A look that finds nothing changed is one small read, whatever the number of bans and mutes: the two lists are
+        read again only when the store's number of its last change of them is another (a ban or a mute made or lifted here or by the command line) or when the soonest mute has run out. A store that does
+        not answer leaves what it said last."""
         try:
             store = self.chat.store
-            self.limited = (frozenset(row[0] for row in store.bans()), frozenset(row[0] for row in store.mutes()))
+            seq = store.last_restriction()
+            if seq != self.limited_seq or store.clock() >= self.limited_until:
+                bans, mutes = store.bans(), store.mutes()
+                self.limited = (frozenset(row[0] for row in bans), frozenset(row[0] for row in mutes))
+                self.limited_seq = seq
+                self.limited_until = min((row[2] for row in mutes), default=float("inf"))
         except StoreError:
             pass
         return self.limited

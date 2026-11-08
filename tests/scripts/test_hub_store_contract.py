@@ -215,6 +215,45 @@ class Contract(unittest.TestCase):
         self.assertFalse(self.store.is_banned("1001"))
         self.assertFalse(self.store.unban("1001"))
 
+    # ---- the number of the last change of the bans and the mutes ----
+
+    def test_the_last_restriction_goes_up_at_every_ban_unban_and_mute_and_at_nothing_else(self):
+        numbers = [self.store.last_restriction()]
+
+        def goes_up(what):
+            numbers.append(self.store.last_restriction())
+            self.assertGreater(numbers[-1], numbers[-2], what)
+
+        def stays(what):
+            self.assertEqual(self.store.last_restriction(), numbers[-1], what)
+        self.store.ban("1001", "me", "alice")
+        goes_up("a ban")
+        self.store.ban("1001", "me", "alice")
+        goes_up("a ban made again")
+        self.assertTrue(self.store.unban("1001"))
+        goes_up("a ban lifted")
+        self.store.mute("1002", 10, "me", "bob")
+        goes_up("a mute")
+        self.store.mute("1002", 30, "me", "bob")
+        goes_up("a mute made again")
+        self.store.mute("1002", 0, "me")
+        goes_up("a mute lifted")
+        self.store.mute("1003", 1, "me", "carol")
+        goes_up("a mute that is to run out")
+        before = self.store.last_restriction()
+        a = self.say(1)
+        self.store.delete_line(a.id, "me")
+        self.store.add_session("k1", "1001", "alice", 1000, 10, 100)
+        self.store.delete_session("k1")
+        self.store.forget("1003")
+        for read in (self.store.bans, self.store.mutes, lambda: self.store.is_banned("1003"), lambda: self.store.muted_until("1003"), lambda: self.store.recent_lines(10), self.store.size):
+            read()
+        stays("lines, a deletion, a login, forget and every read: the bans and the mutes are as they were")
+        self.clock.now += 3 * DAY
+        self.assertEqual(self.store.mutes(), [], "the mute has run out")
+        self.store.purge()
+        self.assertEqual(self.store.last_restriction(), before, "a mute that runs out, and the purge that deletes it, change no number: its end is in mutes()")
+
     # ---- logins ----
 
     def test_a_login_is_found_by_its_key_until_it_runs_out(self):
@@ -297,6 +336,28 @@ class SqliteContract(Contract):
             self.assertNotIn(name, base.PUBLIC)
             self.assertFalse(hasattr(base.StoreBase, name), name)
         self.assertEqual(self.store.db.execute("PRAGMA secure_delete").fetchone()[0], 1)
+
+    def test_another_connection_to_the_file_sees_the_number_and_the_bans_and_mutes_that_changed_it(self):
+        other = storemod.Store(self.path, clock=self.clock, busy_ms=50)           # (the command line: a process of its own that opens the same file)
+        self.addCleanup(other.close)
+        start = self.store.last_restriction()
+        other.ban("1001", "command line", "alice")
+        first = self.store.last_restriction()
+        self.assertGreater(first, start)
+        self.assertTrue(self.store.is_banned("1001"))
+        self.store.mute("1002", 10, "me", "bob")
+        second = other.last_restriction()
+        self.assertGreater(second, first)
+        other.mute("1002", 0, "command line")
+        self.assertGreater(self.store.last_restriction(), second)
+        self.assertEqual(self.store.last_restriction(), other.last_restriction())
+
+    def test_a_file_without_the_counter_reads_as_nothing_changed_yet_and_makes_it_at_the_first_change(self):
+        self.store.db.execute("DELETE FROM meta WHERE k = 'restrict_seq'")        # (a file that an older hub made: its `meta` has the deletions' counter only)
+        self.assertEqual(self.store.last_restriction(), 0)
+        self.store.ban("1001", "me", "alice")
+        self.assertEqual(self.store.last_restriction(), 1)
+        self.assertEqual(self.store.last_deletion(), 0, "the deletions' counter is a row of its own")
 
     def test_the_default_store_is_the_sqlite_one(self):
         self.assertIs(storemod.Store, __import__("hub.store.sqlite", fromlist=["Store"]).Store)
