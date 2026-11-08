@@ -40,8 +40,6 @@ LINE_CEILINGS = {
     "tools/bot_arena.cpp": 2541,
     "tools/map_sweep.cpp": 2626,
     "src/ants_sim/movement_system.cpp": 1678,
-    "src/ants_net/session.cpp": 1565,
-    "src/ants_net/netgame.cpp": 1565,
     "src/ants_sim/sim_engine.cpp": 1533,
 }
 
