@@ -65,6 +65,14 @@
    "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
   },
   {
+   "id": "the_name_script_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/front/lobby_chat.js | web/front/player_name.js | web/front/rematch.js",
+   "new": "web/front/lobby_chat.js | web/front/rematch.js",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
    "id": "the_map_picker_is_light",
    "file": "tools/ci_light.sh",
    "old": " | web/front/game_type.js | web/front/map_picker.js) return 1 ;;",

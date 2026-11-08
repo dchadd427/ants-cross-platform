@@ -33,7 +33,7 @@ import time
 COSTS = {
     "test_web_home_games.TheChecksAreNotVacuous": 537, "test_web_home_chat.TheChecksAreNotVacuous": 462, "test_web_mapmaker.TheGroundAndTheSprites": 387,
     "test_web_mapmaker.TheCodeRuns": 157, "test_nginx_history.TheBlocksRun": 60, "test_web_home_screen.TheChecksAreNotVacuous": 58, "test_web_map_files.ThePagesOwnCode": 47,
-    "test_web_admin.ThePagesOwnCode": 44, "test_web_mapmaker_play.ThePlayChecks": 42, "test_bot_names.TheMutants": 35, "test_web_mapmaker.ThePage": 30,
+    "test_web_replay_open.TheChecksAreNotVacuous": 45, "test_web_admin.ThePagesOwnCode": 44, "test_web_mapmaker_play.ThePlayChecks": 42, "test_bot_names.TheMutants": 35, "test_web_mapmaker.ThePage": 30,
     "test_nginx_stats.TheCacheRuns": 29, "test_web_death_map.TheCards": 28, "test_web_game_menu.TheMutants": 23, "test_web_lobby_chat.TheChecksAreNotVacuous": 23,
     "test_web_lobby_net.TheBudgetChecksAreNotVacuous": 22, "test_web_rematch.TheChecksAreNotVacuous": 20, "test_e2e_deadlines.Waits": 18,
     "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18, "test_run_tests.ParallelResources": 17, "test_web_shapes.TheMutantsOfTheTable": 16,
@@ -61,6 +61,7 @@ LINUX_ONLY = {
     "test_web_lobby_rules.TheCheckIsNotVacuous", "test_web_rematch.TheChecksAreNotVacuous", "test_web_map_maker_link.TheChecksAreNotVacuous", "test_web_game_menu.TheMutants",
     "test_web_shapes.TheMutantsOfTheTable", "test_web_shapes.TheMutantsOfThePicker", "test_bot_names.TheMutants", "test_web_mapmaker.TheGroundAndTheSprites", "test_web_mapmaker.ThePage",
     "test_web_map_files.ThePagesOwnCode", "test_web_admin.ThePagesOwnCode", "test_web_death_map.TheCards",
+    "test_web_player_name.TheChecksAreNotVacuous",
 }
 
 

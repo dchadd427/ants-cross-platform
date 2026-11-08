@@ -905,10 +905,10 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "shell_name_not_remembered",
+      "id": "shell_test_game_has_no_own_name",
       "file": "web/shell.html",
-      "old": "q.has('bots') || test) ? remembered : '');",
-      "new": "q.has('bots')) ? remembered : '');",
+      "old": "q.has('bots') || test);       // (a game here",
+      "new": "q.has('bots'));       // (a game here",
       "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
     },
     {

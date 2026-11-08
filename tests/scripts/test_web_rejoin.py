@@ -138,9 +138,9 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("document.addEventListener('visibilitychange', poller.visibility);", self.page)
         self.assertEqual(len(re.findall(r"addEventListener\('visibilitychange'", self.page)), 2)                        # (the client's wake and the line of numbers' own: tests/scripts/web_name_check.js counts them)
 
-    def test_the_press_takes_this_tab_to_the_game_page_with_the_remembered_name_and_shape_and_no_key(self):
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);", self.wiring)
-        self.assertIn("var remembered = nameCheck(recall(NAME_KEY));", self.wiring)
+    def test_the_press_takes_this_tab_to_the_game_page_with_the_remembered_shape_and_no_name_and_no_key(self):
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);", self.wiring)      # (the key takes the seat, which the room has named: the address says "no name chosen")
+        self.assertNotIn("NAME_KEY", self.wiring)
         self.assertNotIn("window.open", self.wiring)                                                                    # (no new tab: the other join links of the page stay in this one)
         self.assertNotIn("window.open(", self.page)                                                                      # (the page opens no window at all: the test room's "separate windows" went with "More ways to play")
 

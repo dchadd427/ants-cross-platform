@@ -163,6 +163,9 @@ class TheCheckIsNotVacuous(unittest.TestCase):
     def test_a_name_of_32_characters_that_is_too_long(self):
         self.must_fail("web/front/lobby_rules.js", "name.length > 32", "name.length > 31")
 
+    def test_a_card_with_a_pencil_for_a_name_that_nobody_types(self):
+        self.must_fail("web/front/lobby_rules.js", "statCls: 'pstat', remove: false,", "statCls: 'pstat', pencil: true, remove: false,")
+
     def test_three_players_on_one_button_of_the_teams(self):
         self.must_fail("web/front/lobby_rules.js", ".length > 2; });", ".length > 3; });")
 

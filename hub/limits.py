@@ -45,6 +45,10 @@ class Limits:
     checkpoint_retry_seconds: float = 10.0      # how soon the database's log file is cut again when a reader held it
     crowded_sockets: int = 6            # more sockets than this from one address group is logged (docs/HUB.md)
     crowded_log_seconds: float = 60.0
+    who_rows_max: int = 200             # named people that the list of the front page carries (the rest are counted: `more`); moderators first, then the people who wait, who play, who look
+    who_seconds: float = 2.0            # the list is sent to the pages that watch it when it changed, not sooner than this after the last send, whatever happens (changes in between are one change)
+    who_resend_seconds: float = 10.0    # a socket may ask for the whole list again after this long (it gets it once, whatever it asks in between)
+    who_diff_max: int = 50              # a change of more rows than this is sent as the whole list: a frame is never bigger than the list's own
     login_burst: int = 10               # /hub/login and /hub/callback: for each client address a burst of 10, then one every 6 seconds (10 a minute; nginx has the same numbers in front)
     login_refill_seconds: float = 6.0
     session_burst: int = 20             # /hub/me, /hub/logout and /hub/forget: a burst of 20, then one every 3 seconds
@@ -55,6 +59,9 @@ class Limits:
     session_seconds: float = 30 * 86400.0       # how long a login lasts (30 days)
     sessions_per_account: int = 10      # logins that one account keeps at a time (browsers, phones); the oldest go first
     sessions_total: int = 100000        # logins that the hub keeps in all (a crowd of throwaway accounts cannot make the table grow without end): the oldest go first
+    profiles_total: int = 100000        # profiles (the username and the display name of an account, from its last login) that the hub keeps in all: the ones refreshed longest ago go first
+    pick_burst: int = 3                 # switches between the display name and the username that an account may make at once (across all its tabs: a switch makes every page of the account connect again) ...
+    pick_refill_seconds: float = 30.0   # ... then one in this long
     discord_connect_seconds: float = 3.0        # to Discord: the connection ...
     discord_seconds: float = 6.0                # ... a whole call, from the first byte sent to the last byte read ...
     discord_total_seconds: float = 10.0         # ... and the two calls of a login together (nginx waits 15 seconds for the hub's answer)
@@ -171,6 +178,11 @@ class RateByAddress:
     def forget_idle(self, now):
         for key in [k for k, b in self.buckets.items() if b.ready(now) and b.tokens >= self.burst]:
             del self.buckets[key]
+
+
+class RateByAccount(RateByAddress):
+    """The same table of token buckets, one for each account id (the key is the id, not an address): what an account may do however many tabs it has open. A bucket that is full again is
+    forgotten by forget_idle()."""
 
 
 class Strikes:

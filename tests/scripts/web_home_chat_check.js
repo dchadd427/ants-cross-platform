@@ -146,7 +146,7 @@ function rig(o) {
         P.parse('{"t":"x"}') !== null && P.parse(5) === null && P.parse(new ArrayBuffer(4)) === null && P.parse('x'.repeat(P.LIMIT.frame + 1)) === null && P.parse('{') === null && P.parse('[1]') === null && P.parse('3') === null
         && P.parse('null') === null && P.parse('{}') === null && P.parse('{"t":5}') === null && P.parse('{"t":"a","__proto__":{"x":1}}') !== null && P.parse('{"t":"ok"}'.padEnd(P.LIMIT.frame, ' ')) !== null);
     same('count: whole numbers from 0 only', [P.count(0), P.count(7), P.count(-1), P.count(1.5), P.count('3'), P.count(null), P.count(NaN), P.count(Infinity), P.count(1e12)], [0, 7, null, null, null, null, null, null, null]);
-    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true }, false, 0]);
+    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true, k: '', u: '' }, false, 0]);
     same('lineOf: not a line when the id is not a whole number, the name or text is not a string, or nothing is left of the text',
         [{ who: 'a', text: 'x' }, { id: '4', who: 'a', text: 'x' }, { id: -1, who: 'a', text: 'x' }, { id: 1.5, who: 'a', text: 'x' }, { id: 4, who: 5, text: 'x' }, { id: 4, who: 'a', text: 5 }, { id: 4, who: 'a', text: ' \u202e \u200b ' }, null, 'x', []].map((m) => P.lineOf(m)),
         [null, null, null, null, null, null, null, null, null, null]);
@@ -278,14 +278,25 @@ function rig(o) {
 {   // the err codes, in words
     const words = { rate: 'Slow down a little', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first', young: 'Your account is too new to chat yet', bad: 'That line could not be sent', quota: 'You have chatted a lot, try again later' };
     Object.keys(words).forEach((code) => {
-        const r = rig(); r.live(W({ you: YOU, login: true }));
+        const r = rig(); r.live(W({ you: YOU, login: true })); r.dock.say('hello');
         r.s().recv({ t: 'err', code });
         check('err ' + code + ': "' + words[code] + '" in the note, which goes after a few seconds', r.note() === words[code] && (r.clock.advance(5900), r.note() === words[code]) && (r.clock.advance(200), r.note() === ''));
     });
-    const a = rig(); a.live(W({ you: null, login: true })); a.s().recv({ t: 'err', code: 'login' });
-    const b = rig(); b.live(W({ you: null, login: false })); b.s().recv({ t: 'err', code: 'login' });
-    const c = rig(); c.live(W({ you: YOU, login: true })); ['what', 5, null, undefined, {}, 'constructor'].forEach((code) => c.s().recv({ t: 'err', code }));
-    same('err login: "Log in with Discord to chat" where the hub has a login, "Chat is read-only for now" where it has none; a code that is not known is the generic words', [a.note(), b.note(), c.note()], ['Log in with Discord to chat', 'Chat is read-only for now', 'That did not go through']);
+    const a = rig(); a.live(W({ you: YOU, login: true })); a.dock.say('hello'); a.s().recv({ t: 'err', code: 'login' });
+    const b = rig(); b.live(W({ you: YOU, login: false })); b.dock.say('hello'); b.s().recv({ t: 'err', code: 'login' });
+    const c = rig(); c.live(W({ you: YOU, login: true })); c.dock.say('hello'); ['what', 5, null, undefined, {}, 'constructor', '__proto__', 'here'].forEach((code) => c.s().recv({ t: 'err', code }));
+    const cNote = c.note(); c.s().recv({ t: 'err', code: 'rate' });
+    same('err login: "Log in with Discord to chat" where the hub has a login, "Chat is read-only for now" where it has none; a code that is not one of the hub\'s answers to a line (a refused `here` has its own: "here") is no answer to a line: no word, and the line still waits for its own',
+        [a.note(), b.note(), cNote, c.note(), c.field().value], ['Log in with Discord to chat', 'Chat is read-only for now', '', 'Slow down a little', 'hello']);
+    const noLine = rig(); noLine.live(W({ you: YOU }));
+    ['rate', 'bad', 'login', 'muted', 'banned', 'young'].forEach((code) => noLine.s().recv({ t: 'err', code }));
+    same('an err when no line of this page is in flight is not for a line of this page: no word, nothing put in the field', [noLine.note(), noLine.field().value], ['', '']);
+    const lateErr = rig(); lateErr.live(W({ you: YOU })); lateErr.dock.say('hello'); lateErr.clock.advance(9000); lateErr.s().recv({ t: 'err', code: 'rate' });
+    same('(a line that had no answer for 8 s is not waited for: a late err is nobody\'s)', [lateErr.note(), lateErr.field().value], ['', '']);
+    const badCommand = rig(); badCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); badCommand.dock.say('/mute nobody 5'); badCommand.s().recv({ t: 'err', code: 'bad' });
+    same('a moderator\'s command that the hub refuses is told, with nothing put in the field, no code of the dock throws, and the dock stays live: it is in flight for a few seconds', [badCommand.note(), badCommand.field().value, badCommand.dock.state(), badCommand.errors.length], ['That line could not be sent', '', 'live', 0]);
+    const oldCommand = rig(); oldCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); oldCommand.dock.say('/mute nobody 5'); oldCommand.clock.advance(9000); oldCommand.s().recv({ t: 'err', code: 'bad' });
+    same('... and not 8 s later', oldCommand.note(), '');
     const d = rig(); d.live(W({ you: YOU })); d.dock.say('hello'); d.s().recv({ t: 'err', code: 'rate' });
     check('a line that the hub refused comes back into the field (nothing typed is lost)', d.field().value === 'hello');
     d.field().value = 'new words'; d.dock.say('again'); d.s().recv({ t: 'err', code: 'bad' });
@@ -404,7 +415,7 @@ function rig(o) {
     same('a short echo ("lo": under half of "hello world", no part of "hi") answers neither of two lines that wait: the refusals give back "hello world", then "hi"', [refusedFirst, shortPair.field().value], ['hello world', 'hi']);
     const idle = rig(); idle.live(W({ you: YOU }));
     idle.s().recv({ t: 'err', code: 'rate' });
-    check('an err with nothing waiting for an answer takes nothing back, says the words of the err, and no code of the dock throws (the page\'s guard would hide a throw: the dock\'s error hook is looked at)', idle.field().value === '' && idle.note() === 'Slow down a little' && idle.errors.length === 0, String(idle.errors[0]));
+    check('an err with nothing waiting for an answer is not for a line of this page: it takes nothing back, says nothing, and no code of the dock throws (the page\'s guard would hide a throw: the dock\'s error hook is looked at)', idle.field().value === '' && idle.note() === '' && idle.errors.length === 0, String(idle.errors[0]));
     const stranger = rig(); stranger.live(W({ you: YOU }));
     stranger.dock.say('hello world'); stranger.s().recv(L(77, 'maple.leaf', 'goodbye'));
     stranger.s().recv({ t: 'err', code: 'rate' });
@@ -441,6 +452,54 @@ function rig(o) {
     gone.dock.say('lost line'); gone.s().fail(); gone.clock.advance(2500); gone.s().open().recv(W({ you: YOU }));
     gone.s().recv({ t: 'err', code: 'rate' });
     check('a line that was in flight when the link went has no answer to wait for: an err of the new link does not bring it back', gone.field().value === '');
+    // a moderator's command waits in the same list as the lines, and the hub's answer is told to the send that it is for (`bad` is its word for a wrong command, any other code is a line's)
+    const MOD = { name: 'maple.leaf', mod: true };
+    const together = rig(); together.live(W({ you: MOD }));
+    together.dock.say('/mute nobody 5'); together.dock.say('hello');
+    together.s().recv({ t: 'err', code: 'bad' });
+    same('a command and a line sent within one round trip, and the hub says `bad` to the command: the note is the command\'s, and nothing is put in the field (the line was taken)', [together.note(), together.field().value], ['That line could not be sent', '']);
+    together.s().recv(L(90, 'maple.leaf', 'hello'));
+    same('... the line is shown once, as the line that it is, and the field is still empty', [together.rowTexts().filter((t) => t === 'maple.leaf: hello').length, together.field().value], [1, '']);
+    together.clock.advance(2500); together.dock.say('again'); together.s().recv({ t: 'err', code: 'rate' });
+    same('... and the next refusal of a line is for that line', together.field().value, 'again');
+    const lineFirst = rig(); lineFirst.live(W({ you: MOD }));
+    lineFirst.dock.say('hello'); lineFirst.dock.say('/mute nobody 5');
+    lineFirst.s().recv({ t: 'err', code: 'rate' });
+    const lineBack = lineFirst.field().value;
+    lineFirst.s().recv({ t: 'err', code: 'bad' });
+    same('a line and then a command, both refused (`rate` for the line, `bad` for the command): the line comes back, and the command does not take its place in the field', [lineBack, lineFirst.field().value, lineFirst.note()], ['hello', 'hello', 'That line could not be sent']);
+    const muted = rig(); muted.live(W({ you: MOD }));
+    muted.dock.say('/mute nobody 5'); muted.dock.say('hello');
+    muted.s().recv({ t: 'err', code: 'muted' });
+    const mutedBack = muted.field().value;
+    muted.field().value = '';
+    muted.s().recv({ t: 'err', code: 'muted' });
+    same('a command and a line, both refused with a code that is for either (muted): a code that is not `bad` is the line\'s first, then the command\'s, which is not put in the field', [mutedBack, muted.field().value, muted.note()], ['hello', '', 'You cannot chat for a while']);
+    const alone = rig(); alone.live(W({ you: MOD }));
+    alone.dock.say('/mute nobody 5'); alone.s().recv({ t: 'err', code: 'rate' });
+    same('a command that waits alone is the refusal\'s whatever the code (a hub whose database failed says `rate` for it): the note is told, nothing is put in the field', [alone.note(), alone.field().value], ['Slow down a little', '']);
+    const refusedCommand = rig(); refusedCommand.live(W({ you: MOD }));
+    refusedCommand.dock.say('/mute nobody 5'); refusedCommand.s().recv({ t: 'err', code: 'bad' }); refusedCommand.clock.advance(2500);
+    const takenCommand = rig(); takenCommand.live(W({ you: MOD }));
+    takenCommand.dock.say('/mute victim 5'); takenCommand.clock.advance(2500);
+    same('a command that the hub refused may be sent again at once, and one that it took is held back for 31 s like a line that it took', [refusedCommand.dock.say('/mute nobody 5'), takenCommand.dock.say('/mute victim 5')], ['', 'rate']);
+    const behindCommand = rig(); behindCommand.live(W({ you: MOD }));
+    behindCommand.dock.say('/mute victim 1'); behindCommand.dock.say('hi 🫩'); behindCommand.s().recv(L(91, 'maple.leaf', 'hi'));
+    behindCommand.clock.advance(2500); behindCommand.dock.say('beta two'); behindCommand.s().recv({ t: 'err', code: 'rate' });
+    same('a command stands before a line whose echo has a character taken out: the echo is still the answer of the oldest LINE ("hi" is "hi 🫩" without it), and the refusal that follows is for "beta two"', behindCommand.field().value, 'beta two');
+    const inTime = rig(); inTime.live(W({ you: MOD }));
+    inTime.dock.say('/mute nobody 5'); inTime.clock.advance(7999); inTime.s().recv({ t: 'err', code: 'bad' });
+    const tooLate = rig(); tooLate.live(W({ you: MOD }));
+    tooLate.dock.say('/mute nobody 5'); tooLate.clock.advance(8000); tooLate.s().recv({ t: 'err', code: 'bad' });
+    same('a command that nobody answers is waited for for 8 s: a `bad` 7,999 ms after it was sent is its answer, and one 8,000 ms after it is nobody\'s', [inTime.note(), tooLate.note()], ['That line could not be sent', '']);
+    const lostCommand = rig(); lostCommand.live(W({ you: MOD }));
+    lostCommand.dock.say('/mute nobody 5'); lostCommand.s().fail(); lostCommand.clock.advance(2500); lostCommand.s().open().recv(W({ you: MOD }));
+    lostCommand.s().recv({ t: 'err', code: 'bad' });
+    same('a command that was in flight when the link went has no answer to wait for either: a `bad` of the new link is nobody\'s', [lostCommand.note(), lostCommand.field().value], ['', '']);
+    const noCommand = rig(); noCommand.live(W({ you: YOU }));
+    noCommand.dock.say('/shrug'); noCommand.dock.say('hello');
+    noCommand.s().recv({ t: 'err', code: 'bad' });
+    same('a line that begins with a slash from a visitor who is no moderator is a line, not a command: the `bad` is for the oldest line, "/shrug"', noCommand.field().value, '/shrug');
 }
 {   // the counts of the welcome, the history's own ids, the noise of one socket, the order of the ids
     const o = (online) => { const q = rig(); q.live(W({ online })); return [q.on(), one(q.root, 'gc-online').hidden]; };
@@ -1114,6 +1173,200 @@ function bring(env) {                                     // the two files arriv
 {   // the words are the agreed ones, and the page reads no cookie
     check('the words of the login: "Log in", "Log in with Discord", "Chatting as ", "Log out", "Forget me"', [Pure.TEXT.login, Pure.TEXT.loginWith, Pure.TEXT.chatting, Pure.TEXT.logout, Pure.TEXT.forget].join('|') === 'Log in|Log in with Discord|Chatting as |Log out|Forget me');
     check('chat.js never touches the cookie, a token or the address of Discord', !/document\.cookie|discord\.com|Authorization|access_token|\.href\b|location\.search|location\.hash/.test(chatSource.replace(/\/\/.*/g, '')));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. The players list speaks through this socket (web/home/players.js, docs/HOME_SCREEN.md "The players list"): tap(fn) hears the welcome, the list and the loss of the link, send(obj) writes a frame
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const r = rig({});
+    const heard = [];
+    const word = (m) => (m && typeof m === 'object' ? m.t : m);
+    r.dock.tap((kind, m) => heard.push([kind, word(m)]));
+    same('a piece that taps a dock whose socket is not open yet hears nothing', heard, []);
+    r.s().open().recv(W({ presence: true, you: YOU }));
+    same('the welcome is told, once, with the welcome itself', heard, [['live', 'welcome']]);
+    r.s().recv({ t: 'who', full: true, n: 1, g: 0, more: 0, rows: [] });
+    same('a frame of the list is told to it (and is not a line, not a mistake: the log stays as it was)', [heard.slice(1), r.rows().length, r.note()], [[['who', 'who']], 0, '']);
+    r.s().recv({ t: 'nonsense' });
+    same('a kind that nobody knows is not told to it', heard.length, 2);
+    r.dock.shown(false); r.dock.shown(true);
+    same('Home showing or not is told to it', heard.slice(2), [['shown', false], ['shown', true]]);
+    let late = [];
+    r.dock.tap((kind, m) => late.push([kind, word(m)]));
+    same('a piece that comes after the welcome is told it at once (the welcome that the socket has)', late, [['live', 'welcome']]);
+    r.s().fail();
+    same('a lost link is told to every piece', [heard.slice(-1), late.slice(-1)], [[['lost', undefined]], [['lost', undefined]]]);
+    late = [];
+    r.dock.tap((kind) => late.push(kind));
+    same('a piece that comes while the link is down is told that it is (no welcome is kept for a socket that is gone)', late, ['lost']);
+    r.clock.advance(60000);
+    r.live(W({ presence: true }));
+    check('a new socket tells the new welcome to all', heard.slice(-1)[0][0] === 'live' && late.slice(-1)[0] === 'live');
+}
+{
+    const r = rig({});
+    check('send says no before the socket has been welcomed and nothing is written', r.dock.send({ t: 'who' }) === false && r.s().sent.length === 0);
+    r.s().open();
+    check('... also when it is open and the welcome has not come', r.dock.send({ t: 'who' }) === false && r.s().sent.length === 0);
+    r.s().recv(W({ presence: true }));
+    check('welcomed: it writes the frame as JSON and says yes', r.dock.send({ t: 'here', at: 'look' }) === true && r.s().sent.pop() === '{"t":"here","at":"look"}');
+    const s = r.s();
+    s.readyState = 3;
+    check('a socket that is closing is no place to write', r.dock.send({ t: 'who' }) === false);
+    s.readyState = 1; s.send = () => { throw new Error('gone'); };
+    check('a socket that throws when written to: no, and the dock says that the link is lost (and tries again later)', r.dock.send({ t: 'who' }) === false && r.dock.state() === 'offline');
+    const t = rig({});
+    t.dock.tap(() => { throw new Error('a piece that breaks'); });
+    let after = 0; t.dock.tap(() => { after++; });
+    t.live();
+    check('a piece that throws does not stop the others, the dock or the page: the error is reported and the welcome still shows', t.errors.length === 1 && after === 1 && t.dock.state() === 'live' && t.on() === '7 here now');
+    t.s().recv({ t: 'who', full: true, n: 1, g: 0, more: 0, rows: [] });
+    check('... nor does it when the list comes', t.errors.length === 2 && after === 2 && t.dock.state() === 'live');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 10. The two names (docs/HUB.md "Names"): the chat shows the account's display name or its username, as it picked. The switch is one button in the small menu, only where the hub says that the account has both;
+//     a line is the visitor's by the hub's key of the account and not by a name (names are not unique); a moderator's copy of a line has the author's username
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const MINE = 'aaaaaaaaaaaa', OTHERS = 'bbbbbbbbbbbb';
+const TWO = { name: 'Maple Leaf', mod: false, k: MINE, pick: 'display', other: 'maple.leaf' };
+const NAMED = ['\u041c\u0430\u0440\u0438\u044f', '\u0418\u0432\u0430\u043d \u041f\u0435\u0442\u0440\u043e\u0432', '\u039d\u03af\u03ba\u03bf\u03c2', '\u7530\u4e2d\u592a\u90ce', '\u3055\u304f\u3089', '\uae40\ubbfc\uc218', '\u0645\u0631\u064a\u0645', '\u0645\u064e\u0631\u0652\u064a\u064e\u0645', '\u05d3\u05d5\u05d3',
+               '\u05d3\u05b8\u05bc\u05d5\u05b4\u05d3', '\u0930\u093e\u091c\u0947\u0936', '\u0915\u094d\u0937\u0924\u094d\u0930\u093f\u092f', '\u0e2a\u0e21\u0e0a\u0e32\u0e22', '\u0e01\u0e34\u0e49\u0e07', 'Dave \u05d3\u05d5\u05d3', 'Zo\u00eb', 'Nguy\u1ec5n V\u0103n'];
+const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
+{   // the pure parts
+    const P = Pure;
+    same('lineOf: the key and the username of the author, cleaned like a name', [P.lineOf({ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }), P.lineOf({ id: 4, who: 'a', text: 'x', k: 5, u: 5 }), P.lineOf({ id: 4, who: 'a', text: 'x', k: null, u: [] }),
+        P.lineOf({ id: 4, who: 'a', text: 'x', u: '<b>x</b> \u202eevil\u202c \u200b' }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: 'u'.repeat(60) }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: '\u3164\u2800' }).u],
+        [{ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }, { id: 4, who: 'a', text: 'x', mod: false, k: '', u: '' }, { id: 4, who: 'a', text: 'x', mod: false, k: '', u: '' }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
+    same('the words of the switch', [P.TEXT.shows, P.TEXT.names, P.TEXT.use], ['Chat shows your ', ['display name', 'username'], 'Show my ']);
+    check('the names of other scripts are fine as they are: cleaned for display they come out whole, and are not cut at 32 code points', NAMED.every((n) => P.plain(n, true) === n && P.clip(n, 32) === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).who === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).u === n));
+}
+{   // the switch: where it is, what it says, what it sends
+    const r = menuOf(rig({ chip: true }));
+    r.live(W({ login: true, you: TWO }));
+    const note = one(r.root, 'gc-pn'), button = one(r.root, 'gc-pick'), menu = one(r.root, 'gc-menu');
+    check('a hub that says that the account has both names: the small menu has a sentence that says which one the chat shows and a button that offers the other, with its name; both are in the menu, before Forget me', shows(note) && shows(button) && note.textContent === 'Chat shows your display name.'
+          && button.textContent === 'Show my username: maple.leaf' && button.tagName === 'button' && button.type === 'button' && menu.children.indexOf(note) < menu.children.indexOf(button) && menu.children.indexOf(button) < menu.children.indexOf(one(r.root, 'gc-forget')));
+    check('... the account line says the name that is shown (the display name), the chip too', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && one(r.chip, 'gc-cn').textContent === 'Maple Leaf' && one(r.chip, 'gc-av').textContent === 'M');
+    button.click();
+    same('a press sends ONE frame, {"t":"pick","pick":"username"} (the other name), on the open socket, and nothing else (no request, no navigation)', [r.s().sent.filter((x) => x.indexOf('pick') !== -1), r.fetches.length, r.went], [['{"t":"pick","pick":"username"}'], 0, []]);
+    check('... the page does not change what it shows by itself: the name is the hub\'s to change (it closes the socket and the page connects again)', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && note.textContent === 'Chat shows your display name.');
+    const first = r.s();
+    first.fail();
+    check('the hub closes the socket: "Chat is offline" for a moment, the account line is away, and the page connects again after its first wait', r.dock.state() === 'offline' && r.dock.slot.hidden === true && (r.clock.advance(1500), r.sockets.length === 2));
+    r.s().open().recv(W({ login: true, you: { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: 'Maple Leaf' } }));
+    check('the new welcome says the other name: the account line, the sentence and the button follow, and the small menu is as open as it was', one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && note.textContent === 'Chat shows your username.' && button.textContent === 'Show my display name: Maple Leaf' && menu.hidden === false);
+    button.click();
+    same('... and a press now sends the first name', r.s().sent.filter((x) => x.indexOf('pick') !== -1), ['{"t":"pick","pick":"display"}']);
+    button.click();
+    const sent = r.s().sent.filter((x) => x.indexOf('pick') !== -1);
+    check('a second press before the hub has closed the socket sends the same word again (the hub stores the same thing twice and closes the sockets once)', sent.length === 2 && sent[0] === sent[1] && sent[0] === '{"t":"pick","pick":"display"}');
+}
+{   // where there is no switch
+    const cases = {
+        'a hub that has no such thing (the welcome of before: name and mod only)': { name: 'maple.leaf', mod: false },
+        'the key only': { name: 'maple.leaf', mod: false, k: MINE },
+        'a pick and no other name': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username' },
+        'an other name and no pick': { name: 'maple.leaf', mod: false, k: MINE, other: 'Maple Leaf' },
+        'an empty other name': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: '' },
+        'an other name that shows nothing': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: '\u200b\u3164\ufe0f' },
+        'an other name that is not text': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: 5 },
+        'an other name that is an object': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: { name: 'x' } },
+        'a pick that is not one of the two words': { name: 'maple.leaf', mod: false, k: MINE, pick: 'both', other: 'Maple Leaf' },
+        'a pick in capitals': { name: 'maple.leaf', mod: false, k: MINE, pick: 'DISPLAY', other: 'Maple Leaf' },
+        'a pick that is a number': { name: 'maple.leaf', mod: false, k: MINE, pick: 1, other: 'Maple Leaf' },
+        'a pick that is a list': { name: 'maple.leaf', mod: false, k: MINE, pick: ['display'], other: 'Maple Leaf' },
+    };
+    Object.keys(cases).forEach((label) => {
+        const r = menuOf(rig({ chip: true }));
+        r.live(W({ login: true, you: cases[label] }));
+        check(label + ': no sentence and no button of the switch, the rest of the menu as it was', one(r.root, 'gc-pn').hidden === true && one(r.root, 'gc-pick').hidden === true && buttonsShown(r.root).indexOf('Forget me') !== -1 && one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && r.errors.length === 0);
+        one(r.root, 'gc-pick').click();
+        check(label + ': a press that gets through anyway sends nothing', r.s().sent.filter((x) => x.indexOf('pick') !== -1).length === 0);
+    });
+    const reader = menuOf(rig({}));
+    reader.live(W({ login: true, you: null }));
+    check('a reader has no account line and so no switch', one(reader.root, 'gc-pick').hidden === true && reader.dock.slot.hidden === true);
+    const nologin = menuOf(rig({}));
+    nologin.live(W({ login: false, you: TWO }));
+    check('where the hub has no login there is no account line and no switch', nologin.dock.slot.hidden === true && one(nologin.root, 'gc-menu').hidden === true);
+}
+{   // a press that cannot be made, and a hub that refuses
+    const r = menuOf(rig({}));
+    r.live(W({ login: true, you: TWO }));
+    r.s().readyState = 2;
+    one(r.root, 'gc-pick').click();
+    check('the socket is closing: nothing is written to it, and the visitor is told that it did not work', r.s().sent.filter((x) => x.indexOf('pick') !== -1).length === 0 && r.note() === 'That did not work, try again');
+    const q = menuOf(rig({}));
+    q.live(W({ login: true, you: TWO }));
+    q.dock.say('hello');
+    q.s().recv({ t: 'err', code: 'pick' });
+    check('a refused switch ({"t":"err","code":"pick"}) says "That did not work, try again" for a few seconds, and the socket stays', q.note() === 'That did not work, try again' && q.dock.state() === 'live' && q.sockets.length === 1 && (q.clock.advance(6001), q.note() === ''));
+    q.dock.say('second line');
+    q.s().recv({ t: 'err', code: 'pick' });
+    q.s().recv({ t: 'err', code: 'rate' });
+    check('... and it is nobody\'s line: the line that waits for its answer is still waiting (the next refusal of a line is the oldest one\'s)', q.note() === 'Slow down a little' && q.field().value === 'hello');
+    const t = menuOf(rig({}));
+    t.live(W({ login: true, you: TWO }));
+    t.s().send = () => { throw new Error('gone'); };
+    one(t.root, 'gc-pick').click();
+    check('a socket that throws when written to is a lost link, as for any frame, and nothing is thrown at the page', t.dock.state() === 'offline' && t.errors.length === 0);
+}
+{   // a line is the visitor's by the hub's key
+    const history = [{ id: 1, at: 1, who: 'Maple Leaf', text: 'my line', mod: false, k: MINE }, { id: 2, at: 2, who: 'Maple Leaf', text: 'a line of another account with my name', mod: false, k: OTHERS },
+                     { id: 3, at: 3, who: 'maple.leaf', text: 'my line from before the switch', mod: false, k: MINE }, { id: 4, at: 4, who: 'Maple Leaf', text: 'a line that has no key', mod: false }];
+    const r = rig({});
+    r.live(W({ login: true, you: TWO, history }));
+    same('in the history only the lines with the visitor\'s key are the visitor\'s: the same name is not enough, a line with no key is not (a hub that sends keys sends them on every line), and a line under the other name still is', r.rows().map((x) => cls(x).indexOf('gc-me') !== -1), [true, false, true, false]);
+    r.s().recv(L(5, 'Maple Leaf', 'live, mine')); r.s().recv(Object.assign(L(6, 'Maple Leaf', 'live, not mine'), { k: OTHERS })); r.s().recv(Object.assign(L(7, 'Maple Leaf', 'live, mine'), { k: MINE }));
+    same('live lines too', r.rows().slice(4).map((x) => cls(x).indexOf('gc-me') !== -1), [false, false, true]);
+    const folded = rig({});
+    folded.live(W({ login: true, you: TWO })); folded.dock.open(false);
+    folded.s().recv(Object.assign(L(1, 'Maple Leaf', 'mine'), { k: MINE })); folded.s().recv(Object.assign(L(2, 'Maple Leaf', 'not mine'), { k: OTHERS }));
+    check('the unread count is the lines of others: the visitor\'s own is read, and another account that shows the same name is not the visitor', folded.pill() === '1');
+    const echo = rig({});
+    echo.live(W({ login: true, you: TWO }));
+    echo.dock.say('hello');
+    echo.s().recv(Object.assign(L(1, 'Maple Leaf', 'hello'), { k: OTHERS }));
+    echo.s().recv({ t: 'err', code: 'rate' });
+    check('a line of another account with the same name and the same words is not the answer to the visitor\'s line: that one still waits (and is refused as the oldest)', echo.note() === 'Slow down a little' && echo.field().value === 'hello');
+    const mineEcho = rig({});
+    mineEcho.live(W({ login: true, you: TWO }));
+    mineEcho.dock.say('hello');
+    mineEcho.s().recv(Object.assign(L(1, 'Maple Leaf', 'hello'), { k: MINE }));
+    mineEcho.s().recv({ t: 'err', code: 'rate' });
+    check('the visitor\'s own echo, by its key, answers the visitor\'s line: a refusal after it is nobody\'s', mineEcho.note() === '' && mineEcho.field().value === '');
+    const old = rig({});
+    old.live(W({ login: true, you: { name: 'maple.leaf', mod: false }, history: [{ id: 1, at: 1, who: 'maple.leaf', text: 'by the name, as the old hub says', mod: false }, { id: 2, at: 2, who: 'pebble', text: 'x', mod: false }] }));
+    same('a hub that sends no keys: a line is the visitor\'s by its name, as it always was', old.rows().map((x) => cls(x).indexOf('gc-me') !== -1), [true, false]);
+    const half = rig({});
+    half.live(W({ login: true, you: { name: 'maple.leaf', mod: false }, history: [Object.assign({ id: 1, at: 1, who: 'maple.leaf', text: 'x', mod: false }, { k: OTHERS })] }));
+    check('... also when only the lines have a key (a hub of the next version and a welcome of this one): the name decides', cls(half.rows()[0]).indexOf('gc-me') !== -1);
+    const huge = rig({});
+    huge.live(W({ login: true, you: Object.assign({}, TWO, { k: 'k'.repeat(5000) }), history: [{ id: 1, at: 1, who: 'x', text: 'y', mod: false, k: 'k'.repeat(5000) }] }));
+    check('a key that is far too long is cut, the same way on both sides, and nothing breaks', huge.errors.length === 0 && cls(huge.rows()[0]).indexOf('gc-me') !== -1 && one(huge.root, 'gc-an') !== null);
+}
+{   // a moderator's copy of a line has the author's username
+    const history = [{ id: 1, at: 1, who: 'Maple Leaf', text: 'hello', mod: false, k: OTHERS, u: 'aaa.one' }, { id: 2, at: 2, who: 'pebble', text: 'a line that shows the username', mod: false, k: MINE }];
+    const r = rig({});
+    r.live(W({ login: true, you: Object.assign({}, TWO, { mod: true }), history }));
+    r.s().recv(Object.assign(L(3, 'Maple Leaf', 'live'), { k: OTHERS, u: 'bbb.two' }));
+    const rows = r.rows();
+    check('the username is a <bdi> after the name, as text, in the history and in a live line, and a line that has none has none', rows.length === 3 && one(rows[0], 'gc-u').tagName === 'bdi' && one(rows[0], 'gc-u').textContent === 'aaa.one' && one(rows[2], 'gc-u').textContent === 'bbb.two' && one(rows[1], 'gc-u') === null
+          && rows[0].textContent === 'Maple Leafaaa.one: hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[0].children.indexOf(one(rows[0], 'gc-who')) < rows[0].children.indexOf(one(rows[0], 'gc-u')) && rows[0].children.indexOf(one(rows[0], 'gc-u')) < rows[0].children.indexOf(one(rows[0], 'gc-sep')));
+    const odd = rig({});
+    odd.live(W({ login: true, you: TWO, history: [{ id: 1, at: 1, who: 'a', text: 'x', mod: false, u: '<i>x</i> \u202eevil\u202c \u200b' }, { id: 2, at: 2, who: 'a', text: 'y', mod: false, u: 'u'.repeat(80) }, { id: 3, at: 3, who: 'a', text: 'z', mod: false, u: { x: 1 } }] }));
+    check('a username from the hub is text, cleaned and cut like a name, and what is not text is none', one(odd.rows()[0], 'gc-u').textContent === '<i>x</i> evil' && one(odd.rows()[1], 'gc-u').textContent === 'u'.repeat(32) + '\u2026' && one(odd.rows()[2], 'gc-u') === null
+          && odd.env.innerHTMLWrites.length === 0 && odd.log().all().every((e) => ['div', 'p', 'span', 'bdi'].indexOf(e.tagName) !== -1));
+}
+{   // other scripts: whole, in the line, the account line, the chip and the button
+    NAMED.forEach((name) => {
+        const r = menuOf(rig({ chip: true }));
+        r.live(W({ login: true, you: { name, mod: false, k: MINE, pick: 'display', other: name + '.x' }, history: [{ id: 1, at: 1, who: name, text: 'hello', mod: false, k: MINE, u: name + '.x' }] }));
+        check('a name in another script comes through whole (' + name + '): the line, its username, the account line, the chip, the button', r.rows()[0].textContent === name + name + '.x' + ': hello' && one(r.dock.slot, 'gc-an').textContent === name && one(r.chip, 'gc-cn').textContent === name
+              && one(r.root, 'gc-pick').textContent === 'Show my username: ' + name + '.x' && cls(r.rows()[0]).indexOf('gc-me') !== -1 && r.errors.length === 0);
+    });
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');

@@ -1,9 +1,8 @@
-// The two screens of the front page (web/lobby.html, docs/HOME_SCREEN.md): Home (a top bar over a stand-in picture of the Yard) and the Room (today's room page under a slim bar). One page, one WebSocket:
-// the page's client, model and session storage are never touched here, so Home <-> Room is a class on <body> (data-screen, web/home/home.css) and one render(): no request, the seat is never dropped.
-// Everything is made here as text and properties, never markup. ES5, no module system: a page gets AntsHome, node gets module.exports (tests/scripts/web_home_screen_check.js).
+// The two screens of the front page (web/lobby.html, docs/HOME_SCREEN.md): Home (a top bar over the Yard) and the Room (the room page under a slim bar). One page, one WebSocket: the page's client, model and
+// session storage are never touched here, so Home <-> Room is a class on <body> (data-screen, home.css) and one render(): no request, the seat is never dropped. Text and properties only, never markup. ES5:
+// a page gets AntsHome, node gets module.exports (tests/scripts/web_home_screen_check.js).
 //   * Home is "/", the Room "/#room" (pushState: Back goes to Home); a link ("?room=CODE") opens the Room; the page writes no history until a button is pressed.
-//   * A plain visit makes no room: My room makes a private one the first time. Quick join is disabled until the piece that lights it is in; Quick host and Games are lit by web/home/games.js, which loads after the first paint.
-//   * START reaches a guest on Home as on the Room (the page writes the key and goes to the game page): Home says so, and takes no press.
+//   * A plain visit makes no room: My room makes a private one. Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -52,11 +51,11 @@
     function reservedText(width, height) { return 'reserved: ' + Math.round(width) + ' x ' + Math.round(height) + ' px (everything under the top bar)'; }
 
     // ---- the screens ----
-    // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make() (a room of the page's own), leave(), how(), stalled(words) (optional: the hand-off did not come in 15 s, and again after a minute) } })
+    // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make(), leave(), how(), stalled(words) (optional), ... } })
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false;
+        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -187,8 +186,8 @@
         // ---- the screens and the address ----
         function path() { return win.location.pathname.replace(/^\/+/, '/'); }
         function stateOf(name) { var state = {}; state[STATE_KEY] = name; return state; }
-        // A button makes a new history entry for the screen that it goes to ("/" for Home, "/#room" for the Room), so that Back comes back. The entry that the page opened on has no mark of ours (a link
-        // opens the Room at "/?room=CODE"): it is marked with the screen it is the first time that we leave it, and its address stays. A browser that refuses (a sandboxed frame) keeps its address.
+        // A button makes a new history entry for the screen it goes to ("/" for Home, "/#room" for the Room), so that Back comes back. The entry that the page opened on is marked with its screen
+        // the first time that we leave it, and its address stays. A browser that refuses (a sandboxed frame) keeps its address.
         function push(from, to) {
             try {
                 var now = win.history.state;
@@ -230,7 +229,7 @@
             mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);
             gamesCall('sync');
         }
-        // A part that loads after the first paint (its script and its style, from one base name): once both are there onReady mounts it; a part that does not come leaves its buttons as they are
+        // A part that loads after the first paint (its script and style): once both are there onReady mounts it; a part that does not come leaves its buttons as they are
         function lazy(base, onReady) {
             var parts = 2;
             function one() { if (--parts === 0) { try { onReady(); } catch (e) { /* the part is its own */ } } }
@@ -258,38 +257,38 @@
                 gamesCall('inert', held || going);
             });
         }
-        // The page decided what it connects to: link (a link, or a test room, opens the Room), seat (it holds a room of this tab). Called once, before the page connects.
+        // The page decided what it connects to: link (a link or a test room: the Room), seat (it holds a room of this tab). Called once, before the page connects.
         function start(link, seat) {
             show(firstScreen(!!link, !!seat, win.location.hash), 'first');
             wantGames();
             win.addEventListener('popstate', function (e) { show(screenOf(e && e.state, win.location.hash, !!page.info().client), 'pop'); });
             win.addEventListener('resize', function () { fit(); if (menuOpen) placeMenu(); });
         }
-        // START reached this page: it is on its way to the game page, so both bars take no press (My room, Home, Leave room, Menu), and Home says so
+        // START reached this page: it is on its way to the game page, so both bars take no press, and Home says so
         function say() {
             going = true; closeMenu(); gamesCall('opening'); inert(held); if (screen === 'home') opening.hidden = false;
             if (goingTimer !== null) clearTimeout(goingTimer);
             if (failTimer !== null) clearTimeout(failTimer);
             failTimer = null;
-            goingTimer = setTimeout(function () {                // it did not come yet: Home takes presses again, but the seat may still be the game's (a slow page), so Leave room stays off, and the page says so
+            goingTimer = setTimeout(function () {                // not here yet: Home takes presses again, but the seat may still be the game's, so Leave room stays off, and the page says so
                 goingTimer = null; going = false; stalled = true; opening.hidden = true; leave.disabled = true; leave.setAttribute('aria-disabled', 'true'); inert(held);
                 tell(TEXT.slow);
                 failTimer = setTimeout(function () { failTimer = null; tell(TEXT.failed); }, GIVE_UP_MS - OPENING_MS);
             }, OPENING_MS);
         }
-        function tell(words) {                                   // the page's strip, and the Games list's buttons that wait for the game ("slow to open" first, "did not open" when a minute is gone)
+        function tell(words) {                                   // the page's strip, and the Games list's buttons that wait for the game
             said = words;
             try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }
             gamesCall('stalled', words);
         }
-        function inert(on) { held = !!on; [bar, rbar, dock && dock.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
-        // The chat dock (chat.js, chat.css) mounts into Home's div and is told which screen shows; what goes wrong with it stays with it
+        function inert(on) { held = !!on; [bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
+        // The chat dock (chat.js, chat.css) mounts into Home's div and is told which screen shows
         function dockShown() { try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ } }
         function wantDock() {
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
@@ -299,6 +298,12 @@
                 } catch (e) { /* no chat */ }
             }
             if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);
+        }
+
+        function wantPlayers() {                            // the players list (players.js, players.css), after the dock: it uses its socket
+            if (askedPlayers || !dock) return;
+            askedPlayers = true;
+            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: yard, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); });
         }
 
         return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };

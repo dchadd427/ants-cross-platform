@@ -506,11 +506,12 @@
             border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi);
             border-radius: 4px;
             box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow);
+            cursor: default;
         }
-        .name-step input::placeholder { color: #7f9c92; }
         .name-step-msg { margin-top: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
         .name-step-msg:empty { display: none; }
         .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
+        .name-step-hint a { color: var(--ink); text-decoration: underline; }
         .name-step-notice { margin-top: 8px; }
         .name-step-back { margin-top: 14px; }
 
@@ -985,8 +986,8 @@
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
         body.replay .header-actions.rep-only { flex: 0 0 auto; flex-wrap: nowrap; }
-        .rhead { flex: 1 1 0; min-width: 0; display: grid; gap: 5px; line-height: 1.15; align-content: center; }
-        .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); }
+        .rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; line-height: 1.15; align-content: center; }
+        .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); overflow-wrap: anywhere; }
         .rhead h2 small { font-size: 15px; font-weight: 500; }
         .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 5px 7px; }
         .chip { --c: #7d8a84; display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; padding: 1px 10px 1px 7px; font-size: 14px; line-height: 1.5; color: var(--cream); background: #0d171f; border: 1px solid #1c3a30; border-radius: 3px; white-space: nowrap; }
@@ -994,7 +995,7 @@
         .chip .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .chip[data-c="Green"] { --c: var(--c-green); } .chip[data-c="Red"] { --c: var(--c-red); } .chip[data-c="Blue"] { --c: var(--c-blue); } .chip[data-c="Black"] { --c: var(--c-black); }
         .pill { display: inline-block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5; padding: 0 6px; border-radius: 3px; vertical-align: 2px; white-space: nowrap; }
-        .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; }
+        .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; } .pill.own { color: var(--cream); background: #10281f; border: 1px solid var(--frame); }
 
         /* on the picture: what the page says over the game (small, so that the game's own bars stay clear). The REPLAY tag is not here: it rides with the bar (below), so nothing of it lies over the game */
         body.replay #game-container { container-type: inline-size; }
@@ -1052,7 +1053,7 @@
         .rnote { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; width: max-content; max-width: 94%; padding: 3px 12px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--cream); background: rgba(5, 10, 8, .88); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
 
         /* a message in place of the picture: the card of the name step (a card over the whole page, so that it fits any screen) */
-        .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); }
+        .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
         .rm-card p b { font-weight: 500; color: #fff; }
         .rm-card .rm-why { margin: 2px 0 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
         .rm-card .rm-sub { font-size: 15px; }
@@ -1106,7 +1107,7 @@
         .pill.lv { color: #ffc3bd; background: #3a0d11; border: 1px solid #9d0d17; letter-spacing: .1em; }
         .pill.lv::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .rhead h2 .pill.lv { font-size: 13px; vertical-align: 3px; }
-        body.live [data-dl], body.nodl [data-dl] { display: none !important; }
+        body.live [data-dl], body.nodl [data-dl], body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #copy-more, body.ownfile #stats-btn { display: none !important; }
         .rtag.lv b { color: #ff8c84; }
         .rtag.lv b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .tl .edge { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: #ff5a4f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 0 #9d0d17; }
@@ -1141,7 +1142,7 @@
     </style>
 </head>
 <body>
-    <script>if (/(^|[?&])(replay|live)=/.test(window.location.search)) document.body.className += ' replay'; if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed';</script>
+    <script>if (/(^|[?&])(replay|live|local)=/.test(window.location.search)) document.body.className += ' replay'; if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed'; if (/(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search)) document.body.className += ' ownfile';</script>
 
     <header>
         <h1 class="sr">Ants (1998)</h1>
@@ -1215,11 +1216,12 @@
             <div class="name-step-title banner" id="name-step-title">Join the match</div>
             <label for="name-step-input">Your name</label>
             <div class="name-step-row">
-                <input type="text" id="name-step-input" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="name-step-msg">
+                <input type="text" id="name-step-input" readonly aria-describedby="name-step-msg name-step-hint">
                 <button type="button" id="name-step-go" class="btn">Join</button>
             </div>
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
-            <div class="name-step-hint">The name the other players see. Leave it empty to play as Player.</div>
+            <div class="name-step-hint" id="name-step-hint">The name the other players see.</div>
+            <div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>
             <div class="name-step-hint name-step-notice">Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public.</div>
             <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
@@ -1373,7 +1375,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1401,7 +1403,7 @@
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
         //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of three);
         //   badDownload whether a download is not the game data
-        //   localArguments the arguments of a game on THIS computer (?map= or ?mapfile= &bots= &teams= &name=: the front page's Play and START for one), through a whitelist
+        //   localArguments the arguments of a game on THIS computer (?map= or ?mapfile= &bots= &teams= &name=: the front page's Play and START for one), through a whitelist; nameless: no name in the address
         var ANTS_PAGE = (function () {
             // The shapes are web/shapes.js's one table (AntsShapes, loaded above; the game's own is kAspectTable in include/ants_app/canvas_layout.hpp, and tests/scripts/test_web_shapes.py keeps them equal):
             // the names, their order (the selector's, left to right, and the place that the game's ants_set_aspect takes), each shape's steps (the game's canvas is a whole number of them) and the
@@ -1693,8 +1695,8 @@
                 }
                 return levels;
             }
-            function localArguments(search, remembered) {
-                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '', test: null }, q;
+            function localArguments(search) {
+                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '', test: null, nameless: false }, q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var map = (q.get('map') || '').toLowerCase();
                 if (Object.prototype.hasOwnProperty.call(LOCAL_MAPS, map)) {
@@ -1714,7 +1716,8 @@
                     out.teams = '0+' + teams[1];
                     out.args.push('--teams', out.teams);
                 }
-                var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('mapfile') || q.has('bots') || test) ? remembered : '');
+                var name = q.has('name') ? q.get('name') : '';
+                out.nameless = !q.has('name') && !!(q.has('map') || q.has('mapfile') || q.has('bots') || test);       // (a game here with no name in its address: the gate puts the person's own name in)
                 name = typeof name === 'string' ? name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32) : '';
                 if (name) {
                     out.name = name;
@@ -1831,23 +1834,21 @@
         //          (every start of such a room has them)
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
-        var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
-        // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
-        // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
+        var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null, ANTS_OWN_NAME = false;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
+        // Watching a replay: play.html?replay=<file>, a match that is still being played: play.html?live=<id>, or a file of your own: play.html?local=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
+        // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live", one with local= and no record is "choose the file again"; replay= wins over local=, which wins over live=). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else the shape nearest to the screen) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
-        var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);
+        var ANTS_REPLAY_MODE = /(^|[?&])(replay|live|local)=/.test(window.location.search), ANTS_OWN_MODE = ANTS_REPLAY_MODE && /(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search);      // (a file of your own: local=<id>)
         var ANTS_REPLAY_FILE = ANTS_REPLAY_MODE ? window.AntsReplay.fileOf(window.location.search) : null;
-        var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);
-        var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);      // the frame of a match page (web/match.html): the picture and the bar only
+        var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !ANTS_OWN_MODE && !/(^|[?&])replay=/.test(window.location.search);
+        var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_OWN_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);      // the frame of a match page (web/match.html): the picture and the bar only
         var ANTS_LIVE_ID = ANTS_LIVE_MODE ? window.AntsReplay.liveIdOf(window.location.search) : null;
         (function () {
             if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
             joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
             if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
-                var remembered = '';
-                try { remembered = window.localStorage.getItem('ants.name') || ''; } catch (e) { /* private window: not remembered */ }
-                var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test;
+                var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test; ANTS_OWN_NAME = local.nameless;
             }
         })();
 
@@ -1886,12 +1887,9 @@
         // ANTS_PAGE_END
         if (window.AntsRematch) AntsRematch.gamePage({ win: window, doc: document, Net: window.AntsLobbyNet, host: document.getElementById('rematch') });      // the rematch: when the match of a lobby room is over (window.antsMatchOver), the strip under the picture (web/front/rematch.js)
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
-        // THE PLAYER'S NAME, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only (the game's font cannot show anything else, so a text
-        // with an accent or any other character is refused with a line, not changed behind the player's back), the blanks at both ends cut off (a tab or a line end that a paste brings is dropped), at most
-        // 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one, so a room would rename such a name; here it is refused, with the reason; the same rule as ai::is_reserved_bot_name).
-        // An empty name is fine on the web: it means that none was chosen (the game's own "Player", or a random name where the page has seats to name). nameCheck(text) is { ok: true, name } or
-        // { ok: false, why }, why being a short line for the person. A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
-        var NAME_KEY = 'ants.name';
+        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
+        // both ends cut off, at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one): the rules of the desktop game's
+        // start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
         var NAME_MAX = 32;
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
@@ -1901,28 +1899,20 @@
             if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE NAME STEP of a link that somebody else shared (requested: when joining a link from somebody else, the page asks you first what you want your name to be): the field is filled in with
-        // the name that this browser remembered (ants.name), the person sees it and may change it, and only the button (or Enter) with a name that nameCheck accepts goes on: onDone(name) is called
-        // once with the name ('' for none, which is fine) and the name is remembered. A bad name is explained in ui.message and nothing happens. ui is { input, button, message, show(), hide() }, store
-        // is { recall(key), remember(key, value) } (the browser's storage, which may refuse: neither may throw).
-        function runNameStep(ui, store, onDone) {
-            var done = false;
-            var remembered = nameCheck(store.recall(NAME_KEY));
-            ui.input.value = remembered.ok ? remembered.name : '';
+        // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under the username (its shown name did not fit)
+        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', other: ' Your display name has characters that the game cannot show, so your username is used.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
+        // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join): the field shows the name that the person plays under (person.ready, front/player_name.js) and cannot
+        // be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it, unless anybody hid the card meanwhile (the way out). ui is { input, button, message, said(text, login), show(), hide() }.
+        function runNameStep(ui, person, onDone) {
+            var done = false, pressed = false, chosen = null, hide = ui.hide;
+            ui.hide = function () { done = true; hide.apply(ui, arguments); };
+            function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
+            ui.input.value = '';
             ui.show();
-            function confirm() {
-                if (done) return;
-                var checked = nameCheck(ui.input.value);
-                if (!checked.ok) { ui.message.textContent = checked.why; return; }
-                done = true;
-                ui.message.textContent = '';
-                store.remember(NAME_KEY, checked.name);
-                ui.hide();
-                onDone(checked.name);
-            }
+            person.ready(function (name, kind, swap, how) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login'); go(); });
+            function confirm() { pressed = true; go(); }
             ui.button.addEventListener('click', confirm);
             ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
-            ui.input.addEventListener('input', function () { ui.message.textContent = ''; });
             return confirm;
         }
         // NAME_END
@@ -1978,22 +1968,22 @@
         // REJOINKEY_END
 
         // NAMEGATE_BEGIN (tests/scripts/web_name_check.js runs this block)
-        // The game of a link that somebody shared starts only when its player has chosen a name: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after the
-        // name step is done, which puts the name into the game's arguments (--name; none for an empty name: the game's own Player) and opens the gate. The game does not connect before it starts.
-        function makeNameGate(pending, args, ui, store) {
-            var open = !pending;
+        // The game of a link that somebody shared starts only when its player has seen the card and pressed Join: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after the name
+        // step is done, which puts the name that the card showed into the game's arguments (--name) and opens the gate. A game on this computer with no name in its address (`own`) waits, with no card, for the person's name.
+        function makeNameGate(pending, args, ui, person, own) {
+            var open = !pending && !own;
             var waiting = [];
             var gate = {
-                pending: function () { return !open; },
+                pending: function () { return pending && !open; },
                 when: function (fn) { if (open) fn(); else waiting.push(fn); },
                 open: function () { open = true; var run = waiting; waiting = []; run.forEach(function (fn) { fn(); }); }
             };
             if (pending) {
-                runNameStep(ui, store, function (name) {
-                    if (name) args.push('--name', name);
+                runNameStep(ui, person, function (name) {
+                    args.push('--name', name);
                     gate.open();
                 });
-            }
+            } else if (own) person.ready(function (name) { args.push('--name', name); gate.open(); });
             return gate;
         }
         // A reload of a game that this browser is playing is no shared link: the page takes the name out of the address bar itself (below), so the address that a reload opens looks like one that somebody
@@ -2008,8 +1998,8 @@
         }
         // NAMEGATE_END
 
-        // The name step of a shared link (the gate above): a card in the loading screen, filled in with the name that this browser remembered. The address of a game that was opened with a name by
-        // web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
+        // The name step of a shared link (the gate above): a card in the loading screen that shows the name that the person plays under (their login's, else a guest's: front/player_name.js, which asks only when this card or a
+        // game here with no name needs it). The address of a game that was opened with a name by web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
         var ANTS_NAME_GATE = (function () {
             var asks = ANTS_PAGE.asksForName(window.location.search);
             if (asks) {                                           // (a browser that holds the key of this very seat is on its way back: no step, see holdsThisSeat)
@@ -2024,22 +2014,20 @@
                 input: document.getElementById('name-step-input'),
                 button: document.getElementById('name-step-go'),
                 message: document.getElementById('name-step-msg'),
+                said: function (text, login) { document.getElementById('name-step-hint').textContent = text; document.getElementById('name-step-login').hidden = !login; },
                 show: function () {
                     var room = '';
                     try { room = new URLSearchParams(window.location.search).get('room') || ''; } catch (e) { /* no address to read */ }
                     document.getElementById('name-step-title').textContent = 'Join the match ' + ANTS_PAGE.codeText(room);      // (text: the room code passed asksForName's rule; shown in two groups of three)
                     card.hidden = false;
-                    try { ui.input.focus(); } catch (e) { /* nothing to focus */ }
+                    try { ui.button.focus(); } catch (e) { /* nothing to focus */ }
                 },
                 hide: function () {
                     card.hidden = true;
                 }
             };
-            var store = {
-                recall: function (key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } },
-                remember: function (key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
-            };
-            return makeNameGate(asks, ANTS_ARGS, ui, store);
+            var PN = window.AntsPlayerName, own = !asks && ANTS_OWN_NAME;      // (a script of front/ that did not come: the person is a guest, and the card still works)
+            return makeNameGate(asks, ANTS_ARGS, ui, asks || own ? (PN ? PN.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : { ready: function (fn) { fn('Guest', 'guest', false, ''); } }) : null, own);
         })();
 
         // ?prediction=on in the address turns on the prediction of the player's own orders in a match of the network (the game's --prediction on; net::Prediction: they show at once and the confirmed
@@ -3165,7 +3153,7 @@
             var TPS = 20;                                                                          // turns per second
             var FEED_MS = 4000;                                                                    // a match that is being played is fetched again this often
             var FILE = ANTS_REPLAY_FILE;     // the replay on show (a live match gets one when it is over and was kept)
-            var LIVE_ID = ANTS_LIVE_ID;
+            var LIVE_ID = ANTS_LIVE_ID, OWN = ANTS_OWN_MODE ? R.ownPageOf(window, { say: function (text) { say(text); }, infoOf: function (bytes) { return window.AntsMapFiles ? window.AntsMapFiles.infoOfReplay(bytes) : null; } }) : null;      // (a file of your own: web/replay_page.js ownPage)
             var info = null;                 // what the game reported about the file
             var shown = null;                // the card that is up ('' none)
             var liveOn = ANTS_LIVE_MODE && !!LIVE_ID;       // the page follows a match that is being played (the red marks, the notch, "Jump to live"); not for a replay, nor after the match is over
@@ -3216,7 +3204,7 @@
             function lengthSeconds() { return info && info.turns ? Math.floor(info.turns / TPS) : 0; }
             // the length in the header of a replay: the file's own, else (a match that was watched live) what the game holds once it holds the whole file
             function headLength() { return info && info.turns ? lengthSeconds() : (!headPending && isReadyToPlay && get(VALUE.complete) === 1 ? Math.floor(get(VALUE.total) / TPS) : 0); }
-            function setHeader() {
+            function setHeader() { if (OWN) { OWN.header(info, headLength(), !!(info && info.turns && !info.over)); return; }
                 var title = $('r-title'), meta = $('r-meta');
                 title.textContent = '';
                 meta.textContent = '';
@@ -3277,8 +3265,8 @@
                     a.href = '/matches.html';
                     buttons.appendChild(a);
                 };
-                var made = info && info.game ? info.game : 'a version of the game';
-                if (kind === 'older') {
+                var made = info && info.game ? info.game : 'a version of the game', plan = OWN ? OWN.card(kind, { made: made, version: pageVersion(), map: info && info.map ? info.map : OWN.map(), why: why }) : null;
+                if (plan) { title = plan.title; plan.body.forEach(function (node) { body.appendChild(node); }); plan.buttons.forEach(function (node) { buttons.appendChild(node); }); } else if (kind === 'older') {      // (a file of your own has its own words: web/replay_page.js ownPage)
                     title = 'Recorded by an older version';
                     paragraph(['This match was played on ', bold(made), '. The rules of the game have changed since, and a replay only plays on a version with the same rules, so this version (', bold(pageVersion()), ') can’t show it.']);
                     paragraph(['You can still download the file.'], 'rm-sub');
@@ -3342,7 +3330,7 @@
             function cardFor(failure, text) {
                 if (failure === FAIL.older) card('older');
                 else if (failure === FAIL.newer) card('newer');
-                else card('cant', text);
+                else card(OWN && failure === FAIL.nomap && OWN.lacks(text) ? 'nomap' : 'cant', text);
             }
 
             // ---- the bar ----
@@ -3736,7 +3724,7 @@
                 else if (!window.fetch || !window.Promise) fetched = Promise.resolve({ error: 'load', text: 'this browser cannot fetch the match' });
                 else fetched = firstSnapshot();
             } else if (!FILE) {
-                fetched = Promise.resolve({ error: 'gone' });
+                fetched = OWN ? OWN.read() : Promise.resolve({ error: 'gone' });
             } else if (!window.fetch || !window.Promise) {
                 fetched = Promise.resolve({ error: 'load', text: 'this browser cannot fetch the recording' });
             } else {
@@ -3750,8 +3738,8 @@
                 fetched.then(function (got) {
                     if (got.error) return;                    // (its card is up already)
                     var seen = ANTS_LIVE_MODE ? latest : got.bytes, carried = window.AntsMapFiles ? window.AntsMapFiles.embeddedMapOfReplay(seen) : null, need = carried || (window.antsMapFiles ? window.AntsMapFiles.mapOfReplay(seen) : null);       // (a match on a test map carries its map, checked against the head's hash: nothing is fetched; else a match on a map of the players: fetched now; either way written when the game's file system is there)
-                    (carried ? Promise.resolve({ ok: true, bytes: carried.bytes }) : need ? window.antsMapFiles.fetchOnly(need.name, need.hash) : Promise.resolve({ ok: true })).then(function (map) {
-                        if (!map.ok) { card('cant', map.text); return; }
+                    (carried ? Promise.resolve(window.AntsMapFiles.carriedVerdict(carried)) : need ? window.antsMapFiles.fetchOnly(need.name, need.hash) : Promise.resolve({ ok: true })).then(function (map) {
+                        if (!map.ok) { card(OWN && map.mismatch ? 'changed' : OWN && map.gone ? 'nomap' : 'cant', map.text); return; }
                         if (map.bytes) Module.preRun.push(window.AntsMapFiles.writer(function () { return Module.FS; }, need.name, map.bytes));
                         if (ANTS_LIVE_MODE) {
                             Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', latest); applied = latest; });          // (the newest file: the feed went on while the data came)
@@ -3766,17 +3754,17 @@
             };
             // a file that is gone is said at once, while the game's data is still coming (the card covers the loading screen); a live match is looked at again every few seconds from the first answer on
             fetched.then(function (got) {
-                if (got.error === 'gone') card('gone');
+                if (got.error === 'gone' || got.error === 'again') card(got.error);
                 else if (got.error === 'notlive') card('notlive');
                 else if (got.error === 'over') card('over', got.replay);
                 else if (got.error) card('cant', got.text);
-                else if (ANTS_LIVE_MODE) { latest = got.bytes; feedTimer = setTimeout(feed, FEED_MS); }
+                else if (ANTS_LIVE_MODE) { latest = got.bytes; feedTimer = setTimeout(feed, FEED_MS); } else if (OWN) setHeader();      // (the record is read: the header can say the map, the players and the name of the file)
             });
             setHeader();
             liveClasses();
             $('watch-link').setAttribute('aria-current', 'page');   // (the footer says where the player is: the list of matches)
             $('watch-link').removeAttribute('target'); $('watch-link').removeAttribute('rel');   // (and nothing is being played here, so it goes in this tab, like "All matches")
-            window.antsReplayPlaceBar();
+            window.antsReplayPlaceBar(); if (OWN) OWN.chrome();
             setInterval(tick, 100);
             tick();
         })();

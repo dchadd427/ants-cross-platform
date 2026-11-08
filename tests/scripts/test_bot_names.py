@@ -4,7 +4,7 @@
 The list is ONE file; tools/gen_bot_names.py makes the C++ table (src/ants_ai/bot_names_data.inc) and the JavaScript table (the generated block of web/front/bot_names.js) from it.
   - TheGenerator: the committed outputs are what the generator makes (`--check`), the generator refuses a list that breaks a rule, and `--check` fails on an output that was edited by hand.
   - TheList: all printable ASCII letters, 3 to 8 of them, unique in any case, none of the blocklist (tests/data/bot_names_blocklist.txt, and the matcher itself is tested on made-up words),
-    none of the page's twelve placeholder names, 240 to 260 names.
+    240 to 260 names.
   - TheScript: web/front/bot_names.js is a plain ES5 script that node and a page can load.
   - TheJavaScript: tests/scripts/web_bot_names_check.js runs it against the tables that the C++ test (tests/test_ai/test_ai_names.cpp) is held to as well (golden vectors, the digests of
     10,000 keys, the cases of the label, the parser and the reserved-name rule); a third, independent implementation of the picker in this file must agree with it on 3,000 keys; and
@@ -28,7 +28,6 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_bot_names_check.js")
 LIB = os.path.join(REPO, "web", "front", "bot_names.js")
 LIST = os.path.join(REPO, "tools", "bot_names.txt")
 BLOCKLIST = os.path.join(REPO, "tests", "data", "bot_names_blocklist.txt")
-RULES = os.path.join(REPO, "web", "front", "lobby_rules.js")
 GENERATOR = os.path.join(REPO, "tools", "gen_bot_names.py")
 NODE = shutil.which("node")
 M64 = (1 << 64) - 1
@@ -51,11 +50,6 @@ def blocked(name, words):
     """The words of the blocklist that a name is, or holds: `=word` only as the whole name, `word` anywhere inside it (case ignored)."""
     low = name.lower()
     return [w for w in words if (low == w[1:] if w.startswith("=") else w in low)]
-
-
-def web_placeholders():
-    m = re.search(r"var NAMES = \[([^\]]*)\]", read(RULES))
-    return [s.strip().strip("'") for s in m.group(1).split(",")]
 
 
 def mix64(z):
@@ -153,11 +147,6 @@ class TheList(unittest.TestCase):
             self.assertRegex(n, r"^[A-Z][a-z]{2,7}$", n)                         # printable ASCII letters only, 3 to 8 of them
             self.assertTrue(n.isascii() and n.isprintable())
         self.assertEqual(len({n.lower() for n in names}), len(names), "unique in any case")
-
-    def test_none_is_one_of_the_pages_twelve_placeholders(self):
-        placeholders = web_placeholders()
-        self.assertEqual(len(placeholders), 12)
-        self.assertEqual(set(names_of_list()) & set(placeholders), set())
 
     def test_no_name_is_or_holds_a_word_of_the_blocklist(self):
         words = blocklist()

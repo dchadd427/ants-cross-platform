@@ -53,8 +53,8 @@ const N = require(path.join(path.dirname(path.resolve(rulesPath)), 'lobby_net.js
 // 0. What the library offers
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 same('the library exports exactly these names (a new one needs a table here)', Object.keys(RAW).sort(), [
-    'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'NAMES', 'TEXT',
-    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter', 'pickName',
+    'ACTS', 'CODE_CHARS', 'COLORS', 'DEFAULT_MAP_KEY', 'GRID', 'HINT', 'KINDS', 'MAPS', 'META', 'TEXT',
+    'article', 'banner', 'codeText', 'communityName', 'hostName', 'levelWord', 'listOf', 'makeCode', 'mapByKey', 'mapOfFile', 'modelOf', 'moveOf', 'nameAt', 'nameCheck', 'nameOf', 'notBack', 'noticeKind', 'pairOf', 'pendingAfter',
     'planWith', 'playing', 'pressSide', 'reconcileSides', 'shownOf', 'sideOpen', 'sideView', 'sidesFix', 'startNote', 'startsAlone', 'teamBytes', 'teamNeedsFix', 'teamsText', 'typedCode', 'validMapFile', 'viewOf', 'withMode'
 ]);
 
@@ -83,10 +83,10 @@ const nameBlockShell = between(shellText, 'NAME_BEGIN', 'NAME_END', shellPath);
 const nameBlockLobby = between(lobbyText, 'NAME_BEGIN', 'NAME_END', lobbyPath);
 check('the NAME block of web/shell.html and of web/lobby.html is the same text, byte for byte', nameBlockShell === nameBlockLobby);
 check('... and it is the block of the rules (not an empty one)', nameBlockShell.length > 1500 && /function nameCheck\(/.test(nameBlockShell) && /function runNameStep\(/.test(nameBlockShell));
-const pageOf = (block) => new Function(block + '\nreturn { nameCheck: nameCheck, KEY: NAME_KEY, MAX: NAME_MAX };')();
+const pageOf = (block) => new Function(block + '\nreturn { nameCheck: nameCheck, MAX: NAME_MAX };')();
 const pageShell = pageOf(nameBlockShell);
 const pageLobby = pageOf(nameBlockLobby);
-check('the name is remembered under ants.name and has at most 32 characters (both pages)', pageShell.KEY === 'ants.name' && pageLobby.KEY === 'ants.name' && pageShell.MAX === 32 && pageLobby.MAX === 32);
+check('a name has at most 32 characters (both pages)', pageShell.MAX === 32 && pageLobby.MAX === 32);
 
 const NAME_TABLE = [
     // [what is typed, ok, the name that comes back]   (the table of tests/scripts/web_name_check.js, section 1, and a few rows more)
@@ -121,11 +121,8 @@ same('the three refusals say what they are about, in the game page\'s words', [R
 check('a name that is too long and not ASCII is refused for the characters first; too long and "Bot (" for the length', /ASCII/.test(R.nameCheck('é' + 'a'.repeat(40)).why) && /32/.test(R.nameCheck('Bot (' + 'x'.repeat(40)).why));
 check('the blanks that were cut are the only change: a name never comes back longer, changed or in another case', ['  Sam  ', 'sAm', 'Sam Lee'].every((t) => R.nameCheck(t).name === t.trim()));
 
-// A name for somebody who typed none
-check('the picked names are distinct, short, printable, and each is a name that nameCheck takes as it is', new Set(R.NAMES).size === R.NAMES.length && R.NAMES.length >= 8 && R.NAMES.every((n) => { const c = R.nameCheck(n); return c.ok && c.name === n && n.length <= 32 && n !== ''; }));
-R.NAMES.forEach((n, k) => same('pickName(' + ((k + 0.5) / R.NAMES.length).toFixed(3) + ') is the name number ' + k, R.pickName((k + 0.5) / R.NAMES.length), n));
-same('pickName(0) is the first name and pickName(0.999999) the last', [R.pickName(0), R.pickName(0.999999)], [R.NAMES[0], R.NAMES[R.NAMES.length - 1]]);
-[1, 1.5, -0.1, NaN, Infinity, '0.5', null, undefined, {}].forEach((v) => same('pickName(' + String(v) + ') is a name all the same (the first)', R.pickName(v), R.NAMES[0]));
+// The twelve plant names of earlier versions are gone: nobody types a name and nobody is given a made-up one (the person's login name or a guest name: front/player_name.js, tests/scripts/web_player_name_check.js)
+check('the library has no table of names and no picked name any more', R.NAMES === undefined && R.pickName === undefined);
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 2. Room codes
@@ -575,12 +572,12 @@ function show(c) {
     const o = { seat: c.seat, color: c.color.name, kind: c.kind, who: c.who.map((w) => w.text + '/' + w.cls), stat: c.stat };
     if (c.statCls !== 'pstat') o.statCls = c.statCls;
     ['mode', 'tab', 'label', 'drop'].forEach((f) => { if (c[f]) o[f] = c[f]; });
-    ['pencil', 'remove', 'ask', 'grip'].forEach((f) => { if (c[f]) o[f] = true; });
+    ['remove', 'ask', 'grip'].forEach((f) => { if (c[f]) o[f] = true; });
     if (c.teams) o.teams = c.teams.map((t) => (t.pressed ? '+' : '-') + t.side + (t.disabled ? 'x' : '')).join(' ');
     return o;
 }
 const seatName = ['Green', 'Red', 'Blue', 'Black'];
-const youHost = (seat, extra, name) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [(name || 'Juniper') + '/nm', 'You/you'], stat: 'Host. You start the match.', pencil: true, grip: true, label: seatName[seat] + ': ' + (name || 'Juniper') + ', you, host' }, extra || {});
+const youHost = (seat, extra, name) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: [(name || 'Juniper') + '/nm', 'You/you'], stat: 'Host. You start the match.', grip: true, label: seatName[seat] + ': ' + (name || 'Juniper') + ', you, host' }, extra || {});
 const sam = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Sam/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': Sam' }, extra || {});
 const priya = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'person', who: ['Priya/nm'], stat: 'In the room', remove: true, grip: true, label: seatName[seat] + ': Priya' }, extra || {});
 const open = (seat, extra) => Object.assign({ seat: seat, color: seatName[seat], kind: 'open', who: [], stat: 'Takes the next player who joins.', mode: 'open', grip: true, label: seatName[seat] + ': open' }, extra || {});
@@ -658,7 +655,7 @@ expectView('picture 4 (a player\'s screen)', view(S4), {
         { seat: 0, color: 'Green', kind: 'person', who: ['Juniper/nm', 'Host/you'], stat: 'Starts the match.', tab: 'Team 1', label: 'Green: Juniper, host' },
         { seat: 1, color: 'Red', kind: 'bot', who: ['Easy bot/'], stat: 'Computer player', tab: 'Team 2', label: 'Red: Easy bot' },
         { seat: 2, color: 'Blue', kind: 'bot', who: ['Medium bot/'], stat: 'Computer player', tab: 'Team 2', label: 'Blue: Medium bot' },
-        { seat: 3, color: 'Black', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Waiting for the host to start.', pencil: true, tab: 'Team 1', label: 'Black: Sam, you' }
+        { seat: 3, color: 'Black', kind: 'person', who: ['Sam/nm', 'You/you'], stat: 'Waiting for the host to start.', tab: 'Team 1', label: 'Black: Sam, you' }
     ], play: [0, 1, 2, 3], sides: [1, 0, 0, 1],
     top: { heading: 'Juniper’s room', guest: true, ro: true },
     notes: { invite: NOTE_INVITE, slots: 'Juniper arranges the colors and starts the match.', teams: 'Teams: Green + Black against Red + Blue.', teamsWarn: false },
@@ -702,14 +699,14 @@ expectView('picture 15b (the connection is lost)', view(S14, { offline: 'lost' }
     notes: { invite: NOTE_INVITE, slots: 'Your color is kept for a minute while the page gets you back in.', teams: FREE, teamsWarn: false },
     side: side({ mapDisabled: true, startDisabled: true, startLabel: 'Reconnecting…', plan: 'START comes back as soon as you are in.', planShort: 'Getting you back in' })
 });
-same('the connection is lost on a player\'s screen: START says Reconnecting, the pencil is gone', [view(S4, { offline: 'lost' }).side.startLabel, view(S4, { offline: 'lost' }).cards.map((c) => c.pencil)], ['Reconnecting…', [false, false, false, false]]);
+same('the connection is lost on a player\'s screen: START says Reconnecting', view(S4, { offline: 'lost' }).side.startLabel, 'Reconnecting…');
 // picture 16: the page that waits for a name (a room of nobody: four open colors, nothing to press)
 {
     const blank = R.modelOf({ slots: ALL.map(() => ({ state: 0, name: '', rtt: 0, platform: 0 })), plan: [0, 0, 0, 0], map: 'TREASURE.LVL', you: 0, leader: 0, teamA: 255, teamB: 255, inGame: 0, starting: false });
     const v = R.viewOf(blank, ctx({ offline: 'join' }));
     same('picture 16 (joining a room): four open colors, nothing to press, no names, START off',
-        [v.heading, v.cards.map((c) => [c.kind, c.who.map((w) => w.text), c.stat, c.grip, c.mode, !!c.teams, c.pencil, c.remove]), v.notes, v.side.startLabel, v.side.startDisabled, v.side.mapDisabled, v.side.plan, v.side.planShort],
-        ['Joining a room', ALL.map(() => ['open', ['Open'], 'Takes the next player who joins.', false, '', false, false, false]), { invite: NOTE_INVITE, slots: '', teams: '', teamsWarn: false }, 'START!', true, true, '', '']);
+        [v.heading, v.cards.map((c) => [c.kind, c.who.map((w) => w.text), c.stat, c.grip, c.mode, !!c.teams, c.remove]), v.notes, v.side.startLabel, v.side.startDisabled, v.side.mapDisabled, v.side.plan, v.side.planShort],
+        ['Joining a room', ALL.map(() => ['open', ['Open'], 'Takes the next player who joins.', false, '', false, false]), { invite: NOTE_INVITE, slots: '', teams: '', teamsWarn: false }, 'START!', true, true, '', '']);
     const none = R.viewOf(blank, ctx({ offline: 'none' }));
     same('a page with no room (the server refused, or cannot be reached): no line of its own, START off, "No room yet"', [none.heading, none.notes.slots, none.side.startLabel, none.side.startDisabled, none.side.plan, none.side.planShort], ['Your room', '', 'START!', true, 'There is no room yet.', 'No room yet']);
 }
@@ -725,10 +722,8 @@ same('the connection is lost on a player\'s screen: START says Reconnecting, the
     same('while START waits and while the link is lost (or there is no room) there is no Remove button and no question', [view(S13, { removing: 1 }), view(S14, { removing: 1, offline: 'lost' }), view(S14, { removing: 1, offline: 'none' }), view(S14, { removing: 1, offline: 'join' })].map((v) => [v.removing, v.cards.some((c) => c.remove || c.ask)]),
         [[-1, false], [-1, false], [-1, false], [-1, false]]);
 }
-// picture 16c: the pencil of a player's own name, on a player's screen too; not while START waits, not while the link is lost
-same('picture 16c: the pencil is on the page\'s own name only (the host\'s, a player\'s), not while START waits or the link is lost', [
-    view(S14), view(S4), view(S13), view(S13b), view(S14, { offline: 'lost' }), view(S4, { offline: 'lost' })
-].map((v) => v.cards.map((c) => c.pencil ? 1 : 0).join('')), ['1000', '0001', '0000', '0000', '0000', '0000']);
+// (the room's cards have no field for a name: a player's own name is shown like the others', and the pencil of earlier versions is gone: nobody types a name)
+check('no card has a pencil: nobody types a name on the web', [view(S14), view(S4), view(S13), view(S13b), view(S14, { offline: 'lost' }), view(S4, { offline: 'lost' })].every((v) => v.cards.every((c) => c.pencil === undefined)));
 // the grips (the dots: drag a player onto another color) and the drop-downs are the host's, while the room is open
 same('only the host of an open room can drag (grips) and set the colors (drop-downs): a player, START, a lost link have none', [view(S2), view(S4), view(S13), view(S2, { offline: 'lost' }), view(S2, { offline: 'none' })].map((v) => [v.cards.filter((c) => c.grip).length, v.cards.filter((c) => c.mode).length]), [[4, 2], [0, 0], [0, 0], [0, 0], [0, 0]]);
 
@@ -1005,7 +1000,6 @@ for (let i = 0; i < 700; i++) {
         holds('viewOf: four cards, in seat order, each with its color', v.cards.length === 4 && v.cards.every((c, s) => c.seat === s && c.color === R.COLORS[s] && c.kind === m.slots[s].kind), Dv);
         holds('viewOf: read-only (a player, START, no link): no dots, no drop-down, no Remove, no question, no buttons', !ro || v.cards.every((c) => !c.grip && c.mode === '' && !c.remove && !c.ask && c.teams === null), Dv);
         holds('viewOf: the host of an open room can drag every card and set every color that no person holds', ro || v.cards.every((c) => c.grip && (c.mode !== '') === (c.kind !== 'person')), Dv);
-        holds('viewOf: the pencil is on the page\'s own name, while the room is open and the link is there', v.cards.every((c, s) => c.pencil === (m.slots[s].kind === 'person' && !!m.slots[s].me && !m.starting && !offline)), Dv);
         holds('viewOf: Remove is on persons that are neither the page nor the leader, never on a read-only screen; one question at a time, and it is the one that removing says', (() => {
             const ask = v.cards.filter((c) => c.ask).map((c) => c.seat);
             const okRemove = v.cards.every((c, s) => (c.remove || c.ask) === (!ro && m.slots[s].kind === 'person' && !m.slots[s].me && !m.slots[s].leader));
@@ -1111,7 +1105,7 @@ check('the random rooms were many and of every kind (the generator is not stuck)
     const keep = (x) => { if (typeof x === 'string') fixed.add(x); else if (Array.isArray(x)) x.forEach(keep); else if (x && typeof x === 'object') Object.keys(x).forEach((k) => keep(x[k])); };
     [S1, S2, S5, S14, S13, S13b, S4, S12].forEach((room) => [{}, { picked: 1 }, { removing: 1 }, { offline: 'lost' }, { offline: 'none' }, { offline: 'join' }, { refusal: 'A refusal.' }].forEach((o) => keep(R.viewOf(model(room), ctx(o)))));
     BANNERS.forEach((b) => keep(R.banner(b[0], b[1])));
-    keep([R.TEXT.noroom(), R.HINT, R.ACTS, R.MAPS.map((x) => x.info), R.NAMES, R.nameCheck('é').why, R.nameCheck('a'.repeat(40)).why, R.nameCheck('Bot (x)').why, R.typedCode('').why, R.typedCode('!').why, R.teamsText([0, 0, 0, 0], [0, 1], false), R.teamsText([0, 0, 0, 0], ALL, false)]);
+    keep([R.TEXT.noroom(), R.HINT, R.ACTS, R.MAPS.map((x) => x.info), R.nameCheck('é').why, R.nameCheck('a'.repeat(40)).why, R.nameCheck('Bot (x)').why, R.typedCode('').why, R.typedCode('!').why, R.teamsText([0, 0, 0, 0], [0, 1], false), R.teamsText([0, 0, 0, 0], ALL, false)]);
     Object.keys(R.TEXT).forEach((k) => keep(R.TEXT[k]({ server: 'S.', host: 'H', leaver: 'L', guest: true, map: 'M' })));
     const all = Array.from(fixed).concat(Array.from(strings));
     check('no line of the screen says "friend" (a project rule: player)', all.every((s) => !/friend/i.test(s)), all.filter((s) => /friend/i.test(s)).join(' | '));

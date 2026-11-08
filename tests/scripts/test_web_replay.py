@@ -136,9 +136,9 @@ class ThePlayerPage(unittest.TestCase):
 
     def test_everything_of_the_replay_is_hidden_unless_the_address_asks_for_a_replay(self):
         self.assertIn("body:not(.replay) .rep-only { display: none !important; }", self.page)
-        self.assertIn("if (/(^|[?&])(replay|live)=/.test(window.location.search)) document.body.className += ' replay';", self.page)
-        self.assertIn("var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);", self.page)
-        self.assertIn("var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);", self.page)    # (a replay's address wins over a live id)
+        self.assertIn("if (/(^|[?&])(replay|live|local)=/.test(window.location.search)) document.body.className += ' replay';", self.page)     # (a file of your own, local=<id>, is a replay of the page too: tests/scripts/test_web_replay_open.py)
+        self.assertIn("var ANTS_REPLAY_MODE = /(^|[?&])(replay|live|local)=/.test(window.location.search), ANTS_OWN_MODE = ANTS_REPLAY_MODE && /(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search);", self.page)
+        self.assertIn("var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !ANTS_OWN_MODE && !/(^|[?&])replay=/.test(window.location.search);", self.page)    # (a replay's address wins over a local id, and a local id over a live one)
         self.assertIn("window.AntsReplay.fileOf(window.location.search)", self.page)
         self.assertIn("window.AntsReplay.liveIdOf(window.location.search)", self.page)
         self.assertLess(self.page.index('<script src="replay_page.js"></script>'), self.page.index("var ANTS_REPLAY_MODE"))
@@ -226,7 +226,7 @@ class TheLiveGlue(unittest.TestCase):
     def test_the_pieces_that_only_a_live_match_uses_are_all_there_once(self):
         for ident in ("rtag-b", "livebox", "livenow", "b-live"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
-        self.assertIn("body.live [data-dl], body.nodl [data-dl] { display: none !important; }", self.page)   # (no Download while there is no whole file)
+        self.assertIn("body.live [data-dl], body.nodl [data-dl], body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #copy-more, body.ownfile #stats-btn { display: none !important; }", self.page)   # (no Download while there is no whole file, and none for a file of your own, which has no link to copy and no stats either)
         for words in ("Jump to live", ">Live<", ">REPLAY<"):
             self.assertIn(words, self.page, words)
 

@@ -16,6 +16,7 @@ import json
 import os
 import re
 import signal
+import socket as socket_module
 import sqlite3
 import subprocess
 import sys
@@ -34,7 +35,7 @@ import fake_discord as fd  # noqa: E402
 import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
 from login_flow import Visitor  # noqa: E402
-from hub import config as configmod, discord as discordmod, limits as limitmod, login as loginmod, store as storemod  # noqa: E402
+from hub import config as configmod, discord as discordmod, limits as limitmod, login as loginmod, store as storemod, text as textrules  # noqa: E402
 
 CALLBACK = hc.SITE + "/hub/callback"
 SESSION_COOKIE = re.compile(r"^__Host-ants_hub=([0-9a-f]{32}); Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Strict$")
@@ -48,6 +49,32 @@ FUTURE = fd.snowflake(-30)                 # an id that says it was made next mo
 
 def sha(value):
     return hashlib.sha256(value.encode("ascii")).hexdigest()
+
+
+def wire(client, seconds=0.6):
+    """The bytes of every text frame that arrives within `seconds` of silence (the hub's pings are answered and skipped): what a socket was sent, as it was sent."""
+    out = []
+    while True:
+        try:
+            opcode, payload = client.recv_frame(seconds)
+        except (socket_module.timeout, BlockingIOError, EOFError):
+            return out
+        if opcode == 9:
+            client.send(hc.frame(10, payload))
+        elif opcode == 1:
+            out.append(payload)
+
+
+def pick_frame(word):
+    return hc.frame(1, json.dumps({"t": "pick", "pick": word}).encode("utf-8"))
+
+
+def you_without_the_key(you):
+    """The welcome's `you` (or the one of /hub/me) without its key, which is a new one at every start of the hub: only its shape is checked here."""
+    if you is None:
+        return None
+    assert re.fullmatch(r"[0-9a-f]{12}", you["k"]), you
+    return {k: v for k, v in you.items() if k != "k"}
 
 
 class LoginTest(unittest.TestCase):
@@ -333,17 +360,17 @@ class TheCallback(LoginTest):
             if os.path.exists(self.rig.db + suffix):
                 with open(self.rig.db + suffix, "rb") as f:
                     blob += f.read()
-        for canary in (token, "canary-refresh-", "canary-email", "Maple", self.fake.client_secret, "Bearer"):
+        for canary in (token, "canary-refresh-", "canary-email", "canary-avatar-hash", self.fake.client_secret, "Bearer"):
             self.assertNotIn(canary.encode(), blob, canary)
         self.assertEqual(self.rows("lines"), [])
         log = self.rig.log_text.getvalue()
-        for canary in (token, "canary-refresh", "canary-email", self.fake.client_secret):
+        for canary in (token, "canary-refresh", "canary-email", "canary-avatar-hash", self.fake.client_secret):
             self.assertNotIn(canary, log)
 
     def test_the_login_makes_the_socket_a_member_who_may_write(self):
         v = self.member()
         member = self.socket(v)
-        self.assertEqual((member.welcome["login"], member.welcome["you"]), (True, {"name": "maple.leaf", "mod": False}))
+        self.assertEqual((member.welcome["login"], you_without_the_key(member.welcome["you"])), (True, {"name": "maple.leaf", "mod": False}))
         reader = self.socket()
         self.assertEqual((reader.welcome["login"], reader.welcome["you"]), (True, None))
         member.say("hello from discord")
@@ -636,6 +663,11 @@ class TheLimitsAreWhatTheDocsSay(unittest.TestCase):
         self.assertIn("10 seconds for Discord's two calls in all", row)
         self.assertIn("10 logins kept for an account and 100,000 in all (the oldest go)", row)
 
+    def test_the_cap_of_the_profiles_is_the_number_of_the_paragraph_on_the_data(self):
+        with open(os.path.join(REPO, "docs", "HUB.md"), encoding="utf-8") as f:
+            self.assertIn("the table keeps at most 100,000 (the ones refreshed longest ago go, as the logins do)", f.read())
+        self.assertEqual(limitmod.Limits().profiles_total, 100000)
+
 
 class TheSessionsAreKept(LoginTest):
     def test_an_expired_login_is_nobody_and_the_hub_cleans_up_after_it(self):
@@ -746,7 +778,7 @@ class TheModeratorsOfTheSettings(LoginTest):
     def test_a_moderator_is_marked_in_the_welcome_and_his_lines(self):
         v = self.member()
         c = self.socket(v)
-        self.assertEqual(c.welcome["you"], {"name": "maple.leaf", "mod": True})
+        self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": True})
         c.say("a word from a moderator")
         self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["mod"], True)
 
@@ -756,7 +788,7 @@ class TheMeOfAModerator(LoginTest):
 
     def test_me_says_mod(self):
         v = self.member()
-        self.assertEqual(v.call("GET", "/hub/me").json()["you"], {"name": "maple.leaf", "mod": True})
+        self.assertEqual(you_without_the_key(v.call("GET", "/hub/me").json()["you"]), {"name": "maple.leaf", "mod": True})
 
 
 class TheAgeSetting(LoginTest):
@@ -797,7 +829,7 @@ class TheBansAndMutesStandWhateverTheAccountDoes(LoginTest):
         v = self.member()
         reader = self.socket()
         c = self.socket(v)
-        self.assertEqual(c.welcome["you"], {"name": "maple.leaf", "mod": False})    # (it can log in: it is a reader with a name)
+        self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": False})    # (it can log in: it is a reader with a name)
         self.assertTrue(c.welcome["history"] == [] and c.welcome["login"])
         c.say("let me in")
         self.assertEqual(c.recv_json(), {"t": "err", "code": "banned"})
@@ -837,7 +869,9 @@ class TheMe(LoginTest):
     def test_it_says_who_the_cookie_is_and_to_nobody_else(self):
         v = self.member()
         r = v.call("GET", "/hub/me")
-        self.assertEqual((r.status, r.json()), (200, {"login": True, "you": {"name": "maple.leaf", "mod": False}}))
+        body = r.json()
+        self.assertEqual((r.status, body["login"], you_without_the_key(body["you"])), (200, True, {"name": "maple.leaf", "mod": False}))
+        self.assertEqual(body["you"]["k"], self.socket(v).welcome["you"]["k"])               # (the same key as the welcome's)
         self.assertEqual(r.get("cache-control"), "no-store")
         self.assertTrue(r.get("content-type").startswith("application/json"))
         self.assertEqual(self.visitor().call("GET", "/hub/me").json(), {"login": True, "you": None})
@@ -852,6 +886,348 @@ class TheMe(LoginTest):
         self.assertEqual(v.call("GET", "/hub/me", origin=hc.SITE).status, 200)
         self.assertEqual(v.call("POST", "/hub/me").status, 405)
         self.assertEqual(v.call("GET", "/hub/me?x=1").status, 404)
+
+
+# ===================================================================================================================================================
+MOD_ID = "5550001"
+SECOND = fd.snowflake(800)
+
+
+class TheDisplayName(LoginTest):
+    """The display name (`global_name`) that Discord says in the answer to the one question that the login asks: kept in the account's profile, shown in the chat by default, and never a reason
+    to refuse or fail a login."""
+    user = (OLD, "maple.leaf", "Maple Leaf")
+
+    def test_the_login_keeps_both_names_in_the_profile_and_picks_the_display_name_and_the_login_keeps_the_username_as_it_did(self):
+        self.member()
+        (account, username, display, pick, updated), = self.rows("profiles")
+        self.assertEqual((account, username, display, pick), (OLD, "maple.leaf", "Maple Leaf", "display"))
+        self.assertAlmostEqual(updated, time.time(), delta=5)
+        (_key, account, name, _created, _expires), = self.rows()
+        self.assertEqual((account, name), (OLD, "maple.leaf"))
+
+    def test_the_chat_shows_the_display_name_and_the_welcome_and_me_say_so_and_offer_the_switch(self):
+        v = self.member()
+        c = self.socket(v)
+        self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "Maple Leaf", "mod": False, "pick": "display", "other": "maple.leaf"})
+        me = v.call("GET", "/hub/me").json()
+        self.assertEqual(me, {"login": True, "you": c.welcome["you"]})
+        reader = self.socket()
+        reader.drain(0.2)
+        c.say("hello from a display name")
+        line = next(m for m in reader.drain(0.5) if m["t"] == "line")
+        self.assertEqual((line["who"], line["text"], line["k"]), ("Maple Leaf", "hello from a display name", c.welcome["you"]["k"]))
+        self.assertNotIn("u", line)
+
+    def test_no_display_name_no_switch(self):
+        self.fake.user = (OLD, "maple.leaf")
+        v = self.member()
+        c = self.socket(v)
+        self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": False})
+        self.assertEqual(self.rows("profiles")[0][1:4], ("maple.leaf", "", "username"))
+        self.assertEqual(v.call("GET", "/hub/me").json()["you"], c.welcome["you"])
+
+    def test_a_display_name_that_cannot_be_shown_is_none_and_the_login_is_never_refused_or_failed_for_it(self):
+        nothing = [None, 5, 1.5, True, False, [], {}, ["Maple Leaf"], {"name": "Maple Leaf"}, "", " ", "\u200b\u200b", "x", "\U0001f600\U0001f600", "\u3164", "a" * 129, "a" * 20000, "<", "mod", "Admin", "ADMIN", "Adm1n",
+                   "a.d.m.i.n", "\u0410dmin", "\u0391dmin", "Moderator", "..", "\u0301\u0302"]
+        for n, value in enumerate(nothing):
+            account = fd.snowflake(900 + n)
+            self.fake.user = (account, "user%02d" % n, value)
+            v = self.visitor()
+            r = v.login()
+            self.assertEqual(r.status, 302, "%r: %s" % (value, r.text()[:200]))
+            c = self.socket(v)
+            self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "user%02d" % n, "mod": False}, repr(value)[:60])
+            self.assertEqual([row[1:4] for row in self.rows("profiles") if row[0] == account], [("user%02d" % n, "", "username")], repr(value)[:60])
+            c.close()
+
+    def test_a_display_name_that_is_the_username_is_no_second_name_and_there_is_nothing_to_switch(self):
+        self.fake.user = (OLD, "maple.leaf", "maple.leaf")
+        c = self.socket(self.member())
+        self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": False})
+        self.assertEqual(self.rows("profiles")[0][1:4], ("maple.leaf", "", "username"))
+
+    def test_a_username_that_is_refused_is_still_refused_whatever_the_display_name_is(self):
+        for username in ("Evil Name", "x", "admin", "a" * 33):
+            self.fake.user = (OLD, username, "A Perfectly Good Name")
+            r = self.visitor().login()
+            self.assertEqual(r.status, 400, username)
+        self.assertEqual(self.rows("profiles"), [])
+        self.assertEqual(self.rows(), [])
+
+    def test_a_display_name_is_cleaned_before_it_is_kept_and_other_scripts_pass_whole(self):
+        for said, kept in (("  \U0001f341 Maple\u200b   Leaf \U0001f341 ", "Maple Leaf"), ("\u202eevil\u202c name", "evil name"), ("Maple \u2605 Leaf", "Maple Leaf"), ("\uff2d\uff41\uff50\uff4c\uff45", "Maple"),
+                           ("\u041c\u0430\u0440\u0438\u044f", "\u041c\u0430\u0440\u0438\u044f"), ("\u7530\u4e2d\u592a\u90ce", "\u7530\u4e2d\u592a\u90ce"), ("\u0645\u0631\u064a\u0645", "\u0645\u0631\u064a\u0645"),
+                           ("\u05d3\u05d5\u05d3", "\u05d3\u05d5\u05d3"), ("\u0930\u093e\u091c\u0947\u0936", "\u0930\u093e\u091c\u0947\u0936"), ("\u0e2a\u0e21\u0e0a\u0e32\u0e22", "\u0e2a\u0e21\u0e0a\u0e32\u0e22"), ("x" * 40, "x" * 32)):
+            self.fake.user = (OLD, "maple.leaf", said)
+            v = self.visitor()
+            self.assertEqual(v.login().status, 302)
+            c = self.socket(v)
+            self.assertEqual(c.welcome["you"]["name"], kept, repr(said))
+            self.assertEqual(self.rows("profiles")[0][2], kept)
+            self.assertTrue(textrules.valid_shown(kept))
+            c.close()
+
+    def test_a_second_login_refreshes_both_names_and_keeps_the_pick_and_a_rename_is_read(self):
+        v = self.member()
+        self.rig.call(self.rig.store.set_pick, OLD, "username")
+        self.fake.user = (OLD, "maple.new", "Maple Newer")
+        w = self.visitor()
+        self.assertEqual(w.login().status, 302)
+        self.assertEqual(self.rows("profiles")[0][1:4], ("maple.new", "Maple Newer", "username"))
+        self.assertEqual(sorted(row[2] for row in self.rows()), ["maple.leaf", "maple.new"])             # (each login keeps the username that it was made with)
+        old = self.socket(v)                                                                              # (the first browser's login is older than the profile: the profile is the newer of the two)
+        self.assertEqual(you_without_the_key(old.welcome["you"]), {"name": "maple.new", "mod": False, "pick": "username", "other": "Maple Newer"})
+
+    def test_a_login_from_before_profiles_were_kept_shows_the_username_until_its_next_login(self):
+        v = self.member()
+        self.rig.call(self.rig.store.db.execute, "DELETE FROM profiles")
+        c = self.socket(v)
+        self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": False})
+        self.assertEqual(v.call("GET", "/hub/me").json()["you"], c.welcome["you"])
+        self.assertEqual(self.visitor().login().status, 302)
+        self.assertEqual(self.socket(v).welcome["you"]["name"], "Maple Leaf")
+
+    def test_a_profile_that_is_not_usable_is_not_believed_and_the_login_is_still_a_member(self):
+        v = self.member()
+        for username, display in (("Not A Username", "Maple Leaf"), ("maple.leaf", "  Not   Clean  "), ("maple.leaf", "Admin")):
+            self.rig.call(self.rig.store.db.execute, "UPDATE profiles SET username = ?, display = ?", (username, display))
+            c = self.socket(v)
+            self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": False}, (username, display))
+            c.close()
+
+    def test_forget_deletes_the_profile_with_the_rest_and_a_logout_does_not(self):
+        v = self.member()
+        self.assertEqual(v.call("POST", "/hub/logout").status, 200)
+        self.assertEqual(len(self.rows("profiles")), 1)
+        w = self.visitor()
+        w.login()
+        self.assertEqual(w.call("POST", "/hub/forget").status, 200)
+        self.assertEqual(self.rows("profiles"), [])
+        self.assertEqual(self.rows(), [])
+
+    def test_a_cleaner_that_fails_costs_the_person_the_display_name_and_not_the_login_and_the_log_says_only_the_kind_of_error(self):
+        def broken(raw):
+            raise RuntimeError("canary-cleaner-text " + str(raw))
+        with mock.patch.object(textrules, "clean_shown", broken):
+            v = self.visitor()
+            self.assertEqual(v.login().status, 302)
+        c = self.socket(v)
+        self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": False})
+        log = self.rig.log_text.getvalue()
+        self.assertRegex(log, r" login_note kind=display error=RuntimeError\n")
+        self.assertNotIn("canary-cleaner-text", log)
+        self.assertNotIn("Maple", log)
+
+    def test_neither_name_is_in_the_log(self):
+        self.fake.user = (OLD, "maple.leaf", "Canary Display Name")
+        v = self.member()
+        c = self.socket(v)
+        c.say("a line of chat canary-77d1")
+        c.send(pick_frame("username"))
+        c.expect_close(3)
+        v.call("GET", "/hub/me")
+        v.call("POST", "/hub/forget")
+        log = self.rig.log_text.getvalue()
+        for canary in ("Canary", "Display", "maple.leaf", "canary-77d1", OLD):
+            self.assertNotIn(canary, log, canary)
+        for line in log.splitlines():
+            self.assertRegex(line, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ [a-z_]+( [a-z_]+=[A-Za-z0-9_.:/-]*)*$", line)
+
+    def test_the_display_name_is_asked_for_by_no_scope_of_its_own_and_the_address_of_discord_is_as_it_was(self):
+        v = self.visitor()
+        location = v.start().get("location")
+        query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(location).query))
+        self.assertEqual((query["scope"], query["prompt"]), ("identify", "none"))
+        v.callback(v.at_discord(location))
+        self.assertEqual([r[1] for r in self.fake.requests if r[1].startswith("/api/")], ["/api/v10/oauth2/token", "/api/v10/users/@me"])           # (one question: who is this)
+
+
+class TheCapOfProfiles(LoginTest):
+    """The table of profiles holds at most `profiles_total` of them: hub/login.py hands the limit to the store at every login. A login still works when the table is full, and the profile that goes
+    is the one that was refreshed longest ago; its person is shown by the username, as an account with no profile is."""
+    limits = dict(profiles_total=2)
+
+    def test_a_third_login_leaves_two_profiles_and_the_person_of_the_oldest_is_shown_by_the_username(self):
+        people = []
+        for n in range(3):
+            self.tick(10)                                                          # (the profiles are told apart by the time of their login)
+            account = fd.snowflake(960 + n)
+            self.fake.user = (account, "cap.user%d" % n, "Cap Person %d" % n)
+            v = self.visitor()
+            r = v.login()
+            self.assertEqual(r.status, 302, r.text()[:200])
+            people.append((account, v))
+            self.assertLessEqual(len(self.rows("profiles")), 2)
+        self.assertEqual(sorted(row[0] for row in self.rows("profiles")), sorted(account for account, _ in people[1:]))
+        shown = []
+        for _account, v in people:
+            c = self.socket(v)
+            shown.append(you_without_the_key(c.welcome["you"]))
+            c.close()
+        self.assertEqual(shown, [{"name": "cap.user0", "mod": False},
+                                 {"name": "Cap Person 1", "mod": False, "pick": "display", "other": "cap.user1"},
+                                 {"name": "Cap Person 2", "mod": False, "pick": "display", "other": "cap.user2"}])
+
+
+class TheTwoNamesAndTheModerators(LoginTest):
+    """Two accounts show one display name; a moderator sees the username next to it and nobody else does; /mute takes the username."""
+    mods = MOD_ID
+    user = (OLD, "aaa.one", "Maple Leaf")
+
+    def accounts(self):
+        a = self.member()
+        self.fake.user = (SECOND, "bbb.two", "Maple Leaf")
+        b = self.visitor()
+        self.assertEqual(b.login().status, 302)
+        self.fake.user = (MOD_ID, "mod.person", "Mod Person")
+        m = self.visitor()
+        self.assertEqual(m.login().status, 302)
+        return a, b, m
+
+    def test_a_moderators_socket_is_told_the_username_and_the_bytes_of_nobody_else_hold_it(self):
+        a, b, m = self.accounts()
+        author, twin, mod, guest = self.socket(a), self.socket(b), self.socket(m), self.socket(welcome=False)
+        guest.welcome = json.loads(guest.recv_frame()[1])
+        for c in (author, twin, mod, guest):
+            c.drain(0.2)
+        author.say("hello from the first Maple")
+        seen = {name: wire(c) for name, c in (("author", author), ("twin", twin), ("mod", mod), ("guest", guest))}
+        for name in ("author", "twin", "guest"):
+            blob = b"".join(seen[name])
+            self.assertIn(b"hello from the first Maple", blob, name)
+            self.assertNotIn(b"aaa.one", blob, name)
+            self.assertNotIn(b'"u"', blob, name)
+        (frame,) = [json.loads(x) for x in seen["mod"] if b"hello from" in x]
+        self.assertEqual((frame["who"], frame["u"], frame["text"]), ("Maple Leaf", "aaa.one", "hello from the first Maple"))
+        self.assertNotIn(b"bbb.two", b"".join(b"".join(v) for v in seen.values()))
+
+    def test_the_history_of_a_welcome_follows_the_same_rule_and_a_line_by_an_account_that_is_gone_is_named_by_its_profile(self):
+        a, b, m = self.accounts()
+        author = self.socket(a)
+        author.say("a line for the history")
+        author.close()
+        time.sleep(0.3)
+        new_mod = self.socket(m, welcome=False)
+        new_guest = self.socket(welcome=False)
+        new_twin = self.socket(b, welcome=False)
+        got = {name: json.loads(c.recv_frame()[1]) for name, c in (("mod", new_mod), ("guest", new_guest), ("twin", new_twin))}
+        self.assertEqual([(h["who"], h.get("u")) for h in got["mod"]["history"]], [("Maple Leaf", "aaa.one")])
+        self.assertEqual([("u" in h) for h in got["guest"]["history"] + got["twin"]["history"]], [False, False])
+        self.assertEqual(got["mod"]["history"][0]["k"], got["guest"]["history"][0]["k"])
+
+    def test_mute_takes_the_username_and_hits_the_right_one_of_two_that_show_the_same_name(self):
+        a, b, m = self.accounts()
+        author, twin, mod = self.socket(a), self.socket(b), self.socket(m)
+        mod.say("/mute Maple 5")
+        self.assertEqual(mod.recv_json(), {"t": "err", "code": "bad"})
+        mod.say("/mute aaa.one 5")
+        time.sleep(0.3)
+        author.say("I was muted")
+        self.assertEqual(author.recv_json(), {"t": "err", "code": "muted"})
+        reader = self.socket()
+        reader.drain(0.2)
+        twin.say("and I was not")
+        self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["text"], "and I was not")
+        self.assertEqual([(row[0], row[4]) for row in self.rows("mutes")], [(OLD, "aaa.one")])
+
+    def test_mute_takes_the_username_of_an_account_that_has_left_from_its_profile(self):
+        a, b, m = self.accounts()
+        mod = self.socket(m)
+        mod.say("/mute bbb.two 5")
+        time.sleep(0.3)
+        self.assertEqual([row[0] for row in self.rows("mutes")], [SECOND])                         # (nobody with that username was here: the profile said whose it is)
+
+    def test_me_and_the_welcome_of_a_moderator_who_shows_a_display_name(self):
+        _, _, m = self.accounts()
+        you = self.socket(m).welcome["you"]
+        self.assertEqual(you_without_the_key(you), {"name": "Mod Person", "mod": True, "pick": "display", "other": "mod.person"})
+        self.assertEqual(m.call("GET", "/hub/me").json()["you"], you)
+
+
+class ThePickOnTheWire(LoginTest):
+    """{"t":"pick","pick":...} on a real socket: stored, every socket of the account is closed with the call of a logout, the next welcome reads the new name; refused where there is nothing to choose."""
+    user = (OLD, "maple.leaf", "Maple Leaf")
+
+    def test_a_switch_closes_every_socket_of_the_account_and_no_other_and_the_next_welcome_has_the_new_name(self):
+        v = self.member()
+        self.fake.user = (SECOND, "bbb.two", "Other Name")
+        w = self.member()
+        first, second, bystander = self.socket(v), self.socket(v), self.socket(w)
+        first.say("written under the display name")
+        second.drain(0.3)
+        bystander.drain(0.3)
+        first.send(pick_frame("username"))
+        self.assertEqual((first.expect_close(3), second.expect_close(3)), (1000, 1000))
+        bystander.send(hc.frame(1, b'{"t":"ping"}'))
+        self.assertEqual(bystander.recv_json()["t"], "online")                                       # (the other account's socket is as it was)
+        self.assertEqual(self.rows("profiles")[0][3], "username")
+        again = self.socket(v)
+        self.assertEqual(you_without_the_key(again.welcome["you"]), {"name": "maple.leaf", "mod": False, "pick": "username", "other": "Maple Leaf"})
+        self.assertEqual([(h["who"], h["text"]) for h in again.welcome["history"]], [("Maple Leaf", "written under the display name")])      # (the line keeps the name it was written with)
+        reader = self.socket()
+        reader.drain(0.2)
+        again.say("written under the username")
+        self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["who"], "maple.leaf")
+        again.send(pick_frame("display"))
+        self.assertEqual(again.expect_close(3), 1000)
+        self.assertEqual(self.socket(v).welcome["you"]["name"], "Maple Leaf")
+
+    def test_the_lines_of_the_account_are_its_own_by_the_key_under_either_name(self):
+        v = self.member()
+        c = self.socket(v)
+        key = c.welcome["you"]["k"]
+        c.say("one")
+        c.send(pick_frame("username"))
+        c.expect_close(3)
+        d = self.socket(v)
+        self.assertEqual((d.welcome["you"]["k"], [h["k"] for h in d.welcome["history"]]), (key, [key]))
+
+    def test_a_pick_where_there_is_no_display_name_is_refused_and_the_socket_stays(self):
+        self.fake.user = (OLD, "maple.leaf")
+        c = self.socket(self.member())
+        c.send(pick_frame("display"))
+        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        c.send(pick_frame("username"))
+        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        c.send(hc.frame(1, b'{"t":"ping"}'))
+        self.assertEqual(c.recv_json()["t"], "online")
+
+    def test_a_reader_cannot_pick_and_a_word_that_is_not_one_of_the_two_is_a_mistake(self):
+        reader = self.socket()
+        reader.send(pick_frame("username"))
+        self.assertEqual(reader.recv_json(), {"t": "err", "code": "login"})
+        c = self.socket(self.member())
+        for word in ("both", "", "DISPLAY"):
+            c.send(pick_frame(word))
+            self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"}, word)
+        c.send(hc.frame(1, json.dumps({"t": "pick", "pick": ["display"]}).encode()))
+        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        self.assertEqual(self.rows("profiles")[0][3], "display")
+
+    def test_the_switch_is_limited_for_the_account_and_the_refusal_keeps_the_socket(self):
+        v = self.member()
+        for n in range(3):
+            c = self.socket(v)
+            c.send(pick_frame("username" if n % 2 == 0 else "display"))
+            self.assertEqual(c.expect_close(3), 1000, n)
+        c = self.socket(v)
+        c.send(pick_frame("username"))
+        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        c.send(hc.frame(1, b'{"t":"ping"}'))
+        self.assertEqual(c.recv_json()["t"], "online")
+        self.assertEqual(self.rows("profiles")[0][3], "username")                                    # (the third switch was the last: display, username, display... n = 2 is "username")
+
+    def test_the_pick_is_kept_by_the_next_login_of_the_account(self):
+        v = self.member()
+        c = self.socket(v)
+        c.send(pick_frame("username"))
+        c.expect_close(3)
+        w = self.visitor()
+        self.assertEqual(w.login().status, 302)
+        self.assertEqual(self.socket(w).welcome["you"]["name"], "maple.leaf")
+        self.assertEqual(self.socket(v).welcome["you"]["name"], "maple.leaf")
+
 
 
 class TheDatabaseThatCannotBeUsed(LoginTest):
@@ -1387,7 +1763,7 @@ class TheDiscordClient(unittest.TestCase):
         code = "c0de"
         with self.fake.lock:
             self.fake.codes[code] = self.fake.user
-        self.assertEqual(self.run_call(client, code), (OLD, "maple.leaf"))
+        self.assertEqual(self.run_call(client, code), (OLD, "maple.leaf", None))                 # (the id, the username and the display name that Discord says: none, for a person who set none)
         token = next(iter(self.fake.tokens))
         for obj in (client, client.limits, client.ssl):
             self.assertNotIn(token, repr(getattr(obj, "__dict__", {})), type(obj).__name__)
@@ -1638,7 +2014,7 @@ class TheProcess(unittest.TestCase):
         c = hc.Client(port, headers={"Cookie": v.jar.header(), "Sec-Fetch-Site": "same-origin"})
         self.addCleanup(c.close)
         welcome = c.recv_json()
-        self.assertEqual((welcome["login"], welcome["you"]), (True, {"name": "maple.leaf", "mod": False}))
+        self.assertEqual((welcome["login"], you_without_the_key(welcome["you"])), (True, {"name": "maple.leaf", "mod": False}))
         c.say("process canary 77c1")
         self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["text"], "process canary 77c1")
         self.assertEqual(v.call("POST", "/hub/logout").status, 200)
@@ -1704,9 +2080,10 @@ class TheDocumentsSayWhatAnOperatorNeedsToKnow(unittest.TestCase):
         self.assertIn("Login cancelled", checklist)
 
     def test_the_rule_for_lookalikes_of_the_reserved_names_is_said_with_its_reason(self):
-        text = self.paragraph("A visitor's username is untrusted text")
-        for words in ("a page of its own that says why", "`adm1n`", "`system32`", "`hub99`", "a lookalike gains nothing", "by Discord id, never by a name"):
+        text = self.paragraph("A name that could pass for the hub's own voice")
+        for words in ("a page of its own says why", "`adm1n`", "`system32`", "`hub99`", "a lookalike gains nothing", "by Discord id, never by a name", "the Cyrillic and Greek letters"):
             self.assertIn(words, text)
+        self.assertIn("a lookalike of one, is refused with a page of its own that says why", self.paragraph("A visitor's username is untrusted text"))
 
     def test_a_rollback_is_said_to_need_the_volume_of_before(self):
         self.assertIn("schema 3", self.paragraph("`/data/hub.db` (SQLite, WAL"))

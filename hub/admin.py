@@ -8,8 +8,10 @@
     docker exec ants-hub python -m hub.admin status
     docker exec ants-hub python -m hub.admin purge [--keep-lines N]
 
-ACCOUNT is an account id (digits, no leading zero), or a name that has said something in the last 7 days (written @name when the name is all digits). It works on hub.db directly (ANTS_HUB_DB or
---db), so the running hub needs no network door for it: a mute or a ban counts from the next line the account says, and a deleted line is taken off every screen within two seconds.
+ACCOUNT is an account id (digits, no leading zero), or a USERNAME (written @name when the name is all digits): the one name that is unique, from the account's profile, which its last login made. A
+name that the chat shows is not a username (Discord display names are not unique), so it is never taken for one; `list` shows both where they differ, and an account that has no profile yet (it
+has not logged in since profiles were kept) is addressed by its id. It works on hub.db directly (ANTS_HUB_DB or --db), so the running hub needs no network door for it: a mute or a ban counts
+from the next line the account says, and a deleted line is taken off every screen within two seconds.
 `status` says how full the database is: the pages that hold something, the log file on its own, what is free to reuse. `purge` frees space at once: it deletes the oldest lines (the moderators' and the deleted
 ones last, the newest 1,000 never) until the database is at 80% of its limit, which is what the hub does by itself from 90%, or with --keep-lines N all but the newest N (100 or more); the pages they leave are
 free for the lines that follow. It works a chunk at a time, with a tenth of a second between two chunks, so that the hub's own writes go on.
@@ -34,14 +36,16 @@ def when(epoch):
 
 
 def resolve(store, who):
-    """(account id, name) of ACCOUNT, or (None, why)."""
+    """(account id, username) of ACCOUNT, or (None, why). A name is a username, looked up in the profiles; the name of an account that was given as an id is its username when it has a profile,
+    else the name that it last spoke under (which, for an account with no profile, is its username)."""
     if who.startswith("@") or not config.ACCOUNT_ID.match(who):
         name = who[1:] if who.startswith("@") else who
         if not text.valid_name(name):
-            return None, "not an account id or a name"
-        account = store.account_of_name(name)
-        return (account, name) if account else (None, "no line of that name is kept (use the account id)")
-    return who, store.last_name(who)
+            return None, "not an account id or a username"
+        account = store.account_of_username(name)
+        return (account, name) if account else (None, "no account has that username, or more than one does (use the account id)")
+    profile = store.profile(who)
+    return who, profile.username if profile else store.last_name(who)
 
 
 def show(store, count, out):
@@ -51,9 +55,13 @@ def show(store, count, out):
     out.write("mutes:\n")
     for account, name, until, by in store.mutes():
         out.write("  %s %s until %s by %s\n" % (account, name, when(until), by))
-    out.write("lines (newest first; x = deleted):\n")
+    out.write("lines (newest first; x = deleted; the name that was shown, and in brackets the account's username where it is another):\n")
+    usernames = {}
     for line_id, at, account, name, line, deleted in store.lines(count):
-        out.write("  %d%s %s %s %s: %s\n" % (line_id, "x" if deleted else " ", when(at), account, name, line))
+        if account not in usernames:
+            profile = store.profile(account)
+            usernames[account] = profile.username if profile else name
+        out.write("  %d%s %s %s %s%s: %s\n" % (line_id, "x" if deleted else " ", when(at), account, name, " (%s)" % usernames[account] if usernames[account] != name else "", line))
 
 
 def megabytes(count):
