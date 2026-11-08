@@ -37,6 +37,8 @@ add_executable(test_ai
     test_ai_field.cpp
     test_ai_brawl.cpp
     test_ai_kill.cpp
+    test_ai_people.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_watch_people.cpp
 )
 
 target_link_libraries(test_ai PRIVATE

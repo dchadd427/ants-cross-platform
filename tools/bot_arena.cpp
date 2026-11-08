@@ -11,7 +11,7 @@
 //   --seeds A..B      the engine and controller seeds: "3", "1..8", "1,4,9..12" (default 1)
 //   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE: KIND idle, worker, standard (or one of the
 //                     bench bots of tools/bench_aggressor.hpp, which are not bots of the game: aggressor, aggressor2 (a double-thief opening), rusher (the contested middle first),
-//                     saboteur, aggr1 .. aggr9 (an aggressor with that many attackers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
+//                     saboteur, gang (harvests, raids and fights as a group), aggr1 .. aggr9 (an aggressor with that many strikers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
 //                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
 //                     the keys of apply_tune (the tournaments' ablations).
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants. idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
@@ -469,7 +469,7 @@ void print_usage(std::FILE* to) {
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
         "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE (kinds idle worker standard and the bench bots aggressor aggressor2\n"
-        "                     saboteur rusher aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
+        "                     saboteur rusher gang aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
         "                     KIND may be standard+K=V,K=V: a standard bot with its own tuning (see --tune). Default: four standard bots at medium level. %s.\n"
         "  --game-mode M      highest-score (the original's game, default) or 187 (no food, the kills are the score)\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
@@ -525,10 +525,10 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     std::string bench_kind = "aggressor";
     std::vector<std::string> parts = split(spec, ':');
     for (size_t i = 1; i < parts.size(); ++i) {
-        if (upper(parts[i]) == "AGGRESSOR" || upper(parts[i]) == "AGGRESSOR2" || upper(parts[i]) == "SABOTEUR" || upper(parts[i]) == "RUSHER" ||
-            (upper(parts[i]).rfind("AGGR", 0) == 0 && upper(parts[i]).size() == 5 && upper(parts[i])[4] >= '1' && upper(parts[i])[4] <= '9')) {
+        const std::string bench = ai::bench::bench_kind_of(parts[i]);                  // aggressor, ..., gang (any case): a bench bot of tools/bench_aggressor.hpp
+        if (!bench.empty()) {
             aggressor = true;
-            bench_kind = upper(parts[i]) == "SABOTEUR" ? "saboteur" : upper(parts[i]) == "AGGRESSOR2" ? "aggressor2" : upper(parts[i]) == "RUSHER" ? "rusher" : upper(parts[i]) == "AGGRESSOR" ? "aggressor" : "aggr" + parts[i].substr(4);
+            bench_kind = bench;
             parts[i] = "worker";
         } else if (upper(parts[i]).rfind("STANDARD+", 0) == 0) {                      // "standard+K=V,K=V": a standard bot with its own tuning, for the duels of two plans in one match
             aggressor = true;
@@ -562,11 +562,6 @@ std::vector<std::pair<std::string, int64_t>> g_tune;
 std::unique_ptr<ai::Bot> diag_wrap(std::unique_ptr<ai::StandardBot> bot, const ai::BotSpec& spec) {
     if (std::getenv("BOT_DIAG") == nullptr) return bot;
     return std::make_unique<ai::bench::DiagBot>(std::move(bot), spec.kind + ":" + ai::level_name(spec.level) + (spec.style != ai::Style::Random ? std::string(":") + ai::style_name(spec.style) : std::string()));
-}
-
-std::unique_ptr<ai::Bot> count_wrap(std::unique_ptr<ai::Bot> bot, const ai::BotSpec& spec) {
-    if (std::getenv("BOT_DIAG") == nullptr) return bot;
-    return std::make_unique<ai::bench::CountBot>(std::move(bot), spec.kind + ":" + ai::level_name(spec.level));
 }
 
 // The bots of the registry, and the arena's bench bots
@@ -608,23 +603,7 @@ std::unique_ptr<ai::Bot> arena_factory(const ai::BotSpec& spec) {
         }
         return diag_wrap(std::make_unique<ai::StandardBot>(spec.level, spec.style, [keys](ai::LevelPlan& p) { apply_tuning(p, keys); }), spec);
     }
-    if (spec.kind == "aggressor") return count_wrap(std::make_unique<ai::bench::AggressorBot>(), spec);
-    if (spec.kind.size() == 5 && spec.kind.rfind("aggr", 0) == 0 && spec.kind[4] >= '1' && spec.kind[4] <= '9') return count_wrap(std::make_unique<ai::bench::AggressorBot>(1, static_cast<size_t>(spec.kind[4] - '0')), spec);
-    if (spec.kind == "aggressor2") return std::make_unique<ai::bench::AggressorBot>(2);
-    if (spec.kind == "rusher") {                                                      // the centre-rusher of the bench: the economy of the standard bot with the contest order and no tactics
-        ai::LevelPlan plan = ai::plan_for(spec.level);
-        plan.contest_aware = true;
-        plan.secure_side = false;
-        plan.secure_kinds = 0;
-        plan.wall_trigger = ai::WallTrigger::Never;
-        plan.takes_combat = false;
-        plan.takes_thief = false;
-        plan.guards = false;
-        plan.raids = false;
-        plan.counters = false;
-        return std::make_unique<ai::StandardBot>(plan);
-    }
-    if (spec.kind == "saboteur") return std::make_unique<ai::bench::SaboteurBot>();
+    if (std::unique_ptr<ai::Bot> bench = ai::bench::make_bench_bot(spec.kind, spec.level)) return bench;      // aggressor, aggressor2, rusher, saboteur, aggr1 .. aggr9, gang
     if (spec.kind == "standard" && !g_tune.empty()) {
         std::vector<std::pair<std::string, int64_t>> keys = g_tune;
         return diag_wrap(std::make_unique<ai::StandardBot>(spec.level, spec.style, [keys](ai::LevelPlan& p) { apply_tuning(p, keys); }), spec);
@@ -947,7 +926,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.latency_ticks = o.latency;
     s.game_mode = o.game_mode;
     s.record = record;
-    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
+    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "gang", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
     for (const ai::BotSpec& b : j.bots) {
         if (b.kind.rfind("standard+", 0) == 0) s.extra_kinds.push_back(b.kind);
     }
