@@ -2628,7 +2628,7 @@ the end-of-match cases of `test_sim_rules.cpp` (1.3, 12.1, 12.2) and `test_chall
 ### 5.42 Alliance Texts, News Flash Lines and the Chat Log (Capstone-Verified; Supersedes Earlier Alliance Banner and Chat Notes)
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_sim/sim_engine.cpp` (`propose_alliance`, `accept_alliance`, `deny_alliance`, `withdraw_alliance_offer`,
-`break_alliance`, `trigger_player_dropout`, player names), `include/ants_sim/game_strings.hpp` and `src/ants_app/hud.cpp` (`add_chat_entry`, `add_news_flash`, `receive_chat_message`, the log drawing).
+`break_alliance`, `trigger_player_dropout`, player names), `include/ants_sim/game_strings.hpp` and `src/ants_app/hud*.cpp` (`add_chat_entry`, `add_news_flash`, `receive_chat_message`, the log drawing).
 Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat rendering, gate and filter) and the alliance / drop-out cases of `test_challenger_m2_2.cpp` (4.2 - 4.5) and
 `test_app_integration*.cpp` (9.7, 12.9, 12.54, 12.68).
 
@@ -2688,7 +2688,7 @@ Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat r
 
 ### 5.43 Input Task, Edge Scrolling and the Minimap Drag (Capstone-Verified; Supersedes Earlier Scrolling and Edge Pan Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/edge_scroll.hpp` (`edge_scroll_step`, `minimap_scroll_step`), `src/ants_app/hud.cpp` (`HUD::input_tick`, the cursor
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/edge_scroll.hpp` (`edge_scroll_step`, `minimap_scroll_step`), `src/ants_app/hud*.cpp` (`HUD::input_tick`, the cursor
 strips of `evaluate_cursor`) and `src/ants_app/application.cpp` (`handle_camera_panning`, the 50 ms input task). Checked by `tests/test_app/test_input_model.cpp` (70 checks, among them the 1152 golden
 samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulation of the original's code) and test 7.7 of `test_app_integration*.cpp`.
 
@@ -2741,7 +2741,7 @@ samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulati
 
 ### 5.44 Pointer Model: Hit Boxes, Cursor Table, Clicks, the Rubber Band, the Right Button and the Pedestals (Capstone-Verified; Supersedes Earlier Click, Marquee, Armed-Order-Mode and Pedestal Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_app/hud_input.cpp` (the model) and `src/ants_app/hud.cpp` (event dispatch, drawing), with the group orders in
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_app/hud_input.cpp` (the model) and `src/ants_app/hud*.cpp` (event dispatch, drawing), with the group orders in
 `src/ants_sim/sim_engine.cpp` (`issue_group_special_order`, `is_special_target_valid`). Checked by `tests/test_app/test_pointer_model.cpp` (236 checks), the rubber band drawing in
 `tests/test_app/test_hud_layout*.cpp`, and the click tests of `test_app_integration*.cpp` (7.x, 8.7, 9.6, 10.4, 10.5, 12.15, 12.17, 12.20, 12.62, 12.68, 12.75, 12.125, 12.126, 12.144).
 
@@ -2817,7 +2817,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src
 
 ### 5.45 Keyboard, Button Class and Chat (Capstone-Verified; Supersedes Earlier Hotkey, Chat Focus and Button Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD::handle_key_down`, `HUD::handle_text_input`, `HUD::send_chat`, `HUD::handle_mouse_down / up / motion` (`src/ants_app/hud.cpp`) and
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD::handle_key_down`, `HUD::handle_text_input`, `HUD::send_chat`, `HUD::handle_mouse_down / up / motion` (`src/ants_app/hud*.cpp`) and
 `Application::handle_key_down` (`src/ants_app/application.cpp`, developer shortcuts and routing only). Checked by `tests/test_app/test_pointer_model.cpp` (`test_keyboard`, `test_buttons`) and the integration tests
 7.5, 9.7, 11.3, 12.58, 12.59, 12.75.
 
@@ -3081,7 +3081,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::render_
 
 ### 5.56 The Chat Log Window and the chat.txt Transcript (Capstone-Verified; Supersedes Earlier Chat Scroll Notes; Ported in v0.0.72)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::push_chat_entry`, `layout_chat_entry`, `update_chat_tasks`, `chat_scroll_by`, `start_chat_drag` / `move_chat_drag` / `end_chat_drag`, `render_chat_log` (`src/ants_app/hud.cpp`), `IRenderer::set_clip_rect`, `draw_single_line_label` (`text_layout.cpp`), `Application::write_chat_transcript`. Checked by `test_hud_layout` (`test_chat_log`), `test_status_messages` (chat rendering), integration tests 12.9 and 12.9b.
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::push_chat_entry`, `layout_chat_entry`, `update_chat_tasks`, `chat_scroll_by`, `start_chat_drag` / `move_chat_drag` / `end_chat_drag`, `render_chat_log` (`src/ants_app/hud*.cpp`), `IRenderer::set_clip_rect`, `draw_single_line_label` (`text_layout.cpp`), `Application::write_chat_transcript`. Checked by `test_hud_layout` (`test_chat_log`), `test_status_messages` (chat rendering), integration tests 12.9 and 12.9b.
 
 * **The window** (object `[W + 0x4acc]`, 0x54 bytes, constructor `FUN_01011e78`, vtable 0x10026a0, made at 0x100e1b4 inside the view object `[W + 0x4a80]` whose rectangle `W + 0x4a6c` is (482, 299) - (620, 400), **138 x 101 px**). Members: the list of lines `+0x10`; `+0x24` the top of the part of the log that the window shows while nobody drags it (here: "the position"), `+0x28` the position it moves to (the target), `+0x2c` the end of the log, `+0x30` the view, `+0x34` the drag flag, `+0x38 .. +0x44` the pointer of the last drag event (x at `+0x40`, y at `+0x44`), `+0x48` the dragged position, `+0x4c` the task CHATSCRL, `+0x50` the task CHATAPPD.
 

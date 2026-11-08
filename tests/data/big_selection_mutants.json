@@ -163,7 +163,7 @@
   },
   {
    "id": "stop_key_obeys_repeats",
-   "file": "src/ants_app/hud.cpp",
+   "file": "src/ants_app/hud_keys.cpp",
    "old": "if (!repeat && (panel == PanelMode::OneAnt || panel == PanelMode::Ants)) stop_selected(sim);",
    "new": "if (panel == PanelMode::OneAnt || panel == PanelMode::Ants) stop_selected(sim);",
    "build": "test_pointer_model",
