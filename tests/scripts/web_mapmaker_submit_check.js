@@ -106,14 +106,14 @@ function page(opts) {
     const timers = [], dialogs = Dialog.create(doc, host, [top]), server = opts.server || fakeServer(), idb = opts.idb || fakeIdb(), events = [];
     const sentStore = Store.createSent({ idb: opts.noIdb ? null : idb });
     const report = opts.report || { works: true, headline: 'Works in the original game', findings: [], kind: 'classic' };
-    const file = { kind: opts.kind || 'classic', rows: 31, columns: 31, ok: true };
+    const file = { kind: opts.kind || 'classic', rows: 31, columns: 31, ok: true, rules: opts.rules || 0 };
     const bytes = opts.bytes || new Uint8Array([8, 1, 2, 3]), cfg = { bytes };
     const library = Object.assign({ tiny: true, treasure: true }, opts.library || {});
     const env = {
         doc, dialogs, sent: sentStore, fetch: opts.noFetch ? null : server.fetch, later: (f, ms) => (ms >= 30000 ? timers.push(f) : setImmediate(f)), Abort: opts.noAbort ? null : FakeAbort, now: () => opts.now || Date.now(),
         store: { inLibrary: (n) => !!library[Store.key(n)], libraryState: () => opts.libraryState || 'ready', onLibrary: (f) => f() },
-        parse: (b) => (b && b[0] === 8 ? { kind: 'classic', rows: 31, columns: 31 } : b && b[0] === 9 ? { kind: 'extended', rows: 300, columns: 400 } : null),
-        thumb: () => doc.createElement('canvas'), tags: (h, kind) => { h.textContent = kind === 'extended' ? 'Extended map|New version only' : 'Classic map'; },
+        parse: (b) => (b && b[0] === 8 ? { kind: 'classic', rows: 31, columns: 31, rules: 0 } : b && b[0] === 9 ? { kind: 'extended', rows: 300, columns: 400, rules: b[3] === 2 ? 2 : 0 } : null),
+        thumb: () => doc.createElement('canvas'), tags: (h, kind, rules) => { h.textContent = (kind === 'extended' ? 'Extended map|New version only' : 'Classic map') + (rules === 2 ? '|Rules 2' : ''); },
         current: () => (opts.currentError ? { error: opts.currentError } : { name: opts.name || 'Sunny Picnic', bytes: cfg.bytes, file, report }),
         showFinding: (f) => events.push(['show', f.row, f.column]), onOpenCopy: (r, again) => events.push(['copy', r.name, !!again]), onSee: () => events.push(['see']),
         clipboard: opts.clipboard, link: () => 'https://example.org/mapmaker.html'
@@ -249,7 +249,9 @@ async function caseC() {
     // Extended
     p = await opened({ kind: 'extended', bytes: new Uint8Array([9, 1, 2]), report: { works: true, headline: 'Works in the new version', kind: 'extended', findings: [] } });
     check(/only players on the newest version will see it in the map list/.test(text(p)), 'an Extended map gets the line about the newest version');
-    check(/Extended map\|New version only/.test(text(p)), 'with its tags');
+    check(/Extended map\|New version only/.test(text(p)) && !/Rules 2/.test(text(p)), 'with its tags, and no badge of long orders for a map of rules 0');
+    p = await opened({ kind: 'extended', rules: 2, bytes: new Uint8Array([9, 1, 2]), report: { works: true, headline: 'Works in the new version', kind: 'extended', findings: [] } });
+    check(/Extended map\|New version only\|Rules 2/.test(text(p)), 'a map of long orders has its badge in the card');
     p = await opened();
     check(!/only players on the newest version/.test(text(p)), 'a Classic map does not');
     // too big
@@ -383,6 +385,17 @@ async function caseF() {
     check(rows[0].querySelectorAll('button').length === 1 && rows[0].querySelectorAll('button')[0].textContent === 'Withdraw', 'only a waiting map can be withdrawn');
     check(rows[1].querySelectorAll('button').length === 0, 'a map that came from another device has no copy to open here');
     equal(u.counts[u.counts.length - 1], 4, 'the count of the tab');
+    // the rules word of the kept copy reaches the tags of its row: the badge of long orders, for a map that has them (the third byte of the stand-in file says so)
+    const withWord = fakeServer();
+    withWord.state.list = [view(ID1, 'waiting', { name: 'Long Lake', kind: 'extended', sent_at: 1700000400 }), view(ID3, 'waiting', { name: 'Plain Lake', kind: 'extended', sent_at: 1700000300 })];
+    const idb2 = fakeIdb();
+    idb2.m.set('#tokens', { id: '#tokens', list: [TOKEN] });
+    idb2.m.set(ID1, { id: ID1, name: 'Long Lake', kind: 'extended', state: 'waiting', bytes: new Uint8Array([9, 1, 0, 2]), sent_at: 1, tok: TOKEN });
+    idb2.m.set(ID3, { id: ID3, name: 'Plain Lake', kind: 'extended', state: 'waiting', bytes: new Uint8Array([9, 1, 0, 0]), sent_at: 1, tok: TOKEN });
+    const longPage = await loadedPage({ server: withWord, idb: idb2 }), longUi = listUi(longPage);
+    longPage.sub.show(longUi.ui);
+    await later();
+    equal(longUi.list.children.map((r) => /Rules 2/.test(r.textContent)), [true, false], 'a sent map of long orders has the badge in its row, another does not');
     // the server asked with the token, and the records were refreshed in the browser
     check(server.calls.every((c) => c.method === 'GET' && c.url === '/submissions' && c.headers.Authorization === 'Bearer ' + TOKEN), 'one GET /submissions with the token');
     equal([p.idb.m.get(ID1).name, p.idb.m.get(ID4).state, p.idb.m.get(ID2).state], ['Sunny Picnic', 'declined', 'approved'], 'what the server said is kept (the record of a map from another device too)');

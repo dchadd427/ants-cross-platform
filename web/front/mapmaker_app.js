@@ -15,6 +15,7 @@
     var keepTimer = 0, keepReady = false, keepPending = false, keepEdits = 0;      // the unsaved work kept in the browser: a rest of 1.5 s after a change, and not before the work of the last visit was dealt with
 
     // The page cannot go on (a script did not load, or the module is of another version): say so in the canvas's place, with a way out
+    var OUT_OF_DATE = 'The map code is out of date (a copy of one of its files is old in this browser). Reload the page.';
     function fatal(text) {
         var boot = $('boot');
         boot.hidden = false;
@@ -33,23 +34,29 @@
         return false;
     }
 
-    // The tags of a kind: "Classic map", or "Extended map" and the neutral badge (and the joined tag that mapmaker.css shows instead of the two below 360 px)
-    function fillTags(host, kind) {
+    // The tags of a kind: "Classic map", or "Extended map" and the neutral badge, and "Rules 2" after it for a map of long orders (and the joined tag that mapmaker.css shows instead of them below 360 px).
+    // The top bar is given no `rules`: a third badge there makes it taller and the Objects column of a 1280 x 720 window overflows
+    var RULES2_TIP = 'Long orders (rules 2): ants can walk orders of 450 tiles and more. Game versions before this one cannot open this map.';
+    function rulesBadge() { var b = el('span', 'badge-nv badge-r2', 'Rules 2'); b.title = RULES2_TIP; return b; }
+    function fillTags(host, kind, rules) {
         host.textContent = '';
         if (kind === 'extended') {
             host.appendChild(el('span', 'tag tag-ext', 'Extended map'));
             host.appendChild(el('span', 'badge-nv', 'New version only'));
-            host.appendChild(el('span', 'tag tag-join', 'Extended map \u00b7 New version only'));
+            if (rules === 2) host.appendChild(rulesBadge());
+            host.appendChild(el('span', 'tag tag-join', 'Extended map \u00b7 New version only' + (rules === 2 ? ' \u00b7 Rules 2' : '')));
         } else host.appendChild(el('span', 'tag tag-classic', 'Classic map'));
     }
-    function setTags(id, kind) { fillTags($(id), kind); }
+    function setTags(id, kind, rules) { fillTags($(id), kind, rules); }
+    function fillRules(host, rules) { host.textContent = ''; if (rules === 2) host.appendChild(rulesBadge()); }       // (the chip on the heading line of This map: for a window that is not tall)
 
     // The numbers of the open map: the name, the kind, the size, the meter and the one line of the check (not the canvas: a view of the map stays where it is)
     function showFacts() {
         var f = map.file, kind = f.kind;
         $('map-name').value = map.name;
         doc.title = map.name + ' - Map maker - Ants (1998)';
-        setTags('top-tags', kind); setTags('side-tags', kind);
+        var rules = kind === 'extended' ? f.rules : 0;
+        setTags('top-tags', kind); setTags('side-tags', kind, rules); fillRules($('side-rules'), rules);
         $('s-rows').textContent = f.rows; $('s-cols').textContent = f.columns;
         $('s-cells').textContent = MapSizes.number(f.cells);
         var facts = MapSizes.mapFacts(kind, f.cells, map.bytes.length, limits);
@@ -62,7 +69,12 @@
         $('convert-link').textContent = kind === 'classic' ? 'Start an Extended map from this one...' : 'Make a Classic map from this one...';
         var line = $('size-line');
         line.textContent = f.rows + ' x ' + f.columns + ' ';
-        if (kind === 'extended') line.appendChild(el('span', 'badge-nv', 'New version only'));
+        if (kind === 'extended') {                                                           // (two badges go on a line of their own on a phone)
+            var badges = el('span', 'sizebadges' + (rules === 2 ? ' two' : ''));
+            badges.appendChild(el('span', 'badge-nv', 'New version only'));
+            if (rules === 2) { badges.appendChild(doc.createTextNode(' ')); badges.appendChild(rulesBadge()); }
+            line.appendChild(badges);
+        }
     }
 
     // The properties in a few words (the side panel, the line under the map of a phone). They change only with a new array of bytes (a stroke writes in place), so they are read again only then.
@@ -87,7 +99,8 @@
     }
 
     function applyResize(newRows, newCols, keepRow, keepCol) {
-        var ch = win.MapBlocks.resizeMap(map.file, newRows, newCols, keepRow, keepCol);
+        var f = map.file, rules = f.kind === 'extended' ? MapSizes.resizedRules(f.rules, f.rows, newRows) : undefined;
+        var ch = win.MapBlocks.resizeMap(f, newRows, newCols, keepRow, keepCol, undefined, undefined, rules);
         if (ch && ch.error) return dialogs.message('The map could not be resized', ch.error);
         if (ch && !tools.act(ch)) dialogs.message('The map could not be resized', 'Nothing was changed.');
     }
@@ -103,7 +116,7 @@
                         doc: doc, $: $, host: $('crop'), editor: $('editor'),
                         limits: { rows: keepRows, columns: keepCols, cells: keepRows * keepCols },
                         rows: map.file.rows, columns: map.file.columns, name: map.name,
-                        tags: function (h) { fillTags(h, map.file.kind); },
+                        tags: function (h) { fillTags(h, map.file.kind, map.file.rules); },
                         picture: function () { return MapView.miniBase(map.file, 640, 640, canvasOf); },
                         onUse: function (frame) { applyResize(newRows < map.file.rows ? frame.rows : newRows, newCols < map.file.columns ? frame.columns : newCols, frame.row, frame.column); },
                         onCancel: function () { openResize(); }
@@ -219,12 +232,22 @@
         if (keepReady) keepTimer = win.setTimeout(keepNow, 1500);
     }
 
+    // A NEW Extended map has long orders (rules 2) where it plays like the original with them (MapSizes.newRules, docs/MAP_EDITOR.md E4): the core's copy with the word, else the bytes as they are
+    function withLongOrders(bytes) {
+        var f = win.MapFile.parse(bytes);
+        if (!f.ok || f.kind !== 'extended' || MapSizes.newRules(f.rules, f.rows) === f.rules) return bytes;
+        var made = core.convertToLongOrders(bytes);
+        if (made.status === 2) alive();
+        return made.status === 0 && made.json.ok ? made.bytes : bytes;
+    }
+
     // Save as a new map: the map goes into the browser under a free name and the saved map takes the screen (the open one is never written over)
     function keepAs(name, done) {
         var made = fileBytes();
         if (made.error) return done(made.error);
-        store.add(name, map.file.kind, made.bytes, function (error) {
-            done(error === 'exists' ? error : error ? 'The browser would not keep the map. Nothing was saved. You can download it instead.' : '', made.bytes);
+        var bytes = withLongOrders(made.bytes);                              // (the open map's own bytes are not touched)
+        store.add(name, map.file.kind, bytes, function (error) {
+            done(error === 'exists' ? error : error ? 'The browser would not keep the map. Nothing was saved. You can download it instead.' : '', bytes);
         });
     }
     function kept(bytes, name) {
@@ -275,7 +298,7 @@
                 if (made.status === 2) alive();
                 return made;
             },
-            onMade: function (bytes) { var error = setMap(bytes, NEW_NAME); if (error) dialogs.message('The map could not be made', error); }
+            onMade: function (bytes) { var error = setMap(withLongOrders(bytes), NEW_NAME); if (error) dialogs.message('The map could not be made', error); }
         });
     }
 
@@ -302,7 +325,7 @@
     function canvasOf(w, h) { var c = el('canvas'); c.width = w; c.height = h; return c; }
     function openCrop(spec) {
         var file = win.MapFile.parse(spec.bytes);
-        MapCrop.open({ doc: doc, $: $, host: $('crop'), editor: $('editor'), limits: limits.classic, rows: spec.rows, columns: spec.columns, name: spec.name, tags: function (h) { fillTags(h, 'extended'); },
+        MapCrop.open({ doc: doc, $: $, host: $('crop'), editor: $('editor'), limits: limits.classic, rows: spec.rows, columns: spec.columns, name: spec.name, tags: function (h) { fillTags(h, 'extended', file.rules); },
             picture: function () { return MapView.miniBase(file, 640, 640, canvasOf); }, onUse: spec.onUse, onCancel: spec.onCancel });
     }
     function convertEnv() {
@@ -459,6 +482,7 @@
 
     function start(module) {
         core = LvlCore.wrap(module);
+        if (typeof core.convertToLongOrders !== 'function') return fatal(OUT_OF_DATE);       // (a wrapper and a module that are both old agree on their version: this call is what they lack)
         store = MapStore.create({ idb: (function () { try { return win.indexedDB || null; } catch (e) { return null; } })(), fetch: win.fetch ? win.fetch.bind(win) : null, later: function (f, ms) { win.setTimeout(f, ms); } });
         var small = core.limits('new_map'), big = core.limits('extended');
         if (small.status !== 0 || big.status !== 0) return fatal('The map code did not answer. Reload the page.');
@@ -547,7 +571,7 @@
         if (missing.length) return fatal(missing.indexOf('createLvlCore') >= 0 ? 'The map code did not load. Reload the page; if it keeps failing, try again later.' : 'A part of this page did not load (' + missing.join(', ') + '). Reload the page.');
         win.createLvlCore().then(function (module) {
             var found = LvlCore.moduleVersion(module);
-            if (found !== LvlCore.EXPECTED_INTERFACE) return fatal('The map code is out of date (a copy of one of its files is old in this browser). Reload the page.');
+            if (found !== LvlCore.EXPECTED_INTERFACE) return fatal(OUT_OF_DATE);
             start(module);
         }, function (e) { fatal('The map code could not start: ' + (e && e.message ? e.message : e)); });
     }

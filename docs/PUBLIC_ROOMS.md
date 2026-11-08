@@ -22,7 +22,7 @@ The leader of a lobby room ([`NETWORK_PORT.md`](NETWORK_PORT.md#protocol-16-the-
 * **Order** (`RoomManager::lobbies`, a total order): more people first, then the longer public, then the smaller code; at most **50**, the best 50. `count` is the number of rows listed.
 * **A row** has these nine fields and nothing else: `code`, `host` (the leader's name, also while the leader's seat is held; a leader who gave no name is "Player" and its color's number), `map` (the file), `mode` (`"highest-score"` or `"187"`), `people` (persons; a held seat counts), `bots` (colors that nobody holds and the plan gives to a bot), `free` (colors that a newcomer takes), `size` (colors in the match: `people + bots + free`; a person on a color that the plan calls Nobody still plays, so the color counts) and `age` (seconds public).
 * **Never** an address, a key, a platform, another person's name, plan letters or chat: the test of the answer searches the whole text for the keys' hex and the pages' addresses.
-* **It can be crowded out.** The order is people first, every connection is a person and no limit per address exists (as for the pool), so a crowd of small lobbies can push another out of the 50. Names are text as typed (printable ASCII, up to 32 characters, `< > " \` among them): a page shows them as text (`textContent`), as for `/live`.
+* **The list is bounded.** It holds the best 50 rows, people first. Names are text as typed (printable ASCII, up to 32 characters, `< > " \` among them): a page shows them as text (`textContent`), as for `/live`.
 * **The status** of a lobby room (`GET /rooms/<code>`, the list of rooms, the result file) has `"public"`, the leader's choice.
 
 ## Tests

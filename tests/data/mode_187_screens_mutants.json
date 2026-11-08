@@ -171,7 +171,7 @@
   },
   {
    "id": "standing_names_a_dropped_team",
-   "file": "src/ants_sim/mode_187.cpp",
+   "file": "src/ants_sim/last_side.cpp",
    "old": "if ((roster_mask_ & (1u << k)) != 0 && !team_dropped(k) && team_alive(k)) return k;",
    "new": "if ((roster_mask_ & (1u << k)) != 0 && team_alive(k)) return k;",
    "build": "test_out_of_ants",

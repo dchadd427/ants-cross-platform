@@ -420,12 +420,8 @@ public:
     /// the original keeps a NULL entry for it in its team table, which CHECKGO skips (Ants.exe 0x1024921). init(level, seed) plays with every team.
     void init(const ants::assets::LevelData& level, uint32_t random_seed, uint8_t roster_mask);
     uint8_t roster_mask() const noexcept;
-    /// A world made by hand for tests and tools; @p rules as Grid::init_empty (1 = a map of extended rules: the wall at row 90 is down).
+    /// A world made by hand for tests and tools; @p rules as Grid::init_empty (1 = a map of extended rules: the wall at row 90 is down; 2 = extended rules and the wide search of the path finder).
     void init_test_world(uint32_t width, uint32_t height, uint32_t random_seed = 1, uint32_t match_time_ms = 720000, uint16_t rules = 0);
-    /// Test hook (Grid::allow_rules_two_for_tests): call it BEFORE init / init_test_world to have a rules word of 2 (the wide search of the path finder) played as 2; without it a
-    /// word of 2 is played as 1. Nothing outside the tests calls it.
-    void allow_rules_two_for_tests();
-
     void tick();
     /// The one entry through which a player changes the simulation (command.hpp): validates the command (issuer, ownership, ranges) and applies
     /// it. Every machine of a lock-step match applies the same commands at the same tick in canonical order.
@@ -499,6 +495,31 @@ public:
     /// the match when one side is left (docs/GAMEPLAY.md, "187"). init() keeps it, so an engine that is re-initialised plays the same rules again.
     void set_game_mode(GameMode mode);
     GameMode game_mode() const noexcept;
+    /// 187 only, the rules number of the recording that is being played (replay::kSimRulesMode187Heal): with `open` set the hill works as the original's does in 187 matches recorded before the rule below, ants
+    /// enter it and are healed, an ant left with one hit point walks home by itself and the waiting ring queues; the default (false) is the rule of 187 now (docs/GAMEPLAY.md, "187"): an ant cannot enter
+    /// its hill at all. An order to enter is refused with "Can't go there.", the 1 hp retreat and the waiting ring are off, and nothing heals. It is chosen after set_game_mode (which sets it back to the rule of 187 now, so that a program that played an old recording and then starts a match plays by the rules of a match) and before init(), which keeps it;
+    /// the original's game (mode 0) never reads it. A match that is played now never sets it: only the player of an old recording does.
+    void set_hill_open_187(bool open);
+    /// 187 only, the rules number of the recording that is being played (replay::kSimRulesMode187BeforeEndFix): with `on` (the default, the rules of a match played now) an egg keeps a team standing only while it could
+    /// be hatched (the team has a hill to hatch at), and the match ends by "one side is left" only when two teams began with an ant, an egg that could hatch or a hatch;
+    /// with `on` unset any egg keeps its team standing and the seats of the roster are counted, as a recording of 6, 7 or 10 was played (docs/GAMEPLAY.md, "187"). Chosen after set_game_mode (which sets it back to the rule
+    /// of a match played now) and before init(), which keeps it; the original's game never reads it. The state hash does not carry it (the end of the match, which it does, shows the difference).
+    void set_end_fix_187(bool on);
+    bool end_fix_187() const noexcept;
+    /// The original's game only, the rules number of the recording that is being played (replay::kSimRulesBeforeLastSide): with `on` (the default, the rules of a match played now) a match ends when exactly one side
+    /// still has an ant, an egg or a hatch in progress and no food is left that could score, and the results rank by score as always, a tie for the top going to that side (docs/GAMEPLAY.md, "The last side standing"); with `on` unset the match ends
+    /// by the original's CHECKGO alone, as a recording of the rules number 5 was played. It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it;
+    /// 187 has an end rule of its own and never reads it. The state hash does not carry it (the end of the match, which it does, shows the difference).
+    void set_last_side_rule(bool on);
+    /// Whether this match ends by the last-side rule: the original's game with the rule on
+    bool last_side_rule() const noexcept;
+    /// The loader of the recording that is being played (replay::kSimRulesBeforeFireWall, kSimRulesMode187BeforeFireWall and the numbers before them): with `on` (the default, the rules of a match played now) a fire wall of the map file
+    /// loads as the original loads it (Grid::init_from_level: solid by its file bit only); with `on` unset a fire wall whose dictionary entry has a name also gets the remake's obstacle overlay, as it did until v0.14.
+    /// The same for both game modes (the loader knows no mode). It is chosen after set_game_mode (which sets it back to the rule of a match played now) and before init(), which keeps it. The state hash carries the overlay.
+    void set_fire_wall_as_original(bool on);
+    bool fire_wall_as_original() const noexcept;
+    /// Whether an ant of this match can enter its own hill: always in the original's game, in 187 only while the rule of the old recordings is set (set_hill_open_187)
+    bool own_hill_enterable() const noexcept;
 
     // Fog of War
     void set_fog_of_war_enabled(bool enabled);

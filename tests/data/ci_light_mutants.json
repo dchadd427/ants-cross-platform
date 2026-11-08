@@ -1,0 +1,279 @@
+{
+ "note": "Mutants of tools/ci_light.sh, which decides in the first job of the CI whether a pull request needs all of CI or only the light checks: the files of the light kinds that the skipped jobs read, the kinds themselves, the merge base, the comparison with main, the name of main, the output. Each must be noticed by tests/scripts/test_ci_light.py. No build: python3 tools/mutate.py tests/data/ci_light_mutants.json --keep-going --jobs 1, from the repository folder (about 20 seconds for each mutant).",
+ "mutants": [
+  {
+   "id": "a_bumped_submodule_is_left_out",
+   "file": "tools/ci_light.sh",
+   "old": "--no-renames --ignore-submodules=none -z",
+   "new": "--no-renames -z",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_bumped_submodule_counts_although_git_is_told_to_ignore_submodules"
+  },
+  {
+   "id": "a_renamed_file_counts_once",
+   "file": "tools/ci_light.sh",
+   "old": "--name-only --no-renames --ignore-submodules=none",
+   "new": "--name-only --ignore-submodules=none",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "ctest_reads_lobby_rules_and_it_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/front/lobby_rules.js | web/front/preview_*.png) return 1 ;;",
+   "new": "web/front/preview_*.png) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "ctest_needs_the_pictures_and_they_are_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/front/lobby_rules.js | web/front/preview_*.png) return 1 ;;",
+   "new": "web/front/lobby_rules.js) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_lobby_page_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;",
+   "new": "web/shell.html | web/shapes.js) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_game_page_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;",
+   "new": "web/lobby.html | web/shapes.js) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_shape_table_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;",
+   "new": "web/lobby.html | web/shell.html) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_codec_of_the_lobby_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/front/lobby_net.js | web/front/lobby_chat.js",
+   "new": "web/front/lobby_chat.js",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_map_picker_is_light",
+   "file": "tools/ci_light.sh",
+   "old": " | web/front/game_type.js | web/front/map_picker.js) return 1 ;;",
+   "new": " | web/front/game_type.js) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "home_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/home/home.js | web/home/games.js) return 1 ;;",
+   "new": "web/home/games.js) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_games_list_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/home/home.js | web/home/games.js) return 1 ;;",
+   "new": "web/home/home.js) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "a_node_check_of_the_server_script_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "tests/scripts/web_fill_check.js | tests/scripts/web_lobby_server_check.js",
+   "new": "tests/scripts/web_fill_check.js",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_page_harness_is_light",
+   "file": "tools/ci_light.sh",
+   "old": " | tests/scripts/web_page_harness.js) return 1 ;;",
+   "new": ") return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_light_rule_comes_first",
+   "file": "tools/ci_light.sh",
+   "old": "        # ---- of the light kinds, and read or run by the jobs that a light pull request skips ----\n",
+   "new": "        web/* | docs/*) return 0 ;;\n        # ---- of the light kinds, and read or run by the jobs that a light pull request skips ----\n",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "a_file_in_a_folder_of_the_data_is_a_list_of_mutants",
+   "file": "tools/ci_light.sh",
+   "old": "        tests/data/*/*) return 1 ;;\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_file_in_a_folder_of_the_scripts_is_a_page_test",
+   "file": "tools/ci_light.sh",
+   "old": "        tests/scripts/*/*) return 1 ;;\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "unknown_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "tests/scripts/test_web_* | tests/scripts/web_*) return 0 ;;\n    esac\n    return 1\n}",
+   "new": "tests/scripts/test_web_* | tests/scripts/web_*) return 0 ;;\n    esac\n    return 0\n}",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_push_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "if [ \"${EVENT:-}\" != pull_request ]; then",
+   "new": "if false; then",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_short_commit_id_is_taken",
+   "file": "tools/ci_light.sh",
+   "old": "if ! is_commit_id \"$base\" || ! is_commit_id \"$head\"; then",
+   "new": "if false; then",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_base_is_not_the_merge_base",
+   "file": "tools/ci_light.sh",
+   "old": "check_changes \"pull request\" \"$merge_base\"",
+   "new": "check_changes \"pull request\" \"$base\"",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_pull_request_without_a_change_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "if [ $((total_light + total_full)) -eq 0 ]; then",
+   "new": "if false; then",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "one_full_file_is_not_enough",
+   "file": "tools/ci_light.sh",
+   "old": "elif [ \"$total_full\" -gt 0 ]; then",
+   "new": "elif [ \"$total_full\" -gt 1 ]; then",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "main_is_not_compared",
+   "file": "tools/ci_light.sh",
+   "old": "if [ \"$main_merge_base\" != \"$merge_base\" ]; then",
+   "new": "if false; then",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_pull_request_against_another_branch_that_carries_code_main_lacks_is_full"
+  },
+  {
+   "id": "the_files_against_main_are_not_counted",
+   "file": "tools/ci_light.sh",
+   "old": "    total_full=$((total_full + full))\n",
+   "new": "    total_full=$((total_full + 0))\n",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_pull_request_against_another_branch_that_carries_code_main_lacks_is_full"
+  },
+  {
+   "id": "a_main_that_is_not_there_is_the_base",
+   "file": "tools/ci_light.sh",
+   "old": "|| finish false \"the branch main is not there to compare with (is the history complete?)\"",
+   "new": "|| main=$base",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_main_without_a_merge_base_is_the_base",
+   "file": "tools/ci_light.sh",
+   "old": "|| finish false \"no merge base of the pull request and main (is the history complete?)\"",
+   "new": "|| main_merge_base=$merge_base",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_name_of_main_is_not_checked",
+   "file": "tools/ci_light.sh",
+   "old": "is_main_ref \"$main_ref\" || finish false \"MAIN_REF is not a branch of origin\"",
+   "new": "true",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_name_of_main_may_have_any_character",
+   "file": "tools/ci_light.sh",
+   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "new": "refs/remotes/origin/ | refs/remotes/origin/-*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_name_of_main_may_have_an_at_sign",
+   "file": "tools/ci_light.sh",
+   "old": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "new": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-@]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_name_of_main_may_have_a_letter_that_is_not_ascii",
+   "file": "tools/ci_light.sh",
+   "old": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "new": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-éï]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_commit_id_in_capitals_is_taken",
+   "file": "tools/ci_light.sh",
+   "old": "\"\" | *[!0123456789abcdef]*) return 1 ;;",
+   "new": "\"\" | *[!0123456789abcdefABCDEF]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_commit_id_with_a_g_is_taken",
+   "file": "tools/ci_light.sh",
+   "old": "\"\" | *[!0123456789abcdef]*) return 1 ;;",
+   "new": "\"\" | *[!0123456789abcdefg]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_commit_id_may_have_a_letter_that_is_not_ascii",
+   "file": "tools/ci_light.sh",
+   "old": "\"\" | *[!0123456789abcdef]*) return 1 ;;",
+   "new": "\"\" | *[!0123456789abcdefé]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_name_of_main_may_begin_with_a_dash",
+   "file": "tools/ci_light.sh",
+   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "new": "refs/remotes/origin/ | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_decision_is_not_written",
+   "file": "tools/ci_light.sh",
+   "old": "echo \"light=$1\" >> \"$GITHUB_OUTPUT\"",
+   "new": ":",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_path_is_printed_as_it_is",
+   "file": "tools/ci_light.sh",
+   "old": "printf '  %-5s %q\\n' light \"$path\"",
+   "new": "printf '  %-5s %s\\n' light \"$path\"",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "a_path_is_printed_as_it_is_when_it_is_full",
+   "file": "tools/ci_light.sh",
+   "old": "printf '  %-5s %q\\n' FULL \"$path\"",
+   "new": "printf '  %-5s %s\\n' FULL \"$path\"",
+   "test": "python3 tests/scripts/test_ci_light.py"
+  }
+ ]
+}

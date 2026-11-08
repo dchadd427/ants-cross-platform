@@ -44,12 +44,12 @@ artwork, sounds, music and maps are not covered by it: they belong to their copy
 - What: Libre Franklin, Copyright 2020 The Libre Franklin Project Authors, <https://github.com/googlefonts/Libre-Franklin>.
 - Licence: SIL Open Font License, Version 1.1. The full text is in `Original-Ants/LibreFranklin-OFL.txt`; keep that file together with the font.
 
-## Removed from the repository
+## Local files of the original, not part of the repository
 
 - cnc-ddraw (the Windows DirectDraw wrapper <https://github.com/FunkyFr3sh/cnc-ddraw>: `Original-Ants/ddraw.dll`, `Original-Ants/ddraw.ini`,
-  `Original-Ants/cnc-ddraw config.exe`) and the libretro GLSL shaders (<https://github.com/libretro/glsl-shaders>: `Original-Ants/Shaders/`) used
-  to be in the folder `Original-Ants/`. They only run the original `Ants.exe` on Windows, the remake never used them, and they left the repository
-  together with the original program; a local setup of the original keeps them there (`.gitignore` keeps them out of every commit).
+  `Original-Ants/cnc-ddraw config.exe`) and the libretro GLSL shaders (<https://github.com/libretro/glsl-shaders>: `Original-Ants/Shaders/`) only run
+  the original `Ants.exe` on Windows; the remake does not use them. They are not part of the repository and must not be added to it: a local setup
+  of the original keeps them in `Original-Ants/`, and `.gitignore` keeps them out of every commit.
 
 ## Not in the repository (linked or downloaded by the build)
 

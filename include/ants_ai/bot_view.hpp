@@ -186,6 +186,9 @@ public:
     sim::AntType default_ant_type() const noexcept { return default_ant_type_; }
     /// The rules of the match (the room's game type, the same on every machine and known to every player): HighestScore, or Kills187 (no food, the kills are the score, docs/GAMEPLAY.md "187")
     sim::GameMode game_mode() const noexcept { return game_mode_; }
+    /// Whether an ant of this match can enter its own hill, which is what heals it: true in the original's game, false in 187 now (an ant cannot enter its hill there, docs/GAMEPLAY.md "187"), true again
+    /// in a 187 match of the earlier rules. Public to every player, like the game type; the brawl sends no ant home to heal when it is false.
+    bool hill_enterable() const noexcept { return hill_enterable_; }
     /// The analysis of the match, null when the view was built without one
     const MapInfo* map() const noexcept { return map_; }
     /// What the engine's dynamic walking rules need besides the grid for this seat's ants: its ally (own and allied bombs block) and the teams that dropped out (their queue rows are
@@ -226,6 +229,7 @@ private:
     bool hatching_{false};
     sim::AntType default_ant_type_{sim::AntType::Worker};
     sim::GameMode game_mode_{sim::GameMode::HighestScore};
+    bool hill_enterable_{true};
     std::array<TeamRow, sim::MAX_PLAYERS> rows_{};
     std::vector<AntView> mine_;
     std::vector<AntView> others_;

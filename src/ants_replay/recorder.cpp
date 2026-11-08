@@ -4,7 +4,7 @@ namespace ants::replay {
 
 Recorder::Recorder(Header head) {
     head.format_version = kFormatVersion;
-    if (head.mode != 0 && head.sim_rules < kSimRulesMode187) head.sim_rules = sim_rules_for_mode(head.mode);       // (a match of another game mode is recorded under the rules number that goes with it, whoever made the head)
+    if (head.mode != 0) head.sim_rules = sim_rules_for_mode(head.mode);       // (a match of another game mode is recorded under the rules number that goes with it, whoever made the head)
     replay_.head = std::move(head);
     if (replay_.head.hash_period == 0 || replay_.head.hash_period > kMaxTurns) fail("the head's hash period is out of range");       // (on_tick divides by it)
 }
@@ -36,7 +36,7 @@ void Recorder::on_command(const sim::Command& command) {
     }
     bytes_ += 1 + sim::encoded_size(command);                   // (the gap is a byte or two: the count is about what the commands take in the file; encode() makes the final check. The embedded map is not counted: kMaxFileBytes is the match's, see max_file_bytes)
     if (bytes_ > kMaxFileBytes) {
-        fail("the match is too long to keep as a replay");
+        fail("the recording is over its size limit (" + std::to_string(kMaxFileBytes >> 20) + " MiB)");
         return;
     }
     if (replay_.head.recorder_seat != kNoSeat && command.issuer == replay_.head.recorder_seat) ++own_;

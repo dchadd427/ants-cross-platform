@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The owner's page, web/admin.html with web/admin_page.js and web/admin.css (run by ./run_tests.sh --fast and by the CI; docs/MAP_SUBMISSIONS.md "The owner's page").
+"""The admin page, web/admin.html with web/admin_page.js and web/admin.css (run by ./run_tests.sh --fast and by the CI; docs/MAP_SUBMISSIONS.md "The admin page").
 
   - the page's own code is RUN (node, when it is installed): what it shows to nobody (the sign-in box), to an account with a starting password (the choice of its own), to an Admin and to a Moderator (the first
     design's pictures: the account menu, the four tabs, the rows, the rename box, the decline box, the question before a take-down, the users, the password shown once, the log, the empty states), what each button
@@ -30,7 +30,7 @@ def run_check(script=SCRIPT):
 
 
 class ThePagesOwnCode(unittest.TestCase):
-    @unittest.skipUnless(shutil.which("node"), "node is not installed: the owner's page was NOT run (tests/scripts/test_web_admin.py)")
+    @unittest.skipUnless(shutil.which("node"), "node is not installed: the admin page was NOT run (tests/scripts/test_web_admin.py)")
     def test_the_page_shows_and_sends_what_the_pictures_say(self):
         done = run_check()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -76,7 +76,7 @@ class ThePagesOwnCode(unittest.TestCase):
             "an expired session is not noticed": ("if (r.status === 404) return start();\n                    if (done && done(r)) return;", "if (done && done(r)) return;"),
             "a list that fails shows nothing and says nothing": ("(the session ended: the page asks again who is here)\n                    if (r.status !== 200) { toast('The list could not be loaded. Reload the page.'); return null; }", "(the session ended: the page asks again who is here)\n                    if (r.status !== 200) { st.data = { counts: {}, maps: [] }; draw(); return null; }"),
             "the list is not asked again after a change": ("Promise.resolve(load()).then(release, release);", "release();"),
-            "a link leads out of the owner's page": ("add(app, header(section.title, true), add(wrap, host));", "add(app, header(section.title, true), add(wrap, host), el('a'));"),
+            "a link leads out of the admin page": ("add(app, header(section.title, true), add(wrap, host));", "add(app, header(section.title, true), add(wrap, host), el('a'));"),
             "the page behind the question is not inert": ("if (n !== d.node && n !== host.parentNode && n !== app) n.setAttribute('inert', '');", ""),
             "the page behind a box is not inert": ("Array.prototype.slice.call(app.children).forEach(function (n) { n.setAttribute('inert', ''); });", ""),
             "Escape does not close a box": ("if (e.key === 'Escape') { closeModal(); return; }", ""),
@@ -86,7 +86,7 @@ class ThePagesOwnCode(unittest.TestCase):
             "a bidirectional control stays in a typed name": ("[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, ''));\n            n.setAttribute('data-untrusted', TYPED);", "[\\u061d]/g, ''));\n            n.setAttribute('data-untrusted', TYPED);"),
             "the typed name is lost behind the question": ("st.open.typed = input.value; st.dialog = m;", "st.dialog = m;"),
             "Save name and approve asks no question": ("st.open.typed = input.value; st.dialog = m; st.dialogKind = 'approve'; st.dialogBody = { name: input.value }; draw(); });", "act(m.id, 'approve', { name: input.value }); });"),
-            "the question forgets the owner's name": ("act(m.id, 'approve', body || {},", "act(m.id, 'approve', {},"),
+            "the question forgets the name that the admin typed": ("act(m.id, 'approve', body || {},", "act(m.id, 'approve', {},"),
             "the password box shows what is typed": ("input.type = attrs.type || 'text';", "input.type = 'text';"),
             "the eye does not show the password": ("input.type = shown ? 'text' : 'password';", ""),
             "the sign-in password has the wrong autocomplete": ("{ type: 'password', autocomplete: 'current-password', maxlength: 256 });\n            var go", "{ type: 'password', autocomplete: 'off', maxlength: 256 });\n            var go"),
