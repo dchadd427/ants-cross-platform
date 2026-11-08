@@ -22,7 +22,7 @@
     var GROUPS = [['mod', 'Moderators'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing']];
     var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing' };
     var TEXT = {
-        title: 'Players', here: ' here now', you: 'you', mod: 'mod', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
+        title: 'Players', here: ' here now', you: 'you', mod: 'mod', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', badges: '99+', player: ' player', players: ' players', of: ' of ',
         empty: 'Just you here. Host a game!', emptyNote: 'People who log in with Discord show up here by name.', host: '+ Host a game',
         off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games, rooms and the Yard work as always; this list comes back by itself.',
@@ -84,11 +84,12 @@
         if (row.n >= 0 && row.of >= 1) parts.push(row.n + TEXT.of + row.of);
         return parts.join(' · ');
     }
-    // The line under a name: where the person is. A person who looks has none (the group says it), except where `label` is set (the visitor's own row, a moderator's: no group says it there)
-    function metaOf(row, label) {
+    // The line under a name: where the person is. A person who looks has none (the group says it), except where `label` is set (the visitor's own row, a moderator's: no group says it there). A room without details
+    // is "In a room", not private: the hub keeps none of an account that may not chat either; the visitor's own row (`own`) knows.
+    function metaOf(row, label, own) {
         if (row.at === 'look') return label ? WORD.look : '';
-        if (row.at === 'wait') return row.pub ? seatsText(row) || TEXT.publicRoom : TEXT.privateRoom;
-        if (!row.pub) return TEXT.privateGame;
+        if (row.at === 'wait') return row.pub ? seatsText(row) || TEXT.publicRoom : own ? TEXT.privateRoom : TEXT.inRoom;
+        if (!row.pub) return own ? TEXT.privateGame : TEXT.inGame;
         return [row.mapName, row.n >= 0 ? row.n + (row.n === 1 ? TEXT.player : TEXT.players) : ''].filter(Boolean).join(' · ') || TEXT.inGame;
     }
     // What this page tells the hub it is doing, from its own room (client: the page's LobbyClient or null; count: Home's { people, size } of the room or null; handing: the page is on its way to a game).
@@ -177,7 +178,7 @@
         }
         function quick() { return env.quickHost; }
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
-            var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label);
+            var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label, o.you);
             li.setAttribute('data-s', row.at);
             av.setAttribute('aria-hidden', 'true');
             if (row.mod) name.appendChild(el('span', 'pl-badge', TEXT.mod));

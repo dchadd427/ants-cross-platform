@@ -787,6 +787,55 @@
    "old": "if (game) copy.mapName = game.name === (row.mapName || row.guess) ? game.name : '';",
    "new": "copy.mapName = game ? (game.name === (row.mapName || row.guess) ? game.name : '') : (row.mapName || row.guess);",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_room_with_no_details_is_private_for_the_others",
+   "file": "web/home/players.js",
+   "old": "return row.pub ? seatsText(row) || TEXT.publicRoom : own ? TEXT.privateRoom : TEXT.inRoom;",
+   "new": "return row.pub ? seatsText(row) || TEXT.publicRoom : TEXT.privateRoom;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_match_with_no_details_is_private_for_the_others",
+   "file": "web/home/players.js",
+   "old": "if (!row.pub) return own ? TEXT.privateGame : TEXT.inGame;",
+   "new": "if (!row.pub) return TEXT.privateGame;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_visitors_own_private_room_is_not_told_private",
+   "file": "web/home/players.js",
+   "old": "return row.pub ? seatsText(row) || TEXT.publicRoom : own ? TEXT.privateRoom : TEXT.inRoom;",
+   "new": "return row.pub ? seatsText(row) || TEXT.publicRoom : TEXT.inRoom;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_visitors_own_private_match_is_not_told_private",
+   "file": "web/home/players.js",
+   "old": "if (!row.pub) return own ? TEXT.privateGame : TEXT.inGame;",
+   "new": "if (!row.pub) return TEXT.inGame;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_line_of_the_visitors_own_row_does_not_know_it_is_the_visitors",
+   "file": "web/home/players.js",
+   "old": "meta = metaOf(row, o.label, o.you);",
+   "new": "meta = metaOf(row, o.label);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_line_of_every_row_knows_it_is_the_visitors",
+   "file": "web/home/players.js",
+   "old": "meta = metaOf(row, o.label, o.you);",
+   "new": "meta = metaOf(row, o.label, true);",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_words_of_a_room_with_no_details_are_not_the_ones_of_the_picture",
+   "file": "web/home/players.js",
+   "old": "inRoom: 'In a room'",
+   "new": "inRoom: 'A room'",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }
