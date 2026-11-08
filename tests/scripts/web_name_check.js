@@ -88,24 +88,25 @@ check('the refusal of a long name says 32', /32/.test(nameCheck('a'.repeat(33)).
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 function fakeUi() {
     return {
-        shown: 0, hidden: 0, hints: [],
+        shown: 0, hidden: 0, hints: [], logins: [],
         input: { value: '', listeners: {}, addEventListener(t, fn) { this.listeners[t] = fn; } },
         button: { listeners: {}, addEventListener(t, fn) { this.listeners[t] = fn; } },
         message: { textContent: '' },
-        said(text) { this.hints.push(text); },
+        said(text, login) { this.hints.push(text); this.logins.push(login); },
         show() { this.shown++; },
         hide() { this.hidden++; },
     };
 }
-// The person of a page as the card sees it (front/player_name.js): ready(fn) waits until answer(name, kind, swap) is called (a question on its way), or answers at once when `now` is given
+// The person of a page as the card sees it (front/player_name.js): ready(fn) waits until answer(name, kind, swap, how) is called (a question on its way), or answers at once when `now` is given
 function fakePerson(now) {
     const waiting = [];
-    return { asked: 0, ready(fn) { this.asked++; if (now) fn(now[0], now[1], now[2]); else waiting.push(fn); }, answer(name, kind, swap) { waiting.splice(0).forEach((fn) => fn(name, kind, swap)); } };
+    return { asked: 0, ready(fn) { this.asked++; if (now) fn(now[0], now[1], now[2], now[3]); else waiting.push(fn); }, answer(name, kind, swap, how) { waiting.splice(0).forEach((fn) => fn(name, kind, swap, how)); } };
 }
 const HINT_LOGIN = 'This is your Discord name. The other players see it.';
 const HINT_SWAP = ' The chat menu switches it between your display name and your username.';
+const HINT_OTHER = ' Your display name has characters that the game cannot show, so your username is used.';
 const HINT_GUEST = 'You play as a guest. Log in with Discord to play under your own name.';
-same('the words under the name: a login, the switch that the hub says exists, a guest', [names.HINT.login, names.HINT.swap, names.HINT.guest], [HINT_LOGIN, HINT_SWAP, HINT_GUEST]);
+same('the words under the name: a login, the switch that the hub says exists, the username that is used because the display name did not fit, a guest', [names.HINT.login, names.HINT.swap, names.HINT.other, names.HINT.guest], [HINT_LOGIN, HINT_SWAP, HINT_OTHER, HINT_GUEST]);
 check('the words are plain text of the page\'s characters, short, and none of them is a name that nameCheck takes (they are hints, not names)', Object.values(names.HINT).every((w) => /^[\x20-\x7e]+$/.test(w) && w.length < 90 && !/[<>&]/.test(w)));
 {
     const ui = fakeUi();
@@ -129,6 +130,46 @@ check('the words are plain text of the page\'s characters, short, and none of th
     names.runNameStep(ui, person, function () {});
     person.answer('maya_99', 'login', true);
     same('a login whose hub says that there is another name: the words say where it is changed (the chat menu)', ui.hints, [HINT_LOGIN + HINT_SWAP]);
+}
+{
+    const ui = fakeUi();
+    const person = fakePerson();
+    names.runNameStep(ui, person, function () {});
+    person.answer('user_name', 'login', true, 'other');
+    same('a login whose display name did not fit and who plays under the username: the words say why, and not that the chat menu switches it', [ui.input.value, ui.hints, ui.logins], ['user_name', [HINT_LOGIN + HINT_OTHER], [false]]);
+}
+for (const [what, answer, link] of [['a guest whom the hub could log in', ['Guest 550000', 'guest', false, 'login'], true], ['a guest of a site with no login, or whose question failed', ['Guest 550000', 'guest', false, ''], false], ['a login', ['maya', 'login', false, ''], false], ['a login that plays under the username', ['maya_9', 'login', true, 'other'], false]]) {
+    const ui = fakeUi();
+    names.runNameStep(ui, fakePerson(answer), function () {});
+    check('the card offers the link that logs in only to ' + what + ': ' + link, ui.logins.length === 1 && ui.logins[0] === link, JSON.stringify(ui.logins));
+}
+{   // the way out of the card (the review's finding): Join, then "a room of my own instead" while the name is on its way: the answer must not join the link's room
+    const ui = fakeUi();
+    const person = fakePerson();
+    const done = [];
+    names.runNameStep(ui, person, function (n) { done.push(n); });
+    ui.button.listeners.click();
+    ui.hide();
+    person.answer('maya', 'login', false, '');
+    same('Join, then the way out, then the answer: nothing is done (the card was hidden by somebody else, so it is done)', [done, ui.hidden], [[], 1]);
+    ui.button.listeners.click();
+    check('... and a press after that does nothing either', done.length === 0);
+}
+{
+    const ui = fakeUi();
+    const done = [];
+    names.runNameStep(ui, fakePerson(['maya', 'login', false, '']), function (n) { done.push(n); });
+    ui.hide();
+    ui.button.listeners.click();
+    check('the way out before Join: a press afterwards does nothing (the name was there already)', done.length === 0 && ui.hidden === 1);
+}
+{
+    const ui = fakeUi();
+    const done = [];
+    const own = ui.hide;
+    names.runNameStep(ui, fakePerson(['maya', 'login', false, '']), function (n) { done.push(n); });
+    ui.button.listeners.click();
+    same('the card\'s own hide still runs when the step hides it, once (the wrapper calls the card\'s)', [done, ui.hidden, typeof own], [['maya'], 1, 'function']);
 }
 {
     const ui = fakeUi();
@@ -279,6 +320,7 @@ for (const [label, e, want] of [
     ['Page Down', { key: 'PageDown' }, true], ['Ctrl+Arrow (the browser\'s own)', { key: 'ArrowLeft', ctrlKey: true }, false], ['no key', {}, false],
 ]) check('cancelsBrowserKey: ' + label, P.cancelsBrowserKey(e) === want, String(P.cancelsBrowserKey(e)));
 
+same('a game here asks for the person\'s own name (nameless) when its address names a map, bots or a test game and has no name, never with a name (even an empty one) or at the address of another page; and it takes the address only', ['?map=tiny', '?bots=easy', '?map=tiny&name=Bob', '?map=tiny&name=', '', '?join=/ws&room=abc'].map((t) => P.localArguments(t).nameless).concat(P.localArguments.length), [true, true, false, false, false, false, 1]);
 // the gate: a shared link holds the game back until the button; every other address does not
 {
     const ui = fakeUi();
@@ -306,6 +348,28 @@ for (const [label, e, want] of [
     check('the button before the person is known starts nothing', started === 0 && gate.pending() && args.length === 2);
     person.answer('Guest 550000', 'guest', false);
     check('... the game starts when the name is there, under it (a guest name is a name: --name)', started === 1 && !gate.pending() && args.join(' ') === '--join-url ws://h/ws --name Guest 550000', args.join(' '));
+}
+{   // a game on this computer with no name in its address: no card, the start waits for the person's name (the login's, else a guest's) and puts it in
+    const ui = fakeUi();
+    const args = ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'];
+    const person = fakePerson();
+    const gate = shell.makeNameGate(false, args, ui, person, true);
+    let started = 0;
+    gate.when(function () { started++; });
+    check('a game here with no name in its address: it waits for the person (no card, and the page does not say that a name is to be chosen)', started === 0 && ui.shown === 0 && !gate.pending() && person.asked === 1 && args.indexOf('--name') === -1);
+    person.answer('maya', 'login', false, '');
+    check('... and starts under the login\'s name as --name', started === 1 && ui.shown === 0 && args.slice(-2).join(' ') === '--name maya', args.join(' '));
+    gate.when(function () { started++; });
+    check('... once; what asks later starts at once', started === 2 && person.asked === 1);
+    const guest = fakePerson(['Guest 550000', 'guest', false, 'login']);
+    const args2 = ['--map', 'Original-Ants/Maps/TINY.LVL', '--play'];
+    let went = 0;
+    shell.makeNameGate(false, args2, fakeUi(), guest, true).when(function () { went++; });
+    check('a guest: the guest name is the game\'s name, and the game starts at once when the answer is known', went === 1 && args2.slice(-2).join(' ') === '--name Guest 550000');
+    const args3 = ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--name', 'Bob'];
+    let direct = 0;
+    shell.makeNameGate(false, args3, fakeUi(), null).when(function () { direct++; });
+    check('an address that has its name (the front page\'s own): nobody is asked, the game starts at once under it', direct === 1 && args3.join(' ') === '--map Original-Ants/Maps/TINY.LVL --play --name Bob');
 }
 {
     const ui = fakeUi();
@@ -352,9 +416,10 @@ for (const [label, e, want] of [
     const defs = [...shellText.matchAll(/function startGame\(\)/g)].length;
     const gated = [...shellText.matchAll(/ANTS_NAME_GATE\.when\(startGame\)/g)].length;
     check('the game of the page starts only through the gate (no direct startGame() call, two gated starts)', startCalls === defs && gated === 2, startCalls + ' calls, ' + defs + ' definitions, ' + gated + ' gated');
-    check('the page makes the gate from the address and puts the name in the game\'s own arguments; only a page that asks makes the person that asks the hub', /makeNameGate\(asks, ANTS_ARGS, ui, asks \? AntsPlayerName\.forWindow\(window, nameCheck, \{ later: setTimeout, cancel: clearTimeout, random: Math\.random \}\) : null\)/.test(shellText) && /var asks = ANTS_PAGE\.asksForName\(window\.location\.search\)/.test(shellText));
+    check('the page makes the gate from the address and puts the name in the game\'s own arguments; only a page that asks makes the person that asks the hub', /makeNameGate\(asks, ANTS_ARGS, ui, asks \|\| own \? \(PN \? PN\.forWindow\(window, nameCheck, \{ later: setTimeout, cancel: clearTimeout, random: Math\.random \}\) : \{ ready: function \(fn\) \{ fn\('Guest', 'guest', false, ''\); \} \}\) : null, own\)/.test(shellText) && /var PN = window\.AntsPlayerName, own = !asks && ANTS_OWN_NAME;/.test(shellText) && /var asks = ANTS_PAGE\.asksForName\(window\.location\.search\)/.test(shellText));
+    check('a game page whose script of the person did not come still has its card and its games: the person is then a guest (the global is looked at as a property of the window, never as a bare name)', !/[^.\w]AntsPlayerName\b/.test(shellText.replace(/\/\/[^\n]*/g, '').replace(/window\.AntsPlayerName/g, '')) && /\{ ready: function \(fn\) \{ fn\('Guest', 'guest', false, ''\); \} \}/.test(shellText));
     check('the game page\'s card says its words under the name (the hint element, as text) and puts the focus on the Join button, not on the read-only field; the field looks read-only (the cursor of the page, not of a text field)',
-          /said: function \(text\) \{ document\.getElementById\('name-step-hint'\)\.textContent = text; \},/.test(shellText) && /try \{ ui\.button\.focus\(\); \} catch \(e\) \{ \/\* nothing to focus \*\/ \}\s*\},\s*hide: function \(\) \{\s*card\.hidden = true;/.test(shellText) && /\.name-step input \{[^}]*cursor: default;[^}]*\}/.test(shellText));
+          /said: function \(text, login\) \{ document\.getElementById\('name-step-hint'\)\.textContent = text; document\.getElementById\('name-step-login'\)\.hidden = !login; \},/.test(shellText) && /try \{ ui\.button\.focus\(\); \} catch \(e\) \{ \/\* nothing to focus \*\/ \}\s*\},\s*hide: function \(\) \{\s*card\.hidden = true;/.test(shellText) && /\.name-step input \{[^}]*cursor: default;[^}]*\}/.test(shellText));
     check('the game page loads the script of the person (front/player_name.js) with the other scripts of front/, before its own code', /<script src="front\/lobby_net\.js"><\/script><script src="front\/player_name\.js"><\/script>/.test(shellText) && shellText.indexOf('front/player_name.js') < shellText.indexOf('var ANTS_NAME_GATE'));
     for (const id of ['name-step', 'name-step-title', 'name-step-input', 'name-step-go', 'name-step-msg']) check('the card of the step has #' + id, new RegExp('id="' + id + '"').test(shellText));
     check('the name field of the card is read-only (the name is shown, never typed), described by the line under it and by the words under it', /<input type="text" id="name-step-input" readonly aria-describedby="name-step-msg name-step-hint">/.test(shellText) && !/id="name-step-input"[^>]*(maxlength|placeholder|autocomplete)/.test(shellText));
@@ -401,11 +466,11 @@ const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, G
           /runNameStep\(ui, person, o\.done\);/.test(lobbyScript) &&
           /function freshNode\(id\) \{\s*var old = \$\(id\), copy = old\.cloneNode\(true\);\s*old\.parentNode\.replaceChild\(copy, old\);\s*return copy;\s*\}/.test(lobbyScript));
     check('two things ask for a name: a link of somebody else\'s room and a code that was typed (askName is called twice, and no other way starts a seat of a stranger)', (lobbyScript.match(/\baskName\(\{/g) || []).length === 2);
-    check('the card says its words as text: the title, the button, the words under the name (from the NAME block), the way out; the field is read-only and takes the focus away from itself: the button has it', /\$\('name-step-title'\)\.textContent = o\.title;/.test(lobbyScript) && /ui\.button\.textContent = o\.button;/.test(lobbyScript) && /said: function \(text\) \{ \$\('name-step-hint'\)\.textContent = text; \},/.test(lobbyScript)
+    check('the card says its words as text: the title, the button, the words under the name (from the NAME block), the way out; the field is read-only and takes the focus away from itself: the button has it', /\$\('name-step-title'\)\.textContent = o\.title;/.test(lobbyScript) && /ui\.button\.textContent = o\.button;/.test(lobbyScript) && /said: function \(text, login\) \{ \$\('name-step-hint'\)\.textContent = text; \$\('name-step-login'\)\.hidden = !login; \},/.test(lobbyScript) && /\$\('name-step-title'\)\.textContent = o\.title; \$\('name-step-login'\)\.hidden = true;/.test(lobbyScript)
           && /\$\('name-step-own'\)\.textContent = o\.backText \|\| 'Start a room of my own instead';/.test(lobbyScript) && /try \{ ui\.button\.focus\(\); \}/.test(lobbyScript) && /<input type="text" id="name-step-input" readonly aria-describedby="name-step-msg name-step-hint">/.test(lobbyMarkup) && !/id="name-step-input"[^>]*(maxlength|placeholder|autocomplete)/.test(lobbyMarkup));
     check('the front page\'s card field looks read-only: the cursor of the page, not of a text field', /\.name-step input \{[^}]*cursor: default; \}/.test(lobbyText));
     check('nobody types a name and nobody is given a made-up one: no suggestion, no picked name, no remembered name, no pencil, no rename, no key of a name in the storage', !/suggestion|pickName|savedName|NAME_KEY|editName|data-edit|\.rename\(|'ants\.name'/.test(lobbyScript) && !/\.edit\b/.test(lobbyText) && !/\u270e/.test(lobbyText));
-    check('the person of the page (front/player_name.js) is made once, with the page\'s own rules of a name and its own clock and generator, and asks when the page opens; the page names no address of the hub', (lobbyScript.match(/PlayerName\.forWindow\(/g) || []).length === 1 && /var person = PlayerName\.forWindow\(window, nameCheck, \{ later: setTimeout, cancel: clearTimeout, random: Math\.random \}\);\s*person\.ask\(\);/.test(lobbyScript) && lobbyText.indexOf('/hub') === -1);
+    check('the person of the page (front/player_name.js) is made once, with the page\'s own rules of a name and its own clock and generator, and asks when the page opens; the page names no address of the hub', (lobbyScript.match(/PlayerName\.forWindow\(/g) || []).length === 1 && /var person = PlayerName\.forWindow\(window, nameCheck, \{ later: setTimeout, cancel: clearTimeout, random: Math\.random \}\);\s*person\.ask\(\);/.test(lobbyScript) && lobbyText.split('href="/hub/login?next=home"').join('').indexOf('/hub') === -1);
     check('the name for a new seat is the person\'s sure one, and a seat connects only through open(): at once with a name, else when the person is known (one call of connect() on a client in the whole script)', /function myName\(\) \{ return person\.known\(\); \}/.test(lobbyScript) && /function open\(c, name\) \{ if \(name\) c\.connect\(\); else person\.ready\(function \(own\) \{ c\.name = own; c\.connect\(\); \}\); \}/.test(lobbyScript) && (lobbyScript.match(/\.connect\(\)/g) || []).length === 2 && /open\(c, p\.name\);/.test(lobbyScript) && /open\(p, name\);/.test(lobbyScript));
     check('a match for one is played under the seat\'s own name, and the Rejoin button sends none (the key takes the seat)', /soloAddress\(model, client\.name, pickedShape\)/.test(lobbyScript) && /rejoinQuery\(rejoinOffered, '', pickedShape\)/.test(lobbyScript));
     // What the page does with a name: nothing is put into markup. A name is set as text (el() sets textContent), through a value or an attribute, and goes into an address only through encodeURIComponent
@@ -593,6 +658,36 @@ for (const [what, me] of [['a hub where nobody is logged in', 'guest'], ['a site
     late[1] ? late[1](answer(MAYA)) : late[0](answer(MAYA));
     await afterIt();
     check('... and the room is made under the login\'s name when it has', env.sockets.length === 1 && helloName(env.last().open().sent[0]) === 'maya');
+}
+
+{   // the review's finding: Join, then "a room of my own instead", while the hub's answer is on its way: the answer must not join the link's room
+    const late = [];
+    const env = runLobby('?room=k7m2xq', {}, { me: () => new Promise((resolve) => { late.push(resolve); }) });
+    env.$('name-step-go').click();
+    env.$('name-step-own').click();
+    check('Join and then "a room of my own instead" before the hub has answered: the card is gone and no socket is open yet', env.$('name-step').hidden && env.sockets.length === 0);
+    late.forEach((resolve) => resolve(answer(MAYA)));
+    await afterIt();
+    const rooms = env.sockets.map((sock) => helloRoom(sock.open().sent[0]));
+    check('... the answer makes the page\'s own room, and no Hello is for the link\'s room', rooms.length === 1 && rooms[0] !== 'k7m2xq' && env.sockets.every((sock) => helloName(sock.sent[0]) === 'maya'), JSON.stringify(rooms));
+}
+for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', true], ['a person who is logged in', MAYA, false], ['a site with no hub', undefined, false], ['a hub that fails', 'fail', false]]) {
+    const env = runLobby('?room=k7m2xq', {}, { me });
+    await afterIt();
+    check('the card of a link offers "Log in with Discord" for ' + what + ' only: ' + shown, env.$('name-step-login').hidden === !shown, String(env.$('name-step-login').hidden));
+}
+{   // a login whose display name did not fit: the card says why the username is the name
+    const env = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: 'S\u00f8ren', mod: false, pick: 'display', other: 'soren_k', key: 'k' } } });
+    await afterIt();
+    same('the card of a login whose display name would lose a letter: the username in the field, and the words that say why (not the chat menu\'s switch)', [env.$('name-step-input').value, env.$('name-step-hint').textContent, env.$('name-step-login').hidden], ['soren_k', HINT_LOGIN + HINT_OTHER, true]);
+    const fits = runLobby('?room=k7m2xq', {}, { me: { login: true, you: { name: 'Maya', mod: false, pick: 'display', other: 'maya_99', key: 'k' } } });
+    await afterIt();
+    same('... a display name that fits is the name, with the words about the switch', [fits.$('name-step-input').value, fits.$('name-step-hint').textContent], ['Maya', HINT_LOGIN + HINT_SWAP]);
+}
+{   // the link itself: one place in each card, a plain link, no script of its own
+    const LINK = '<div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>';
+    check('both cards hold the link that logs a guest in: a plain link to the hub\'s login (the word `home` of its fixed list, as the chat dock\'s button says on Home), hidden until the card says that the hub could log the person in', lobbyText.split(LINK).length === 2 && shellText.split(LINK).length === 2);
+    check('... under the words that say whose name it is, and no script of its own on it', lobbyText.indexOf('id="name-step-hint"') < lobbyText.indexOf('id="name-step-login"') && shellText.indexOf('id="name-step-hint"') < shellText.indexOf('id="name-step-login"') && !/id="name-step-login"[^>]*\bon[a-z]+=/.test(lobbyText + shellText) && !/<a [^>]*on[a-z]+=/.test(lobbyText.slice(lobbyText.indexOf('id="name-step-login"'), lobbyText.indexOf('id="who-notice"'))));
 }
 
 // ---- 5.2 the room as the page paints it: a name is only ever text; the pencil changes the player's own name; a link made for somebody else carries no name

@@ -520,8 +520,9 @@ class TheGamePage(PageCase):
 
     def test_the_local_parameters_are_read_only_for_a_game_that_joins_no_server(self):
         self.assertIn("if (joined.args.indexOf('--join-url') === -1) {", self.page)
-        self.assertIn("var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach", self.page)
-        self.assertIn("localStorage.getItem('ants.name')", self.page)
+        self.assertIn("var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach", self.page)
+        self.assertIn("ANTS_OWN_NAME = local.nameless;", self.page)
+        self.assertNotIn("ants.name", self.page)                        # (an old remembered name is used by nothing: the person's own name is put in by the gate)
         self.assertEqual(len(re.findall(r"LOCAL_MAPS\s*=\s*\{", self.page)), 1)
         self.assertIn("localArguments: localArguments", self.page)
 

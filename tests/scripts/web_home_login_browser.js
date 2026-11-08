@@ -118,6 +118,14 @@ async function main() {
         await pg.reload({ waitUntil: 'load' });
         await pg.waitForFunction(() => document.getElementById('name-step-input').value !== '', null, { timeout: 8000 });
         check('a reload, the next visit: the same guest name', (await pg.evaluate(() => document.getElementById('name-step-input').value)) === card.value);
+        const link = await pg.evaluate(() => { const l = document.querySelector('#name-step-login a'); return { shown: !document.getElementById('name-step-login').hidden, href: l && l.getAttribute('href'), text: l && l.textContent }; });
+        check('the card of a guest shows the plain link "Log in with Discord" to the hub\'s login, going back to Home', link.shown && link.href === '/hub/login?next=home' && link.text === 'Log in with Discord', JSON.stringify(link));
+        await shot(pg, 'x_name_card_guest_link', 'desktop');
+        await pg.click('#name-step-login a');
+        await pg.waitForURL(/localhost:\d+\/oauth2\/authorize/, { timeout: 8000 });
+        const viaLink = new URL(pg.url());
+        check('a click on it is the same login as the chip\'s: the tab goes to Discord (the fake one) with the application, the way back and the hub\'s state (a link of this site is let through: its Sec-Fetch-Site is same-origin)',
+            viaLink.searchParams.get('client_id') === info.client_id && viaLink.searchParams.get('redirect_uri') === info.site + '/hub/callback' && /^[0-9a-f]{32}$/.test(viaLink.searchParams.get('state') || ''), pg.url());
         await context.close();
     }
 

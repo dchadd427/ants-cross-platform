@@ -511,6 +511,7 @@
         .name-step-msg { margin-top: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
         .name-step-msg:empty { display: none; }
         .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
+        .name-step-hint a { color: var(--ink); text-decoration: underline; }
         .name-step-notice { margin-top: 8px; }
         .name-step-back { margin-top: 14px; }
 
@@ -1220,6 +1221,7 @@
             </div>
             <div class="name-step-msg" id="name-step-msg" role="alert"></div>
             <div class="name-step-hint" id="name-step-hint">The name the other players see.</div>
+            <div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>
             <div class="name-step-hint name-step-notice">Online matches are recorded. Anybody can watch them, live or later. Recordings are kept for 30 days. Results and names are kept for good and are public.</div>
             <a class="btn sm name-step-back" id="name-step-back" href="/">&larr; Back to the front page</a>
         </div>
@@ -1401,7 +1403,7 @@
         //   marginPixel / overControl the game's pointer just outside the box of a WINDOWED page (within the margin: the nearest pixel of the picture), and whether a pointer is over one of the page's own controls
         //   joinArguments the arguments of ?join= &room= &roommap= &roomseats= &roomteams= &roomleaderstart= &platform= &seat= &name= &fill= &teams= &start=; asksForName / withoutName the name step of a shared link, codeText the room code that its title shows (two groups of three);
         //   badDownload whether a download is not the game data
-        //   localArguments the arguments of a game on THIS computer (?map= or ?mapfile= &bots= &teams= &name=: the front page's Play and START for one), through a whitelist
+        //   localArguments the arguments of a game on THIS computer (?map= or ?mapfile= &bots= &teams= &name=: the front page's Play and START for one), through a whitelist; nameless: no name in the address
         var ANTS_PAGE = (function () {
             // The shapes are web/shapes.js's one table (AntsShapes, loaded above; the game's own is kAspectTable in include/ants_app/canvas_layout.hpp, and tests/scripts/test_web_shapes.py keeps them equal):
             // the names, their order (the selector's, left to right, and the place that the game's ants_set_aspect takes), each shape's steps (the game's canvas is a whole number of them) and the
@@ -1693,8 +1695,8 @@
                 }
                 return levels;
             }
-            function localArguments(search, remembered) {
-                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '', test: null }, q;
+            function localArguments(search) {
+                var out = { args: [], map: '', file: '', bots: '', teams: '', name: '', test: null, nameless: false }, q;
                 try { q = new URLSearchParams(search); } catch (e) { return out; }
                 var map = (q.get('map') || '').toLowerCase();
                 if (Object.prototype.hasOwnProperty.call(LOCAL_MAPS, map)) {
@@ -1714,7 +1716,8 @@
                     out.teams = '0+' + teams[1];
                     out.args.push('--teams', out.teams);
                 }
-                var name = q.has('name') ? q.get('name') : ((q.has('map') || q.has('mapfile') || q.has('bots') || test) ? remembered : '');
+                var name = q.has('name') ? q.get('name') : '';
+                out.nameless = !q.has('name') && !!(q.has('map') || q.has('mapfile') || q.has('bots') || test);       // (a game here with no name in its address: the gate puts the person's own name in)
                 name = typeof name === 'string' ? name.replace(/[^\x20-\x7e]/g, '').trim().substring(0, 32) : '';
                 if (name) {
                     out.name = name;
@@ -1831,7 +1834,7 @@
         //          (every start of such a room has them)
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
-        var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
+        var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null, ANTS_OWN_NAME = false;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
         // Watching a replay: play.html?replay=<file>, a match that is still being played: play.html?live=<id>, or a file of your own: play.html?local=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live", one with local= and no record is "choose the file again"; replay= wins over local=, which wins over live=). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else the shape nearest to the screen) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
@@ -1845,9 +1848,7 @@
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
             joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
             if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
-                var remembered = '';
-                try { remembered = window.localStorage.getItem('ants.name') || ''; } catch (e) { /* private window: not remembered */ }
-                var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test;
+                var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test; ANTS_OWN_NAME = local.nameless;
             }
         })();
 
@@ -1886,11 +1887,9 @@
         // ANTS_PAGE_END
         if (window.AntsRematch) AntsRematch.gamePage({ win: window, doc: document, Net: window.AntsLobbyNet, host: document.getElementById('rematch') });      // the rematch: when the match of a lobby room is over (window.antsMatchOver), the strip under the picture (web/front/rematch.js)
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
-        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js: it asks the site's own page for the
-        // login and keeps the guest name in this browser). It is still a name that the game takes, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only, the blanks at
-        // both ends cut off (a tab or a line end that a paste brings is dropped), at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer
-        // player is always shown as one, so a room would rename such a name). nameCheck(text) is { ok: true, name } or { ok: false, why }, why being a short line; front/player_name.js makes a login's name fit with it.
-        // A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
+        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
+        // both ends cut off, at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one): the rules of the desktop game's
+        // start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
         var NAME_MAX = 32;
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
@@ -1900,16 +1899,17 @@
             if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE WORDS under the name on the card: what the name is, and, for a login whose hub says that there is another name (the chat menu's switch between the display name and the username), where it is changed
-        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
-        // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join, and what is recorded): the field shows the name that the person plays under (person.ready, from
-        // front/player_name.js) and cannot be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it. ui is { input, button, message, said(text), show(), hide() }.
+        // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under the username (its shown name did not fit)
+        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', other: ' Your display name has characters that the game cannot show, so your username is used.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
+        // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join): the field shows the name that the person plays under (person.ready, front/player_name.js) and cannot
+        // be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it, unless anybody hid the card meanwhile (the way out). ui is { input, button, message, said(text, login), show(), hide() }.
         function runNameStep(ui, person, onDone) {
-            var done = false, pressed = false, chosen = null;
-            function go() { if (done || !pressed || chosen === null) return; done = true; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
+            var done = false, pressed = false, chosen = null, hide = ui.hide;
+            ui.hide = function () { done = true; hide.apply(ui, arguments); };
+            function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
             ui.input.value = '';
             ui.show();
-            person.ready(function (name, kind, swap) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind === 'login' && swap ? NAME_HINT.swap : '')); go(); });
+            person.ready(function (name, kind, swap, how) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login'); go(); });
             function confirm() { pressed = true; go(); }
             ui.button.addEventListener('click', confirm);
             ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
@@ -1968,13 +1968,13 @@
         // REJOINKEY_END
 
         // NAMEGATE_BEGIN (tests/scripts/web_name_check.js runs this block)
-        // The game of a link that somebody shared starts only when its player has seen the card and pressed Join: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after
-        // the name step is done, which puts the name that the card showed into the game's arguments (--name) and opens the gate. The game does not connect before it starts.
-        function makeNameGate(pending, args, ui, person) {
-            var open = !pending;
+        // The game of a link that somebody shared starts only when its player has seen the card and pressed Join: gate.when(fn) runs fn at once for every other address (`pending` false), and for a shared link after the name
+        // step is done, which puts the name that the card showed into the game's arguments (--name) and opens the gate. A game on this computer with no name in its address (`own`) waits, with no card, for the person's name.
+        function makeNameGate(pending, args, ui, person, own) {
+            var open = !pending && !own;
             var waiting = [];
             var gate = {
-                pending: function () { return !open; },
+                pending: function () { return pending && !open; },
                 when: function (fn) { if (open) fn(); else waiting.push(fn); },
                 open: function () { open = true; var run = waiting; waiting = []; run.forEach(function (fn) { fn(); }); }
             };
@@ -1983,7 +1983,7 @@
                     args.push('--name', name);
                     gate.open();
                 });
-            }
+            } else if (own) person.ready(function (name) { args.push('--name', name); gate.open(); });
             return gate;
         }
         // A reload of a game that this browser is playing is no shared link: the page takes the name out of the address bar itself (below), so the address that a reload opens looks like one that somebody
@@ -1998,9 +1998,8 @@
         }
         // NAMEGATE_END
 
-        // The name step of a shared link (the gate above): a card in the loading screen that shows the name that the person plays under: their login's, else a guest name (front/player_name.js, which asks the site's own page for it
-        // and only when this card asks). The address of a game that was opened with a name by
-        // web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
+        // The name step of a shared link (the gate above): a card in the loading screen that shows the name that the person plays under (their login's, else a guest's: front/player_name.js, which asks only when this card or a
+        // game here with no name needs it). The address of a game that was opened with a name by web/lobby.html loses its name parameter in the address bar, so that a copy of it is a shared link like any other.
         var ANTS_NAME_GATE = (function () {
             var asks = ANTS_PAGE.asksForName(window.location.search);
             if (asks) {                                           // (a browser that holds the key of this very seat is on its way back: no step, see holdsThisSeat)
@@ -2015,7 +2014,7 @@
                 input: document.getElementById('name-step-input'),
                 button: document.getElementById('name-step-go'),
                 message: document.getElementById('name-step-msg'),
-                said: function (text) { document.getElementById('name-step-hint').textContent = text; },
+                said: function (text, login) { document.getElementById('name-step-hint').textContent = text; document.getElementById('name-step-login').hidden = !login; },
                 show: function () {
                     var room = '';
                     try { room = new URLSearchParams(window.location.search).get('room') || ''; } catch (e) { /* no address to read */ }
@@ -2027,7 +2026,8 @@
                     card.hidden = true;
                 }
             };
-            return makeNameGate(asks, ANTS_ARGS, ui, asks ? AntsPlayerName.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : null);
+            var PN = window.AntsPlayerName, own = !asks && ANTS_OWN_NAME;      // (a script of front/ that did not come: the person is a guest, and the card still works)
+            return makeNameGate(asks, ANTS_ARGS, ui, asks || own ? (PN ? PN.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : { ready: function (fn) { fn('Guest', 'guest', false, ''); } }) : null, own);
         })();
 
         // ?prediction=on in the address turns on the prediction of the player's own orders in a match of the network (the game's --prediction on; net::Prediction: they show at once and the confirmed

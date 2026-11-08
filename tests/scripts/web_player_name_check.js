@@ -49,11 +49,12 @@ const FIT = [
     ['Jos\u00e9', 'Jose'], ['Zo\u00eb', 'Zoe'], ['\u00dcnal', 'Unal'], ['cr\u00e8me br\u00fbl\u00e9e', 'creme brulee'], ['\u00d1and\u00fa', 'Nandu'], ['Jos\u00e9'.normalize('NFD'), 'Jose'],      // (an accent: the letter stays, the mark goes)
     ['\ufb01sh', 'fish'], ['\uff21\uff4c\uff49\uff43\uff45', 'Alice'], ['\ud835\udcd0\ud835\udcf7\ud835\udcf7', 'Ann'], ['\u2460\u2461', '12'], ['\u338f', 'kg'],      // (ligature, full-width letters, math letters, circled digits, a unit: what NFKD makes of them)
     ['Al\u00a0ice', 'Al ice'], ['Al\u3000ice', 'Al ice'], ['Al\u2003ice', 'Al ice'],                                                                         // (other blanks are blanks)
-    ['\ud83d\ude00Ana\ud83d\ude00', 'Ana'], ['Ana\u540d\u524d', 'Ana'], ['\u540d\u524d', ''], ['\ud83d\ude00\ud83d\ude00', ''], ['\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35', ''], ['\u0645\u0631\u062d\u0628\u0627', ''],
-    ['\u0141ukasz', 'ukasz'], ['\u00d8re', 're'],                                                                                                              // (no table of look-alikes: what NFKD does not give is dropped)
+    ['\ud83d\ude00Ana\ud83d\ude00', 'Ana'], ['Ana\u540d\u524d', ''], ['\u540d\u524d', ''], ['\ud83d\ude00\ud83d\ude00', ''], ['\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35', ''], ['\u0645\u0631\u062d\u0628\u0627', ''],
+    ['\u0141ukasz', ''], ['\u00d8re', ''], ['S\u00f8ren', ''], ['Stra\u00dfe', ''], ['\u0131\u015f\u0131k', ''], ['\u041c\u0430\u0440\u0438\u044f 42', ''], ['Ana \u0663', ''],      // (a letter or a digit that NFKD does not give would be lost: the name is refused, and the other name gets its turn)
+    ['Jos\u00e9 \u00d1and\u00fa', 'Jose Nandu'], ['\uff2d\uff21\uff39\uff21', 'MAYA'], ['Maya \ud83d\ude00', 'Maya'], ['Maya \u2728', 'Maya'], ['\ud835\udc0c\ud835\udc1a\ud835\udc32\ud835\udc1a', 'Maya'], ['Ma\u00aeya', 'Maya'], ['Ana\u0301\u0323', 'Ana'],      // (marks, emoji and signs may go; full-width and math letters become plain ones)
     ['a\u200bb', 'ab'], ['\u202eAna', 'Ana'], ['An\u202ea', 'Ana'], ['a\u0000b', 'ab'], ['a\tb', 'ab'], ['a\nb', 'ab'], ['a\r\nb', 'ab'], ['a\u007fb', 'ab'],
     ['  a   b  ', 'a b'], ['a  b   c', 'a b c'], [' ', ''], ['', ''], ['\u00a0\u00a0', ''], ['   ab', 'ab'], ['ab   ', 'ab'],
-    ['a'.repeat(32) + ' ', 'a'.repeat(32)], [' ' + 'a'.repeat(32) + ' ', 'a'.repeat(32)], ['a', ''], ['\u00e9', ''], ['\u0141', ''], ['a'.repeat(33), ''], ['a'.repeat(32) + '\u540d', 'a'.repeat(32)], ['\ufb03'.repeat(10), 'ffi'.repeat(10)], ['\ufb03'.repeat(11), ''],      // (too short, too long: not cut; fitted to 32 and not more)
+    ['a'.repeat(32) + ' ', 'a'.repeat(32)], [' ' + 'a'.repeat(32) + ' ', 'a'.repeat(32)], ['a', ''], ['\u00e9', ''], ['\u0141', ''], ['a'.repeat(33), ''], ['a'.repeat(32) + '\u540d', ''], ['\ufb03'.repeat(10), 'ffi'.repeat(10)], ['\ufb03'.repeat(11), ''],      // (too short, too long: not cut; fitted to 32 and not more)
     [' '.repeat(50) + 'abc', 'abc'], ['\ud83d\ude00'.repeat(60) + 'abc', 'abc'], ['a'.repeat(1000), ''], [' '.repeat(300) + 'abc', ''], ['x'.repeat(250) + '\u540d'.repeat(10) + 'y', ''],                                                        // (the text is cut before any work: a name hidden behind a lot of blanks is not found)
     ['Bot (Easy)', ''], ['Pip (bot)', ''], ['Pip (bot, Hard)', ''], ['bot(x', ''], ['B o t (', ''], ['Robot (x)', 'Robot (x)'], ['Bot', 'Bot'], ['Botany', 'Botany'], ['Pip (bots)', 'Pip (bots)'],
     ['<script>alert(1)</script>', '<script>alert(1)</script>'], ['a&b', 'a&b'],                                                                              // (text stays text: the page only ever sets it as text)
@@ -75,16 +76,17 @@ check('fit does not throw for a text that is not well formed (a lone surrogate)'
 // 2. fromMe
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const ME = (body) => P.fromMe(body, nameCheck);
-same('today\'s shape: a login with a name that fits', ME({ login: true, you: { name: 'maya', mod: false } }), { kind: 'login', name: 'maya', canSwitch: false });
-same('... a moderator is the same', ME({ login: true, you: { name: 'maya', mod: true } }), { kind: 'login', name: 'maya', canSwitch: false });
-same('the shape with an other name: the shown name that fits wins, and the hub says that a switch exists', ME({ login: true, you: { name: 'Maya \u2728', mod: false, pick: 'display', other: 'maya_99', key: 'k1' } }), { kind: 'login', name: 'Maya', canSwitch: true });
-same('... an accented display name is made to fit', ME({ login: true, you: { name: 'Jos\u00e9', mod: false, pick: 'display', other: 'jose_1' } }), { kind: 'login', name: 'Jose', canSwitch: true });
-same('... a display name that cannot fit gives way to the username that does', ME({ login: true, you: { name: '\u540d\u524d', mod: false, pick: 'display', other: 'user_name' } }), { kind: 'login', name: 'user_name', canSwitch: true });
-same('... the username shown and a display name that fits: the shown one (name) first, whatever the other is', ME({ login: true, you: { name: 'user_name', other: 'Maya' } }), { kind: 'login', name: 'user_name', canSwitch: true });
-same('... a shown name that cannot fit and an other name that cannot either: no name (the guest name is used)', ME({ login: true, you: { name: '\u540d\u524d', other: '\ud83d\ude00' } }), { kind: 'login', name: '', canSwitch: true });
-same('... a shown name that is a computer player\'s gives way to the other name', ME({ login: true, you: { name: 'Bot (Maya)', other: 'maya_99' } }), { kind: 'login', name: 'maya_99', canSwitch: true });
-same('... a shown name that is too long once fitted gives way to the other name', ME({ login: true, you: { name: '\ufb03'.repeat(11), other: 'maya_99' } }), { kind: 'login', name: 'maya_99', canSwitch: true });
-same('today\'s shape with a name that cannot fit: a login, and no name', ME({ login: true, you: { name: '\u540d\u524d', mod: false } }), { kind: 'login', name: '', canSwitch: false });
+same('today\'s shape: a login with a name that fits', ME({ login: true, you: { name: 'maya', mod: false } }), { kind: 'login', name: 'maya', canSwitch: false, viaOther: false });
+same('... a moderator is the same', ME({ login: true, you: { name: 'maya', mod: true } }), { kind: 'login', name: 'maya', canSwitch: false, viaOther: false });
+same('the shape with an other name: the shown name that fits wins, and the hub says that a switch exists', ME({ login: true, you: { name: 'Maya \u2728', mod: false, pick: 'display', other: 'maya_99', key: 'k1' } }), { kind: 'login', name: 'Maya', canSwitch: true, viaOther: false });
+same('... an accented display name is made to fit', ME({ login: true, you: { name: 'Jos\u00e9', mod: false, pick: 'display', other: 'jose_1' } }), { kind: 'login', name: 'Jose', canSwitch: true, viaOther: false });
+same('... a display name that cannot fit gives way to the username that does', ME({ login: true, you: { name: '\u540d\u524d', mod: false, pick: 'display', other: 'user_name' } }), { kind: 'login', name: 'user_name', canSwitch: true, viaOther: true });
+same('... the username shown and a display name that fits: the shown one (name) first, whatever the other is', ME({ login: true, you: { name: 'user_name', other: 'Maya' } }), { kind: 'login', name: 'user_name', canSwitch: true, viaOther: false });
+same('... a shown name that cannot fit and an other name that cannot either: no name (the guest name is used)', ME({ login: true, you: { name: '\u540d\u524d', other: '\ud83d\ude00' } }), { kind: 'login', name: '', canSwitch: true, viaOther: false });
+same('... a shown name that would lose a letter (a slashed o) gives way to the other name, which is not a remnant', ME({ login: true, you: { name: 'S\u00f8ren', other: 'soren_k' } }), { kind: 'login', name: 'soren_k', canSwitch: true, viaOther: true });
+same('... a shown name that is a computer player\'s gives way to the other name', ME({ login: true, you: { name: 'Bot (Maya)', other: 'maya_99' } }), { kind: 'login', name: 'maya_99', canSwitch: true, viaOther: true });
+same('... a shown name that is too long once fitted gives way to the other name', ME({ login: true, you: { name: '\ufb03'.repeat(11), other: 'maya_99' } }), { kind: 'login', name: 'maya_99', canSwitch: true, viaOther: true });
+same('today\'s shape with a name that cannot fit: a login, and no name', ME({ login: true, you: { name: '\u540d\u524d', mod: false } }), { kind: 'login', name: '', canSwitch: false, viaOther: false });
 same('an other name that is not text, or is empty, is no switch', [ME({ login: true, you: { name: 'maya', other: 7 } }).canSwitch, ME({ login: true, you: { name: 'maya', other: '' } }).canSwitch, ME({ login: true, you: { name: 'maya', other: null } }).canSwitch], [false, false, false]);
 same('a name that is not text is no name', ME({ login: true, you: { name: 42, other: 'maya_99' } }).name, 'maya_99');
 same('a login with nobody (you is null) is a guest', ME({ login: true, you: null }), { kind: 'guest', name: '', canSwitch: false });
@@ -185,7 +187,8 @@ function rig(o) {
     env.release = async (i, body) => { env.pending[i](body); await tick(); };
     env.fail = async (i) => { env.fetches[i].reject(new Error('network down')); await tick(); };
     env.heard = [];
-    env.ready = () => env.who.ready((name, kind, canSwitch) => env.heard.push([name, kind, canSwitch]));
+    env.hows = [];
+    env.ready = () => env.who.ready((name, kind, canSwitch, how) => { env.heard.push([name, kind, canSwitch]); env.hows.push(how); });
     return env;
 }
 const LOGIN = (name, other) => ({ login: true, you: other === undefined ? { name, mod: false } : { name, mod: false, pick: 'display', other, key: 'k' } });
@@ -229,6 +232,35 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         same('a login with no name that fits plays as a guest (the guest name, kept)', r.heard, [[GUEST_NAME, 'guest', false]]);
         check('... and asks again at the next seat (it is a login: it can change)', (r.ready(), r.fetches.length === 2));
         r.restore();
+    }
+    // -- what the card is told besides the name (how): the other name was used, or a guest could be logged in
+    for (const [what, body, want] of [['a login whose shown name fits', LOGIN('maya', 'maya_9'), ''], ['today\'s shape, a username', LOGIN('maya'), ''], ['a login whose shown name did not fit: the other name is used', LOGIN('\u540d\u524d', 'user_name'), 'other'],
+        ['a login whose shown name would lose a letter: the other name is used', LOGIN('S\u00f8ren', 'soren_k'), 'other'], ['a login with no name that fits (the guest name is used)', LOGIN('\u540d\u524d', '\ud83d\ude00'), ''],
+        ['a guest of a hub that has a login (it could log in)', GUEST_PAGE, 'login']]) {
+        const r = rig();
+        r.ready();
+        await r.reply(0, 200, body);
+        same('how: ' + what + ' is ' + JSON.stringify(want), r.hows, [want]);
+        r.restore();
+    }
+    {
+        const r = rig();
+        r.ready();
+        await r.reply(0, 200, GUEST_PAGE);
+        r.ready();
+        same('how: a guest answer is kept for the page and says the same at once (a seat that asks later)', r.hows, ['login', 'login']);
+        r.restore();
+        const none = rig();
+        none.ready();
+        await none.reply(0, 404, null);
+        const failed = rig();
+        failed.ready();
+        await failed.reply(0, 503, null);
+        const given = rig();
+        given.ready();
+        given.advance(P.ASK_MS);
+        same('how: a site with no login, a failed question and an answer given up have no login to offer a guest', [none.hows, failed.hows, given.hows], [[''], [''], ['']]);
+        none.restore(); failed.restore(); given.restore();
     }
     // -- a login is asked again at every seat: a log out without a reload
     {

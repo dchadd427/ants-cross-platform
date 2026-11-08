@@ -36,6 +36,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_check.js")
 HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
+LOGIN_LINK = 'href="/hub/login?next=home"'      # (the one thing that a page may say of the hub in its markup: the plain link of the name card that logs a guest in; tests/scripts/test_web_name.py)
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 51000, 15900           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer): they load after the first paint, so they cost the first look nothing
 
 
@@ -55,7 +56,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
 
     def test_the_front_page_does_not_link_the_dock_home_loads_it_later(self):
         for word in ("home/chat", "gchat", "AntsHomeChat", "/hub", "hub/ws"):
-            self.assertNotIn(word, self.page, word)
+            self.assertNotIn(word, self.page.replace(LOGIN_LINK, ""), word)        # (but for the plain link of the name card that logs a guest in)
         self.assertEqual(self.page.count('<script src="home/home.js"></script>'), 1)
         self.assertFalse([src for src in re.findall(r'<script src="([^"]*)"', self.page) if "chat" in src and "lobby_chat" not in src], "the page's scripts are the ones that it had: the dock is not one of them")
 
@@ -71,7 +72,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     text = f.read()
                 if re.search(r"home/chat\.(js|css)", text):
                     naming_the_dock.add(rel)
-                if re.search(r"/hub/ws|/hub\b", text):
+                if re.search(r"/hub/ws|/hub\b", text.replace(LOGIN_LINK, "")):
                     naming_the_door.add(rel)
                 if re.search(r"/hub/ws", text):
                     naming_the_socket.add(rel)
@@ -81,7 +82,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
-            self.assertNotRegex(read(*rel), r"/hub\b", rel[-1])
+            self.assertNotRegex(read(*rel).replace(LOGIN_LINK, ""), r"/hub\b", rel[-1])
 
 
 class TheLoaderInHome(unittest.TestCase):

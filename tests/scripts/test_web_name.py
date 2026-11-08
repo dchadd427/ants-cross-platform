@@ -61,8 +61,20 @@ class TheMarkup(unittest.TestCase):
                     found[rel] = re.findall(r"[\w.]*\(\s*'ants\.name'", text)
                 if "ants.guest" in text:
                     guest.add(rel)
-        self.assertEqual(found, {"web/shell.html": ["window.localStorage.getItem('ants.name'"]}, "a name that an earlier version remembered is read by the game page's game on this computer (an address with no name) and by nothing else, and written by nothing")
+        self.assertEqual(found, {}, "a name that an earlier version remembered is read by nothing and written by nothing: the game on this computer takes the person's own name from the gate")
         self.assertEqual(guest, {"web/front/player_name.js"}, "the guest name's key is the one script's own")
+
+    def test_the_login_link_of_the_card_is_a_plain_link_in_the_two_cards_and_goes_back_to_a_word_that_the_hub_has(self):
+        link = '<div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>'
+        for path in (LOBBY, SHELL):
+            page = read(path)
+            self.assertEqual(page.count(link), 1, path)
+            self.assertEqual(page.count("/hub/"), 1, "no other address of the hub in the page: " + path)
+            self.assertLess(page.index('id="name-step-hint"'), page.index('id="name-step-login"'), path)
+        hub = read(os.path.join(REPO, "hub", "login.py"))
+        words = re.search(r"^NEXT = \{([^}]*)\}", hub, re.M)
+        self.assertIsNotNone(words)
+        self.assertIn('"home"', words.group(1), "the hub's fixed list of places to go back to has the word that the link uses (the dock's own button says it on Home)")
 
     def test_the_page_makes_no_markup_from_text(self):
         page = read(LOBBY)

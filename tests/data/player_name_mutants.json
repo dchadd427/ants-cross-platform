@@ -109,36 +109,36 @@
   {
    "id": "me_prefers_the_other_name",
    "file": "web/front/player_name.js",
-   "old": "var name = fit(you.name, check) || fit(you.other, check);",
-   "new": "var name = fit(you.other, check) || fit(you.name, check);",
+   "old": "var shown = fit(you.name, check), name = shown || fit(you.other, check);",
+   "new": "var shown = fit(you.name, check), name = fit(you.other, check) || shown;",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
    "id": "me_ignores_the_other_name",
    "file": "web/front/player_name.js",
-   "old": "var name = fit(you.name, check) || fit(you.other, check);",
-   "new": "var name = fit(you.name, check);",
+   "old": "var shown = fit(you.name, check), name = shown || fit(you.other, check);",
+   "new": "var shown = fit(you.name, check), name = shown;",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
    "id": "me_takes_only_the_other_name_when_the_shown_one_is_accented",
    "file": "web/front/player_name.js",
-   "old": "var name = fit(you.name, check) || fit(you.other, check);",
-   "new": "var name = (you.name === fit(you.name, check) ? you.name : '') || fit(you.other, check);",
+   "old": "var shown = fit(you.name, check), name = shown || fit(you.other, check);",
+   "new": "var shown = fit(you.name, check), name = (you.name === shown ? you.name : '') || fit(you.other, check);",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
    "id": "me_no_switch_flag",
    "file": "web/front/player_name.js",
-   "old": "canSwitch: typeof you.other === 'string' && you.other !== '' };",
-   "new": "canSwitch: false };",
+   "old": "canSwitch: typeof you.other === 'string' && you.other !== '',",
+   "new": "canSwitch: false,",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
    "id": "me_switch_for_an_empty_other",
    "file": "web/front/player_name.js",
-   "old": "canSwitch: typeof you.other === 'string' && you.other !== '' };",
-   "new": "canSwitch: typeof you.other === 'string' };",
+   "old": "canSwitch: typeof you.other === 'string' && you.other !== '',",
+   "new": "canSwitch: typeof you.other === 'string',",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
@@ -361,15 +361,15 @@
   {
    "id": "answer_login_as_guest",
    "file": "web/front/player_name.js",
-   "old": "return result.kind === 'login' && result.name ? { name: result.name, kind: 'login', canSwitch: result.canSwitch }",
-   "new": "return result.kind === 'login' && result.name ? { name: result.name, kind: 'guest', canSwitch: result.canSwitch }",
+   "old": "{ name: result.name, kind: 'login', canSwitch: result.canSwitch,",
+   "new": "{ name: result.name, kind: 'guest', canSwitch: result.canSwitch,",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
    "id": "answer_hides_the_switch",
    "file": "web/front/player_name.js",
-   "old": "{ name: result.name, kind: 'login', canSwitch: result.canSwitch }",
-   "new": "{ name: result.name, kind: 'login', canSwitch: false }",
+   "old": "{ name: result.name, kind: 'login', canSwitch: result.canSwitch,",
+   "new": "{ name: result.name, kind: 'login', canSwitch: false,",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
@@ -382,8 +382,8 @@
   {
    "id": "callback_error_not_caught",
    "file": "web/front/player_name.js",
-   "old": "try { fn(a.name, a.kind, a.canSwitch); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error(e); }",
-   "new": "fn(a.name, a.kind, a.canSwitch);",
+   "old": "try { fn(a.name, a.kind, a.canSwitch, a.how); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error(e); }",
+   "new": "fn(a.name, a.kind, a.canSwitch, a.how);",
    "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
   },
   {
@@ -767,8 +767,8 @@
   {
    "id": "page_card_says_nothing",
    "file": "web/lobby.html",
-   "old": "said: function (text) { $('name-step-hint').textContent = text; },",
-   "new": "said: function (text) { },",
+   "old": "said: function (text, login) { $('name-step-hint').textContent = text; $('name-step-login').hidden = !login; },",
+   "new": "said: function (text, login) { $('name-step-login').hidden = !login; },",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
@@ -795,8 +795,8 @@
   {
    "id": "name_block_lobby_goes_on_twice",
    "file": "web/lobby.html",
-   "old": "function go() { if (done || !pressed || chosen === null) return; done = true;",
-   "new": "function go() { if (!pressed || chosen === null) return; done = true;",
+   "old": "function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = '';",
+   "new": "function go() { if (!pressed || chosen === null) return; ui.message.textContent = '';",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
@@ -816,21 +816,21 @@
   {
    "id": "name_block_lobby_says_no_words",
    "file": "web/lobby.html",
-   "old": "ui.said(NAME_HINT[kind] + (kind === 'login' && swap ? NAME_HINT.swap : ''));",
+   "old": "ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
    "new": "",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
    "id": "name_block_lobby_says_the_switch_to_everybody",
    "file": "web/lobby.html",
-   "old": "(kind === 'login' && swap ? NAME_HINT.swap : '')",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
    "new": "(swap ? NAME_HINT.swap : '')",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
    "id": "name_block_lobby_never_says_the_switch",
    "file": "web/lobby.html",
-   "old": "(kind === 'login' && swap ? NAME_HINT.swap : '')",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
    "new": "''",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
@@ -865,8 +865,8 @@
   {
    "id": "name_block_lobby_keeps_the_old_message",
    "file": "web/lobby.html",
-   "old": "done = true; ui.message.textContent = ''; ui.hide();",
-   "new": "done = true; ui.hide();",
+   "old": "function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen); }",
+   "new": "function go() { if (done || !pressed || chosen === null) return; ui.hide(); onDone(chosen); }",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
@@ -886,7 +886,7 @@
   {
    "id": "name_block_shell_says_no_words",
    "file": "web/shell.html",
-   "old": "ui.said(NAME_HINT[kind] + (kind === 'login' && swap ? NAME_HINT.swap : ''));",
+   "old": "ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
    "new": "",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
@@ -900,15 +900,15 @@
   {
    "id": "shell_gate_asks_the_hub_always",
    "file": "web/shell.html",
-   "old": "asks ? AntsPlayerName.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : null",
-   "new": "AntsPlayerName.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random })",
+   "old": "asks || own ? (PN ? PN.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : { ready: function (fn) { fn('Guest', 'guest', false, ''); } }) : null, own);",
+   "new": "PN ? PN.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : { ready: function (fn) { fn('Guest', 'guest', false, ''); } }, own);",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
    "id": "shell_gate_without_the_rules",
    "file": "web/shell.html",
-   "old": "AntsPlayerName.forWindow(window, nameCheck, {",
-   "new": "AntsPlayerName.forWindow(window, undefined, {",
+   "old": "PN.forWindow(window, nameCheck, {",
+   "new": "PN.forWindow(window, undefined, {",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
@@ -921,8 +921,8 @@
   {
    "id": "shell_card_says_nothing",
    "file": "web/shell.html",
-   "old": "said: function (text) { document.getElementById('name-step-hint').textContent = text; },",
-   "new": "said: function (text) { },",
+   "old": "said: function (text, login) { document.getElementById('name-step-hint').textContent = text; document.getElementById('name-step-login').hidden = !login; },",
+   "new": "said: function (text, login) { document.getElementById('name-step-login').hidden = !login; },",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   },
   {
@@ -944,6 +944,239 @@
    "file": "web/shell.html",
    "old": "<div class=\"name-step-hint\" id=\"name-step-hint\">The name the other players see.</div>",
    "new": "<div class=\"name-step-hint\">The name the other players see.</div>",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "fit_loses_a_letter_silently",
+   "file": "web/front/player_name.js",
+   "old": "        if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';\n",
+   "new": "",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_refuses_a_mark_too",
+   "file": "web/front/player_name.js",
+   "old": "if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';",
+   "new": "if (/[^\\x20-\\x7e]/.test(s)) return '';",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_looks_at_letters_only",
+   "file": "web/front/player_name.js",
+   "old": "new RegExp('[\\\\p{L}\\\\p{N}]', 'u')",
+   "new": "new RegExp('[\\\\p{L}]', 'u')",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_looks_at_digits_only",
+   "file": "web/front/player_name.js",
+   "old": "new RegExp('[\\\\p{L}\\\\p{N}]', 'u')",
+   "new": "new RegExp('[\\\\p{N}]', 'u')",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_looks_at_the_text_before_nfkd",
+   "file": "web/front/player_name.js",
+   "old": "        try { s = s.normalize('NFKD'); } catch (e) { /* a browser without normalize: the text as it is, and its accented letters are refused below */ }\n        if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';\n",
+   "new": "        if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';\n        try { s = s.normalize('NFKD'); } catch (e) { /* a browser without normalize: the text as it is, and its accented letters are refused below */ }\n",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "via_other_never_told",
+   "file": "web/front/player_name.js",
+   "old": "viaOther: !shown && name !== '' }",
+   "new": "viaOther: false }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "via_other_whenever_there_is_a_name",
+   "file": "web/front/player_name.js",
+   "old": "viaOther: !shown && name !== '' }",
+   "new": "viaOther: name !== '' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "via_other_when_no_name_fits",
+   "file": "web/front/player_name.js",
+   "old": "viaOther: !shown && name !== '' }",
+   "new": "viaOther: !shown }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_other_never_told",
+   "file": "web/front/player_name.js",
+   "old": "how: result.viaOther ? 'other' : '' }",
+   "new": "how: '' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_login_never_told",
+   "file": "web/front/player_name.js",
+   "old": "how: result.kind === 'guest' ? 'login' : '' }",
+   "new": "how: '' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_login_for_every_guest",
+   "file": "web/front/player_name.js",
+   "old": "how: result.kind === 'guest' ? 'login' : '' }",
+   "new": "how: 'login' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_is_not_passed_on",
+   "file": "web/front/player_name.js",
+   "old": "fn(a.name, a.kind, a.canSwitch, a.how)",
+   "new": "fn(a.name, a.kind, a.canSwitch)",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "page_step_way_out_is_not_noticed",
+   "file": "web/lobby.html",
+   "old": "ui.hide = function () { done = true; hide.apply(ui, arguments); };",
+   "new": "ui.hide = function () { hide.apply(ui, arguments); };",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html",
+   "expect": "the way out"
+  },
+  {
+   "id": "page_step_hide_never_reaches_the_card",
+   "file": "web/lobby.html",
+   "old": "ui.hide = function () { done = true; hide.apply(ui, arguments); };",
+   "new": "ui.hide = function () { done = true; };",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_hide_is_not_wrapped",
+   "file": "web/lobby.html",
+   "old": "            ui.hide = function () { done = true; hide.apply(ui, arguments); };\n",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html",
+   "expect": "the way out"
+  },
+  {
+   "id": "page_step_other_words_not_said",
+   "file": "web/lobby.html",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
+   "new": "(kind !== 'login' ? '' : swap ? NAME_HINT.swap : '')",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_switch_words_before_other",
+   "file": "web/lobby.html",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
+   "new": "(kind !== 'login' ? '' : swap ? NAME_HINT.swap : how === 'other' ? NAME_HINT.other : '')",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_link_flag_inverted",
+   "file": "web/lobby.html",
+   "old": "how === 'login'); go(); });",
+   "new": "how !== 'login'); go(); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_link_for_every_guest",
+   "file": "web/lobby.html",
+   "old": "how === 'login'); go(); });",
+   "new": "kind === 'guest'); go(); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_other_words_change",
+   "file": "web/lobby.html",
+   "old": "other: ' Your display name has characters that the game cannot show, so your username is used.'",
+   "new": "other: ' Your display name cannot be shown, so your username is used.'",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_link_always_shown",
+   "file": "web/lobby.html",
+   "old": "$('name-step-login').hidden = !login; },",
+   "new": "$('name-step-login').hidden = false; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_link_never_shown",
+   "file": "web/lobby.html",
+   "old": "$('name-step-login').hidden = !login; },",
+   "new": "$('name-step-login').hidden = true; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_link_stays_from_the_last_use",
+   "file": "web/lobby.html",
+   "old": " $('name-step-login').hidden = true;\n",
+   "new": "\n",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_card_link_always_shown",
+   "file": "web/shell.html",
+   "old": "document.getElementById('name-step-login').hidden = !login; },",
+   "new": "document.getElementById('name-step-login').hidden = false; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_is_not_held",
+   "file": "web/shell.html",
+   "old": "var open = !pending && !own;",
+   "new": "var open = !pending;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_says_pending",
+   "file": "web/shell.html",
+   "old": "pending: function () { return pending && !open; },",
+   "new": "pending: function () { return !open; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_never_opens",
+   "file": "web/shell.html",
+   "old": "} else if (own) person.ready(function (name) { args.push('--name', name); gate.open(); });",
+   "new": "} else if (own) person.ready(function (name) { args.push('--name', name); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_has_no_name",
+   "file": "web/shell.html",
+   "old": "} else if (own) person.ready(function (name) { args.push('--name', name); gate.open(); });",
+   "new": "} else if (own) person.ready(function (name) { gate.open(); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_local_arguments_always_nameless",
+   "file": "web/shell.html",
+   "old": "out.nameless = !q.has('name') && !!(",
+   "new": "out.nameless = !!(",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_local_arguments_never_nameless",
+   "file": "web/shell.html",
+   "old": "out.nameless = !q.has('name') && !!(q.has('map') || q.has('mapfile') || q.has('bots') || test);",
+   "new": "out.nameless = false;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_person_script_not_guarded",
+   "file": "web/shell.html",
+   "old": "var PN = window.AntsPlayerName, own",
+   "new": "var PN = AntsPlayerName, own",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_person_without_script_is_nobody",
+   "file": "web/shell.html",
+   "old": "{ ready: function (fn) { fn('Guest', 'guest', false, ''); } }",
+   "new": "{ ready: function (fn) { } }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_own_game_asks_before_a_shared_link",
+   "file": "web/shell.html",
+   "old": "var PN = window.AntsPlayerName, own = !asks && ANTS_OWN_NAME;",
+   "new": "var PN = window.AntsPlayerName, own = ANTS_OWN_NAME;",
    "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   }
  ]

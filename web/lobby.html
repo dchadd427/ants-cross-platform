@@ -196,6 +196,7 @@
     .name-step-msg { margin-top: 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: #ffe4de; background: #3b0d10; border: 2px solid var(--edge); border-left: 6px solid #ff7a6b; border-radius: 3px; }
     .name-step-msg:empty { display: none; }
     .name-step-hint { margin-top: 12px; font-size: 14px; line-height: 1.35; color: var(--ink); }
+    .name-step-hint a { color: var(--ink); text-decoration: underline; }
     .name-step-back { margin-top: 14px; }
 
     /* ---- narrower windows ---- */
@@ -352,6 +353,7 @@
         </div>
         <div class="name-step-msg" id="name-step-msg" role="alert"></div>
         <div class="name-step-hint" id="name-step-hint">The name the other players see.</div>
+        <div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>
         <div class="name-step-hint name-step-notice" id="who-notice">Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public.</div>
         <button type="button" class="btn sm name-step-back" id="name-step-own">Start a room of my own instead</button>
     </div>
@@ -396,11 +398,9 @@
         function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }
         // SHAPES_END
         // NAME_BEGIN (tests/scripts/web_name_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
-        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js: it asks the site's own page for the
-        // login and keeps the guest name in this browser). It is still a name that the game takes, by the rules of the desktop game's start menu (check_player_name in src/ants_app/start_menu.cpp): printable ASCII only, the blanks at
-        // both ends cut off (a tab or a line end that a paste brings is dropped), at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer
-        // player is always shown as one, so a room would rename such a name). nameCheck(text) is { ok: true, name } or { ok: false, why }, why being a short line; front/player_name.js makes a login's name fit with it.
-        // A name is only ever shown as text and put into a link with encodeURIComponent, never into markup.
+        // THE PLAYER'S NAME is not typed on the web: a person who is logged in with Discord plays under the login's name, anybody else under a guest name (front/player_name.js). The game takes printable ASCII only, the blanks at
+        // both ends cut off, at most 32 characters, and nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored: a computer player is always shown as one): the rules of the desktop game's
+        // start menu (check_player_name in src/ants_app/start_menu.cpp). nameCheck(text) is { ok: true, name } or { ok: false, why }. A name is only ever shown as text and put into a link with encodeURIComponent, never markup.
         var NAME_MAX = 32;
         function nameCheck(text) {
             var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
@@ -410,16 +410,17 @@
             if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
             return { ok: true, name: name };
         }
-        // THE WORDS under the name on the card: what the name is, and, for a login whose hub says that there is another name (the chat menu's switch between the display name and the username), where it is changed
-        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
-        // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join, and what is recorded): the field shows the name that the person plays under (person.ready, from
-        // front/player_name.js) and cannot be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it. ui is { input, button, message, said(text), show(), hide() }.
+        // THE WORDS under the name on the card: whose name it is; where a login changes it (the chat menu's switch, when the hub says that there is another name); why a login plays under the username (its shown name did not fit)
+        var NAME_HINT = { login: 'This is your Discord name. The other players see it.', swap: ' The chat menu switches it between your display name and your username.', other: ' Your display name has characters that the game cannot show, so your username is used.', guest: 'You play as a guest. Log in with Discord to play under your own name.' };
+        // THE NAME STEP of a link that somebody else shared (the card asks first, so that the person knows that they join): the field shows the name that the person plays under (person.ready, front/player_name.js) and cannot
+        // be typed in; the button (or Enter) goes on once that name is there, and onDone(name) is called once with it, unless anybody hid the card meanwhile (the way out). ui is { input, button, message, said(text, login), show(), hide() }.
         function runNameStep(ui, person, onDone) {
-            var done = false, pressed = false, chosen = null;
-            function go() { if (done || !pressed || chosen === null) return; done = true; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
+            var done = false, pressed = false, chosen = null, hide = ui.hide;
+            ui.hide = function () { done = true; hide.apply(ui, arguments); };
+            function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen); }
             ui.input.value = '';
             ui.show();
-            person.ready(function (name, kind, swap) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind === 'login' && swap ? NAME_HINT.swap : '')); go(); });
+            person.ready(function (name, kind, swap, how) { chosen = name; ui.input.value = name; ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login'); go(); });
             function confirm() { pressed = true; go(); }
             ui.button.addEventListener('click', confirm);
             ui.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); } });
@@ -976,9 +977,9 @@
             var ui = {
                 input: freshNode('name-step-input'), button: freshNode('name-step-go'),
                 message: { get textContent() { return $('name-step-msg').textContent; }, set textContent(v) { $('name-step-msg').textContent = v; ui.input.setAttribute('aria-invalid', v ? 'true' : 'false'); } },
-                said: function (text) { $('name-step-hint').textContent = text; },
+                said: function (text, login) { $('name-step-hint').textContent = text; $('name-step-login').hidden = !login; },
                 show: function () {
-                    $('name-step-title').textContent = o.title;
+                    $('name-step-title').textContent = o.title; $('name-step-login').hidden = true;
                     ui.button.textContent = o.button;
                     $('who-notice').hidden = o.notice === false;
                     $('name-step-own').textContent = o.backText || 'Start a room of my own instead';
