@@ -1,0 +1,158 @@
+# The paths of the game server, the site's services and their tests. One list: tools/server_paths.py reads it (tests/scripts/test_server_paths.py checks it), and a tool or a test
+# that needs it goes through that module.
+#
+# One pattern per line:
+#   dir/     everything under the directory
+#   a*b      a glob: * matches inside one path component and never across a /
+#   a/b.c    anything else is the exact path of one file
+# '#' starts a comment (a whole line, or the end of one); blank lines are ignored; there is no negation.
+# `python3 tools/server_paths.py --check` fails for a pattern that matches no tracked file. A file that belongs with the server, the hub or the site gets its line in the change that
+# adds it (a directory or a glob line covers the new files that fit it).
+# What is not listed is the game: its libraries, the native and the web clients, the front page and Home, the map maker with its submit client, the replay page, and the tests that
+# run without the server.
+
+# ---- server code ----
+src/ants_server/
+include/ants_server/
+# the control interface and the database of the server
+src/ants_ctl/
+include/ants_ctl/
+src/ants_db/
+include/ants_db/
+third_party/sqlite/
+
+# ---- the chat hub ----
+hub/
+
+# ---- host: the web server's files, the images, the stack and the deploy tools ----
+docker/nginx.conf
+docker/trusted-proxies.conf
+# (docker/resolve_build_id.sh is not listed: build_web.sh and tests/scripts/test_version_tools.py use it too)
+# the web image: the game's web build with the site's pages behind docker/nginx.conf (build_web.sh builds the web client alone)
+Dockerfile
+Dockerfile.server
+Dockerfile.hub
+docker-compose.yml
+docker-compose.server.yml
+docker-compose.stack.yml
+docker-compose.staging.yml
+tools/deploy_filter.py
+tools/deploy_wait.py
+tools/deploy_webhook.sh
+# replays the web Dockerfile and serves the result with nginx.conf
+tools/web_without_docker.py
+
+# ---- site pages: the operator's page, the match history, the live board, the statistics views and the legal page ----
+web/admin.html
+web/admin.css
+web/admin_page.js
+web/matches.html
+web/match.html
+web/live.html
+web/matches.css
+web/history_page.js
+web/match_stats.js
+web/match_stats.css
+web/death_map.js
+web/death_map.css
+web/legal.html
+
+# ---- tests: the C++ suites of the server's libraries ----
+tests/test_server/
+tests/test_db/
+tests/test_ctl/
+# the application tests that run a room manager of the server (a pattern that may match no file)
+tests/test_app_server/
+
+# ---- tests: scripts for the hub, nginx.conf, the deploy tools and the staging stack ----
+tests/scripts/test_hub_*
+tests/scripts/test_nginx_*
+tests/scripts/test_deploy_*
+tests/scripts/test_staging_*
+tests/scripts/fake_discord.py
+tests/scripts/hub_*
+tests/scripts/login_*
+tests/scripts/stack_command.py
+tests/scripts/test_pbkdf2_vectors.py
+# the tests of tools/web_without_docker.py (it replays the Dockerfile and serves the result with docker/nginx.conf)
+tests/scripts/test_web_without_docker.py
+
+# ---- tests: scripts that start the real ants_server ----
+tests/scripts/test_ants_server.sh
+tests/scripts/submissions_server_check.py
+tests/scripts/testmaps_server_check.py
+# only test_ants_server.sh uses these three (it sources e2e_deadlines.sh); test_e2e_deadlines.py runs that script with a fake server, and test_measure_tick_rate.py tests the measure
+tests/scripts/e2e_deadlines.sh
+tests/scripts/flaky_proxy.py
+tests/scripts/measure_tick_rate.py
+tests/scripts/test_e2e_deadlines.py
+tests/scripts/test_measure_tick_rate.py
+# the lobby page's client run against the real server over a WebSocket (test_ants_server.sh runs the first two), and the front page's Games list in a browser against the real server
+tests/scripts/web_lobby_server_check.js
+tests/scripts/web_lobby_handoff_check.js
+tests/scripts/web_home_games_browser.js
+# browser checks that start the real ants_server before their first part (with a front door for /ws) and say SKIP without the program; they share the Server, Front and Visitor
+# classes of web_rejoin_check.py, web_map_fetch_check.py, web_lobby_chat_browser.py and web_map_picker_browser.py, and each has a wrapper, tests/scripts/test_web_*.sh
+tests/scripts/test_web_countdown.sh
+tests/scripts/web_countdown_check.py
+tests/scripts/test_web_game_type.sh
+tests/scripts/web_game_type_browser.py
+tests/scripts/test_web_lobby_chat.sh
+tests/scripts/web_lobby_chat_browser.py
+tests/scripts/test_web_map_fetch.sh
+tests/scripts/web_map_fetch_check.py
+tests/scripts/test_web_map_picker.sh
+tests/scripts/web_map_picker_browser.py
+tests/scripts/test_web_rejoin.sh
+tests/scripts/web_rejoin_check.py
+tests/scripts/test_web_rematch.sh
+tests/scripts/web_rematch_browser.py
+# browser checks that run against the real hub (python3 -m hub; the login one also runs the real nginx.conf and a fake Discord, through login_site.py)
+tests/scripts/web_home_chat_real_hub_browser.js
+tests/scripts/web_home_login_browser.js
+# Not listed, for these reasons:
+#  - test_web_home.sh and web_home_check.py start ants_server only for the parts that make a room; the parts old and game, and part of leave, run without it
+#  - web_front_room.py is used by web_home_check.py too, mini_websocket.js by the home chat checks, web_hidden_check.py (the DevTools client) by most browser checks
+#  - test_web_hidden.sh, test_web_prediction.sh and their checks run against a stack that is already up and never start the program
+#  - test_web_rejoin.py, test_web_lobby_net.py and test_default_map.py read some of the files above; each of them has parts that need none of those files
+#  - web_fill_check.js and web_page_harness.js run page code on tables with no server (only test_ants_server.sh runs the first today); the CI runs web_routes_check.py against the web image
+#  - process_state.py is imported by test_mutate_tool.py and test_run_tests.py; quick_http.py is a helper of the tests with a test of its own
+
+# ---- tests: the site pages' checks ----
+tests/scripts/test_web_admin.py
+tests/scripts/web_admin_check.js
+tests/scripts/test_web_matches.*
+tests/scripts/web_matches_check.py
+tests/scripts/test_web_live.sh
+tests/scripts/web_live_check.py
+tests/scripts/web_live_stub.js
+tests/scripts/web_history*_check.js
+tests/scripts/web_match_stats_check.js
+tests/scripts/test_web_match_stats.py
+tests/scripts/test_web_death_map.*
+tests/scripts/web_death_map_check.js
+tests/scripts/test_web_legal.py
+
+# ---- tests: data ----
+# the mutant lists of the files above, and the lists whose mutants are all killed by tests listed above (a list that also changes files of the game, killed by its tests, is not listed)
+tests/data/hub*_mutants.json
+tests/data/nginx_*_mutants.json
+tests/data/admin_accounts_mutants.json
+tests/data/submissions_mutants.json
+tests/data/trusted*
+tests/data/death_map_mutants.json
+tests/data/match_stats_mutants.json
+tests/data/online_ants_cap_mutants.json
+tests/data/online_pairs_cap_mutants.json
+tests/data/online_terms_mutants.json
+tests/data/result_file_mutants.json
+tests/data/test_maps_mutants.json
+tests/data/home_games_browser_mutants.json
+# the known answers that test_pbkdf2_vectors.py and tests/test_server/ read
+tests/data/pbkdf2_vectors.json
+
+# ---- docs ----
+docs/SERVER.md
+docs/HUB.md
+docs/MAP_SUBMISSIONS.md
+docs/SITE_STATS.md
