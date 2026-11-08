@@ -54,6 +54,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.defenders = 2;
             p.leash_tiles = 10;
             p.fight_linger_ticks = 100;
+            p.defend_keep_percent = 120;         // (the defence batch is built and OFF here: `--tune defence=1` turns it on with these numbers; docs/BOT_PEOPLE.md)
+            p.defend_max = 3;
+            p.defend_reach = 8;
             p.wall_trigger = WallTrigger::ThiefPossible;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
@@ -87,6 +90,10 @@ LevelPlan plan_for(Level level) noexcept {
             p.defenders = 3;
             p.leash_tiles = 12;
             p.fight_linger_ticks = 60;
+            p.defend_all_types = true;           // the defence batch (docs/BOT_PEOPLE.md): every ant that can strike answers a blow, the struck ant first, as many as the enemy has there and one more
+            p.victim_answers = true;
+            p.defend_by_strength = true;
+            p.defend_keep_percent = 60;          // a force of at least 60 percent of the enemy's near the target keeps the fight up; below that it is called off at the look
             p.wall_trigger = WallTrigger::Early;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
@@ -242,6 +249,12 @@ void without_kill_batch(LevelPlan& p) noexcept {
     p.reach_fights = false;
     p.idle_hunt = false;
     p.chore_worth = false;
+}
+
+void without_defence_batch(LevelPlan& p) noexcept {
+    p.defend_all_types = false;
+    p.victim_answers = false;
+    p.defend_by_strength = false;
 }
 
 void without_war_batch(LevelPlan& p) noexcept {

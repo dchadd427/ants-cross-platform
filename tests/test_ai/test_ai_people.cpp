@@ -1,10 +1,10 @@
 // The yardstick for computer players against people (docs/BOT_PEOPLE.md): the "people" numbers of bot_watch on hand-made streams of snapshots, five scenes in which the standard bot at Hard is
 // judged against an opponent that the test scripts (synthetic: no recording of anybody's game), and the bench bot `gang`. Nothing here changes how a bot plays.
 //
-//   AI34.1  a gang of three hits one of four ants that are far from home: the bot must hit back (at least six blows in 600 ticks) and lose at most one ant   (known failure: Step 1)
+//   AI34.1  a gang of three hits one of four ants that are far from home: the bot must hit back (at least six blows in 600 ticks) and lose at most one ant   (required since Step 1)
 //   AI34.2  an enemy Fire Ant camps four tiles from the hill of a bot with two ants: it is not left to kill them alone                                          (known failure: Step 3)
 //   AI34.3  a lone ant on its way to a Fire power-up does not walk up to an enemy Combat Ant alone                                                              (known failure: Step 3)
-//   AI34.4  a hurt Bomber that an enemy worker hits strikes back within 40 ticks or walks home                                                                  (known failure: Step 1)
+//   AI34.4  a hurt Bomber that an enemy worker hits strikes the worker itself within 200 ticks (it has three workers nearby: the last ants of a bot never fight)                (required since Step 1)
 //   AI34.5  an enemy Thief raids a hill that has no Fire Ant three times: before the fourth raid the hole is shut or the Thief is struck                       (known failure: Step 5)
 //   AI34.6  the blows, the fights, hitting back and helping, the crowd at a fight and the focus on a victim, from a stream of snapshots
 //   AI34.7  heals and Fire Ants (the walls lit at an enemy gate)
@@ -123,11 +123,6 @@ public:
         if (script) script(sim.current_tick());
     }
     SeatPeople bot() const { return seen.people().seat(0); }
-    size_t blows_by(uint32_t striker, uint32_t victim, uint64_t from = 0, uint64_t to = ~uint64_t{0}) const {
-        size_t n = 0;
-        for (const watch::Blow& b : seen.people().blows()) n += b.striker == striker && b.victim == victim && b.tick >= from && b.tick <= to ? 1u : 0u;
-        return n;
-    }
 
 private:
     std::unique_ptr<RecordingSink> sink_;
@@ -239,40 +234,32 @@ Verdict scene_lone_ant(Style style, bool combat_from_start) {
     return v;
 }
 
-// AI34.4: the bot's Bomber (empty, 6 hit points) is struck by an enemy worker that strikes again after every blow. It walks towards its hill when, after the first blow, it gains three tiles on the hill's
-// entrance while it is in its walking clip (a blow throws it a tile away from the striker, which is no walk)
+// AI34.4: the bot's Bomber (empty, 6 hit points; three workers of the bot stand nearby: the last ants of a bot never fight, so a lone Bomber could not answer) is struck by an enemy worker that strikes again
+// at the first tick that 20 divides at which it is idle (a person orders a moment after the blow, and the engine takes no order for an ant that is engaged or in its hit clip, so a striker that orders on the very
+// tick leaves its victim no free tick at all). The Bomber must strike the worker itself within 200 ticks of the first blow on it
 Verdict scene_hurt_bomber(Style style) {
     Scene s;
     empty_field(s.sim, 344);
     add_pile(s.sim, 30, 12, 40, 25);
     const uint32_t bomber = s.sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{16, 10});
     s.sim.get_unit(bomber).hp = 6;
+    for (int i = 0; i < 3; ++i) s.sim.spawn_unit(0, sim::AntType::Worker, TileCoord{10 + i, 8});
     const uint32_t enemy = s.sim.spawn_unit(1, sim::AntType::Worker, TileCoord{21, 10});
     s.start(344, style);
-    const TileCoord home = TileCoord{5, 5};
-    uint64_t first_blow = 0;
-    int32_t before = -1;
-    bool was_walking = false;
-    int32_t gained = 0;
     for (uint64_t t = 0; t < kWarmUp + 400; ++t) {
         s.step([&](uint64_t now) {
-            if (now >= kWarmUp) strike_again(s, enemy, bomber);
-            for (const watch::Blow& b : s.seen.people().blows()) {
-                if (first_blow == 0 && b.victim == bomber) first_blow = b.tick;
-            }
-            const sim::AntSnapshot* m = snapshot_of(s.sim, bomber);
-            if (first_blow == 0 || m == nullptr || !alive(s.sim, bomber) || now > first_blow + 300) return;
-            const int32_t d = std::max(std::abs(m->tile_x - home.x), std::abs(m->tile_y - home.y));
-            const bool walking = m->state == sim::UnitState::Walking;
-            if (before >= 0 && was_walking && walking && d < before) gained += before - d;
-            before = d;
-            was_walking = walking;
+            if (now >= kWarmUp && now % 20 == 0) strike_again(s, enemy, bomber);
         });
     }
-    const size_t back = first_blow == 0 ? 0 : s.blows_by(bomber, enemy, first_blow, first_blow + 40);
+    uint64_t first_blow = 0;
+    uint64_t first_back = 0;
+    for (const watch::Blow& b : s.seen.people().blows()) {
+        if (first_blow == 0 && b.victim == bomber) first_blow = b.tick;
+        if (first_blow != 0 && first_back == 0 && b.striker == bomber && b.victim == enemy) first_back = b.tick;
+    }
     Verdict v;
-    v.pass = first_blow != 0 && (back > 0 || gained >= 3);
-    v.note = styled(style, std::string("first blow at tick ") + std::to_string(first_blow) + ", blows back within 40 ticks " + std::to_string(back) + ", tiles walked towards its hill " + std::to_string(gained));
+    v.pass = first_blow != 0 && first_back != 0 && first_back <= first_blow + 200;
+    v.note = styled(style, "first blow at tick " + std::to_string(first_blow) + ", the Bomber's first blow back " + (first_back == 0 ? std::string("never") : "after " + std::to_string(first_back - first_blow) + " ticks") + " (at most 200)");
     return v;
 }
 
@@ -330,6 +317,7 @@ Verdict both_styles(const std::function<Verdict(Style)>& scene) {
 // A case that the shipped bot fails today and a later step has to fix: green while it fails (the measure is printed), red the day it passes. `required`: the step has made it a rule.
 void settle(const char* id, int step, bool required, const Verdict& v) {
     if (required) {
+        std::cout << "[" << id << ": " << v.note << "] ";
         ASSERT_TRUE(v.pass);
         return;
     }
@@ -596,7 +584,7 @@ void run_people_tests() {
     } TEST_END();
 
     TEST_CASE("AI34.1 A Gang Of Three Hits One Of Four Ants That Are Far From Home (Two Thieves, A Fire Ant, A Worker): Within 600 Ticks The Hard Bot Strikes At Least Six Blows And Loses At Most One Ant") {
-        settle("AI34.1", 1, false, both_styles([](Style st) { return scene_gang_on_four(st); }));
+        settle("AI34.1", 1, true, both_styles([](Style st) { return scene_gang_on_four(st); }));
     } TEST_END();
 
     TEST_CASE("AI34.2 An Enemy Fire Ant Camps Four Tiles From The Hill Of A Hard Bot With Two Ants And Strikes Whatever Comes Within Three Tiles: Within 1,200 Ticks No Ant Of The Bot Dies Alone To It, Or Two Of Them Strike It") {
@@ -613,8 +601,8 @@ void run_people_tests() {
         }));
     } TEST_END();
 
-    TEST_CASE("AI34.4 An Enemy Worker Strikes The Empty Bomber Of A Hard Bot (6 Hit Points) Again After Every Blow: The Bomber Strikes Back Within 40 Ticks Of The First Blow Or Walks Towards Its Hill") {
-        settle("AI34.4", 1, false, both_styles([](Style st) { return scene_hurt_bomber(st); }));
+    TEST_CASE("AI34.4 An Enemy Worker Strikes The Empty Bomber Of A Hard Bot (6 Hit Points, Three Workers Of The Bot Nearby) Again A Moment After Every Blow: The Bomber Strikes The Worker Itself Within 200 Ticks Of The First Blow") {
+        settle("AI34.4", 1, true, both_styles([](Style st) { return scene_hurt_bomber(st); }));
     } TEST_END();
 
     TEST_CASE("AI34.5 An Enemy Thief Raids The Hill Of A Hard Bot With No Fire Ant Three Times In About 2,400 Ticks: Before The Fourth Raid The Three Tiles East Of The Raid Tile Are Shut, Or The Thief Has Been Struck") {
