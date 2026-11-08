@@ -108,6 +108,8 @@ function page(name, code, extra) {
     ALL.push(c);
     return c;
 }
+// the answer of the hub's own page for a person who is logged in as `name`: the pages of this check play under it (nobody types a name on the web: front/player_name.js)
+const login = (name) => ({ login: true, you: { name, mod: false } });
 function names(c) { return c.room ? c.room.slots.map((s) => (s.state === N.SLOT.Client ? s.name : s.state === N.SLOT.Bot ? '(bot)' : '-')).join('|') : '(no room)'; }
 const online = (c) => () => c.status === 'online' && c.room !== null;
 
@@ -495,7 +497,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const A = page('Ada', room);
         A.connect();
         await step('Ada makes the room', () => online(A));
-        const env = harness.runLobby('?room=' + room, { 'ants.name': 'Bea' }, { WebSocket: ToTheServer, realTime: true });
+        const env = harness.runLobby('?room=' + room, {}, { me: login('Bea'), WebSocket: ToTheServer, realTime: true });
         check('a link opens the page on the Room, behind the name card', env.screen() === 'room' && !env.$('name-step').hidden && pageSockets.length === 0);
         env.$('name-step-go').click();
         await step('the page joins by the link: the real room welcomes it as seat 1 and it waits for Ada', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'Waiting for Ada', 5000);
@@ -527,7 +529,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const sockets = [];
         class ToTheServer extends WS { constructor() { super(wsUrl); sockets.push(this); } }
         const realList = (url) => (url === '/lobbies' ? fetch(listBase + '/lobbies', { cache: 'no-store' }) : Promise.reject(new Error('no ' + url + ' here')));
-        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: realList, label: 'staging' });
+        const onPage = (name) => harness.runLobby('', {}, { me: login(name), WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: realList, label: 'staging' });
         const listed = async () => (await (await fetch(listBase + '/lobbies')).json());
         const text = (env, cls) => { const e = env.$('home').findAll((n) => String(n.className).split(/\s+/).indexOf(cls) !== -1)[0]; return e ? e.textContent : null; };
         const A = onPage('Quinn');
@@ -581,7 +583,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
             return { status: 200, headers: { get: () => null }, text: () => Promise.resolve(JSON.stringify(data)) };
         };
         const realRows = async () => (await (await fetch(listBase + '/lobbies', { cache: 'no-store' })).json()).lobbies.filter((x) => /^Qj/.test(x.host));
-        const onPage = (name) => harness.runLobby('', { 'ants.name': name }, { WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: aList, label: 'staging' });
+        const onPage = (name) => harness.runLobby('', {}, { me: login(name), WebSocket: ToTheServer, realTime: true, stayHome: true, lazy: true, fetch: aList, label: 'staging' });
         const hostOf = (name, room) => { const c = page(name, room); c.connect(); return c; };
         const publicHost = async (name, room) => { const c = hostOf(name, room); await step(name + ' makes a room', () => online(c), 5000); c.setPublic(true); await stepLater(name + '\'s room is in the real list', async () => (await realRows()).some((x) => x.code === room), 5000); return c; };
         const cardOf = (env) => env.body.findAll((n) => String(n.className).split(/\s+/).indexOf('gconfirm') !== -1)[0] || null;
@@ -715,7 +717,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         const A = page('Ada', room);
         A.connect();
         await step('Ada makes the room', () => online(A));
-        const env = harness.runLobby('?room=' + room, { 'ants.name': 'Bea' }, { WebSocket: ToTheServer, realTime: true });
+        const env = harness.runLobby('?room=' + room, {}, { me: login('Bea'), WebSocket: ToTheServer, realTime: true });
         env.$('name-step-go').click();
         await step('Bea joins by the link', () => () => A.seatOf('Bea') === 1 && env.$('start').textContent === 'Waiting for Ada', 5000);
         env.roomBar('rhome').click();

@@ -52,7 +52,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
             self.assertNotIn(word, page, word)
 
     def test_no_other_file_of_the_site_names_the_list_and_the_hubs_door_is_still_the_docks_alone(self):
-        naming_the_list, naming_the_door = set(), set()
+        naming_the_list, naming_the_socket = set(), set()
         for base, _dirs, names in os.walk(WEB):
             for name in names:
                 if os.path.splitext(name)[1] not in (".html", ".js", ".css"):
@@ -63,10 +63,10 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     text = f.read()
                 if re.search(r"home/players\b", text):
                     naming_the_list.add(rel)
-                if re.search(r"/hub/ws|/hub\b", text):
-                    naming_the_door.add(rel)
+                if re.search(r"/hub/ws", text):
+                    naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_list), ["web/home/home.js", "web/home/players.css", "web/home/players.js"], "only the front page's own script asks for the list (the two files name themselves)")
-        self.assertEqual(sorted(naming_the_door), ["web/home/chat.js"], "the list opens no socket of its own: it speaks through the dock's")
+        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js"], "the list opens no socket of its own: it speaks through the dock's (the one other script that names the hub asks its one page, GET /hub/me, for the name to play under)")
 
     def test_the_game_server_and_the_game_never_hear_of_it(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js"), ("web", "front", "lobby_rules.js")):
@@ -285,7 +285,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_players_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["web/lobby.html", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
+    FILES = (["web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
               "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

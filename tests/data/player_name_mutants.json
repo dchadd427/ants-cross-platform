@@ -1,0 +1,1183 @@
+{
+ "note": "Mutants of the code that decides the name a person plays under on the web, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/front/player_name.js against tests/scripts/web_player_name_check.js (the fitting of a login's name, what the answer of /hub/me says, the guest name and how it is kept, the person that asks the hub and what waits for it), and the page's use of it against tests/scripts/web_name_check.js. Run from the checkout: python3 tools/mutate.py tests/data/player_name_mutants.json --keep-going --jobs 1 --timeout 120. Every mutant must be caught; tests/scripts/test_web_player_name.py runs the same list in the quick tier on a copy of the files.",
+ "mutants": [
+  {
+   "id": "fit_without_nfkd",
+   "file": "web/front/player_name.js",
+   "old": "try { s = s.normalize('NFKD'); } catch (e) {",
+   "new": "try { s = s; } catch (e) {",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_with_nfc",
+   "file": "web/front/player_name.js",
+   "old": "s.normalize('NFKD')",
+   "new": "s.normalize('NFC')",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_keeps_non_ascii",
+   "file": "web/front/player_name.js",
+   "old": "s = s.replace(/[^\\x20-\\x7e]/g, '').replace(/ +/g, ' ')",
+   "new": "s = s.replace(/[\\x00-\\x1f]/g, '').replace(/ +/g, ' ')",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_keeps_the_marks_as_blanks",
+   "file": "web/front/player_name.js",
+   "old": "s = s.replace(/[^\\x20-\\x7e]/g, '').replace(/ +/g, ' ')",
+   "new": "s = s.replace(/[^\\x20-\\x7e]/g, ' ').replace(/ +/g, ' ')",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_without_collapsing_blanks",
+   "file": "web/front/player_name.js",
+   "old": "s = s.replace(/[^\\x20-\\x7e]/g, '').replace(/ +/g, ' ').replace(/^ | $/g, '');",
+   "new": "s = s.replace(/[^\\x20-\\x7e]/g, '').replace(/^ | $/g, '');",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_without_trimming",
+   "file": "web/front/player_name.js",
+   "old": "s = s.replace(/[^\\x20-\\x7e]/g, '').replace(/ +/g, ' ').replace(/^ | $/g, '');",
+   "new": "s = s.replace(/[^\\x20-\\x7e]/g, '').replace(/ +/g, ' ');",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_takes_one_character",
+   "file": "web/front/player_name.js",
+   "old": "var MIN = 2, MAX = 32;",
+   "new": "var MIN = 1, MAX = 32;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_takes_33_characters",
+   "file": "web/front/player_name.js",
+   "old": "var MIN = 2, MAX = 32;",
+   "new": "var MIN = 2, MAX = 33;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_cuts_a_long_name",
+   "file": "web/front/player_name.js",
+   "old": "if (s.length < MIN || s.length > MAX) return '';",
+   "new": "if (s.length < MIN) return ''; s = s.slice(0, MAX);",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_without_the_cut_of_the_input",
+   "file": "web/front/player_name.js",
+   "old": "var s = text.slice(0, CUT);",
+   "new": "var s = text;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_cut_too_short",
+   "file": "web/front/player_name.js",
+   "old": "var CUT = 256;",
+   "new": "var CUT = 40;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_ignores_the_checker",
+   "file": "web/front/player_name.js",
+   "old": "var checked = typeof check === 'function' ? check(s) : { ok: true, name: s };",
+   "new": "var checked = { ok: true, name: s };",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_ignores_the_checkers_verdict",
+   "file": "web/front/player_name.js",
+   "old": "return checked && checked.ok === true && typeof checked.name === 'string' && checked.name.length >= MIN ? checked.name : '';",
+   "new": "return checked && typeof checked.name === 'string' && checked.name.length >= MIN ? checked.name : s;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_takes_a_name_that_is_not_text",
+   "file": "web/front/player_name.js",
+   "old": "if (typeof text !== 'string') return '';\n        var s",
+   "new": "if (typeof text !== 'string') text = String(text);\n        var s",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_returns_the_fitted_text_not_the_checkers",
+   "file": "web/front/player_name.js",
+   "old": "checked.ok === true && typeof checked.name === 'string' && checked.name.length >= MIN ? checked.name : ''",
+   "new": "checked.ok === true && typeof checked.name === 'string' && checked.name.length >= MIN ? s : ''",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_prefers_the_other_name",
+   "file": "web/front/player_name.js",
+   "old": "var shown = fit(you.name, check), name = shown || fit(you.other, check);",
+   "new": "var shown = fit(you.name, check), name = fit(you.other, check) || shown;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_ignores_the_other_name",
+   "file": "web/front/player_name.js",
+   "old": "var shown = fit(you.name, check), name = shown || fit(you.other, check);",
+   "new": "var shown = fit(you.name, check), name = shown;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_takes_only_the_other_name_when_the_shown_one_is_accented",
+   "file": "web/front/player_name.js",
+   "old": "var shown = fit(you.name, check), name = shown || fit(you.other, check);",
+   "new": "var shown = fit(you.name, check), name = (you.name === shown ? you.name : '') || fit(you.other, check);",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_no_switch_flag",
+   "file": "web/front/player_name.js",
+   "old": "canSwitch: typeof you.other === 'string' && you.other !== '',",
+   "new": "canSwitch: false,",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_switch_for_an_empty_other",
+   "file": "web/front/player_name.js",
+   "old": "canSwitch: typeof you.other === 'string' && you.other !== '',",
+   "new": "canSwitch: typeof you.other === 'string',",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_guest_is_failed",
+   "file": "web/front/player_name.js",
+   "old": "if (you === null) return { kind: 'guest', name: '', canSwitch: false };",
+   "new": "if (you === null) return { kind: 'failed', name: '', canSwitch: false };",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_no_login_is_a_guest",
+   "file": "web/front/player_name.js",
+   "old": "if (body.login === false) return { kind: 'none', name: '', canSwitch: false };",
+   "new": "if (body.login === false) return { kind: 'login', name: '', canSwitch: false };",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_takes_any_login_word",
+   "file": "web/front/player_name.js",
+   "old": "if (body.login !== true) return { kind: 'failed', name: '', canSwitch: false };",
+   "new": "if (!body.login) return { kind: 'failed', name: '', canSwitch: false };",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "me_takes_a_you_that_is_text",
+   "file": "web/front/player_name.js",
+   "old": "if (!you || typeof you !== 'object' || Array.isArray(you)) return { kind: 'failed', name: '', canSwitch: false };",
+   "new": "if (!you) return { kind: 'failed', name: '', canSwitch: false };",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_five_digits",
+   "file": "web/front/player_name.js",
+   "old": "return String(100000 + Math.floor(r * 900000));",
+   "new": "return String(10000 + Math.floor(r * 90000));",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_range_off_by_one",
+   "file": "web/front/player_name.js",
+   "old": "return String(100000 + Math.floor(r * 900000));",
+   "new": "return String(100000 + Math.floor(r * 899999));",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_can_start_with_zero",
+   "file": "web/front/player_name.js",
+   "old": "return String(100000 + Math.floor(r * 900000));",
+   "new": "return String(Math.floor(r * 1000000));",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_takes_a_random_that_is_no_number",
+   "file": "web/front/player_name.js",
+   "old": "var r = typeof random === 'number' && random >= 0 && random < 1 ? random : 0;",
+   "new": "var r = random;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_digits_allow_a_leading_zero",
+   "file": "web/front/player_name.js",
+   "old": "/^[1-9][0-9]{5}$/",
+   "new": "/^[0-9]{6}$/",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_digits_five",
+   "file": "web/front/player_name.js",
+   "old": "/^[1-9][0-9]{5}$/",
+   "new": "/^[1-9][0-9]{4,5}$/",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_name_without_the_blank",
+   "file": "web/front/player_name.js",
+   "old": "return 'Guest ' + digits;",
+   "new": "return 'Guest' + digits;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_name_other_word",
+   "file": "web/front/player_name.js",
+   "old": "return 'Guest ' + digits;",
+   "new": "return 'Visitor ' + digits;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_not_read_from_storage",
+   "file": "web/front/player_name.js",
+   "old": "value = store ? store.getItem(GUEST_KEY) : null; } catch (e) { value = null; }",
+   "new": "value = null; } catch (e) { value = null; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_not_kept_in_storage",
+   "file": "web/front/player_name.js",
+   "old": "try { if (store) store.setItem(GUEST_KEY, value); } catch (e) { /* a browser that keeps nothing: the name lasts for this page */ }",
+   "new": "",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_stored_unchecked",
+   "file": "web/front/player_name.js",
+   "old": "if (!validDigits(value)) {",
+   "new": "if (!value) {",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_stored_under_another_key",
+   "file": "web/front/player_name.js",
+   "old": "var GUEST_KEY = 'ants.guest';",
+   "new": "var GUEST_KEY = 'ants.name';",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_not_kept_for_the_page",
+   "file": "web/front/player_name.js",
+   "old": "            kept = value;\n            return kept;",
+   "new": "            return value;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_made_again_after_a_logout",
+   "file": "web/front/player_name.js",
+   "old": "            if (kept) return kept;\n",
+   "new": "",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_storage_error_not_caught",
+   "file": "web/front/player_name.js",
+   "old": "try { store = env.storage ? env.storage() : null; value = store ? store.getItem(GUEST_KEY) : null; } catch (e) { value = null; }",
+   "new": "store = env.storage ? env.storage() : null; value = store ? store.getItem(GUEST_KEY) : null;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_write_error_not_caught",
+   "file": "web/front/player_name.js",
+   "old": "try { if (store) store.setItem(GUEST_KEY, value); } catch (e) { /* a browser that keeps nothing: the name lasts for this page */ }",
+   "new": "if (store) store.setItem(GUEST_KEY, value);",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "login_not_asked_again",
+   "file": "web/front/player_name.js",
+   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
+   "new": "function again(result) { return result.kind === 'failed'; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "failed_not_asked_again",
+   "file": "web/front/player_name.js",
+   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
+   "new": "function again(result) { return result.kind === 'login'; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "guest_asked_again",
+   "file": "web/front/player_name.js",
+   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
+   "new": "function again(result) { return true; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "none_asked_again",
+   "file": "web/front/player_name.js",
+   "old": "function again(result) { return result.kind === 'login' || result.kind === 'failed'; }",
+   "new": "function again(result) { return result.kind !== 'guest'; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "ready_always_waits",
+   "file": "web/front/player_name.js",
+   "old": "if (last && !again(last)) { tell(fn, last); return; }\n                waiting.push(fn);",
+   "new": "waiting.push(fn);",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "ready_answers_a_login_from_memory",
+   "file": "web/front/player_name.js",
+   "old": "if (last && !again(last)) { tell(fn, last); return; }",
+   "new": "if (last && last.kind !== 'failed') { tell(fn, last); return; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "question_not_shared",
+   "file": "web/front/player_name.js",
+   "old": "            if (flying) return;\n            flying = true;",
+   "new": "            flying = true;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "page_asks_again_for_a_guest",
+   "file": "web/front/player_name.js",
+   "old": "ask: function () { if (!last || again(last)) ask(); },",
+   "new": "ask: function () { ask(); },",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "page_never_asks",
+   "file": "web/front/player_name.js",
+   "old": "ask: function () { if (!last || again(last)) ask(); },",
+   "new": "ask: function () { },",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "known_for_a_login",
+   "file": "web/front/player_name.js",
+   "old": "known: function () { return last && !again(last) ? guestName(guest()) : ''; }",
+   "new": "known: function () { return last ? guestName(guest()) : ''; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "known_never",
+   "file": "web/front/player_name.js",
+   "old": "known: function () { return last && !again(last) ? guestName(guest()) : ''; }",
+   "new": "known: function () { return ''; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "answer_login_as_guest",
+   "file": "web/front/player_name.js",
+   "old": "{ name: result.name, kind: 'login', canSwitch: result.canSwitch,",
+   "new": "{ name: result.name, kind: 'guest', canSwitch: result.canSwitch,",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "answer_hides_the_switch",
+   "file": "web/front/player_name.js",
+   "old": "{ name: result.name, kind: 'login', canSwitch: result.canSwitch,",
+   "new": "{ name: result.name, kind: 'login', canSwitch: false,",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "answer_empty_login_name_taken",
+   "file": "web/front/player_name.js",
+   "old": "return result.kind === 'login' && result.name ?",
+   "new": "return result.kind === 'login' ?",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "callback_error_not_caught",
+   "file": "web/front/player_name.js",
+   "old": "try { fn(a.name, a.kind, a.canSwitch, a.how); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error(e); }",
+   "new": "fn(a.name, a.kind, a.canSwitch, a.how);",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "callback_error_not_reported",
+   "file": "web/front/player_name.js",
+   "old": "catch (e) { if (typeof console !== 'undefined' && console.error) console.error(e); }",
+   "new": "catch (e) { }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "settle_forgets_the_timer",
+   "file": "web/front/player_name.js",
+   "old": "if (timer !== null) { cancel(timer); timer = null; }\n            round++;",
+   "new": "round++;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "settle_does_not_start_a_new_round",
+   "file": "web/front/player_name.js",
+   "old": "round++; flying = false;\n            last = result;",
+   "new": "flying = false;\n            last = result;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "settle_leaves_the_question_open",
+   "file": "web/front/player_name.js",
+   "old": "round++; flying = false;\n            last = result;",
+   "new": "round++;\n            last = result;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "waiting_not_cleared",
+   "file": "web/front/player_name.js",
+   "old": "            var run = waiting;\n            waiting = [];",
+   "new": "            var run = waiting.slice();",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "late_answer_is_heard",
+   "file": "web/front/player_name.js",
+   "old": "                if (mine !== round) return;\n                if (res && res.status === 404)",
+   "new": "                if (res && res.status === 404)",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "late_json_is_heard",
+   "file": "web/front/player_name.js",
+   "old": "body.then(function (data) { if (mine === round) settle(fromMe(data, env.check)); }, failed);",
+   "new": "body.then(function (data) { settle(fromMe(data, env.check)); }, failed);",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "late_failure_is_heard",
+   "file": "web/front/player_name.js",
+   "old": "function failed() { if (mine === round) settle({ kind: 'failed', name: '', canSwitch: false }); }",
+   "new": "function failed() { settle({ kind: 'failed', name: '', canSwitch: false }); }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "no_limit_on_the_wait",
+   "file": "web/front/player_name.js",
+   "old": "            timer = later(function () {",
+   "new": "            timer = later(function () { return; ",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "limit_too_long",
+   "file": "web/front/player_name.js",
+   "old": "var ASK_MS = 2000;",
+   "new": "var ASK_MS = 20000;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "limit_too_short",
+   "file": "web/front/player_name.js",
+   "old": "var ASK_MS = 2000;",
+   "new": "var ASK_MS = 200;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "limit_does_not_end_the_request",
+   "file": "web/front/player_name.js",
+   "old": "if (ctl) { try { ctl.abort(); } catch (e) { /* it is given up all the same */ } }",
+   "new": "",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "limit_ignores_a_new_round",
+   "file": "web/front/player_name.js",
+   "old": "                timer = null;\n                if (mine !== round) return;",
+   "new": "                timer = null;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "not_found_is_a_failure",
+   "file": "web/front/player_name.js",
+   "old": "if (res && res.status === 404) { settle({ kind: 'none', name: '', canSwitch: false }); return; }",
+   "new": "if (res && res.status === 404) { settle({ kind: 'failed', name: '', canSwitch: false }); return; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "any_status_is_good",
+   "file": "web/front/player_name.js",
+   "old": "if (!res || res.ok !== true || typeof res.json !== 'function') { failed(); return; }",
+   "new": "if (!res || typeof res.json !== 'function') { failed(); return; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_without_the_cookie",
+   "file": "web/front/player_name.js",
+   "old": "credentials: 'same-origin', cache: 'no-store'",
+   "new": "credentials: 'omit', cache: 'no-store'",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_with_every_cookie",
+   "file": "web/front/player_name.js",
+   "old": "credentials: 'same-origin', cache: 'no-store'",
+   "new": "credentials: 'include', cache: 'no-store'",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_from_the_cache",
+   "file": "web/front/player_name.js",
+   "old": "credentials: 'same-origin', cache: 'no-store'",
+   "new": "credentials: 'same-origin', cache: 'default'",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_follows_redirects",
+   "file": "web/front/player_name.js",
+   "old": "cache: 'no-store', redirect: 'error'",
+   "new": "cache: 'no-store', redirect: 'follow'",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_for_another_page",
+   "file": "web/front/player_name.js",
+   "old": "var ME = '/hub/me';",
+   "new": "var ME = '/hub/login';",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_with_a_query",
+   "file": "web/front/player_name.js",
+   "old": "env.fetch(ME, {",
+   "new": "env.fetch(ME + '?x=1', {",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_is_a_post",
+   "file": "web/front/player_name.js",
+   "old": "redirect: 'error', signal",
+   "new": "redirect: 'error', method: 'POST', signal",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "request_without_a_signal",
+   "file": "web/front/player_name.js",
+   "old": "signal: ctl ? ctl.signal : undefined",
+   "new": "signal: undefined",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "no_fetch_waits_for_the_limit",
+   "file": "web/front/player_name.js",
+   "old": "if (!p || typeof p.then !== 'function') { failed(); return; }",
+   "new": "if (!p || typeof p.then !== 'function') { return; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fetch_error_not_caught",
+   "file": "web/front/player_name.js",
+   "old": "try { p = env.fetch ? env.fetch(ME, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: ctl ? ctl.signal : undefined }) : null; } catch (e) { p = null; }",
+   "new": "p = env.fetch ? env.fetch(ME, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: ctl ? ctl.signal : undefined }) : null;",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_fetch_unbound",
+   "file": "web/front/player_name.js",
+   "old": "fetch: typeof win.fetch === 'function' ? function (url, init) { return win.fetch(url, init); } : null,",
+   "new": "fetch: typeof win.fetch === 'function' ? win.fetch : null,",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_storage_session",
+   "file": "web/front/player_name.js",
+   "old": "storage: function () { return win.localStorage; },",
+   "new": "storage: function () { return win.sessionStorage; },",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_abort_missing",
+   "file": "web/front/player_name.js",
+   "old": "Abort: win.AbortController, check: check",
+   "new": "Abort: undefined, check: check",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_check_missing",
+   "file": "web/front/player_name.js",
+   "old": "Abort: win.AbortController, check: check",
+   "new": "Abort: win.AbortController",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_random_ignores_the_pages",
+   "file": "web/front/player_name.js",
+   "old": "random: tools.random || function () { return Math.random(); },",
+   "new": "random: function () { return Math.random(); },",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_random_without_fallback",
+   "file": "web/front/player_name.js",
+   "old": "random: tools.random || function () { return Math.random(); },",
+   "new": "random: tools.random || function () { return 0; },",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_clock_ignored",
+   "file": "web/front/player_name.js",
+   "old": "later: tools.later || function (fn, ms) { return setTimeout(fn, ms); }, cancel: tools.cancel || function (handle) { clearTimeout(handle); },",
+   "new": "later: function (fn, ms) { return setTimeout(fn, ms); }, cancel: function (handle) { clearTimeout(handle); },",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_cancel_ignored",
+   "file": "web/front/player_name.js",
+   "old": "cancel: tools.cancel || function (handle) { clearTimeout(handle); },",
+   "new": "cancel: function (handle) { clearTimeout(handle); },",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "window_without_tools_breaks",
+   "file": "web/front/player_name.js",
+   "old": "    tools = tools || {};\n",
+   "new": "",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "clock_called_as_a_method",
+   "file": "web/front/player_name.js",
+   "old": "            timer = later(function () {",
+   "new": "            timer = env.later(function () {",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "cancel_called_as_a_method",
+   "file": "web/front/player_name.js",
+   "old": "if (timer !== null) { cancel(timer); timer = null; }",
+   "new": "if (timer !== null) { env.cancel(timer); timer = null; }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "random_called_as_a_method",
+   "file": "web/front/player_name.js",
+   "old": "value = guestDigits(random ? random() : Math.random());",
+   "new": "value = guestDigits(env.random ? env.random() : Math.random());",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "page_seat_connects_without_the_name",
+   "file": "web/lobby.html",
+   "old": "function open(c, name) { if (name) c.connect(); else person.ready(function (own) { c.name = own; c.connect(); }); }",
+   "new": "function open(c, name) { c.connect(); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_seat_connects_before_the_name",
+   "file": "web/lobby.html",
+   "old": "person.ready(function (own) { c.name = own; c.connect(); }); }",
+   "new": "person.ready(function (own) { c.connect(); c.name = own; }); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_seat_never_waits",
+   "file": "web/lobby.html",
+   "old": "function open(c, name) { if (name) c.connect(); else person.ready(function (own) { c.name = own; c.connect(); }); }",
+   "new": "function open(c, name) { c.name = name || person.known(); c.connect(); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_seat_ignores_a_name_it_has",
+   "file": "web/lobby.html",
+   "old": "function open(c, name) { if (name) c.connect(); else",
+   "new": "function open(c, name) { if (false) c.connect(); else",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_name_of_a_new_seat_is_the_rooms",
+   "file": "web/lobby.html",
+   "old": "function myName() { return person.known(); }",
+   "new": "function myName() { return client && client.name ? client.name : person.known(); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_name_is_never_sure",
+   "file": "web/lobby.html",
+   "old": "function myName() { return person.known(); }",
+   "new": "function myName() { return ''; }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_connect_skips_open",
+   "file": "web/lobby.html",
+   "old": "            render();\n            open(c, p.name);\n        }",
+   "new": "            render();\n            c.connect();\n        }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_probe_skips_open",
+   "file": "web/lobby.html",
+   "old": "            open(p, name);\n            return p;",
+   "new": "            p.connect();\n            return p;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_does_not_ask_when_it_opens",
+   "file": "web/lobby.html",
+   "old": "        person.ask();\n",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_person_without_the_rules",
+   "file": "web/lobby.html",
+   "old": "PlayerName.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random });",
+   "new": "PlayerName.forWindow(window, undefined, { later: setTimeout, cancel: clearTimeout, random: Math.random });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_person_with_its_own_generator",
+   "file": "web/lobby.html",
+   "old": "{ later: setTimeout, cancel: clearTimeout, random: Math.random }",
+   "new": "{ later: setTimeout, cancel: clearTimeout }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_person_with_its_own_clock",
+   "file": "web/lobby.html",
+   "old": "{ later: setTimeout, cancel: clearTimeout, random: Math.random }",
+   "new": "{ random: Math.random }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_solo_game_under_the_guest_name",
+   "file": "web/lobby.html",
+   "old": "var address = soloAddress(model, client.name, pickedShape);",
+   "new": "var address = soloAddress(model, myName(), pickedShape);",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_rejoin_with_a_name",
+   "file": "web/lobby.html",
+   "old": "rejoinQuery(rejoinOffered, '', pickedShape)",
+   "new": "rejoinQuery(rejoinOffered, person.known(), pickedShape)",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_not_read_only",
+   "file": "web/lobby.html",
+   "old": "<input type=\"text\" id=\"name-step-input\" readonly aria-describedby=\"name-step-msg name-step-hint\">",
+   "new": "<input type=\"text\" id=\"name-step-input\" aria-describedby=\"name-step-msg name-step-hint\">",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_has_the_cursor_of_a_field",
+   "file": "web/lobby.html",
+   "old": "box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); cursor: default; }",
+   "new": "box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_focus_on_the_field",
+   "file": "web/lobby.html",
+   "old": "try { ui.button.focus(); } catch (e) { /* nothing to focus */ }\n                },\n                hide: function () { $('name-step').hidden = true;",
+   "new": "try { ui.input.focus(); } catch (e) { /* nothing to focus */ }\n                },\n                hide: function () { $('name-step').hidden = true;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_says_nothing",
+   "file": "web/lobby.html",
+   "old": "said: function (text, login) { $('name-step-hint').textContent = text; $('name-step-login').hidden = !login; },",
+   "new": "said: function (text, login) { $('name-step-login').hidden = !login; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_not_run_with_the_person",
+   "file": "web/lobby.html",
+   "old": "runNameStep(ui, person, o.done);",
+   "new": "runNameStep(ui, { ready: function (fn) { fn(myName() || 'Player', 'guest', false); } }, o.done);",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_goes_on_without_the_button",
+   "file": "web/lobby.html",
+   "old": "function go() { if (done || !pressed || chosen === null) return;",
+   "new": "function go() { if (done || chosen === null) return;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_goes_on_before_the_name",
+   "file": "web/lobby.html",
+   "old": "function go() { if (done || !pressed || chosen === null) return;",
+   "new": "function go() { if (done || !pressed) return;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_goes_on_twice",
+   "file": "web/lobby.html",
+   "old": "function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = '';",
+   "new": "function go() { if (!pressed || chosen === null) return; ui.message.textContent = '';",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_hands_on_what_was_typed",
+   "file": "web/lobby.html",
+   "old": "ui.hide(); onDone(chosen); }",
+   "new": "ui.hide(); onDone(ui.input.value || chosen); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_shows_no_name",
+   "file": "web/lobby.html",
+   "old": "chosen = name; ui.input.value = name; ui.said(",
+   "new": "chosen = name; ui.said(",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_says_no_words",
+   "file": "web/lobby.html",
+   "old": "ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_says_the_switch_to_everybody",
+   "file": "web/lobby.html",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
+   "new": "(swap ? NAME_HINT.swap : '')",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_never_says_the_switch",
+   "file": "web/lobby.html",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_words_of_a_guest_changed",
+   "file": "web/lobby.html",
+   "old": "guest: 'You play as a guest. Log in with Discord to play under your own name.'",
+   "new": "guest: 'You play as a guest.'",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_words_of_a_login_changed",
+   "file": "web/lobby.html",
+   "old": "login: 'This is your Discord name. The other players see it.'",
+   "new": "login: 'This is your name.'",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_listens_to_typing",
+   "file": "web/lobby.html",
+   "old": "            ui.button.addEventListener('click', confirm);",
+   "new": "            ui.button.addEventListener('click', confirm);\n            ui.input.addEventListener('input', function () { ui.message.textContent = ''; });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_enter_does_not_go_on",
+   "file": "web/lobby.html",
+   "old": "if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); confirm(); }",
+   "new": "if (e.key === 'Enter') { if (e.preventDefault) e.preventDefault(); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_lobby_keeps_the_old_message",
+   "file": "web/lobby.html",
+   "old": "function go() { if (done || !pressed || chosen === null) return; ui.message.textContent = ''; ui.hide(); onDone(chosen); }",
+   "new": "function go() { if (done || !pressed || chosen === null) return; ui.hide(); onDone(chosen); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_shell_goes_on_without_the_button",
+   "file": "web/shell.html",
+   "old": "function go() { if (done || !pressed || chosen === null) return;",
+   "new": "function go() { if (done || chosen === null) return;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_shell_hands_on_what_was_typed",
+   "file": "web/shell.html",
+   "old": "ui.hide(); onDone(chosen); }",
+   "new": "ui.hide(); onDone(ui.input.value || chosen); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "name_block_shell_says_no_words",
+   "file": "web/shell.html",
+   "old": "ui.said(NAME_HINT[kind] + (kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : ''), how === 'login');",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_card_not_read_only",
+   "file": "web/shell.html",
+   "old": "<input type=\"text\" id=\"name-step-input\" readonly aria-describedby=\"name-step-msg name-step-hint\">",
+   "new": "<input type=\"text\" id=\"name-step-input\" aria-describedby=\"name-step-msg name-step-hint\">",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_asks_the_hub_always",
+   "file": "web/shell.html",
+   "old": "asks || own ? (PN ? PN.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : { ready: function (fn) { fn('Guest', 'guest', false, ''); } }) : null, own);",
+   "new": "PN ? PN.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random }) : { ready: function (fn) { fn('Guest', 'guest', false, ''); } }, own);",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_without_the_rules",
+   "file": "web/shell.html",
+   "old": "PN.forWindow(window, nameCheck, {",
+   "new": "PN.forWindow(window, undefined, {",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_gives_no_name_to_the_game",
+   "file": "web/shell.html",
+   "old": "                    args.push('--name', name);\n                    gate.open();",
+   "new": "                    gate.open();",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_card_says_nothing",
+   "file": "web/shell.html",
+   "old": "said: function (text, login) { document.getElementById('name-step-hint').textContent = text; document.getElementById('name-step-login').hidden = !login; },",
+   "new": "said: function (text, login) { document.getElementById('name-step-login').hidden = !login; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_card_focus_on_the_field",
+   "file": "web/shell.html",
+   "old": "try { ui.button.focus(); } catch (e) { /* nothing to focus */ }\n                },\n                hide: function () {\n                    card.hidden = true;",
+   "new": "try { ui.input.focus(); } catch (e) { /* nothing to focus */ }\n                },\n                hide: function () {\n                    card.hidden = true;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_page_does_not_load_the_person",
+   "file": "web/shell.html",
+   "old": "<script src=\"front/lobby_net.js\"></script><script src=\"front/player_name.js\"></script>",
+   "new": "<script src=\"front/lobby_net.js\"></script>",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_hint_is_not_an_element",
+   "file": "web/shell.html",
+   "old": "<div class=\"name-step-hint\" id=\"name-step-hint\">The name the other players see.</div>",
+   "new": "<div class=\"name-step-hint\">The name the other players see.</div>",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "fit_loses_a_letter_silently",
+   "file": "web/front/player_name.js",
+   "old": "        if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';\n",
+   "new": "",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_refuses_a_mark_too",
+   "file": "web/front/player_name.js",
+   "old": "if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';",
+   "new": "if (/[^\\x20-\\x7e]/.test(s)) return '';",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_looks_at_letters_only",
+   "file": "web/front/player_name.js",
+   "old": "new RegExp('[\\\\p{L}\\\\p{N}]', 'u')",
+   "new": "new RegExp('[\\\\p{L}]', 'u')",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_looks_at_digits_only",
+   "file": "web/front/player_name.js",
+   "old": "new RegExp('[\\\\p{L}\\\\p{N}]', 'u')",
+   "new": "new RegExp('[\\\\p{N}]', 'u')",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "fit_looks_at_the_text_before_nfkd",
+   "file": "web/front/player_name.js",
+   "old": "        try { s = s.normalize('NFKD'); } catch (e) { /* a browser without normalize: the text as it is, and its accented letters are refused below */ }\n        if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';\n",
+   "new": "        if (LETTER && LETTER.test(s.replace(/[\\x20-\\x7e]/g, ''))) return '';\n        try { s = s.normalize('NFKD'); } catch (e) { /* a browser without normalize: the text as it is, and its accented letters are refused below */ }\n",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "via_other_never_told",
+   "file": "web/front/player_name.js",
+   "old": "viaOther: !shown && name !== '' }",
+   "new": "viaOther: false }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "via_other_whenever_there_is_a_name",
+   "file": "web/front/player_name.js",
+   "old": "viaOther: !shown && name !== '' }",
+   "new": "viaOther: name !== '' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "via_other_when_no_name_fits",
+   "file": "web/front/player_name.js",
+   "old": "viaOther: !shown && name !== '' }",
+   "new": "viaOther: !shown }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_other_never_told",
+   "file": "web/front/player_name.js",
+   "old": "how: result.viaOther ? 'other' : '' }",
+   "new": "how: '' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_login_never_told",
+   "file": "web/front/player_name.js",
+   "old": "how: result.kind === 'guest' ? 'login' : '' }",
+   "new": "how: '' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_login_for_every_guest",
+   "file": "web/front/player_name.js",
+   "old": "how: result.kind === 'guest' ? 'login' : '' }",
+   "new": "how: 'login' }",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "how_is_not_passed_on",
+   "file": "web/front/player_name.js",
+   "old": "fn(a.name, a.kind, a.canSwitch, a.how)",
+   "new": "fn(a.name, a.kind, a.canSwitch)",
+   "test": "node tests/scripts/web_player_name_check.js web/front/player_name.js web/lobby.html"
+  },
+  {
+   "id": "page_step_way_out_is_not_noticed",
+   "file": "web/lobby.html",
+   "old": "ui.hide = function () { done = true; hide.apply(ui, arguments); };",
+   "new": "ui.hide = function () { hide.apply(ui, arguments); };",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html",
+   "expect": "the way out"
+  },
+  {
+   "id": "page_step_hide_never_reaches_the_card",
+   "file": "web/lobby.html",
+   "old": "ui.hide = function () { done = true; hide.apply(ui, arguments); };",
+   "new": "ui.hide = function () { done = true; };",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_hide_is_not_wrapped",
+   "file": "web/lobby.html",
+   "old": "            ui.hide = function () { done = true; hide.apply(ui, arguments); };\n",
+   "new": "",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html",
+   "expect": "the way out"
+  },
+  {
+   "id": "page_step_other_words_not_said",
+   "file": "web/lobby.html",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
+   "new": "(kind !== 'login' ? '' : swap ? NAME_HINT.swap : '')",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_switch_words_before_other",
+   "file": "web/lobby.html",
+   "old": "(kind !== 'login' ? '' : how === 'other' ? NAME_HINT.other : swap ? NAME_HINT.swap : '')",
+   "new": "(kind !== 'login' ? '' : swap ? NAME_HINT.swap : how === 'other' ? NAME_HINT.other : '')",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_link_flag_inverted",
+   "file": "web/lobby.html",
+   "old": "how === 'login'); go(); });",
+   "new": "how !== 'login'); go(); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_link_for_every_guest",
+   "file": "web/lobby.html",
+   "old": "how === 'login'); go(); });",
+   "new": "kind === 'guest'); go(); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_step_other_words_change",
+   "file": "web/lobby.html",
+   "old": "other: ' Your display name has characters that the game cannot show, so your username is used.'",
+   "new": "other: ' Your display name cannot be shown, so your username is used.'",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_link_always_shown",
+   "file": "web/lobby.html",
+   "old": "$('name-step-login').hidden = !login; },",
+   "new": "$('name-step-login').hidden = false; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_link_never_shown",
+   "file": "web/lobby.html",
+   "old": "$('name-step-login').hidden = !login; },",
+   "new": "$('name-step-login').hidden = true; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_card_link_stays_from_the_last_use",
+   "file": "web/lobby.html",
+   "old": " $('name-step-login').hidden = true;\n",
+   "new": "\n",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_card_link_always_shown",
+   "file": "web/shell.html",
+   "old": "document.getElementById('name-step-login').hidden = !login; },",
+   "new": "document.getElementById('name-step-login').hidden = false; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_is_not_held",
+   "file": "web/shell.html",
+   "old": "var open = !pending && !own;",
+   "new": "var open = !pending;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_says_pending",
+   "file": "web/shell.html",
+   "old": "pending: function () { return pending && !open; },",
+   "new": "pending: function () { return !open; },",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_never_opens",
+   "file": "web/shell.html",
+   "old": "} else if (own) person.ready(function (name) { args.push('--name', name); gate.open(); });",
+   "new": "} else if (own) person.ready(function (name) { args.push('--name', name); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_gate_own_game_has_no_name",
+   "file": "web/shell.html",
+   "old": "} else if (own) person.ready(function (name) { args.push('--name', name); gate.open(); });",
+   "new": "} else if (own) person.ready(function (name) { gate.open(); });",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_local_arguments_always_nameless",
+   "file": "web/shell.html",
+   "old": "out.nameless = !q.has('name') && !!(",
+   "new": "out.nameless = !!(",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_local_arguments_never_nameless",
+   "file": "web/shell.html",
+   "old": "out.nameless = !q.has('name') && !!(q.has('map') || q.has('mapfile') || q.has('bots') || test);",
+   "new": "out.nameless = false;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_person_script_not_guarded",
+   "file": "web/shell.html",
+   "old": "var PN = window.AntsPlayerName, own",
+   "new": "var PN = AntsPlayerName, own",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_person_without_script_is_nobody",
+   "file": "web/shell.html",
+   "old": "{ ready: function (fn) { fn('Guest', 'guest', false, ''); } }",
+   "new": "{ ready: function (fn) { } }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_own_game_asks_before_a_shared_link",
+   "file": "web/shell.html",
+   "old": "var PN = window.AntsPlayerName, own = !asks && ANTS_OWN_NAME;",
+   "new": "var PN = window.AntsPlayerName, own = ANTS_OWN_NAME;",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  }
+ ]
+}

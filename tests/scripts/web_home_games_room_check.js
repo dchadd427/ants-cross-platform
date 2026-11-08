@@ -11,7 +11,7 @@
 // tests/scripts/test_web_home_games.py runs this with node (the quick tier). usage: node web_home_games_room_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, RULES0, done, broke, pressEscape, pressElsewhere } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
@@ -249,7 +249,7 @@ const OTHERS = ['Maya', 'Sage'];
 {   // no room: it makes one, then sends Visibility(public) after the Welcome
     const env = await page();
     tap(env.home('host'));
-    check('Quick host with no room makes a room of the page\'s own (a new code, the remembered name: My room\'s machinery, one socket) and shows the Room', env.sockets.length === 1 && env.screen() === 'room' && helloName(env.last().sent[0] || env.last().open().sent[0]) === 'Maya');
+    check('Quick host with no room makes a room of the page\'s own (a new code, the remembered name: My room\'s machinery, one socket) and shows the Room', env.sockets.length === 1 && env.screen() === 'room' && helloName(env.last().sent[0] || env.last().open().sent[0]) === GUEST);
     const sock = env.last();
     check('... nothing is sent about the room before it exists (Visibility waits for the Welcome)', visibilities(sock).length === 0);
     tap(env.home('host'));
@@ -462,7 +462,7 @@ const welcomed = (sock, seat, host, flags) => { sock.open(); sock.receive(welcom
     await openGames(env);
     tap(joinOf(rowsOf(env)[0]));
     check('Join in the list, from a room of your own with nobody else in it, asks nothing and opens a second client that only joins (a Hello with no lobby block, the room of the row, the name of the room that is yours)', env.sockets.length === 2 && !dialogOf(env)
-          && hex(env.last().open().sent[0]) === hex(helloBytes('Maya', 'k7m2xq', { join: true })));
+          && hex(env.last().open().sent[0]) === hex(helloBytes(GUEST, 'k7m2xq', { join: true })));
     check('... and the own room is kept until the other welcomes the page: no Leave, the socket open, the code and the screen the same', leaves(own) === 0 && !own.closed && env.$('code').textContent === grouped(ownCode) && env.screen() === 'home');
     check('... the buttons of the list take no press while it looks (a double press is no second client)', joinOf(rowsOf(env)[0]).disabled === true);
     joinOf(rowsOf(env)[0]).click();
@@ -532,7 +532,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     check('Escape is "Stay here" and gives the focus back to the button that asked', dialogOf(env) === null && env.sockets.length === 1 && env.focused === joinOf(rowsOf(env)[0]));
     tap(joinOf(rowsOf(env)[0]));
     tap(first(dialogOf(env), 'gyes'));
-    check('"Leave and join" opens the second client (and still leaves nothing: the old room goes when the new one welcomes the page)', dialogOf(env) === null && env.sockets.length === 2 && leaves(own) === 0 && hex(env.last().open().sent[0]) === hex(helloBytes('Maya', 'k7m2xq', { join: true })));
+    check('"Leave and join" opens the second client (and still leaves nothing: the old room goes when the new one welcomes the page)', dialogOf(env) === null && env.sockets.length === 2 && leaves(own) === 0 && hex(env.last().open().sent[0]) === hex(helloBytes(GUEST, 'k7m2xq', { join: true })));
     env.last().receive(welcome(1, KEY2, 0));
     check('... then it leaves', leaves(own) === 1 && own.closed);
 }
@@ -569,7 +569,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     const env = await withList();
     await openGames(env);
     tap(joinOf(rowsOf(env)[1]));
-    check('Join with no room asks nothing and opens the second client for the room of the row (the name that the page picked or remembered)', !dialogOf(env) && env.sockets.length === 1 && hex(env.last().open().sent[0]) === hex(helloBytes('Maya', 'abc234', { join: true })));
+    check('Join with no room asks nothing and opens the second client for the room of the row (the name that the page picked or remembered)', !dialogOf(env) && env.sockets.length === 1 && hex(env.last().open().sent[0]) === hex(helloBytes(GUEST, 'abc234', { join: true })));
     env.last().receive(welcome(0 + 1, KEY2, 0));
     env.last().receive(roomAs(['Clover', 'Maya'], 1, PRIVATE));
     check('... it is the page\'s room when it welcomes it', env.screen() === 'room' && stripText(env) === 'Joined Clover’s room.' && env.$('code').textContent === 'abc 234');
@@ -614,11 +614,11 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     input.fire('input', {});
     check('typing takes the line away', hint.textContent === '');
     input.value = 'K7M 2xq'; input.key('Enter');
-    check('Enter asks for the name too: the card is up, titled with the code in two groups, and nothing connects yet', !env.$('name-step').hidden && env.$('name-step-title').textContent === 'Join the room k7m 2xq' && env.$('name-step-input').value === 'Maya' && env.sockets.length === 1 && input.value === 'K7M 2xq');
-    env.type('name-step-input', 'Ann & <b>Bob</b>');
+    check('Enter asks for the name too: the card is up, titled with the code in two groups, and nothing connects yet', !env.$('name-step').hidden && env.$('name-step-title').textContent === 'Join the room k7m 2xq' && env.$('name-step-input').value === GUEST && env.sockets.length === 1 && input.value === 'K7M 2xq');
+    env.$('name-step-input').value = 'Ann & <b>Bob</b>';
     env.$('name-step-go').click();
     const probe = env.last();
-    check('a good name looks at the room: a second socket, a Hello that only joins (no lobby block), under the name typed (< > & are just characters); the own room stays', env.sockets.length === 2 && hex(probe.open().sent[0]) === hex(helloBytes('Ann & <b>Bob</b>', 'k7m2xq', { join: true })) && leaves(own) === 0 && !own.closed && go.disabled === true);
+    check('a good name looks at the room: a second socket, a Hello that only joins (no lobby block), under the guest name that the card showed (what is written into the read-only field changes nothing); the own room stays', env.sockets.length === 2 && hex(probe.open().sent[0]) === hex(helloBytes(GUEST, 'k7m2xq', { join: true })) && leaves(own) === 0 && !own.closed && go.disabled === true);
     probe.receive(reject(6));
     check('a room that does not exist: the line under the field says so, and the own room is as it was', hint.textContent === 'There is no room with that code. Check it, or ask the host to send the link again.' && !own.closed && go.disabled === false && env.innerHTMLWrites.length === 0);
     for (const [typed, want] of [['k7m2xq', 'k7m2xq'], ['k7m 2xq', 'k7m2xq'], ['  k7m 2xq  ', 'k7m2xq'], ['K7M 2XQ', 'k7m2xq'], ['my_room-1', 'my_room-1'], ['demo-small-2p-x7k2', 'demo-small-2p-x7k2'], ['a'.repeat(32), 'a'.repeat(32)]]) {
@@ -629,7 +629,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
         const field = first(popOf(e), 'joinbox').children[0];
         field.value = typed; tap(first(popOf(e), 'gcgo'));
         e.$('name-step-go').click();
-        check('Join takes ' + JSON.stringify(typed) + ' as the code ' + want + ' (blanks dropped, capitals lowered): a joining Hello for it', e.sockets.length === 2 && hex(e.last().open().sent[0]) === hex(helloBytes('Maya', want, { join: true })));
+        check('Join takes ' + JSON.stringify(typed) + ' as the code ' + want + ' (blanks dropped, capitals lowered): a joining Hello for it', e.sockets.length === 2 && hex(e.last().open().sent[0]) === hex(helloBytes(GUEST, want, { join: true })));
     }
     for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a match that has started', 3, 'The match in that room has already started.']]) {
         const e = await withList();

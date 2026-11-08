@@ -9,7 +9,7 @@ usage: gen_bot_names.py [--check] [--root DIR]
                running the generator fails the quick tier)
 
 Exit 0 when done or in order, 1 for a difference (--check) or a list that breaks its own rules, 2 for a usage error. The rules of the list that the generator itself enforces (the
-quality tests in tests/scripts/test_bot_names.py and tests/test_ai/test_ai_names.cpp add the blocklist and the web placeholders): a name is a capital letter and 2 to 7 small
+quality tests in tests/scripts/test_bot_names.py and tests/test_ai/test_ai_names.cpp add the blocklist): a name is a capital letter and 2 to 7 small
 ASCII letters, no two names are the same in any case, the list has 240 to 260 names. The ORDER of the file is kept (it is part of the picker; see the top of tools/bot_names.txt).
 """
 import argparse
