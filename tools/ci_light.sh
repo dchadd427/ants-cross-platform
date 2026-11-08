@@ -52,7 +52,7 @@ is_light() {    # is_light PATH: 0 when the path is one of the light kinds and n
         # web_lobby_handoff_check.js run the lobby page against the real server and the native game, in the fake browser of web_page_harness.js (shapes.js; the scripts of front/ and home/ that the
         # harness loads: the codec of the protocol, the name of the person, the chat, the rematch strip, the game modes and types, the map picker, Home and the Games list)
         web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;
-        web/front/lobby_net.js | web/front/player_name.js | web/front/lobby_chat.js | web/front/rematch.js | web/front/game_modes.js | web/front/game_type.js | web/front/map_picker.js) return 1 ;;
+        web/front/lobby_net.js | web/front/lobby_chat.js | web/front/player_name.js | web/front/rematch.js | web/front/game_modes.js | web/front/game_type.js | web/front/map_picker.js) return 1 ;;
         web/home/home.js | web/home/games.js) return 1 ;;
         tests/scripts/web_fill_check.js | tests/scripts/web_lobby_server_check.js | tests/scripts/web_lobby_handoff_check.js | tests/scripts/web_page_harness.js) return 1 ;;
         # ---- the light kinds ----
