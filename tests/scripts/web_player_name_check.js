@@ -507,18 +507,19 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
     {
         const calls = [];
         const saved = {};
-        const timers = [];
+        const timers = [], cancelled = [];
         const win = {
             fetch(url, init) { calls.push([url, init]); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(GUEST_PAGE) }); },
             localStorage: { getItem: (k) => (k in saved ? saved[k] : null), setItem: (k, v) => { saved[k] = v; } },
             AbortController: function () { this.signal = { aborted: false }; this.abort = function () { this.signal.aborted = true; }; }
         };
         const heard = [];
-        const who = P.forWindow(win, nameCheck, { later: function (fn, ms) { if (this !== undefined) throw new TypeError('Illegal invocation'); timers.push(ms); return timers.length; }, cancel: function () { if (this !== undefined) throw new TypeError('Illegal invocation'); }, random: function () { if (this !== undefined) throw new TypeError('Illegal invocation'); return 0.25; } });
+        const who = P.forWindow(win, nameCheck, { later: function (fn, ms) { if (this !== undefined) throw new TypeError('Illegal invocation'); timers.push(ms); return timers.length; }, cancel: function (handle) { if (this !== undefined) throw new TypeError('Illegal invocation'); cancelled.push(handle); }, random: function () { if (this !== undefined) throw new TypeError('Illegal invocation'); return 0.25; } });
         who.ready((n, k) => heard.push([n, k]));
         await tick();
         check('a page\'s window gives the question the AbortController of its browser: a signal that ends it', !!calls[0][1].signal && calls[0][1].signal.aborted === false);
         same('a page\'s window: its fetch asks /hub/me, its generator makes the guest name, its storage keeps it, its clock limits the wait', [calls[0][0], heard, saved, timers], ['/hub/me', [['Guest 325000', 'guest']], { 'ants.guest': '325000' }, [P.ASK_MS]]);
+        same('... and its own clock ends it: the answer hands the page\'s cancel the handle that the page\'s later returned (not the global clearTimeout)', cancelled, [1]);
         same('... its window\'s own fetch is called as a method of the window', (() => { let me = null; const w2 = Object.assign({}, win, { fetch: function () { me = this; return new Promise(() => {}); } }); P.forWindow(w2, nameCheck, { later: () => 1, cancel: () => {} }).ask(); return me === w2; })(), true);
         const login = Object.assign({}, win, { localStorage: { getItem: () => null, setItem: () => {} }, fetch: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(LOGIN('Bot (Maya)', 'maya_99')) }) });
         const heardLogin = [];
