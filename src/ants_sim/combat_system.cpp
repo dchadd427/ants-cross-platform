@@ -265,7 +265,7 @@ bool SimulationEngineImpl::melee_contact(AntUnit& a, AntUnit& t) {
 // FUN_0101dded LowHpCheck with flag 1: a 1 hp survivor goes home ahead of the queue, a victim without hit points
 // starts dying. Returns true when it did one of them.
 bool SimulationEngineImpl::low_hp_check(AntUnit& a) {
-    if (a.hp == 1) {
+    if (a.hp == 1 && !hill_closed()) {          // (187 now: no hill to retreat to, so an ant at 1 hp is hurt like any other and stays where it is)
         a.waypoints.clear();
         a.current_waypoint_idx = 0;
         ++a.move_serial;

@@ -59,8 +59,8 @@ struct ServerLimits {
     // the seats, the teams and the leader-starts flag that the room should have) for a room that does not exist makes it, at most `demo_rooms` of them at a time (0 = off). The code is only a name: whatever
     // 6 letters and numbers the first player's game made. The block chooses the seats (2 to 4), the teams and whether a full room waits for its leader's START; the map is the block's when the server offers
     // it (`demo_maps`) and `demo_map` when it does not (a page that offers a map this server does not allow still gets the room it asked for). A public room waits `demo_wait_ms` (ten minutes) for its players and is
-    // forgotten half a minute after it ended; a Hello with a block for the code of one that is over makes a new room at once, and a Hello without a block is NoSuchRoom (a Hello for a room that is not there is, too). Whoever can
-    // reach the door can fill these rooms and hold them for a match: that is the price of a page that works without a secret; rooms of the control interface are made by the control interface and are never public.
+    // forgotten half a minute after it ended; a Hello with a block for the code of one that is over makes a new room at once, and a Hello without a block is NoSuchRoom (a Hello for a room that is not there is, too). These rooms
+    // are open to anyone who can reach the door, so their number is bounded by `demo_rooms`; rooms of the control interface are made by the control interface and are never public.
     size_t demo_rooms{0};
     std::string demo_map;
     // Lobby rooms (protocol 16; the server's --demo-lobbies, which needs --demo-rooms, the demo maps and reconnect): see the paragraph at the top. A waiting lobby is forgotten `lobby_empty_close_ms` after the last person
@@ -100,11 +100,15 @@ inline constexpr uint32_t kDemoMaxPauseMs = 10u * 60u * 1000u;
 /// restarts) from costing a match.
 inline constexpr uint32_t kDemoAbandonedMs = 60u * 1000u;
 
+/// A source of random bytes: fills out[0 .. n) and says whether it could (secret.hpp random_bytes, the operating system's generator, is the one that a server uses; a test passes its own)
+using RandomBytes = std::function<bool(uint8_t* out, size_t n)>;
+
 /// A room code as the control interface draws it when a room is made without one (RoomManager::new_code): kDrawnRoomCodeChars (six, as many as the game's own codes have) characters without the look-alikes
-/// (no 0 / O, 1 / I / L), the first an upper-case letter, so that a code of the control interface always has a capital and a visitor's block never takes its name (net::public_room_code). `rng` is the
-/// generator to draw from (the manager's own, seeded from the operating system; a test passes its own).
+/// (no 0 / O, 1 / I / L), the first an upper-case letter, so that a code of the control interface always has a capital and a visitor's block never takes its name (net::public_room_code). Every character is
+/// drawn from the bytes of `source` with no lean towards any of them (a byte that the alphabet does not divide evenly is thrown away). False, and `code` empty, when `source` fails or gives nothing but bytes that
+/// are thrown away (at most 2,048 of them are read).
 inline constexpr size_t kDrawnRoomCodeChars = 6;
-std::string draw_room_code(std::mt19937& rng);
+bool draw_room_code(std::string& code, const RandomBytes& source);
 
 /// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),
 /// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields (tools/deploy_wait.py accepts nothing else).
@@ -153,6 +157,9 @@ class RoomManager {
 public:
     RoomManager(MapStore store, ServerLimits limits = ServerLimits());
     ~RoomManager();
+
+    /// The bytes that the codes of the rooms of the control interface are drawn from (draw_room_code): the operating system's generator unless a test says otherwise (secret.hpp random_bytes)
+    void set_code_source(RandomBytes source) { code_source_ = std::move(source); }
 
     /// Starts to keep restart records (restart_record.hpp): every room that holds seats keeps one from the start of its match to its end, and restore_rooms() can bring the rooms of the records of the
     /// folder back. Call it before any room is made. False, with the reason, when the folder cannot be used (the server then keeps none). An empty `config.dir` keeps none and is true.
@@ -205,7 +212,8 @@ public:
     bool bot_matches_enabled() const noexcept { return bot_every_ms_ != 0; }
     /// One match of computer players now (what the timer does): the room's code when it was made, else the reason in `why`
     bool start_bot_match(uint32_t now_ms, std::string& code, std::string& why);
-    /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not) and the replays (files purged, a match that was not kept): once each, never a key
+    /// Lines for the server's log about the restart records (a record that was written no more, a room that was restored or not), the replays (files purged, a match that was not kept) and the seats that a room dropped
+    /// for a state that differed from the referee's: once each, never a key
     std::vector<std::string> take_notices();
 
     const MapStore& store() const noexcept { return store_; }
@@ -231,7 +239,7 @@ public:
 
     bool status(const std::string& code, RoomStatus& out, uint32_t now_ms) const;
     std::vector<RoomStatus> list(uint32_t now_ms) const;
-    /// The owner closes a room (its clients are dropped); false when there is no such room
+    /// The operator closes a room (its clients are dropped); false when there is no such room
     bool close_room(const std::string& code, uint32_t now_ms);
 
     /// The rooms that ended (finished or failed) since the last call, once each: what the server logs and writes to its result files
@@ -297,7 +305,7 @@ private:
     void park(std::unique_ptr<net::Connection> connection, const std::string& address, const std::vector<uint8_t>& message, const net::HelloMsg& hello, const Restoring& job, uint32_t now_ms);
     void release_parked(const std::string& code, uint32_t now_ms);
     void reject(std::unique_ptr<net::Connection> connection, net::RejectReason reason, uint32_t now_ms);
-    std::string new_code();
+    std::string new_code();           // "" when the operating system's generator fails (create_room then refuses the room: a code that can be guessed is not drawn instead)
     /// Makes the public room that a Hello with a create block names, when public rooms are on, the code is a valid one, the block is valid and there is a free place (or one can be had:
     /// evict_abandoned_public); false otherwise
     bool make_public_room(const std::string& code, const net::CreateBlock& block, uint32_t now_ms);
@@ -345,11 +353,12 @@ private:
     std::vector<RoomStatus> unreported_;     // the ends of rooms that were forgotten in the pass in which they ended
     uint64_t created_{0};
     uint64_t refused_{0};
-    uint64_t code_counter_{0};
+    RandomBytes code_source_;                    // (set in the constructor)
     uint32_t bot_every_ms_{0};                   // the server's own matches of computer players: how often (0: none)
     uint32_t next_bot_match_ms_{0};
     std::mt19937 bot_rng_;
     std::vector<std::string> bot_notes_;         // what the timer did, for the log (take_notices)
+    std::vector<std::string> room_notes_;        // what the rooms said (Room::take_notes), for the log (take_notices)
 };
 
 }  // namespace ants::server

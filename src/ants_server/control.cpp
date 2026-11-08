@@ -10,7 +10,9 @@
 #include "ants_net/protocol.hpp"
 #include "ants_replay/replay.hpp"
 #include "ants_server/map_preview.hpp"
+#include "ants_server/site_stats.hpp"
 #include "ants_server/submissions_http.hpp"
+#include "ants_server/whole_file.hpp"
 
 namespace ants::server {
 
@@ -124,6 +126,7 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
     o.set("rejoins", JsonValue::make_int(s.rejoins));
     o.set("drops_by_vote", JsonValue::make_int(s.drops_by_vote));
     o.set("drops_by_cap", JsonValue::make_int(s.drops_by_cap));
+    o.set("drops_by_state", JsonValue::make_int(s.drops_by_state));
     o.set("rejoins_refused", JsonValue::make_int(s.rejoins_refused));
     o.set("catch_up_expired", JsonValue::make_int(s.catch_up_expired));
     o.set("streamed_bytes", JsonValue::make_int(static_cast<int64_t>(s.streamed_bytes)));
@@ -185,6 +188,36 @@ JsonValue status_to_json(const RoomStatus& s, bool in_list) {
         o.set("result", std::move(result));
     }
     return o;
+}
+
+namespace {
+
+// ASCII only: a room code is, and so is the name of the statistics file
+bool same_name_ignoring_case(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i) {
+        const char x = a[i] >= 'A' && a[i] <= 'Z' ? static_cast<char>(a[i] - 'A' + 'a') : a[i];
+        const char y = b[i] >= 'A' && b[i] <= 'Z' ? static_cast<char>(b[i] - 'A' + 'a') : b[i];
+        if (x != y) return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+std::string result_file_name(const std::string& code) {
+    if (code.empty() || !net::valid_room_code(code)) return std::string();
+    const std::string name = code + ".json";
+    return same_name_ignoring_case(name, SiteStats::kFileName) ? code + ".room.json" : name;
+}
+
+std::string write_result_file(const std::filesystem::path& dir, const RoomStatus& status) {
+    const std::string name = result_file_name(status.code);
+    if (name.empty()) return "a room's result was not written: its code is not a room code";
+    std::string why;
+    if (!write_whole_file((dir / name).string(), ctl::to_json(status_to_json(status)) + "\n", why)) return "room " + status.code + ": its result was not written: " + why;
+    if (name == status.code + ".json") return std::string();
+    return "room " + status.code + ": its result is in " + name + " (" + SiteStats::kFileName + " is the statistics file)";
 }
 
 bool spec_from_json(const JsonValue& body, RoomSpec& out, std::string& error) {

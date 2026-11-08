@@ -3,6 +3,7 @@ add_executable(test_lockstep
     test_lockstep_protocol.cpp
     test_lockstep_reconnect_core.cpp
     test_lockstep_failures.cpp
+    test_lockstep_hash.cpp
     test_lockstep_reconnect_session.cpp
     test_lockstep_protocols.cpp
     test_lockstep_countdown.cpp

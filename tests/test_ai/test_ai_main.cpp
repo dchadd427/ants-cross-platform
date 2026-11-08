@@ -27,6 +27,8 @@ int main() {
     run_island_expedition_tests();
     run_island_ferry_tests();
     run_island_small_tests();
+    run_token_group_tests();
+    run_power_up_cap_tests();
     run_merge_tests();
     run_cantgo_tests();
     run_flower_tests();

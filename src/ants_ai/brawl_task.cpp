@@ -100,7 +100,7 @@ void BrawlTask::step(TaskContext& c) {
     std::vector<uint32_t> going_home;
     for (const AntView& a : v.mine()) {
         Job& job = jobs_[a.id];
-        if (a.hp <= params_.retreat_hp) {
+        if (a.hp <= params_.retreat_hp && v.hill_enterable()) {       // (no hill to heal in: in 187 now an ant cannot enter it, so a hurt ant fights on like any other)
             if (!a.takes_orders()) continue;
             if (job.kind != Kind::Home || (!pending(job, c.profile, now) && a.idle() && a.tile.chebyshev_dist(home.entrance) > 1)) going_home.push_back(a.id);
             continue;

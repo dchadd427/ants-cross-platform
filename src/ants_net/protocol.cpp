@@ -1086,8 +1086,8 @@ bool decode(const uint8_t* data, size_t size, CatchUpMsg& out) {
 
 std::vector<uint8_t> encode_turn_batch_packed(uint32_t first_turn, uint32_t count, const uint8_t* packed, size_t size) {
     if (count == 0 || count > kMaxBatchTurns || (packed == nullptr && size != 0)) return {};
-    std::vector<uint8_t> out;
-    out.reserve(kBatchHeaderBytes + size);
+    std::vector<uint8_t> out(kBatchHeaderBytes + size);
+    out.clear();                                                  // (all the capacity at once, like reserve(); after reserve() GCC 15 reports the push_backs below as -Wfree-nonheap-object, which they are not)
     ByteWriter w(out);
     w.u8(static_cast<uint8_t>(MsgType::TurnBatch));
     w.u32(first_turn);

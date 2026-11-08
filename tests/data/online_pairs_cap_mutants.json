@@ -1,0 +1,60 @@
+{
+ "note": "Mutants of the cap of pairs of a plant and a waypoint of an online room's map (OnlineLimits::kMaxPlantWaypointPairs = 1,000,000), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/online_pairs_cap_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught: each breaks the cap or the counter (OnlineLimits::plant_waypoint_pairs, the same plants and the same waypoints that SimulationEngine::init's set-up loop counts) or removes the refusal at one door. The web side (the Play this map dialog's refusal and its MAX_ONLINE_PAIRS) is in tests/data/mapmaker_play_mutants.json (play_pairs_*); the shared allows()/listed_name()/online_refusal() code that the ants cap and the pairs cap both go through has its own pairs-forgetting mutants beside the ants ones, in online_ants_cap_mutants.json and online_limit_mutants.json. Not listed on purpose: the same second locks behind a first one that online_ants_cap_mutants.json's own note names (Room::start_lobby and the lobby's START in Room::update, behind choose_map, load_map and build_room: no door of the manager makes a Room on a map over the cap, so no test can start one; the feeder's own load_level is covered by MP2.5 and MP2.6 instead); the counter's predicate against the tile id (not the record's team) has its own full pin, every tile id, in test_lvl_core's C13, which lvl_core.cpp's own small copy of the dropper-plant list must agree with (OnlineLimits::plant_waypoint_pairs uses sim::movement::is_dropper_plant_tile directly, so this counter and that pin share one answer for every id; no map of the fixtures used here tells a plant from a same-team non-plant record, so a mutant that confused the two would not be caught by a map alone). The mutants of the code that judges a map by all the limits as one set (OnlineLimits::first_over and allows over a MapCounts, the doors that ask them, the store's counts) are in online_terms_mutants.json: the ones listed here before that change, for code that is gone, were replaced by theirs (8 of them).",
+ "mutants": [
+  {
+   "id": "pairs_cap_one_more",
+   "file": "include/ants_server/online_limits.hpp",
+   "old": "kMaxPlantWaypointPairs = 1000000;",
+   "new": "kMaxPlantWaypointPairs = 1000001;",
+   "build": [
+    "test_server",
+    "test_map_list",
+    "test_test_maps",
+    "test_submissions",
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.259 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.260 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=ML4.7 ./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=TM1.7c ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=SUB1.2d ./build/tests/test_server/test_submissions && ANTS_TEST_FILTER=MP2.5 ./build/tests/test_server/test_map_plays && ANTS_TEST_FILTER=MP2.6 ./build/tests/test_server/test_map_plays"
+  },
+  {
+   "id": "pairs_cap_one_less",
+   "file": "include/ants_server/online_limits.hpp",
+   "old": "kMaxPlantWaypointPairs = 1000000;",
+   "new": "kMaxPlantWaypointPairs = 999999;",
+   "build": [
+    "test_server",
+    "test_map_list",
+    "test_test_maps",
+    "test_submissions",
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.259 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=S3.260 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=ML4.7 ./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=TM1.7c ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=SUB1.2d ./build/tests/test_server/test_submissions && ANTS_TEST_FILTER=MP2.5 ./build/tests/test_server/test_map_plays && ANTS_TEST_FILTER=MP2.6 ./build/tests/test_server/test_map_plays"
+  },
+  {
+   "id": "counter_forgets_the_plants",
+   "file": "src/ants_server/online_limits.cpp",
+   "old": "    uint64_t plants = 0;\n    for (const assets::AnthillSpawn& spawn : level.anthill_spawns()) {\n        if (sim::movement::is_dropper_plant_tile(spawn.tile_id)) ++plants;\n    }\n    return plants * static_cast<uint64_t>(level.waypoints.size());",
+   "new": "    return static_cast<uint64_t>(level.waypoints.size());",
+   "build": [
+    "test_server",
+    "test_map_list",
+    "test_test_maps",
+    "test_submissions",
+    "test_map_plays"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.259 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=ML4.7 ./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=TM1.7c ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=SUB1.2d ./build/tests/test_server/test_submissions"
+  },
+  {
+   "id": "counter_forgets_the_waypoints",
+   "file": "src/ants_server/online_limits.cpp",
+   "old": "    return plants * static_cast<uint64_t>(level.waypoints.size());",
+   "new": "    return plants;",
+   "build": [
+    "test_server",
+    "test_map_list",
+    "test_test_maps",
+    "test_submissions"
+   ],
+   "test": "ANTS_TEST_FILTER=S3.259 timeout 900 ./build/tests/test_server/test_server && ANTS_TEST_FILTER=ML4.7 ./build/tests/test_server/test_map_list && ANTS_TEST_FILTER=TM1.7c ./build/tests/test_server/test_test_maps && ANTS_TEST_FILTER=SUB1.2d ./build/tests/test_server/test_submissions"
+  }
+ ]
+}
