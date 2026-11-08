@@ -740,6 +740,13 @@ void run_b41_style_tests() {
                 ASSERT_FALSE(p.combat_when_attacked);                                                            // taken in the opening, by every style
             }
         }
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {                                 // the defence batch (AI35.6): Hard's, whatever the style and the variations of the bot's own
+            for (uint32_t seed = 1; seed <= 12; ++seed) {
+                const LevelPlan p = plan_in_match(level, Style::Random, seed, static_cast<uint8_t>(seed % 4));
+                ASSERT_EQ(p.defend_all_types && p.victim_answers && p.defend_by_strength, level == Level::Hard);
+                ASSERT_EQ(p.defend_all_types || p.victim_answers || p.defend_by_strength, level == Level::Hard);
+            }
+        }
         const LevelPlan hard = plan_for(Level::Hard);
         ASSERT_TRUE(hard.gate && hard.steals && hard.max_thief == 2u && hard.max_combat == 1u && hard.combat_extra == 1u);
         ASSERT_FALSE(plan_for(Level::Medium).gate);

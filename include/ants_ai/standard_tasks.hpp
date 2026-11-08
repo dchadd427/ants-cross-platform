@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "ants_ai/chore_worth.hpp"
+#include "ants_ai/defence.hpp"
 #include "ants_ai/opportunity_task.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -33,6 +34,8 @@ namespace ants::ai {
 ///               hold nothing (Combat Ants first), as many as the level says, are taken from whatever they were doing and ordered to attack it, and ordered again each time they are
 ///               idle after their blow (one attack order is one blow), while the target stays within the leash of the place of the first blow.
 ///   a thief     (Medium and Hard) an enemy Thief ant that holds no loot and is within reach of the own raid tile: attacked the same way until it is gone or has raided.
+/// The fights that answer a blow follow the defence rules of the plan where they are on (defence.hpp; Hard): any ant that can strike answers, the struck one first, as many as the enemy has near the
+/// target and one more, and the fight is kept up through the target's hit clips while the force is as strong as the enemy's.
 /// A fight ends when the target dies, leaves sight or the leash, stands on a power-up, or no blow has been seen for the level's linger time; an attack that was acknowledged and then
 /// shows "can't go" within a few ticks tells that the target is out of reach (it stands on something that no order reaches): that ant is left alone for 900 ticks. The ants go back
 /// to the pool when the fight ends.
@@ -99,6 +102,9 @@ private:
         uint32_t abort_percent{0};           // (with assault) the strength below which it is called off, in percent of the enemy's (80 percent of the odds it was started with, those eased for a bot that is behind, but never more than plan.skirmish_abort_percent)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         bool vicinity{false};                // (with hunt) a 3-HP zero-Combat vicinity hunt (plan.vicinity_hunt)
+        std::vector<uint32_t> victims;       // the own ants that were struck since the last look at this fight (plan.victim_answers: they are its first defenders)
+        uint64_t last_hurt{0};               // the last look at which the target had lost hit points
+        uint8_t seen_hp{0};                  // the target's hit points at the last look
         std::map<uint32_t, Defender> defenders;
     };
 
@@ -106,6 +112,8 @@ private:
     void start_offence(TaskContext& context);
     void start_fire_defence(TaskContext& context);
     void run_fight(TaskContext& context, Fight& fight, bool& end, std::vector<std::pair<sim::TileCoord, std::vector<uint32_t>>>& attacks);
+    /// (defence.cpp) the ants that join a fight that answers a blow; false: the force is weaker than the enemy's and the fight is called off (plan.defend_by_strength)
+    bool take_defenders(TaskContext& context, Fight& fight, const AntView& target, size_t wanted, const Strength& theirs);
 
     Tactics& tactics_;
     std::map<uint32_t, Fight> fights_;       // by the target's id

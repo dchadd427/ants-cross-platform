@@ -59,40 +59,6 @@ sim::TileCoord step_aside(const BotView& v, uint8_t seat, sim::TileCoord tile) {
     return sim::TileCoord{-1, -1};
 }
 
-// The real numbers of a blow (docs/GAME_REVERSE_ENGINEERING.md 5.36): every ant has 10 hit points, a Combat Ant's punch takes 2 of them and every other blow 1
-uint32_t blow_damage(sim::AntType type) noexcept { return type == sim::AntType::Combat ? 2u : 1u; }
-
-// Blows that an ant of `damage` per blow needs to take `hp` hit points (0 for an ant that has none)
-uint32_t blows_to_kill(uint32_t hp, uint32_t damage) noexcept { return damage == 0 ? hp : (hp + damage - 1) / damage; }
-
-// The strength of a group in a fight, the number of the square law of attrition: the sum of the hit points times the sum of the damage of one round of blows
-struct Strength {
-    uint32_t hp{0};
-    uint32_t dmg{0};
-    uint32_t n{0};
-    void add(uint32_t h, uint32_t d) noexcept {
-        hp += h;
-        dmg += d;
-        ++n;
-    }
-    uint64_t value() const noexcept { return static_cast<uint64_t>(hp) * dmg; }
-};
-
-// What answers a blow near `centre`: the enemy ants within `radius` tiles that do not carry food (a carrier is no fighter) and are not `exclude`, the `cap` strongest of them (the standard
-// bot of Hard sends three). Hit points are on the view for every ant (a project decision).
-Strength enemy_strength(const BotView& v, sim::TileCoord centre, int32_t radius, uint32_t exclude, uint32_t cap) {
-    std::vector<std::pair<uint32_t, uint32_t>> near;                              // (hit points, damage)
-    for (const AntView& e : v.others()) {
-        if (e.id == exclude || e.holding || e.tile.chebyshev_dist(centre) > radius) continue;
-        if (v.ally() < sim::MAX_PLAYERS && e.team == v.ally()) continue;
-        near.emplace_back(std::max<uint32_t>(e.hp, 1u), blow_damage(e.type));
-    }
-    std::stable_sort(near.begin(), near.end(), [](const auto& x, const auto& y) { return x.first * x.second > y.first * y.second; });
-    Strength out;
-    for (size_t i = 0; i < near.size() && i < cap; ++i) out.add(near[i].first, near[i].second);
-    return out;
-}
-
 }  // namespace
 
 // ---- FightTask ------------------------------------------------------------------------------------------------------------------------------------------
@@ -176,6 +142,7 @@ void FightTask::start_fights(TaskContext& c) {
         const auto it = fights_.find(best->id);
         if (it != fights_.end()) {
             it->second.last_alarm = now;
+            if (plan.victim_answers) it->second.victims.push_back(h.ant);
             continue;
         }
         Fight f;
@@ -183,6 +150,7 @@ void FightTask::start_fights(TaskContext& c) {
         f.anchor = h.tile;
         f.started = now;
         f.last_alarm = now;
+        if (plan.victim_answers) f.victims.push_back(h.ant);
         fights_.emplace(best->id, std::move(f));
         ++fights_started_;
     }
@@ -570,6 +538,22 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         end = true;                                                              // down to the last ants: they leave the fight
         return;
     }
+    // (the defence batch: defence.hpp) a fight that answers a blow is sized by the enemy ants near its target and kept up while the force is as strong as theirs (plan.defend_by_strength)
+    const bool defence = !f.offence && !f.fire && !f.thief;
+    const bool by_strength = defence && plan.defend_by_strength && target != nullptr;
+    const DefenceFrame frame = by_strength ? defence_frame(v, plan, target->tile, tactics_.guard_stance) : DefenceFrame{};
+    if (target != nullptr) {
+        if (target->hp < f.seen_hp) f.last_hurt = now;                           // (a blow of the own defenders, or of anything else, landed)
+        f.seen_hp = target->hp;
+    }
+    const auto own_strength = [&]() {
+        Strength s;
+        for (const auto& d : f.defenders) {
+            const AntView* a = find_ant(v.mine(), d.first);
+            if (a != nullptr) s.add(a->hp, blow_damage(a->type));
+        }
+        return s;
+    };
     // (the stand batch) the hunt of the Fire Ant that fires the gate in: while it stands on a fire wall only an own Fire Ant's blow reaches it (plan.fire_duel); the others wait until it is thrown off
     const bool reach_fire = f.fire && plan.fire_duel;
     const bool on_fire = reach_fire && target != nullptr && v.has_grid() && v.grid().has_fire_at(target->tile);
@@ -600,7 +584,8 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         const KillPlan kill = kill_plan(target->hp, combats, others);
         return target->hp < sim::AntUnit::MAX_HP && kill.possible && kill.blows <= plan.hunt_blows;
     };
-    const bool waits_for_clip = plan.health_aware && target != nullptr && (f.offence || f.fire || f.thief || f.defenders.empty() || kill_now());
+    const bool waits_for_clip = plan.health_aware && target != nullptr && (f.offence || f.fire || f.thief || f.defenders.empty() || kill_now() ||
+                                                                           (by_strength && keep_defence(plan, own_strength(), frame.theirs, target->tile.chebyshev_dist(f.anchor), now - std::max(f.last_alarm, f.last_hurt))));
     // An enemy that was struck plays the hit clip for a second or so and cannot be attacked meanwhile: the fight waits for it while a kill is in reach (with the hit points on the view a wounded target
     // is finished, not given up at the first blow); every other reason that attackable() gives ends the fight
     bool in_hit_clip = false;
@@ -645,11 +630,7 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         }
         // a skirmish of the bot's own ends by its clock, by how far the target was followed and by the strength of the force: the odds that it was started with are not kept (a force that has
         // lost a third of its strength still fights) but one that has fallen below the enemy's is called off
-        Strength own;
-        for (const auto& d : f.defenders) {
-            const AntView* a = find_ant(v.mine(), d.first);
-            if (a != nullptr) own.add(a->hp, blow_damage(a->type));
-        }
+        const Strength own = own_strength();
         const Strength theirs = enemy_strength(v, target->tile, plan.skirmish_near, target->id, plan.skirmish_enemy_cap);
         const uint32_t abort_percent = f.assault ? f.abort_percent : plan.skirmish_abort_percent;
         const bool weak = own.n > 0 && own.value() * 100u < theirs.value() * abort_percent;
@@ -670,8 +651,8 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
             return;
         }
         f.last_alarm = now;
-    } else if (target->tile.chebyshev_dist(f.anchor) > plan.leash_tiles + (wounded ? 4 : 0) || now > f.last_alarm + plan.fight_linger_ticks * (wounded ? 3u : 1u)) {
-        end = true;                                                              // it left the leash, or the fight is over
+    } else if (target->tile.chebyshev_dist(f.anchor) > plan.leash_tiles + (wounded ? 4 : 0) || (!by_strength && now > f.last_alarm + plan.fight_linger_ticks * (wounded ? 3u : 1u))) {
+        end = true;                                                              // it left the leash, or the fight is over (by_strength: keep_defence says when)
         return;
     }
     // the defenders that are still ours and fit
@@ -713,8 +694,13 @@ void FightTask::run_fight(TaskContext& c, Fight& f, bool& end, std::vector<std::
         }
     }
     // more defenders: Combat Ants first, then the nearest
-    const size_t wanted = f.hunt ? plan.hunt_force : f.assault ? f.force : f.offence ? plan.skirmish_force : f.fire ? plan.defenders + (f.raider ? plan.raider_extra : plan.fire_defence_extra) : plan.defenders + (tactics_.guard_stance ? 1u : 0u);
-    if (f.defenders.size() < wanted) {
+    const size_t wanted = f.hunt ? plan.hunt_force : f.assault ? f.force : f.offence ? plan.skirmish_force : f.fire ? plan.defenders + (f.raider ? plan.raider_extra : plan.fire_defence_extra) : by_strength ? frame.wanted : plan.defenders + (tactics_.guard_stance ? 1u : 0u);
+    if (defence && (plan.defend_all_types || plan.victim_answers || plan.defend_by_strength)) {
+        if (!take_defenders(c, f, *target, wanted, frame.theirs)) {              // (defence.cpp: the struck ants first, then the ants near the target; false: the force is weaker than the enemy's)
+            end = true;
+            return;
+        }
+    } else if (f.defenders.size() < wanted) {
         std::vector<const AntView*> cands;
         for (const AntView& a : v.mine()) {
             // (the stand batch) a Fire Ant of the own side strikes the Fire Ant that fires the gate in; with the draft every ant that can strike does
