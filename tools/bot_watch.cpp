@@ -1,13 +1,13 @@
 // bot_watch: plays matches of computer players like bot_arena and WATCHES them (docs/BOT_FIGHT.md). It counts, per seat and per minute of game time, what the bots do badly:
 // ants that stand idle or stuck, kills that were within reach and were not taken (above all an enemy on a tile next to water that a blow would throw in), the time that goes to
 // fire-wall chores and other tasks, and the plain losses (drowned, blown up, lone ants in a crowd). The observer only reads the engine after each tick (ArenaSpec::on_tick), so it
-// changes nothing: a match under watch has the same state hash as the same match in bot_arena.
+// changes nothing: a match under watch has the same state hash as the same match in bot_arena. Every seat also gets its "people" numbers (docs/BOT_PEOPLE.md; --no-people leaves them out).
 //
 // Usage:
-//   bot_watch [--map NAMES] [--maps-dir DIR] [--seeds A..B] --seat N=SPEC ... [--rotate] [--threads N] [--ticks full|N] [--latency-ticks N] [--out FILE] [--quiet]
+//   bot_watch [--map NAMES] [--maps-dir DIR] [--seeds A..B] --seat N=SPEC ... [--rotate] [--threads N] [--ticks full|N] [--latency-ticks N] [--out FILE] [--quiet] [--no-people]
 //   bot_watch --mapinfo NAMES [--maps-dir DIR]     (and --ascii NAMES: the map as letters)
 //   bot_watch --replay FILE... [--maps-dir DIR] [--out FILE]     the same counters over recordings (a person's game against bots too: the bots' ants have no task names there)
-// SPEC is as in bot_arena (KIND:LEVEL[:STYLE]); KIND may be standard+K=V,K=V (the keys of apply_tune, tools/bot_arena_tune.cpp), `styled=1` draws the style like the registry's bot.
+// SPEC is as in bot_arena (KIND:LEVEL[:STYLE]; the bench bots too: gang, aggressor, ...); KIND may be standard+K=V,K=V (the keys of apply_tune, tools/bot_arena_tune.cpp), `styled=1` draws the style like the registry's bot.
 // --rotate plays every distinct arrangement of the specs over the seats. The report is JSON (format 1): per match, per seat, the counters, the per-minute rows and the worst scenes.
 #include <algorithm>
 #include <array>
@@ -43,7 +43,9 @@
 #include "ants_replay/replay.hpp"
 #include "ants_sim/sim_engine.hpp"
 #include "ants_test_paths.hpp"
+#include "bench_aggressor.hpp"
 #include "bot_arena_tune.hpp"
+#include "bot_watch_people.hpp"
 #include "library_guard.hpp"
 #include <cstdarg>
 #include <cctype>
@@ -58,6 +60,7 @@ namespace fs = std::filesystem;
 namespace ai = ants::ai;
 namespace sim = ants::sim;
 namespace assets = ants::assets;
+namespace watch = ants::watch;
 
 namespace {
 
@@ -770,6 +773,7 @@ struct Options {
     unsigned threads{1};
     std::string out;
     bool quiet{false};
+    bool people{true};
     bool mapinfo{false};
     bool ascii{false};
     std::vector<std::string> replays;
@@ -805,9 +809,12 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     std::vector<std::string> parts = split(spec, ':');
     std::string kind = parts[0];
     std::string tuned;
+    const std::string bench = ai::bench::bench_kind_of(kind);                 // a bench bot (gang, aggressor, ...): the registry parses it as a worker, the kind is put back
     if (kind.rfind("standard+", 0) == 0) {
         tuned = kind;
         parts[0] = "standard";
+    } else if (!bench.empty()) {
+        parts[0] = "worker";
     }
     ai::Style pinned = ai::Style::Random;
     if (!tuned.empty() && parts.size() == 3) {                                 // KIND:LEVEL:STYLE of a tuned bot
@@ -820,6 +827,8 @@ bool parse_seat(const std::string& text, ai::BotSpec& out, std::string& err) {
     if (!tuned.empty()) {
         out.kind = tuned;
         out.style = pinned;
+    } else if (!bench.empty()) {
+        out.kind = bench;
     }
     return true;
 }
@@ -877,6 +886,7 @@ bool parse_args(const std::vector<std::string>& a, Options& o, std::string& err)
             o.out = *v;
         } else if (k == "--rotate") o.rotate = true;
         else if (k == "--quiet") o.quiet = true;
+        else if (k == "--no-people") o.people = false;
         else { err = "unknown option " + k; return false; }
     }
     return true;
@@ -958,6 +968,7 @@ struct MatchOut {
     std::string json;
     std::string line;
     bool ok{true};
+    watch::PeopleTotals people;
 };
 
 // A seat's bot, made like bot_arena's: the registry's bot for `standard`, a tuned one for `standard+K=V,K=V`
@@ -990,7 +1001,8 @@ std::unique_ptr<ai::Bot> make_seat_bot(const ai::BotSpec& spec, Observer& obs) {
             made = std::make_unique<ai::StandardBot>(spec.level, spec.style, tune);
         }
     } else {
-        made = ai::make_bot(spec);
+        made = ai::bench::make_bench_bot(spec.kind, spec.level);
+        if (made == nullptr) made = ai::make_bot(spec);
     }
     if (made != nullptr && std::strcmp(made->kind(), "standard") == 0 && spec.seat < sim::MAX_PLAYERS) obs.seats[spec.seat].bot = static_cast<ai::StandardBot*>(made.get());
     return made;
@@ -1053,11 +1065,12 @@ MatchOut play_one(const Options& o, const LoadedMap& m, uint32_t seed, const std
     spec.max_ticks = o.ticks;
     spec.latency_ticks = o.latency;
     for (const ai::BotSpec& b : arrangement) {
-        if (b.kind.rfind("standard+", 0) == 0) spec.extra_kinds.push_back(b.kind);
+        if (b.kind.rfind("standard+", 0) == 0 || !ai::bench::bench_kind_of(b.kind).empty()) spec.extra_kinds.push_back(b.kind);
     }
+    watch::PeopleObserver people;                                                   // (the people numbers read the engine like the observer: nothing is changed)
     spec.factory = [&](const ai::BotSpec& b) { return make_seat_bot(b, obs); };
-    spec.on_tick = [&](const sim::SimulationEngine& e) { obs.tick(e); };
-    spec.inspect = [&](const sim::SimulationEngine&) { obs.finish(); };
+    spec.on_tick = [&](const sim::SimulationEngine& e) { obs.tick(e); if (o.people) people.tick(e); };
+    spec.inspect = [&](const sim::SimulationEngine&) { obs.finish(); people.finish(); };
     const ai::ArenaResult r = ai::play_match(spec);
     if (!r.error.empty()) {
         out.ok = false;
@@ -1065,6 +1078,7 @@ MatchOut play_one(const Options& o, const LoadedMap& m, uint32_t seed, const std
         return out;
     }
     std::ostringstream j;
+    std::string people_lines;
     j << "{\"map\":" << json_quote(m.name) << ",\"seed\":" << seed << ",\"arrangement\":" << json_quote(out.arrangement) << ",\"ticks\":" << r.ticks << ",\"over\":" << (r.match_over ? "true" : "false")
       << ",\"hash\":\"" << fmt("%016llx", static_cast<unsigned long long>(r.hash)) << "\",\"reachable_left\":" << r.reachable_units_left << ",\"seats\":[";
     for (size_t i = 0; i < r.seats.size(); ++i) {
@@ -1075,7 +1089,14 @@ MatchOut play_one(const Options& o, const LoadedMap& m, uint32_t seed, const std
           << ",\"refused\":" << s.refused_orders << ",\"orders\":" << s.orders << ",\"attack_orders\":" << s.attack_orders << ",\"stalls\":" << s.stalls << ",\"fires_lit\":" << s.fires_lit
           << ",\"bombs_planted\":" << s.bombs_planted << ",\"obs\":{";
         write_counters(j, obs.seats[seat].c);
-        j << "}}";
+        j << "}";
+        if (o.people && people.started()) {
+            const watch::SeatPeople sp = people.people().seat(seat);
+            j << ",\"people\":" << sp.json();
+            out.people.add(spec_text(s.spec), sp);
+            people_lines += fmt("\n  seat %d %s people: ", int(seat), spec_text(s.spec).c_str()) + sp.line();
+        }
+        j << "}";
     }
     j << "],\"events\":[";
     std::sort(obs.events.begin(), obs.events.end(), [](const Event& a, const Event& b) { return a.score > b.score; });
@@ -1084,7 +1105,7 @@ MatchOut play_one(const Options& o, const LoadedMap& m, uint32_t seed, const std
     out.json = j.str();
     std::string scores;
     for (const ai::ArenaSeatResult& s : r.seats) scores += fmt(" [%d %s %d]", int(s.spec.seat), spec_text(s.spec).c_str(), s.score);
-    out.line = out.map + " seed " + std::to_string(seed) + ":" + scores + fmt("  ticks %llu  hash %016llx", static_cast<unsigned long long>(r.ticks), static_cast<unsigned long long>(r.hash));
+    out.line = out.map + " seed " + std::to_string(seed) + ":" + scores + fmt("  ticks %llu  hash %016llx", static_cast<unsigned long long>(r.ticks), static_cast<unsigned long long>(r.hash)) + people_lines;
     return out;
 }
 
@@ -1143,15 +1164,18 @@ std::string watch_replay(const Options& o, const std::string& file, std::string&
         obs.seats[seat].present = true;
         label[seat] = replay.head.names[seat];
     }
+    watch::PeopleObserver people;
     ants::replay::Hooks hooks;
-    hooks.after_tick = [&](uint32_t, sim::SimulationEngine& engine) { obs.tick(engine); };
+    hooks.after_tick = [&](uint32_t, sim::SimulationEngine& engine) { obs.tick(engine); if (o.people) people.tick(engine); };
     const ants::replay::Outcome out = ants::replay::play(replay, level, hooks);
     obs.finish();
+    people.finish();
     ok = out.ok;
     std::ostringstream j;
     j << "{\"replay\":" << json_quote(fs::path(file).filename().string()) << ",\"map\":" << json_quote(replay.head.map_name) << ",\"game\":" << json_quote(replay.head.game_version) << ",\"ticks\":" << out.turns
       << ",\"ok\":" << (out.ok ? "true" : "false") << ",\"seats\":[";
     bool first = true;
+    std::string people_lines;
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (!obs.seats[seat].present) continue;
         const std::string& name = label[seat];
@@ -1159,14 +1183,19 @@ std::string watch_replay(const Options& o, const std::string& file, std::string&
         std::string spec = bot == std::string::npos ? "human" : "bot-" + name.substr(bot + 6, name.find(')', bot) - bot - 6);
         j << (first ? "" : ",") << "{\"seat\":" << int(seat) << ",\"name\":" << json_quote(name) << ",\"spec\":" << json_quote(spec) << ",\"score\":" << out.scores[seat] << ",\"obs\":{";
         write_counters(j, obs.seats[seat].c);
-        j << "}}";
+        j << "}";
+        if (o.people && people.started()) {
+            j << ",\"people\":" << people.people().seat(seat).json();
+            people_lines += "\n  seat " + std::to_string(seat) + " " + spec + " people: " + people.people().seat(seat).line();
+        }
+        j << "}";
         first = false;
     }
     j << "],\"events\":[";
     std::sort(obs.events.begin(), obs.events.end(), [](const Event& a, const Event& b) { return a.score > b.score; });
     for (size_t i = 0; i < obs.events.size() && i < 8; ++i) j << (i ? "," : "") << obs.events[i].text;
     j << "]}";
-    line = fs::path(file).filename().string() + (out.ok ? ": played, every hash matches" : ": " + out.error);
+    line = fs::path(file).filename().string() + (out.ok ? ": played, every hash matches" : ": " + out.error) + people_lines;
     return j.str();
 }
 
@@ -1208,7 +1237,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (o.help || (argc == 1)) {
-        std::printf("usage: bot_watch --map NAMES [--maps-dir DIR] [--seeds A..B] --seat N=SPEC... [--rotate] [--threads N] [--ticks full|N] [--out FILE] [--quiet]\n       bot_watch --mapinfo NAMES [--maps-dir DIR]\n");
+        std::printf("usage: bot_watch --map NAMES [--maps-dir DIR] [--seeds A..B] --seat N=SPEC... [--rotate] [--threads N] [--ticks full|N] [--out FILE] [--quiet] [--no-people]\n       bot_watch --mapinfo NAMES [--maps-dir DIR]\n");
         return o.help ? 0 : 2;
     }
     if (!o.replays.empty()) {
@@ -1280,13 +1309,16 @@ int main(int argc, char** argv) {
     std::ostringstream report;
     report << "{\"format\":1,\"tool\":\"bot_watch\",\"matches\":[";
     bool first = true;
+    watch::PeopleTotals people;
     for (const MatchOut& r : results) {
         all_ok = all_ok && r.ok;
         if (!r.ok) continue;
         report << (first ? "" : ",\n") << r.json;
+        people.merge(r.people);
         first = false;
     }
-    report << "]}\n";
+    report << "]" << (people.empty() ? std::string() : ",\"people_totals\":" + people.json()) << "}\n";
+    if (!o.quiet) for (const std::string& l : people.lines()) std::printf("%s\n", l.c_str());
     if (!o.out.empty()) {
         std::ofstream f(o.out, std::ios::binary);
         f << report.str();
