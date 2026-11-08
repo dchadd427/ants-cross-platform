@@ -85,6 +85,10 @@
 .gc-slot { position: relative; }
 .gc-menu { position: absolute; z-index: 2; right: 0; bottom: calc(100% + 4px); box-sizing: border-box; width: min(300px, 100%); padding: 10px 12px 12px; font-size: 14px; line-height: 1.4; color: #a8cfc0; background: #0b1117; border: 2px solid #1f5a49; border-radius: 6px; box-shadow: 3px 4px 0 var(--shadow); }
 .gc-forget { min-height: 46px; margin-top: 8px; }
+.gc-pick { min-height: 46px; max-width: 100%; margin: 8px 0 12px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.gc-u { margin-left: 6px; font-size: 13px; color: #7f9c92; }
+.gc-u::before { content: "("; }
+.gc-u::after { content: ")"; }
 .hbar .hlogin { gap: 8px; padding: 0 14px; }
 .hlogin .gc-dc { width: 22px; height: 22px; }
 .gc-av { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 16px; line-height: 1; color: var(--gold); background: #0b1a17; border: 2px solid #1c4a3b; border-radius: 50%; }

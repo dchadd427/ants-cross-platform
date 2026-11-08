@@ -1,4 +1,4 @@
-"""hub.db: the chat lines kept for moderation, who is muted or banned, and the logins (docs/HUB.md, "Data").
+"""hub.db: the chat lines kept for moderation, who is muted or banned, the logins, and who each account is (its profile) (docs/HUB.md, "Data").
 
 Everything is keyed by account id, so a mute or a ban survives a restart, a new session and a rename. The chat process and `python -m hub.admin` open the same file (WAL, so they
 do not block each other). A line is kept `retention_days` (7) and then deleted for good: the delete zeroes the freed pages (secure_delete) and the log file is cut. A line that a
@@ -11,7 +11,7 @@ import os
 import sqlite3
 import time
 
-from .base import PUBLIC, Line, StoreBase, StoreError, Usage
+from .base import PICKS, PROFILE_DAYS, PUBLIC, Line, Profile, StoreBase, StoreError, Usage
 
 SCHEMA = 3
 
@@ -84,6 +84,14 @@ class Store(StoreBase):
                 CREATE INDEX IF NOT EXISTS sessions_expires ON sessions (expires);
                 PRAGMA user_version = 3;
                 COMMIT;""")
+        # (the profiles are an additive table: no version of the schema came with it, so a hub of an earlier version opens the same file and never looks at it; docs/HUB.md, "Data")
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profiles'").fetchone() is None:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS profiles (account TEXT PRIMARY KEY, username TEXT NOT NULL, display TEXT NOT NULL DEFAULT '', pick TEXT NOT NULL, updated INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS profiles_username ON profiles (username);
+                CREATE INDEX IF NOT EXISTS profiles_updated ON profiles (updated);
+                COMMIT;""")
 
     def close(self):
         self.db.close()
@@ -130,12 +138,8 @@ class Store(StoreBase):
     def last_deletion(self):
         return self.db.execute("SELECT v FROM meta WHERE k = 'del_seq'").fetchone()[0]
 
-    def account_of_name(self, name):
-        """The account that last spoke under this name (names are unique among live accounts, but a rename frees one), or None."""
-        row = self.db.execute("SELECT account FROM lines WHERE name = ? ORDER BY id DESC LIMIT 1", (name,)).fetchone()
-        return row[0] if row else None
-
     def last_name(self, account):
+        """The name the account last spoke under (the one that was shown then), or ''."""
         row = self.db.execute("SELECT name FROM lines WHERE account = ? ORDER BY id DESC LIMIT 1", (account,)).fetchone()
         return row[0] if row else ""
 
@@ -144,13 +148,15 @@ class Store(StoreBase):
         return self.db.execute("SELECT id, at, account, name, text, deleted FROM lines ORDER BY id DESC LIMIT ?", (count,)).fetchall()
 
     def purge(self, chunk=2000):
-        """Delete up to `chunk` lines that are past their time (call again while it returns `chunk`: a long backlog is not one long wait), the mutes that are over and the logins that
-        have run out, then cut the log file. Returns how many lines went."""
+        """Delete up to `chunk` lines that are past their time (call again while it returns `chunk`: a long backlog is not one long wait), the mutes that are over, the logins that
+        have run out and the profiles that no login has refreshed for PROFILE_DAYS (a login lasts 30 days, so such a profile belongs to nobody who is logged in), then cut the log file.
+        Returns how many lines went."""
         now = int(self.clock())
         with self.transaction():
             gone = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE at < ? LIMIT ?)", (now - self.retention, chunk)).rowcount
             self.db.execute("DELETE FROM mutes WHERE until <= ?", (now,))
             self.db.execute("DELETE FROM sessions WHERE expires <= ?", (now,))
+            self.db.execute("DELETE FROM profiles WHERE updated < ?", (now - PROFILE_DAYS * 86400,))
         self.checkpoint()
         return gone
 
@@ -243,14 +249,15 @@ class Store(StoreBase):
         return gone
 
     def forget(self, account, since=0):
-        """Everything that ties this account's id or name to the site, except what keeps the others safe: all its logins and all its chat lines go, and the name is wiped from its mute
-        and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went and that a screen may still show: the lines that were not deleted, and the ones that a
+        """Everything that ties this account's id or name to the site, except what keeps the others safe: all its logins, its profile and all its chat lines go, and the name is wiped from its
+        mute and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went and that a screen may still show: the lines that were not deleted, and the ones that a
         moderator deleted from the command line after the deletion numbered `since` (the hub's last look: it did not tell the screens yet). A line that was deleted and announced before is on
         no screen, and must not use up the few frames that a bulk drop is allowed (hub/chat.py drop_lines). The log file is cut at once, so that neither the lines, nor the name, nor the hashes
         of the logins are left in it (a reader that holds the file up leaves them there until a later look: `unsettled`)."""
         with self.transaction():
             ids = [r[0] for r in self.db.execute("SELECT id FROM lines WHERE account = ? AND (deleted = 0 OR del_seq > ?)", (account, int(since)))]
             self.db.execute("DELETE FROM sessions WHERE account = ?", (account,))
+            self.db.execute("DELETE FROM profiles WHERE account = ?", (account,))
             self.db.execute("DELETE FROM lines WHERE account = ?", (account,))
             self.db.execute("UPDATE mutes SET name = '' WHERE account = ?", (account,))
             self.db.execute("UPDATE bans SET name = '' WHERE account = ?", (account,))
@@ -259,6 +266,34 @@ class Store(StoreBase):
         except StoreError:            # (the forgetting is done and is told: the cut is tried again by the hub's clock)
             self.unsettled = True
         return ids
+
+    # ---- profiles -------------------------------------------------------------------------------------------------------------------------
+
+    def set_profile(self, account, username, display, total):
+        """What a login of the account just said: its username and its display name ('' for none that may be shown). The pick stays; a new profile, and one that had no display name and now
+        has one, picks the display name. At most `total` profiles are kept (the ones refreshed longest ago go, as the logins of `add_session` do), and what went stays in the log file only
+        until the hub's clock cuts it (`unsettled`)."""
+        now = int(self.clock())
+        with self.transaction():
+            self.db.execute("INSERT INTO profiles (account, username, display, pick, updated) VALUES (?, ?, ?, ?, ?) ON CONFLICT (account) DO UPDATE SET username = excluded.username, "
+                            "display = excluded.display, updated = excluded.updated, pick = CASE WHEN profiles.display = '' AND excluded.display != '' THEN 'display' ELSE profiles.pick END",
+                            (account, username, display, "display" if display else "username", now))
+            over = self.db.execute("DELETE FROM profiles WHERE rowid IN (SELECT rowid FROM profiles ORDER BY updated DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,)).rowcount
+        self.unsettled = self.unsettled or over > 0
+
+    def profile(self, account):
+        row = self.db.execute("SELECT username, display, pick FROM profiles WHERE account = ?", (account,)).fetchone()
+        return Profile(*row) if row else None
+
+    def set_pick(self, account, pick):
+        if pick not in PICKS:
+            return False
+        with self.transaction():
+            return self.db.execute("UPDATE profiles SET pick = ? WHERE account = ? AND display != ''", (pick, account)).rowcount == 1
+
+    def account_of_username(self, username):
+        rows = self.db.execute("SELECT account FROM profiles WHERE username = ? LIMIT 2", (username,)).fetchall()
+        return rows[0][0] if len(rows) == 1 else None
 
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------
 

@@ -1,7 +1,8 @@
 """Who is on the front page right now (docs/HUB.md, "Presence"): the list that Home shows beside the Yard. No sockets here: a peer is the object that hub.chat talks to.
 
-A socket that is let in with a login is a named person (the Discord username that the hub already shows in the chat); a socket without one is a guest, counted and never named, and so is an account that is banned
-from the chat. A page says what its visitor is doing (looking, waiting in a room that has not started, in a match) and asks for the list; the hub sends the list once and then the changes, to every page that
+A socket that is let in with a login is a named person (by the name that the chat shows: the person's Discord display name or username, as they picked; a name is not unique, so a row is told
+from another only by its number `i`, and the person's own row by `me`, never by the name); a socket without a login is a guest, counted and never named, and so is an account that is banned
+from the chat. A row never holds a username that the person chose not to show: the list is one frame for every page, so it holds nothing that only moderators may see. A page says what its visitor is doing (looking, waiting in a room that has not started, in a match) and asks for the list; the hub sends the list once and then the changes, to every page that
 watches it at once, at most every `who_seconds`. All of it is memory, for as long as a socket is open: nothing goes to the database, the log has no name or number of a person, and a person is out of the list
 one send after the socket closes.
 

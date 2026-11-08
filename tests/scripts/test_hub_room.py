@@ -143,7 +143,7 @@ class TheStoreAtItsLimit(unittest.TestCase):
         for n, person in enumerate(people):
             room.say(person, "hello from %d" % n)
         self.assertEqual([p.codes() for p in people], [["rate"]] * 5)                  # the guard answers rate to each account, and no line is kept
-        self.assertIsNone(room.store.account_of_name("visitor1"))
+        self.assertEqual(room.store.last_name("2001"), "")                              # (and the first of them has no line under any name)
         room.store.mute("1000", 60, "cli", "user0")
         room.store.ban("1001", "cli", "user1")
         room.store.add_session("a" * 64, "1002", "user2", 3600, 10, 100000)
@@ -510,6 +510,7 @@ class TheChatTellsQuota(unittest.TestCase):
     def test_a_moderators_command_is_not_held_back_by_the_budget_and_the_moderator_is_held_to_it_for_lines(self):
         mod = FakePeer(session.Identity("9001", "moddy", False))
         who = self.room.person(1)
+        self.room.store.set_profile("2001", "visitor1", "", 100)                       # (what the login of the account made: a moderator names an account by its username)
         self.room.say(who, "something to mute for")
         for n in range(5):
             self.room.say(mod, "announcement %d" % n)

@@ -111,6 +111,7 @@ class Hub:
         self.clock = clock
         self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)
         self.chat.on_store_error = self.store_trouble
+        self.chat.end_logins = self.end_logins            # (a switch of the shown name closes the account's sockets with the call that a logout uses)
         self.next_trouble_log = float("-inf")
         self.next_presence_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
@@ -261,10 +262,20 @@ class Hub:
             if who is not None and not peer.closed and ((session is not None and who.session == session) or (account is not None and who.account_id == account)):
                 peer.close(1000, "logged out")
 
+    @staticmethod
+    def believable(who):
+        """Whether what the login layer handed out is an identity: an account id; a username (`valid_name`), which is what a moderator addresses the account by; the name that is shown, which is
+        that username or a display name that the text rules of a shown name leave as it is; and, for an account that has both, which one is shown and the other one."""
+        if not (configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.username) and (who.name == who.username or textrules.valid_shown(who.name))):
+            return False
+        if who.pick == "" and who.other == "":
+            return True
+        return who.pick in ("display", "username") and (who.other == who.username or textrules.valid_shown(who.other)) and who.other != who.name
+
     async def identify(self, headers):
         try:
             who = await asyncio.wait_for(self.sessions.identify(headers), self.limits.identify_seconds)
-            if who is not None and configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.name):
+            if who is not None and self.believable(who):
                 return who
         except Exception as e:                                       # (a login that fails or is late, or hands out what is not an identity: the visitor reads, and cannot write)
             self.log.event("error", kind=type(e).__name__, where="session")
@@ -307,6 +318,7 @@ class Hub:
         if now >= self.next_forget:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
+            self.chat.pick_limits.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)
         if now >= self.next_purge:

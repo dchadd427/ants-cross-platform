@@ -1,6 +1,6 @@
 """Discord, the two calls that the login needs (docs/HUB.md, "Login"): the code that Discord handed the browser is exchanged for an access token (`POST /oauth2/token`), and the token is
-used once, to ask who it belongs to (`GET /users/@me`). The id and the username are all that is kept; the token is a local variable of one function and is gone when it returns (no
-refresh token is asked for or looked at, no email, no avatar).
+used once, to ask who it belongs to (`GET /users/@me`). The id, the username and the display name (`global_name`, which the one scope `identify` includes, and which is null for a person who set none)
+are all that is looked at and kept; the token is a local variable of one function and is gone when it returns (no refresh token is asked for or looked at, no email, no avatar).
 
 A small HTTP client of its own, because the answer of another service is data and not a thing to trust: https only (the one exception is the fake Discord of the tests, on a loopback
 address, which hub/config.py allows only to a hub that listens on one), the certificate and the name checked, short timeouts for the connection and for the whole call, no redirect
@@ -53,7 +53,8 @@ class Discord:
         return self.authorize_base + "?" + "&".join("%s=%s" % (k, urllib.parse.quote(v, safe="")) for k, v in pairs)
 
     async def who(self, code):
-        """(id, username) of the account that `code` was handed to, or a DiscordError. At most `login_inflight` of these run at a time: the next one is `busy` at once."""
+        """(id, username, display name) of the account that `code` was handed to, or a DiscordError. The display name is whatever Discord said of it (null, or text of any kind and size: it is
+        untrusted, and hub/text.py clean_shown() decides what becomes of it; a bad one is never a failed login). At most `login_inflight` of these run at a time: the next one is `busy` at once."""
         if self.inflight >= self.limits.login_inflight:
             raise DiscordError("busy")
         self.inflight += 1
@@ -86,7 +87,7 @@ class Discord:
         account, name = data.get("id"), data.get("username")
         if not isinstance(account, str) or not config.ACCOUNT_ID.match(account) or not isinstance(name, str):
             raise DiscordError("down", status)
-        return account, name
+        return account, name, data.get("global_name")
 
     @staticmethod
     def check_status(status):

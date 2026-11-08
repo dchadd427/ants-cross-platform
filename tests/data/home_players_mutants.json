@@ -483,15 +483,15 @@
   {
    "id": "send_writes_before_the_welcome",
    "file": "web/home/chat.js",
-   "old": "send: function (obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false;",
-   "new": "send: function (obj) { if (!sock || sock.readyState !== 1) return false;",
+   "old": "function out(obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false;",
+   "new": "function out(obj) { if (!sock || sock.readyState !== 1) return false;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "send_does_not_notice_a_broken_socket",
    "file": "web/home/chat.js",
-   "old": "try { sock.send(JSON.stringify(obj)); return true; } catch (e) { lost(); return false; } },",
-   "new": "try { sock.send(JSON.stringify(obj)); return true; } catch (e) { return false; } },",
+   "old": "try { sock.send(JSON.stringify(obj)); return true; } catch (e) { lost(); return false; }",
+   "new": "try { sock.send(JSON.stringify(obj)); return true; } catch (e) { return false; }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

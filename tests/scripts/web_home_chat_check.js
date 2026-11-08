@@ -146,7 +146,7 @@ function rig(o) {
         P.parse('{"t":"x"}') !== null && P.parse(5) === null && P.parse(new ArrayBuffer(4)) === null && P.parse('x'.repeat(P.LIMIT.frame + 1)) === null && P.parse('{') === null && P.parse('[1]') === null && P.parse('3') === null
         && P.parse('null') === null && P.parse('{}') === null && P.parse('{"t":5}') === null && P.parse('{"t":"a","__proto__":{"x":1}}') !== null && P.parse('{"t":"ok"}'.padEnd(P.LIMIT.frame, ' ')) !== null);
     same('count: whole numbers from 0 only', [P.count(0), P.count(7), P.count(-1), P.count(1.5), P.count('3'), P.count(null), P.count(NaN), P.count(Infinity), P.count(1e12)], [0, 7, null, null, null, null, null, null, null]);
-    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true }, false, 0]);
+    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true, k: '', u: '' }, false, 0]);
     same('lineOf: not a line when the id is not a whole number, the name or text is not a string, or nothing is left of the text',
         [{ who: 'a', text: 'x' }, { id: '4', who: 'a', text: 'x' }, { id: -1, who: 'a', text: 'x' }, { id: 1.5, who: 'a', text: 'x' }, { id: 4, who: 5, text: 'x' }, { id: 4, who: 'a', text: 5 }, { id: 4, who: 'a', text: ' \u202e \u200b ' }, null, 'x', []].map((m) => P.lineOf(m)),
         [null, null, null, null, null, null, null, null, null, null]);
@@ -1223,6 +1223,150 @@ function bring(env) {                                     // the two files arriv
     check('a piece that throws does not stop the others, the dock or the page: the error is reported and the welcome still shows', t.errors.length === 1 && after === 1 && t.dock.state() === 'live' && t.on() === '7 here now');
     t.s().recv({ t: 'who', full: true, n: 1, g: 0, more: 0, rows: [] });
     check('... nor does it when the list comes', t.errors.length === 2 && after === 2 && t.dock.state() === 'live');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 10. The two names (docs/HUB.md "Names"): the chat shows the account's display name or its username, as it picked. The switch is one button in the small menu, only where the hub says that the account has both;
+//     a line is the visitor's by the hub's key of the account and not by a name (names are not unique); a moderator's copy of a line has the author's username
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const MINE = 'aaaaaaaaaaaa', OTHERS = 'bbbbbbbbbbbb';
+const TWO = { name: 'Maple Leaf', mod: false, k: MINE, pick: 'display', other: 'maple.leaf' };
+const NAMED = ['\u041c\u0430\u0440\u0438\u044f', '\u0418\u0432\u0430\u043d \u041f\u0435\u0442\u0440\u043e\u0432', '\u039d\u03af\u03ba\u03bf\u03c2', '\u7530\u4e2d\u592a\u90ce', '\u3055\u304f\u3089', '\uae40\ubbfc\uc218', '\u0645\u0631\u064a\u0645', '\u0645\u064e\u0631\u0652\u064a\u064e\u0645', '\u05d3\u05d5\u05d3',
+               '\u05d3\u05b8\u05bc\u05d5\u05b4\u05d3', '\u0930\u093e\u091c\u0947\u0936', '\u0915\u094d\u0937\u0924\u094d\u0930\u093f\u092f', '\u0e2a\u0e21\u0e0a\u0e32\u0e22', '\u0e01\u0e34\u0e49\u0e07', 'Dave \u05d3\u05d5\u05d3', 'Zo\u00eb', 'Nguy\u1ec5n V\u0103n'];
+const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
+{   // the pure parts
+    const P = Pure;
+    same('lineOf: the key and the username of the author, cleaned like a name', [P.lineOf({ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }), P.lineOf({ id: 4, who: 'a', text: 'x', k: 5, u: 5 }), P.lineOf({ id: 4, who: 'a', text: 'x', k: null, u: [] }),
+        P.lineOf({ id: 4, who: 'a', text: 'x', u: '<b>x</b> \u202eevil\u202c \u200b' }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: 'u'.repeat(60) }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: '\u3164\u2800' }).u],
+        [{ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }, { id: 4, who: 'a', text: 'x', mod: false, k: '', u: '' }, { id: 4, who: 'a', text: 'x', mod: false, k: '', u: '' }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
+    same('the words of the switch', [P.TEXT.shows, P.TEXT.names, P.TEXT.use], ['Chat shows your ', ['display name', 'username'], 'Show my ']);
+    check('the names of other scripts are fine as they are: cleaned for display they come out whole, and are not cut at 32 code points', NAMED.every((n) => P.plain(n, true) === n && P.clip(n, 32) === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).who === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).u === n));
+}
+{   // the switch: where it is, what it says, what it sends
+    const r = menuOf(rig({ chip: true }));
+    r.live(W({ login: true, you: TWO }));
+    const note = one(r.root, 'gc-pn'), button = one(r.root, 'gc-pick'), menu = one(r.root, 'gc-menu');
+    check('a hub that says that the account has both names: the small menu has a sentence that says which one the chat shows and a button that offers the other, with its name; both are in the menu, before Forget me', shows(note) && shows(button) && note.textContent === 'Chat shows your display name.'
+          && button.textContent === 'Show my username: maple.leaf' && button.tagName === 'button' && button.type === 'button' && menu.children.indexOf(note) < menu.children.indexOf(button) && menu.children.indexOf(button) < menu.children.indexOf(one(r.root, 'gc-forget')));
+    check('... the account line says the name that is shown (the display name), the chip too', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && one(r.chip, 'gc-cn').textContent === 'Maple Leaf' && one(r.chip, 'gc-av').textContent === 'M');
+    button.click();
+    same('a press sends ONE frame, {"t":"pick","pick":"username"} (the other name), on the open socket, and nothing else (no request, no navigation)', [r.s().sent.filter((x) => x.indexOf('pick') !== -1), r.fetches.length, r.went], [['{"t":"pick","pick":"username"}'], 0, []]);
+    check('... the page does not change what it shows by itself: the name is the hub\'s to change (it closes the socket and the page connects again)', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && note.textContent === 'Chat shows your display name.');
+    const first = r.s();
+    first.fail();
+    check('the hub closes the socket: "Chat is offline" for a moment, the account line is away, and the page connects again after its first wait', r.dock.state() === 'offline' && r.dock.slot.hidden === true && (r.clock.advance(1500), r.sockets.length === 2));
+    r.s().open().recv(W({ login: true, you: { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: 'Maple Leaf' } }));
+    check('the new welcome says the other name: the account line, the sentence and the button follow, and the small menu is as open as it was', one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && note.textContent === 'Chat shows your username.' && button.textContent === 'Show my display name: Maple Leaf' && menu.hidden === false);
+    button.click();
+    same('... and a press now sends the first name', r.s().sent.filter((x) => x.indexOf('pick') !== -1), ['{"t":"pick","pick":"display"}']);
+    button.click();
+    const sent = r.s().sent.filter((x) => x.indexOf('pick') !== -1);
+    check('a second press before the hub has closed the socket sends the same word again (the hub stores the same thing twice and closes the sockets once)', sent.length === 2 && sent[0] === sent[1] && sent[0] === '{"t":"pick","pick":"display"}');
+}
+{   // where there is no switch
+    const cases = {
+        'a hub that has no such thing (the welcome of before: name and mod only)': { name: 'maple.leaf', mod: false },
+        'the key only': { name: 'maple.leaf', mod: false, k: MINE },
+        'a pick and no other name': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username' },
+        'an other name and no pick': { name: 'maple.leaf', mod: false, k: MINE, other: 'Maple Leaf' },
+        'an empty other name': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: '' },
+        'an other name that shows nothing': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: '\u200b\u3164\ufe0f' },
+        'an other name that is not text': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: 5 },
+        'an other name that is an object': { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: { name: 'x' } },
+        'a pick that is not one of the two words': { name: 'maple.leaf', mod: false, k: MINE, pick: 'both', other: 'Maple Leaf' },
+        'a pick in capitals': { name: 'maple.leaf', mod: false, k: MINE, pick: 'DISPLAY', other: 'Maple Leaf' },
+        'a pick that is a number': { name: 'maple.leaf', mod: false, k: MINE, pick: 1, other: 'Maple Leaf' },
+        'a pick that is a list': { name: 'maple.leaf', mod: false, k: MINE, pick: ['display'], other: 'Maple Leaf' },
+    };
+    Object.keys(cases).forEach((label) => {
+        const r = menuOf(rig({ chip: true }));
+        r.live(W({ login: true, you: cases[label] }));
+        check(label + ': no sentence and no button of the switch, the rest of the menu as it was', one(r.root, 'gc-pn').hidden === true && one(r.root, 'gc-pick').hidden === true && buttonsShown(r.root).indexOf('Forget me') !== -1 && one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && r.errors.length === 0);
+        one(r.root, 'gc-pick').click();
+        check(label + ': a press that gets through anyway sends nothing', r.s().sent.filter((x) => x.indexOf('pick') !== -1).length === 0);
+    });
+    const reader = menuOf(rig({}));
+    reader.live(W({ login: true, you: null }));
+    check('a reader has no account line and so no switch', one(reader.root, 'gc-pick').hidden === true && reader.dock.slot.hidden === true);
+    const nologin = menuOf(rig({}));
+    nologin.live(W({ login: false, you: TWO }));
+    check('where the hub has no login there is no account line and no switch', nologin.dock.slot.hidden === true && one(nologin.root, 'gc-menu').hidden === true);
+}
+{   // a press that cannot be made, and a hub that refuses
+    const r = menuOf(rig({}));
+    r.live(W({ login: true, you: TWO }));
+    r.s().readyState = 2;
+    one(r.root, 'gc-pick').click();
+    check('the socket is closing: nothing is written to it, and the visitor is told that it did not work', r.s().sent.filter((x) => x.indexOf('pick') !== -1).length === 0 && r.note() === 'That did not work, try again');
+    const q = menuOf(rig({}));
+    q.live(W({ login: true, you: TWO }));
+    q.dock.say('hello');
+    q.s().recv({ t: 'err', code: 'pick' });
+    check('a refused switch ({"t":"err","code":"pick"}) says "That did not work, try again" for a few seconds, and the socket stays', q.note() === 'That did not work, try again' && q.dock.state() === 'live' && q.sockets.length === 1 && (q.clock.advance(6001), q.note() === ''));
+    q.dock.say('second line');
+    q.s().recv({ t: 'err', code: 'pick' });
+    q.s().recv({ t: 'err', code: 'rate' });
+    check('... and it is nobody\'s line: the line that waits for its answer is still waiting (the next refusal of a line is the oldest one\'s)', q.note() === 'Slow down a little' && q.field().value === 'hello');
+    const t = menuOf(rig({}));
+    t.live(W({ login: true, you: TWO }));
+    t.s().send = () => { throw new Error('gone'); };
+    one(t.root, 'gc-pick').click();
+    check('a socket that throws when written to is a lost link, as for any frame, and nothing is thrown at the page', t.dock.state() === 'offline' && t.errors.length === 0);
+}
+{   // a line is the visitor's by the hub's key
+    const history = [{ id: 1, at: 1, who: 'Maple Leaf', text: 'my line', mod: false, k: MINE }, { id: 2, at: 2, who: 'Maple Leaf', text: 'a line of another account with my name', mod: false, k: OTHERS },
+                     { id: 3, at: 3, who: 'maple.leaf', text: 'my line from before the switch', mod: false, k: MINE }, { id: 4, at: 4, who: 'Maple Leaf', text: 'a line that has no key', mod: false }];
+    const r = rig({});
+    r.live(W({ login: true, you: TWO, history }));
+    same('in the history only the lines with the visitor\'s key are the visitor\'s: the same name is not enough, a line with no key is not (a hub that sends keys sends them on every line), and a line under the other name still is', r.rows().map((x) => cls(x).indexOf('gc-me') !== -1), [true, false, true, false]);
+    r.s().recv(L(5, 'Maple Leaf', 'live, mine')); r.s().recv(Object.assign(L(6, 'Maple Leaf', 'live, not mine'), { k: OTHERS })); r.s().recv(Object.assign(L(7, 'Maple Leaf', 'live, mine'), { k: MINE }));
+    same('live lines too', r.rows().slice(4).map((x) => cls(x).indexOf('gc-me') !== -1), [false, false, true]);
+    const folded = rig({});
+    folded.live(W({ login: true, you: TWO })); folded.dock.open(false);
+    folded.s().recv(Object.assign(L(1, 'Maple Leaf', 'mine'), { k: MINE })); folded.s().recv(Object.assign(L(2, 'Maple Leaf', 'not mine'), { k: OTHERS }));
+    check('the unread count is the lines of others: the visitor\'s own is read, and another account that shows the same name is not the visitor', folded.pill() === '1');
+    const echo = rig({});
+    echo.live(W({ login: true, you: TWO }));
+    echo.dock.say('hello');
+    echo.s().recv(Object.assign(L(1, 'Maple Leaf', 'hello'), { k: OTHERS }));
+    echo.s().recv({ t: 'err', code: 'rate' });
+    check('a line of another account with the same name and the same words is not the answer to the visitor\'s line: that one still waits (and is refused as the oldest)', echo.note() === 'Slow down a little' && echo.field().value === 'hello');
+    const mineEcho = rig({});
+    mineEcho.live(W({ login: true, you: TWO }));
+    mineEcho.dock.say('hello');
+    mineEcho.s().recv(Object.assign(L(1, 'Maple Leaf', 'hello'), { k: MINE }));
+    mineEcho.s().recv({ t: 'err', code: 'rate' });
+    check('the visitor\'s own echo, by its key, answers the visitor\'s line: a refusal after it is nobody\'s', mineEcho.note() === '' && mineEcho.field().value === '');
+    const old = rig({});
+    old.live(W({ login: true, you: { name: 'maple.leaf', mod: false }, history: [{ id: 1, at: 1, who: 'maple.leaf', text: 'by the name, as the old hub says', mod: false }, { id: 2, at: 2, who: 'pebble', text: 'x', mod: false }] }));
+    same('a hub that sends no keys: a line is the visitor\'s by its name, as it always was', old.rows().map((x) => cls(x).indexOf('gc-me') !== -1), [true, false]);
+    const half = rig({});
+    half.live(W({ login: true, you: { name: 'maple.leaf', mod: false }, history: [Object.assign({ id: 1, at: 1, who: 'maple.leaf', text: 'x', mod: false }, { k: OTHERS })] }));
+    check('... also when only the lines have a key (a hub of the next version and a welcome of this one): the name decides', cls(half.rows()[0]).indexOf('gc-me') !== -1);
+    const huge = rig({});
+    huge.live(W({ login: true, you: Object.assign({}, TWO, { k: 'k'.repeat(5000) }), history: [{ id: 1, at: 1, who: 'x', text: 'y', mod: false, k: 'k'.repeat(5000) }] }));
+    check('a key that is far too long is cut, the same way on both sides, and nothing breaks', huge.errors.length === 0 && cls(huge.rows()[0]).indexOf('gc-me') !== -1 && one(huge.root, 'gc-an') !== null);
+}
+{   // a moderator's copy of a line has the author's username
+    const history = [{ id: 1, at: 1, who: 'Maple Leaf', text: 'hello', mod: false, k: OTHERS, u: 'aaa.one' }, { id: 2, at: 2, who: 'pebble', text: 'a line that shows the username', mod: false, k: MINE }];
+    const r = rig({});
+    r.live(W({ login: true, you: Object.assign({}, TWO, { mod: true }), history }));
+    r.s().recv(Object.assign(L(3, 'Maple Leaf', 'live'), { k: OTHERS, u: 'bbb.two' }));
+    const rows = r.rows();
+    check('the username is a <bdi> after the name, as text, in the history and in a live line, and a line that has none has none', rows.length === 3 && one(rows[0], 'gc-u').tagName === 'bdi' && one(rows[0], 'gc-u').textContent === 'aaa.one' && one(rows[2], 'gc-u').textContent === 'bbb.two' && one(rows[1], 'gc-u') === null
+          && rows[0].textContent === 'Maple Leafaaa.one: hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[0].children.indexOf(one(rows[0], 'gc-who')) < rows[0].children.indexOf(one(rows[0], 'gc-u')) && rows[0].children.indexOf(one(rows[0], 'gc-u')) < rows[0].children.indexOf(one(rows[0], 'gc-sep')));
+    const odd = rig({});
+    odd.live(W({ login: true, you: TWO, history: [{ id: 1, at: 1, who: 'a', text: 'x', mod: false, u: '<i>x</i> \u202eevil\u202c \u200b' }, { id: 2, at: 2, who: 'a', text: 'y', mod: false, u: 'u'.repeat(80) }, { id: 3, at: 3, who: 'a', text: 'z', mod: false, u: { x: 1 } }] }));
+    check('a username from the hub is text, cleaned and cut like a name, and what is not text is none', one(odd.rows()[0], 'gc-u').textContent === '<i>x</i> evil' && one(odd.rows()[1], 'gc-u').textContent === 'u'.repeat(32) + '\u2026' && one(odd.rows()[2], 'gc-u') === null
+          && odd.env.innerHTMLWrites.length === 0 && odd.log().all().every((e) => ['div', 'p', 'span', 'bdi'].indexOf(e.tagName) !== -1));
+}
+{   // other scripts: whole, in the line, the account line, the chip and the button
+    NAMED.forEach((name) => {
+        const r = menuOf(rig({ chip: true }));
+        r.live(W({ login: true, you: { name, mod: false, k: MINE, pick: 'display', other: name + '.x' }, history: [{ id: 1, at: 1, who: name, text: 'hello', mod: false, k: MINE, u: name + '.x' }] }));
+        check('a name in another script comes through whole (' + name + '): the line, its username, the account line, the chip, the button', r.rows()[0].textContent === name + name + '.x' + ': hello' && one(r.dock.slot, 'gc-an').textContent === name && one(r.chip, 'gc-cn').textContent === name
+              && one(r.root, 'gc-pick').textContent === 'Show my username: ' + name + '.x' && cls(r.rows()[0]).indexOf('gc-me') !== -1 && r.errors.length === 0);
+    });
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');

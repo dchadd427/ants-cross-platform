@@ -696,6 +696,27 @@
    "old": "                self.limited_seq = seq\n",
    "new": "                self.limited_seq = store.last_restriction()\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_row_holds_the_username",
+   "file": "hub/presence.py",
+   "old": "best[who.account_id] = (key, who.name, where, who.young)",
+   "new": "best[who.account_id] = (key, who.username, where, who.young)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_presence"
+  },
+  {
+   "id": "people_who_show_one_name_are_one_row",
+   "file": "hub/presence.py",
+   "old": "if who.account_id not in best or key > best[who.account_id][0]:\n                best[who.account_id] = (key, who.name, where, who.young)",
+   "new": "if who.name not in best or key > best[who.name][0]:\n                best[who.name] = (key, who.name, where, who.young)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_presence"
+  },
+  {
+   "id": "the_own_row_is_told_by_the_name",
+   "file": "hub/chat.py",
+   "old": "welcome[\"me\"] = self.presence.row_id(you.account_id)",
+   "new": "welcome[\"me\"] = self.presence.row_id(you.name)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_presence"
   }
  ]
 }

@@ -27,6 +27,8 @@ ALICE = session.Identity("1001", "alice", False)
 BOB = session.Identity("1002", "bob", False)
 MOD = session.Identity("9001", "moddy", False)
 YOUNG = session.Identity("1003", "newbie", True)
+MAPLE_A = session.Identity("1101", "Maple Leaf", False, None, 0, "aaa.one", "display", "aaa.one")        # shows its display name; its username is aaa.one
+MAPLE_B = session.Identity("1102", "Maple Leaf", False, None, 0, "bbb.two", "display", "bbb.two")        # another account that shows the same name
 
 
 class Clock:
@@ -41,12 +43,17 @@ class FakePeer:
     def __init__(self, identity=None):
         self.identity = identity
         self.sent = []
+        self.raw = []                                   # the bytes that were sent, as they went out
         self.strikes = 0
         self.charges = 0
         self.closed = None
 
     def send_text(self, data):
+        self.raw.append(data)
         self.sent.append(json.loads(data.decode("utf-8")))
+
+    def close(self, code, reason=""):
+        self.closed = (code, reason)
 
     def strike(self):
         self.strikes += 1
@@ -102,9 +109,9 @@ class TheWelcome(WorldTest):
     def test_shape_for_a_reader_a_member_and_a_moderator(self):
         reader = self.w.chat.welcome(self.reader)
         self.assertEqual(reader, {"t": "welcome", "v": 1, "you": None, "login": True, "presence": True, "online": 3, "history": []})
-        self.assertEqual(self.w.chat.welcome(self.alice)["you"], {"name": "alice", "mod": False})
+        self.assertEqual(self.w.chat.welcome(self.alice)["you"], {"name": "alice", "mod": False, "k": self.w.chat.key_of("1001")})
         mod = self.w.join(MOD)
-        self.assertEqual(self.w.chat.welcome(mod)["you"], {"name": "moddy", "mod": True})
+        self.assertEqual(self.w.chat.welcome(mod)["you"], {"name": "moddy", "mod": True, "k": self.w.chat.key_of("9001")})
 
     def test_login_false_when_the_hub_has_no_login(self):
         w = World(login=False)
@@ -118,7 +125,7 @@ class TheWelcome(WorldTest):
         history = self.w.chat.welcome(self.reader)["history"]
         self.assertEqual(len(history), 50)
         self.assertEqual([h["text"] for h in history], ["line %d" % n for n in range(10, 60)])
-        self.assertEqual(set(history[0]), {"id", "at", "who", "text", "mod"})
+        self.assertEqual(set(history[0]), {"id", "at", "who", "text", "mod", "k"})
         self.assertEqual([h["id"] for h in history], sorted(h["id"] for h in history))
         self.assertEqual(history[0]["who"], "alice")
         self.assertIs(history[0]["mod"], False)
@@ -163,7 +170,7 @@ class TheRules(WorldTest):
         for peer in (self.alice, self.bob, self.reader):
             line = peer.kinds("line")
             self.assertEqual(len(line), 1)
-            self.assertEqual(line[0], {"t": "line", "id": 1, "at": 1_800_000_000, "who": "alice", "text": "hello", "mod": False})
+            self.assertEqual(line[0], {"t": "line", "id": 1, "at": 1_800_000_000, "who": "alice", "text": "hello", "mod": False, "k": self.w.chat.key_of("1001")})
         self.assertEqual(self.alice.codes(), [])
 
     def test_a_reader_cannot_write(self):
@@ -473,9 +480,9 @@ class TheModerators(WorldTest):
         self.w.say(self.mod, "/mute sam 5")
         self.assertEqual([m[0] for m in self.w.store.mutes()], ["1010"])
 
-    def test_the_account_that_is_here_wins_over_one_that_spoke_under_the_name_before(self):
-        self.w.store.add_line("1020", "sam", "years ago", False)
-        here = self.w.join(session.Identity("1021", "sam", False))
+    def test_the_account_that_is_here_wins_over_one_whose_profile_has_the_username_from_before(self):
+        self.w.store.set_profile("1020", "sam", "", 100)                 # (an account that gave the name up: its profile is as old as its last login)
+        here = self.w.join(session.Identity("1021", "sam", False))      # (a login from before profiles were kept: it has no profile of its own yet)
         self.w.say(self.mod, "/mute sam 5")
         self.assertEqual([m[0] for m in self.w.store.mutes()], ["1021"])
         self.assertIn(here, self.w.chat.peers)
@@ -571,7 +578,8 @@ class TheModerators(WorldTest):
         self.assertEqual(self.bob.codes(), ["muted"])
         self.assertEqual(self.w.store.mutes()[0][:2], ("1002", "bob"))
 
-    def test_mute_by_name_of_someone_who_has_left_but_spoke(self):
+    def test_mute_by_username_of_someone_who_has_left_but_spoke(self):
+        self.w.store.set_profile("1002", "bob", "", 100)               # (what the login of the account made)
         self.w.say(self.bob, "hello")
         self.w.chat.peers.discard(self.bob)
         self.w.say(self.mod, "/mute bob 5")
@@ -660,6 +668,254 @@ class TheModerators(WorldTest):
         self.assertIs(w.chat.welcome(peer)["you"]["mod"], False)
         w.say(peer, "hi")
         self.assertIs(w.store.recent_lines(1)[0].mod, 0)
+
+
+class TheNamesAreNotKeys(WorldTest):
+    """Display names are not unique: two accounts can show one name, so a line is its author's by a key, a moderator's command takes the username, and the username goes to moderators only."""
+
+    def setUp(self):
+        super().setUp()
+        self.mod = self.w.join(MOD)
+        self.a, self.b = self.w.join(MAPLE_A), self.w.join(MAPLE_B)
+
+    def test_an_identity_that_has_no_username_of_its_own_is_known_by_its_name(self):
+        self.assertEqual(session.Identity("1001", "alice", False).username, "alice")
+        self.assertEqual((MAPLE_A.name, MAPLE_A.username, MAPLE_A.pick, MAPLE_A.other), ("Maple Leaf", "aaa.one", "display", "aaa.one"))
+        self.assertEqual(MAPLE_A._replace(young=True).username, "aaa.one")
+        self.assertEqual(session.Identity("1001", "alice", False)[:5], ("1001", "alice", False, None, 0))
+
+    def test_two_accounts_that_show_one_name_are_told_apart_by_their_keys(self):
+        self.w.say(self.a, "one")
+        self.w.clock.now += 3
+        self.w.say(self.b, "two")
+        lines = self.reader.kinds("line")
+        self.assertEqual([l["who"] for l in lines], ["Maple Leaf", "Maple Leaf"])
+        self.assertNotEqual(lines[0]["k"], lines[1]["k"])
+        self.assertEqual((lines[0]["k"], lines[1]["k"]), (self.w.chat.welcome(self.a)["you"]["k"], self.w.chat.welcome(self.b)["you"]["k"]))
+        self.assertEqual([h["k"] for h in self.w.chat.welcome(self.reader)["history"]], [lines[0]["k"], lines[1]["k"]])
+
+    def test_a_key_is_twelve_hex_digits_that_name_nobody_after_a_restart(self):
+        key = self.w.chat.key_of("1101")
+        self.assertRegex(key, r"^[0-9a-f]{12}$")
+        self.assertNotIn("1101", key)
+        self.assertEqual(key, self.w.chat.key_of("1101"))
+        self.assertNotEqual(key, self.w.chat.key_of("1102"))
+        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        self.assertNotEqual(key, again.key_of("1101"))
+
+    def test_a_mute_takes_the_username_and_hits_that_account_whatever_the_names_shown(self):
+        self.w.say(self.a, "hello")
+        self.assertEqual([m["u"] for m in self.mod.kinds("line")], ["aaa.one"])               # (the moderator is told whose line it is)
+        self.w.say(self.mod, "/mute aaa.one 5")
+        self.assertEqual(self.mod.codes(), [])
+        self.assertEqual([tuple(m)[:2] for m in self.w.store.mutes()], [("1101", "aaa.one")])
+        self.w.clock.now += 3
+        self.w.say(self.b, "I show the same name and am not muted")
+        self.w.say(self.a, "but I am")
+        self.assertEqual((self.b.codes(), self.a.codes()), ([], ["muted"]))
+
+    def test_a_name_that_is_shown_is_never_a_target_not_even_when_it_is_somebody_elses_username(self):
+        shows_it = self.w.join(session.Identity("1201", "yy.two", False, None, 0, "xx.one", "display", "xx.one"))      # shows what is the username of another account
+        holder = self.w.join(session.Identity("1202", "yy.two", False))
+        self.w.say(self.mod, "/mute yy.two 5")
+        self.assertEqual([m[0] for m in self.w.store.mutes()], ["1202"])
+        self.w.say(self.mod, "/mute yy.two 0")
+        self.w.store.set_profile("1202", "yy.two", "", 100)
+        self.w.chat.peers.discard(holder)                                                         # (the holder of the username is not here: the profile says who it is, not what is shown)
+        self.w.say(self.mod, "/mute yy.two 5")
+        self.assertEqual([m[0] for m in self.w.store.mutes()], ["1202"])
+        self.w.say(self.mod, "/mute xx.one 5")                                                   # (and the account that shows that name is reached by its own username)
+        self.assertEqual(sorted(m[0] for m in self.w.store.mutes()), ["1201", "1202"])
+        self.assertIn(shows_it, self.w.chat.peers)
+
+    def test_the_names_that_are_shown_are_no_username_at_all(self):
+        self.w.say(self.a, "hello")
+        for command in ("/mute Maple 5", "/mute maple 5", "/mute maple.leaf 5", "/mute Maple_Leaf 5", "/mute 1101 5"):
+            before = len(self.mod.codes())
+            self.w.say(self.mod, command)
+            self.assertEqual(self.mod.codes()[before:], ["bad"], command)
+        self.assertEqual(self.w.store.mutes(), [])
+
+    def test_two_accounts_here_with_one_username_and_two_profiles_with_one_are_no_target(self):
+        first, second = self.w.join(session.Identity("1301", "sam", False)), self.w.join(session.Identity("1302", "sam", False))
+        self.w.say(self.mod, "/mute sam 5")
+        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["bad"], []))
+        self.w.chat.peers.discard(first)
+        self.w.chat.peers.discard(second)
+        self.w.store.set_profile("1301", "sam", "", 100)
+        self.w.store.set_profile("1302", "sam", "", 100)                                         # (a name that was given up and taken: each profile is as old as its last login)
+        self.w.say(self.mod, "/mute sam 5")
+        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["bad", "bad"], []))
+
+    def test_the_username_is_in_a_moderators_copy_of_a_line_and_in_the_bytes_of_nobody_else(self):
+        self.w.say(self.a, "hello")
+        for peer in (self.reader, self.alice, self.bob, self.a, self.b):
+            wire = b"".join(peer.raw)
+            self.assertNotIn(b"aaa.one", wire)
+            self.assertNotIn(b'"u"', wire)
+            self.assertIn(b'"who":"Maple Leaf"', wire)
+        self.assertEqual(json.loads(self.mod.raw[-1]), {"t": "line", "id": 1, "at": 1_800_000_000, "who": "Maple Leaf", "text": "hello", "mod": False, "k": self.w.chat.key_of("1101"), "u": "aaa.one"})
+
+    def test_a_line_that_shows_the_username_has_no_second_one_and_a_moderators_own_line_is_the_same_for_all(self):
+        self.w.say(self.alice, "hello")
+        self.assertNotIn("u", self.mod.kinds("line")[0])
+        self.assertEqual(self.mod.raw[-1], self.reader.raw[-1])
+        self.w.clock.now += 3
+        self.w.say(self.mod, "a word from a moderator")
+        self.assertEqual(self.mod.raw[-1], self.reader.raw[-1])                               # (its username is its shown name here: the same bytes for everybody)
+
+    def test_a_moderator_who_shows_a_display_name_is_marked_and_named_for_moderators_only(self):
+        shown = session.Identity("9002", "The Boss", False, None, 0, "boss.one", "display", "boss.one")
+        w = World(mods=("9001", "9002"))
+        self.addCleanup(w.close)
+        a, boss, other, reader = w.join(shown), w.join(MOD), w.join(ALICE), w.join(None)
+        w.say(a, "from the boss")
+        self.assertEqual(json.loads(reader.raw[-1])["mod"], True)
+        self.assertNotIn(b"boss.one", b"".join(reader.raw + other.raw))
+        self.assertEqual((json.loads(boss.raw[-1])["u"], json.loads(a.raw[-1])["u"]), ("boss.one", "boss.one"))        # (every moderator sees it, the author too: it is a moderator)
+
+    def test_the_history_of_a_moderators_welcome_has_the_usernames_that_are_known_and_nobody_elses_has_any(self):
+        self.w.store.set_profile("1401", "ccc.three", "Gone Girl", 100)
+        self.w.store.add_line("1401", "Gone Girl", "from an account that is not here now", False)
+        self.w.store.add_line("1402", "Nameless", "from one that no profile knows", False)
+        self.w.store.add_line("1403", "dddd.four", "from one that shows its username", False)
+        self.w.store.set_profile("1403", "dddd.four", "", 100)
+        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        mod = FakePeer(MOD)
+        again.peers.add(mod)
+        history = again.welcome(mod)["history"]
+        self.assertEqual([(h["who"], h.get("u")) for h in history], [("Gone Girl", "ccc.three"), ("Nameless", None), ("dddd.four", None)])
+        for reader in (FakePeer(None), FakePeer(ALICE), FakePeer(MAPLE_A)):
+            again.peers.add(reader)
+            wire = json.dumps(again.welcome(reader)).encode("utf-8")
+            self.assertNotIn(b"ccc.three", wire)
+            self.assertNotIn(b'"u"', wire)
+
+    def test_the_username_of_a_line_comes_from_a_socket_that_is_open_else_from_the_profile_and_a_store_that_does_not_answer_is_no_username(self):
+        self.w.store.set_profile("1101", "aaa.old", "Maple Leaf", 100)                         # (the profile is older than the login that this socket was let in with)
+        self.w.say(self.a, "hello")
+        self.assertEqual(self.mod.kinds("line")[-1]["u"], "aaa.one")
+        self.assertEqual(self.w.chat.usernames(["1101", "9999"]), {"1101": "aaa.one"})
+        self.w.chat.peers.discard(self.a)
+        self.assertEqual(self.w.chat.usernames(["1101", "9999"]), {"1101": "aaa.old"})
+        with mock.patch.object(self.w.store, "profile", side_effect=storemod.StoreError("locked")):
+            self.assertEqual(self.w.chat.usernames(["1101"]), {})
+        gone = FakePeer(session.Identity("1103", "Maple Leaf", False, None, 0, "ccc.three", "display", "ccc.three"))
+        gone.closed = (1000, "")
+        self.w.chat.peers.add(gone)
+        self.assertEqual(self.w.chat.usernames(["1103"]), {})                                      # (a socket that is closed is nobody, and this account has no profile)
+
+    def test_the_welcome_and_me_carry_the_switch_only_where_there_is_one(self):
+        self.assertEqual(self.w.chat.you_of(MAPLE_A), {"name": "Maple Leaf", "mod": False, "k": self.w.chat.key_of("1101"), "pick": "display", "other": "aaa.one"})
+        shows_username = session.Identity("1101", "aaa.one", False, None, 0, "aaa.one", "username", "Maple Leaf")
+        self.assertEqual(self.w.chat.you_of(shows_username), {"name": "aaa.one", "mod": False, "k": self.w.chat.key_of("1101"), "pick": "username", "other": "Maple Leaf"})
+        self.assertEqual(set(self.w.chat.you_of(ALICE)), {"name", "mod", "k"})                   # (no display name: no switch: no `pick`, no `other`)
+        self.assertEqual(self.w.chat.welcome(self.a)["you"], self.w.chat.you_of(MAPLE_A))
+
+
+class ThePick(WorldTest):
+    """{"t":"pick","pick":"display"|"username"}: the account's choice of the name that it is shown by."""
+
+    def setUp(self):
+        super().setUp()
+        self.w.store.set_profile("1101", "aaa.one", "Maple Leaf", 100)
+        self.maple = self.w.join(MAPLE_A)
+        self.ended = []
+        self.w.chat.end_logins = lambda **kw: self.ended.append(kw)
+
+    def pick(self, peer, value="username"):
+        self.w.chat.on_text(peer, json.dumps({"t": "pick", "pick": value}))
+
+    def test_a_pick_is_stored_and_ends_every_login_of_the_account_with_the_call_of_a_logout(self):
+        self.pick(self.maple, "username")
+        self.assertEqual(self.w.store.profile("1101").pick, "username")
+        self.assertEqual(self.ended, [{"account": "1101"}])
+        self.assertEqual((self.maple.codes(), self.maple.strikes, self.maple.charges), ([], 0, 0))
+        self.w.clock.now += 30
+        self.pick(self.maple, "display")
+        self.assertEqual(self.w.store.profile("1101").pick, "display")
+        self.assertEqual(self.ended, [{"account": "1101"}, {"account": "1101"}])
+        self.assertEqual(self.maple.sent, [])                                                    # (nothing is answered: the socket is closed and the page connects again)
+
+    def test_the_lines_that_were_written_keep_the_name_they_were_written_with(self):
+        self.w.say(self.maple, "as the display name")
+        self.pick(self.maple, "username")
+        self.assertEqual([(l.name, l.text) for l in self.w.store.recent_lines(10)], [("Maple Leaf", "as the display name")])
+        self.assertEqual([(h["who"], h["text"]) for h in self.w.chat.welcome(self.reader)["history"]], [("Maple Leaf", "as the display name")])
+
+    def test_a_reader_cannot_pick(self):
+        self.pick(self.reader)
+        self.assertEqual((self.reader.codes(), self.reader.strikes, self.ended), (["login"], 1, []))
+
+    def test_an_account_with_no_display_name_has_nothing_to_choose_between(self):
+        self.w.store.set_profile("1001", "alice", "", 100)
+        self.pick(self.alice, "display")
+        self.pick(self.alice, "username")
+        self.assertEqual((self.alice.codes(), self.alice.strikes, self.ended), (["pick", "pick"], 2, []))
+        self.assertEqual(self.w.store.profile("1001").pick, "username")
+
+    def test_an_account_that_logged_in_before_profiles_were_kept_has_none_either(self):
+        self.pick(self.bob, "display")
+        self.assertEqual((self.bob.codes(), self.bob.strikes, self.ended, self.w.store.profile("1002")), (["pick"], 1, [], None))
+
+    def test_anything_but_one_of_the_two_words_is_refused_as_a_mistake_and_changes_nothing(self):
+        for value in ("other", "", " display", "Display", "DISPLAY", "username ", None, 5, 1.5, True, False, [], ["display"], {}, {"pick": "display"}):
+            before = self.maple.strikes
+            self.pick(self.maple, value)
+            self.assertEqual(self.maple.strikes, before + 1, repr(value))
+        self.w.chat.on_text(self.maple, json.dumps({"t": "pick"}))
+        self.assertEqual(self.maple.codes(), ["pick"] * 16)
+        self.assertEqual((self.w.store.profile("1101").pick, self.ended), ("display", []))
+
+    def test_extra_fields_are_ignored_like_those_of_any_other_message(self):
+        self.w.chat.on_text(self.maple, json.dumps({"t": "pick", "pick": "username", "why": "because"}))
+        self.assertEqual((self.maple.codes(), self.ended), ([], [{"account": "1101"}]))
+
+    def test_an_account_may_switch_a_few_times_at_once_and_then_slowly_whatever_the_number_of_its_tabs(self):
+        other_tab = self.w.join(MAPLE_A)
+        for n in range(3):
+            self.pick(self.maple if n % 2 else other_tab, "username" if n % 2 == 0 else "display")
+        self.assertEqual(len(self.ended), 3)
+        self.pick(self.maple, "username")
+        self.assertEqual((self.maple.codes(), len(self.ended), self.maple.strikes), (["pick"], 3, 1))
+        self.w.clock.now += LIMITS.pick_refill_seconds - 1
+        self.pick(other_tab, "username")
+        self.assertEqual((other_tab.codes(), len(self.ended)), (["pick"], 3))
+        self.w.clock.now += 1
+        self.pick(other_tab, "username")
+        self.assertEqual((other_tab.codes(), len(self.ended)), (["pick"], 4))
+
+    def test_the_limit_is_each_accounts_own(self):
+        other = session.Identity("1102", "Other Maple", False, None, 0, "bbb.two", "display", "bbb.two")
+        self.w.store.set_profile("1102", "bbb.two", "Other Maple", 100)
+        theirs = self.w.join(other)
+        for _ in range(3):
+            self.pick(self.maple, "username")
+        self.pick(self.maple, "username")
+        self.pick(theirs, "username")
+        self.assertEqual((self.maple.codes(), theirs.codes(), [e["account"] for e in self.ended]), (["pick"], [], ["1101"] * 3 + ["1102"]))
+
+    def test_a_refused_word_costs_no_token_and_a_refused_account_does(self):
+        for _ in range(10):
+            self.pick(self.maple, "other")
+        self.pick(self.maple, "username")
+        self.assertEqual(len(self.ended), 1)                                                     # (the ten that were refused for their word did not use up the three)
+
+    def test_a_database_that_does_not_answer_is_a_refusal_that_is_no_mistake_and_nothing_is_closed(self):
+        with mock.patch.object(self.w.store, "set_pick", side_effect=storemod.StoreError("locked")):
+            self.pick(self.maple, "username")
+        self.assertEqual((self.maple.codes(), self.maple.strikes, self.maple.charges, self.ended), (["pick"], 0, 1, []))
+
+    def test_a_pick_is_not_a_line_and_the_code_is_not_one_that_a_line_can_be_refused_with(self):
+        self.pick(self.maple, "username")
+        self.assertEqual(self.reader.kinds("line"), [])
+        self.assertEqual(chatmod.PICK_REFUSED, "pick")
+        self.assertNotIn(chatmod.PICK_REFUSED, ("rate", "login", "muted", "banned", "long", "empty", "young", "bad", "here"))
+
+    def test_the_call_is_the_hubs_end_logins_when_the_hub_made_the_chat(self):
+        from hub import server
+        hub = server.Hub(config.Config(), self.w.store, session.NoLogin(), logmod.Log(io.StringIO()), clock=self.w.clock)
+        self.assertEqual(hub.chat.end_logins, hub.end_logins)
 
 
 class TheStrikes(unittest.TestCase):
@@ -794,7 +1050,7 @@ class TheStore(unittest.TestCase):
         self.wall.now += 120                                          # the first line is now 7 days and a minute old
         self.assertEqual([l.text for l in self.store.recent_lines(10)], ["newer line"])      # (not shown from the history either)
         self.assertEqual(self.store.purge(), 1)
-        self.assertEqual(self.store.account_of_name("ann"), "1")
+        self.assertEqual(self.store.last_name("1"), "ann")                   # (the newer line is still there)
         for name in os.listdir(self.folder.name):                    # (the database and its log file: purge() itself must have left the text in neither)
             with open(os.path.join(self.folder.name, name), "rb") as f:
                 self.assertNotIn(canary.encode(), f.read(), "the text is still in " + name)
@@ -856,12 +1112,11 @@ class TheStore(unittest.TestCase):
         self.assertGreater(again.muted_until("2"), 0)
         self.store = again
 
-    def test_names_are_looked_up_by_the_newest_line(self):
+    def test_the_name_that_an_account_last_spoke_under_is_the_one_of_its_newest_line(self):
         self.store.add_line("1", "ann", "x", False)
-        self.store.add_line("2", "ann", "y", False)                  # the name changed hands
-        self.assertEqual(self.store.account_of_name("ann"), "2")
-        self.assertIsNone(self.store.account_of_name("nobody"))
-        self.assertEqual(self.store.last_name("1"), "ann")
+        self.store.add_line("1", "anne", "y", False)
+        self.store.add_line("2", "anne", "z", False)                 # (another account that showed the same name: a name is not a key)
+        self.assertEqual(self.store.last_name("1"), "anne")
         self.assertEqual(self.store.last_name("9"), "")
 
     def test_deleted_lines(self):
@@ -961,6 +1216,7 @@ class TheStore(unittest.TestCase):
         self.assertGreater(self.store.size(), empty)                                    # (and the pages that hold the lines, once the log file is cut)
 
     def test_the_size_goes_down_when_lines_are_deleted_though_the_file_does_not(self):
+        empty = self.store.size()
         for n in range(3000):
             self.store.add_line("1", "ann", "line %d " % n + "x" * 150, False)
         self.store.checkpoint()
@@ -970,7 +1226,7 @@ class TheStore(unittest.TestCase):
         self.wall.now += 8 * 86400
         self.assertEqual(self.store.purge(10 ** 6), 3000)
         self.assertGreaterEqual(os.path.getsize(self.db), file_size * 0.9)              # sqlite keeps the file as big as it was ...
-        self.assertLess(self.store.size(), full / 10)                                   # ... but the freed pages are room again, and room is what the guard counts
+        self.assertLess(self.store.size(), empty + full / 10)                           # ... but the freed pages are room again, and room is what the guard counts (the tables that an empty store has are in `empty`)
 
 
     def test_a_newer_database_is_refused(self):
@@ -988,6 +1244,19 @@ class TheStore(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "file modes")
     def test_the_file_is_private(self):
         self.assertEqual(os.stat(self.db).st_mode & 0o077, 0)
+
+    def test_a_profile_that_goes_over_the_cap_asks_for_the_cut_of_the_log_file_and_one_that_stays_within_it_does_not(self):
+        self.store.set_profile("1", "ann", "", 2)
+        self.store.set_profile("2", "ben", "Ben B", 2)
+        self.store.checkpoint()
+        self.assertFalse(self.store.unsettled)
+        self.store.set_profile("2", "ben", "Ben C", 2)                       # (a login of an account that is kept already: nothing goes)
+        self.assertFalse(self.store.unsettled)
+        self.store.set_profile("3", "cat", "", 2)                            # (the oldest goes: it is in the log file until the hub's clock cuts it)
+        self.assertTrue(self.store.unsettled)
+        self.assertIsNone(self.store.profile("1"))
+        self.assertTrue(self.store.checkpoint())
+        self.assertFalse(self.store.unsettled)
 
     def test_a_forget_is_done_and_told_when_the_cut_of_the_log_file_fails_and_the_cut_is_asked_for_again(self):
         self.store.add_line("7", "gone", "a line", False)
@@ -1209,6 +1478,8 @@ class TheCommandLine(unittest.TestCase):
         self.store = storemod.Store(self.db)
         self.alice = self.store.add_line("1001", "alice", "hello there", False)
         self.digits = self.store.add_line("2002", "12345", "numbers", False)
+        self.store.set_profile("1001", "alice", "", 100)                # (what the login of each account made: the username that the command line takes)
+        self.store.set_profile("2002", "12345", "", 100)
         self.store.close()
 
     def run_admin(self, *args):
@@ -1336,6 +1607,58 @@ class TheCommandLine(unittest.TestCase):
         self.assertEqual((done.returncode, done.stdout), (0, "1001 banned\n"), done.stderr)
         done = subprocess.run([sys.executable, "-m", "hub.admin", "list"], cwd=REPO, env=env, capture_output=True, text=True)
         self.assertIn("1001 alice since", done.stdout)
+
+    def test_a_name_is_a_username_and_never_a_name_that_was_shown(self):
+        store = storemod.Store(self.db)
+        self.addCleanup(store.close)
+        store.add_line("3003", "alice", "a line of an account that shows the username of another", False)
+        store.set_profile("3003", "carol", "alice", 100)                 # carol shows the name alice; alice is the username of account 1001
+        self.assertEqual(self.run_admin("mute", "alice", "30")[0], 0)
+        self.assertEqual([m[0] for m in store.mutes()], ["1001"])
+        self.assertEqual(self.run_admin("ban", "carol")[0], 0)
+        self.assertEqual([b[0] for b in store.bans()], ["3003"])
+        self.assertEqual([b[1] for b in store.bans()], ["carol"])        # (the name that is kept with it is the username)
+
+    def test_a_username_that_two_profiles_have_is_refused_and_the_id_still_works(self):
+        store = storemod.Store(self.db)
+        self.addCleanup(store.close)
+        store.set_profile("4004", "alice", "", 100)
+        status, out, err = self.run_admin("ban", "alice")
+        self.assertEqual((status, out), (1, ""))
+        self.assertIn("more than one", err)
+        self.assertEqual(store.bans(), [])
+        self.assertEqual(self.run_admin("ban", "4004")[0], 0)
+        self.assertEqual([b[0] for b in store.bans()], ["4004"])
+
+    def test_an_account_with_no_profile_is_addressed_by_its_id_and_keeps_the_name_it_spoke_under(self):
+        store = storemod.Store(self.db)
+        self.addCleanup(store.close)
+        store.add_line("5005", "ghost", "from before profiles were kept", False)
+        status, _, err = self.run_admin("mute", "ghost", "5")
+        self.assertEqual(status, 1)
+        self.assertIn("account id", err)
+        self.assertEqual(self.run_admin("mute", "5005", "5")[0], 0)
+        self.assertEqual([tuple(m)[:2] for m in store.mutes()], [("5005", "ghost")])
+
+    def test_an_id_is_named_by_its_profile_where_it_has_one(self):
+        store = storemod.Store(self.db)
+        self.addCleanup(store.close)
+        store.set_profile("1001", "alice", "Alice A", 100)
+        store.add_line("1001", "Alice A", "a line as the display name", False)
+        self.assertEqual(self.run_admin("ban", "1001")[0], 0)
+        self.assertEqual([tuple(b)[:2] for b in store.bans()], [("1001", "alice")])
+
+    def test_list_shows_the_name_that_was_shown_and_the_username_where_they_differ(self):
+        store = storemod.Store(self.db)
+        self.addCleanup(store.close)
+        store.set_profile("3003", "carol", "Carol C", 100)
+        store.add_line("3003", "Carol C", "a line of a display name", False)
+        store.add_line("3003", "carol", "a line of the username", False)
+        status, out, _ = self.run_admin("list")
+        self.assertEqual(status, 0)
+        self.assertIn("3003 Carol C (carol): a line of a display name", out)
+        self.assertIn("3003 carol: a line of the username", out)
+        self.assertIn("1001 alice: hello there", out)
 
 
 if __name__ == "__main__":
