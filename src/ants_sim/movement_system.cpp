@@ -1367,7 +1367,7 @@ bool SimulationEngineImpl::adjust_goal(AntUnit& a, TileCoord& t, bool user_cmd) 
 // FUN_0101fc50: snap, idle, classify, adjust the goal and queue an asynchronous path request.
 bool SimulationEngineImpl::go_to(AntUnit& a, TileCoord t, bool user_cmd, bool special) {
     if (user_cmd && !can_take_user_order(a)) return false;
-    occ_refresh_for_order();
+    occ_refresh_for_order(); if (hill_goal_refused(a, t)) return false;     // 187 now: no ant enters its hill, and a raid would take kills that nobody could bring home
     // Anthill clicked: own hill -> entrance; enemy hill -> raid tile for thieves, otherwise stop.
     for (const auto& ah : grid_.anthills()) {
         const int32_t bx = static_cast<int32_t>(ah.x);

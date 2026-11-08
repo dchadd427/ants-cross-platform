@@ -501,9 +501,9 @@ void parse_level(const uint8_t* data, size_t size, const LevelLimits& limits, Pa
                             (LVL_KNOWN_FORMAT_FLAGS == 0 ? std::string("none") : "0x" + hex(LVL_KNOWN_FORMAT_FLAGS)) + "): the file is from a later version of the format and is not read");
             return;
         }
-        if (lvl.rules > LVL_RULES_EXTENDED) {
+        if (lvl.rules > LVL_RULES_MOST) {
             add_problem(p.fatal, Severity::Fatal, Kind::RulesOutOfRange,
-                        "the rules word is " + num(lvl.rules) + ": only 0 (the original's rules) and 1 (extended rules) are known, the file is not read");
+                        "the rules word is " + num(lvl.rules) + ": only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders) are known, the file is not read");
             return;
         }
         uint16_t description_bytes = 0;

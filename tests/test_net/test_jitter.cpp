@@ -14,6 +14,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include "../common/test_assert.hpp"
 
@@ -151,7 +152,7 @@ struct Drive {
         while (arrival(next_turn) <= now) {
             TurnMsg m;
             m.turn = next_turn++;
-            runner.on_turn(m);
+            runner.on_turn(std::move(m));
         }
         runner.update(told_ms);
         tick_times.push_back(now);
@@ -163,7 +164,7 @@ struct Drive {
         while (arrival(next_turn) <= now) {
             TurnMsg m;
             m.turn = next_turn++;
-            runner.on_turn(m);
+            runner.on_turn(std::move(m));
         }
         runner.update(dt);
         const uint32_t waited = runner.stalled_ms();
@@ -451,7 +452,7 @@ int main() {
         for (uint32_t k = 0; k < 40; ++k) {
             TurnMsg m;
             m.turn = k;
-            runner.on_turn(m);
+            runner.on_turn(std::move(m));
         }
         runner.update(16);
         ASSERT_EQ(runner.buffer_turns(), 1u);
@@ -632,7 +633,7 @@ int main() {
         for (; k < 2; ++k) {
             TurnMsg m;
             m.turn = k;
-            r.on_turn(m);
+            r.on_turn(std::move(m));
         }
         r.update(0);                                                                    // starts: runs turn 0; turn 1 is queued, due in 50 ms
         ASSERT_EQ(r.queued(), 1u);
@@ -641,21 +642,21 @@ int main() {
         for (; k < 3; ++k) {
             TurnMsg m;
             m.turn = k;
-            r.on_turn(m);
+            r.on_turn(std::move(m));
         }
         ASSERT_EQ(r.slack_ms(), 100u);                                                  // two queued: the newest is due in 100 ms: 40 ms beyond the buffer
         ASSERT_EQ(r.speed_x4(), 5u);                                                    // 1.25x
         for (; k < 5; ++k) {
             TurnMsg m;
             m.turn = k;
-            r.on_turn(m);
+            r.on_turn(std::move(m));
         }
         ASSERT_EQ(r.slack_ms(), 200u);                                                  // 140 beyond: three steps
         ASSERT_EQ(r.speed_x4(), 7u);
         for (; k < 40; ++k) {
             TurnMsg m;
             m.turn = k;
-            r.on_turn(m);
+            r.on_turn(std::move(m));
         }
         ASSERT_EQ(r.speed_x4(), 16u);                                                   // never beyond four times
         LockstepRunner::Config slow;
@@ -666,7 +667,7 @@ int main() {
         for (uint32_t j = 0; j < 40; ++j) {
             TurnMsg m;
             m.turn = j;
-            capped.on_turn(m);
+            capped.on_turn(std::move(m));
         }
         capped.update(0);
         ASSERT_EQ(capped.speed_x4(), 8u);
@@ -847,7 +848,7 @@ int main() {
         const auto feed = [&](uint32_t turn) {
             TurnMsg t;
             t.turn = turn;
-            return r.on_turn(t);
+            return r.on_turn(std::move(t));
         };
         for (uint32_t k = 0; k < 3; ++k) ASSERT_TRUE(feed(k));
         r.update(17);                                                                       // starts: three turns are queued
@@ -884,7 +885,7 @@ int main() {
         LockstepRunner fresh(sim2, cfg);
         TurnMsg t0;
         t0.turn = 0;
-        fresh.on_turn(t0);
+        fresh.on_turn(std::move(t0));
         for (uint32_t i = 0; i < 100; ++i) fresh.update(16);                                // 1.6 s with one turn
         ASSERT_EQ(fresh.next_turn_to_execute(), 0u);
         ASSERT_FALSE(fresh.rebuilding());
@@ -971,7 +972,7 @@ int main() {
         for (uint32_t k = 0; k < 10; ++k) {
             TurnMsg t;
             t.turn = k;
-            ASSERT_TRUE(r.on_turn(t));
+            ASSERT_TRUE(r.on_turn(std::move(t)));
         }
         r.update(16);                                                                      // starts (two turns are enough: ten are queued)
         r.update(600);                                                                     // ONE long frame: it runs every turn that is there and ends empty-handed (a tick is due)
@@ -984,7 +985,7 @@ int main() {
         ASSERT_FALSE(r.rebuilding());
         TurnMsg late;
         late.turn = 10;
-        ASSERT_TRUE(r.on_turn(late));
+        ASSERT_TRUE(r.on_turn(std::move(late)));
         r.update(16);                                                                      // the late turn runs at once: it is not held for a buffer
         ASSERT_EQ(r.next_turn_to_execute(), 11u);
         ASSERT_EQ(r.stalled_ms(), 0u);
@@ -1031,7 +1032,7 @@ int main() {
         for (uint32_t k = 0; k < 300; ++k) {
             TurnMsg t;
             t.turn = k;
-            ASSERT_TRUE(r.on_turn(t));
+            ASSERT_TRUE(r.on_turn(std::move(t)));
         }
         r.update(16);                                                                      // starts: one tick
         ASSERT_EQ(r.next_turn_to_execute(), 1u);
@@ -1051,7 +1052,7 @@ int main() {
             while (next < total) {
                 TurnMsg t;
                 t.turn = next++;
-                ASSERT_TRUE(r.on_turn(t));
+                ASSERT_TRUE(r.on_turn(std::move(t)));
             }
             ASSERT_EQ(r.backlog_ms(), total * kTurnMs);
             ASSERT_EQ(r.queued(), size_t{total});

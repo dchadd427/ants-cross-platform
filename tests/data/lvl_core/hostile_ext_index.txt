@@ -1,5 +1,5 @@
 hostile_ext_format_flag	1	does not load: the format flags are 0x1, of which 0x1 are bits that this reader does not know (it knows none): the file is from a later version of the format and is not read
-hostile_ext_rules_2	1	does not load: the rules word is 2: only 0 (the original's rules) and 1 (extended rules) are known, the file is not read
+hostile_ext_rules_3	1	does not load: the rules word is 3: only 0 (the original's rules), 1 (extended rules) and 2 (extended rules with long orders) are known, the file is not read
 hostile_ext_huge_grid	1	does not load: the grid has 4294967295 rows x 4294967295 columns, more than the 2048 a side that version 9 of the format holds
 hostile_ext_grid_65535	1	does not load: the grid has 65535 rows x 65535 columns, more than the 2048 a side that version 9 of the format holds
 hostile_ext_cut_in_header	1	does not load: the file ends inside the header (byte 10 of 12): the original's loader throws "System read file error." there and the game does not start

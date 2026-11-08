@@ -1211,7 +1211,7 @@ void s6_kinds() {
         CHECK(m.kind == MapKind::Extended && !m.works && m.has(Code::FormatFlagsUnknown) && m.report.first(Code::FormatFlagsUnknown)->severity == Severity::Fatal && m.has(Code::NotForOriginal));
         CHECK(m.headline == "Does not work in the new version" && m.badge == "New version only" && m.report.judged);
         std::vector<uint8_t> rules = w.bytes;
-        rules[14] = 2;                                                       // the rules word: only 0 and 1 are known
+        rules[14] = 3;                                                       // the rules word: only 0, 1 and 2 are known
         m = check_map(rules.data(), rules.size(), limits);
         CHECK(!m.works && m.has(Code::RulesOutOfRange) && m.report.first(Code::RulesOutOfRange)->severity == Severity::Fatal);
         // a cut at several places: never works, never throws, the kind is Extended

@@ -239,7 +239,7 @@ void Application::prepare_replay() {
     }
     if (!replay::plays_here(replay->head)) {
         const uint16_t needs = replay::sim_rules_of(replay->head);
-        const bool older = needs != 0 ? needs < replay::kSimRules : replay->head.engine_rules < net::kProtocolVersion;
+        const bool older = needs != 0 ? needs < replay::kSimRulesNewest : replay->head.engine_rules < net::kProtocolVersion;
         replay_failure_ = older ? ReplayFailure::Older : ReplayFailure::Newer;
         replay_failure_text_ = replay::rules_refusal(replay->head);
         replay_file_ = std::move(replay);                                  // (its head is shown: the page says who recorded it)

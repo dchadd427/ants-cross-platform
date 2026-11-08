@@ -323,7 +323,7 @@ class TheDocumentsSayWhatIsBuilt(unittest.TestCase):
         doc = read("docs", "NETWORK_PORT.md")
         pages = read("docs", "PLAY_IN_BROWSER.md") + read("docs", "SERVER.md")
         for needle in ("kDemoMaxPauseMs", "kDemoAbandonedMs", "`ants_leave_match()`", "`kRejoinMaxAgeMs`", "never makes a room and never replaces an ended one", "`window.antsSeatKnown(seat)`",
-                       "none older than three hours", "`--no-reconnect` has no keys", "`ANTS_PAGE.cancelsBrowserKey`", "`resolve_host`", "**The crash-loop guard**", "`record_sync_ms`", "**A native player's key travels in clear**", "**The review of phase 2**", "L8 and L9 in the known limits"):
+                       "none older than three hours", "`--no-reconnect` has no keys", "`ANTS_PAGE.cancelsBrowserKey`", "`resolve_host`", "**The crash-loop guard**", "`record_sync_ms`", "**The native door is not encrypted**", "**The review of phase 2**", "L8 and L9 in the known limits"):
             self.assertIn(needle, doc, needle)
         for needle in ("for three hours", "(10 in a demo room)", "leaving through the web page's Menu button"):
             self.assertIn(needle, pages, needle)

@@ -251,6 +251,7 @@ uint32_t SimulationEngine::predict_order_ack(const Command& cmd, uint32_t* neede
     if (best == nullptr) return 0;
     // GoTo: stop_sync, no path. The ant's OWN type decides here (cmp word ptr [esi + 0x54], 3 at 0x101fcb7): the workers of a level whose default type is Thief cannot raid
     if (hill_team >= 0 && hill_team != best->player_id && best->type != AntType::Thief) return 0;
+    if (hill_team >= 0 && impl_->hill_closed()) return 0;      // 187 now: an ant cannot enter its hill and a thief cannot raid one, GoTo refuses both
     // Only the ability types can refuse the target: a worker, combat ant or thief keeps its order 0 and simply walks to the tile (the classification asks the getter, 0x10206bb)
     const AntType kind = impl_->type_of(*best);
     if (cmd.type == CommandType::GroupSpecial && (kind == AntType::Bomber || kind == AntType::Fire || kind == AntType::Swimmer) &&

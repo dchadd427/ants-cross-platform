@@ -2,7 +2,8 @@
 
 Everything is keyed by account id, so a mute or a ban survives a restart, a new session and a rename. The chat process and `python -m hub.admin` open the same file (WAL, so they
 do not block each other). A line is kept `retention_days` (7) and then deleted for good: the delete zeroes the freed pages (secure_delete) and the log file is cut. A line that a
-moderator deletes stays in the file, marked, until its time is up; the hub learns of a deletion that the command line made by reading `del_seq`.
+moderator deletes stays in the file, marked, until its time is up; the hub learns of a deletion that the command line made by reading `del_seq`. When the file comes near the size limit the hub makes
+room: `make_room` deletes the oldest lines, and the pages they free are reused by the lines that follow, so the file stops growing.
 """
 import contextlib
 import functools
@@ -10,7 +11,7 @@ import os
 import sqlite3
 import time
 
-from .base import PUBLIC, Line, StoreBase, StoreError
+from .base import PUBLIC, Line, StoreBase, StoreError, Usage
 
 SCHEMA = 3
 
@@ -27,6 +28,8 @@ def refusal_as_store_error(method, errors=sqlite3.OperationalError):
 
 
 class Store(StoreBase):
+    log_max_bytes = 16 * 1024 * 1024                # a reader that holds hub.db (a backup tool, a shell that was left open) keeps the log file from being cut, and every chunk that make_room deletes adds its pages to it: when the log is this long and cannot be cut, no more lines go
+
     def __init__(self, path, clock=time.time, retention_days=7, busy_ms=5000):
         self.path = path
         self.busy_ms = busy_ms                      # how long a write waits for another process's write (the hub uses a short time: its one thread must not wait for seconds)
@@ -161,17 +164,57 @@ class Store(StoreBase):
         self.unsettled = bool(busy)
         return not busy
 
-    def size(self):
-        """Bytes in use: the pages of hub.db that hold something, and the log file. A page that deleted lines freed is room for new ones, though the file never shrinks, so the file's
-        own size is not what is counted (a database that was once full would stay full for ever)."""
+    def used_bytes(self):
+        """The pages of hub.db that hold something. A page that deleted lines freed is room for new ones, though the file never shrinks, so the file's own size is not what is counted (a database that
+        was once full would stay full for ever)."""
         pages = self.db.execute("PRAGMA page_count").fetchone()[0]
         free = self.db.execute("PRAGMA freelist_count").fetchone()[0]
         page_size = self.db.execute("PRAGMA page_size").fetchone()[0]
+        return (pages - free) * page_size
+
+    def log_bytes(self):
+        """The size of the log file (hub.db-wal)."""
         try:
-            log_file = os.path.getsize(self.path + "-wal")
+            return os.path.getsize(self.path + "-wal")
         except OSError:
-            log_file = 0
-        return (pages - free) * page_size + log_file
+            return 0
+
+    def size(self):
+        """Bytes in use: the pages of hub.db that hold something, and the log file."""
+        return self.used_bytes() + self.log_bytes()
+
+    def make_room(self, target, chunk=2000, keep=1000):
+        """The oldest lines go first, so that the pages they leave are whole and the lines that follow use them: the lines are in the order of their numbers, and so are their time and their
+        pages. The moderators' lines and the lines that a moderator deleted (they are kept for moderation) go last, and the newest `keep` never (the screens and the hub's memory hold fewer). The log file is cut at once, so that the lines are in neither file (a reader
+        that holds it up leaves them there until a later look: `unsettled`; while it does and the log file is over `log_max_bytes`, no line is deleted: nothing would cut what a chunk adds to it)."""
+        chunk, keep = max(1, int(chunk)), max(0, int(keep))
+        if self.size() <= target:
+            return 0
+        cut = self.checkpoint()                    # (what is left of the log file is not lines to delete: cut it, and look at the pages that hold something)
+        if not cut and self.log_bytes() > self.log_max_bytes:
+            return 0                               # (a reader holds the log file and it is long: a chunk would add its pages to a file that cannot be cut; `unsettled` says so, and the hub's clock asks again)
+        if self.used_bytes() <= target:
+            return 0
+        edge = self.db.execute("SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?", (keep,)).fetchone()
+        if edge is None:
+            return 0
+        gone = 0
+        with self.transaction():
+            for kept in (0, 1):                      # (first the lines that nobody had a reason to keep, then the moderators' and the ones that a moderator deleted)
+                gone += self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= ? AND (mod OR deleted) = ? ORDER BY id LIMIT ?)", (edge[0], kept, chunk - gone)).rowcount
+                if gone >= chunk:
+                    break
+        if gone:
+            try:
+                self.checkpoint()
+            except StoreError:            # (the lines are gone and are told: the cut is tried again by the hub's clock)
+                self.unsettled = True
+        return gone
+
+    def usage(self):
+        lines, oldest = self.db.execute("SELECT COUNT(*), COALESCE(MIN(at), 0) FROM lines").fetchone()
+        free = self.db.execute("PRAGMA freelist_count").fetchone()[0] * self.db.execute("PRAGMA page_size").fetchone()[0]
+        return Usage(self.used_bytes(), free, lines, oldest, self.log_bytes())
 
     # ---- logins ---------------------------------------------------------------------------------------------------------------------------
 

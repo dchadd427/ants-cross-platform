@@ -9,6 +9,7 @@ add_library(ants_server_core STATIC
     secret.cpp
     restart_record.cpp
     site_stats.cpp
+    whole_file.cpp
     replay_store.cpp
     live_board.cpp
     history_record.cpp

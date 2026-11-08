@@ -1,0 +1,1244 @@
+{
+ "note": "Mutants of the headers, the origin check, the headers passed to the game server, the access log and the compressed files of docker/nginx.conf and the Dockerfile, for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_headers_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_headers.py: each breaks one rule - Strict-Transport-Security on every kind of answer (and only for this host), the four headers of a page and the policy directive by directive (the game page against the others), which address is which kind, the permissions policy (what is switched off and what the game needs), the sockets of the policy, the origin of a game connection (none, the site's own host with or without a port or the final dot of a fully qualified name, anything else refused), what the game server is given, the access log (the path that was asked for, no query, no referrer, cookie or Authorization header), the compressed copies and their step in the Dockerfile, and that every Host name is served.",
+ "mutants": [
+  {
+   "id": "hsts_missing_at_the_server",
+   "file": "docker/nginx.conf",
+   "old": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800\" always;\n",
+   "new": "    add_header X-Content-Type-Options \"nosniff\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_at_the_server_not_on_errors",
+   "file": "docker/nginx.conf",
+   "old": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800\" always;\n",
+   "new": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_covers_subdomains",
+   "file": "docker/nginx.conf",
+   "old": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800\" always;\n",
+   "new": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800; includeSubDomains\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_is_preloaded",
+   "file": "docker/nginx.conf",
+   "old": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800\" always;\n",
+   "new": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800; preload\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_lasts_a_day",
+   "file": "docker/nginx.conf",
+   "old": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800\" always;\n",
+   "new": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=86400\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_lasts_a_year",
+   "file": "docker/nginx.conf",
+   "old": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=604800\" always;\n",
+   "new": "    add_header X-Content-Type-Options \"nosniff\" always;\n    add_header Strict-Transport-Security \"max-age=31536000\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_page_block",
+   "file": "docker/nginx.conf",
+   "old": "        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n}\n",
+   "new": "    }\n}\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_admin_block",
+   "file": "docker/nginx.conf",
+   "old": "        add_header Permissions-Policy \"camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n",
+   "new": "        add_header Permissions-Policy \"camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_map_maker_block",
+   "file": "docker/nginx.conf",
+   "old": "        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n\n    # Every other page",
+   "new": "        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n\n    # Every other page",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_code_block",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.wasm$ {\n        default_type application/wasm;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.wasm$ {\n        default_type application/wasm;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_data_block",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.data$ {\n        default_type application/octet-stream;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.data$ {\n        default_type application/octet-stream;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_sprites_block",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /sprites/ {\n        alias /usr/share/nginx/html/asset_catalog/sprites/;\n        add_header Cache-Control \"public, max-age=604800, no-transform\" always;\n        add_header Access-Control-Allow-Origin \"*\" always;\n        add_header Cross-Origin-Resource-Policy \"cross-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ^~ /sprites/ {\n        alias /usr/share/nginx/html/asset_catalog/sprites/;\n        add_header Cache-Control \"public, max-age=604800, no-transform\" always;\n        add_header Access-Control-Allow-Origin \"*\" always;\n        add_header Cross-Origin-Resource-Policy \"cross-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_map_pictures_block",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /maps/previews/ {\n        if ($request_method !~ \"^(GET|HEAD)\\z\") { return 405; }\n        if ($is_args) { return 404; }\n        if ($uri !~ \"^/maps/previews/[ -.0-\\[\\]-~]{1,80}\\.(webp|png)\\z\") { return 404; }\n        error_page 404 = @approved_files;                                 # (a picture or a file that this folder has not is asked of the game server: the maps that players sent and the maintainer approved)\n        limit_req zone=ants_map_previews burst=400 nodelay;\n        limit_req_status 503;\n        alias /srv/community-maps/previews/;\n        autoindex off;\n        types { }\n        default_type image/webp;\n        add_header Cache-Control \"public, max-age=86400\";               # (no \"always\": only a good answer is cacheable, never a 404 or a 403)\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ^~ /maps/previews/ {\n        if ($request_method !~ \"^(GET|HEAD)\\z\") { return 405; }\n        if ($is_args) { return 404; }\n        if ($uri !~ \"^/maps/previews/[ -.0-\\[\\]-~]{1,80}\\.(webp|png)\\z\") { return 404; }\n        error_page 404 = @approved_files;                                 # (a picture or a file that this folder has not is asked of the game server: the maps that players sent and the maintainer approved)\n        limit_req zone=ants_map_previews burst=400 nodelay;\n        limit_req_status 503;\n        alias /srv/community-maps/previews/;\n        autoindex off;\n        types { }\n        default_type image/webp;\n        add_header Cache-Control \"public, max-age=86400\";               # (no \"always\": only a good answer is cacheable, never a 404 or a 403)\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_fallback_of_approved_maps",
+   "file": "docker/nginx.conf",
+   "old": "    location @approved_files {\n        if ($request_method !~ \"^(GET|HEAD)\\z\") { return 404; }\n        if ($is_args) { return 404; }\n        if ($uri !~ \"^/maps/(files/[ -.0-\\[\\]-~]{1,80}\\.(lvl|LVL)|previews/[ -.0-\\[\\]-~]{1,80}\\.png)\\z\") { return 404; }\n        limit_req zone=ants_map_files burst=40 nodelay;\n        limit_req_status 503;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_replays ants-server:4020;\n        proxy_pass http://$ants_replays;\n        proxy_http_version 1.1;\n        proxy_method GET;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n        proxy_hide_header Cache-Control;\n        add_header Cache-Control \"public, max-age=300\";\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location @approved_files {\n        if ($request_method !~ \"^(GET|HEAD)\\z\") { return 404; }\n        if ($is_args) { return 404; }\n        if ($uri !~ \"^/maps/(files/[ -.0-\\[\\]-~]{1,80}\\.(lvl|LVL)|previews/[ -.0-\\[\\]-~]{1,80}\\.png)\\z\") { return 404; }\n        limit_req zone=ants_map_files burst=40 nodelay;\n        limit_req_status 503;\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_replays ants-server:4020;\n        proxy_pass http://$ants_replays;\n        proxy_http_version 1.1;\n        proxy_method GET;\n        proxy_pass_request_headers off;\n        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_pass_request_body off;\n        proxy_set_header Content-Length \"\";\n        proxy_connect_timeout 3s;\n        proxy_read_timeout 10s;\n        proxy_send_timeout 10s;\n        proxy_hide_header X-Content-Type-Options;\n        proxy_hide_header Cache-Control;\n        add_header Cache-Control \"public, max-age=300\";\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_hub_off_answer",
+   "file": "docker/nginx.conf",
+   "old": "    location @hub_off {\n        access_log off;                                           # (nginx logs a request with the settings of the place where it ends: this one, after the redirect of error_page)\n        default_type application/json;\n        add_header Cache-Control \"no-store\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n        return 503 '{\"error\":\"hub_off\",\"message\":\"Chat is not available right now.\"}';\n    }\n",
+   "new": "    location @hub_off {\n        access_log off;                                           # (nginx logs a request with the settings of the place where it ends: this one, after the redirect of error_page)\n        default_type application/json;\n        add_header Cache-Control \"no-store\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        return 503 '{\"error\":\"hub_off\",\"message\":\"Chat is not available right now.\"}';\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_a_login_page_answer",
+   "file": "docker/nginx.conf",
+   "old": "    location @hub_page_limit {\n        access_log off;\n        default_type text/html;\n        add_header Cache-Control \"no-store\" always;\n        add_header Content-Security-Policy \"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n        return 429 '<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Ants! - Log in</title><body style=\"margin:0;padding:24px;font:18px/1.5 system-ui,sans-serif;color:rgb(244,236,226);background:rgb(12,26,21)\"><h1 style=\"font-size:22px;color:rgb(246,208,88)\">Too many tries</h1><p>Wait a minute and press Log in again.</p><p><a style=\"color:rgb(159,240,196)\" href=\"/\">Back to the front page</a></p>';\n    }\n",
+   "new": "    location @hub_page_limit {\n        access_log off;\n        default_type text/html;\n        add_header Cache-Control \"no-store\" always;\n        add_header Content-Security-Policy \"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\" always;\n        add_header Referrer-Policy \"no-referrer\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        return 429 '<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Ants! - Log in</title><body style=\"margin:0;padding:24px;font:18px/1.5 system-ui,sans-serif;color:rgb(244,236,226);background:rgb(12,26,21)\"><h1 style=\"font-size:22px;color:rgb(246,208,88)\">Too many tries</h1><p>Wait a minute and press Log in again.</p><p><a style=\"color:rgb(159,240,196)\" href=\"/\">Back to the front page</a></p>';\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hsts_missing_in_the_favicon_block",
+   "file": "docker/nginx.conf",
+   "old": "    location = /favicon.png {\n        root /usr/share/nginx/html;\n        try_files /favicon.png /favicon.ico =204;\n        add_header Cache-Control \"public, max-age=2592000\";\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location = /favicon.png {\n        root /usr/share/nginx/html;\n        try_files /favicon.png /favicon.ico =204;\n        add_header Cache-Control \"public, max-age=2592000\";\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_block_without_content_security_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "catalog_block_without_content_security_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_block_without_x_frame_options",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "catalog_block_without_x_frame_options",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_block_without_referrer_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "catalog_block_without_referrer_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_block_without_permissions_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "catalog_block_without_permissions_policy",
+   "file": "docker/nginx.conf",
+   "old": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ^~ /asset_catalog/ {\n        root /usr/share/nginx/html;\n        index index.html;\n        try_files $uri $uri/ =404;\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_block_sends_the_policy_in_a_header_that_is_not_one",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy-Report-Only $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_block_loses_the_isolation",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_block_loses_nosniff",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "new": "    location ~* \\.(html|css|js)$ {\n        add_header Cache-Control \"no-cache, must-revalidate\" always;\n        add_header Content-Security-Policy $ants_csp always;\n        add_header X-Frame-Options $ants_frame_options always;\n        add_header Referrer-Policy $ants_referrer_policy always;\n        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "map_maker_without_the_permissions_policy",
+   "file": "docker/nginx.conf",
+   "old": "        add_header Permissions-Policy $ants_permissions_policy always;\n        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n\n    # Every other page",
+   "new": "        add_header Cross-Origin-Opener-Policy \"same-origin\" always;\n        add_header Cross-Origin-Embedder-Policy \"require-corp\" always;\n        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n\n    # Every other page",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_page_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "new": "    \"~^/(?:play|index)\\.html\\z\" page;\n    \"~\\.html\\z\" page;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "index_html_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "new": "    \"~^/play\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "play_html_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "new": "    \"~^/index\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "every_page_is_a_game",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "new": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" game;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "no_page_is_a_page",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "new": "    \"~^/(?:play|index)\\.html\\z\" game;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "scripts_are_pages",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "new": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n    \"~\\.js\\z\" page;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "games_scripts_are_games",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/(?:play|index)\\.html\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "new": "    \"~^/(?:play|index)\\.(?:html|js)\\z\" game;\n    \"~\\.html\\z\" page;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_default_is_open",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src *; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_default_is_nothing",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_styles_from_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_styles_without_inline",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_pictures_without_the_button",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_pictures_from_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_pictures_from_any_coffee_host",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_pictures_without_data",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_fonts_from_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src *; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_media_without_blobs",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self'; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_connects_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src * $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_connects_to_any_socket",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' ws: wss: $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_without_the_sockets_of_the_host",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_without_workers_from_blobs",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_frames_from_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src *; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_frames_nothing",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_allows_plug_ins",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'self'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_without_plug_in_rule",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; base-uri 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_allows_a_base_address",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_without_base_rule",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; form-action 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_posts_forms_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action *\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "policy_without_form_rule",
+   "file": "docker/nginx.conf",
+   "old": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'\";\n",
+   "new": "    default \"default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://cdn.buymeacoffee.com; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' $ants_ws_sources; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'none'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_policy_without_eval",
+   "file": "docker/nginx.conf",
+   "old": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "new": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; frame-ancestors 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_policy_without_webassembly",
+   "file": "docker/nginx.conf",
+   "old": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "new": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_policy_without_inline_script",
+   "file": "docker/nginx.conf",
+   "old": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "new": "    game \"$ants_csp_common; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_policy_not_framed_by_the_site",
+   "file": "docker/nginx.conf",
+   "old": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "new": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'none'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_policy_framed_by_anyone",
+   "file": "docker/nginx.conf",
+   "old": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "new": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors *\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_policy_scripts_from_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "new": "    game \"$ants_csp_common; script-src 'self' https: 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_policy_without_the_ancestors",
+   "file": "docker/nginx.conf",
+   "old": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'; frame-ancestors 'self'\";\n",
+   "new": "    game \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' 'unsafe-eval'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_policy_allows_eval",
+   "file": "docker/nginx.conf",
+   "old": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'\";\n",
+   "new": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'none'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_policy_allows_webassembly",
+   "file": "docker/nginx.conf",
+   "old": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'\";\n",
+   "new": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; frame-ancestors 'none'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_policy_scripts_from_anywhere",
+   "file": "docker/nginx.conf",
+   "old": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'\";\n",
+   "new": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline' https:; frame-ancestors 'none'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_policy_scripts_from_data",
+   "file": "docker/nginx.conf",
+   "old": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'\";\n",
+   "new": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline' data:; frame-ancestors 'none'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_policy_framed_by_the_site",
+   "file": "docker/nginx.conf",
+   "old": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'\";\n",
+   "new": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'self'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_policy_framed_by_anyone",
+   "file": "docker/nginx.conf",
+   "old": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'\";\n",
+   "new": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors *\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "page_policy_without_the_ancestors",
+   "file": "docker/nginx.conf",
+   "old": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'\";\n",
+   "new": "    page \"$ants_csp_common; script-src 'self' 'unsafe-inline'\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_pages_are_not_frameable",
+   "file": "docker/nginx.conf",
+   "old": "    game SAMEORIGIN;\n",
+   "new": "    game DENY;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "game_pages_are_frameable_by_anyone",
+   "file": "docker/nginx.conf",
+   "old": "    game SAMEORIGIN;\n",
+   "new": "    game \"\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "other_pages_are_frameable_by_the_site",
+   "file": "docker/nginx.conf",
+   "old": "    page DENY;\n",
+   "new": "    page SAMEORIGIN;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "other_pages_are_frameable",
+   "file": "docker/nginx.conf",
+   "old": "    page DENY;\n",
+   "new": "    page \"\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "referrer_policy_is_the_browsers_default",
+   "file": "docker/nginx.conf",
+   "old": "    ~. same-origin;\n",
+   "new": "    ~. strict-origin-when-cross-origin;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "referrer_policy_sends_everything",
+   "file": "docker/nginx.conf",
+   "old": "    ~. same-origin;\n",
+   "new": "    ~. unsafe-url;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "referrer_policy_sends_nothing",
+   "file": "docker/nginx.conf",
+   "old": "    ~. same-origin;\n",
+   "new": "    ~. no-referrer;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_empty",
+   "file": "docker/nginx.conf",
+   "old": "    ~. \"camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), interest-cohort=()\";\n",
+   "new": "    ~. \"interest-cohort=()\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_allows_the_camera",
+   "file": "docker/nginx.conf",
+   "old": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "new": "microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_allows_the_location",
+   "file": "docker/nginx.conf",
+   "old": "microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "new": "microphone=(), payment=(), usb=(), serial=()",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_allows_the_camera_to_this_site",
+   "file": "docker/nginx.conf",
+   "old": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "new": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_forbids_fullscreen",
+   "file": "docker/nginx.conf",
+   "old": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "new": "camera=(), fullscreen=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_forbids_sound",
+   "file": "docker/nginx.conf",
+   "old": "display-capture=(), interest-cohort=()\";\n}",
+   "new": "display-capture=(), autoplay=(), interest-cohort=()\";\n}",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_forbids_the_clipboard",
+   "file": "docker/nginx.conf",
+   "old": "display-capture=(), interest-cohort=()\";\n}",
+   "new": "display-capture=(), clipboard-write=(), interest-cohort=()\";\n}",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "permissions_policy_forbids_the_gamepad",
+   "file": "docker/nginx.conf",
+   "old": "display-capture=(), interest-cohort=()\";\n}",
+   "new": "display-capture=(), gamepad=(), interest-cohort=()\";\n}",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sockets_of_any_host_text",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "new": "    \"~^(?<ants_ws_host>[^ ]+)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sockets_of_a_host_that_may_end_in_a_directive",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "new": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sockets_without_a_port",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "new": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sockets_without_brackets",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "new": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sockets_for_wss_only",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\\z\" \"ws://$ants_ws_host wss://$ants_ws_host\";\n",
+   "new": "    \"~^(?<ants_ws_host>[A-Za-z0-9.-]+(?::[0-9]{1,5})?|\\[[0-9A-Fa-f:.]+\\](?::[0-9]{1,5})?)\\z\" \"wss://$ants_ws_host\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "sockets_from_the_server_name",
+   "file": "docker/nginx.conf",
+   "old": "map $http_host $ants_ws_sources {",
+   "new": "map $host $ants_ws_sources {",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_not_checked",
+   "file": "docker/nginx.conf",
+   "old": "        if ($ants_ws_origin_ok = 0) { return 403; }\n        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n",
+   "new": "        resolver 127.0.0.11 valid=10s ipv6=off;\n        set $ants_server ants-server:4002;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_check_lets_the_foreign_through",
+   "file": "docker/nginx.conf",
+   "old": "        if ($ants_ws_origin_ok = 0) { return 403; }\n        resolver 127.0.0.11",
+   "new": "        if ($ants_ws_origin_ok = 1) { return 403; }\n        resolver 127.0.0.11",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_refusal_is_a_redirect",
+   "file": "docker/nginx.conf",
+   "old": "        if ($ants_ws_origin_ok = 0) { return 403; }\n        resolver 127.0.0.11",
+   "new": "        if ($ants_ws_origin_ok = 0) { return 302 /; }\n        resolver 127.0.0.11",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_refusal_is_a_not_found",
+   "file": "docker/nginx.conf",
+   "old": "        if ($ants_ws_origin_ok = 0) { return 403; }\n        resolver 127.0.0.11",
+   "new": "        if ($ants_ws_origin_ok = 0) { return 404; }\n        resolver 127.0.0.11",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_default_lets_in",
+   "file": "docker/nginx.conf",
+   "old": "    default 0;\n    \"~^\\|[^|]*\\z\" 1;\n",
+   "new": "    default 1;\n    \"~^\\|[^|]*\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_null_let_in",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^\\|[^|]*\\z\" 1;\n",
+   "new": "    \"~^\\|[^|]*\\z\" 1;\n    \"~^null\\|\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_none_refused",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^\\|[^|]*\\z\" 1;\n",
+   "new": "    \"~^\\|[^|]*\\z\" 0;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_none_rule_takes_an_origin_that_begins_with_the_separator",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^\\|[^|]*\\z\" 1;\n",
+   "new": "    \"~^\\|\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_none_rule_unanchored",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^\\|[^|]*\\z\" 1;\n",
+   "new": "    \"~\\|[^|]*\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_any_host",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|.*\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_host_must_only_begin_the_name",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_may_begin_with_anything",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_any_scheme",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^[a-z]+://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_https_only",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_http_only",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^http://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_no_port",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])\\.?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_no_final_dot",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?::[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_final_dots_without_end",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.+|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_final_dot_and_port",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])\\.?(?::[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_port_and_final_dot",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?::[0-9]{1,5})?\\.?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_any_port_text",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[^|]*)?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_may_have_a_path",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?[^|]*\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_no_brackets",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "    \"~^https?://([^|/:@\\[\\]]+)(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_ignores_case",
+   "file": "docker/nginx.conf",
+   "old": "map \"$http_origin|$host\" $ants_ws_origin_ok {\n    default 0;\n    \"~^\\|[^|]*\\z\" 1;\n    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "new": "map \"$http_origin|$host\" $ants_ws_origin_ok {\n    default 0;\n    \"~^\\|[^|]*\\z\" 1;\n    \"~*^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_compares_the_host_with_its_port",
+   "file": "docker/nginx.conf",
+   "old": "map \"$http_origin|$host\" $ants_ws_origin_ok {\n    default 0;\n    \"~^\\|[^|]*\\z\" 1;\n    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n}\n",
+   "new": "map \"$http_origin|$http_host\" $ants_ws_origin_ok {\n    default 0;\n    \"~^\\|[^|]*\\z\" 1;\n    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n}\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_origin_compares_the_server_name",
+   "file": "docker/nginx.conf",
+   "old": "map \"$http_origin|$host\" $ants_ws_origin_ok {\n    default 0;\n    \"~^\\|[^|]*\\z\" 1;\n    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n}\n",
+   "new": "map \"$http_origin|$server_name\" $ants_ws_origin_ok {\n    default 0;\n    \"~^\\|[^|]*\\z\" 1;\n    \"~^https?://([^|/:@\\[\\]]+|\\[[0-9a-f:.]+\\])(?:\\.|:[0-9]{1,5})?\\|\\1\\z\" 1;\n}\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "hub_door_checks_the_origin_here_too",
+   "file": "docker/nginx.conf",
+   "old": "    location = /hub/ws {\n        if ($request_method != GET) { return 405; }\n",
+   "new": "    location = /hub/ws {\n        if ($ants_ws_origin_ok = 0) { return 403; }\n        if ($request_method != GET) { return 405; }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_passes_every_header",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_http_version 1.1;                                   # the upgrade needs HTTP/1.1 to the backend\n        proxy_pass_request_headers off;\n",
+   "new": "        proxy_http_version 1.1;                                   # the upgrade needs HTTP/1.1 to the backend\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_address_is_the_visitors",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_set_header X-Client-Address $http_x_client_address;\n        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_address_is_the_forwarded_one",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_set_header X-Client-Address $http_x_forwarded_for;\n        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_address_not_given",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_passes_authorization",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_set_header Authorization $http_authorization;\n        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_passes_the_cookie",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_set_header Cookie $http_cookie;\n        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_passes_the_forwarded_address",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_set_header X-Forwarded-For $http_x_forwarded_for;\n        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_passes_the_browser",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_set_header User-Agent $http_user_agent;\n        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_drops_the_subprotocol",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Sec-WebSocket-Protocol $http_sec_websocket_protocol;\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_drops_the_origin",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Origin $http_origin;\n        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "new": "        proxy_set_header X-Client-Address $remote_addr;\n        proxy_buffering off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_drops_the_key",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;\n        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "new": "        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_drops_the_version",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "new": "        proxy_set_header Sec-WebSocket-Protocol",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_drops_the_upgrade",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_http_version 1.1;                                   # the upgrade needs HTTP/1.1 to the backend\n        proxy_pass_request_headers off;\n        proxy_set_header Upgrade $http_upgrade;\n",
+   "new": "        proxy_http_version 1.1;                                   # the upgrade needs HTTP/1.1 to the backend\n        proxy_pass_request_headers off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_host_is_not_passed",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Host $host;\n        proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;\n        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "new": "        proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;\n        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "ws_connection_is_not_upgrade",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_set_header Connection \"upgrade\";\n        proxy_set_header Host $host;\n        proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;\n        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "new": "        proxy_set_header Connection \"close\";\n        proxy_set_header Host $host;\n        proxy_set_header Sec-WebSocket-Key $http_sec_websocket_key;\n        proxy_set_header Sec-WebSocket-Version $http_sec_websocket_version;\n        proxy_set_header Sec-WebSocket-Protocol",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "busy_passes_every_header",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "busy_passes_the_address_the_visitor_names",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n",
+   "new": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n        proxy_set_header X-Client-Address $http_x_client_address;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "busy_passes_the_cookie",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n",
+   "new": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n        proxy_set_header Cookie $http_cookie;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "busy_passes_authorization",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n",
+   "new": "        proxy_pass_request_headers off;                           # (nothing of the visitor's request is passed on but the Host: no cookie, no Authorization, no address header)\n        proxy_set_header Authorization $http_authorization;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "server_does_not_log_without_the_query",
+   "file": "docker/nginx.conf",
+   "old": "\n    access_log /dev/stdout ants_noquery;\n\n    # Gzip compression",
+   "new": "\n    # Gzip compression",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "server_logs_in_the_stock_format",
+   "file": "docker/nginx.conf",
+   "old": "\n    access_log /dev/stdout ants_noquery;\n\n    # Gzip compression",
+   "new": "\n    access_log /dev/stdout main;\n\n    # Gzip compression",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "server_logs_nothing",
+   "file": "docker/nginx.conf",
+   "old": "\n    access_log /dev/stdout ants_noquery;\n\n    # Gzip compression",
+   "new": "\n    access_log off;\n\n    # Gzip compression",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_request_line",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_query",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $request_uri $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_args",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path$is_args$args $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_rewritten_path",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $uri $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_referrer",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\" \"$http_referer\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_cookie",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\" \"$http_cookie\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_authorization",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\" \"$http_authorization\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_the_forwarded_address",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\" \"$http_x_forwarded_for\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_no_address",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '- [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_no_time",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_no_status",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $body_bytes_sent \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_has_no_size",
+   "file": "docker/nginx.conf",
+   "old": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status $body_bytes_sent \"$http_user_agent\"';\n",
+   "new": "log_format ants_noquery '$remote_addr [$time_local] \"$request_method $ants_path $server_protocol\" $status \"$http_user_agent\"';\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_path_keeps_the_query",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_p>[^?]*)\" $ants_p;\n",
+   "new": "    \"~^(?<ants_p>.*)\" $ants_p;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_path_is_cut_at_the_first_slash",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_p>[^?]*)\" $ants_p;\n",
+   "new": "    \"~^(?<ants_p>/[^?/]*)\" $ants_p;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "log_path_is_cut_at_a_dot",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^(?<ants_p>[^?]*)\" $ants_p;\n",
+   "new": "    \"~^(?<ants_p>[^?.]*)\" $ants_p;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "gzip_static_off",
+   "file": "docker/nginx.conf",
+   "old": "    gzip_static on;\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "gzip_static_is_off_by_name",
+   "file": "docker/nginx.conf",
+   "old": "    gzip_static on;\n",
+   "new": "    gzip_static off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "gzip_off",
+   "file": "docker/nginx.conf",
+   "old": "    gzip on;\n    gzip_static on;\n",
+   "new": "    gzip off;\n    gzip_static on;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "gzip_vary_off",
+   "file": "docker/nginx.conf",
+   "old": "    gzip_vary on;\n",
+   "new": "    gzip_vary off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "etag_off",
+   "file": "docker/nginx.conf",
+   "old": "    gzip_static on;\n",
+   "new": "    gzip_static on;\n    etag off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "data_block_recompresses",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.data$ {\n        default_type application/octet-stream;\n",
+   "new": "    location ~* \\.data$ {\n        default_type application/octet-stream;\n        gzip_static off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "wasm_block_has_no_copy",
+   "file": "docker/nginx.conf",
+   "old": "    location ~* \\.wasm$ {\n        default_type application/wasm;\n",
+   "new": "    location ~* \\.wasm$ {\n        default_type application/wasm;\n        gzip_static off;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_makes_no_copies",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_are_made_at_the_lowest_level",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -1 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_replace_the_files",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_keep_the_time",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_leave_out_the_data",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_leave_out_the_code",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_leave_out_the_script",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.wasm; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_are_not_checked",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" || exit 1; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_fail_quietly",
+   "file": "Dockerfile",
+   "old": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\" || exit 1; done\n",
+   "new": "RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k \"$f\" && test -s \"$f.gz\"; done\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "image_copies_are_made_before_the_build",
+   "file": "Dockerfile",
+   "old": "RUN cmake --build build_web -j$(nproc)\n\n# The three big files",
+   "new": "# The three big files",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "unknown_hosts_are_refused",
+   "file": "docker/nginx.conf",
+   "old": "    server_name beta.playants.org localhost;\n",
+   "new": "    server_name beta.playants.org localhost;\n    if ($host !~ \"^(beta\\.playants\\.org|localhost)$\") { return 421; }\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "unknown_hosts_get_a_default_server",
+   "file": "docker/nginx.conf",
+   "old": "server {\n    listen 80;\n",
+   "new": "server {\n    listen 80 default_server;\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "stats_door_doubles_nosniff",
+   "file": "docker/nginx.conf",
+   "old": "        proxy_hide_header X-Content-Type-Options;                 # (the server's own nosniff line is the one that this block inherits: not twice)\n    }\n\n    # A browser tells the server that a single-player game began",
+   "new": "    }\n\n    # A browser tells the server that a single-player game began",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  }
+ ]
+}

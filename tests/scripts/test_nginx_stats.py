@@ -114,7 +114,7 @@ class TheLocations(unittest.TestCase):
             sent = sorted(h.lower() for h in re.findall(r"proxy_set_header\s+(\S+)", block))
             self.assertEqual(sent, ["connection", "content-length", "host"], name)           # (the whole list of what the server is sent: no Cookie, no address, nothing of the browser)
             self.assertIn("proxy_set_header Host $host;", block, name)                       # (exactly one Host: the door refuses none and two)
-        self.assertNotIn("proxy_pass_request_headers", WS)                                   # (the other door needs the visitor's headers: the handshake is made of them)
+        self.assertIn("proxy_pass_request_headers off;", WS)                                 # (the other door too: it is given the headers of its handshake, one by one, and the address nginx sees: tests/scripts/test_nginx_headers.py)
 
     def test_they_go_to_the_same_server_and_port_as_the_websocket_door(self):
         door = re.search(r"set \$ants_server ([a-z0-9.-]+):(\d+);", WS)
@@ -135,7 +135,7 @@ class TheLocations(unittest.TestCase):
         self.assertTrue({"ants_busy", "ants_local", "ants_stats"} <= set(zones))                             # (its own three, none shared with another location: a flood of one never uses up another's allowance; the zones of /replays are tests/scripts/test_nginx_replays.py's, which lists all of them)
         for zone in zones:
             self.assertLess(CONF.index("zone=%s:" % zone), CONF.index("server {"))           # http context: before the server block
-        # behind a reverse proxy every visitor may have the proxy's address: these are limits of the whole site, sized for it (the server's own cap of 120 a minute is the bound that matters)
+        # (the server's own cap of 120 a minute is the bound that matters)
         self.assertEqual(zones["ants_stats"][1:], (20, "s"))                                 # twenty a second for the numbers (the cache answers them) ...
         self.assertEqual(zones["ants_local"][1:], (60, "m"))                                 # ... sixty reports a minute ...
         self.assertIn("limit_req zone=ants_stats burst=100 nodelay;", STATS)                 # ... with a burst of 100 ...

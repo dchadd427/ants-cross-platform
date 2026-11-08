@@ -1,0 +1,10 @@
+# Review requests for pull requests go to the maintainer.
+*                      @dchadd427
+
+# Build, container, deployment and automation files are named on their own, so that they keep
+# a reviewer whatever happens to the default line above.
+/.github/              @dchadd427
+/docker/               @dchadd427
+/Dockerfile*           @dchadd427
+/docker-compose*.yml   @dchadd427
+/tools/                @dchadd427

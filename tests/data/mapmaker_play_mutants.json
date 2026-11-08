@@ -1122,13 +1122,6 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_heavy_no_warning_with_others",
-      "file": "web/front/mapmaker_play.js",
-      "old": "if (v.heavy) friendsPanel.appendChild(warning());",
-      "new": "if (false) friendsPanel.appendChild(warning());",
-      "test": "node tests/scripts/web_mapmaker_play_check.js"
-    },
-    {
       "id": "play_heavy_warning_everywhere",
       "file": "web/front/mapmaker_play.js",
       "old": "if (v.heavy) botsPanel.appendChild(warning());",
@@ -1185,38 +1178,59 @@
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_cap_8001",
+      "id": "play_cap_1001",
       "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_ONLINE_ANTS = 8000;",
-      "new": "var MAX_ONLINE_ANTS = 8001;",
+      "old": "var MAX_ONLINE_ANTS = 1000;",
+      "new": "var MAX_ONLINE_ANTS = 1001;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
-      "id": "play_cap_7999",
+      "id": "play_cap_999",
       "file": "web/front/mapmaker_play.js",
-      "old": "var MAX_ONLINE_ANTS = 8000;",
-      "new": "var MAX_ONLINE_ANTS = 7999;",
+      "old": "var MAX_ONLINE_ANTS = 1000;",
+      "new": "var MAX_ONLINE_ANTS = 999;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
       "id": "play_cap_off_by_one",
       "file": "web/front/mapmaker_play.js",
-      "old": "out.online = out.ants <= MAX_ONLINE_ANTS;",
-      "new": "out.online = out.ants < MAX_ONLINE_ANTS;",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "new": "out.online = out.ants < MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
       "id": "play_cap_never_refuses",
       "file": "web/front/mapmaker_play.js",
-      "old": "out.online = out.ants <= MAX_ONLINE_ANTS;",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
       "new": "out.online = true;",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
       "id": "play_cap_counts_one_color_only",
       "file": "web/front/mapmaker_play.js",
-      "old": "out.online = out.ants <= MAX_ONLINE_ANTS;",
-      "new": "out.online = (teams[0] ? teams[0].start_markers : 0) <= MAX_ONLINE_ANTS;",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "new": "out.online = (teams[0] ? teams[0].start_markers : 0) <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_pairs_off_by_one",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "new": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs < MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_pairs_never_counted",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.pairs = (read.plants || 0) * (read.waypoints || 0);",
+      "new": "out.pairs = 0;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_pairs_counts_plants_only",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.pairs = (read.plants || 0) * (read.waypoints || 0);",
+      "new": "out.pairs = (read.plants || 0);",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
@@ -1236,22 +1250,43 @@
     {
       "id": "play_cap_refusal_missing",
       "file": "web/front/mapmaker_play.js",
-      "old": "if (!v.online) {                                             // (the refusal takes the place of the slow-game warning)",
-      "new": "if (false) {                                             // (the refusal takes the place of the slow-game warning)",
+      "old": "if (v.ants > MAX_ONLINE_ANTS) {                              // (a heavy map is over the cap too: its only word)",
+      "new": "if (false) {                              // (a heavy map is over the cap too: its only word)",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_pairs_refusal_missing",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (v.pairs > MAX_ONLINE_PAIRS) {",
+      "new": "if (false) {",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
       "id": "play_cap_refusal_words",
       "file": "web/front/mapmaker_play.js",
-      "old": "so it cannot host this map. You can still play it against bots on this device.",
-      "new": "so it is refused.",
+      "old": "commas(MAX_ONLINE_ANTS) + ', so it cannot host this map. You can still play it against bots on this device.",
+      "new": "commas(MAX_ONLINE_ANTS) + ', so it is refused.",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_pairs_refusal_words",
+      "file": "web/front/mapmaker_play.js",
+      "old": "commas(MAX_ONLINE_PAIRS) + ', so it cannot host this map. You can still play it against bots on this device.",
+      "new": "commas(MAX_ONLINE_PAIRS) + ', so it is refused.",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
       "id": "play_cap_refusal_without_the_way_out",
       "file": "web/front/mapmaker_play.js",
-      "old": "You can still play it against bots on this device.'; }",
-      "new": "'; }",
+      "old": "commas(MAX_ONLINE_ANTS) + ', so it cannot host this map. You can still play it against bots on this device.'; }",
+      "new": "commas(MAX_ONLINE_ANTS) + ', so it cannot host this map.'; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_pairs_refusal_without_the_way_out",
+      "file": "web/front/mapmaker_play.js",
+      "old": "commas(MAX_ONLINE_PAIRS) + ', so it cannot host this map. You can still play it against bots on this device.'; }",
+      "new": "commas(MAX_ONLINE_PAIRS) + ', so it cannot host this map.'; }",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {
@@ -1266,6 +1301,146 @@
       "file": "web/front/mapmaker_play.js",
       "old": "no.setAttribute('role', 'status');\n                    friendsPanel.appendChild(no);",
       "new": "friendsPanel.appendChild(no);",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_cap_251",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ONLINE_FOOD = 250;",
+      "new": "var MAX_ONLINE_FOOD = 251;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_cap_249",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ONLINE_FOOD = 250;",
+      "new": "var MAX_ONLINE_FOOD = 249;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_off_by_one",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "new": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food < MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_never_counted",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.food = read.food_piles || 0;",
+      "new": "out.food = 0;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_missing_key_is_over",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.food = read.food_piles || 0;",
+      "new": "out.food = read.food_piles;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_refusal_words",
+      "file": "web/front/mapmaker_play.js",
+      "old": "commas(MAX_ONLINE_FOOD) + ', so it cannot host this map. You can still play it against bots on this device.",
+      "new": "commas(MAX_ONLINE_FOOD) + ', so it is refused.",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_refusal_without_the_way_out",
+      "file": "web/front/mapmaker_play.js",
+      "old": "commas(MAX_ONLINE_FOOD) + ', so it cannot host this map. You can still play it against bots on this device.'; }",
+      "new": "commas(MAX_ONLINE_FOOD) + ', so it cannot host this map.'; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_food_refusal_numbers_without_commas",
+      "file": "web/front/mapmaker_play.js",
+      "old": "'This map has ' + commas(food) + ' food objects.",
+      "new": "'This map has ' + food + ' food objects.",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_cap_1001",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ONLINE_POWERUPS = 1000;",
+      "new": "var MAX_ONLINE_POWERUPS = 1001;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_cap_999",
+      "file": "web/front/mapmaker_play.js",
+      "old": "var MAX_ONLINE_POWERUPS = 1000;",
+      "new": "var MAX_ONLINE_POWERUPS = 999;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_off_by_one",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups <= MAX_ONLINE_POWERUPS;",
+      "new": "out.online = out.ants <= MAX_ONLINE_ANTS && out.pairs <= MAX_ONLINE_PAIRS && out.food <= MAX_ONLINE_FOOD && out.powerups < MAX_ONLINE_POWERUPS;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_never_counted",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.powerups = read.powerups || 0;",
+      "new": "out.powerups = 0;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_missing_key_is_over",
+      "file": "web/front/mapmaker_play.js",
+      "old": "out.powerups = read.powerups || 0;",
+      "new": "out.powerups = read.powerups;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_refusal_words",
+      "file": "web/front/mapmaker_play.js",
+      "old": "commas(MAX_ONLINE_POWERUPS) + ', so it cannot host this map. You can still play it against bots on this device.",
+      "new": "commas(MAX_ONLINE_POWERUPS) + ', so it is refused.",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_refusal_without_the_way_out",
+      "file": "web/front/mapmaker_play.js",
+      "old": "commas(MAX_ONLINE_POWERUPS) + ', so it cannot host this map. You can still play it against bots on this device.'; }",
+      "new": "commas(MAX_ONLINE_POWERUPS) + ', so it cannot host this map.'; }",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_powerups_refusal_numbers_without_commas",
+      "file": "web/front/mapmaker_play.js",
+      "old": "'This map has ' + commas(powerups) + ' power-ups.",
+      "new": "'This map has ' + powerups + ' power-ups.",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_more_refusals_missing",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (row[0] <= row[1]) return;",
+      "new": "return;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_more_refusals_at_the_cap",
+      "file": "web/front/mapmaker_play.js",
+      "old": "if (row[0] <= row[1]) return;",
+      "new": "if (row[0] < row[1]) return;",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_more_refusals_food_against_the_wrong_cap",
+      "file": "web/front/mapmaker_play.js",
+      "old": "[[v.food, MAX_ONLINE_FOOD, onlineFoodText]",
+      "new": "[[v.food, MAX_ONLINE_POWERUPS, onlineFoodText]",
+      "test": "node tests/scripts/web_mapmaker_play_check.js"
+    },
+    {
+      "id": "play_more_refusals_not_a_status",
+      "file": "web/front/mapmaker_play.js",
+      "old": "noMore.setAttribute('role', 'status');\n                    friendsPanel.appendChild(noMore);",
+      "new": "friendsPanel.appendChild(noMore);",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     }
   ]

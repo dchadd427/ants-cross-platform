@@ -168,7 +168,7 @@ class ThePublicRoomChecksAreNotVacuous(TheBudgetChecksAreNotVacuous):
     def test_the_list_is_whole(self):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
-        for needed in ("page_protocol_still_21", "page_public_without_lobby", "page_setpublic_anybody", "page_setpublic_while_starting", "page_setpublic_at_the_servers_bucket", "page_setpublic_burst_without_reserve"):
+        for needed in ("page_protocol_still_22", "page_public_without_lobby", "page_setpublic_anybody", "page_setpublic_while_starting", "page_setpublic_at_the_servers_bucket", "page_setpublic_burst_without_reserve"):
             self.assertIn(needed, ids)
 
 

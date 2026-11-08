@@ -59,7 +59,7 @@ enum class OriginalSafeCode : uint8_t {
     RowsBeyondWall,          // rows_beyond_wall (a warning, Classic maps): more than 90 rows; the original's path finder never enters the 91st row, so ants cannot cross it
     ExtendedNotAcceptedHere, // extended_not_accepted_here (a place_limit, fatal, not judged): an Extended map given to a place that reads Classic maps only (LevelLimits::allow_extended)
     FormatFlagsUnknown,      // format_flags_unknown (fatal, Extended maps): a flag bit that this reader does not know, so the file is from a later version of the format
-    RulesOutOfRange,         // rules_out_of_range (fatal, Extended maps): a rules word other than 0 and 1
+    RulesOutOfRange,         // rules_out_of_range (fatal, Extended maps): a rules word above 2
     ObjectAnchorOutsideMap,  // object_anchor_outside_map (a note, Extended maps): an object whose anchor lies outside the grid
 };
 
