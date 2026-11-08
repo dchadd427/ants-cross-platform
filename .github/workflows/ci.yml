@@ -83,7 +83,7 @@ jobs:
 
   linux_tests:
     name: Linux tests (${{ matrix.name }})
-    # pinned: the default image moved to Ubuntu 26.04 with GCC 15, which the code does not build with -Werror yet
+    # pinned: the compiler under the required check changes only with this file (the default image has GCC 15 now, which the code also builds with)
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
