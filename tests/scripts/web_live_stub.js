@@ -1,14 +1,20 @@
 // A stand-in for the game's program (index.js) in tests/scripts/web_live_check.py: the page's glue only knows the game through Module._ants_replay_get / _ants_replay_do (the values and the
 // controls of src/ants_app/application.cpp: ReplayValue Live=7, Limit=8, Complete=9; ReplayControl Extend=5, LiveOver=6), the file system that it writes the recording to, and the report that the
 // game makes when it has read the file. The file here is "ANTSFAKE <turns> <complete> <id>\n...": the stub plays turns at 20 a second to the Limit (the whole file, or 40 turns short of it
-// while it follows a file that grows) and keeps what the glue did in window.__stub for the check to read.
+// while it follows a file that grows) and keeps what the glue did in window.__stub for the check to read (window.__stub.files: every file that the page wrote to the game's file system, as
+// bytes). A REAL recording (it starts with the 8 bytes that every replay starts with: tests/scripts/web_replay_open_browser.js hands one over) is a whole match of window.__stubReport.turns turns
+// (20060: 16:43) with the report that window.__stubReport says (map, roster, names, version, game ...; a page sets it before this script runs), and window.__stubReport.failure (the game's
+// ReplayFailure: 1 unreadable, 2 older, 3 newer, 4 no map) makes it fail the way the game does, with the text that goes with it.
 (function () {
     'use strict';
     var M = window.Module;
     var files = {};
     M.FS = { writeFile: function (p, b) { files[p] = new Uint8Array(b); }, readFile: function (p) { return files[p]; } };
     var STATE = { playing: 2, paused: 3, jumping: 4, ended: 5, cut: 6, failed: 7 };
-    var g = { state: STATE.playing, turn: 0, total: 0, speed: 100, jumpPct: 0, target: 0, live: 0, liveOver: 0, complete: 0, id: '', args: [], extends: 0, ignored: 0, seeks: [], jumpUntil: 0, prior: STATE.playing };
+    var g = { state: STATE.playing, turn: 0, total: 0, speed: 100, jumpPct: 0, target: 0, live: 0, liveOver: 0, complete: 0, id: '', args: [], extends: 0, ignored: 0, seeks: [], jumpUntil: 0, prior: STATE.playing, files: files, failure: 0 };
+    var MAGIC = [0x89, 0x41, 0x52, 0x50, 0x4c, 0x0d, 0x0a, 0x1a];
+    var custom = window.__stubReport || {};
+    function isReal(bytes) { return !!bytes && bytes.length > MAGIC.length && MAGIC.every(function (b, i) { return bytes[i] === b; }); }
     window.__stub = g;
     function parse(bytes) {
         if (!bytes) return null;
@@ -23,7 +29,7 @@
             case 2: return g.total;
             case 3: return g.speed;
             case 4: return g.jumpPct;
-            case 5: return 0;
+            case 5: return g.failure;
             case 6: return g.target;
             case 7: return g.live;
             case 8: return limit();
@@ -80,12 +86,16 @@
     (M.preRun || []).forEach(function (f) { f(); });                                                           // (the page writes the recording in its preRun)
     g.args = (M.arguments || []).slice();
     var f = parse(files['/replay.antsrep']);
-    if (!f) g.state = STATE.failed;
+    if (!f && isReal(files['/replay.antsrep'])) f = { turns: typeof custom.turns === 'number' ? custom.turns : 20060, complete: 1, id: 'real' };
+    if (custom.failure) { g.failure = custom.failure; g.state = STATE.failed; g.total = 0; }
+    else if (!f) g.state = STATE.failed;
     else { g.total = f.turns; g.complete = f.complete; g.id = f.id; g.live = (g.args.indexOf('--replay-live') !== -1 && !f.complete) ? 1 : 0; }
     setTimeout(function () {
         (M.postRun || []).forEach(function (f) { f(); });
         if (typeof window.antsReplayReport === 'function') {
-            window.antsReplayReport({ map: 'TREASURE.LVL', roster: 15, names: ['Mika', 'Bot (Medium)', 'Bot (Medium)', 'Bot (Medium)'], turns: g.total, over: !!g.complete, version: '0.11.0', game: 'v0.11.0', sim_rules: 1 });
+            var report = { map: 'TREASURE.LVL', roster: 15, names: ['Mika', 'Bot (Medium)', 'Bot (Medium)', 'Bot (Medium)'], turns: g.total, over: !!g.complete, version: '0.11.0', game: 'v0.11.0', sim_rules: 1 };
+            Object.keys(custom).forEach(function (k) { report[k] = custom[k]; });
+            window.antsReplayReport(report);
         }
         requestAnimationFrame(frame);
     }, 200);
