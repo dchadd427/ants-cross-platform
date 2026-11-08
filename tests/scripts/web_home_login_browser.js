@@ -4,6 +4,8 @@
 //   * the places and sizes of the Log in button, the chip and the account line at 390 x 844 (a phone), 844 x 390 (held sideways) and 1280 x 800 (a desktop) next to the approved pictures, every target 44 px;
 //   * click Log in, the consent page of the fake Discord, the way back, and Home logged in (the cookie that Discord's navigation could not carry back is not needed for the page to load: the socket has it);
 //   * the cookie as the browser keeps it (__Host-, Secure, HttpOnly, SameSite=Strict, Path=/, no Domain), that the page's script cannot read it, that no code, state or token is in the address, the storage or the page;
+//   * the name that a person plays under (web/front/player_name.js): the page's own question to /hub/me through the real nginx and hub, the card of a link (a guest name, then the login's name, in a field that cannot be typed
+//     in), and a Log out with no reload after which the next question is answered "nobody" and the guest name that the browser kept comes back;
 //   * a line written as the visitor and read by another browser, a reload, Log out, Forget me (the lines go from other screens at once), a banned account (reads, cannot write), a young account (cannot write),
 //     a Discord that does not answer (the calm page and a link back) while the chat goes on for everybody else;
 //   * with a game server: a visitor who is in a room logs in and is back in the same seat (the tab's session storage survives the round trip), also through /hub/login?next=room.
@@ -91,6 +93,34 @@ async function main() {
     }
     const sessionCookie = async (context) => (await context.cookies()).find((c) => c.name === '__Host-ants_hub');
 
+    // ---- the name that a person plays under: the card of a link, in a browser that is not logged in: a guest name that the browser keeps, in a field that cannot be typed in ----
+    const personOf = (pg) => pg.evaluate(() => new Promise((resolve) => {              // (the page's script made its own person in a closure: this one is made the same way, from the same script, and kept on the window)
+        window.__person = window.__person || window.AntsPlayerName.forWindow(window, function (t) { return { ok: true, name: t }; });
+        window.__person.ready(function (name, kind, canSwitch) { resolve([name, kind, canSwitch]); });
+    }));
+    const cardOf = async (pg, url) => {
+        await pg.goto(info.site + url, { waitUntil: 'load' });
+        await pg.waitForSelector('#name-step:not([hidden])', { timeout: 8000 });
+        await pg.waitForFunction(() => document.getElementById('name-step-input').value !== '', null, { timeout: 8000 });
+        return pg.evaluate(() => { const i = document.getElementById('name-step-input'); return { value: i.value, readOnly: i.readOnly, placeholder: i.placeholder, hint: document.getElementById('name-step-hint').textContent, focus: document.activeElement && document.activeElement.id, guest: localStorage.getItem('ants.guest'), keys: Object.keys(localStorage).sort().join() }; });
+    };
+    {
+        const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+        const pg = await context.newPage();
+        pg.on('pageerror', (e) => errors.push(String(e && e.message || e)));
+        const card = await cardOf(pg, '/?room=k7m2xq');
+        check('a visitor who is not logged in: the card of a link shows a guest name ("Guest" and six digits) in a field that cannot be typed in, says so, and the Join button has the focus', /^Guest [1-9][0-9]{5}$/.test(card.value) && card.readOnly === true && card.placeholder === '' && /You play as a guest/.test(card.hint) && card.focus === 'name-step-go', JSON.stringify(card));
+        check('... the browser kept the guest name under ants.guest, the six digits, and nothing else', card.guest === card.value.slice(6) && card.keys === 'ants.guest', JSON.stringify(card));
+        await pg.focus('#name-step-input');
+        await pg.keyboard.type('Mallory');
+        check('typing into the field changes nothing', (await pg.evaluate(() => document.getElementById('name-step-input').value)) === card.value);
+        await shot(pg, 'x_name_card_guest', 'desktop');
+        await pg.reload({ waitUntil: 'load' });
+        await pg.waitForFunction(() => document.getElementById('name-step-input').value !== '', null, { timeout: 8000 });
+        check('a reload, the next visit: the same guest name', (await pg.evaluate(() => document.getElementById('name-step-input').value)) === card.value);
+        await context.close();
+    }
+
     // ---- logged out, at the three sizes: the chip, the field that is off and the Log in button, as drawn (lobbyhome_x_chat_out_*) ----
     for (const size of Object.keys(SIZES)) {
         const { page, context } = await open(size);
@@ -134,6 +164,21 @@ async function main() {
     await shot(page, 'x_chat_in', 'desktop');
     await shot(page, 'x_home_in', 'desktop');
 
+    // ---- the name that a person plays under, logged in: the page's own question to /hub/me (a same-origin GET with the cookie, through the real nginx) ----
+    const inAnswer = await personOf(page);
+    check('logged in: the question of the page is answered with the login\'s name, as a login', inAnswer[0] === 'maple.leaf' && inAnswer[1] === 'login', JSON.stringify(inAnswer));
+    {
+        const tab = await desk.context.newPage();
+        tab.on('pageerror', (e) => errors.push(String(e && e.message || e)));
+        const card = await cardOf(tab, '/?room=k7m2xq');
+        check('the card of a link, in another tab of the same browser: the login\'s name in a field that cannot be typed in, "This is your Discord name", and the Join button has the focus', card.value === 'maple.leaf' && card.readOnly === true && /This is your Discord name/.test(card.hint) && card.focus === 'name-step-go', JSON.stringify(card));
+        await tab.focus('#name-step-input');
+        await tab.keyboard.type('Mallory');
+        check('typing into it changes nothing', (await tab.evaluate(() => document.getElementById('name-step-input').value)) === 'maple.leaf');
+        await shot(tab, 'x_name_card_in', 'desktop');
+        await tab.close();
+    }
+
     // ---- a line, read by another browser; a reload; the small menu; Log out ----
     const other = await open('desktop');
     await page.fill('#gchat .gc-input', 'hello from the browser');
@@ -151,6 +196,9 @@ async function main() {
     await waitYou(page, 'no');
     check('Log out: the visitor is a reader again (the chip says Log in, the field is off), the cookie is gone from the browser, the old lines are still there', (await text(page, '.hlogin')).trim() === 'Log in' && !(await sessionCookie(desk.context)) && (await page.evaluate(() => document.querySelector('#gchat .gc-input').disabled))
         && (await text(page, '#gchat .gc-log')).indexOf('maple.leaf: hello from the browser') !== -1);
+    const outAnswer = await personOf(page);                 // (the person that this page made before the log out: its last answer was a login, so it asks again)
+    check('after Log out, with no reload, the same page\'s next question is answered "nobody": the next room is a guest\'s, the guest name that the browser keeps', outAnswer[1] === 'guest' && /^Guest [1-9][0-9]{5}$/.test(outAnswer[0]) && outAnswer[0].slice(6) === await page.evaluate(() => localStorage.getItem('ants.guest')), JSON.stringify(outAnswer));
+    check('... and a guest is not asked again: the same name', (await personOf(page))[0] === outAnswer[0]);
     check('... and a reload is still a reader', (await page.reload({ waitUntil: 'load' }), await page.waitForSelector('#gchat[data-state="live"]'), (await you(page)) === 'no'));
     await shot(page, 'x_loggedout_again', 'desktop');
 

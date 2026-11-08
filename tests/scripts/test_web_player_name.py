@@ -13,6 +13,7 @@ who is logged in with Discord plays under the login's name, made to fit the game
     a spread of it in the quick tier (one or more for every rule) and keeps the whole list well made (each text is in its file exactly once).
 The node checks need node; without it these tests are skipped and say so.
 """
+import gzip
 import json
 import os
 import re
@@ -28,6 +29,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK = os.path.join(SCRIPTS, "web_player_name_check.js")
 SPEC = os.path.join(REPO, "tests", "data", "player_name_mutants.json")
 NODE = shutil.which("node")
+SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 12500, 4300        # bytes, raw and gzipped (about 12,000 and 4,000): one script that all of the name needs, and nothing else belongs in it
 
 
 def read(path):
@@ -78,6 +80,11 @@ class TheScript(unittest.TestCase):
     def test_it_writes_no_markup_and_touches_no_element(self):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.|\bwindow\.|createElement|textContent|\beval\b|new Function|setTimeout\(\s*['\"]")
 
+    def test_it_stays_small(self):
+        data = self.js.encode("utf-8")
+        self.assertLess(len(data), SCRIPT_BUDGET, "player_name.js is %d bytes" % len(data))                         # (the folder's own budget, tests/scripts/test_web_front.py, holds all of web/front/ too)
+        self.assertLess(len(gzip.compress(data, 9)), SCRIPT_GZIP_BUDGET, "and %d bytes gzipped" % len(gzip.compress(data, 9)))
+
     def test_a_name_that_the_hub_says_is_cut_before_any_work(self):
         self.assertIn("var s = text.slice(0, CUT);", self.js)
         self.assertLess(self.js.index("var s = text.slice(0, CUT);"), self.js.index(".normalize('NFKD')"))
@@ -97,9 +104,11 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     pass, so that a failure is the change's. The whole list runs with tools/mutate.py; the quick tier runs the ones of QUICK (every rule has one) and keeps the list well made."""
 
     FILES = ("web/front/player_name.js", "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js",
-             "web/shapes.js", "tests/scripts/web_player_name_check.js")
+             "web/shapes.js", "web/home/home.js", "web/home/games.js", "tests/scripts/web_player_name_check.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js")
     QUICK = ("fit_without_nfkd", "fit_keeps_non_ascii", "fit_cuts_a_long_name", "fit_ignores_the_checker", "me_prefers_the_other_name", "me_guest_is_failed", "guest_five_digits", "guest_not_kept_in_storage",
-             "login_not_asked_again", "guest_asked_again", "question_not_shared", "known_for_a_login", "no_limit_on_the_wait", "late_answer_is_heard", "not_found_is_a_failure", "request_without_the_cookie")
+             "login_not_asked_again", "guest_asked_again", "question_not_shared", "known_for_a_login", "no_limit_on_the_wait", "late_answer_is_heard", "not_found_is_a_failure", "request_without_the_cookie", "clock_called_as_a_method",
+             "page_seat_connects_without_the_name", "page_name_of_a_new_seat_is_the_rooms", "page_connect_skips_open", "page_rejoin_with_a_name", "page_card_not_read_only", "name_block_lobby_goes_on_without_the_button",
+             "name_block_lobby_hands_on_what_was_typed", "shell_gate_gives_no_name_to_the_game")
 
     @classmethod
     def setUpClass(cls):

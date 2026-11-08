@@ -60,7 +60,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
         self.assertFalse([src for src in re.findall(r'<script src="([^"]*)"', self.page) if "chat" in src and "lobby_chat" not in src], "the page's scripts are the ones that it had: the dock is not one of them")
 
     def test_no_other_file_of_the_site_names_the_dock_or_the_hubs_door(self):
-        naming_the_dock, naming_the_door = set(), set()
+        naming_the_dock, naming_the_door, naming_the_socket = set(), set(), set()
         for base, _dirs, names in os.walk(WEB):
             for name in names:
                 if os.path.splitext(name)[1] not in (".html", ".js", ".css"):
@@ -73,8 +73,11 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     naming_the_dock.add(rel)
                 if re.search(r"/hub/ws|/hub\b", text):
                     naming_the_door.add(rel)
+                if re.search(r"/hub/ws", text):
+                    naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
-        self.assertEqual(sorted(naming_the_door), ["web/home/chat.js"], "only the dock's script knows the address of the hub: a page that opens a socket to it is a page that has a chat")
+        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
+        self.assertEqual(sorted(naming_the_door), ["web/front/player_name.js", "web/home/chat.js"], "the one other script that names the hub is the one that asks for the name to play under: its one page, GET /hub/me (tests/scripts/test_web_player_name.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
@@ -379,7 +382,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["web/lobby.html", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

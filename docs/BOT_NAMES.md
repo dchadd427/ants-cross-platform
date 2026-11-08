@@ -11,7 +11,7 @@ How a computer player is named, shown and kept apart from a person. The code is 
 
 ## The list and the picker
 
-252 names of 3 to 8 ASCII letters (first names and ant-ish words), one name per line in `tools/bot_names.txt`; `tools/gen_bot_names.py` writes the C++ table and the JavaScript table (a test fails when a committed table differs from the list). None equals the twelve names the front page offers a visitor, none holds a word of `tests/data/bot_names_blocklist.txt`. The order is part of the picker: new names go at the end.
+252 names of 3 to 8 ASCII letters (first names and ant-ish words), one name per line in `tools/bot_names.txt`; `tools/gen_bot_names.py` writes the C++ table and the JavaScript table (a test fails when a committed table differs from the list). None holds a word of `tests/data/bot_names_blocklist.txt`. The order is part of the picker: new names go at the end.
 
 `pick_bot_names(key, count)` gives `count` different names: draw i is `mix64(mix64(key ^ seed) + i * golden) % N`, a repeat is skipped. `bot_name_key(text)` makes the key from a text (FNV-1a finished with `mix64`, never 0); `bot_seat_name(key, seat)` is entry `seat` of the four names of the key, so a bot keeps its name whatever the other seats are. A room's key is `bot_name_key(its code)`: fixed when the room is made, kept by a restart (the code is), so a restored room names its bots as before. Key 0 means no key: the legacy name.
 

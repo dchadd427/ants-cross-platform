@@ -69,7 +69,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_old_room_is_let_go_of_only_when_the_new_one_welcomes_the_page(self):
         probe = self.page[self.page.index("function probe(code, name, done) {"):]
-        probe = probe[:probe.index("p.connect();")]
+        probe = probe[:probe.index("open(p, name);")]
         self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
         self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))
         self.assertEqual(probe.count("old.leave()"), 1, "the one place where the old room is let go of")
@@ -329,7 +329,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_games_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the copy with
     nothing changed must pass"""
-    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
+    FILES = ["web/lobby.html", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
              "tests/data/home_games_thumbs.json", "Community-Maps/previews.json",
              "tests/scripts/web_home_games_room_check.js", "tests/scripts/web_home_games_quickjoin_check.js", "tests/scripts/web_home_games_rig.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] \
         + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]

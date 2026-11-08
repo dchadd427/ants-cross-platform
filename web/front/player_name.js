@@ -61,6 +61,7 @@
     // create(env): env.fetch(url, init) is a promise of a response (null: a browser without fetch), env.later(fn, ms) and env.cancel(handle) the clock, env.storage() the browser's localStorage (it may
     // throw or be none), env.random() a number from 0 up to 1, env.Abort the AbortController of the browser (or none), env.check the page's nameCheck. Returns { ask, ready, known }.
     function create(env) {
+        var later = env.later, cancel = env.cancel, random = env.random;       // (called as plain functions: a browser's setTimeout and clearTimeout refuse to be the method of another object)
         var kept = '';                    // the guest digits of this page
         var last = null;                  // the last question that ended: { kind, name, canSwitch }
         var waiting = [];                 // what waits for the question that is on its way
@@ -71,7 +72,7 @@
             var store = null, value = null;
             try { store = env.storage ? env.storage() : null; value = store ? store.getItem(GUEST_KEY) : null; } catch (e) { value = null; }
             if (!validDigits(value)) {
-                value = guestDigits(env.random ? env.random() : Math.random());
+                value = guestDigits(random ? random() : Math.random());
                 try { if (store) store.setItem(GUEST_KEY, value); } catch (e) { /* a browser that keeps nothing: the name lasts for this page */ }
             }
             kept = value;
@@ -87,7 +88,7 @@
             try { fn(a.name, a.kind, a.canSwitch); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error(e); }       // (the others that wait still hear)
         }
         function settle(result) {
-            if (timer !== null) { env.cancel(timer); timer = null; }
+            if (timer !== null) { cancel(timer); timer = null; }
             round++; flying = false;
             last = result;
             var run = waiting;
@@ -100,7 +101,7 @@
             var mine = ++round;
             var ctl = null;
             try { ctl = env.Abort ? new env.Abort() : null; } catch (e) { ctl = null; }
-            timer = env.later(function () {
+            timer = later(function () {
                 timer = null;
                 if (mine !== round) return;
                 if (ctl) { try { ctl.abort(); } catch (e) { /* it is given up all the same */ } }

@@ -18,7 +18,7 @@ if (!lobbyPath) { console.log('usage: web_home_screen_check.js lobby.html'); pro
 const lobbyDir = path.dirname(path.resolve(lobbyPath));
 const Home = require(path.join(lobbyDir, 'home', 'home.js'));
 const H = require('./web_page_harness.js')(lobbyPath);
-const { NET0, KEY, E, C, hex, roomMessage, helloBytes, helloName, helloRoom, CODE, THROWS, runLobby, lobbyText } = H;
+const { NET0, KEY, E, C, GUEST, hex, roomMessage, helloBytes, helloName, helloRoom, CODE, THROWS, runLobby, lobbyText } = H;
 
 let checks = 0;
 let failures = 0;
@@ -126,10 +126,10 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
 // 3. My room, Home, Back and Forward, a link, a reload, Leave room
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const env = runLobby('', {}, { stayHome: true });
     env.home('mine').click();
-    check('My room makes a private room at once: one socket, a Hello that makes the room (a new code, the lobby block, the remembered name, no key)', env.sockets.length === 1
-          && hex(env.last().open().sent[0]) === hex(helloBytes('Maya', helloRoom(env.last().sent[0]))) && CODE.test(helloRoom(env.last().sent[0])));
+    check('My room makes a private room at once: one socket, a Hello that makes the room (a new code, the lobby block, the guest name, no key)', env.sockets.length === 1
+          && hex(env.last().open().sent[0]) === hex(helloBytes(GUEST, helloRoom(env.last().sent[0]))) && CODE.test(helloRoom(env.last().sent[0])));
     check('... and shows the Room: data-screen="room", the address /#room, one new history entry (the first entry is marked as Home, its address as it was)', env.screen() === 'room' && env.win.location.hash === '#room'
           && env.entries.length === 2 && env.entries[1].url === '/#room' && JSON.stringify(env.entries[1].state) === '{"ants":"room"}' && JSON.stringify(env.entries[0].state) === '{"ants":"home"}' && env.entries[0].url === '/' && env.replaced.length === 0);
     check('... the page is scrolled to the top and the focus is on the Home button (the button that was pressed is not on this screen)', env.scrolled.length >= 1 && env.focused === env.roomBar('rhome'));
@@ -247,7 +247,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const env = runLobby('', { 'ants.rejoin.r-1.1': entry(1000), 'ants.name': 'Maya' }, { stayHome: true });
     check('the Rejoin strip is on Home too (above both screens): shown, with its words and its button', env.screen() === 'home' && env.$('rejoin').hidden === false && /room r-1/.test(env.$('rejoin-note').textContent) && env.$('rejoin-go').textContent === 'Rejoin it');
     env.$('rejoin-go').click();
-    check('... and its button goes to the game page from Home', env.assigned.length === 1 && /\?join=\/ws&room=r-1&seat=1&name=Maya$/.test(env.assigned[0]));
+    check('... and its button goes to the game page from Home', env.assigned.length === 1 && /\?join=\/ws&room=r-1&seat=1&name=$/.test(env.assigned[0]));
 }
 {   // a room that refuses the page while it is on Home: a room of its own and a note, and Home stays
     const env = runLobby('', { 'ants.name': 'Maya' }, { session: { 'ants.lobby': JSON.stringify({ c: 'k7m2xq', k: hex(KEY), n: 'Maya', o: 0 }) } });

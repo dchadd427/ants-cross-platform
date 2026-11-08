@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
 
 // the address of a picture of the library (map_picker.js: the one shape that the page loads for a map of the players): /maps/previews/ and a name of unreserved characters and %XX (never an escaped slash, backslash or NUL), no leading dot
 const LIBRARY = /^\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2F|5C|00)[0-9A-F]{2})(?:[A-Za-z0-9._~-]|%(?!2F|5C|00)[0-9A-F]{2})*\.webp$/;
@@ -441,7 +441,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     await wait(env, 5000); await wait(env, 5000);
     check('the list is looked at every 5 s while Home shows, without any press (the pace of an open list), and the same rows stay (the same nodes)', env.site.times.slice(0, 3).join() === '0,5000,10000' && rowsOf(env).length === 3);
     tap(joinOf(rowsOf(env)[0]));
-    check('Join in the docked list is the popover\'s Join: a second client that only joins, with the room of the row', env.sockets.length === 1 && hex(env.last().sent[0] || env.last().open().sent[0]) === hex(helloBytes('Maya', 'c1v3rr', { join: true })));
+    check('Join in the docked list is the popover\'s Join: a second client that only joins, with the room of the row', env.sockets.length === 1 && hex(env.last().sent[0] || env.last().open().sent[0]) === hex(helloBytes(GUEST, 'c1v3rr', { join: true })));
     env.home('mine').click();
     const onRoom = env.looks();
     await wait(env, 20000);

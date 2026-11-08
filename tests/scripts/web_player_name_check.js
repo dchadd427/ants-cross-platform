@@ -138,7 +138,8 @@ same('guestName puts the word and a blank before the digits', P.guestName('48217
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 4. the person
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// A scripted browser: the network (every request waits for reply(i, status, body) or fail(i)), a clock, a storage, a generator of numbers, an AbortController
+// A scripted browser: the network (every request waits for reply(i, status, body) or fail(i)), a clock, a storage, a generator of numbers, an AbortController. The clock and the generator refuse to be called as methods of
+// another object (`this` must be undefined), as a browser's setTimeout and clearTimeout do: the page hands them over as they are
 function rig(o) {
     o = o || {};
     const env = { fetches: [], timers: [], clock: 0, store: Object.assign({}, o.store || {}), sets: [], gets: [], randoms: 0, aborted: [], errors: [] };
@@ -159,10 +160,10 @@ function rig(o) {
             env.fetches.push(call);
             return o.notAPromise ? {} : new Promise((resolve, reject) => { call.resolve = resolve; call.reject = reject; });
         },
-        later(fn, ms) { const id = nextTimer++; env.timers.push({ id, at: env.clock + ms, fn }); return id; },
-        cancel(id) { if (!o.cancelDoesNothing) env.timers = env.timers.filter((t) => t.id !== id); },
+        later(fn, ms) { if (this !== undefined) throw new TypeError('Illegal invocation'); const id = nextTimer++; env.timers.push({ id, at: env.clock + ms, fn }); return id; },
+        cancel(id) { if (this !== undefined) throw new TypeError('Illegal invocation'); if (!o.cancelDoesNothing) env.timers = env.timers.filter((t) => t.id !== id); },
         storage: o.noStorage ? undefined : () => { if (o.storageThrows) throw new Error('storage is blocked'); return storage; },
-        random() { env.randoms++; return o.random === undefined ? 0.5 : (typeof o.random === 'function' ? o.random(env.randoms) : o.random); },
+        random() { if (this !== undefined) throw new TypeError('Illegal invocation'); env.randoms++; return o.random === undefined ? 0.5 : (typeof o.random === 'function' ? o.random(env.randoms) : o.random); },
         Abort: o.noAbort ? undefined : FakeAbort,
         check: nameCheck
     };
@@ -513,7 +514,7 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
             AbortController: function () { this.signal = { aborted: false }; this.abort = function () { this.signal.aborted = true; }; }
         };
         const heard = [];
-        const who = P.forWindow(win, nameCheck, { later: (fn, ms) => { timers.push(ms); return timers.length; }, cancel: () => {}, random: () => 0.25 });
+        const who = P.forWindow(win, nameCheck, { later: function (fn, ms) { if (this !== undefined) throw new TypeError('Illegal invocation'); timers.push(ms); return timers.length; }, cancel: function () { if (this !== undefined) throw new TypeError('Illegal invocation'); }, random: function () { if (this !== undefined) throw new TypeError('Illegal invocation'); return 0.25; } });
         who.ready((n, k) => heard.push([n, k]));
         await tick();
         check('a page\'s window gives the question the AbortController of its browser: a signal that ends it', !!calls[0][1].signal && calls[0][1].signal.aborted === false);

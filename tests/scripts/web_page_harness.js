@@ -254,9 +254,11 @@ function runLobby(search, stored, options) {
         confirm(q) { env.confirms.push(q); return true; },
     };
     if (!options.noSession) win.sessionStorage = session;
-    // a clock that stands still until env.advance(ms): the page's toasts and the client's waits
-    const setTimer = (fn, ms) => { const id = env.nextTimer++; env.timers.push({ id, at: env.clock + ms, fn }); return id; };
-    const clearTimer = (id) => { env.timers = env.timers.filter((t) => t.id !== id); };
+    // a clock that stands still until env.advance(ms): the page's toasts and the client's waits. Like a browser's, it is called as a plain function or as a method of the window, and refuses to be the method of
+    // any other object ("Illegal invocation": `env.later(fn, ms)` with setTimeout as `later` throws in a real browser, and so it does here)
+    const plainCall = (self) => { if (self !== undefined && self !== null && self !== win && self !== globalThis) throw new TypeError('Illegal invocation'); };
+    const setTimer = function (fn, ms) { plainCall(this); const id = env.nextTimer++; env.timers.push({ id, at: env.clock + ms, fn }); return id; };
+    const clearTimer = function (id) { plainCall(this); env.timers = env.timers.filter((t) => t.id !== id); };
     env.advance = (ms) => {
         const until = env.clock + ms;
         for (;;) {
