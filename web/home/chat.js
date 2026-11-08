@@ -100,12 +100,12 @@
         var visit = env.go || function (url) { win.location.assign(url); };
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (unanswered: lines sent and not answered yet, oldest first)
+        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
         var busy = false, menuOn = false;                                       // (a POST of the login is on its way; the small menu of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
         var tight = 0;                                                           // what Home leaves under its bar: 0 the room for the panel, 1 too little for the open panel (the strip shows), 2 too little for the strip (nothing shows)
-        var commandAt = -MS.pending, taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
+        var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -314,7 +314,7 @@
             var e = lineOf(m);
             if (!e || known(e.id)) return;
             e.own = !!you && e.who === you.name; e.fresh = !e.own && !seen();
-            if (e.own) { var key = nfc(e.text), at = -1; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; if (at < 0 && unanswered.length && points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
+            if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
             render();
@@ -342,13 +342,14 @@
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
-        function waiting() { var t = now(); unanswered = unanswered.filter(function (o) { return t - o.at < MS.pending; }); }       // (a line with no answer after 8 s is not waited for)
-        function refuse(code) {                                                 // the hub refused a line: the oldest without an answer (it answers in order), which the hub forgets; a refusal with no line, or command, of ours in flight is not ours
+        function waiting() { var t = now(); unanswered = unanswered.filter(function (o) { return t - o.at < MS.pending; }); }       // (a send with no answer after 8 s is not waited for)
+        function oldest(cmd) { for (var i = 0; i < unanswered.length; i++) if (!unanswered[i].cmd === !cmd) return i; return -1; }       // (the oldest line that waits, or with `cmd` the oldest command)
+        function refuse(code) {                                                 // the hub refused a send, in order: `bad` is what it says to a wrong command, any other code is for a line; nothing of ours waiting, no refusal of ours
             waiting();
-            var refused = unanswered.shift();
-            if (refused === undefined && now() - commandAt >= MS.pending) return;
-            tell(code);
-            if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; }
+            var at = oldest(code === 'bad'), refused = unanswered.splice(at < 0 ? 0 : at, 1)[0];
+            if (!refused) return;
+            tell(code); delete said[refused.text];
+            if (!refused.cmd && !field.value) field.value = refused.text;      // (a command is not put back: Enter would issue it again)
         }
         function allowed(text) {                                                // this page's own pace, below the hub's; a text that was sent in the last 31 s is not sent again (the hub remembers every one of them, not only the last)
             var t = now(), old;
@@ -363,8 +364,8 @@
             var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
-            if (!(you.mod && text.charAt(0) === '/')) { waiting(); unanswered.push({ text: text, key: nfc(text), at: now() }); }       // (a moderator's command has no answer: it has an err when it is wrong, for a few seconds)
-            else commandAt = now();
+            var cmd = you.mod && text.charAt(0) === '/';
+            waiting(); unanswered.push({ text: text, key: nfc(text), at: now(), cmd: cmd });       // (a command has no answer when the hub takes it, and `bad` when it is wrong)
             return '';
         }
         function setOpen(on) { open = !!on; if (seen()) stale = true; render(); }
