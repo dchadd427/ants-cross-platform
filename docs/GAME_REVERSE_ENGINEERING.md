@@ -1037,7 +1037,7 @@ When an ant perishes due to HP depletion (melee combat damage, bomb blast shockw
 
 ### 5.14 In-Game Typography: Label Fonts, the Wrap Algorithm and the Health Number (Capstone-Verified; Supersedes the Earlier 12 / 14 / 18 Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/renderer.hpp` (`FontSize`, `font_cell_height`), `src/ants_app/renderer.cpp` (font loading,
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/renderer.hpp` (`FontSize`, `font_cell_height`), `src/ants_app/renderer*.cpp` (font loading,
 `Renderer::ttf_point_size`, `draw_text`, `draw_fixed_text`), `include/ants_app/text_layout.hpp` / `src/ants_app/text_layout.cpp` (`wrap_label_text`, `draw_label`, `fit_text`) and the text sites of
 `hud.cpp`, `map_select.cpp`, `scorecard.cpp`. Checked by `tests/test_app/test_hud_layout_screens.cpp` (`test_text_sizes`, `test_label_wrap`) and `tests/test_app/test_render_parity.cpp` (`test_text_sizes`,
 `test_fixed_digits`). (The first version of this section listed three heights, 12 / 14 / 18, and the renderer did not even honour those: its three tiers were 9 / 11 / 13 px em, cell heights 11 / 13 / 15,
@@ -3040,7 +3040,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::render_
 
 ### 5.54 The Fog of War's Reveal and the Layer-2 Scan Margin (Capstone-Verified; Ported in v0.0.70)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::update_fog_of_war` (`src/ants_sim/sim_engine_impl.hpp`), `AntUnit::fog_tile_x / y`, `Renderer::render_terrain_layer2_structures` (`src/ants_app/renderer.cpp`). Checked by integration test 12.76b (and 12.76), `test_render_parity`.
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::update_fog_of_war` (`src/ants_sim/sim_engine_impl.hpp`), `AntUnit::fog_tile_x / y`, `Renderer::render_terrain_layer2_structures` (`src/ants_app/renderer_terrain.cpp`). Checked by integration test 12.76b (and 12.76), `test_render_parity`.
 
 * **The reveal** (`FUN_01006af4`, called only from an ant's position update `FUN_0101a93a` at 0x101a9f8): a 13 x 13 square (+-6 around the ant's **pixel tile**, clamped with signed words, sticky), and only for the ants of the viewer and of its teammate (`+0x68`) **at that moment**. There is **no reveal around a hill** (the remake revealed a 16 x 16 box around every own and allied hill each tick: +9 % to +43 % more explored ground at the start of every fog game) and **nothing is revealed when a team forms** (the remake's per-tick scan of the ally's ants revealed 210 to 531 cells at once; in the original an allied ant reveals when it next moves). The start ants of the viewer reveal at their creation.
 
@@ -3099,7 +3099,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::push_ch
 
 ### 5.57 The Layer-2 Pass Under Fog: Body Cells and the Live Food Footprint (Capstone-Verified; Ported in v0.0.73)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::render_terrain_layer2_structures`, `draw_object_from_body_cell`, `draw_static_object`, `food_stage_anim` (`src/ants_app/renderer.cpp`). Checked by `test_render_parity` (`test_fog_objects`: 54 fog patterns on the six maps against a model of the pass, `test_food_fog_footprint`).
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::render_terrain_layer2_structures`, `draw_object_from_body_cell`, `draw_static_object`, `food_stage_anim` (`src/ants_app/renderer_terrain.cpp`). Checked by `test_render_parity` (`test_fog_objects`: 54 fog patterns on the six maps against a model of the pass, `test_food_fog_footprint`).
 
 * **The pass** (`FUN_01008089`, mode 2, 0x10081cb - 0x100835e; the layer array is `W + 0xd8`, cells of 4 bytes: word 0 = `id << 1 | anchor bit`, byte 2 the anchor's row, byte 3 its column): one row-major pass (rows outer, columns inner) over the rows `top / 32 - 3` .. `bottom / 32 + 3` and the columns likewise (docs 5.54), for every cell:
 
@@ -3125,7 +3125,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEn
 
 ### 5.59 Every Clip Steps in Real Time: Walking, Idle, Swimming ... (Capstone-Verified; Ported in v0.0.75)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::predict_ant_clip`, `draw_single_ant`, `collect_ant_units`, `collect_selection_markers` (`src/ants_app/renderer.cpp`). Checked by `test_render_parity` (`test_subtick_locomotion`, `test_subtick_prediction`, `test_marker_and_digit_position`).
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::predict_ant_clip`, `draw_single_ant`, `collect_ant_units`, `collect_selection_markers` (`src/ants_app/renderer_units.cpp`). Checked by `test_render_parity` (`test_subtick_locomotion`, `test_subtick_prediction`, `test_marker_and_digit_position`).
 
 * **The original** moves a sprite along its clip with `timeGetTime()`: the animation step (`FUN_0102b997`) runs for every sprite on each scheduler pass and, for every frame whose end time has passed, applies the frame's displacement and moves on to the next frame (at the last frame the clip's step callback decides what comes next); the screen is redrawn by the REFRESH task (period 0: on every pass, 0x102c4d1). A frame or a step therefore shows up within one redraw of the moment it ends.
 
@@ -3139,7 +3139,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::pr
 
 ### 5.60 The Death Clips Are the Ant's Own; the Burn Overlay Is a View Child (Capstone-Verified; Ported in v0.0.76)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::set_action` (death), `Renderer::collect_ant_units`, `collect_burn_overlays`, `predict_ant_clip` (`src/ants_sim/movement_system.cpp`, `src/ants_app/renderer.cpp`). Checked by integration tests 12.52 and 12.117, `test_render_parity` (`test_dying_ant`, `test_burn_overlay_layer`, `test_frozen_ant`).
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::set_action` (death), `Renderer::collect_ant_units`, `collect_burn_overlays`, `predict_ant_clip` (`src/ants_sim/movement_system.cpp`, `src/ants_app/renderer_units.cpp`). Checked by integration tests 12.52 and 12.117, `test_render_parity` (`test_dying_ant`, `test_burn_overlay_layer`, `test_frozen_ant`).
 
 * **Death** (`SetAction(0xC)`, 0x101b3fd): `death1` .. `death4` (Table-4 animations 102 .. 105, variant `rand() % 4`) are clips of the **ant's own sprite**; no other sprite is made. The clip's frames hold no displacement (11 / 12 / 10 / 7 frames: 920 / 1000 / 980 / 600 ms); the first frame is booked twice when the clip starts inside a callback, so the ant lives 1020 / 1100 / 1080 / 660 ms until `FinishDeath` removes it (docs 5.35). Until then it is an ordinary ant of the display list: its hit-point number (Ctrl+L, "0") and its minimap dot stay, it is drawn and sorted like every ant. The remake started a `death1 .. death4` **effect** beside the ant's own clip and skipped the dying ant in the draw: the effect began about 20 ms after the clip and ended about 80 to 100 ms before the ant's removal (the audit's probe: clip at 1480 ms, effect 1500 - 2420 ms, nothing drawn 2420 - 2500 ms, removal at 2500 ms), and the ant's number and sort order were missing. The effect is gone; a dying ant is drawn through its loco clip with the sub-tick stepping of 5.59. The death sprites' names start with a digit, which exempts them from the team color shift.
 

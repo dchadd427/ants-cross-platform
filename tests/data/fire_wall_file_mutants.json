@@ -19,7 +19,7 @@
   },
   {
    "id": "runtime_pass_hides_fire",
-   "file": "src/ants_app/renderer.cpp",
+   "file": "src/ants_app/renderer_terrain.cpp",
    "old": "                if (explored(c, r)) draw_template_world(anim_id_fire_, wx, wy);\n",
    "new": "                if (explored(c, r) && cell.timer_ticks > 0) draw_template_world(anim_id_fire_, wx, wy);\n"
   },
