@@ -199,6 +199,7 @@ void run_contest_tests() {
                 LevelPlan p = plan;
                 p.skirmish = false;
                 p.hunt = false;
+                without_defence_batch(p);                                                                                            // (the subject is the older rule; the batch keeps such a fight up: AI35.5)
                 Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(p), 4, 4);
                 for (int t = 0; t < 300; ++t) {
                     keep_attacking(sim, 1, enemy, victim);

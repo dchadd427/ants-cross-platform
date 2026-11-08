@@ -217,7 +217,7 @@ if(NOT EMSCRIPTEN)
 
     # Bot watcher (not part of the normal build): plays matches like bot_arena and counts what the bots do badly, per seat and minute (docs/BOT_FIGHT.md)
     #   cmake --build build --target bot_watch && ./build/bot_watch --map TREASURE --seeds 1..4 --seat 0=standard:hard --seat 1=standard:medium --out watch.json
-    add_executable(bot_watch EXCLUDE_FROM_ALL tools/bot_watch.cpp tools/bot_arena_tune.cpp)
+    add_executable(bot_watch EXCLUDE_FROM_ALL tools/bot_watch.cpp tools/bot_watch_people.cpp tools/bot_arena_tune.cpp)
     target_link_libraries(bot_watch PRIVATE ants_ai ants_replay ants_net ants_sim ants_assets ants_test_paths Threads::Threads)
 
     # Replay tool (not part of the normal build): checks a replay file and lists its orders with their time, place and ant type (docs/REPLAYS.md)

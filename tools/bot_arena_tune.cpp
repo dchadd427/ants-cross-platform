@@ -221,6 +221,19 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         else p.opportunity = p.reach_fights = p.idle_hunt = p.chore_worth = true;
         return true;
     }
+    if (key == "defence") {                                                           // the defence batch of docs/BOT_PEOPLE.md, "Step 1: everyone hits back" (0: the bot as it was before it; 1: its three rules on, with the level's numbers)
+        if (v == 0) ai::without_defence_batch(p);
+        else p.defend_all_types = p.victim_answers = p.defend_by_strength = true;
+        return true;
+    }
+    if (key == "dall") return flag(p.defend_all_types);
+    if (key == "dvictim") return flag(p.victim_answers);
+    if (key == "dstr") return flag(p.defend_by_strength);
+    if (key == "dkeep") { p.defend_keep_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "dradius") { p.defend_radius = static_cast<int32_t>(v); return true; }
+    if (key == "dextra") { p.defend_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "dmax") { p.defend_max = static_cast<uint32_t>(v); return true; }
+    if (key == "dreach") { p.defend_reach = static_cast<int32_t>(v); return true; }
     if (key == "opp") return flag(p.opportunity);
     if (key == "oppreach") { p.opportunity_reach = static_cast<int32_t>(v); return true; }
     if (key == "oppjobs") { p.opportunity_jobs = static_cast<uint32_t>(v); return true; }

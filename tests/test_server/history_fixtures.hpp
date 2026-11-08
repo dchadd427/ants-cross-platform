@@ -232,7 +232,7 @@ struct MatchSpec {
         case 4:
         case 5:
             spec.map = "TREASURE";
-            spec.seed = k == 4 ? 60u : 6u;                               // (5: a seat that runs out of ants; with the bots' order of the contested food, 31 and 23 lost their premises, and with the quick kill 57 and 4 did)
+            spec.seed = k == 4 ? 10u : 11u;                              // (5: a seat that runs out of ants, 4: none does, and bombs are laid and thieves raid; with the bots' order of the contested food, 31 and 23 lost their premises, with the quick kill 57 and 4 did, with the answer of every ant that can strike 60 and 6 did, and with that answer kept up from 60 percent of the enemy's strength 6, 8, 11, 13, 15, 18, 19 and 20 did)
             spec.turns = 7000;
             spec.names = {"Bot (Hard)", "Bot (Hard)", "Bot (Hard)", "Bot (Hard)"};
             break;

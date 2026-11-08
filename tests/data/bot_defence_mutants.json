@@ -1,0 +1,236 @@
+{
+ "note": "Mutants of the defence batch (include/ants_ai/defence.hpp, src/ants_ai/defence.cpp, docs/BOT_PEOPLE.md 'Step 1: everyone hits back') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_defence_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI35 and the required AI34.1 and AI34.4).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 sh -c \"for f in 'AI35.' 'AI34.1 ' 'AI34.4 '; do ANTS_TEST_FILTER=\\\"\\$f\\\" ./build/tests/test_ai/test_ai || exit 1; done\""
+ },
+ "mutants": [
+  {
+   "id": "wall_keeper_may_defend",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    if (tactics.wall_demand && ant.id == tactics.wall_keeper) return false;\n",
+   "new": "    if (false && tactics.wall_demand && ant.id == tactics.wall_keeper) return false;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "raid_task_thief_may_defend",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "(owner == StandardBot::kRaids && near_raid_tile(view, map, ant.tile))",
+   "new": "(false && near_raid_tile(view, map, ant.tile))",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "island_crew_may_defend",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    if (owner == StandardBot::kIslands || owner == StandardBot::kExpedition) return false;\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "another_fights_ants_may_defend",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    return owner == kNoTask || ledger.rank(owner) < ledger.rank(StandardBot::kFight);",
+   "new": "    return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "hurt_ant_threshold_three",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "constexpr uint8_t kMinDefendHp = 4;",
+   "new": "constexpr uint8_t kMinDefendHp = 3;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "carrier_may_defend",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    if (ant.holding || ant.carried_points > 0 || ant.hp < kMinDefendHp ||",
+   "new": "    if (ant.hp < kMinDefendHp ||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "power_up_ant_may_defend",
+   "file": "src/ants_ai/defence.cpp",
+   "old": " || view.powerup_at(ant.tile) != nullptr) return false;\n    if (tactics.wall_demand",
+   "new": ") return false;\n    if (tactics.wall_demand",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "stunned_ant_may_defend",
+   "file": "src/ants_ai/defence.cpp",
+   "old": " && !in_hit_clip) || ant.state == sim::UnitState::Stunned) return false;",
+   "new": " && !in_hit_clip)) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "struck_ant_in_clip_refused",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    const bool in_hit_clip = struck && (ant.state == sim::UnitState::Flinch || ant.state == sim::UnitState::Knockback);",
+   "new": "    const bool in_hit_clip = false && struck && (ant.state == sim::UnitState::Flinch || ant.state == sim::UnitState::Knockback);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.2"
+  },
+  {
+   "id": "struck_ants_not_added",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    if (plan.victim_answers) {",
+   "new": "    if (false) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.3"
+  },
+  {
+   "id": "no_extra_defender",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "enemies + plan.defend_extra",
+   "new": "enemies",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.4"
+  },
+  {
+   "id": "defenders_not_capped",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    return std::min<size_t>(plan.defend_max, std::max<size_t>(level, enemies + plan.defend_extra));",
+   "new": "    return std::max<size_t>(level, enemies + plan.defend_extra);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.4"
+  },
+  {
+   "id": "keep_comparison_flipped",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "return own.value() * 100u >= enemy.value() * plan.defend_keep_percent &&",
+   "new": "return own.value() * 100u < enemy.value() * plan.defend_keep_percent &&",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.5"
+  },
+  {
+   "id": "force_never_weighed",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    if (plan.defend_by_strength) {\n        Strength own;",
+   "new": "    if (false) {\n        Strength own;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.5"
+  },
+  {
+   "id": "job_ants_come_first",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "            if (busy(*x) != busy(*y)) return busy(*y);",
+   "new": "            if (busy(*x) != busy(*y)) return busy(*x);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.1"
+  },
+  {
+   "id": "reach_ignored",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "            if (listed(a) || !fit(a, false) || a.tile.chebyshev_dist(target.tile) > reach) continue;",
+   "new": "            if (listed(a) || !fit(a, false) || a.tile.chebyshev_dist(target.tile) > static_cast<int64_t>(reach) + 1000) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.1"
+  },
+  {
+   "id": "every_type_needs_the_old_rule",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "        if (plan.defend_all_types) return can_defend(v, a, tactics_, c.ledger, c.map, struck);",
+   "new": "        if (false) return can_defend(v, a, tactics_, c.ledger, c.map, struck);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.4"
+  },
+  {
+   "id": "numbers_apply_without_the_flag",
+   "file": "src/ants_ai/standard_tasks.cpp",
+   "old": "    const bool by_strength = defence && plan.defend_by_strength && target != nullptr;",
+   "new": "    const bool by_strength = defence && target != nullptr;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.6"
+  },
+  {
+   "id": "keep_since_blow_dropped",
+   "file": "src/ants_ai/defence.cpp",
+   "old": " && since_blow <= static_cast<uint64_t>(plan.fight_linger_ticks) * kLingerFactor;",
+   "new": " && (true || since_blow <= static_cast<uint64_t>(plan.fight_linger_ticks) * kLingerFactor);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "linger_factor_one",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "constexpr uint64_t kLingerFactor = 5;",
+   "new": "constexpr uint64_t kLingerFactor = 1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "walk_reach_dropped",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if ((plan.reach_fights && !walk_reaches(c.map, c.seat, a.tile, target.tile))",
+   "new": "if ((false && !walk_reaches(c.map, c.seat, a.tile, target.tile))",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "carrier_enemy_counts",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (e.id == exclude || e.holding || e.tile.chebyshev_dist(centre) > radius) continue;",
+   "new": "if (e.id == exclude || e.tile.chebyshev_dist(centre) > radius) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "guard_stance_ignored",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "const size_t level = plan.defenders + (guard_stance ? 1u : 0u);",
+   "new": "const size_t level = plan.defenders + (guard_stance && false ? 1u : 0u);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "victim_ignores_room",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (a != nullptr && room() && !listed(*a) && fit(*a, true)) join.push_back(a);",
+   "new": "if (a != nullptr && !listed(*a) && fit(*a, true)) join.push_back(a);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "frame_cap_wanted_only",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "static_cast<uint32_t>(out.wanted) + 2u",
+   "new": "static_cast<uint32_t>(out.wanted)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "victims_never_cleared",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    f.victims.clear();\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "own_hill_raid_tile_counts",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (team != view.seat() && team != view.ally() && hill.present",
+   "new": "if (team != view.ally() && hill.present",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  },
+  {
+   "id": "ally_raid_tile_counts",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (team != view.seat() && team != view.ally() && hill.present",
+   "new": "if (team != view.seat() && hill.present",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI35.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI35.7"
+  }
+ ]
+}
