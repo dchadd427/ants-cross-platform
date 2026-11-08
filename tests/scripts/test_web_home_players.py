@@ -166,13 +166,17 @@ class TheStyle(unittest.TestCase):
 
     def test_the_games_list_that_the_live_site_docks_in_the_yard_keeps_clear_of_the_panel_under_1280_px_and_is_centered_from_there(self):
         rules = re.sub(r"/\*.*?\*/", "", self.games, flags=re.S)
-        left, right, cap, taken = (int(g) for g in re.search(r"\.gdock \{ position: absolute; z-index: \d+; top: 12px; left: (\d+)px; right: (\d+)px; width: min\((\d+)px, calc\(100% - (\d+)px\)\);", rules).groups())
-        gap, width = 16, 260
-        self.assertIn("@media (min-width: 1180px) and (max-width: 1279px) and (min-height: 501px) { .pl-on .gdock { right: %dpx; width: min(%dpx, calc(100%% - %dpx)); } }" % (right + width + gap, cap, left + right + width + gap), self.css,
-                      "from 1180 to 1279 px the list ends %d px before the panel (%d px wide, %d px from the Yard's edge)" % (gap, width, right))
-        panel = re.search(r"\.pl \{ position: absolute; z-index: 6; display: flex; top: 14px; right: 14px; width: 260px;", self.css)
+        left, cap = (int(g) for g in re.search(r"\.gdock \{ position: absolute; z-index: \d+; top: 12px; left: (\d+)px; right: \d+px; width: min\((\d+)px, calc\(100% - \d+px\)\);", rules).groups())
+        panel = re.search(r"\.pl \{ position: absolute; z-index: 6; display: flex; top: 14px; right: (\d+)px; width: (\d+)px;", self.css)
         self.assertIsNotNone(panel)
-        self.assertEqual(right, 12, "the panel's 14 px from the edge and the list's 12 are why the gap is 16 and not 14: the panel's frame is 5 px, the list's 5")
+        edge, width = (int(g) for g in panel.groups())
+        moved = re.search(r"@media \(min-width: 1180px\) and \(max-width: 1279px\) and \(min-height: 501px\) \{ \.pl-on \.gdock \{ right: (\d+)px; width: min\(%dpx, calc\(100%% - (\d+)px\)\); \} \}" % cap, self.css)
+        self.assertIsNotNone(moved, "from 1180 to 1279 px the list moves left and is narrower")
+        right, taken = int(moved.group(1)), int(moved.group(2))
+        gap = right - edge - width        # (both are measured from the Yard's right edge: the panel's left edge is `edge + width` from it, the list's right edge is `right` from it)
+        self.assertGreater(gap, 0)
+        self.assertEqual(taken, left + right, "the list's width is what is left between its own left edge and its new right edge")
+        self.assertIn("ends %d px before it up to 1279 px wide" % gap, read("docs", "HOME_SCREEN.md"), "the document says the gap that these rules make (measured in a browser at every width from 1180 to 1279 px)")
         # from 1280 px the list's own rule holds (it is centered in the window and ends well before the panel): nothing here says where it is, whatever the window
         css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
         placed = [(query.strip(), body) for query, body in re.findall(r"@media ([^{]+)\{((?:[^{}]|\{[^{}]*\})*)\}", css) if re.search(r"\.pl-on \.gdock \{[^}]*\bwidth:", body)]
@@ -283,7 +287,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     copy with nothing changed must pass"""
     FILES = (["web/lobby.html", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
               "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
-              "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
+              "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
 
     @classmethod

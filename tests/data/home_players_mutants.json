@@ -731,6 +731,27 @@
    "old": "@media (max-width: 440px) { .pl-on .hbar .pl-bar { padding: 6px 10px; } }",
    "new": "@media (max-width: 440px) { .pl-bar { padding: 6px 10px; } }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_document_says_another_gap_than_the_rules_make",
+   "file": "docs/HOME_SCREEN.md",
+   "old": "ends 14 px before it up to 1279 px wide",
+   "new": "ends 16 px before it up to 1279 px wide",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_games_list_is_two_pixels_too_far_from_the_panel",
+   "file": "web/home/players.css",
+   "old": ".pl-on .gdock { right: 288px; width: min(560px, calc(100% - 716px)); } }      /* (from 1280",
+   "new": ".pl-on .gdock { right: 290px; width: min(560px, calc(100% - 718px)); } }      /* (from 1280",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_panel_is_two_pixels_nearer_to_the_edge",
+   "file": "web/home/players.css",
+   "old": ".pl { position: absolute; z-index: 6; display: flex; top: 14px; right: 14px; width: 260px;",
+   "new": ".pl { position: absolute; z-index: 6; display: flex; top: 14px; right: 12px; width: 260px;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }
