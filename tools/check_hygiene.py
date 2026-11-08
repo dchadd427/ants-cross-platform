@@ -3,7 +3,7 @@
 
 usage: check_hygiene.py [--root DIR] [--list]
 
-Exit 0 when everything is in order, 1 when there are findings (one line each), 2 for a usage error. --list prints the current numbers that the ratchet tables below pin.
+Exit 0 when everything is in order, 1 when there are findings (one line each), 2 for a usage error; a warning (see the end of this text) never changes the exit status. --list prints the current numbers that the ratchet tables below pin.
 Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --tools and by CI). The checks:
   1. a document (docs/**/*.md, root *.md) is at most DOC_LIMIT bytes, except the pages of DOC_CEILINGS (ceilings that may only shrink);
   2. every docs/*.md and docs/<folder>/README.md is reachable from README.md by relative markdown links (a link to a folder reaches its README.md);
@@ -14,6 +14,11 @@ Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --too
   7. no tracked path begins with a build folder (build/ or build_*/ at the top: local build output that .gitignore keeps out; it gets in by `git add -f` or a tool that adds everything).
   8. American spelling (AGENTS.md "Spelling"): no tracked text file writes the British spelling of "color" (SPELLING_*: the kept names are allowed by file; the word is built from two halves below, so that this file does not name it);
 Ratchets: a number may never grow. When a page or file shrinks by more than the tolerance, the table must be lowered, so that the gain is kept.
+A checkout of the game alone does not have the paths that tools/server_paths.txt lists (the game server, the site's services and their tests; a tree without that list names none). Where a listed
+file is not there:
+  - an entry of DOC_CEILINGS, LINE_CEILINGS or SPELLING_KEPT that names it is skipped (an entry for a file that is neither there nor listed is a finding, as always);
+  - a markdown link in a document to it leaves the checkout: a warning line `FILE:LINE: warning: ...`, printed after the findings, one for each path that a line links. (A link to a listed
+    file that is there is followed like any other.)
 """
 import argparse
 import hashlib
@@ -21,6 +26,9 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import server_paths  # noqa: E402  (the same folder)
 
 DOC_LIMIT = 100 * 1024
 DOC_SLACK = 0.05  # a page more than 5% below its ceiling: lower the ceiling
@@ -97,8 +105,18 @@ def is_doc(rel):
     return rel.endswith(".md") and (rel.startswith("docs/") or "/" not in rel)
 
 
-def check_doc_sizes(root, files, limit=DOC_LIMIT, ceilings=None, slack=DOC_SLACK):
+def server_matcher(root):
+    """A function that says whether a path (from the root, with /) is one that the list of the tree at ROOT, tools/server_paths.txt, names: the paths of the game server, the site's services and
+    their tests. A tree that has no list names none."""
+    try:
+        return server_paths.matcher(server_paths.load(root))
+    except FileNotFoundError:
+        return lambda rel: False
+
+
+def check_doc_sizes(root, files, limit=DOC_LIMIT, ceilings=None, slack=DOC_SLACK, server=None):
     ceilings = DOC_CEILINGS if ceilings is None else ceilings
+    server = server_matcher(root) if server is None else server
     out = []
     for rel in files:
         if not is_doc(rel):
@@ -114,7 +132,7 @@ def check_doc_sizes(root, files, limit=DOC_LIMIT, ceilings=None, slack=DOC_SLACK
         elif size > limit:
             out.append("%s: %d bytes is above the document limit %d (split it)" % (rel, size, limit))
     for rel in ceilings:
-        if rel not in files:
+        if rel not in files and not server(rel):
             out.append("%s: in the ceiling table but not a tracked file: remove it from the table" % rel)
     return out
 
@@ -123,23 +141,52 @@ LINK = re.compile(r"\]\(\s*<?([^)\s>]+)")
 REFDEF = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s|$)", re.M)
 
 
-def links_of(root, rel, filesset):
+def link_paths(root, rel):
+    """The relative markdown links of the page REL as sorted (line, path) pairs, each once: the path is written from the root, with / (a link to a web address, to a heading of the page or to
+    nothing is not one, and nor is a link in fenced code, whose lines still count)."""
     text = read_bytes(root, rel).decode("utf-8", "replace")
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
+    text = re.sub(r"```.*?```", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
     here = os.path.dirname(rel)
     found = set()
-    for target in LINK.findall(text) + REFDEF.findall(text):
+    for m in list(LINK.finditer(text)) + list(REFDEF.finditer(text)):
+        target = m.group(1)
         if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
             continue
         target = target.split("#")[0].split("?")[0]
         if not target:
             continue
-        path = os.path.normpath(os.path.join(here, target)).replace(os.sep, "/")
+        found.add((text.count("\n", 0, m.start(1)) + 1, os.path.normpath(os.path.join(here, target)).replace(os.sep, "/")))
+    return sorted(found)
+
+
+def links_of(root, rel, filesset):
+    found = set()
+    for _, path in link_paths(root, rel):
         if path in filesset:
             found.add(path)
         elif path + "/README.md" in filesset:
             found.add(path + "/README.md")
     return found
+
+
+def warn_links_out(root, files, server):
+    """The warnings (they never fail the check): one for each link, in a document, to a path that tools/server_paths.txt lists and this tree does not have (a file, or a folder with no tracked
+    file). Such a link leaves the checkout; where the file is there, check_reachable follows the link like any other."""
+    filesset = set(files)
+    folders = set()
+    for rel in files:
+        folder = os.path.dirname(rel)
+        while folder and folder not in folders:
+            folders.add(folder)
+            folder = os.path.dirname(folder)
+    out = []
+    for rel in files:
+        if not is_doc(rel):
+            continue
+        for line, path in link_paths(root, rel):
+            if path not in filesset and path not in folders and (server(path) or server(path + "/")):
+                out.append("%s:%d: warning: the link to %s leaves the checkout (tools/server_paths.txt lists it, and this tree does not have it)" % (rel, line, path))
+    return out
 
 
 def check_reachable(root, files, start="README.md"):
@@ -240,8 +287,9 @@ def kind_of(rel):
     return None, None
 
 
-def check_lines(root, files, ceilings=None, slack=LINE_SLACK):
+def check_lines(root, files, ceilings=None, slack=LINE_SLACK, server=None):
     ceilings = LINE_CEILINGS if ceilings is None else ceilings
+    server = server_matcher(root) if server is None else server
     out = []
     for rel in files:
         kind, limit = kind_of(rel)
@@ -258,7 +306,7 @@ def check_lines(root, files, ceilings=None, slack=LINE_SLACK):
         elif n > limit:
             out.append("%s: %d lines is above the %s limit %d (split it)" % (rel, n, kind, limit))
     for rel in ceilings:
-        if rel not in files:
+        if rel not in files and not server(rel):
             out.append("%s: in the line ceiling table but not a tracked file: remove it from the table" % rel)
     return out
 
@@ -335,13 +383,15 @@ SPELLING_KEPT = {              # file -> patterns that may keep the British word
 }
 
 
-def check_spelling_table(root, files, kept=None):
+def check_spelling_table(root, files, kept=None, server=None):
     """A kept pattern that no line of its file uses is a finding: the table stays as short as the older spelling's remaining places."""
     kept = SPELLING_KEPT if kept is None else kept
+    server = server_matcher(root) if server is None else server
     out = []
     for rel, patterns in sorted(kept.items()):
         if rel not in files:
-            out.append("%s: in the spelling table but not tracked (remove it from the table)" % rel)
+            if not server(rel):
+                out.append("%s: in the spelling table but not tracked (remove it from the table)" % rel)
             continue
         lines = read_bytes(root, rel).decode("utf-8", "replace").splitlines()
         for pat in patterns:
@@ -370,9 +420,14 @@ def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
 
 def run_checks(root):
     files = tracked_files(root)
-    return (check_doc_sizes(root, files) + check_reachable(root, files) + check_forbidden(root, files)
-            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files) + check_spelling(root, files)
-            + check_spelling_table(root, files))
+    server = server_matcher(root)
+    return (check_doc_sizes(root, files, server=server) + check_reachable(root, files) + check_forbidden(root, files)
+            + check_lines(root, files, server=server) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files) + check_spelling(root, files)
+            + check_spelling_table(root, files, server=server))
+
+
+def run_warnings(root):
+    return warn_links_out(root, tracked_files(root), server_matcher(root))
 
 
 def list_numbers(root):
@@ -409,8 +464,8 @@ def main(argv):
         print("\n".join(list_numbers(root)))
         return 0
     findings = run_checks(root)
-    for f in findings:
-        print(f)
+    for line in findings + run_warnings(root):
+        print(line)
     return 1 if findings else 0
 
 

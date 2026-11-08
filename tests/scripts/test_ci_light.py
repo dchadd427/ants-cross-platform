@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -26,6 +27,16 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 SCRIPT = os.path.join(REPO, "tools", "ci_light.sh")
 GIT_ENV = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.org", GIT_COMMITTER_NAME="t",
                GIT_COMMITTER_EMAIL="t@example.org")
+sys.path.insert(0, os.path.join(REPO, "tools"))
+import server_paths  # noqa: E402
+
+IS_SERVER = server_paths.matcher(server_paths.load(REPO))      # (the paths of the game server, the site's services and their tests: tools/server_paths.txt)
+
+
+def absent_server_file(rel, root=REPO, server=IS_SERVER):
+    """True for a file that tools/server_paths.txt names and the checkout at ROOT does not have (a checkout of the game alone has none of them). Any other file that is not there is still an error."""
+    return server(rel) and not os.path.exists(os.path.join(root, *rel.split("/")))
+
 
 LIGHT = ["web/index.js", "web/front/x.css", "web/a/b/c/d.html", "docs/WORKFLOW.md", "docs/legacy/x.c", "docs/img/p.png", "CHANGELOG.md", "README.md", "tests/data/home_chat_mutants.json",
          "tests/data/x_mutants.json", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_web_aspect.sh", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_routes_check.py",
@@ -421,19 +432,26 @@ class TheSkippedJobsReadNoLightFile(unittest.TestCase):
     """A light pull request skips the macOS job and the Windows jobs. What these build and run: the game, the server and the test programs, ctest (all of it, on all three systems), the tool
     self-tests, the E2E runner and, on macOS, the two script suites (tests/scripts/test_start_game.sh, test_ants_server.sh with the node checks it runs). The files of the light kinds that any of
     these reads are full in tools/ci_light.sh (NATIVE_READS at the top says which, and by whom); these tests find the reads in the sources, so that a test that starts to read another page fails
-    here until the file is in that list. (The python tests that macOS runs read pages and documents too, as its document, version and spec checks do; Linux runs the same ones.)"""
+    here until the file is in that list. (The python tests that macOS runs read pages and documents too, as its document, version and spec checks do; Linux runs the same ones.)
+    A checkout of the game alone does not have some of the readers (paths of tools/server_paths.txt): a reader or a listed file that is one of those and is not there is left out of the
+    comparisons below, and what the readers that are there read must still be listed."""
 
     def test_the_c_plus_plus_of_ctest_the_tools_and_the_e2e_runner_read_these_pages_and_no_others(self):
         found = cpp_reads()
-        self.assertEqual(sorted(found), sorted(CPP_READS), "a C++ source names a file of web/ or docs/ (or the like) that is not listed: make the file full in is_light of tools/ci_light.sh, "
+        here = [key for key in CPP_READS if not absent_server_file(key[0])]
+        self.assertEqual(sorted(found), sorted(here), "a C++ source names a file of web/ or docs/ (or the like) that is not listed: make the file full in is_light of tools/ci_light.sh, "
                          "add it to NATIVE_READS and CPP_READS in this test, and say so in docs/WORKFLOW.md")
         for (source, _), representative in CPP_READS.items():
             self.assertIn(representative, NATIVE_READS, source)
 
     def test_the_shell_suites_the_node_checks_and_the_page_harness_read_these_files_and_no_others(self):
         found = set()
+        missing = []                                                 # (the readers that this checkout does not have)
         shell = re.compile(r'(?:\$ROOT|\$\{ROOT\})/((?:web|docs)/[A-Za-z0-9_./*-]+|CHANGELOG\.md|README\.md|tests/data/[a-z_]+_mutants\.json|tests/scripts/(?:test_web_|web_)[A-Za-z0-9_.]+)')
         for name in ("test_ants_server.sh", "test_start_game.sh", "e2e_deadlines.sh"):
+            if absent_server_file("tests/scripts/" + name):
+                missing.append(name)
+                continue
             with open(os.path.join(HERE, name), encoding="utf-8") as f:
                 for line in f:
                     if not line.lstrip().startswith("#"):
@@ -444,12 +462,21 @@ class TheSkippedJobsReadNoLightFile(unittest.TestCase):
         found |= {"web/" + n for n in re.findall(r"loadFile\('((?:home|front)/[a-z_]+\.js)'", harness)}
         found |= {"web/" + n for n in re.findall(r"'(home/[a-z_]+\.js)'", harness)}
         for name in ("web_lobby_server_check.js", "web_lobby_handoff_check.js", "web_fill_check.js"):         # (the node checks that the script suite runs, and what they load)
+            if absent_server_file("tests/scripts/" + name):
+                missing.append(name)
+                continue
             with open(os.path.join(HERE, name), encoding="utf-8") as f:
                 text = f.read()
             found |= {"web/" + n for n in re.findall(r"path\.join\(webDir, '([^']+)'\)", text)}
             found |= {"tests/scripts/" + n for n in re.findall(r"require\('\./(web_[a-z_]+\.js)'\)", text)}
-        self.assertEqual(sorted(found), sorted(k for k in NATIVE_READS if not k.startswith("web/front/preview_")),
-                         "a script of the macOS job (or the page harness that it runs) reads a file of a light kind that is not listed, or a listed one is not read any more: tools/ci_light.sh, NATIVE_READS here")
+        listed = sorted(k for k in NATIVE_READS if not k.startswith("web/front/preview_"))
+        said = ("a script of the macOS job (or the page harness that it runs) reads a file of a light kind that is not listed, or a listed one is not read any more: tools/ci_light.sh, "
+                "NATIVE_READS here")
+        if missing:       # (a checkout without some of the readers: a file that only those load cannot be told from one that nobody loads, so what the others read must be listed, and no more is asked)
+            self.assertTrue(found, "the readers that this checkout has find no page of a light kind (missing: %s)" % ", ".join(missing))
+            self.assertEqual(sorted(found - set(listed)), [], said)
+        else:
+            self.assertEqual(sorted(found), listed, said)
 
     def test_every_listed_file_is_of_a_light_kind_and_says_who_reads_it(self):
         self.assertGreater(len(NATIVE_READS), 15)
@@ -457,7 +484,23 @@ class TheSkippedJobsReadNoLightFile(unittest.TestCase):
             self.assertTrue(LIGHT_KIND.match(path), "%s is not of a light kind: it needs no entry" % path)
             self.assertTrue(readers)
         for path in NATIVE_READS:                                    # (the decision itself is tried on each of them in Decision)
-            self.assertTrue(os.path.exists(os.path.join(REPO, path)), "%s is listed and not in the repository any more" % path)
+            if not absent_server_file(path):
+                self.assertTrue(os.path.exists(os.path.join(REPO, path)), "%s is listed and not in the repository any more" % path)
+
+
+class TheAbsentServerFiles(unittest.TestCase):
+    """What a checkout of the game alone may lack: a file that tools/server_paths.txt names. Any other file that is not there is an error in the tests above."""
+
+    def test_only_a_listed_file_that_is_not_there_is_absent_in_this_sense(self):
+        server = server_paths.matcher(["src/ants_server/", "tests/scripts/test_hub_*", "docs/SERVER.md"])
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "tests", "scripts"))
+            with open(os.path.join(root, "tests", "scripts", "test_hub_here.py"), "w", encoding="utf-8") as f:
+                f.write("x = 1\n")
+            for rel in ("src/ants_server/room.cpp", "tests/scripts/test_hub_gone.py", "docs/SERVER.md"):
+                self.assertTrue(absent_server_file(rel, root, server), rel)
+            for rel in ("tests/scripts/test_hub_here.py", "web/lobby.html", "tests/scripts/test_web_gone.py", "src/ants_net/gone.cpp"):     # (there; or not named by the list)
+                self.assertFalse(absent_server_file(rel, root, server), rel)
 
 
 class TheRulesAreWritten(unittest.TestCase):
