@@ -27,7 +27,8 @@
         title: 'Global chat', short: 'Chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', crowded: 'No room to open it: close a notice',  mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
-        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.'
+        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
+        shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my '
     };
     var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
@@ -73,10 +74,11 @@
         return m && typeof m === 'object' && typeof m.t === 'string' ? m : null;
     }
     function count(n) { return typeof n === 'number' && n >= 0 && n <= LIMIT.count && n === Math.floor(n) ? n : null; }
-    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod }, or null when it is not a line
+    function nameOf(s) { return typeof s === 'string' ? clip(plain(s.slice(0, LIMIT.name * 4), true), LIMIT.name) : ''; }       // (a name of the hub, or its key of an account)
+    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, k (its author's key), u (its author's username: moderators only) }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line);
-        return shows(text) ? { id: m.id, who: clip(plain(m.who.slice(0, LIMIT.name * 4), true), LIMIT.name) || '?', text: text, mod: m.mod === true } : null;
+        return shows(text) ? { id: m.id, who: nameOf(m.who) || '?', text: text, mod: m.mod === true, k: nameOf(m.k), u: nameOf(m.u) } : null;
     }
     function wordOf(code, login) {                                       // the words of an err code; "log in" is asked only where the hub has a login
         if (code === 'login' && !login) return ERR.readonly;
@@ -143,10 +145,10 @@
         var guest = el('p', 'gc-guest', TEXT.guest); guest.hidden = true;
         // the login chip's place: who the visitor is (the hub's welcome says), Log out, and a small menu with Forget me
         var slot = el('div', 'gc-slot'); slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;
-        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'gc-link', TEXT.logout), moreBtn = el('button', 'gc-link gc-more', '…'), menu = el('div', 'gc-menu'), forgetBtn = el('button', 'btn gc-forget', TEXT.forget);
-        outBtn.type = 'button'; moreBtn.type = 'button'; forgetBtn.type = 'button';
+        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'gc-link', TEXT.logout), moreBtn = el('button', 'gc-link gc-more', '…'), menu = el('div', 'gc-menu'), forgetBtn = el('button', 'btn gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
+        outBtn.type = 'button'; moreBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
         moreBtn.setAttribute('aria-label', TEXT.menu); moreBtn.setAttribute('aria-expanded', 'false'); moreBtn.setAttribute('aria-controls', 'gchat-menu');
-        menu.id = 'gchat-menu'; menu.hidden = true; put(menu, [el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
+        menu.id = 'gchat-menu'; menu.hidden = true; put(menu, [pickNote, pickBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName, outBtn, moreBtn]);
         put(slot, [acct, menu]);
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
@@ -171,9 +173,12 @@
         function row(e) {
             var r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (e.own ? ' gc-me' : ''));
             if (e.mod) r.appendChild(el('span', 'gc-badge', TEXT.mod + ' '));
-            put(r, [el('bdi', 'gc-who', e.who), el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
+            put(r, [el('bdi', 'gc-who', e.who)]);
+            if (e.u) r.appendChild(el('bdi', 'gc-u', e.u));
+            put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
             return r;
         }
+        function mine(e) { return !!you && (you.k ? e.k === you.k : e.who === you.name); }       // (by the hub's key; a hub that sends none: by the name)
         function atBottom() { var h = log.scrollHeight; return typeof h !== 'number' || h - log.scrollTop - log.clientHeight < 48; }
         function settle(force) {                                                 // one scroll to the newest line for a whole burst, and only when the reader was at the bottom (a log that is made again is read from the bottom)
             if (!stickTimer) {
@@ -224,6 +229,8 @@
             note.textContent = notice || (state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');
             slot.hidden = !(live && you && login); acctName.textContent = you ? you.name : '';
             outBtn.disabled = forgetBtn.disabled = busy;
+            pickNote.hidden = pickBtn.hidden = !(you && you.other);
+            if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
             moreBtn.setAttribute('aria-expanded', menuOn && you ? 'true' : 'false'); menu.hidden = !(menuOn && you && login);
             if (chip) {                                                         // (the bar: Log in where a login is offered, the visitor's name where they are named; nothing while the hub is not there)
                 chip.hidden = !(live && login);
@@ -293,15 +300,15 @@
         function onWelcome(m) {
             if (welcomed) return;                                                // (one welcome for each socket)
             if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }       // (a hub that speaks another version is no hub for this page)
-            var name = m.you && typeof m.you === 'object' && typeof m.you.name === 'string' ? clip(plain(m.you.name.slice(0, LIMIT.name * 4), true), LIMIT.name) : '';
-            you = name ? { name: name, mod: m.you.mod === true } : null;
+            var y = m.you && typeof m.you === 'object' ? m.you : {}, name = nameOf(y.name);
+            you = name ? { name: name, mod: y.mod === true, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '' } : null;
             login = m.login === true; people = count(m.online);
             var before = lastId;
             feed.length = 0;
             (m.history || []).slice(-LIMIT.history).forEach(function (raw) {
                 var e = lineOf(raw);
                 if (!e || known(e.id)) return;
-                e.own = !!you && e.who === you.name;
+                e.own = mine(e);
                 e.fresh = ever && e.id > before && !e.own && !seen();             // (the first welcome is the past; after a lost link, the lines that came meanwhile are news)
                 push(e);
             });
@@ -313,7 +320,7 @@
         function onLine(m) {
             var e = lineOf(m);
             if (!e || known(e.id)) return;
-            e.own = !!you && e.who === you.name; e.fresh = !e.own && !seen();
+            e.own = mine(e); e.fresh = !e.own && !seen();
             if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
@@ -339,6 +346,7 @@
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
             else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) refuse(m.code);
+            else if (m.t === 'err' && m.code === 'pick') tell('failed');
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -387,7 +395,9 @@
             var done = guard(function (ok) { busy = false; if (ok) relink(); else { tell('failed'); } render(); });
             try { f.call(win, path, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }).then(function (r) { done(!!r && r.ok === true); }, function () { done(false); }); } catch (e) { done(false); }
         }
+        function out(obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false; try { sock.send(JSON.stringify(obj)); return true; } catch (e) { lost(); return false; } }
         enter.addEventListener('click', guard(startLogin));
+        pickBtn.addEventListener('click', guard(function () { if (you && you.other && !out({ t: 'pick', pick: you.pick === 'display' ? 'username' : 'display' })) tell('failed'); }));       // (the hub closes the account's sockets; the page connects again and reads the new name)
         outBtn.addEventListener('click', guard(function () { leave(LOGOUT); }));
         forgetBtn.addEventListener('click', guard(function () { leave(FORGET); }));
         moreBtn.addEventListener('click', guard(function () { setMenu(!menuOn); }));
@@ -420,7 +430,7 @@
         return {
             root: box, slot: slot, field: field, say: sendLine, state: function () { return state; },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
-            send: function (obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false; try { sock.send(JSON.stringify(obj)); return true; } catch (e) { lost(); return false; } },
+            send: out,
             shown: guard(function (on) { isHome = !!on; fit(); if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
         };
     }

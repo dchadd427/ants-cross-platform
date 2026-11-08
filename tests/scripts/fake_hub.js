@@ -2,13 +2,16 @@
 // at /hub/ws: down welcome (you, login, online, history), line, del, online, err; up say and ping; and it keeps the hub's own pace for a writer (a burst of 3, then one line every 2 seconds, the same text twice
 // within 30 seconds refused), so that a page that sends faster than it would is seen. It is also the hub's bad days on demand: a socket that says nothing, frames that are not JSON, a frame of megabytes, a
 // welcome that comes in pieces, an upgrade answered 503 with the JSON of a missing hub (what nginx says) or 404 (a site that has no such door), a socket that is cut. Plain node, no packages.
+// The two names (docs/HUB.md "Names"): a `you` with `k` (the key of the account), `pick` ("display" or "username") and `other` (the name that is not shown) is an account that can choose; its lines carry its key,
+// and a {"t":"pick","pick":...} is answered as the real hub does: the names change places, every socket is closed (1000) and the next welcome says who the account is now; where the account cannot choose it is
+// {"t":"err","code":"pick"}. `line(id, who, text, mod, extra)` takes more fields (k, u).
 //   const hub = await startHub({ you: { name: 'maple.leaf', mod: false }, login: true, history: [line(1, 'pebble', 'hello')] });  hub.url; hub.say('pebble', 'hi'); hub.drop(); await hub.close();
 'use strict';
 const http = require('http');
 const crypto = require('crypto');
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-const line = (id, who, text, mod) => ({ id, at: 1700000000 + id, who, text, mod: !!mod });
+const line = (id, who, text, mod, extra) => Object.assign({ id, at: 1700000000 + id, who, text, mod: !!mod }, extra);
 
 function frame(opcode, payload) {                       // a server's frame: whole, not masked
     const n = payload.length;
@@ -22,7 +25,7 @@ function startHub(options) {
     const hub = { peers: [], received: [], upgrades: 0, nextId: 100, welcomes: 0, options: o };
     const server = o.server || http.createServer((req, res) => { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('not here'); });       // (o.server: the upgrades of a server that is there already, a page's own, are taken: the page and the hub share one address)
     const writers = new Map();                          // peer -> { tokens, at, said }
-    const welcome = () => ({ t: 'welcome', v: 1, you: o.you, login: o.login, online: o.online, history: o.history });
+    const welcome = () => Object.assign({ t: 'welcome', v: 1, you: o.you, login: o.login, online: o.online, history: o.history }, o.welcomeExtra);       // (o.welcomeExtra: more of the welcome, for example { presence: true, me: 3 })
 
     server.on('upgrade', (req, socket) => {
         hub.upgrades++;
@@ -71,6 +74,14 @@ function startHub(options) {
         try { m = JSON.parse(text); } catch (e) { hub.send(peer, { t: 'err', code: 'bad' }); return; }
         hub.received.push(m);
         if (m.t === 'ping') { hub.send(peer, { t: 'online', n: o.online }); return; }
+        if (m.t === 'who' || m.t === 'here') { if (m.t === 'who' && o.who) hub.send(peer, o.who); return; }       // (the players list: o.who is the frame that answers a `who`; a `here` is taken and not answered)
+        if (m.t === 'pick') {
+            const y = o.you;
+            if (!y || !y.other || (m.pick !== 'display' && m.pick !== 'username')) { hub.send(peer, { t: 'err', code: 'pick' }); return; }
+            if (m.pick !== y.pick) o.you = Object.assign({}, y, { name: y.other, other: y.name, pick: m.pick });
+            hub.closeAll(1000);
+            return;
+        }
         if (m.t !== 'say') { hub.send(peer, { t: 'err', code: 'bad' }); return; }
         if (!o.you) { hub.send(peer, { t: 'err', code: 'login' }); return; }
         const w = writers.get(peer), now = Date.now();
@@ -80,12 +91,12 @@ function startHub(options) {
         if ([...m.text].length > 200) { hub.send(peer, { t: 'err', code: 'long' }); return; }
         if (w.said.has(m.text) || w.tokens < 1) { hub.rateRefusals = (hub.rateRefusals || 0) + 1; hub.send(peer, { t: 'err', code: 'rate' }); return; }
         w.tokens -= 1; w.said.set(m.text, now);
-        hub.say(o.you.name, m.text, o.you.mod);
+        hub.say(o.you.name, m.text, o.you.mod, o.you.k ? { k: o.you.k } : undefined);
     }
     hub.send = (peer, obj) => { if (peer.open) peer.socket.write(frame(1, Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj)))); };
     hub.raw = (peer, buffer) => { if (peer.open) peer.socket.write(buffer); };
     hub.broadcast = (obj) => hub.peers.forEach((p) => hub.send(p, obj));
-    hub.say = (who, text, mod) => { const id = hub.nextId++; hub.broadcast(Object.assign({ t: 'line' }, line(id, who, text, mod))); return id; };
+    hub.say = (who, text, mod, extra) => { const id = hub.nextId++; hub.broadcast(Object.assign({ t: 'line' }, line(id, who, text, mod, extra))); return id; };
     hub.del = (id) => hub.broadcast({ t: 'del', id });
     hub.setOnline = (n) => { o.online = n; hub.broadcast({ t: 'online', n }); };
     hub.drop = () => hub.peers.slice().forEach((p) => p.socket.destroy());            // every socket is cut, no close frame
