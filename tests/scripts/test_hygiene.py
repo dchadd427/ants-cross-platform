@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Tests of tools/check_hygiene.py: each check on small synthetic trees, and the real repository (which must pass)."""
+"""Tests of tools/check_hygiene.py: each check on small synthetic trees, and the real repository (which must pass).
+
+A checkout of the game alone does not have the paths that tools/server_paths.txt lists. What these tests hold for such a tree (ListedPaths, LinksOut, Cli): an entry of a ratchet table for a
+file that is not there is skipped when the list names the file and is a finding when it does not; a file that is there is held to its entry like any other; a markdown link in a document to a
+listed path that is not there is a warning, printed after the findings, and the exit status stays 0; a link to a listed path that is there is followed."""
 import hashlib
 import os
 import re
@@ -32,6 +36,10 @@ class Tree(unittest.TestCase):
 
     def files(self):
         return ch.tracked_files(self.root)
+
+    def listed(self, *patterns):
+        """The list of this tree's paths of the game server, the site's services and their tests (tools/server_paths.txt): one pattern a line."""
+        self.put("tools/server_paths.txt", "".join(p + "\n" for p in patterns))
 
 
 class DocSize(Tree):
@@ -88,6 +96,59 @@ class Reachable(Tree):
         self.put("docs/sub/d/one.md", "one\n")
         self.put("docs/sub/d/two.md", "never linked, and not a folder page\n")
         self.assertEqual(ch.check_reachable(self.root, self.files()), [])
+
+
+class LinksOut(Tree):
+    """A link in a document to a path that tools/server_paths.txt lists and the tree does not have leaves the checkout: a warning, one for each such link on a line."""
+    LIST = ("docs/SERVER.md", "hub/", "tests/scripts/test_hub_*", "src/ants_server/")
+
+    def warned(self):
+        """(file, line, path) of each warning of the tree, in the order printed"""
+        rows = []
+        for text in ch.run_warnings(self.root):
+            m = re.match(r"^(.+):(\d+): warning: the link to (\S+) leaves the checkout \(", text)
+            self.assertTrue(m, text)
+            rows.append((m.group(1), int(m.group(2)), m.group(3)))
+        return rows
+
+    def test_a_link_to_a_listed_path_that_is_not_there_is_a_warning_with_its_line(self):
+        self.listed(*self.LIST)
+        self.put("README.md", "[ok](docs/A.md) [s](docs/SERVER.md#top) [h](hub/) [h2](hub)\n"                                   # 1: a page, a listed page, a listed folder twice
+                              "[t](tests/scripts/test_hub_core.py?x=1) [gone](docs/GONE.md) [web](https://x.org/docs/SERVER.md) [a](#top)\n"    # 2: a listed glob; not listed; web; heading
+                              "```\n[code](docs/SERVER.md)\n```\n"                                                                # 3-5: fenced code is no link
+                              "[ref]: <src/ants_server/room.cpp>\n")                                                              # 6: a reference-style link
+        self.put("docs/A.md", "see [up](../docs/SERVER.md) and [x](../hub/README.md)\n")
+        self.assertEqual(self.warned(), [("README.md", 1, "docs/SERVER.md"), ("README.md", 1, "hub"), ("README.md", 2, "tests/scripts/test_hub_core.py"),
+                                         ("README.md", 6, "src/ants_server/room.cpp"), ("docs/A.md", 1, "docs/SERVER.md"), ("docs/A.md", 1, "hub/README.md")])
+        self.assertIn("tools/server_paths.txt lists it", ch.run_warnings(self.root)[0])
+
+    def test_only_the_documents_are_looked_at(self):
+        self.listed(*self.LIST)
+        for rel in ("src/NOTES.md", "Community-Maps/README.md", "web/page.md", "tests/scripts/README.md", "docs/page.txt"):
+            self.put(rel, "[s](/docs/SERVER.md) [r](../docs/SERVER.md) [d](../../docs/SERVER.md)\n")
+        self.assertEqual(self.warned(), [])
+        self.put("docs/sub/deep.md", "[s](../SERVER.md)\n")
+        self.put("NOTES.md", "[s](docs/SERVER.md)\n")
+        self.assertEqual(self.warned(), [("NOTES.md", 1, "docs/SERVER.md"), ("docs/sub/deep.md", 1, "docs/SERVER.md")])
+
+    def test_without_a_list_or_for_a_path_it_does_not_name_there_is_no_warning(self):
+        self.put("README.md", "[s](docs/SERVER.md) [h](hub/) [x](docs/OTHER.md)\n")
+        self.assertEqual(self.warned(), [])                                       # (a tree that has no list names nothing)
+        self.listed("hub/")
+        self.assertEqual(self.warned(), [("README.md", 1, "hub")])                # (docs/SERVER.md and docs/OTHER.md are not on this list)
+
+    def test_a_link_to_a_listed_path_that_is_there_is_followed_and_is_no_warning(self):
+        self.listed(*self.LIST)
+        self.put("README.md", "[s](docs/SERVER.md) [h](hub/)\n")
+        self.put("docs/SERVER.md", "[b](B.md)\n")
+        self.put("docs/B.md", "reached through the listed page\n")
+        self.put("hub/store.py", "x = 1\n")
+        self.assertEqual((ch.run_warnings(self.root), ch.check_reachable(self.root, self.files())), ([], []))
+        os.remove(os.path.join(self.root, "docs", "SERVER.md"))                  # the same tree without the listed page and the folder
+        shutil.rmtree(os.path.join(self.root, "hub"))
+        self.assertEqual(self.warned(), [("README.md", 1, "docs/SERVER.md"), ("README.md", 1, "hub")])
+        out = ch.check_reachable(self.root, self.files())
+        self.assertEqual([x.split(":")[0] for x in out], ["docs/B.md"])           # (the page that only the listed page linked is not reached: a finding, as before)
 
 
 class Forbidden(Tree):
@@ -269,6 +330,61 @@ class BuildFolders(Tree):
         self.assertTrue(any(l.startswith("build_x/: ") for l in done.stdout.splitlines()), done.stdout)
 
 
+class ListedPaths(Tree):
+    """An entry of a ratchet table (page ceilings, line ceilings, kept spellings) for a file that is not there: skipped when tools/server_paths.txt names the file, a finding when it does not."""
+    LIST = ("src/ants_server/", "tests/scripts/test_hub_*", "docs/SERVER.md")
+
+    def names(self, out):
+        return [line.split(":")[0] for line in out]
+
+    def test_a_page_ceiling_for_a_listed_page_that_is_not_there_is_skipped_and_for_another_is_a_finding(self):
+        self.listed(*self.LIST)
+        out = ch.check_doc_sizes(self.root, self.files(), ceilings={"docs/SERVER.md": 150000, "docs/GONE.md": 150000})
+        self.assertEqual(self.names(out), ["docs/GONE.md"])
+        self.assertIn("in the ceiling table but not a tracked file", out[0])
+
+    def test_a_line_ceiling_for_a_listed_file_that_is_not_there_is_skipped_and_for_another_is_a_finding(self):
+        self.listed(*self.LIST)
+        out = ch.check_lines(self.root, self.files(), ceilings={"src/ants_server/room.cpp": 2000, "src/ants_net/gone.cpp": 2000})
+        self.assertEqual(self.names(out), ["src/ants_net/gone.cpp"])
+        self.assertIn("in the line ceiling table but not a tracked file", out[0])
+
+    def test_a_kept_spelling_for_a_listed_file_that_is_not_there_is_skipped_and_for_another_is_a_finding(self):
+        self.listed(*self.LIST)
+        kept = {"src/ants_server/history_record.cpp": [r"\bx\b"], "web/gone.js": [r"\bx\b"]}
+        out = ch.check_spelling_table(self.root, self.files(), kept)
+        self.assertEqual(self.names(out), ["web/gone.js"])
+        self.assertIn("in the spelling table but not tracked", out[0])
+
+    def test_a_listed_file_that_is_there_is_held_to_its_entry_like_any_other(self):
+        self.listed(*self.LIST)
+        big = ch.DOC_LIMIT * 2
+        self.put("docs/SERVER.md", size=big)
+        self.put("src/ants_server/small.cpp", lines=10)
+        self.put("src/ants_server/room.cpp", "nothing to keep\n")
+        files = self.files()
+        self.assertIn("above its ceiling", ch.check_doc_sizes(self.root, files, ceilings={"docs/SERVER.md": big - 1})[0])
+        self.assertIn("no longer exceeds", ch.check_lines(self.root, files, ceilings={"src/ants_server/small.cpp": 2000})[0])
+        self.assertIn("the kept spelling pattern", ch.check_spelling_table(self.root, files, {"src/ants_server/room.cpp": [r"\bx\b"]})[0])
+
+    def test_the_list_names_a_path_by_directory_glob_or_file_as_the_module_that_reads_it_does(self):
+        self.listed(*self.LIST)
+        named = ["src/ants_server/deep/room.cpp", "tests/scripts/test_hub_core.py", "docs/SERVER.md"]
+        not_named = ["src/ants_serverx/room.cpp", "tests/scripts/sub/test_hub_core.py", "tests/scripts/test_web_x.py", "docs/SERVER.md.bak"]
+        out = ch.check_lines(self.root, self.files(), ceilings={rel: 2000 for rel in named + not_named})
+        self.assertEqual(sorted(self.names(out)), sorted(not_named))
+
+    def test_a_tree_that_has_no_list_skips_nothing(self):
+        out = ch.check_lines(self.root, self.files(), ceilings={"src/ants_server/room.cpp": 2000})
+        self.assertEqual(self.names(out), ["src/ants_server/room.cpp"])
+
+    def test_a_line_of_the_list_that_is_no_pattern_is_refused_by_the_module_that_reads_it(self):
+        self.listed("src/ants_server/", "/etc/x")
+        with self.assertRaises(ValueError) as caught:
+            ch.server_matcher(self.root)
+        self.assertIn(":2:", str(caught.exception))
+
+
 class Cli(Tree):
     def run_tool(self, *args):
         return subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py")] + list(args), capture_output=True, text=True)
@@ -294,6 +410,22 @@ class Cli(Tree):
         done = self.run_tool("--list")
         self.assertEqual(done.returncode, 0)
         self.assertIn("ASSERT_TRUE definitions", done.stdout)
+
+    def test_a_tree_without_the_listed_paths_passes_with_a_warning_for_each_link_that_leaves_it(self):
+        # (every entry of the tables names a path that the list names and the tree lacks, and the two ASSERT_TRUE definitions that the check counts are there: nothing else is left to find)
+        self.listed("docs/SERVER.md", *(list(ch.DOC_CEILINGS) + list(ch.LINE_CEILINGS) + list(ch.SPELLING_KEPT)))
+        self.put("tests/common/test_assert.hpp", "#define ASSERT_TRUE(x) a\n#define ASSERT_TRUE(x) b\n")
+        self.put("README.md", "[server](docs/SERVER.md)\n")
+        done = self.run_tool("--root", self.root)
+        lines = done.stdout.splitlines()
+        self.assertEqual((done.returncode, len(lines)), (0, 1), done.stdout + done.stderr)
+        self.assertTrue(lines[0].startswith("README.md:1: warning: the link to docs/SERVER.md leaves the checkout"), lines[0])
+        self.put("docs/A.md", "no link reaches this page\n")                       # a finding: it comes first, the warning after it, and the status is 1
+        done = self.run_tool("--root", self.root)
+        lines = done.stdout.splitlines()
+        self.assertEqual((done.returncode, [x.split(":")[0] for x in lines]), (1, ["docs/A.md", "README.md"]), done.stdout + done.stderr)
+        self.assertNotIn(": warning: ", lines[0])
+        self.assertIn(": warning: ", lines[1])
 
 
 class Spelling(Tree):
@@ -385,7 +517,11 @@ class RealRepository(unittest.TestCase):
 
     def test_repository_passes(self):
         done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", ROOT], capture_output=True, text=True)
-        self.assertEqual((done.returncode, done.stdout), (0, ""), done.stdout + done.stderr)
+        findings = [line for line in done.stdout.splitlines() if ": warning: " not in line]
+        self.assertEqual((done.returncode, findings), (0, []), done.stdout + done.stderr)
+        server = ch.server_matcher(ROOT)
+        if any(server(rel) for rel in ch.tracked_files(ROOT)):                        # (a tree that has the listed files: its links are followed, and it prints nothing)
+            self.assertEqual(done.stdout, "")
 
 
 if __name__ == "__main__":
