@@ -985,8 +985,8 @@
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
         body.replay .header-actions.rep-only { flex: 0 0 auto; flex-wrap: nowrap; }
-        .rhead { flex: 1 1 0; min-width: 0; display: grid; gap: 5px; line-height: 1.15; align-content: center; }
-        .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); }
+        .rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; line-height: 1.15; align-content: center; }
+        .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); overflow-wrap: anywhere; }
         .rhead h2 small { font-size: 15px; font-weight: 500; }
         .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 5px 7px; }
         .chip { --c: #7d8a84; display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; padding: 1px 10px 1px 7px; font-size: 14px; line-height: 1.5; color: var(--cream); background: #0d171f; border: 1px solid #1c3a30; border-radius: 3px; white-space: nowrap; }
@@ -994,7 +994,7 @@
         .chip .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .chip[data-c="Green"] { --c: var(--c-green); } .chip[data-c="Red"] { --c: var(--c-red); } .chip[data-c="Blue"] { --c: var(--c-blue); } .chip[data-c="Black"] { --c: var(--c-black); }
         .pill { display: inline-block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5; padding: 0 6px; border-radius: 3px; vertical-align: 2px; white-space: nowrap; }
-        .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; }
+        .pill.cut { color: #f2c48c; background: #2a1d08; border: 1px solid #6b4a14; } .pill.own { color: var(--cream); background: #10281f; border: 1px solid var(--frame); }
 
         /* on the picture: what the page says over the game (small, so that the game's own bars stay clear). The REPLAY tag is not here: it rides with the bar (below), so nothing of it lies over the game */
         body.replay #game-container { container-type: inline-size; }
@@ -1052,7 +1052,7 @@
         .rnote { position: absolute; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70; width: max-content; max-width: 94%; padding: 3px 12px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--cream); background: rgba(5, 10, 8, .88); border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 1px var(--frame); pointer-events: none; }
 
         /* a message in place of the picture: the card of the name step (a card over the whole page, so that it fits any screen) */
-        .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); }
+        .rm-card p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; color: var(--ink); overflow-wrap: anywhere; }
         .rm-card p b { font-weight: 500; color: #fff; }
         .rm-card .rm-why { margin: 2px 0 12px; padding: 6px 10px; font-size: 14px; line-height: 1.3; color: var(--bad-ink); background: var(--bad-bg); border: 2px solid var(--edge); border-left: 6px solid var(--bad-edge); border-radius: 3px; }
         .rm-card .rm-sub { font-size: 15px; }
@@ -1106,7 +1106,7 @@
         .pill.lv { color: #ffc3bd; background: #3a0d11; border: 1px solid #9d0d17; letter-spacing: .1em; }
         .pill.lv::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .rhead h2 .pill.lv { font-size: 13px; vertical-align: 3px; }
-        body.live [data-dl], body.nodl [data-dl] { display: none !important; }
+        body.live [data-dl], body.nodl [data-dl], body.ownfile [data-dl], body.ownfile #copy-btn, body.ownfile #copy-more, body.ownfile #stats-btn { display: none !important; }
         .rtag.lv b { color: #ff8c84; }
         .rtag.lv b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
         .tl .edge { display: none; position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: #ff5a4f; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -3px 0 #9d0d17; }
@@ -1141,7 +1141,7 @@
     </style>
 </head>
 <body>
-    <script>if (/(^|[?&])(replay|live)=/.test(window.location.search)) document.body.className += ' replay'; if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed';</script>
+    <script>if (/(^|[?&])(replay|live|local)=/.test(window.location.search)) document.body.className += ' replay'; if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed'; if (/(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search)) document.body.className += ' ownfile';</script>
 
     <header>
         <h1 class="sr">Ants (1998)</h1>
@@ -1832,13 +1832,13 @@
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
         var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
-        // Watching a replay: play.html?replay=<file>, or a match that is still being played: play.html?live=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
-        // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live"; an address with both is a replay). The game gets nothing else from the address then (no room,
+        // Watching a replay: play.html?replay=<file>, a match that is still being played: play.html?live=<id>, or a file of your own: play.html?local=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
+        // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live", one with local= and no record is "choose the file again"; replay= wins over local=, which wins over live=). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else the shape nearest to the screen) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
-        var ANTS_REPLAY_MODE = /(^|[?&])(replay|live)=/.test(window.location.search);
+        var ANTS_REPLAY_MODE = /(^|[?&])(replay|live|local)=/.test(window.location.search), ANTS_OWN_MODE = ANTS_REPLAY_MODE && /(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search);      // (a file of your own: local=<id>)
         var ANTS_REPLAY_FILE = ANTS_REPLAY_MODE ? window.AntsReplay.fileOf(window.location.search) : null;
-        var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !/(^|[?&])replay=/.test(window.location.search);
-        var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);      // the frame of a match page (web/match.html): the picture and the bar only
+        var ANTS_LIVE_MODE = ANTS_REPLAY_MODE && !ANTS_OWN_MODE && !/(^|[?&])replay=/.test(window.location.search);
+        var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_OWN_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);      // the frame of a match page (web/match.html): the picture and the bar only
         var ANTS_LIVE_ID = ANTS_LIVE_MODE ? window.AntsReplay.liveIdOf(window.location.search) : null;
         (function () {
             if (ANTS_REPLAY_MODE) return;
@@ -3153,7 +3153,7 @@
             var TPS = 20;                                                                          // turns per second
             var FEED_MS = 4000;                                                                    // a match that is being played is fetched again this often
             var FILE = ANTS_REPLAY_FILE;     // the replay on show (a live match gets one when it is over and was kept)
-            var LIVE_ID = ANTS_LIVE_ID;
+            var LIVE_ID = ANTS_LIVE_ID, OWN = ANTS_OWN_MODE ? R.ownPageOf(window, { say: function (text) { say(text); }, infoOf: function (bytes) { return window.AntsMapFiles ? window.AntsMapFiles.infoOfReplay(bytes) : null; } }) : null;      // (a file of your own: web/replay_page.js ownPage)
             var info = null;                 // what the game reported about the file
             var shown = null;                // the card that is up ('' none)
             var liveOn = ANTS_LIVE_MODE && !!LIVE_ID;       // the page follows a match that is being played (the red marks, the notch, "Jump to live"); not for a replay, nor after the match is over
@@ -3204,7 +3204,7 @@
             function lengthSeconds() { return info && info.turns ? Math.floor(info.turns / TPS) : 0; }
             // the length in the header of a replay: the file's own, else (a match that was watched live) what the game holds once it holds the whole file
             function headLength() { return info && info.turns ? lengthSeconds() : (!headPending && isReadyToPlay && get(VALUE.complete) === 1 ? Math.floor(get(VALUE.total) / TPS) : 0); }
-            function setHeader() {
+            function setHeader() { if (OWN) { OWN.header(info, headLength(), !!(info && info.turns && !info.over)); return; }
                 var title = $('r-title'), meta = $('r-meta');
                 title.textContent = '';
                 meta.textContent = '';
@@ -3265,8 +3265,8 @@
                     a.href = '/matches.html';
                     buttons.appendChild(a);
                 };
-                var made = info && info.game ? info.game : 'a version of the game';
-                if (kind === 'older') {
+                var made = info && info.game ? info.game : 'a version of the game', plan = OWN ? OWN.card(kind, { made: made, version: pageVersion(), map: info && info.map ? info.map : OWN.map(), why: why }) : null;
+                if (plan) { title = plan.title; plan.body.forEach(function (node) { body.appendChild(node); }); plan.buttons.forEach(function (node) { buttons.appendChild(node); }); } else if (kind === 'older') {      // (a file of your own has its own words: web/replay_page.js ownPage)
                     title = 'Recorded by an older version';
                     paragraph(['This match was played on ', bold(made), '. The rules of the game have changed since, and a replay only plays on a version with the same rules, so this version (', bold(pageVersion()), ') can’t show it.']);
                     paragraph(['You can still download the file.'], 'rm-sub');
@@ -3330,7 +3330,7 @@
             function cardFor(failure, text) {
                 if (failure === FAIL.older) card('older');
                 else if (failure === FAIL.newer) card('newer');
-                else card('cant', text);
+                else card(OWN && failure === FAIL.nomap && OWN.lacks(text) ? 'nomap' : 'cant', text);
             }
 
             // ---- the bar ----
@@ -3724,7 +3724,7 @@
                 else if (!window.fetch || !window.Promise) fetched = Promise.resolve({ error: 'load', text: 'this browser cannot fetch the match' });
                 else fetched = firstSnapshot();
             } else if (!FILE) {
-                fetched = Promise.resolve({ error: 'gone' });
+                fetched = OWN ? OWN.read() : Promise.resolve({ error: 'gone' });
             } else if (!window.fetch || !window.Promise) {
                 fetched = Promise.resolve({ error: 'load', text: 'this browser cannot fetch the recording' });
             } else {
@@ -3738,8 +3738,8 @@
                 fetched.then(function (got) {
                     if (got.error) return;                    // (its card is up already)
                     var seen = ANTS_LIVE_MODE ? latest : got.bytes, carried = window.AntsMapFiles ? window.AntsMapFiles.embeddedMapOfReplay(seen) : null, need = carried || (window.antsMapFiles ? window.AntsMapFiles.mapOfReplay(seen) : null);       // (a match on a test map carries its map, checked against the head's hash: nothing is fetched; else a match on a map of the players: fetched now; either way written when the game's file system is there)
-                    (carried ? Promise.resolve({ ok: true, bytes: carried.bytes }) : need ? window.antsMapFiles.fetchOnly(need.name, need.hash) : Promise.resolve({ ok: true })).then(function (map) {
-                        if (!map.ok) { card('cant', map.text); return; }
+                    (carried ? Promise.resolve(window.AntsMapFiles.carriedVerdict(carried)) : need ? window.antsMapFiles.fetchOnly(need.name, need.hash) : Promise.resolve({ ok: true })).then(function (map) {
+                        if (!map.ok) { card(OWN && map.mismatch ? 'changed' : OWN && map.gone ? 'nomap' : 'cant', map.text); return; }
                         if (map.bytes) Module.preRun.push(window.AntsMapFiles.writer(function () { return Module.FS; }, need.name, map.bytes));
                         if (ANTS_LIVE_MODE) {
                             Module.preRun.push(function () { Module.FS.writeFile('/replay.antsrep', latest); applied = latest; });          // (the newest file: the feed went on while the data came)
@@ -3754,17 +3754,17 @@
             };
             // a file that is gone is said at once, while the game's data is still coming (the card covers the loading screen); a live match is looked at again every few seconds from the first answer on
             fetched.then(function (got) {
-                if (got.error === 'gone') card('gone');
+                if (got.error === 'gone' || got.error === 'again') card(got.error);
                 else if (got.error === 'notlive') card('notlive');
                 else if (got.error === 'over') card('over', got.replay);
                 else if (got.error) card('cant', got.text);
-                else if (ANTS_LIVE_MODE) { latest = got.bytes; feedTimer = setTimeout(feed, FEED_MS); }
+                else if (ANTS_LIVE_MODE) { latest = got.bytes; feedTimer = setTimeout(feed, FEED_MS); } else if (OWN) setHeader();      // (the record is read: the header can say the map, the players and the name of the file)
             });
             setHeader();
             liveClasses();
             $('watch-link').setAttribute('aria-current', 'page');   // (the footer says where the player is: the list of matches)
             $('watch-link').removeAttribute('target'); $('watch-link').removeAttribute('rel');   // (and nothing is being played here, so it goes in this tab, like "All matches")
-            window.antsReplayPlaceBar();
+            window.antsReplayPlaceBar(); if (OWN) OWN.chrome();
             setInterval(tick, 100);
             tick();
         })();

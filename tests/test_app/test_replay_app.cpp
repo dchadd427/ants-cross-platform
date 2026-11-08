@@ -31,8 +31,11 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <vector>
 #include "../common/test_assert.hpp"
+#include "../test_server/big_map_fixtures.hpp"
+#include "../common/map_library.hpp"
 
 #if defined(_WIN32)
 #include <process.h>
@@ -449,6 +452,28 @@ std::vector<uint8_t> with_filler(const std::vector<uint8_t>& file, size_t filler
     out.insert(out.end(), chunk.begin(), chunk.end());
     out.insert(out.end(), file.begin() + static_cast<std::ptrdiff_t>(head_end), file.end());
     return out;
+}
+
+// TINY with `plants` plants of the tile `plant_tile` (404, a clover: a plant that drops flowers) on the cell at row 1, column 1 and `waypoints` waypoints without a trigger on the cell at row 5, column 5: setting a
+// match up looks, for every plant, through all the waypoints for the one on its cell (SimulationEngine::init), so the work is their product. "" when it cannot be made.
+std::string tiny_with_plants_and_waypoints(uint32_t plants, uint32_t waypoints, uint16_t plant_tile = 404) {
+    assets::LevelData level;
+    const std::string base = big_tiny_bytes();
+    if (!assets::LVLParser::load_from_memory(reinterpret_cast<const uint8_t*>(base.data()), base.size(), level, nullptr, assets::LevelLimits::for_extended_maps())) return std::string();
+    for (uint32_t i = 0; i < plants; ++i) level.anthill_spawns.push_back(assets::AnthillSpawn{plant_tile, 1, 1, 255, 0});
+    for (uint32_t i = 0; i < waypoints; ++i) level.waypoints.push_back(assets::Waypoint{5, 5, 0, 0, {}});
+    const assets::LevelWriteResult written = assets::write_level(level, assets::LevelLimits::for_extended_maps());
+    return written.ok ? std::string(written.bytes.begin(), written.bytes.end()) : std::string();
+}
+
+// The recording `made` as if its match had been played on the map `map` that was called `name`, with the map carried in the file (the chunk tmap)
+std::vector<uint8_t> carrying_map(const Handmade& made, const std::string& map, const std::string& name) {
+    replay::Replay r = made.file;
+    r.head.map_name = name;
+    r.embedded_map.assign(map.begin(), map.end());
+    r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+    std::string error;
+    return replay::encode(r, error);
 }
 
 }  // namespace
@@ -1388,6 +1413,132 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::Unreadable);
             v.app.shutdown();
         }
+    } TEST_END();
+
+    TEST_CASE("RA7.10 A map that the file carries and that starts more than 8,000 ants is refused at once (failure 4 with the count) and never set up, where setting up 65,535 takes seconds natively and minutes in a browser; a file that carries 8,000 is not refused for its ants") {
+        const Handmade made = make_handmade(700, true);
+        ASSERT_FALSE(made.bytes.empty());
+        ScratchRoot empty;                                                                  // (a maps folder that holds a map, SMALL, and not the one of the match: the application needs one to start)
+        fs::copy_file(maps_dir() + "/SMALL.LVL", empty.path() / "SMALL.LVL");
+        const auto carrying = [&](const std::string& map) {
+            replay::Replay r = made.file;
+            r.embedded_map.assign(map.begin(), map.end());
+            r.head.map_hash = net::hash_bytes(r.embedded_map.data(), r.embedded_map.size());
+            std::string error;
+            return replay::encode(r, error);
+        };
+        {   // exactly the limit: the file is not refused for its ants (what its match does on that map is not this test's business: nothing is played)
+            const std::string at = tiny_with_ants({2000, 2000, 2000, 2000});
+            ASSERT_FALSE(at.empty());
+            Viewer v(carrying(at), "at.antsrep", false, empty.path().string());
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::None);
+            v.app.shutdown();
+        }
+        {   // 65,535 ants: refused while the file is read, the frames in which the match would be set up do nothing, and it all takes no time
+            const std::string crowd = tiny_with_ants({16384, 16384, 16384, 16383});
+            ASSERT_FALSE(crowd.empty());
+            const auto started = std::chrono::steady_clock::now();
+            Viewer v(carrying(crowd), "crowd.antsrep", false, empty.path().string());
+            v.frames(40);
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap && v.state() == ReplayState::Failed);
+            ASSERT_TRUE(v.app.replay_failure_text().find("65,535 ants") != std::string::npos);
+            ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(10));
+            v.app.shutdown();
+        }
+    } TEST_END();
+
+    TEST_CASE("RA7.11 A map that the file carries is also refused for the pairs of a plant and a waypoint above 1,000,000 (setting a match up looks through all the waypoints for each plant: 65,400 plants and 65,535 waypoints are 4.3 billion pairs); the work is plants times waypoints, and neither alone is a crowd") {
+        const Handmade made = make_handmade(700, true);
+        ASSERT_FALSE(made.bytes.empty());
+        ScratchRoot empty;
+        fs::copy_file(maps_dir() + "/SMALL.LVL", empty.path() / "SMALL.LVL");
+        const auto watched = [&](const std::string& map) { return carrying_map(made, map, "TINY.LVL"); };      // (TINY.LVL is not in the folder: the map is the file's own)
+        {   // exactly 1,000,000 pairs is not refused; one more plant is; 2,000 records that are no plants (the tile 409; and the tile 422, whose only flag is the 0x20 of a plant object: it does not have the plant flag) with the same waypoints are not; waypoints without a plant, or plants without a waypoint, are no work
+            const std::tuple<uint32_t, uint32_t, uint16_t, bool> cases[] = {{1000, 1000, 404, false}, {1001, 1000, 404, true}, {2000, 1000, 409, false}, {2000, 1000, 422, false}, {0, 65535, 404, false}, {65535 - 12, 0, 404, false}};
+            for (const auto& [plants, waypoints, tile, refused] : cases) {
+                const std::string map = tiny_with_plants_and_waypoints(plants, waypoints, tile);
+                ASSERT_FALSE(map.empty());
+                Viewer v(watched(map), "pairs.antsrep", false, empty.path().string());
+                ASSERT_TRUE(v.ok);
+                ASSERT_TRUE((v.app.replay_failure() == ReplayFailure::NoMap) == refused);
+                if (refused) ASSERT_TRUE(v.app.replay_failure_text().find("1,001 plants and 1,000 waypoints, so setting it up looks at 1,001,000 pairs of them, more than the 1,000,000 that a replay is set up with") != std::string::npos);
+                v.app.shutdown();
+            }
+        }
+        {   // the largest file (65,400 plants on one cell and 65,535 waypoints on another), refused as the file is read
+            const std::string map = tiny_with_plants_and_waypoints(65400, 65535);
+            ASSERT_FALSE(map.empty());
+            const auto started = std::chrono::steady_clock::now();
+            Viewer v(watched(map), "residual.antsrep", false, empty.path().string());
+            v.frames(40);
+            ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap && v.state() == ReplayState::Failed);
+            ASSERT_TRUE(v.app.replay_failure_text().find("65,400 plants and 65,535 waypoints, so setting it up looks at 4,285,989,000 pairs") != std::string::npos);
+            ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(5));
+            v.app.shutdown();
+        }
+    } TEST_END();
+
+    TEST_CASE("RA7.12 The limits hold for the map that the file carries WHICHEVER copy the game reads: the page writes that map into the maps folder under its name, and the game then reads the folder's copy, which it counts too; a map of the folder that the file does not carry is the server's own and is not counted") {
+        const Handmade made = make_handmade(700, true);
+        ASSERT_FALSE(made.bytes.empty());
+        struct Case {
+            std::string name, huge, just_over, words;
+        };
+        const Case cases[] = {{"Crowd.lvl", tiny_with_ants({16384, 16384, 16384, 16383}), tiny_with_ants({2250, 2250, 2250, 2250}), "65,535 ants"},
+                              {"Plants.lvl", tiny_with_plants_and_waypoints(65400, 65535), tiny_with_plants_and_waypoints(1001, 1000), "65,400 plants and 65,535 waypoints"}};
+        const auto folder_with = [&](ScratchRoot& folder, const std::string& name, const std::string& map) {                // (what the page writes before the game starts: the maps folder with the file's map in it, under its name;
+            for (const char* original : {"SMALL.LVL", "TREASURE.LVL"}) fs::copy_file(maps_dir() + "/" + original, folder.path() / original);       // TREASURE.LVL is the map that the start screen highlights, as in the game's own data)
+            std::ofstream out(folder.path() / name, std::ios::binary);
+            out << map;
+        };
+        for (const Case& c : cases) {
+            ASSERT_TRUE(!c.huge.empty() && !c.just_over.empty());
+            {   // the largest file of its kind (65,535 ants; 65,400 plants and 65,535 waypoints), in the folder as the page writes it: refused as the file is read (the game would hold the thread for seconds), in no time
+                ScratchRoot folder;
+                folder_with(folder, c.name, c.huge);
+                const auto started = std::chrono::steady_clock::now();
+                Viewer v(carrying_map(made, c.huge, c.name), "copy.antsrep", false, folder.path().string());
+                v.frames(40);
+                ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap && v.state() == ReplayState::Failed);
+                ASSERT_TRUE(v.app.replay_failure_text().find(c.words) != std::string::npos);
+                ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds(5));
+                v.app.shutdown();
+            }
+            {   // a map just over the limits in the folder: refused when the file carries it, played when the file does not (a match on a map of the library: nothing is counted)
+                ScratchRoot folder;
+                folder_with(folder, c.name, c.just_over);
+                Viewer v(carrying_map(made, c.just_over, c.name), "carried.antsrep", false, folder.path().string());
+                ASSERT_TRUE(v.ok && v.app.replay_failure() == ReplayFailure::NoMap);
+                v.app.shutdown();
+                replay::Replay bare = made.file;
+                bare.head.map_name = c.name;
+                bare.head.map_hash = net::hash_bytes(reinterpret_cast<const uint8_t*>(c.just_over.data()), c.just_over.size());
+                std::string error;
+                Viewer w(replay::encode(bare, error), "bare.antsrep", false, folder.path().string());
+                ASSERT_TRUE(w.ok && w.app.replay_failure() == ReplayFailure::None);
+                w.app.shutdown();
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("RA7.13 No map of the library (the six originals and the 534 of the players) is refused when a file carries it: the largest has 248 starting ants and 112 plants with 114 waypoints, 12,768 pairs, and the limits are 8,000 and 1,000,000") {
+        const Handmade made = make_handmade(100, true);
+        ASSERT_FALSE(made.bytes.empty());
+        ScratchRoot nowhere;
+        size_t checked = 0;
+        for (const ants_test::LibraryMap& m : ants_test::library()) {
+            const std::vector<uint8_t> bytes = ants_test::read_file_bytes(m.path);
+            replay::Replay r = made.file;
+            r.head.map_name = m.name;
+            r.embedded_map = bytes;
+            r.head.map_hash = net::hash_bytes(bytes.data(), bytes.size());
+            assets::LevelData level;
+            std::string error;
+            if (!replay::load_map_or_embedded(r, std::vector<std::string>{nowhere.path().string()}, level, error)) std::cout << "\n    refused: " << m.name << ": " << error << "\n";
+            ASSERT_TRUE(error.empty());
+            ++checked;
+        }
+        ASSERT_EQ(checked, 540u);
     } TEST_END();
 
     TEST_CASE("RA7.6 Quit and Leave Game leave the viewer (back to the page's list): the dialog's Yes does not quit a match, it ends the viewing") {
