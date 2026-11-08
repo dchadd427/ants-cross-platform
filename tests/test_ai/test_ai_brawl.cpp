@@ -9,7 +9,9 @@
 //   AI30.4   packs: at most two ants strike a victim, each victim its own pack, the wounded and the near first; the ants left over join the nearest fight (three on a victim)
 //   AI30.5   a pack is ordered onto its victim again when a blow threw it to another tile, and the blows land (a lone victim loses hit points and is followed)
 //   AI30.5b  an enemy on the move is not ordered upon while it is far; a victim that cannot be thrown (a pocket of rock) is struck on, the pack ordered again because an ant stands idle
-//   AI30.6   an ant with three hit points or fewer goes home to heal and is not sent to fight; healed, it strikes again
+//   AI30.6   under the earlier rule of 187 (the hill works): an ant with three hit points or fewer goes home to heal and is not sent to fight; healed, it strikes again
+//   AI30.11  the hill is closed in 187 now: the view says so, the brawl sends no ant home and a hurt ant is fought with, the controller refuses every click of a seat onto its own hill (the food game's
+//            tasks too), and the original's game and the earlier rule are as they were
 //   AI30.7   no walk, no order: enemy ants behind a wall and a hill that no walk reaches draw no attack and no march; the hill that a walk reaches is marched to
 //   AI30.8   allies are never struck
 //   AI30.9   an attack that is refused twice (the walk is not there though the analysis of the start says it is) is not ordered again for a while
@@ -27,6 +29,8 @@ using namespace ants::ai;
 using namespace b41;
 
 namespace {
+
+enum class Rules187 { Original, Closed, Open };
 
 LevelPlan brawl_plan(Level level, bool brawl = true) {
     LevelPlan p = plan_for(level);
@@ -87,19 +91,25 @@ void run_brawl_tests() {
             {
                 Fight f(sim::GameMode::Kills187, 4, {TileCoord{30, 12}, TileCoord{31, 12}});
                 Rig rig(f.sim, 0, level, std::make_unique<StandardBot>(brawl_plan(level)), 4, 8);
-                uint16_t least = 10;                                                              // (a victim that is hurt walks home and heals: the lowest it fell is what shows the blows)
+                uint16_t least = 10;                                                              // (the lowest hit points a victim fell to: what shows the blows)
+                std::set<std::pair<int, int>> where;                                              // every tile on which an ant of the enemy team was seen during the run
                 for (int t = 0; t < 900; ++t) {
                     rig.tick();
                     for (const uint32_t foe : f.foes) {
                         const sim::AntSnapshot* v = snapshot_of(f.sim, foe);
                         if (v != nullptr) least = std::min<uint16_t>(least, v->hp);
                     }
+                    for (const sim::AntSnapshot& v : f.sim.get_world_state().ants) {
+                        if (v.player_id == 1) where.insert({v.tile_x, v.tile_y});                       // (the two victims, and the egg that hatches for a team whose last ant died: the hill is closed, nothing takes a victim home to heal)
+                    }
                 }
                 const std::vector<Command> attacks = attacks_of(rig);
                 brawl_attacks = attacks.size();
                 ASSERT_TRUE(!attacks.empty());
                 for (const Command& c : attacks) {
-                    ASSERT_TRUE(c.tile_x >= 20 && c.tile_y >= 6 && c.tile_y <= 26);                   // a tile where the enemy ants stand or were thrown (a victim is thrown from tile to tile)
+                    bool near_a_foe = false;                                                          // a tile where an enemy ant stood or was thrown (a victim is thrown from tile to tile and nothing takes it home)
+                    for (const auto& w : where) near_a_foe = near_a_foe || (std::abs(w.first - c.tile_x) <= 2 && std::abs(w.second - c.tile_y) <= 2);
+                    ASSERT_TRUE(near_a_foe);
                     ASSERT_TRUE(c.ants.size() <= 4);
                 }
                 ASSERT_EQ(rig.proposed_count(CommandType::GroupSpecial), 0u);
@@ -230,8 +240,9 @@ void run_brawl_tests() {
         }
     } TEST_END();
 
-    TEST_CASE("AI30.6 An Ant With Three Hit Points Or Fewer Goes Home To Heal And Is Not Sent To Fight; Healed, It Strikes Again") {
+    TEST_CASE("AI30.6 Under The Earlier Rule Of 187 (The Hill Works): An Ant With Three Hit Points Or Fewer Goes Home To Heal And Is Not Sent To Fight; Healed, It Strikes Again") {
         Fight f(sim::GameMode::Kills187, 2, {TileCoord{30, 12}});
+        f.sim.set_hill_open_187(true);                                                          // (a recording of the rules number 6; a match that is played now has the hill closed)
         f.sim.get_unit(f.mine[0]).hp = 2;
         Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
         rig.run(24);
@@ -251,6 +262,88 @@ void run_brawl_tests() {
         bool joined = false;
         for (size_t i = before; i < attacks.size(); ++i) joined = joined || names(attacks[i], f.mine[0]);
         ASSERT_TRUE(joined);
+    } TEST_END();
+
+    TEST_CASE("AI30.11 The Hill Is Closed In 187 Now: The View Says So, The Brawl Sends No Ant Home And Fights With A Hurt Ant, The Controller Refuses Every Click Onto The Own Hill, The Original's Game And The Earlier Rule Are As They Were") {
+        {   // the view: the original's game and the earlier rule can enter the hill, 187 now cannot; a copy of the view keeps it
+            for (const bool open : {false, true}) {
+                Fight f(sim::GameMode::Kills187, 2, {TileCoord{40, 12}});
+                f.sim.set_hill_open_187(open);
+                const MapInfo map(f.sim);
+                const BotView view = BotView::build(f.sim, 0, &map);
+                ASSERT_EQ(view.hill_enterable(), open);
+                const BotView copy(view);
+                ASSERT_EQ(copy.hill_enterable(), open);
+            }
+            Fight original(sim::GameMode::HighestScore, 2, {TileCoord{40, 12}});
+            const MapInfo map(original.sim);
+            ASSERT_TRUE(BotView::build(original.sim, 0, &map).hill_enterable());
+        }
+        {   // the brawl: the ant with 2 hit points (and one with 1) is no home job and fights like the others, for 900 ticks; no click of the bot names a tile of its hill
+            Fight f(sim::GameMode::Kills187, 3, {TileCoord{30, 12}});
+            f.sim.get_unit(f.mine[0]).hp = 2;
+            f.sim.get_unit(f.mine[1]).hp = 1;
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(900);
+            const HillInfo& hill = rig.map().hill(0);
+            bool hurt_fought = false;
+            for (const auto& e : rig.proposed) {
+                const Command& c = e.second;
+                ASSERT_FALSE(c.tile_x >= hill.origin.x && c.tile_x <= hill.origin.x + 3 && c.tile_y >= hill.origin.y && c.tile_y <= hill.origin.y + 3);
+                if (c.type == CommandType::GroupAttack && (names(c, f.mine[0]) || names(c, f.mine[1]))) hurt_fought = true;
+            }
+            ASSERT_TRUE(hurt_fought);
+            for (const uint32_t id : f.mine) ASSERT_FALSE(f.sim.is_ant_in_base_queue(id));
+        }
+        {   // the same two hurt ants under the earlier rule are sent home (AI30.6 says how), so the line above is not an accident of the world
+            Fight f(sim::GameMode::Kills187, 3, {TileCoord{30, 12}});
+            f.sim.set_hill_open_187(true);
+            f.sim.get_unit(f.mine[0]).hp = 2;
+            f.sim.get_unit(f.mine[1]).hp = 1;
+            Rig rig(f.sim, 0, Level::Hard, std::make_unique<StandardBot>(brawl_plan(Level::Hard)), 4, 8);
+            rig.run(60);
+            const HillInfo& hill = rig.map().hill(0);
+            size_t home = 0;
+            for (const auto& e : rig.proposed) home += e.second.type == CommandType::GroupMove && e.second.tile_x == hill.entrance.x && e.second.tile_y == hill.entrance.y ? 1u : 0u;
+            ASSERT_TRUE(home >= 1);
+        }
+        {   // the controller: a click onto the own hill (any of its 16 tiles) never leaves in 187 now, whoever proposes it; it leaves in the original's game and in the earlier rule; another tile always leaves
+            for (const Rules187 rules : {Rules187::Original, Rules187::Closed, Rules187::Open}) {
+                sim::SimulationEngine sim;
+                sim.set_game_mode(rules == Rules187::Original ? sim::GameMode::HighestScore : sim::GameMode::Kills187);
+                sim.set_hill_open_187(rules == Rules187::Open);
+                empty_field(sim, 7);
+                const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{12, 12});
+                RecordingSink sink(sim, true);
+                BotController ctl(sim, 1);
+                size_t step = 0;
+                auto bot = std::make_unique<ScriptBot>([&](const BotView& v, Orders& o) {
+                    if ((v.tick() - 1) % 40 != 0 || step >= 19) return;
+                    const TileCoord hill = v.map()->hill(0).origin;
+                    const int k = static_cast<int>(step++);
+                    const TileCoord to = k < 16 ? TileCoord{hill.x + k % 4, hill.y + k / 4} : (k == 16 ? TileCoord{20, 20} : (k == 17 ? v.map()->hill(0).entrance : v.map()->hill(1).origin));      // (the last is a tile of the ENEMY's hill: a click that is no business of this rule)
+                    o.move({ant}, to, Priority::Urgent);
+                });
+                BotSpec spec;
+                spec.seat = 0;
+                spec.level = Level::Hard;
+                std::string why;
+                ASSERT_TRUE(ctl.add(spec, std::move(bot), sink, why));
+                for (uint64_t i = 0; i < 19 * 40 + 40; ++i) {
+                    sim.tick();
+                    ctl.on_tick(sim);
+                    sim.clear_news_events();
+                }
+                ASSERT_EQ(step, 19u);
+                if (rules == Rules187::Closed) {
+                    ASSERT_EQ(ctl.stats(0).filtered, 17u);                                       // the 16 tiles and the entrance
+                    ASSERT_EQ(ctl.stats(0).released, 2u);                                        // (20, 20) and the enemy's hill
+                } else {
+                    ASSERT_EQ(ctl.stats(0).filtered, 0u);
+                    ASSERT_EQ(ctl.stats(0).released, 19u);
+                }
+            }
+        }
     } TEST_END();
 
     TEST_CASE("AI30.7 No Walk, No Order: Enemy Ants Behind A Wall And A Hill That No Walk Reaches Draw No Attack And No March; The Hill That A Walk Reaches Is Marched To") {

@@ -825,6 +825,57 @@ void run_map_tests() {
         ASSERT_TRUE(far_walk.failed && !far_walk.delivered);
     } TEST_END();
 
+    TEST_CASE("AI1.19b The Same Snake At Rules 2 (The Wide Search): The Engine Goes On Past The Limit Of 8,000, So The Far Pile Has An Approach, MapInfo Draws The Same Line As The Engine (A Path At Rules 2, None At Rules 1), And The Limit Of A Walk Is The 24 Bits Of The Wide Cost") {
+        sim::SimulationEngine tiny;
+        start_match(tiny, "TINY", 1, 0x0F);
+        const sim::FoodObject model = tiny.grid().food_objects()[0];
+        const auto snake = [](sim::SimulationEngine& sim, uint16_t rules) {
+            sim.init_test_world(60, 60, 12, 720000, rules);
+            sim.set_anthill(0, TileCoord{2, 2});
+            for (int y = 2; y <= 58; y += 2) {
+                for (int x = 0; x < 60; ++x) {
+                    if (x >= 2 && x <= 5 && y <= 5) continue;
+                    const bool east_gap = (y % 4 == 2) && x == 59;
+                    const bool west_gap = (y % 4 == 0) && x == (y == 4 ? 6 : 0);
+                    if (!east_gap && !west_gap) sim.set_terrain(x, y, sim::TERRAIN_OBSTACLE);
+                }
+            }
+        };
+        ASSERT_EQ(MapInfo::path_cost_limit(sim::Grid{}), MapInfo::kPathCostLimit);
+        ASSERT_EQ(MapInfo::kWidePathCostLimit, 16777216);
+        for (const uint16_t rules : {uint16_t{0}, uint16_t{1}, uint16_t{2}}) {
+            sim::SimulationEngine sim;
+            snake(sim, rules);
+            const auto pile_at = [&](int32_t col, int32_t row) {
+                sim::FoodObject o = model;
+                o.col = static_cast<uint16_t>(col);
+                o.row = static_cast<uint16_t>(row);
+                return sim.grid_mut().add_food_object(o);
+            };
+            const int32_t near_pile = pile_at(30, 8);
+            const int32_t far_pile = pile_at(30, 32);
+            const MapInfo mi(sim);
+            ASSERT_EQ(MapInfo::path_cost_limit(sim.grid()), rules == 2 ? MapInfo::kWidePathCostLimit : MapInfo::kPathCostLimit);
+            const Approach near_ap = mi.piles()[static_cast<size_t>(near_pile)].approach[0];
+            const Approach far_ap = mi.piles()[static_cast<size_t>(far_pile)].approach[0];
+            ASSERT_TRUE(near_ap.reachable() && near_ap.cost > 2500 && near_ap.cost < MapInfo::kPathCostLimit);
+            ASSERT_EQ(far_ap.reachable(), rules == 2);                                              // rules 2: offered (the cost is above 8,000); rules 0 and 1: not, as the engine
+            if (rules == 2) {
+                ASSERT_TRUE(far_ap.cost > MapInfo::kPathCostLimit);
+                ASSERT_TRUE(mi.trip_ticks(0, static_cast<uint32_t>(far_pile)) > 0);
+                ASSERT_TRUE(mi.reachable_points() == 2u * static_cast<uint32_t>(model.units) * model.value);
+            } else {
+                ASSERT_EQ(mi.trip_ticks(0, static_cast<uint32_t>(far_pile)), -1);
+            }
+            // the engine agrees with the line: an ant at the queue tile is sent next to the far pile
+            sim::SimulationEngine b;
+            snake(b, rules);
+            const Walk far_walk = order_and_wait(b, 0, mi.hill(0).queue, TileCoord{29, 31}, 600);
+            ASSERT_EQ(far_walk.delivered, rules == 2);
+            ASSERT_EQ(far_walk.failed, rules != 2);
+        }
+    } TEST_END();
+
     TEST_CASE("AI1.20 Two Objects On One Anchor: The Last One Owns The Cells And Sets The Points, The First One Loses The Units (The Engine's Own Rule, Seen By An Ant); MapInfo Says Which Is Which") {
         sim::SimulationEngine sim;
         sim.init_test_world(40, 40, 13, 720000);

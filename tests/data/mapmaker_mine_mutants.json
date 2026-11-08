@@ -207,7 +207,7 @@
   {
    "id": "mine_an_unreadable_map_is_listed_as_a_kind",
    "file": "web/front/mapmaker_mine.js",
-   "old": "if (file) env.tags(tags, file.kind);",
+   "old": "if (file) env.tags(tags, file.kind, file.rules);",
    "new": "env.tags(tags, file ? file.kind : 'classic');",
    "test": "node tests/scripts/web_mapmaker_mine_check.js"
   },

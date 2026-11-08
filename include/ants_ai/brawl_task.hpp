@@ -5,10 +5,11 @@
 // invitation to team up and its fairness, and spends every ant on the fight.
 //
 // What the engine allows (measured; docs/BOTS.md, "187: the brawl"): one blow lands per hit clip, about every 40 ticks, however many ants strike a victim; a worker's blow takes 1 hit point and
-// throws the victim one tile away from the attacker, a Combat Ant's punch takes 2 and throws it four; an ant left with ONE hit point walks home and is caught only by luck; an ant thrown into
+// throws the victim one tile away from the attacker, a Combat Ant's punch takes 2 and throws it four; under the earlier rule an ant left with ONE hit point walks home and is caught only by luck (in 187 now the hill is closed and it stays where it is); an ant thrown into
 // water drowns whatever its hit points. An order that names a tile is carried out against whoever stands there when it arrives, so a victim that was struck (and thrown to another tile) or has
 // moved on is hit again only by an order that names its new tile. The task therefore
-//   * sends every ant that is hurt home to heal (the hill restores all hit points) and calls it back when it is whole,
+//   * under the earlier rule sends every ant that is hurt home to heal (the hill restores all hit points) and calls it back when it is whole; when the hill is closed (BotView::hill_enterable() is false, 187 now)
+//     it sends no ant home at all,
 //   * forms packs of a few ants on each enemy ant it can reach, the wounded and the near first, so that blows land in parallel on different victims,
 //   * orders a whole pack onto its victim again whenever the victim was thrown to another tile or an ant of the pack stands idle after its blow,
 //   * lets ants that found no victim of their own join the nearest fight, and

@@ -238,8 +238,8 @@ class Grid {
 public:
     Grid() = default;
 
-    /// A world made by hand (tests and tools); @p rules is the rules word that a level of that rules would have (0 = the original's, 1 = extended rules; 2, the wide search, only
-    /// after allow_rules_two_for_tests(): see rules_word_played()).
+    /// A world made by hand (tests and tools); @p rules is the rules word that a level of that rules would have (0 = the original's, 1 = extended rules, 2 = extended rules and the
+    /// wide search of the path finder; any other word is played as 1, see rules_word_played()).
     bool init_empty(uint32_t w, uint32_t h, uint16_t rules = 0) {
         width_ = w;
         height_ = h;
@@ -262,17 +262,13 @@ public:
     }
 
     /**
-     * @brief The test hook of rules 2 (docs/MAP_FORMAT.md "Orders on a big map"): until a Grid has been told so, a rules word of 2 is played as 1. Rules 2 is switched off in the
-     *        simulation, not only in the map reader: init_from_level and init_empty keep a word of 2 only for a Grid that was told here before, and the tests that exercise the wide
-     *        search do that. Nothing under src/, tools/ or web/ calls it. It stays set when the Grid is loaded again, and a copy of the Grid keeps it. The next release switches rules 2
-     *        on (a map may ask for it) and deletes this hook.
-     */
-    void allow_rules_two_for_tests() noexcept { rules_two_allowed_ = true; }
-
-    /**
      * @brief Initializes the grid from parsed LevelData.
+     * @param fire_wall_as_original true (the rules of a match played now, replay::kSimRules 9 and 10): a fire wall of the file (layer-2 id 134) loads as the original loads it, an object that is
+     *        solid by its file bit only. false (the rules numbers 5 to 8): the remake's name-based obstacle overlay is also set on a fire wall whose dictionary entry has a name (the map maker's
+     *        `wallup04`), as the loader did until v0.14 (docs/reverse_engineering/map_loader_fidelity.md, section 8). Nothing but the state hash from tick 0 and, in play, a dying ant's power-up
+     *        drop and the bots' bomb placement on such a cell depend on it.
      */
-    bool init_from_level(const ants::assets::LevelData& level);
+    bool init_from_level(const ants::assets::LevelData& level, bool fire_wall_as_original = true);
 
     /// True once the solid bits come from an LVL file (init_from_level); part of the state hash
     bool exact_solid_bits() const noexcept { return exact_solid_bits_; }
@@ -296,7 +292,7 @@ public:
     }
 
     /// The rules word of the level that was loaded (LevelData::rules: 0 = the original's rules, 1 = extended rules; 0 for a world made by hand and for every version 8 map).
-    /// It is part of the state hash when it is not 0. Never above 1 unless allow_rules_two_for_tests() was called: a level that carries a word of 2 or more is played as rules 1 (rules_word_played).
+    /// It is part of the state hash when it is not 0. Never above 2: a word of 3 or more (no reader accepts one) is played as rules 1 (rules_word_played). 2 is the wide search.
     uint16_t rules() const noexcept { return rules_; }
 
     uint32_t width() const noexcept { return width_; }
@@ -537,11 +533,9 @@ private:
     std::vector<FoodObject> food_objects_;
     uint16_t default_ant_tile_{TILE_EMPTY};   // level+0x70 (block 3), 0x7FFE = none
     uint16_t rules_{0};                       // LevelData::rules (version 9; 0 for version 8), as played (rules_word_played)
-    bool rules_two_allowed_{false};           // allow_rules_two_for_tests(); not part of the state
 
-    // The word that is played for a level's rules word: 0 and 1 as they are; 2 (the wide search) only for a Grid that allow_rules_two_for_tests() was called on; every other word (2 on
-    // a Grid that was not told, 3 and up, which no reader accepts either) as 1, the extended rules that every word above 0 has always played as.
-    uint16_t rules_word_played(uint16_t word) const noexcept { return word <= 1u ? word : (word == 2u && rules_two_allowed_ ? word : uint16_t{1}); }
+    // The word that is played for a level's rules word: 0, 1 and 2 as they are; every other word (3 and up, which no reader accepts either) as 1, the extended rules that every word above 0 has always played as.
+    static constexpr uint16_t rules_word_played(uint16_t word) noexcept { return word <= 2u ? word : uint16_t{1}; }
 };
 
 } // namespace ants::sim

@@ -1,5 +1,5 @@
 {
- "note": "Mutants of .github/workflows/ci.yml: slips of the pen that a reader of the file could make (a typo in the part or the conclusion that a step asks for, a name used twice, a renamed check, a small job that does not always run, a ctest that may find no test, the light checks), each of which the tests of tests/scripts/test_ci_workflow.py must notice. No build: python3 tools/mutate.py tests/data/ci_workflow_mutants.json --keep-going --jobs 1, from the repository folder (a few seconds for each mutant). Every mutant must be caught; the first ones are the four that used to pass unnoticed.",
+ "note": "Mutants of .github/workflows/ci.yml: slips of the pen that a reader of the file could make (a typo in the part or the conclusion that a step asks for, a name used twice, a renamed check, a small job that does not always run, a ctest that may find no test, the light checks, the Linux jobs back on the default image), each of which the tests of tests/scripts/test_ci_workflow.py must notice. No build: python3 tools/mutate.py tests/data/ci_workflow_mutants.json --keep-going --jobs 1, from the repository folder (a few seconds for each mutant). Every mutant must be caught; the first ones are the four that used to pass unnoticed.",
  "mutants": [
   {
    "id": "typo_part_of_ctest_long",
@@ -321,9 +321,25 @@
   {
    "id": "linux_legs_have_no_time_limit",
    "file": ".github/workflows/ci.yml",
-   "old": "    name: Linux tests (${{ matrix.name }})\n    runs-on: ubuntu-latest\n    timeout-minutes: 40\n",
-   "new": "    name: Linux tests (${{ matrix.name }})\n    runs-on: ubuntu-latest\n",
+   "old": "    runs-on: ubuntu-24.04\n    timeout-minutes: 40\n",
+   "new": "    runs-on: ubuntu-24.04\n",
    "test": "python3 tests/scripts/test_ci_workflow.py"
+  },
+  {
+   "id": "linux_legs_run_on_the_default_image",
+   "file": ".github/workflows/ci.yml",
+   "old": "    runs-on: ubuntu-24.04\n    timeout-minutes: 40\n",
+   "new": "    runs-on: ubuntu-latest\n    timeout-minutes: 40\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_linux_jobs_run_on_ubuntu_24_04_and_not_on_the_default_image"
+  },
+  {
+   "id": "linux_check_runs_on_the_default_image",
+   "file": ".github/workflows/ci.yml",
+   "old": "    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n",
+   "new": "    runs-on: ubuntu-latest\n    timeout-minutes: 5\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_linux_jobs_run_on_ubuntu_24_04_and_not_on_the_default_image"
   },
   {
    "id": "a_push_does_not_cancel_the_older_run",

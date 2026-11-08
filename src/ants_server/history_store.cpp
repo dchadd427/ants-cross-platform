@@ -239,8 +239,7 @@ const char* recording_name(Recording r) noexcept {
 }
 
 bool entry_plays_here(const ReplayEntry& entry) noexcept {
-    const uint16_t wanted = replay::sim_rules_for_mode(entry.mode);                      // (0 for a mode that this build does not know: nothing equals it)
-    return entry.readable && wanted != 0 && entry.sim_rules == wanted;
+    return entry.readable && replay::plays_mode_rules(entry.mode, entry.sim_rules);      // (a mode that this build does not know: never)
 }
 
 std::string map_hash_text(uint64_t hash) {

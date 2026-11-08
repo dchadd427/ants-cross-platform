@@ -14,6 +14,7 @@
 //   G  Delete takes the record's own key (a nameless record, a key that is not its name)
 //   H  the tabs My maps and My submissions (the second is the player's submissions, given by the page: mapmaker_submit.js)
 //   F  Copy of a saved map (not the open one): the source, the default name and the two ways of making the copy
+//   I  the rules word of a saved map reaches the tags of its row (the badge "Rules 2" is the page's, for a map of long orders only)
 // Exit status 0 when everything passes, 1 otherwise.
 'use strict';
 
@@ -266,6 +267,7 @@ function caseF() {
         const open = { name: 'Open map', bytes: new Uint8Array([1, 1]), file: { rows: 31, columns: 31 }, kind: 'classic', report: { headline: 'Works' } };
         const core = {
             convertToExtended(bytes) { seen.push('extended ' + bytes[0]); return { status: 0, json: { ok: true, reasons: [], notes: [] }, bytes: new Uint8Array([7]) }; },
+            convertToLongOrders(bytes) { seen.push('long orders ' + bytes[0]); return { status: 0, json: { ok: true, reasons: [], notes: [] }, bytes: new Uint8Array([7]) }; },
             convertToClassic(bytes) { seen.push('classic ' + bytes[0]); return { status: 0, json: { ok: true, reasons: [], notes: [] }, bytes: new Uint8Array([6]) }; },
             readReport() { return { status: 0, json: { rows: 40, columns: 50 } }; }
         };
@@ -285,7 +287,7 @@ function caseF() {
     c.button('Next: what changes').click();
     check(/Draft \(40 x 50\)/.test(c.host.querySelector('.lead').textContent), 'Start an Extended map names the saved map: ' + c.host.querySelector('.lead').textContent);
     c.button('Make the new Extended map').click();
-    equal([c.seen, c.made], [['extended 8'], [[[7], 'Draft Extended']]], 'and the saved map\'s bytes go to the core, not the open map\'s');
+    equal([c.seen, c.made], [['long orders 8'], [[[7], 'Draft Extended']]], 'and the saved map\'s bytes go to the core (40 rows: it plays like the original with long orders), not the open map\'s');
     c = setupCopy('extended');
     c.convert.copy(c.given);
     equal(c.host.querySelector('.sn').textContent, 'Draft', 'an Extended saved map is the source too');
@@ -350,8 +352,25 @@ async function caseH() {
     equal(bare.p.els['mine-title'].textContent, 'My maps', 'and cannot open on one');
 }
 
+// ---- I: the word of each saved map is given to the tags of its row ----
+async function caseI() {
+    const idb = fakeIdb();
+    idb.stores.drafts.set('long', rec('Long', 'extended', 400, new Uint8Array([9, 1, 2])));
+    idb.stores.drafts.set('ext', rec('Ext', 'extended', 300, new Uint8Array([9, 1, 1])));
+    idb.stores.drafts.set('plain', rec('Plain', 'extended', 200, new Uint8Array([9, 1, 0])));
+    idb.stores.drafts.set('old', rec('Old', 'classic', 100, new Uint8Array([8, 1, 0])));
+    const seen = [];
+    const s = await loaded(await opened(idb), {
+        parse: (bytes) => (bytes[0] === 8 ? { kind: 'classic', rows: 31, columns: 31, rules: 0 } : { kind: 'extended', rows: 300, columns: 400, rules: bytes[2] }),
+        tags: (host, kind, rules) => { seen.push([kind, rules]); host.textContent = (kind === 'extended' ? 'Extended map' : 'Classic map') + (rules === 2 ? '|Rules 2' : ''); }
+    });
+    equal(names(s), ['Long', 'Ext', 'Plain', 'Old'], 'a row for each saved map');
+    equal(s.p.els['mine-list'].children.map((r) => r.querySelector('.t1').textContent.replace(/^\S+ /, '')), ['Extended map|Rules 2', 'Extended map', 'Extended map', 'Classic map'], 'only the map of long orders has the badge in its row');
+    equal(seen.map((x) => x.join(':')).sort(), ['classic:0', 'extended:0', 'extended:1', 'extended:2'], 'each row is given the rules word of its file');
+}
+
 (async () => {
-    const parts = [['A the store: list and delete', caseA], ['B the list, the filters and the empty states', caseB], ['C Open, Copy and a map that cannot be read', caseC], ['D Delete and its question', caseD], ['E Escape, closing and waiting', caseE], ['F Copy of a saved map', caseF], ['G Delete by the record\'s own key', caseG], ['H the tabs', caseH]];
+    const parts = [['A the store: list and delete', caseA], ['B the list, the filters and the empty states', caseB], ['C Open, Copy and a map that cannot be read', caseC], ['D Delete and its question', caseD], ['E Escape, closing and waiting', caseE], ['F Copy of a saved map', caseF], ['G Delete by the record\'s own key', caseG], ['H the tabs', caseH], ['I the rules word in the rows', caseI]];
     for (const [name, fn] of parts) {
         const was = failures;
         try { await fn(); } catch (e) { failures++; console.log('    ERROR: ' + (e && e.stack || e)); }

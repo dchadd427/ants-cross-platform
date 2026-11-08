@@ -109,7 +109,7 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
     impl_->active_effects_.clear();
     impl_->battle_clouds_.clear();
     impl_->score_bubbles_.clear();
-    impl_->grid_.init_from_level(level);
+    impl_->grid_.init_from_level(level, impl_->fire_wall_as_original_);
     const bool mode187 = impl_->game_mode_ == GameMode::Kills187;
     if (mode187) {
         // 187: no food and no power-ups on any map; everything else (the start markers, the starting ants, the eggs, the ant types) is the map's own
@@ -202,14 +202,11 @@ void SimulationEngine::init(const ants::assets::LevelData& level_in, uint32_t ra
         }
     }
 
+    impl_->started_mask_ = impl_->alive_mask();
     impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
     if (impl_->fog_of_war_enabled_) {
         impl_->update_fog_of_war();
     }
-}
-
-void SimulationEngine::allow_rules_two_for_tests() {
-    impl_->grid_.allow_rules_two_for_tests();
 }
 
 void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t random_seed, uint32_t match_time_ms, uint16_t rules) {
@@ -241,6 +238,7 @@ void SimulationEngine::init_test_world(uint32_t width, uint32_t height, uint32_t
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) {
         impl_->stats_.set_egg_count(p, 10);
     }
+    impl_->started_mask_ = 0x0Fu;                       // (every team of a test world has its eggs and is in the match, whether a hill could hatch them or not)
 
     impl_->fog_revealed_.assign(static_cast<size_t>(impl_->grid_.width() * impl_->grid_.height()), 0);
     if (impl_->fog_of_war_enabled_) {
@@ -254,7 +252,7 @@ void SimulationEngine::tick() {
         return;
     }
 
-    // 187: a team that has no ant, egg or hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
+    // 187: a team that has no ant, no egg that can hatch and no hatch left is said before CHECKGO looks, so that the team whose fall ends the match is said too (the match is over at CHECKGO, and nothing ticks after that)
     if (impl_->game_mode_ == GameMode::Kills187) impl_->announce_out_of_ants_187();
 
     // 1. CHECKGO (Ants.exe 0x1024839, period 200 ms, first run at once): the time warnings and the end of the match
@@ -410,7 +408,7 @@ void SimulationEngineImpl::checkgo_poll() {
 
 bool SimulationEngineImpl::team_alive(uint8_t team) const {
     if (team >= MAX_PLAYERS) return false;
-    if (stats_.get_egg_count(team) > 0 || hatch_[team].active) return true;
+    if (hatch_[team].active || (stats_.get_egg_count(team) > 0 && (!end_fixed_187() || egg_can_hatch(team)))) return true;       // (187 now: an egg that cannot hatch is no life, mode_187.cpp)
     for (const auto& a : ants_) {
         if (a != nullptr && !a->removed && a->player_id == team) return true;
     }
@@ -453,7 +451,7 @@ bool SimulationEngineImpl::checkgo_end_rules() const {
         if ((roster_mask_ & (1u << local)) == 0 || team_dropped(local)) continue;     // a dropped team's machine is gone
         if (checkgo_ends_for(local)) return true;
     }
-    return false;
+    return last_side_ends() && last_side_decides();         // (the rules number 8: the one side that is left wins when nothing is left to score; last_side.cpp)
 }
 
 bool SimulationEngineImpl::drop_leaves_winner() const {
@@ -485,11 +483,8 @@ MatchResult SimulationEngineImpl::make_match_result() const {
         for (const auto& a : ants_) {
             if (a != nullptr && !a->removed && a->player_id < MAX_PLAYERS) ++result.ants_left[a->player_id];
         }
-        if (match_state_ == MatchState::GameOver) {
-            result.standing = last_standing_187();
-            result.decide_winners();                     // the cues follow the rows, which follow the team that is left
-        }
     }
+    if (match_state_ == MatchState::GameOver) mark_side_left(result);       // (187: the side that is left goes first; the original's game under the rules number 8: it wins a tie; last_side.cpp)
     return result;
 }
 
@@ -541,7 +536,7 @@ bool SimulationEngine::issue_order(const AntOrder& order) {
         case OrderType::ReturnToBase: {
             unit->ability_target = TileCoord{-1, -1};
             join_base_queue(order.ant_id);
-            return true;
+            return !impl_->hill_closed();                       // (187 now: the order was refused)
         }
         case OrderType::Attack:
             unit->ability_target = TileCoord{-1, -1};
@@ -929,6 +924,7 @@ void SimulationEngine::set_match_time_remaining_ms(uint32_t ms) {
 
 void SimulationEngine::set_game_mode(GameMode mode) {
     impl_->game_mode_ = mode;
+    impl_->hill_open_187_ = false; impl_->end_fix_187_ = true; impl_->last_side_rule_ = true; impl_->fire_wall_as_original_ = true;       // (the rules of a match that is played now; the player of an old recording says otherwise after this: set_hill_open_187, set_end_fix_187, set_last_side_rule, set_fire_wall_as_original)
     impl_->world_state_dirty_ = true;
 }
 
@@ -1185,7 +1181,7 @@ bool SimulationEngine::is_special_target_valid(AntType type, TileCoord tile, boo
             for (const auto& ah : impl.grid_.anthills()) {
                 if (tile.x >= static_cast<int32_t>(ah.x) && tile.x <= static_cast<int32_t>(ah.x) + 3 &&
                     tile.y >= static_cast<int32_t>(ah.y) && tile.y <= static_cast<int32_t>(ah.y) + 3) {
-                    return ah.team_id != own_team;
+                    return ah.team_id != own_team && !impl.hill_closed();      // (187 now: no raid, a thief's click on a hill is refused)
                 }
             }
             return false;
