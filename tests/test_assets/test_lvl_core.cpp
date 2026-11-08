@@ -17,6 +17,8 @@
 //       that go with it, the records that move) on the whole library as Classic and as Extended maps, the stored answers, the refusals, bounds before anything is allocated
 //   C13 the dropper-plant tile list of read_report's "plants" count: every one of the 1,344 tile ids agrees with sim::movement::is_dropper_plant_tile, which this module cannot link
 //   C14 the power-up tile list of read_report's "powerups" count: every one of the 1,344 tile ids agrees with sim::movement::is_powerup_tile, which this module cannot link
+//   C13 the long-order conversion (interface version 5): the twin of the conversion up, with the rules word 2 and nothing else different, on the whole library and on Extended maps of every word, the
+//       source untouched, hostile files (too short, wrong magic, a version that does not match, a rules word above 2, huge dimensions), and thousands of mutated files
 // `test_lvl_core --write-expected` writes the expectation again (after a change of the core that is meant), `--print-tile-names` prints src/ants_assets/lvl_tile_names.inc.
 #include "ants_assets/chd_parser.hpp"
 #include "ants_assets/lvl_checker.hpp"
@@ -52,6 +54,7 @@ uint8_t* lvl_blank(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32
 uint8_t* lvl_same_level(const uint8_t* a, uint32_t size_a, const uint8_t* b, uint32_t size_b, uint32_t profile);
 uint8_t* lvl_check_map(const uint8_t* data, uint32_t size, uint32_t profile);
 uint8_t* lvl_convert_to_extended(const uint8_t* data, uint32_t size);
+uint8_t* lvl_convert_to_long_orders(const uint8_t* data, uint32_t size);
 uint8_t* lvl_convert_to_classic(const uint8_t* data, uint32_t size, uint32_t profile);
 uint8_t* lvl_needs_extended(const uint8_t* data, uint32_t size, uint32_t profile);
 uint8_t* lvl_blank_extended(uint32_t rows, uint32_t columns, uint32_t ground_tile, uint32_t eggs, uint32_t minutes);
@@ -212,6 +215,7 @@ Conv c_crop(const Bytes& b, uint32_t row, uint32_t column, uint32_t rows, uint32
 }
 
 Conv c_to_extended(const Bytes& b) { return unpack(take(lvl_convert_to_extended(b.data(), static_cast<uint32_t>(b.size())))); }
+Conv c_to_long_orders(const Bytes& b) { return unpack(take(lvl_convert_to_long_orders(b.data(), static_cast<uint32_t>(b.size())))); }
 Conv c_to_classic(const Bytes& b, uint32_t profile = 0) { return unpack(take(lvl_convert_to_classic(b.data(), static_cast<uint32_t>(b.size()), profile))); }
 
 Bytes up_of(const Bytes& classic) { return c_to_extended(classic).bytes; }
@@ -350,7 +354,7 @@ void c1_names() {
 
 // ---- C2 ----
 void c2_interface() {
-    CHECK(lvl_interface_version() == 4);
+    CHECK(lvl_interface_version() == 5);
     lvl_free(nullptr);
     uint8_t* zero = lvl_alloc(0);
     CHECK(zero != nullptr);
@@ -460,7 +464,7 @@ void c6_no_memory() {
     const std::string too_long(256, 'x');
     int faults = 0;
     for (long allow = 0; allow < 400; allow += (allow < 60 ? 1 : 7)) {
-        for (int call = 0; call < 16; ++call) {
+        for (int call = 0; call < 18; ++call) {
             g_allow = allow;
             lvl_core::Result r;
             switch (call) {
@@ -479,6 +483,8 @@ void c6_no_memory() {
                 case 12: r = lvl_core::set_properties(tiny9.data(), tiny9.size(), reinterpret_cast<const uint8_t*>(too_long.data()), too_long.size(), 7, 3, 63, lvl_core::Profile::Extended); break;     // (refused: too long)
                 case 13: r = lvl_core::crop(tiny.data(), tiny.size(), 3, 4, 20, 18, lvl_core::Profile::NewMap); break;
                 case 14: r = lvl_core::crop(tiny9.data(), tiny9.size(), 3, 4, 20, 18, lvl_core::Profile::Extended); break;
+                case 15: r = lvl_core::convert_to_long_orders(tiny.data(), tiny.size()); break;
+                case 16: r = lvl_core::convert_to_long_orders(tiny9.data(), tiny9.size()); break;
                 default: r = lvl_core::check_map(tiny.data(), tiny.size(), lvl_core::Profile::NewMap); break;
             }
             g_allow = -1;
@@ -817,7 +823,7 @@ void c10_blank_extended() {
         LevelValidation report;
         CHECK_MSG(level.load_from_memory(bytes.data(), bytes.size(), &report, LevelLimits::for_extended_maps()), id);
         CHECK(level.version == 9 && level.height() == c.rows && level.width() == c.columns && level.boundary_param == c.eggs && level.default_minutes == c.minutes && level.format_flags == 0);
-        CHECK_MSG(level.rules == (c.rows > 90 || c.columns > 256 ? 1u : 0u), id + ": the extended rules from 91 rows or 257 columns on");
+        CHECK_MSG(level.rules == (c.rows > 256 || c.columns > 256 ? 2u : c.rows > 90 ? 1u : 0u), id + ": the extended rules from 91 rows on, the long-order rules when a side is beyond 256");
         CHECK(!level.layer1_terrain.empty() && level.layer1_terrain.front().tile_index == c.ground);
         const LevelWriteResult w = write_level(blank_extended_level(c.rows, c.columns, lvl_core::tile_names(), LevelLimits::for_extended_maps()), LevelLimits::for_extended_maps());
         if (c.ground == 485 && c.eggs == 6 && c.minutes == 10) CHECK_MSG(w.ok && w.bytes == bytes, id + ": blank_extended_level's bytes");
@@ -855,8 +861,8 @@ std::vector<FileCase> hostile_extended_cases() {
     flags[10] = 1;
     add("format_flag", flags);
     Bytes rules = up;
-    rules[14] = 2;
-    add("rules_2", rules);
+    rules[14] = 3;
+    add("rules_3", rules);
     Bytes grid = up;
     put32(grid, 7412 + shift, 0xFFFFFFFFu);
     put32(grid, 7416 + shift, 0xFFFFFFFFu);
@@ -1396,6 +1402,208 @@ void c14_power_up_tiles() {
     }
 }
 
+// ---- C13 ----
+// The long-order conversion (interface version 5): lvl_convert_to_long_orders is lvl_convert_to_extended with the rules word 2 in the new file, and nothing else different.
+// The word of a version 9 file is the one at 14 (docs/MAP_FORMAT.md); 99 for a file that is not one
+uint32_t rules_of(const Bytes& b) { return b.size() > 15 && b[0] == 9 ? static_cast<uint32_t>(b[14]) | static_cast<uint32_t>(b[15]) << 8 : 99u; }
+
+Bytes with_rules(Bytes b, uint16_t rules) {
+    b[14] = static_cast<uint8_t>(rules & 0xFF);
+    b[15] = static_cast<uint8_t>(rules >> 8);
+    return b;
+}
+
+bool loads_as_extended(const Bytes& b, uint16_t* rules = nullptr) {
+    LevelData level;
+    LevelValidation report;
+    if (!level.load_from_memory(b.data(), b.size(), &report, LevelLimits::for_extended_maps())) return false;
+    if (rules != nullptr) *rules = level.rules;
+    return level.version == 9;
+}
+
+void c13_long_orders() {
+    const Bytes tiny = read_checked("Original-Ants/Maps/TINY.LVL");
+    // every map of the library goes up with the word 2: the file is the one of the plain conversion with that word set, the JSON is the same text, the source is not touched
+    int tried = 0;
+    for (const auto& file : whole_library()) {
+        const Bytes before = file.second;
+        const Conv up = c_to_extended(file.second);
+        const Conv lo = c_to_long_orders(file.second);
+        CHECK_MSG(lo.status == 0 && contains(lo.json, "\"ok\":true") && contains(lo.json, "\"to\":\"extended\"") && contains(lo.json, "\"from\":\"" + std::string(before[0] == 9 ? "extended" : "classic") + "\""), file.first + ": " + lo.json);
+        CHECK_MSG(lo.json == up.json, file.first + ": the answer is the plain conversion's, word for word");
+        CHECK_MSG(rules_of(up.bytes) == 0 && rules_of(lo.bytes) == 2, file.first + ": the plain copy has rules 0 and this one rules 2");
+        CHECK_MSG(lo.bytes == with_rules(up.bytes, 2), file.first + ": nothing but the rules word differs from the plain copy");
+        CHECK_MSG(file.second == before, file.first + ": the bytes that were given are as they were");
+        ++tried;
+    }
+    CHECK_MSG(tried == 540, "the whole library: " + std::to_string(tried));
+    // the nine maps of the set in detail: the reader sees rules 2 and the same map (the one difference of the two levels is the word)
+    for (const FileCase& c : library_cases()) {
+        const Conv up = c_to_extended(c.bytes), lo = c_to_long_orders(c.bytes);
+        uint16_t rules = 99;
+        CHECK_MSG(loads_as_extended(lo.bytes, &rules) && rules == 2, c.id + ": it loads as an Extended map of rules 2");
+        const Answer same = c_same(up.bytes, lo.bytes, 2);
+        CHECK_MSG(same.status == 0 && same.payload == "{\"same\":false,\"difference\":\"rules: 0 / 2\"}", c.id + ": the one difference is the rules word: " + same.payload);
+        CHECK_MSG(c_same(with_rules(lo.bytes, 0), up.bytes, 2).payload == "{\"same\":true}", c.id + ": with the word taken back it is the same map");
+        const Conv again = c_to_long_orders(lo.bytes);
+        CHECK_MSG(again.status == 0 && contains(again.json, "\"from\":\"extended\"") && again.bytes == lo.bytes, c.id + ": converting it again changes nothing");
+        const Answer rw = c_rewrite(lo.bytes, 2);
+        CHECK_MSG(rw.status == 0 && as_bytes(rw.payload) == lo.bytes, c.id + ": it is its own canonical file");
+        const Conv down = c_to_classic(lo.bytes);
+        CHECK_MSG(down.status == 0 && contains(down.json, "\"ok\":true") && codes_of(down.json, "notes").find("rules_long_orders_dropped") != std::string::npos, c.id + ": a Classic map from it says what is lost: " + codes_of(down.json, "notes"));
+        CHECK_MSG(down.bytes == as_bytes(c_rewrite(c.bytes).payload), c.id + ": and is the canonical Classic file again");
+        CHECK_MSG(contains(down.json, "{\"code\":\"rules_long_orders_dropped\",\"message\":\"the map has long orders (rules 2); a Classic map has the original's rules only, so a long path order can fail there\"}"), c.id + ": in the short words: " + down.json);
+    }
+    // an Extended map of any word gets the word 2 and keeps its cells (the same level but for the word); 95 rows is a map that asks for rules 1
+    for (const uint16_t word : {uint16_t(0), uint16_t(1), uint16_t(2)}) {
+        LevelData level = blank_extended_level(95, 20, lvl_core::tile_names());
+        level.rules = word;
+        level.description = "word " + std::to_string(word);
+        const LevelWriteResult w = write_level(level, LevelLimits::for_extended_maps());
+        CHECK(w.ok);
+        const Conv lo = c_to_long_orders(w.bytes);
+        CHECK_MSG(lo.status == 0 && contains(lo.json, "\"from\":\"extended\"") && rules_of(lo.bytes) == 2 && lo.bytes == with_rules(w.bytes, 2), "rules " + std::to_string(word) + " becomes 2 and nothing else changes: " + lo.json.substr(0, 100));
+        CHECK_MSG(c_same(w.bytes, lo.bytes, 2).payload == (word == 2 ? "{\"same\":true}" : "{\"same\":false,\"difference\":\"rules: " + std::to_string(word) + " / 2\"}"), "the two differ by the word only");
+    }
+    // a map of 512 x 512 (the most): rules 2 already as made, so the copy is the same bytes
+    const Answer largest = take(lvl_blank_extended(512, 512, 485, 6, 10));
+    const Conv largest_copy = c_to_long_orders(as_bytes(largest.payload));
+    CHECK_MSG(largest.status == 0 && largest_copy.status == 0 && largest_copy.bytes == as_bytes(largest.payload), "a map that has rules 2 comes back as its own bytes");
+    // the other kind of answer: a map that cannot be written as an Extended map is an answer with "ok": false and no file (a level of more than the Extended limits is not read at all)
+    const LevelData over = blank_extended_level(1025, 3, lvl_core::tile_names(), LevelLimits::format_ceiling());
+    const LevelWriteResult over_file = write_level(over, LevelLimits::format_ceiling());
+    CHECK(over_file.ok);
+    CHECK_MSG(c_to_long_orders(over_file.bytes).status == 1 && c_to_extended(over_file.bytes).status == 1, "a grid beyond the Extended limits is not read: status 1, as the plain conversion says");
+}
+
+// Hostile files: too short, a magic that is no version, a version that does not match the layout, a rules word above 2, huge dimensions, cuts and noise. The long-order call refuses
+// what the plain conversion refuses, in the same words, and asks the heap for nothing near the size that a header announces.
+void c13_hostile() {
+    const Bytes tiny = read_checked("Original-Ants/Maps/TINY.LVL");
+    const Bytes up = c_to_extended(tiny).bytes;
+    const size_t description = static_cast<size_t>(up[16]) | static_cast<size_t>(up[17]) << 8;
+    const size_t shift = 18 + description - 40;                                   // (c10: where TINY's offsets are in the version 9 file)
+    std::vector<FileCase> cases = hostile_cases();
+    for (const FileCase& c : hostile_extended_cases()) cases.push_back(c);
+    auto add = [&](const std::string& id, Bytes b) { cases.push_back(FileCase{"hostile_long_" + id, "-", true, std::move(b)}); };
+    add("one_byte_nine", Bytes{9});
+    add("three_bytes", Bytes{9, 0, 0});
+    add("header_only", Bytes(up.begin(), up.begin() + 18));
+    for (const uint32_t magic : {0u, 1u, 7u, 10u, 0x12345678u, 0xFFFFFFFFu}) {
+        Bytes b = up;
+        put32(b, 0, magic);
+        add("magic_" + std::to_string(magic), b);
+    }
+    Bytes eight_as_nine = tiny;                                                    // a version 8 body that says it is version 9: its fields are read at the wrong places
+    put32(eight_as_nine, 0, 9);
+    add("version_8_body_says_9", eight_as_nine);
+    Bytes nine_as_eight = up;                                                      // a version 9 body that says it is version 8
+    put32(nine_as_eight, 0, 8);
+    add("version_9_body_says_8", nine_as_eight);
+    for (const uint16_t word : {uint16_t(3), uint16_t(4), uint16_t(255), uint16_t(256), uint16_t(0x8000), uint16_t(0xFFFF)}) add("rules_" + std::to_string(word), with_rules(up, word));
+    Bytes flags = up;
+    flags[10] = 1;
+    add("format_flag", flags);
+    for (const uint32_t side : {0u, 1025u, 65535u, 65536u, 0x7FFFFFFFu, 0xFFFFFFFFu}) {
+        Bytes rows = up, columns = up, both = up;
+        put32(rows, 7412 + shift, side);
+        put32(columns, 7416 + shift, side);
+        put32(both, 7412 + shift, side);
+        put32(both, 7416 + shift, side);
+        add("rows_" + std::to_string(side), rows);
+        add("columns_" + std::to_string(side), columns);
+        add("both_" + std::to_string(side), both);
+    }
+    Bytes long_description = up;                                                   // the length of the description reaches beyond the file
+    long_description[16] = 0xFF;
+    long_description[17] = 0xFF;
+    add("description_65535", long_description);
+    int refused = 0;
+    for (const FileCase& c : cases) {
+        const unsigned long long asked = g_bytes;
+        const Conv lo = c_to_long_orders(c.bytes);
+        const unsigned long long used = g_bytes - asked;
+        const Conv plain = c_to_extended(c.bytes);
+        CHECK_MSG(lo.status == 1 && plain.status == 1 && lo.json == plain.json && lo.bytes.empty(), c.id + ": refused as the plain conversion refuses it: " + lo.json.substr(0, 100));
+        CHECK_MSG(contains(lo.json, "does not load"), c.id + ": with the sentence of the reader: " + lo.json.substr(0, 100));
+        CHECK_MSG(used < 32ull * (1u << 20), c.id + ": a refused file asks the heap for no more than the file: " + std::to_string(used) + " bytes asked");
+        ++refused;
+    }
+    CHECK_MSG(refused >= 55, "hostile files were tried: " + std::to_string(refused));
+    // no bytes at all, a null pointer, a size of nothing
+    CHECK(unpack(take(lvl_convert_to_long_orders(nullptr, 0))).status == 1);
+    CHECK(c_to_long_orders(Bytes()).status == 1);
+    // a map that is only a file of the right size but not a map: 513 KB of zeros and of noise
+    CHECK(c_to_long_orders(Bytes(513u * 1024u, 0)).status == 1 && c_to_long_orders(random_bytes(7, 600000)).status == 1);
+    // the answer to a rules word that is known is not a refusal: 0, 1 and 2 each go to 2
+    for (const uint16_t word : {uint16_t(0), uint16_t(1), uint16_t(2)}) {
+        const Conv lo = c_to_long_orders(with_rules(up, word));
+        CHECK_MSG(lo.status == 0 && rules_of(lo.bytes) == 2, "rules " + std::to_string(word) + " is a word that is known");
+    }
+}
+
+// Thousands of mutated files: a seeded xorshift flips bytes, cuts, grows, swaps the version, the flags, the rules word and the dimensions for TINY as a Classic map, as an Extended map, with rules 2
+// and with rules 1. Whatever the file, the call answers 1 or 0 (never 2: no memory is missing), says what the plain conversion says, and what it makes loads as an Extended map of rules 2
+// that has the cells of the plain copy. The point of the number is the sanitizers: ./run_tests.sh --asan runs this under AddressSanitizer and UBSan. A reviewer can ask for more:
+// ANTS_LVL_FUZZ_ROUNDS (the files for each of the five seeds, 1,000 by default) and ANTS_LVL_FUZZ_SEED (20241104 by default) in the environment.
+void c13_mutated() {
+    const Bytes tiny = read_checked("Original-Ants/Maps/TINY.LVL");
+    const Bytes up = c_to_extended(tiny).bytes;
+    const size_t description = static_cast<size_t>(up[16]) | static_cast<size_t>(up[17]) << 8;
+    const size_t shift = 18 + description - 40;
+    LevelData one = blank_extended_level(95, 20, lvl_core::tile_names());
+    one.rules = 1;
+    const LevelWriteResult one_file = write_level(one, LevelLimits::for_extended_maps());
+    CHECK(one_file.ok);
+    const std::vector<Bytes> seeds = {tiny, up, with_rules(up, 1), with_rules(up, 2), one_file.bytes};
+    const uint32_t interesting[] = {0u, 1u, 2u, 3u, 7u, 8u, 9u, 10u, 89u, 90u, 91u, 255u, 256u, 257u, 1024u, 1025u, 65535u, 65536u, 0x7FFFFFFFu, 0x80000000u, 0xFFFFFFFFu};
+    const char* rounds_text = std::getenv("ANTS_LVL_FUZZ_ROUNDS");
+    const char* seed_text = std::getenv("ANTS_LVL_FUZZ_SEED");
+    const int rounds = rounds_text != nullptr && std::atoi(rounds_text) > 0 ? std::atoi(rounds_text) : 1000;
+    uint32_t x = seed_text != nullptr && std::strtoul(seed_text, nullptr, 10) != 0 ? static_cast<uint32_t>(std::strtoul(seed_text, nullptr, 10)) : 20241104u;
+    auto rnd = [&](uint32_t n) { x ^= x << 13; x ^= x >> 17; x ^= x << 5; return n == 0 ? 0u : x % n; };
+    int inputs = 0, loaded = 0, refused = 0, faults = 0, nulls = 0;
+    unsigned long long worst = 0;
+    for (const Bytes& seed : seeds) {
+        for (int i = 0; i < rounds; ++i) {
+            Bytes b = seed;
+            switch (rnd(8)) {
+                case 0: for (uint32_t k = 1 + rnd(8); k > 0; --k) b[rnd(static_cast<uint32_t>(b.size()))] = static_cast<uint8_t>(rnd(256)); break;                       // bytes anywhere
+                case 1: for (uint32_t k = 1 + rnd(4); k > 0; --k) b[rnd(64)] = static_cast<uint8_t>(rnd(256)); break;                                                     // bytes of the header
+                case 2: b.resize(rnd(static_cast<uint32_t>(b.size()))); break;                                                                                          // a cut
+                case 3: { const uint32_t at = rnd(static_cast<uint32_t>(b.size())); b.insert(b.begin() + at, 1 + rnd(40), static_cast<uint8_t>(rnd(256))); break; }       // a chunk grows in
+                case 4: { const uint32_t at = rnd(static_cast<uint32_t>(b.size())), n = std::min<uint32_t>(1 + rnd(40), static_cast<uint32_t>(b.size()) - at); b.erase(b.begin() + at, b.begin() + at + n); break; }   // a chunk is gone
+                case 5: { const size_t at = rnd(2) == 0 ? 0 : 4 + 4 * rnd(3); if (b.size() > at + 4) put32(b, at, interesting[rnd(21)]); break; }                           // the version and the first dwords
+                case 6: { const size_t at = (seed[0] == 9 ? 7412 + shift : 7412) + 4 * rnd(2); if (b.size() > at + 4) put32(b, at, interesting[rnd(21)]); break; }          // the grid's dimensions
+                default: if (b.size() > 17) { b[10 + rnd(4)] = static_cast<uint8_t>(rnd(4)); b[14] = static_cast<uint8_t>(rnd(5)); b[15] = static_cast<uint8_t>(rnd(3) == 0 ? rnd(256) : 0); } break;   // the flags and the rules word
+            }
+            const unsigned long long asked = g_bytes;
+            const Conv lo = c_to_long_orders(b);
+            worst = std::max(worst, g_bytes - asked);
+            const Conv plain = c_to_extended(b);
+            ++inputs;
+            if (lo.status > 1) ++faults;
+            if (lo.status != plain.status || lo.json != plain.json) {
+                CHECK_MSG(false, "the same answer as the plain conversion (input " + std::to_string(inputs) + "): " + lo.json.substr(0, 100) + " / " + plain.json.substr(0, 100));
+                continue;
+            }
+            if (lo.status == 1) { ++refused; continue; }
+            if (lo.status != 0) { ++nulls; continue; }
+            const bool ok = contains(lo.json, "\"ok\":true");
+            CHECK_MSG(ok == !plain.bytes.empty() && lo.bytes.empty() == !ok, "a file only when the map could be converted (input " + std::to_string(inputs) + ")");
+            if (!ok) continue;
+            uint16_t rules = 99;
+            CHECK_MSG(loads_as_extended(lo.bytes, &rules) && rules == 2, "what is made loads as an Extended map of rules 2 (input " + std::to_string(inputs) + ")");
+            CHECK_MSG(lo.bytes == with_rules(plain.bytes, 2), "and is the plain copy with the word set (input " + std::to_string(inputs) + ")");
+            ++loaded;
+        }
+    }
+    CHECK_MSG(inputs >= 5000 && faults == 0 && nulls == 0, "no fault, no missing block: " + std::to_string(inputs) + " inputs, " + std::to_string(faults) + " faults");
+    CHECK_MSG(loaded > inputs / 20 && refused > inputs / 20, "the mutations met both answers: " + std::to_string(loaded) + " converted, " + std::to_string(refused) + " refused");
+    CHECK_MSG(worst < 32ull * (1u << 20), "no file made the call ask the heap for more than a few MB: " + std::to_string(worst) + " bytes at most");
+    std::cout << "(" << inputs << " mutated files: " << loaded << " converted, " << refused << " refused) ";
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -1429,6 +1637,9 @@ int main(int argc, char* argv[]) {
     run_case("C12 the crop", c12_crop);
     run_case("C13 the dropper-plant tile list", c13_plant_tiles);
     run_case("C14 the power-up tile list", c14_power_up_tiles);
+    run_case("C13 the long-order conversion", c13_long_orders);
+    run_case("C13 hostile files for it", c13_hostile);
+    run_case("C13 mutated files", c13_mutated);
     std::cout << "\n" << g_cases << " cases, " << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures == 0 ? 0 : 1;
 }

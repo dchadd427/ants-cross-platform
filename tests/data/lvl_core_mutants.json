@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the map core's Extended calls in the browser module (docs/MAP_FORMAT.md, \"In the browser\"): the Extended profile and its limits, the conversions and their reasons, the check by kind, the blank Extended map, the properties of a map (interface version 3), the crop of a map (interface version 4), the C interface and the JavaScript wrapper. Run: python3 tools/mutate.py tests/data/lvl_core_mutants.json --keep-going --jobs 1 (do not commit the .report.json). The first mutants are held by test_lvl_core, the last ones by tests/scripts/lvl_core_check.js (it needs build_web/lvl_core: emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core) and by tests/scripts/test_lvl_core.py.",
+ "note": "Mutants of the map core's Extended calls in the browser module (docs/MAP_FORMAT.md, \"In the browser\"): the Extended profile and its limits, the conversions and their reasons, the check by kind, the blank Extended map, the properties of a map (interface version 3), the crop of a map (interface version 4), the long-order conversion (interface version 5), the C interface and the JavaScript wrapper. Run: python3 tools/mutate.py tests/data/lvl_core_mutants.json --keep-going --jobs 1 (do not commit the .report.json). The first mutants are held by test_lvl_core, the last ones by tests/scripts/lvl_core_check.js (it needs build_web/lvl_core: emcmake cmake -B build_web -DBUILD_TESTS=OFF && cmake --build build_web --target lvl_core) and by tests/scripts/test_lvl_core.py.",
  "defaults": {},
  "mutants": [
   {
@@ -45,8 +45,8 @@
   {
    "id": "conversion_goes_the_other_way",
    "file": "src/ants_assets/lvl_core.cpp",
-   "old": "to_extended ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_classic(level)",
-   "new": "to_extended ? ants::assets::convert_to_classic(level) : ants::assets::convert_to_extended(level)",
+   "old": "to_extended ? (long_orders ? ants::assets::convert_to_long_orders(level) : ants::assets::convert_to_extended(level)) : ants::assets::convert_to_classic(level)",
+   "new": "to_extended ? ants::assets::convert_to_classic(level) : (long_orders ? ants::assets::convert_to_long_orders(level) : ants::assets::convert_to_extended(level))",
    "build": [
     "test_lvl_core"
    ],
@@ -195,7 +195,7 @@
   {
    "id": "interface_version_stays_2",
    "file": "src/ants_assets/lvl_core_c.cpp",
-   "old": "lvl_interface_version() { return 4; }",
+   "old": "lvl_interface_version() { return 5; }",
    "new": "lvl_interface_version() { return 2; }",
    "build": [
     "test_lvl_core"
@@ -363,7 +363,7 @@
   {
    "id": "wrapper_needs_the_second_interface",
    "file": "web/lvl_core_api.js",
-   "old": "var EXPECTED_INTERFACE = 4;",
+   "old": "var EXPECTED_INTERFACE = 5;",
    "new": "var EXPECTED_INTERFACE = 2;",
    "build": [],
    "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
@@ -875,7 +875,7 @@
   {
    "id": "interface_version_is_not_raised_for_the_crop",
    "file": "src/ants_assets/lvl_core_c.cpp",
-   "old": "lvl_interface_version() { return 4; }",
+   "old": "lvl_interface_version() { return 5; }",
    "new": "lvl_interface_version() { return 3; }",
    "build": [
     "test_lvl_core"
@@ -911,6 +911,110 @@
     "test_lvl_core"
    ],
    "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "interface_version_is_not_raised_for_the_long_orders",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "lvl_interface_version() { return 5; }",
+   "new": "lvl_interface_version() { return 4; }",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "long_orders_conversion_keeps_the_word_it_found",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "(long_orders ? ants::assets::convert_to_long_orders(level) : ants::assets::convert_to_extended(level))",
+   "new": "(long_orders ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_extended(level))",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "long_orders_conversion_is_asked_for_the_plain_one",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why, true)",
+   "new": "convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why, false)",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "long_orders_conversion_is_held_to_a_new_maps_limits",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why, true)",
+   "new": "convert_file(true, data, size, LevelLimits::for_new_maps(), c, why, true)",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "long_orders_conversion_goes_down_to_a_classic_map",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why, true)",
+   "new": "convert_file(false, data, size, LevelLimits::for_extended_maps(), c, why, true)",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "long_orders_call_is_the_plain_conversion",
+   "file": "src/ants_assets/lvl_core.cpp",
+   "old": "return guarded([&] { return convert_to_long_orders_impl(data, size); });",
+   "new": "return guarded([&] { return convert_to_long_orders_impl(data, size).status == 0 ? convert_to_extended_impl(data, size) : convert_to_extended_impl(data, size); });",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "long_orders_export_is_the_plain_conversion",
+   "file": "src/ants_assets/lvl_core_c.cpp",
+   "old": "block_of(ants::assets::lvl_core::convert_to_long_orders(data, size))",
+   "new": "block_of(ants::assets::lvl_core::convert_to_extended(data, size))",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "long_orders_note_is_not_the_short_one",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "so a long path order can fail there\"",
+   "new": "so it may play differently\"",
+   "build": [
+    "test_lvl_core"
+   ],
+   "test": "./build/tests/test_assets/test_lvl_core"
+  },
+  {
+   "id": "export_list_loses_the_long_orders",
+   "file": "CMakeLists.txt",
+   "old": "_lvl_convert_to_extended,_lvl_convert_to_long_orders,_lvl_convert_to_classic,",
+   "new": "_lvl_convert_to_extended,_lvl_convert_to_classic,",
+   "build": [],
+   "test": "python3 -m unittest tests/scripts/test_lvl_core.py"
+  },
+  {
+   "id": "wrapper_long_orders_asks_for_the_plain_call",
+   "file": "web/lvl_core_api.js",
+   "old": "module._lvl_convert_to_long_orders(ptr[0], bytes.length), 'conversion')",
+   "new": "module._lvl_convert_to_extended(ptr[0], bytes.length), 'conversion')",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
+  },
+  {
+   "id": "wrapper_long_orders_does_not_read_the_file_as_a_conversion",
+   "file": "web/lvl_core_api.js",
+   "old": "module._lvl_convert_to_long_orders(ptr[0], bytes.length), 'conversion')",
+   "new": "module._lvl_convert_to_long_orders(ptr[0], bytes.length), 'bytes')",
+   "build": [],
+   "test": "node tests/scripts/lvl_core_check.js --module build_web/lvl_core --require"
   }
  ]
 }

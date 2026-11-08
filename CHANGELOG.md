@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.14.0 - 2026-11-07 - New rules: 187's closed hill, the last side standing, fire walls and long orders
+
+**For players:**
+- **A new game version; older ones cannot join.** A v0.13 game is refused, and a page that stayed open shows "A newer version of Ants is out. Reload the page to update."
+- **The game type 187 has a closed hill.** No ant can enter its hill, so nothing heals: an order to go home is refused ("Can't go there.") and an ant at 1 hit point no longer walks home. 187 also ends fairly in two rare cases: a team with only eggs it cannot hatch (no hill) no longer keeps a match going, and a room with more seats than teams no longer ends it at once.
+- **The original's game ends when one side is left and no food can score** (before, it played on to the clock). The highest score wins, even for a side with no ant left; a tie for the top, all 0 for example, goes to the side still standing. Power-ups and bombs are not food. It shows on the 29 library maps with no food, such as ARENA and FIGHT.
+- **Five fire-wall maps play a little differently** (ANTS_PARTY-V.3.0.5, A_Coaster_Mix_Turnament_Map, Welcome_from_chaos, thief craker2.0, ~~PlAyEr'S_rEvEnGe2): a fire wall that the map file places is free ground once it is put out, as in the original (a dying ant's power-up and the computer players' bombs can use its cell).
+- **Long orders on big maps.** The wide search finds a path for an order of 450 tiles, where the original gives up at about 400. The Map Maker (v1.8.0) gives it to a new Extended map by itself where the map plays like the original with it, and the side panel shows "Rules 2" (long orders). A map of the original's rules that is taller than 90 rows keeps its wall at row 90 when it is resized and stays taller (before, Resize took it down). Earlier game versions cannot open a Rules 2 map.
+- **Old recordings still play** under the rules they were made with. When the server is updated, matches still running end.
+
+**Rules / network:** network protocol 23 (was 22): no message changed, but 187, the end of the original's game and the fire walls of map files play differently, so a v0.13 game cannot play with this one. The replay rules number is 9 for the original's game (was 5) and 11 for 187 (was 6); recordings of 5 and 6 play as before.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/76545ba9...b86dab0c)
+
 ## v0.13.2 - 2026-11-06 - Per-visitor limits, page headers and a chat store that keeps its size
 
 **For players:**
@@ -370,12 +384,12 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.124 - 2026-10-24 - Three more picture shapes, and one dropdown to pick them
 
 **For players:**
-- **Three more picture shapes:** 3:2 (960 x 640, tablets and Surface-style laptops), 20:9 (1200 x 540, phones held sideways) and 32:9 (1920 x 540, super-ultrawide monitors). The list is now Classic 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9. A wider picture shows more of the map at the first zoom (32:9 shows about 2.3 times what 16:9 does) and less when zoomed all the way out; everybody picks their own shape and zooming out is free, so no match changes.
-- **One dropdown instead of the buttons:** the Picture control under the game, in the front page's Picture row, in the settings menu (Esc: on Windows and Linux the arrow keys change the picture of the running game at once and the menu stays open; on macOS the arrows open the list and Enter picks; Esc with the list open is the browser's own and has not been checked in each browser yet) and in a recording's bar is a dropdown that lists each shape with its size. A quiet line under it, "16:10 fills your screen", names the shape closest to your screen. On an upright phone the dropdown has a line of its own and the page no longer scrolls sideways.
+- **Three more picture shapes:** 3:2 (960 x 640, tablets and Surface-style laptops), 20:9 (1200 x 540, phones held sideways) and 32:9 (1920 x 540, super-ultrawide monitors). The list is now Classic 4:3, 3:2, 16:10, 16:9, 20:9, 21:9 and 32:9. A wider picture shows more of the map at the first zoom (32:9 shows about 2.3 times what 16:9 does) and less when zoomed all the way out; everybody picks their own shape, so no match changes.
+- **One dropdown instead of the buttons:** the Picture control under the game, in the front page's Picture row, in the settings menu (Esc: on Windows and Linux the arrow keys change the picture of the running game at once and the menu stays open; on macOS the arrows open the list and Enter picks; Esc with the list open is the browser's own and has not been checked in each browser yet) and in a recording's bar is a dropdown that lists each shape with its size. A quiet line under it ("16:10 fills your screen") names the shape closest to your screen. On an upright phone the dropdown has its own line and the page no longer scrolls sideways.
 - **The first visit** counts the new shapes too: a 3:2 tablet starts in 3:2, a 3840 x 1080 monitor in 32:9, a phone held sideways in 20:9. Anything you picked, and `?aspect=` in the address (which also takes `3:2`, `20:9` and `32:9`), still wins.
-- On a wide monitor the 32:9 picture is shown at its real size: the page's game area is no longer cut at 1280 pixels for it.
+- On a wide monitor the 32:9 picture is shown at its real size (the game area is no longer cut at 1280 pixels).
 
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees, not what the match is: nobody's shape is sent to the server or to the other players).
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (what a player sees: nobody's shape is sent to the server or to the other players).
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/b9a0ab04...c66cf43e)
 
@@ -479,27 +493,16 @@ Work that is not released yet is written in the same template under a heading th
 ## v0.12.114 - 2026-10-23 - A settings menu on Esc and a Settings button
 
 **For players:**
-- **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so settle your settings quickly in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
-- **Where the button is:** in the page's header next to Menu, under the picture on a phone or a narrow window, over the picture (beside the cross that leaves fullscreen) while the page is fullscreen, and in the bar of a replay. Safari and Firefox keep Esc for themselves in fullscreen, and a phone has no Esc, so the button is the way in there.
-- **New: Master volume, Mute and remembered hit point numbers.** Master volume scales every sound and the music; Mute silences everything and keeps your sliders where they are; the white hit point numbers (Ctrl+L) now stay on or off from one game to the next. The menu also has the sound sliders, the picture shape, Fullscreen, the fullscreen mouse, the map scroll speed, chat, quick help and a list of the mouse, touch and keys. The original's Options window is unchanged.
+- **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so be quick in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
+- **Where the button is:** in the page's header next to Menu, under the picture on a phone or a narrow window, over the picture (beside the cross that leaves fullscreen) in fullscreen, and in the bar of a replay. Safari and Firefox keep Esc for themselves in fullscreen, and a phone has no Esc: use the button there.
+- **New: Master volume, Mute and remembered hit point numbers.** Master volume scales every sound and the music; Mute silences everything and keeps your sliders where they are; the white hit point numbers (Ctrl+L) now stay on or off from one game to the next. The menu also has the sound sliders, picture shape, Fullscreen, fullscreen mouse, map scroll speed, chat, quick help and a list of the mouse, touch and keys. The original's Options window is unchanged.
 - **Leave game says what will happen** before it does it: with one opponent left it is a forfeit that ends the match for everybody and counts as a loss; with more it drops you out and the others play on; at home it ends the game. There is no separate Surrender button.
 - **Replays and live watching** have the same panel without the Game section ("Back to the matches" leaves, asking nothing); the frame of a match page has none.
 
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens, and Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
+**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens; Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...feb90e21)
 
-## v0.12.113 - 2026-10-23 - Pick up: a drag let go off the map goes back
+## Older versions (v0.12.113 and before)
 
-**For players:**
-- **Pick up: drag a thing off the map and let go, and it goes back.** If you let go of the mouse or lift your finger outside the map (off its edge, over the side panel or over the bar), nothing changes and the thing is back where it was. While your pointer is off the map the see-through copy goes away and the bar says "Let go here and it goes back where it was."
-- **Enter or Done while you are still dragging no longer throws the pick away.** They now wait: you lift, and the thing is put down where the copy is.
-- A drag that ends on the map still puts the thing down in one step (or stays in your hand, red, with the reason, when the place is blocked); Escape and a click work as before.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged. Map Maker v1.5.4.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/37aeace1...1291d49e)
-
-## Older versions (v0.12.112 and before)
-
-Every release before v0.12.113, and the long notes of v0.12.112, v0.12.111, v0.12.110, v0.12.109, v0.12.108, v0.12.107, v0.12.106, v0.12.105, v0.12.104, v0.12.103, v0.12.102, v0.12.101, v0.12.100, v0.12.99, v0.12.98, v0.12.97, v0.12.96, v0.12.95, v0.12.94, v0.12.93, v0.12.92, v0.12.91, v0.12.90, v0.12.89, v0.12.88, v0.12.87, v0.12.86, v0.12.85, v0.12.84, v0.12.83, v0.12.82, v0.12.81, v0.12.80, v0.12.79, v0.12.78, v0.12.77, v0.12.76, v0.12.75, v0.12.74, v0.12.73, v0.12.72, v0.12.71, v0.12.70, v0.12.69, v0.12.59, v0.12.58, v0.12.57, v0.12.56, v0.12.55, v0.12.53, v0.12.52, v0.12.51, v0.12.50, v0.12.49, v0.12.48, v0.12.46, v0.12.45, v0.12.44, v0.12.43, v0.12.42, v0.12.41, v0.12.40, v0.12.39, v0.12.38, v0.12.37, v0.12.36, v0.12.35, v0.12.33, v0.12.32, v0.12.31, v0.12.30, v0.12.29, v0.12.28, v0.12.27, v0.12.26, v0.12.24, v0.12.23, v0.12.22, v0.12.21, v0.12.20, v0.12.19, v0.12.18, v0.12.16, v0.12.15, v0.12.14, v0.12.13, v0.12.12, v0.12.11, v0.12.10, v0.12.9, v0.12.8, v0.12.7, v0.12.6, v0.12.5, v0.12.4, v0.12.3, v0.12.2, v0.12.1, v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.114, and the long notes of v0.12.113 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

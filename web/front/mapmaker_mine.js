@@ -82,7 +82,7 @@
             var bytes = new Uint8Array(rec.bytes || 0), file = label(rec) ? env.parse(bytes) : null, name = label(rec), r = { rec: rec, file: file }, tags = el('span', 'tags'), acts = el('div', 'macts');
             r.node = el('div', 'mrow'); r.thumb = el('span', 'mthumb'); r.thumb.setAttribute('aria-hidden', 'true');
             r.line = el('div', 't3');
-            if (file) env.tags(tags, file.kind);
+            if (file) env.tags(tags, file.kind, file.rules);
             var size = el('div', 't2', file ? file.rows + ' x ' + file.columns : 'This saved map cannot be read.');
             if (file) size.appendChild(el('span', 'hidem', ' · saved in this browser'));
             if (file) {

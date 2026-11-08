@@ -69,7 +69,7 @@ function makeVersion9() {
 function caseA() {
     const files = libraryFiles();
     check(files.length === 540, 'the library has 540 maps (' + files.length + ')');
-    let classic = 0;
+    let classic = 0, described = 0;
     for (const f of files) {
         const bytes = new Uint8Array(fs.readFileSync(f));
         const m = File.parse(bytes);
@@ -77,11 +77,16 @@ function caseA() {
         if (m.ok) {
             classic++;
             check(m.layer2 + 6 * m.cells <= bytes.length, path.basename(f) + ': both layers lie inside the file');
+            if (bytes[14] !== 0 || bytes[15] !== 0) described++;
+            check(m.rules === 0, path.basename(f) + ': a Classic map has no rules word (bytes 14 and 15 of the file are its description)');
         }
     }
     check(classic === 540, 'all 540 are read');
+    check(described > 300, 'most Classic files hold bytes of their description at 14 and 15, so a reader of the word must not look there: ' + described);
     const v9 = File.parse(makeVersion9());
     check(v9.ok && v9.kind === 'extended' && v9.version === 9 && v9.rows === 5 && v9.columns === 7, 'a version 9 file is read: ' + JSON.stringify([v9.ok, v9.kind, v9.rows, v9.columns, v9.error]));
+    const wordOf = (w) => { const b = makeVersion9(); b[14] = w & 255; b[15] = w >> 8; return File.parse(b).rules; };
+    equal([v9.rules, wordOf(0), wordOf(1), wordOf(2), wordOf(3), wordOf(0x0102)], [0, 0, 1, 2, 3, 258], 'the rules word of a version 9 file is the word at 14 (the page shows it and judges nothing by it: a word above 2 is the core\'s to refuse)');
     if (v9.ok) {
         equal([v9.tile1(0, 0), v9.tile1(4, 6), v9.tile1(2, 3)], [431, 431 + 34, 431 + 17], 'version 9 layer 1');
         equal([v9.tile2(2, 3), v9.tile2(0, 0)], [246, 0x7FFE], 'version 9 layer 2');

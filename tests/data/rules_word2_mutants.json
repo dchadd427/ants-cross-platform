@@ -1,0 +1,244 @@
+{
+ "note": "Mutants of the map rules word 2 (the wide search switched on by a map: include/ants_assets/lvl_parser.hpp LVL_RULES_LONG_ORDERS, docs/MAP_FORMAT.md 'Orders on a big map', docs/TESTING.md 2.9.6 and 2.29.4): the reader and the writer of the word, the conversion to a copy of rules 2 and the note when it goes down to a Classic map, the rules of a blank Extended map, the Grid's played word and the hash that mixes it, the order tile at rules 2, the bots' limit and lvl_tool convert --rules 2. Run: python3 tools/mutate.py tests/data/rules_word2_mutants.json --keep-going --jobs 1 (do not commit the .report.json). (The wide search itself has tests/data/rules_two_mutants.json.)",
+ "mutants": [
+  {
+   "id": "reader_refuses_the_word_two",
+   "file": "src/ants_assets/lvl_parser.cpp",
+   "old": "if (lvl.rules > LVL_RULES_MOST) {",
+   "new": "if (lvl.rules > LVL_RULES_EXTENDED) {",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "reader_knows_the_word_three",
+   "file": "include/ants_assets/lvl_parser.hpp",
+   "old": "LVL_RULES_MOST = LVL_RULES_LONG_ORDERS;",
+   "new": "LVL_RULES_MOST = 3;",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "writer_refuses_the_word_two",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "if (level.rules > LVL_RULES_MOST) return \"the rules word",
+   "new": "if (level.rules > LVL_RULES_EXTENDED) return \"the rules word",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "classic_conversion_refuses_a_map_of_rules_two",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "    if (level.rules > LVL_RULES_MOST) {\n        why.push_back",
+   "new": "    if (level.rules > LVL_RULES_EXTENDED) {\n        why.push_back",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "classic_conversion_gives_rules_two_the_note_of_rules_one",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "{\"rules_long_orders_dropped\",",
+   "new": "{\"rules_extended_dropped\",",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "classic_conversion_gives_rules_two_no_note",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "} else if (level.rules == LVL_RULES_LONG_ORDERS && notes != nullptr) {",
+   "new": "} else if (false && level.rules == LVL_RULES_LONG_ORDERS && notes != nullptr) {",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "long_orders_copy_is_rules_one",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "result.level.rules = LVL_RULES_LONG_ORDERS;",
+   "new": "result.level.rules = LVL_RULES_EXTENDED;",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "long_orders_copy_is_rules_zero",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "result.level.rules = LVL_RULES_LONG_ORDERS;",
+   "new": "result.level.rules = LVL_RULES_ORIGINAL;",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "blank_map_with_a_tall_side_stays_rules_one",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "(rows > LVL_MAX_GRID_SIDE || columns > LVL_MAX_GRID_SIDE) ? LVL_RULES_LONG_ORDERS",
+   "new": "(columns > LVL_MAX_GRID_SIDE) ? LVL_RULES_LONG_ORDERS",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "blank_map_of_256_a_side_is_rules_two",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": "(rows > LVL_MAX_GRID_SIDE || columns > LVL_MAX_GRID_SIDE) ? LVL_RULES_LONG_ORDERS",
+   "new": "(rows >= LVL_MAX_GRID_SIDE || columns > LVL_MAX_GRID_SIDE) ? LVL_RULES_LONG_ORDERS",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "blank_map_over_90_rows_is_rules_two",
+   "file": "src/ants_assets/lvl_writer.cpp",
+   "old": ": rows > LVL_ORIGINAL_RULES_MOST_ROWS ? LVL_RULES_EXTENDED : LVL_RULES_ORIGINAL;",
+   "new": ": rows > LVL_ORIGINAL_RULES_MOST_ROWS ? LVL_RULES_LONG_ORDERS : LVL_RULES_ORIGINAL;",
+   "build": "test_lvl_writer",
+   "test": "./build/tests/test_assets/test_lvl_writer"
+  },
+  {
+   "id": "grid_plays_the_word_two_as_one",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "word <= 2u ? word",
+   "new": "word <= 1u ? word",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
+   "expect": "TINY at rules 2 plays"
+  },
+  {
+   "id": "grid_plays_the_word_three_as_three",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "word <= 2u ? word",
+   "new": "word <= 3u ? word",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip"
+  },
+  {
+   "id": "grid_plays_a_word_above_two_as_rules_zero",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "word <= 2u ? word : uint16_t{1}; }",
+   "new": "word <= 2u ? word : uint16_t{0}; }",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip"
+  },
+  {
+   "id": "grid_level_keeps_every_rules_word",
+   "file": "src/ants_sim/grid.cpp",
+   "old": "rules_ = rules_word_played(level.rules);",
+   "new": "rules_ = level.rules;",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip"
+  },
+  {
+   "id": "grid_world_by_hand_keeps_every_rules_word",
+   "file": "include/ants_sim/grid.hpp",
+   "old": "rules_ = rules_word_played(rules);",
+   "new": "rules_ = rules;",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip"
+  },
+  {
+   "id": "grid_hash_mixes_the_word_only_for_rules_one",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (e.grid_.rules() != 0) h.u16(e.grid_.rules());",
+   "new": "if (e.grid_.rules() == 1) h.u16(e.grid_.rules());",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip",
+   "expect": "hashes otherwise than the rules word 0"
+  },
+  {
+   "id": "ant_hash_marks_the_order_tile_only_for_rules_one",
+   "file": "src/ants_sim/state_hash.cpp",
+   "old": "if (rules != 0 && a.orig_order_tile.x",
+   "new": "if (rules == 1 && a.orig_order_tile.x",
+   "build": "test_map_roundtrip",
+   "test": "./build/tests/test_sim/test_map_roundtrip"
+  },
+  {
+   "id": "rules_two_reads_the_order_tile_as_the_original",
+   "file": "include/ants_sim/ant_unit.hpp",
+   "old": "        if (rules == 0) return static_cast<uint16_t>(orig_order_tile.y)",
+   "new": "        if (rules != 1) return static_cast<uint16_t>(orig_order_tile.y)",
+   "build": "test_movement_golden",
+   "test": "./build/tests/test_sim/test_movement_golden"
+  },
+  {
+   "id": "bots_plan_rules_two_with_the_original_limit",
+   "file": "include/ants_ai/map_info.hpp",
+   "old": "grid.rules() == 2 ? kWidePathCostLimit : kPathCostLimit",
+   "new": "grid.rules() == 3 ? kWidePathCostLimit : kPathCostLimit",
+   "build": "test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
+   "expect": "AI1.19b"
+  },
+  {
+   "id": "bots_plan_rules_one_with_the_wide_limit",
+   "file": "include/ants_ai/map_info.hpp",
+   "old": "grid.rules() == 2 ? kWidePathCostLimit : kPathCostLimit",
+   "new": "grid.rules() >= 1 ? kWidePathCostLimit : kPathCostLimit",
+   "build": "test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
+   "expect": "AI1.19b"
+  },
+  {
+   "id": "bots_wide_limit_is_23_bits",
+   "file": "include/ants_ai/map_info.hpp",
+   "old": "kWidePathCostLimit = 1 << 24;",
+   "new": "kWidePathCostLimit = 1 << 23;",
+   "build": "test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
+   "expect": "AI1.19b"
+  },
+  {
+   "id": "bots_approach_uses_the_limit_of_the_original",
+   "file": "src/ants_ai/map_info.cpp",
+   "old": "if (total >= path_cost_limit(grid)) continue;",
+   "new": "if (total >= MapInfo::kPathCostLimit) continue;",
+   "build": "test_ai",
+   "test": "env ANTS_TEST_FILTER=AI1.19b ./build/tests/test_ai/test_ai",
+   "expect": "AI1.19b"
+  },
+  {
+   "id": "tool_convert_ignores_rules_two",
+   "file": "tools/lvl_tool.cpp",
+   "old": "(o.rules == LVL_RULES_LONG_ORDERS ? convert_to_long_orders(level) : convert_to_extended(level))",
+   "new": "convert_to_extended(level)",
+   "build": "lvl_tool",
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_grown_copy_loses_rules_two",
+   "file": "tools/lvl_tool.cpp",
+   "old": "grown.rules = std::max(grown.rules, c.level.rules);",
+   "new": "grown.rules = grown.rules;",
+   "build": "lvl_tool",
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_grown_copy_ignores_the_size_rule",
+   "file": "tools/lvl_tool.cpp",
+   "old": "grown.rules = std::max(grown.rules, c.level.rules);",
+   "new": "grown.rules = c.level.rules;",
+   "build": "lvl_tool",
+   "test": "./build/lvl_tool --selftest",
+   "expect": "a side above 256 gets rules 2 by itself"
+  },
+  {
+   "id": "tool_info_calls_rules_two_extended",
+   "file": "tools/lvl_tool.cpp",
+   "old": "level.rules == LVL_RULES_LONG_ORDERS ? \" (extended rules, long orders)\"",
+   "new": "level.rules == 99 ? \" (extended rules, long orders)\"",
+   "build": "lvl_tool",
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_takes_rules_on_every_command",
+   "file": "tools/lvl_tool.cpp",
+   "old": "|| !o.output.empty() || o.rules != 0) && command != \"convert\") {",
+   "new": "|| !o.output.empty()) && command != \"convert\") {",
+   "build": "lvl_tool",
+   "test": "./build/lvl_tool --selftest"
+  },
+  {
+   "id": "tool_takes_rules_one",
+   "file": "tools/lvl_tool.cpp",
+   "old": "number(args[++i], 2, 2, v)",
+   "new": "number(args[++i], 1, 2, v)",
+   "build": "lvl_tool",
+   "test": "./build/lvl_tool --selftest"
+  }
+ ]
+}

@@ -489,7 +489,8 @@
     }
 
     // Resize the open map to (newRows x newCols), keeping rows from `keepRow` and columns from `keepCol` when shrinking, or padding at `padRow` and `padCol` when growing, as one undoable CHANGE.
-    function resizeMap(file, newRows, newCols, keepRow, keepCol, padRow, padCol) {
+    // `rules`, when given, is the word a version 9 map has afterwards (mapmaker_sizes.js, resizedRules): it goes in the same step, and Undo gives the old one back.
+    function resizeMap(file, newRows, newCols, keepRow, keepCol, padRow, padCol, rules) {
         newRows = clampTo(newRows, 1, 1024); newCols = clampTo(newCols, 1, 1024);
         var oldRows = file.rows, oldCols = file.columns;
         var kr = newRows < oldRows ? clampTo(keepRow || 0, 0, oldRows - newRows) : 0;
@@ -585,8 +586,8 @@
         while (h < prev.length && h < next.length && prev[h] === next[h]) h++;
         while (t < prev.length - h && t < next.length - h && prev[prev.length - 1 - t] === next[next.length - 1 - t]) t++;
         var change = emptyChange();
-        if (file.version === 9 && (newRows > 90 || newCols > 256) && rd(file.bytes, 14) === 0) {
-            change.splices.push({ abs: true, at: 14, removed: file.bytes.slice(14, 16), inserted: new Uint8Array([1, 0]) });
+        if (file.version === 9 && rules !== undefined && rules !== rd(file.bytes, 14)) {
+            change.splices.push({ abs: true, at: 14, removed: file.bytes.slice(14, 16), inserted: new Uint8Array([rules & 255, rules >> 8]) });
         }
         if (h < prev.length || h < next.length) change.splices.push({ abs: true, at: baseAt + h, removed: prev.slice(h, prev.length - t), inserted: next.slice(h, next.length - t) });
         return change;
