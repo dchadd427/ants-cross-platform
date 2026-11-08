@@ -19,11 +19,11 @@ constexpr int32_t kFightGapTiles = 10;             // ... and at most this many 
 constexpr uint64_t kSamplePeriod = 20;             // the walking speed and the crowd at a fight are sampled every this many ticks
 constexpr int32_t kCrowdRadius = 4;                // the ants at a fight are the ants within this many tiles of its last blow
 constexpr uint16_t kHurtHp = 4;                    // an ant with this many hit points or fewer is hurt: it should be walking home
-constexpr uint64_t kWarningTicks = 1200;           // ... and a death counts what the ant had left of its last this many ticks
+constexpr uint64_t kWarningTicks = 1200;           // a death looks back at most this many ticks for the first look at the ant hurt
 constexpr int32_t kHomeRadius = 10;                // a bomb within this many tiles of its owner's hill entrance is a home mine
 constexpr uint64_t kMineEnds[3] = {3000, 6000, 12000};
 constexpr int32_t kGateRadius = 4;                 // a fire wall within this many tiles of an enemy hill's entrance is at its gate
-constexpr int32_t kBlastRadius = 1;                // a bomb that is gone hit an enemy ant that lost hit points this many tiles from it ...
+constexpr int32_t kBlastRadius = 1;                // a bomb that is gone hit an enemy ant that lost hit points within this many tiles of it ...
 constexpr uint64_t kBlastTicks = 2;                // ... in the same tick or in the next two
 constexpr uint64_t kFocusGapTicks = 200;           // two blows of one seat less than this many ticks apart are a pair
 constexpr uint32_t kMaxAntId = 1u << 20;
@@ -64,10 +64,8 @@ struct People::Impl {
         bool dead{false};
         bool was_fire{false};
         bool hurt{false};
-        uint8_t seat{0};
         uint16_t hp{0};
         sim::AntType type{sim::AntType::Worker};
-        sim::TileCoord tile{};
         uint64_t hurt_since{0};
         sim::TileCoord hurt_tile{};
         bool sample_valid{false};
@@ -188,10 +186,8 @@ void People::tick(const Snapshot& s) {
             m.deaths.push_back(d);
         }
         st.seen = true;
-        st.seat = a.seat;
         st.hp = a.hp;
         st.type = a.type;
-        st.tile = a.tile;
     }
     std::sort(fell.begin(), fell.end(), [](const AntSnap* x, const AntSnap* y) { return x->id < y->id; });
     // 2. the blows: a hit ant with an enemy ant in its strike clip within two tiles; the nearest such ant struck it
