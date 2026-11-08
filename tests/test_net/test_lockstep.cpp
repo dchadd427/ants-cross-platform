@@ -14,6 +14,7 @@ int main() {
     run_reconnect_core_tests();
     run_match_tests();
     run_failure_tests();
+    run_hash_tests();
     run_dropout_tests();
     run_migration_tests();
     run_reconnect_session_tests();

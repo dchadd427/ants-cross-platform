@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Runs the python tests of tests/scripts side by side (suite 5.2 of ./run_tests.sh, and the CI).
 
-usage: run_python_tests.py [--dir DIR] [--jobs N] [--list]
+usage: run_python_tests.py [--dir DIR] [--jobs N] [--list] [--shard K/N] [--skip-linux-only]
 
 The result is that of `python3 -m unittest discover -s tests/scripts -p 'test_*.py'`: every test runs and the exit status is 1 when any failed. What differs is the time: every
 test CLASS of every test_*.py file runs in a process of its own, N at a time (N = the number of cores, at most 8), so that the slowest class and not the sum of all of them
 decides (the long ones, listed in COSTS, start first). The output is a line for each class, in the order of the files, the full output of the classes that failed, and a total. The classes share nothing (each makes its
 folders under its own temporary folder), which is what lets them run together. A file without a class that has tests runs as a whole (an import error then shows up).
+
+The CI splits the work two ways, and a plain run (no option) is still every test:
+  --shard K/N          only the groups of slice K of N (K from 1): the groups go, the most expensive first, each to the slice that has the least so far (COSTS), so the N slices take about the same
+                       time, and every group is in exactly one slice. The Linux job runs all the slices (its python legs); together they are every test.
+  --skip-linux-only    leave out the groups of LINUX_ONLY (see there): the macOS job runs the rest, the Linux job runs them with everything else.
 """
 import argparse
 import ast
@@ -22,13 +27,40 @@ import tempfile
 import time
 
 
-# The classes that take 20 seconds or more (seconds, alone, on a four-core machine, rounded): the longest start first, so that the last one to start is a short one and a runner with three cores does not begin
-# a class of two minutes when the others are nearly done. The output stays in the order of the files. A name that is not a class here is refused by test_run_python_tests.
+# What each group costs, in seconds of a run on the CI's Linux machine (four groups side by side), rounded; the groups of 5 seconds or more, the longest first (a group that is not here counts 1). The
+# order of the run starts the longest first, so that the last one to start is a short one and a runner with three cores does not begin a class of two minutes when the others are nearly done
+# (the output stays in the order of the files); --shard shares the groups between its slices by the same numbers. A name that is not a class here is refused by test_run_python_tests.
 COSTS = {
-    "test_web_mapmaker.TheCodeRuns": 110, "test_web_mapmaker.TheGroundAndTheSprites": 115, "test_web_mapmaker.ThePage": 20, "test_nginx_history.TheBlocksRun": 58, "test_web_admin.ThePagesOwnCode": 33,
-    "test_bot_names.TheMutants": 30, "test_web_death_map.TheCards": 30, "test_nginx_stats.TheCacheRuns": 28, "test_web_map_files.ThePagesOwnCode": 26, "test_web_lobby_chat.TheChecksAreNotVacuous": 24,
-    "test_web_mapmaker_play.ThePlayChecks": 20, "test_e2e_deadlines.Waits": 20, "test_web_home_chat.TheChecksAreNotVacuous": 85, "test_web_home_screen.TheChecksAreNotVacuous": 39, "test_web_home_games.TheChecksAreNotVacuous": 230,
-    "test_web_replay_open.TheChecksAreNotVacuous": 45,
+    "test_web_home_games.TheChecksAreNotVacuous": 537, "test_web_home_chat.TheChecksAreNotVacuous": 462, "test_web_mapmaker.TheGroundAndTheSprites": 387,
+    "test_web_mapmaker.TheCodeRuns": 157, "test_nginx_history.TheBlocksRun": 60, "test_web_home_screen.TheChecksAreNotVacuous": 58, "test_web_map_files.ThePagesOwnCode": 47,
+    "test_web_replay_open.TheChecksAreNotVacuous": 45, "test_web_admin.ThePagesOwnCode": 44, "test_web_mapmaker_play.ThePlayChecks": 42, "test_bot_names.TheMutants": 35, "test_web_mapmaker.ThePage": 30,
+    "test_nginx_stats.TheCacheRuns": 29, "test_web_death_map.TheCards": 28, "test_web_game_menu.TheMutants": 23, "test_web_lobby_chat.TheChecksAreNotVacuous": 23,
+    "test_web_lobby_net.TheBudgetChecksAreNotVacuous": 22, "test_web_rematch.TheChecksAreNotVacuous": 20, "test_e2e_deadlines.Waits": 18,
+    "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18, "test_run_tests.ParallelResources": 17, "test_web_shapes.TheMutantsOfTheTable": 16,
+    "test_web_lobby_rules.TheCheckIsNotVacuous": 16, "test_web_lobby.TheCheckIsNotVacuous": 15, "test_nginx_live.TheBlocksRun": 15, "test_e2e_deadlines.Watchdog": 14,
+    "test_map_atlas.TheAtlas": 13, "test_web_without_docker.TheRealDockerfileReplayed": 13, "test_changelog_to_html.TheScriptRunByNode": 13, "test_deploy_wait.TheProgram": 12,
+    "test_web_shapes.TheMutantsOfThePicker": 12, "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous": 12, "test_nginx_replays.TheBlocksRun": 11, "test_hub_ws.TheFuzz": 11,
+    "test_nginx_lobbies.TheCacheRuns": 10, "test_e2e_deadlines.TheScriptCounts": 10, "test_deploy_webhook.DeployWebhook": 10, "test_hub_login.TheCallback": 10,
+    "test_hub_login.TheSocket": 10, "test_nginx_lobbies.TheServerHangsRuns": 10, "test_measure_tick_rate.Program": 10, "test_nginx_maps.TheBlocksRun": 8,
+    "test_nginx_hub_login.TheBlocksRun": 8, "test_hub_login.TheForget": 8, "test_web_map_picker.ThePickersOwnCode": 8, "test_hub_login.TheProcess": 7,
+    "test_web_home_chat.TheCodeRuns": 7, "test_nginx_lobbies.TheServerFailsRuns": 7, "test_hub_login.TheDiscordClient": 7, "test_hub_server.TheProcess": 7,
+    "test_nginx_stats.TheRealServerBehindTheFile": 7, "test_hub_server.TheTimers": 6, "test_mutate_tool.Project": 6, "test_mutate_tool.WithABuildStep": 6,
+    "test_community_maps.TheList": 6, "test_run_tests.ParallelRunner": 6, "test_web_map_maker_link.TheChecksAreNotVacuous": 6, "test_nginx_stats.TheBlocksRun": 6,
+    "test_ci_light.Decision": 6, "test_cmake_version.CcacheSupport": 5,
+}
+
+# The groups that the macOS job leaves to Linux (--skip-linux-only): page tests only. They run the JavaScript of the site's pages with node against the files of the checkout (or build the map
+# maker's atlas from them), start no server and no socket of their own, and assert no time, so nothing in them depends on the operating system. Most are the "checks are not vacuous" groups
+# (a check on broken copies of the scripts must fail, which it does on every system), and the real runs of the same checks stay on macOS wherever they are classes of their own (TheCodeRuns,
+# TheChecksThatNodeRuns: among them the home chat against a fake hub on a real socket). Every other group runs on both: what the macOS runners taught the tests (servers, sockets, HTTP, clocks and
+# timers, the watchdog of a node that does not end in test_web_mapmaker_play, the long output of a node through a pipe in test_web_mapmaker.TheCodeRuns, file names and paths, bash 3.2, compilers).
+# test_run_python_tests allows page tests only in this list, and a group that is new runs on macOS until it is named here.
+LINUX_ONLY = {
+    "test_web_home_games.TheChecksAreNotVacuous", "test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_screen.TheChecksAreNotVacuous", "test_web_lobby.TheCheckIsNotVacuous",
+    "test_web_lobby_chat.TheChecksAreNotVacuous", "test_web_lobby_net.TheBudgetChecksAreNotVacuous", "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous",
+    "test_web_lobby_rules.TheCheckIsNotVacuous", "test_web_rematch.TheChecksAreNotVacuous", "test_web_map_maker_link.TheChecksAreNotVacuous", "test_web_game_menu.TheMutants",
+    "test_web_shapes.TheMutantsOfTheTable", "test_web_shapes.TheMutantsOfThePicker", "test_bot_names.TheMutants", "test_web_mapmaker.TheGroundAndTheSprites", "test_web_mapmaker.ThePage",
+    "test_web_map_files.ThePagesOwnCode", "test_web_admin.ThePagesOwnCode", "test_web_death_map.TheCards",
 }
 
 
@@ -50,6 +82,20 @@ def units(directory, package):
 def start_order(work):
     """the indexes of work in the order in which the groups start: the longest (COSTS) first; what has no cost keeps the order of the files"""
     return sorted(range(len(work)), key=lambda i: -COSTS.get(work[i][0], 0))
+
+
+def shard_of(work, k, n):
+    """The groups of work that slice k of n (k from 1) runs, in the order of the files. The groups go in the order of the start (the longest first), each to the slice that has the least so far
+    (the lower number when equal; a group without a cost counts 1), so that every group is in exactly one slice and the slices cost about the same. It depends on the groups and COSTS only, so
+    the jobs of a run that each take their slice agree without talking."""
+    load = [0] * n
+    mine = []
+    for i in start_order(work):
+        s = min(range(n), key=lambda j: (load[j], j))
+        load[s] += COSTS.get(work[i][0], 1)
+        if s == k - 1:
+            mine.append(work[i])
+    return [w for w in work if w in mine]
 
 
 def node_shim(folder):
@@ -88,6 +134,8 @@ def main(argv):
     parser.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)), help="the folder of the test_*.py files (default: this script's folder)")
     parser.add_argument("--jobs", type=int, default=min(os.cpu_count() or 4, 8), help="how many classes at a time (default: the number of cores, at most 8)")
     parser.add_argument("--list", action="store_true", help="print what would run (one class or file per line) and exit")
+    parser.add_argument("--shard", metavar="K/N", help="run only slice K of N (K from 1) of the groups: the slices take about the same time and together they are every group")
+    parser.add_argument("--skip-linux-only", action="store_true", help="leave out the groups of LINUX_ONLY (the page tests that the macOS job leaves to Linux)")
     args = parser.parse_args(argv[1:])
     directory = os.path.abspath(args.dir)
     root = os.path.abspath(os.path.join(directory, "..", ".."))
@@ -96,6 +144,16 @@ def main(argv):
     if not work or args.jobs < 1:
         print("run_python_tests: no test_*.py in %s (or --jobs below 1)" % directory, file=sys.stderr)
         return 2
+    if args.skip_linux_only:
+        work = [w for w in work if w[0] not in LINUX_ONLY]
+    shard = None
+    if args.shard is not None:
+        picked = re.fullmatch(r"(\d+)/(\d+)", args.shard)
+        shard = (int(picked.group(1)), int(picked.group(2))) if picked else None
+        if not shard or not 1 <= shard[0] <= shard[1] or shard[1] > len(work):
+            print("run_python_tests: --shard %s is not K/N with 1 <= K <= N <= the number of groups (%d)" % (args.shard, len(work)), file=sys.stderr)
+            return 2
+        work = shard_of(work, *shard)
     if args.list:
         for label, dotted in work:
             print("%s\t%s" % (label, dotted))
@@ -113,8 +171,9 @@ def main(argv):
         print("%-62s %s  %3d tests  %5.1fs" % (r["label"], "ok    " if r["status"] == 0 else "FAILED", r["tests"], r["seconds"]))
     for r in failed:
         print("\n===== %s =====\n%s" % (r["label"], r["output"].rstrip()))
-    print("\nRan %d tests in %d groups in %.1fs (side by side; one after the other they take %.1fs)" % (
-        sum(r["tests"] for r in results), len(results), time.monotonic() - started, sum(r["seconds"] for r in results)))
+    which = (" of slice %d/%d" % shard) if shard else ""
+    print("\nRan %d tests in %d groups%s in %.1fs (side by side; one after the other they take %.1fs)" % (
+        sum(r["tests"] for r in results), len(results), which, time.monotonic() - started, sum(r["seconds"] for r in results)))
     if failed:
         print("FAILED: %s" % ", ".join(r["label"] for r in failed))
         return 1

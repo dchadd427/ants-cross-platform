@@ -94,6 +94,11 @@ public:
     /// The engine's A* gives up when the f value (g + h) of the node it pops reaches this (path_planner.hpp kFailF): a walk costing more is never found. It is also the
     /// engine's cost of a blocked step (kBlockedCost), which MapInfo::step_cost returns for water
     static constexpr int32_t kPathCostLimit = 8000;
+    /// On a map of rules 2 (the wide search, Grid::rules()) the engine's search goes on past kPathCostLimit and finds any walk whose cost fits its 24 bit cost (PathSearch::kWideGMask):
+    /// the limit of a walk there is this. A single step of kPathCostLimit or more is blocked on every map.
+    static constexpr int32_t kWidePathCostLimit = 1 << 24;
+    /// The cost from which the engine's search of this map no longer finds a walk: kPathCostLimit (rules 0 and 1) or kWidePathCostLimit (rules 2). The bots plan with the same range as the engine.
+    static int32_t path_cost_limit(const sim::Grid& grid) noexcept { return grid.rules() == 2 ? kWidePathCostLimit : kPathCostLimit; }
     /// The engine's path finder never generates a tile of this row (the neighbour routine writes it as the "invalid" marker and the search skips every neighbour in it:
     /// src/ants_sim/path_planner.cpp, FUN_01019c31 and the test `!= 0x5a` at 0x1019b23 in Ants.exe), so on a map taller than 90 rows nothing can be walked INTO row 90 and the
     /// map is cut in two there. `walkable` models it for a map of rules 0 (Grid::rules()); on a map of rules 1 the wall is down in the engine and here. (The shipped maps have at most 60 rows.)

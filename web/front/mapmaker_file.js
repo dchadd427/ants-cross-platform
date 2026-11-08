@@ -38,6 +38,7 @@
         if (end > bytes.length) return { ok: false, error: 'the file is cut short inside the grid' };
         var file = {
             ok: true, bytes: bytes, version: version, kind: version === 9 ? 'extended' : 'classic', rows: rows, columns: columns, cells: cells, layer1: layer1, layer2: layer2,
+            rules: version === 9 ? u16(bytes, 14) : 0,     // the rules word (docs/MAP_FORMAT.md): the badge and mapmaker_sizes.js use it, nothing judges by it
             dictAt: dictAt, names: names,                   // where the dictionary's word is, and how many names it has
             blocksAt: end,                                  // where the lists after the layers begin (block 1: docs/MAP_FORMAT.md, "The layout")
             markers: [], food: [], plants: [], defaultType: EMPTY2,

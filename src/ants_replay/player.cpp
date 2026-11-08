@@ -165,6 +165,10 @@ std::string rules_refusal(const Header& head) {
 void begin_match(sim::SimulationEngine& engine, const Replay& replay, const assets::LevelData& level, bool fog) {
     engine.set_fog_of_war_enabled(fog);
     engine.set_game_mode(static_cast<sim::GameMode>(replay.head.mode));       // (before init, like every machine of the match did; plays_here and the head's checks have made sure that the mode is one this build knows)
+    engine.set_hill_open_187(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) == kSimRulesMode187Heal);       // (a 187 match recorded before the closed hill plays with the hill that works)
+    engine.set_end_fix_187(!(replay.head.mode == static_cast<uint8_t>(sim::GameMode::Kills187) && sim_rules_of(replay.head) < kSimRulesMode187));       // (a 187 match recorded before the end-rule fixes, 6, 7 or 10, counts the seats of the roster and any egg)
+    engine.set_last_side_rule(!(replay.head.mode == 0 && sim_rules_of(replay.head) == kSimRulesBeforeLastSide));       // (a match of the original's game recorded before the last-side rule ends by the original's CHECKGO alone)
+    engine.set_fire_wall_as_original(fire_wall_as_original_rules(sim_rules_of(replay.head)));       // (a match recorded before the loader of the original reads a named fire wall with the remake's obstacle overlay, in either mode)
     engine.init(level, replay.head.seed, replay.head.roster);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         engine.set_player_name(seat, ((replay.head.roster >> seat) & 1u) != 0 ? replay.head.names[seat] : std::string());

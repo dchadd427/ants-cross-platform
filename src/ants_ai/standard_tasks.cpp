@@ -891,6 +891,7 @@ const std::vector<int32_t>& PowerUpTask::field_for(TaskContext& c, sim::TileCoor
     if (e.field.empty() || now >= e.tick + params_.field_ttl_ticks) {
         e.field = MapInfo::cost_field_onto(v.grid(), mask_, c.seat, tile, v.walk_context());
         e.tick = now;
+        ++searches_;
     }
     return e.field;
 }
@@ -934,7 +935,7 @@ bool PowerUpTask::try_start(TaskContext& c, sim::AntType kind) {
         return nearest(x.p) < nearest(y.p);
     });
     const sim::Grid& grid = v.grid();
-    const size_t limit = tactics_.gate_map ? cands.size() : std::min<size_t>(3, cands.size());
+    const size_t limit = std::min(cands.size(), tactics_.gate_map ? gate_candidates(static_cast<uint64_t>(grid.width()) * grid.height()) : size_t{3});     // (a gate map's bot looks further, as far as the searches stay within a budget)
     for (size_t i = 0; i < limit; ++i) {
         const PowerUpView& p = *cands[i].p;
         const std::vector<int32_t>& f = field_for(c, p.tile);
@@ -1131,7 +1132,7 @@ void PowerUpTask::step(TaskContext& c) {
     }
     for (auto it = black_.begin(); it != black_.end();) it = it->second <= now ? black_.erase(it) : std::next(it);
     for (auto it = tile_black_.begin(); it != tile_black_.end();) it = it->second <= now ? tile_black_.erase(it) : std::next(it);
-    for (auto it = fields_.begin(); it != fields_.end();) it = now >= it->second.tick + 5u * params_.field_ttl_ticks ? fields_.erase(it) : std::next(it);
+    for (auto it = fields_.begin(); it != fields_.end();) it = now >= it->second.tick + params_.field_ttl_ticks ? fields_.erase(it) : std::next(it);        // (a field that is older than its time is searched again when it is asked for)
 
     // 1. the trips that are under way
     const uint64_t stale_after = profile.reaction_delay + profile.reaction_delay * profile.jitter_percent / 100u + profile.intent_ttl + profile.decision_interval + 8u;

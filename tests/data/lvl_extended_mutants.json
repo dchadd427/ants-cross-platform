@@ -163,10 +163,10 @@
    "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
   },
   {
-   "id": "rules_2_read",
+   "id": "rules_3_read",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "if (lvl.rules > LVL_RULES_EXTENDED) {\n            add_problem(p.fatal",
-   "new": "if (lvl.rules > 2) {\n            add_problem(p.fatal",
+   "old": "if (lvl.rules > LVL_RULES_MOST) {\n            add_problem(p.fatal",
+   "new": "if (lvl.rules > 3) {\n            add_problem(p.fatal",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -175,10 +175,10 @@
    "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
   },
   {
-   "id": "rules_1_refused",
+   "id": "rules_2_refused",
    "file": "src/ants_assets/lvl_parser.cpp",
-   "old": "if (lvl.rules > LVL_RULES_EXTENDED) {\n            add_problem(p.fatal",
-   "new": "if (lvl.rules >= LVL_RULES_EXTENDED) {\n            add_problem(p.fatal",
+   "old": "if (lvl.rules > LVL_RULES_MOST) {\n            add_problem(p.fatal",
+   "new": "if (lvl.rules >= LVL_RULES_MOST) {\n            add_problem(p.fatal",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -199,10 +199,10 @@
    "test": "./build/tests/test_assets/test_lvl_writer && ./build/tests/test_assets/test_original_safe && ./build/lvl_tool --selftest"
   },
   {
-   "id": "writer_writes_rules_2",
+   "id": "writer_writes_rules_3",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "if (level.rules > LVL_RULES_EXTENDED) return \"the rules word",
-   "new": "if (level.rules > 2) return \"the rules word",
+   "old": "if (level.rules > LVL_RULES_MOST) return \"the rules word",
+   "new": "if (level.rules > 3) return \"the rules word",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -785,8 +785,8 @@
   {
    "id": "blank_extended_rules_at_90_rows",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "(rows > LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE)",
-   "new": "(rows >= LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE)",
+   "old": "rows > LVL_ORIGINAL_RULES_MOST_ROWS ? LVL_RULES_EXTENDED",
+   "new": "rows >= LVL_ORIGINAL_RULES_MOST_ROWS ? LVL_RULES_EXTENDED",
    "build": [
     "test_lvl_writer",
     "test_original_safe",
@@ -797,8 +797,8 @@
   {
    "id": "blank_extended_rules_never",
    "file": "src/ants_assets/lvl_writer.cpp",
-   "old": "(rows > LVL_ORIGINAL_RULES_MOST_ROWS || columns > LVL_MAX_GRID_SIDE)",
-   "new": "(rows > 100000)",
+   "old": "rows > LVL_ORIGINAL_RULES_MOST_ROWS ? LVL_RULES_EXTENDED",
+   "new": "rows > 100000 ? LVL_RULES_EXTENDED",
    "build": [
     "test_lvl_writer",
     "test_original_safe",

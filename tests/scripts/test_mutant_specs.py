@@ -21,13 +21,8 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TOOL = os.path.join(REPO, "tools", "mutate.py")
 DATA = os.path.join(REPO, "tests", "data")
 
-# Specs that are not checked yet: file name -> why, and when to look again.
-STALE_ALLOWED = {
-    "rules_one_mutants.json": "7 of its 29 mutants aim at src/ants_sim/path_planner.cpp, movement_system.cpp and include/ants_sim/grid.hpp, files that the engine speed-up work is still "
-                              "changing; listed 2026-10-25, re-aim them (and take the file off this list) after those changes to path_planner, movement_system and grid land",
-    "grid_extended_mutants.json": "2 of its 31 mutants aim at src/ants_sim/grid.cpp and include/ants_sim/grid.hpp, files that the engine speed-up work is still changing; "
-                                  "listed 2026-10-25, re-aim them (and take the file off this list) after those changes to grid land",
-}
+# Specs that are not checked yet: file name -> why, and when to look again (listed 20xx-xx-xx, "after those changes ...").
+STALE_ALLOWED = {}
 
 
 def specs():

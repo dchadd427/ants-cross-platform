@@ -64,7 +64,7 @@ def site_conf(site_port, webroot, hub_port, server_ports, dead_port, cache):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--server", default=os.environ.get("ANTS_SERVER", ""), help="a built ants_server (protocol 22); without it the front page has no game server")
+    ap.add_argument("--server", default=os.environ.get("ANTS_SERVER", ""), help="a built ants_server (protocol 23); without it the front page has no game server")
     ap.add_argument("--consent", action="store_true", help="the fake Discord shows a consent page (a first visit)")
     ap.add_argument("--min-days", default="7")
     args = ap.parse_args()
