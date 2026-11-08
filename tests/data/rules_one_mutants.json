@@ -40,8 +40,8 @@
   {
    "id": "manager_forgets_the_flag",
    "file": "src/ants_sim/path_planner.cpp",
-   "old": "*pool_, wall_at_row_90)",
-   "new": "*pool_, (wall_at_row_90 && false) || true)",
+   "old": "*pool_, wall_at_row_90, wide)",
+   "new": "*pool_, (wall_at_row_90 && false) || true, wide)",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "5.4d"
@@ -49,8 +49,8 @@
   {
    "id": "step_skips_the_constant_row_90",
    "file": "src/ants_sim/path_planner.cpp",
-   "old": "if (n.y == sentinel_row_) continue;",
-   "new": "if (n.y == kSentinelRow) continue;",
+   "old": "if (n.y == sentinel_row_) continue;  // 0x1019b23",
+   "new": "if (n.y == kSentinelRow) continue;  // 0x1019b23",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "5.4b"
@@ -58,8 +58,8 @@
   {
    "id": "step_skips_nothing",
    "file": "src/ants_sim/path_planner.cpp",
-   "old": "if (n.y == sentinel_row_) continue;",
-   "new": "if (n.y == -2) continue;",
+   "old": "if (n.y == sentinel_row_) continue;  // 0x1019b23",
+   "new": "if (n.y == -2) continue;  // 0x1019b23",
    "build": "test_path_planner",
    "test": "./build/tests/test_sim/test_path_planner",
    "expect": "5.4"
@@ -85,8 +85,8 @@
   {
    "id": "simulation_always_keeps_the_wall",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "grid_.rules() == 0);   // rules 1",
-   "new": "true);   // rules 1",
+   "old": "grid_.rules() == 0, grid_.rules() == 2);",
+   "new": "true, grid_.rules() == 2);",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "7.1"
@@ -94,8 +94,8 @@
   {
    "id": "simulation_always_takes_the_wall_down",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "grid_.rules() == 0);   // rules 1",
-   "new": "false);   // rules 1",
+   "old": "grid_.rules() == 0, grid_.rules() == 2);",
+   "new": "false, grid_.rules() == 2);",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "7.1"
@@ -103,8 +103,8 @@
   {
    "id": "simulation_wall_flag_inverted",
    "file": "src/ants_sim/movement_system.cpp",
-   "old": "grid_.rules() == 0);   // rules 1",
-   "new": "grid_.rules() != 0);   // rules 1",
+   "old": "grid_.rules() == 0, grid_.rules() == 2);",
+   "new": "grid_.rules() != 0, grid_.rules() == 2);",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",
    "expect": "7.1"
@@ -211,7 +211,7 @@
   {
    "id": "empty_grid_ignores_the_rules",
    "file": "include/ants_sim/grid.hpp",
-   "old": "        rules_ = rules;\n        return true;",
+   "old": "        rules_ = rules_word_played(rules);\n        return true;",
    "new": "        rules_ = static_cast<uint16_t>(rules & 0u);\n        return true;",
    "build": "test_movement_golden",
    "test": "./build/tests/test_sim/test_movement_golden",

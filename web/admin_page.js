@@ -1,4 +1,4 @@
-// The owner's page (docs/MAP_SUBMISSIONS.md, "The owner's page" and "Accounts"), reached only by typing /admin: no page of the site links to it. It shows the sign-in box (and nothing else) to a stranger, the
+// The admin page (docs/MAP_SUBMISSIONS.md, "The admin page" and "Accounts"), reached only by typing /admin: no page of the site links to it. It shows the sign-in box (and nothing else) to a stranger, the
 // choice of a new password to an account that still has its starting password (the server holds that too), and the sections to everybody else: the maps that players sent (Admin and Moderator) and the users and
 // the log of what was done (Admin only). The page asks the server who is here (GET /admin/api/me) and shows only what it is told; the server decides everything again on every call.
 //   * Every text that comes from a person or from the server goes into the page with textContent, never as HTML. A password is typed into a password input (autocomplete current-password / new-password), sent in the
@@ -17,7 +17,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var TIME_ZONE = 'America/Los_Angeles';                 // the owner's times are Pacific time
+    var TIME_ZONE = 'America/Los_Angeles';                 // the maintainer's times are Pacific time
     var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var TABS = [['waiting', 'Waiting'], ['approved', 'Approved'], ['declined', 'Declined'], ['taken_down', 'Taken down']];
     var LEADS = {
@@ -73,7 +73,7 @@
         return a.d + ' ' + MONTHS[a.m - 1];
     }
 
-    // The description as the owner sees it: one line, no control or invisible characters, at most 100 characters (the file keeps its own bytes; the server cleans it too)
+    // The description as the admin sees it: one line, no control or invisible characters, at most 100 characters (the file keeps its own bytes; the server cleans it too)
     function cleanDescription(text) {
         var t = String(text === undefined || text === null ? '' : text).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ');
         t = t.replace(/[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff\ufff9-\ufffb]|\udb40[\udc00-\udc7f]/g, '').replace(/\s+/g, ' ').replace(/^ | $/g, '');
@@ -315,7 +315,7 @@
             (name ? pass.input : user.input).focus();
         }
 
-        function showOff() {                                // the owner's page is off on this server (every call is a 404): the page says only that it is the owner's
+        function showOff() {                                // the admin page is off on this server (every call is a 404): the page says only that it is the admin's
             var c = el('div', 'lcard');
             add(c, el('h1', null, 'This page is for the owner only'));
             card(c);
@@ -485,7 +485,7 @@
             openModal('Change password', [note, current.box].concat(pair.nodes), [cancel, save], current.input);
         }
 
-        // ---- the owner's shell: the sections, one of which is shown ----
+        // ---- the admin's shell: the sections, one of which is shown ----
         var SECTIONS = [
             { id: 'maps', title: 'Maps players sent', render: renderMaps, roles: ['admin', 'moderator'] },
             { id: 'users', title: 'Users', render: renderUsers, roles: ['admin'] }
@@ -644,7 +644,7 @@
                 return group;
             }
 
-            // The one small question for Approve and Take down: the map as the owner will decide on it (name, maker, picture, cleaned description), then the button
+            // The one small question for Approve and Take down: the map as the maintainer will decide on it (name, maker, picture, cleaned description), then the button
             function confirmDialog(m, kind, body) {
                 var approve = kind === 'approve';
                 var scrim = el('div', 'scrim');
@@ -976,7 +976,7 @@
         function start() {
             return call('GET', '/admin/api/me').then(function (r) {
                 me = r.status === 200 ? r.json : null;
-                if (!me) return showOff();                                     // (an answer of 404: the owner's page is off here; the page says only that it is the owner's)
+                if (!me) return showOff();                                     // (an answer of 404: the admin page is off here; the page says only that it is the admin's)
                 if (!me.signed_in) return showLogin('', false);
                 if (me.must_change) return showChoose();
                 return showShell();

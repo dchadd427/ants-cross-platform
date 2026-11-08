@@ -32,8 +32,8 @@
 // (a step of cost 8000 or more) ends the search exactly as the original's f >= 8000 test does, so every search the original finishes (a path, or no path before its limit)
 // runs here pop for pop the same; once a node has passed the limit, such a node is dropped and the search goes on. The same holds for TIME: a slice has the original's 1,000
 // expansions until the search has popped a node with f >= 8000 (the pop at which the original would have given up, limit_hit()); only the slices after that one get the larger
-// budget of a big map (PathManager::wide_budget), so a rules-2 map that the original can play delivers every path in the same 50 ms run as rules 1 does. No map reaches rules 2 yet
-// (the map files and their readers come with the next release); the engine takes this search only for a Grid of rules 2, and rules 0 and 1 run the search above unchanged.
+// budget of a big map (PathManager::wide_budget), so a rules-2 map that the original can play delivers every path in the same 50 ms run as rules 1 does, when no other order of the team is searched past the limit (a team's searches take turns, and one that the original gives up on stays in the turns here: the paths are the same, a delivery that waits for its turn can come later). A map asks for it with the rules
+// word 2 of its file (docs/MAP_FORMAT.md); the engine takes this search only for a Grid of rules 2, and rules 0 and 1 run the search above unchanged.
 //
 // Coordinates: the original's tile is {int16 row, int16 col}. This port uses ants::sim::TileCoord with
 // x = column and y = row throughout.
@@ -137,7 +137,7 @@ public:
     static constexpr uint32_t kFailF = 8000u;              ///< popped f >= 8000 -> no path (0x1019ae0)
     static constexpr uint16_t kDefaultBudget = 1000u;      ///< expansions per PATHMGR run (0x10247ac)
     static constexpr uint32_t kWideBudgetFloor = 1000u;    ///< the wide search's budget never goes below the original's
-    static constexpr uint32_t kWideBudgetCellsPerStep = 32u; ///< ... and grows with the map: one step per 32 cells (512 x 512 = 8,192 steps)
+    static constexpr uint32_t kWideBudgetCellsPerStep = 64u; ///< ... and grows with the map: one step per 64 cells (512 x 512 = 4,096 steps)
     static constexpr int32_t kSentinelRow = 0x5a;          ///< invalid-neighbour marker (0x1019cbd)
     static constexpr int32_t kNoSentinelRow = -1;          ///< the marker when the wall is down (rules 1): never a real row
 
@@ -242,7 +242,7 @@ public:
 
     using CostProvider = std::function<uint32_t(uint32_t ant_id, TileCoord from, TileCoord to)>;
 
-    /** @brief The budget of a wide search that has passed the original's limit (limit_hit()), for a map of @p rows x @p cols: max(1000, cells / 32), at most 65,535 (exactly 1,000 up to 32,031 cells). Before that a wide search gets the original's 1,000. */
+    /** @brief The budget of a wide search that has passed the original's limit (limit_hit()), for a map of @p rows x @p cols: max(1000, cells / 64), at most 65,535 (exactly 1,000 up to 64,063 cells). Before that a wide search gets the original's 1,000. */
     static constexpr uint16_t wide_budget(uint32_t rows, uint32_t cols) noexcept {
         const uint64_t steps = static_cast<uint64_t>(rows) * cols / PathSearch::kWideBudgetCellsPerStep;
         return static_cast<uint16_t>(steps < PathSearch::kWideBudgetFloor ? PathSearch::kWideBudgetFloor : (steps > 65535u ? 65535u : steps));

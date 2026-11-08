@@ -198,41 +198,45 @@ void the_rules_word_is_in_the_hash(uint32_t ticks) {
     // only the grid part carries the word: the ants, the food, the players and the rest of the state are those of rules 0 at the start
     check(one_play[0].players == zero_play[0].players && one_play[0].food == zero_play[0].food && one_play[0].ants == zero_play[0].ants && one_play[0].engine == zero_play[0].engine,
           "at the start, only the grid hash of rules 1 differs from rules 0");
-    // the word is mixed with its value: another word is another hash (the format allows 0 and 1 today; the Grid takes any)
+    // rules 2 from a real conversion (convert_to_long_orders): the same map as rules 1, played with the wide search; the library maps are at most 10,449 cells, so their budget is the
+    // original's 1,000 and the play equals the play at rules 1 in everything but the rules word (the ledger option --rules2 does this for all 540 maps)
+    const LevelConversion long_orders = ants::assets::convert_to_long_orders(tiny);
+    check(long_orders.ok && long_orders.level.rules == ants::assets::LVL_RULES_LONG_ORDERS && long_orders.level.version == 9, "TINY.LVL goes to an Extended map of rules 2");
+    if (long_orders.ok) {
+        const ants_test::RulesOneComparison cmp = ants_test::play_hashes_rules_one(up.level, ticks, 2);
+        check(cmp.difference.empty() && cmp.checkpoints > 1, "TINY at rules 2 plays as at rules 0 in every part of the hash but the rules word: " + cmp.difference);
+        ants::sim::Grid two;
+        check(two.init_from_level(long_orders.level) && two.rules() == 2, "the Grid carries the rules word 2 of a level");
+        const std::vector<ants::sim::StateHash> two_play = play_hashes(long_orders.level, ticks);
+        bool plays_as_rules_one = two_play.size() == one_play.size();
+        for (size_t i = 0; i < two_play.size() && i < one_play.size(); ++i) plays_as_rules_one = plays_as_rules_one && two_play[i].grid != one_play[i].grid && two_play[i].ants == one_play[i].ants && two_play[i].paths == one_play[i].paths;
+        check(plays_as_rules_one, "TINY at rules 2 has the ants and the paths of rules 1 at every checkpoint and another grid hash (the word)");
+    }
+    // the word is mixed with its value: another word is another hash (the format allows 0, 1 and 2; the Grid plays 0, 1 and 2 as they are and any other word as 1)
     LevelData rules_two = up.level;
     rules_two.rules = 2;
     ants::sim::SimulationEngine e1;
     ants::sim::SimulationEngine e2;
-    e2.allow_rules_two_for_tests();                                           // (the test hook of rules 2: Grid::allow_rules_two_for_tests)
     e1.init(rules_one, ants_test::kLibrarySeed, 0x0F);
     e2.init(rules_two, ants_test::kLibrarySeed, 0x0F);
-    check(e1.state_hash().grid != e2.state_hash().grid && e2.grid().rules() == 2, "a rules word of 2 hashes otherwise than a rules word of 1");
-    // rules 2 is switched off in the simulation too: without the hook a level that carries 2 (or any higher word) is played as rules 1, from a level and from a world made by hand
-    for (const uint16_t word : {uint16_t{2}, uint16_t{3}, uint16_t{200}, uint16_t{0xFFFF}}) {
+    check(e1.state_hash().grid != e2.state_hash().grid && e2.grid().rules() == 2, "a rules word of 2 is played as 2 and hashes otherwise than a rules word of 1");
+    check(e2.state_hash().grid != zero_play[0].grid, "a rules word of 2 hashes otherwise than the rules word 0 (the word is mixed in for every word but 0)");
+    for (const uint16_t word : {uint16_t{3}, uint16_t{200}, uint16_t{0xFFFF}}) {                       // (no reader accepts these; the Grid does not trust the reader)
         LevelData asked = up.level;
         asked.rules = word;
         ants::sim::SimulationEngine plain;
         plain.init(asked, ants_test::kLibrarySeed, 0x0F);
-        check(plain.grid().rules() == 1 && plain.state_hash().grid == e1.state_hash().grid, "a level with the rules word " + std::to_string(word) + " is played as rules 1 (rules 2 is switched off)");
+        check(plain.grid().rules() == 1 && plain.state_hash().grid == e1.state_hash().grid, "a level with the rules word " + std::to_string(word) + " is played as rules 1");
         ants::sim::SimulationEngine by_hand;
         by_hand.init_test_world(20, 20, 7, 600000, word);
-        check(by_hand.grid().rules() == 1, "a world made by hand with the rules word " + std::to_string(word) + " is rules 1 (rules 2 is switched off)");
+        check(by_hand.grid().rules() == 1, "a world made by hand with the rules word " + std::to_string(word) + " is rules 1");
     }
-    {
-        ants::sim::SimulationEngine hooked;
-        hooked.allow_rules_two_for_tests();
-        hooked.init_test_world(20, 20, 7, 600000, 2);
-        check(hooked.grid().rules() == 2, "with the test hook a world made by hand keeps the rules word 2");
-        hooked.init_test_world(20, 20, 7, 600000, 3);
-        check(hooked.grid().rules() == 1, "the hook lets 2 through and nothing else: a word of 3 is rules 1");
-        hooked.init_test_world(20, 20, 7, 600000, 1);
-        check(hooked.grid().rules() == 1, "the hook changes nothing for the rules word 1");
-        ants::sim::SimulationEngine copy(hooked);
-        copy.init_test_world(20, 20, 7, 600000, 2);
-        check(copy.grid().rules() == 2, "a copy of an engine keeps the hook");
-        ants::sim::SimulationEngine fresh;
-        fresh.init_test_world(20, 20, 7, 600000, 2);
-        check(fresh.grid().rules() == 1, "an engine that was not told has no hook, whatever another engine did");
+    for (const uint16_t word : {uint16_t{0}, uint16_t{1}, uint16_t{2}}) {
+        ants::sim::SimulationEngine by_hand;
+        by_hand.init_test_world(20, 20, 7, 600000, word);
+        check(by_hand.grid().rules() == word, "a world made by hand keeps the rules word " + std::to_string(word));
+        ants::sim::SimulationEngine copy(by_hand);
+        check(copy.grid().rules() == word, "a copy of the engine keeps the rules word " + std::to_string(word));
     }
     // an ant ordered to (120, 90) hashes otherwise than an ant with no order tile (-1, -1)
     ants::sim::SimulationEngine eo;
@@ -249,7 +253,6 @@ void the_rules_word_is_in_the_hash(uint32_t ticks) {
 // both. `ants_hash` is the hash of the ants of a 130 x 100 test world (91+ rows, 121+ columns) with one ant that holds `tile` as its order tile.
 uint64_t ants_hash_with_order_tile(uint16_t rules, ants::sim::TileCoord tile) {
     ants::sim::SimulationEngine e;
-    if (rules == 2) e.allow_rules_two_for_tests();
     e.init_test_world(130, 100, 7, 600000, rules);
     const uint32_t id = e.spawn_unit(0, ants::sim::AntType::Worker, ants::sim::TileCoord{5, 5});
     e.get_unit(id).orig_order_tile = tile;
@@ -376,7 +379,7 @@ void the_grid_reads_relative_anchors() {
     check(bomb.anchor_y == -1 && bomb.anchor_x == -1 && bomb.interactive_owner == 2, "a bomb tile has no anchor and keeps its owner");
     const ants::sim::TileCell& empty = g.get_cell(1, 1);
     check(empty.anchor_y == -1 && empty.anchor_x == -1, "an empty cell has no anchor");
-    check(g.rules() == tall.rules && tall.rules == ants::assets::LVL_RULES_EXTENDED, "a blank Extended map above 90 rows is at rules 1 and the Grid says so");
+    check(g.rules() == tall.rules && tall.rules == ants::assets::LVL_RULES_LONG_ORDERS, "a blank Extended map with a side above 256 is at rules 2 and the Grid plays it as rules 2");
 }
 
 // LevelLimits::for_play_extended(): Extended maps, up to 1,024 a side and 262,144 cells (512 x 512, any shape).

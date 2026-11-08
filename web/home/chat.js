@@ -29,10 +29,10 @@
         fold: 'Fold chat', open: 'Open chat', crowded: 'No room to open it: close a notice',  mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.'
     };
-    var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
+    var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
-        young: 'Your account is too new to chat yet', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again'
+        young: 'Your account is too new to chat yet', quota: 'You have chatted a lot, try again later', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again'
     };
 
     // ---- the pure parts -------------------------------------------------------------------------------------------------------------------------------------------------------------------------

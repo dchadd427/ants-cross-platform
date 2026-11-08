@@ -1,0 +1,57 @@
+{
+ "note": "Mutants of the names check of tools/check_hygiene.py (the names of private files kept as digests, looked for in the text and in the path of every tracked file) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_hygiene.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hygiene_mutants.json --keep-going --jobs 1.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hygiene.Forbidden"
+ },
+ "mutants": [
+  {
+   "id": "path_names_are_not_looked_at",
+   "file": "tools/check_hygiene.py",
+   "old": "        if any(holds(run) for run in PRIVATE_RUN.findall(low)):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Forbidden"
+  },
+  {
+   "id": "path_is_printed_with_the_name",
+   "file": "tools/check_hygiene.py",
+   "old": "            for start, end in holds.spans(low):",
+   "new": "            for start, end in []:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Forbidden"
+  },
+  {
+   "id": "allow_list_skips_the_names_too",
+   "file": "tools/check_hygiene.py",
+   "old": "            m = None if rel in allowed else FORBIDDEN.search(line)",
+   "new": "            if rel in allowed:\n                break\n            m = FORBIDDEN.search(line)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Forbidden"
+  },
+  {
+   "id": "allow_list_is_not_for_the_trailers",
+   "file": "tools/check_hygiene.py",
+   "old": "            m = None if rel in allowed else FORBIDDEN.search(line)",
+   "new": "            m = FORBIDDEN.search(line)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Forbidden"
+  },
+  {
+   "id": "names_in_text_are_case_sensitive",
+   "file": "tools/check_hygiene.py",
+   "old": "set(PRIVATE_RUN.findall(text.lower()))",
+   "new": "set(PRIVATE_RUN.findall(text))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Forbidden"
+  },
+  {
+   "id": "names_are_found_at_the_start_of_a_run_only",
+   "file": "tools/check_hygiene.py",
+   "old": "for i in range(len(run) - n + 1))",
+   "new": "for i in range(1))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Forbidden"
+  },
+  {
+   "id": "a_short_entry_is_accepted",
+   "file": "tools/check_hygiene.py",
+   "old": "        if length < PRIVATE_NAME_MIN_LENGTH:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Forbidden"
+  }
+ ]
+}

@@ -36,6 +36,18 @@ bool limits_of(Profile profile, LevelLimits& limits) {
 
 const char* profile_name(Profile profile) { return profile == Profile::NewMap ? "new_map" : profile == Profile::Game ? "game" : "extended"; }
 
+// Whether a block-1 tile id is one of the 14 dropper plants that the simulation's flower dropper task tests (sim::movement::is_dropper_plant_tile: the clovers 404 .. 408, the flowers 410 .. 416, 420, 421).
+// This module builds for the browser too (no simulation code), so the ids are listed again here; test_lvl_core pins this list equal to the simulation's own table, every id.
+constexpr bool is_dropper_plant_tile_id(uint16_t id) noexcept {
+    return (id >= 404 && id <= 408) || (id >= 410 && id <= 416) || id == 420 || id == 421;
+}
+
+// Whether a layer-2 tile id is a power-up (sim::movement::is_powerup_tile: the ids 62 .. 66, the five kinds of FUN_01021087), which the bots list and group when a match starts. This module builds for the browser
+// too (no simulation code), so the ids are listed again here; test_lvl_core pins this list equal to the simulation's own table, every id.
+constexpr bool is_power_up_tile_id(uint16_t id) noexcept {
+    return id >= 62 && id <= 66;
+}
+
 Result refused(const std::string& sentence) { return Result{1, sentence}; }
 
 // JSON text, built by hand: the keys in a fixed order, a string with every byte outside printable ASCII written as \u00XX (so the text is valid whatever the file held)
@@ -116,12 +128,16 @@ Result read_report_impl(const uint8_t* data, size_t size, Profile profile) {
     const LevelValidation v = level.validate(0x0F, limits);
     std::array<uint32_t, 4> markers{};
     std::array<uint32_t, 4> hills{};
+    uint64_t plants = 0;
+    uint64_t powerups = 0;
     for (const AnthillSpawn& sp : level.anthill_spawns) {
         if (sp.team_id < 4) ++markers[sp.team_id];
+        if (is_dropper_plant_tile_id(sp.tile_id)) ++plants;
     }
     for (const MapCell& c : level.layer2_interactive) {
         const int team = hill_team_of_id(c.tile_index);
         if (team >= 0) ++hills[static_cast<size_t>(team)];
+        if (is_power_up_tile_id(c.tile_index)) ++powerups;
     }
     const std::vector<uint16_t> used = used_tile_ids(level);
     out += ",\n";
@@ -150,6 +166,10 @@ Result read_report_impl(const uint8_t* data, size_t size, Profile profile) {
     put_number(out, "food_piles", static_cast<long long>(level.food_schedules.size()));
     out += ',';
     put_number(out, "waypoints", static_cast<long long>(level.waypoints.size()));
+    out += ',';
+    put_number(out, "plants", static_cast<long long>(plants));          // block 1 records with the dropper-plant flag: plants x waypoints is the cost of setting the map up (OnlineLimits::kMaxPlantWaypointPairs)
+    out += ',';
+    put_number(out, "powerups", static_cast<long long>(powerups));          // layer-2 cells with a power-up tile (OnlineLimits::kMaxPowerUps)
     out += ",\n";
     put_key(out, "teams");
     out += '[';
@@ -367,12 +387,13 @@ void refuse_for_place(Converted& c, const std::string& error) {
     c.conversion.note_codes.clear();
 }
 
-// The file is read as a place that takes Extended maps reads it (a map of either kind), converted, and the copy written under `place`; false (with the sentence) when the file does not load
-bool convert_file(bool to_extended, const uint8_t* data, size_t size, const LevelLimits& place, Converted& c, std::string& why) {
+// The file is read as a place that takes Extended maps reads it (a map of either kind), converted, and the copy written under `place`; false (with the sentence) when the file does not load.
+// `long_orders` goes with `to_extended`: the copy has the rules word 2 (convert_to_long_orders), every cell and record as the source's
+bool convert_file(bool to_extended, const uint8_t* data, size_t size, const LevelLimits& place, Converted& c, std::string& why, bool long_orders = false) {
     LevelData level;
     if (!load(data, size, LevelLimits::for_extended_maps(), level, why)) return false;
     c.from_extended = level.version == LVL_EXTENDED_VERSION;
-    c.conversion = to_extended ? ants::assets::convert_to_extended(level) : ants::assets::convert_to_classic(level);
+    c.conversion = to_extended ? (long_orders ? ants::assets::convert_to_long_orders(level) : ants::assets::convert_to_extended(level)) : ants::assets::convert_to_classic(level);
     // a new Classic map is held to fewer columns than the format's 256: the sentence names the limit that the place will apply
     const uint32_t most = place.columns_for(LVL_EXPECTED_VERSION);
     for (size_t i = 0; i < c.conversion.reasons.size() && i < c.conversion.reason_codes.size(); ++i) {
@@ -414,6 +435,13 @@ Result convert_to_extended_impl(const uint8_t* data, size_t size) {
     Converted c;
     std::string why;
     if (!convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why)) return refused(why);
+    return conversion_result(true, c);
+}
+
+Result convert_to_long_orders_impl(const uint8_t* data, size_t size) {
+    Converted c;
+    std::string why;
+    if (!convert_file(true, data, size, LevelLimits::for_extended_maps(), c, why, true)) return refused(why);
     return conversion_result(true, c);
 }
 
@@ -764,6 +792,7 @@ Result read_report(const uint8_t* data, size_t size, Profile profile) { return g
 Result check_original(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return check_original_impl(data, size, profile); }); }
 Result check_map(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return check_map_impl(data, size, profile); }); }
 Result convert_to_extended(const uint8_t* data, size_t size) { return guarded([&] { return convert_to_extended_impl(data, size); }); }
+Result convert_to_long_orders(const uint8_t* data, size_t size) { return guarded([&] { return convert_to_long_orders_impl(data, size); }); }
 Result convert_to_classic(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return convert_to_classic_impl(data, size, profile); }); }
 Result needs_extended(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return needs_extended_impl(data, size, profile); }); }
 Result rewrite(const uint8_t* data, size_t size, Profile profile) { return guarded([&] { return rewrite_impl(data, size, profile); }); }

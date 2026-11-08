@@ -64,10 +64,11 @@ std::vector<AntSnapshot> ants_of(const SimulationEngine& e, uint8_t team) {
     return out;
 }
 
-// A small world for the rules: a 40 x 40 test map with the given rules, `per_team` combat ants for each of the given teams in a row, no eggs for anybody
-SimulationEngine small_world(GameMode mode, std::initializer_list<uint8_t> teams, uint32_t per_team = 3, uint32_t ms = 720000) {
+// A small world for the rules: a 40 x 40 test map with the given rules, `per_team` combat ants for each of the given teams in a row, no eggs and no hill for anybody
+SimulationEngine small_world(GameMode mode, std::initializer_list<uint8_t> teams, uint32_t per_team = 3, uint32_t ms = 720000, bool end_fix = true) {
     SimulationEngine e;
     e.set_game_mode(mode);
+    e.set_end_fix_187(end_fix);                                           // (false: the end rule of the rules numbers 6, 7 and 10)
     e.init_test_world(40, 40, 11, ms);
     for (uint8_t p = 0; p < MAX_PLAYERS; ++p) e.set_player_eggs(p, 0);
     for (uint8_t t : teams) {
@@ -388,11 +389,17 @@ int main() {
         ASSERT_EQ(r.winning_players[0], 0);
     } TEST_END();
 
-    TEST_CASE("3.4 the original's rule would not end that match: a last side with 0 points never wins; 187 ends it, 4 teams in the match, three of them gone") {
+    TEST_CASE("3.4 the original's CHECKGO alone (rules number 5) would not end that match: a last side with 0 points never wins; the last-side rule (rules number 8) and 187 end it, 4 teams in the match, three of them gone") {
         SimulationEngine plain = small_world(GameMode::HighestScore, {0, 1});
+        plain.set_last_side_rule(false);
         for (const AntSnapshot& a : ants_of(plain, 1)) plain.kill_unit(a.id);
         run_ticks(plain, 200);
         ASSERT_FALSE(plain.is_match_over());
+        SimulationEngine last_side = small_world(GameMode::HighestScore, {0, 1});         // (no food on that map: nothing is left to score)
+        for (const AntSnapshot& a : ants_of(last_side, 1)) last_side.kill_unit(a.id);
+        run_ticks(last_side, 200);
+        ASSERT_TRUE(last_side.is_match_over());
+        ASSERT_EQ(last_side.get_world_state().match_result.tie_standing, 0);       // (the original's game: the side that is left wins a tie, here all 0)
         SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2, 3});
         for (int t : {1, 2}) for (const AntSnapshot& a : ants_of(e, static_cast<uint8_t>(t))) e.kill_unit(a.id);
         run_ticks(e, 40);
@@ -601,6 +608,96 @@ int main() {
         ASSERT_EQ(e.get_world_state().match_result.standing, 0);
     } TEST_END();
 
+    TEST_CASE("3.5b the last ants of both final teams die within one check (200 ms): nobody stands, the ranking is by kills, a tie goes to each screen's own team, and every team is out (the rule is kept as it was)") {
+        SimulationEngine e = small_world(GameMode::Kills187, {0, 1}, 2);
+        kill_pair(e, 0, 1);
+        kill_pair(e, 0, 1);                                                // team 0 has 2 kills, team 1 none
+        for (const uint8_t t : {uint8_t{0}, uint8_t{1}}) for (const AntSnapshot& a : ants_of(e, t)) e.kill_unit(a.id);       // both teams lose everything before the rule looks
+        ASSERT_FALSE(e.is_match_over());
+        run_ticks(e, 10);
+        ASSERT_TRUE(e.is_match_over());
+        const MatchResult r = e.get_world_state().match_result;
+        ASSERT_EQ(r.standing, PLAYER_NEUTRAL);
+        ASSERT_EQ(r.ants_left[0], 0u);
+        ASSERT_EQ(r.ants_left[1], 0u);
+        ASSERT_EQ(r.rows(0)[0].first, 0);                                  // the most kills first, on every screen
+        ASSERT_EQ(r.rows(1)[0].first, 0);
+        ASSERT_TRUE(r.is_winner(0) && !r.is_winner(1));
+        SimulationEngine tie = small_world(GameMode::Kills187, {0, 1}, 2);
+        for (const uint8_t t : {uint8_t{0}, uint8_t{1}}) for (const AntSnapshot& a : ants_of(tie, t)) tie.kill_unit(a.id);
+        run_ticks(tie, 10);
+        ASSERT_TRUE(tie.is_match_over());
+        const MatchResult t = tie.get_world_state().match_result;
+        ASSERT_EQ(t.standing, PLAYER_NEUTRAL);
+        ASSERT_EQ(t.rows(0)[0].first, 0);                                  // equal kills: each screen puts its own team first (history says draw, test_history_record HR2.2)
+        ASSERT_EQ(t.rows(1)[0].first, 1);
+        SimulationEngine old = small_world(GameMode::Kills187, {0, 1}, 2, 720000, false);       // and the same under the rules before 11
+        for (const uint8_t k : {uint8_t{0}, uint8_t{1}}) for (const AntSnapshot& a : ants_of(old, k)) old.kill_unit(a.id);
+        run_ticks(old, 10);
+        ASSERT_TRUE(old.is_match_over());
+        ASSERT_EQ(old.get_world_state().match_result.standing, PLAYER_NEUTRAL);
+    } TEST_END();
+
+    TEST_CASE("3.7c allies and a ghost team: an alliance is one side, a team of eggs that cannot hatch is none, so the match ends when the enemy of the alliance is gone (under the rules before 11 the ghost kept it going)") {
+        for (const bool fixed : {true, false}) {
+            SimulationEngine e = small_world(GameMode::Kills187, {0, 1, 2}, 3, 720000, fixed);
+            e.apply_command([] { Command c; c.type = CommandType::AllianceInvite; c.issuer = 0; c.other_player = 1; return c; }());
+            e.apply_command([] { Command c; c.type = CommandType::AllianceAccept; c.issuer = 1; c.other_player = 0; return c; }());
+            e.set_player_eggs(3, 5);                                       // team 3: five eggs, no hill, no ant
+            run_ticks(e, 10);
+            ASSERT_FALSE(e.is_match_over());                               // the alliance against team 2
+            for (const AntSnapshot& a : ants_of(e, 2)) e.kill_unit(a.id);
+            run_ticks(e, 40);
+            ASSERT_EQ(e.is_match_over(), fixed);
+            if (fixed) ASSERT_TRUE(e.get_world_state().match_result.standing == 0);
+        }
+    } TEST_END();
+
+    TEST_CASE("3.13 a roster of two seats with one team on the map: the match does not end at the first look (the rules before 11 counted the seats and ended it with that team the winner); it ends when the team is gone") {
+        SimulationEngine reset;
+        reset.set_game_mode(GameMode::Kills187);
+        reset.set_end_fix_187(false);
+        ASSERT_FALSE(reset.end_fix_187());
+        reset.set_game_mode(GameMode::Kills187);
+        ASSERT_TRUE(reset.end_fix_187());                                  // (a program that played an old recording and starts a match plays by the rules of a match)
+        const LevelData level = load_map("TINY");
+        LevelData one_team = level.for_roster(0x01);                       // the map as only seat 0 plays it: no hill, no start marker for the others
+        one_team.boundary_param = 0;                                       // and no egg for them
+        for (const bool fixed : {true, false}) {
+            SimulationEngine e;
+            e.set_game_mode(GameMode::Kills187);
+            e.set_end_fix_187(fixed);
+            e.init(one_team, 5u, 0x03);                                    // two seats at the table
+            run_ticks(e, 400);
+            ASSERT_EQ(e.is_match_over(), !fixed);
+            ASSERT_EQ(e.get_world_state().match_result.standing, fixed ? PLAYER_NEUTRAL : uint8_t{0});
+            if (!fixed) continue;
+            for (const AntSnapshot& a : ants_of(e, 0)) e.kill_unit(a.id);
+            run_ticks(e, 40);
+            ASSERT_TRUE(e.is_match_over());                                // nobody is left at all: the rule the original has too
+            ASSERT_EQ(e.get_world_state().match_result.standing, PLAYER_NEUTRAL);
+        }
+        // with eggs for the seat that has no team they are ghosts (no hill): neither rule ends the match for them while team 0 plays
+        LevelData eggs = level.for_roster(0x01);
+        for (const bool fixed : {true, false}) {
+            SimulationEngine e;
+            e.set_game_mode(GameMode::Kills187);
+            e.set_end_fix_187(fixed);
+            e.init(eggs, 5u, 0x03);
+            run_ticks(e, 400);
+            ASSERT_FALSE(e.is_match_over());
+        }
+        // two teams on the map in a roster of two seats still end the match when one is gone (3.11)
+        SimulationEngine both;
+        both.set_game_mode(GameMode::Kills187);
+        both.init(level, 5u, 0x03);
+        both.set_player_eggs(1, 0);
+        for (const AntSnapshot& a : ants_of(both, 1)) both.kill_unit(a.id);
+        run_ticks(both, 100);
+        ASSERT_TRUE(both.is_match_over());
+        ASSERT_EQ(both.get_world_state().match_result.standing, 0);
+    } TEST_END();
+
     TEST_CASE("4.1 the eggs are lives: a team with an egg is not out when its last ant dies, the free hatch costs it none of its kills, and the match goes on until the egg is hatched and the ant killed") {
         SimulationEngine e = small_world(GameMode::Kills187, {0, 1}, 1);
         kill_pair(e, 1, 0);
@@ -627,16 +724,72 @@ int main() {
         ASSERT_EQ(f.get_world_state().player_scores[0], 2);
     } TEST_END();
 
-    TEST_CASE("4.1c an egg alone keeps a side alive (no ant, no hatch yet): the match goes on; it ends when the egg is gone and the last ant with it") {
+    TEST_CASE("4.1c a ghost team, eggs and no hill and no ant, keeps nobody standing: the match ends and the other team stands; under the rules before 11 the eggs held the match for ever") {
         SimulationEngine e = small_world(GameMode::Kills187, {0});
-        e.set_player_eggs(1, 2);                                           // team 1 has two eggs and not one ant
-        run_ticks(e, 200);
-        ASSERT_FALSE(e.is_match_over());
-        ASSERT_EQ(e.get_world_state().match_result.standing, PLAYER_NEUTRAL);
-        e.set_player_eggs(1, 0);
+        e.set_player_eggs(1, 2);                                           // team 1 has two eggs and not one ant, and no hill to hatch at
         run_ticks(e, 40);
         ASSERT_TRUE(e.is_match_over());
         ASSERT_EQ(e.get_world_state().match_result.standing, 0);
+        SimulationEngine paid = small_world(GameMode::Kills187, {0});
+        paid.set_player_eggs(1, 2);
+        paid.set_player_score(1, 200);                                     // even with the points of a hatch there is no hill for the newborn: the egg cannot hatch
+        run_ticks(paid, 40);
+        ASSERT_TRUE(paid.is_match_over());
+        ASSERT_EQ(paid.get_world_state().match_result.standing, 0);
+        SimulationEngine old = small_world(GameMode::Kills187, {0}, 3, 720000, false);
+        old.set_player_eggs(1, 2);
+        run_ticks(old, 400);
+        ASSERT_FALSE(old.is_match_over());                                 // (the earlier rule: an egg alone is a side)
+        ASSERT_EQ(old.get_world_state().match_result.standing, PLAYER_NEUTRAL);
+        old.set_player_eggs(1, 0);
+        run_ticks(old, 40);
+        ASSERT_TRUE(old.is_match_over());                                  // (it ended the moment the egg was gone)
+        ASSERT_EQ(old.get_world_state().match_result.standing, 0);
+    } TEST_END();
+
+    TEST_CASE("4.1d an egg counts while its team has a hill to hatch it at: a team with a hill, eggs and no ant is a side (as it always was), and the eggs are lives with a hill too: the last ant dies, the egg is hatched for nothing, the newborn walks out, and the match ends when it is killed") {
+        for (const bool fixed : {true, false}) {
+            SimulationEngine e = small_world(GameMode::Kills187, {0}, 3, 720000, fixed);
+            e.set_anthill(1, TileCoord{30, 30});
+            e.set_player_eggs(1, 2);                                       // a hill, two eggs, no ant, no points
+            run_ticks(e, 100);
+            ASSERT_FALSE(e.is_match_over());                               // (the hill is there: a side, under the earlier rule too)
+            e.set_player_score(1, 200);
+            ASSERT_TRUE(e.try_hatch(1, AntType::Worker, false) == SimulationEngine::HatchResult::Started);
+            run_ticks(e, 200);
+            ASSERT_FALSE(e.is_match_over());
+            ASSERT_EQ(ants_of(e, 1).size(), 1u);                           // the newborn
+            e.set_player_eggs(1, 0);
+            for (const AntSnapshot& a : ants_of(e, 1)) e.kill_unit(a.id);
+            run_ticks(e, 40);
+            ASSERT_TRUE(e.is_match_over());
+            ASSERT_EQ(e.get_world_state().match_result.standing, 0);
+        }
+        SimulationEngine f = small_world(GameMode::Kills187, {0, 1}, 1);
+        f.set_anthill(1, TileCoord{30, 30});
+        f.set_player_eggs(1, 1);
+        for (const AntSnapshot& a : ants_of(f, 1)) f.kill_unit(a.id);
+        ASSERT_EQ(f.get_pending_hatch_count(1), 1u);
+        run_ticks(f, 100);
+        ASSERT_FALSE(f.is_match_over());                                   // (the hatch runs 8 seconds)
+        run_ticks(f, 100);
+        ASSERT_FALSE(f.is_match_over());
+        ASSERT_EQ(ants_of(f, 1).size(), 1u);
+        for (const AntSnapshot& a : ants_of(f, 1)) f.kill_unit(a.id);
+        run_ticks(f, 40);
+        ASSERT_TRUE(f.is_match_over());
+        ASSERT_EQ(f.get_world_state().match_result.standing, 0);
+        // the same last ant without a hill: the free hatch is started (the egg is spent) and cancelled when it comes due, because there is no entrance for the newborn; then nothing can hatch and the team is out
+        SimulationEngine g = small_world(GameMode::Kills187, {0, 1}, 1);
+        g.set_player_eggs(1, 3);
+        for (const AntSnapshot& a : ants_of(g, 1)) g.kill_unit(a.id);
+        ASSERT_EQ(g.get_pending_hatch_count(1), 1u);
+        run_ticks(g, 100);
+        ASSERT_FALSE(g.is_match_over());                                   // (a hatch in progress counts)
+        run_ticks(g, 100);
+        ASSERT_TRUE(g.is_match_over());                                    // (it came to nothing: two eggs are left and no hill to hatch them at)
+        ASSERT_EQ(g.get_world_state().match_result.standing, 0);
+        ASSERT_TRUE(ants_of(g, 1).empty());
     } TEST_END();
 
     TEST_CASE("4.1b a hatch that a player asks for needs 200 kills in 187 (as it needs 200 points elsewhere) and takes none of them") {

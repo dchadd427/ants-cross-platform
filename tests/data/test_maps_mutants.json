@@ -14,8 +14,8 @@
   {
    "id": "test_map_online_limit_not_asked",
    "file": "src/ants_server/test_maps.cpp",
-   "old": "    if (!OnlineLimits::allows(static_cast<uint64_t>(rows * columns))) {",
-   "new": "    if (false) {"
+   "old": "    const Term over = OnlineLimits::first_over(counts);",
+   "new": "    const Term over = Term::None;"
   },
   {
    "id": "test_map_one_team_accepted",

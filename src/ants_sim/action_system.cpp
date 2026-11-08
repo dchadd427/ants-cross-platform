@@ -194,6 +194,7 @@ void SimulationEngineImpl::cleanup_enter(AntUnit& a) {
 // in when nobody is on or heading for the entrance. Queue order: the earliest arrival time at the ring tile; ants that
 // were ordered by a click or a retreat have time 0 and go first (strictly smaller time wins, the first ant wins ties).
 void SimulationEngineImpl::anthillq_run() {
+    if (hill_closed()) return;                  // 187 now: nobody enters a hill, so nobody waits at its ring (the task keeps its beat: the timer is in the state hash)
     for (uint8_t team = 0; team < MAX_PLAYERS; ++team) {
         const TileCoord home = team_entrance(team);
         if (home.x < 0) continue;

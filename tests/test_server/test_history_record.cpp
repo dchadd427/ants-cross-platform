@@ -18,6 +18,7 @@
 #include "ants_server/history_record.hpp"
 #include "ants_sim/game_mode.hpp"
 #include "ants_sim/match_stats.hpp"
+#include "ants_sim/sim_engine.hpp"
 #include "ants_sim/start_teams.hpp"
 
 using namespace ants;
@@ -66,6 +67,7 @@ struct Fake {
     std::vector<std::array<uint8_t, 2>> allies;              // allied pairs (both ways)
     int quitter{-1};
     int standing{-1};                                        // 187: the side left (a seat), -1 none
+    int tie_standing{-1};                                    // the original's game, rules number 8: the side left, which wins a tie for the top score
     uint8_t dropped{0};
     sim::StartTeams teams;
     uint32_t turns{2400};
@@ -109,6 +111,7 @@ HistoryRecord record_of(const Fake& f) {
     }
     r.quitter = f.quitter >= 0 ? static_cast<uint16_t>(f.quitter) : sim::NO_QUITTER;
     r.standing = f.standing >= 0 ? static_cast<uint8_t>(f.standing) : sim::PLAYER_NEUTRAL;
+    r.tie_standing = f.tie_standing >= 0 ? static_cast<uint8_t>(f.tie_standing) : sim::PLAYER_NEUTRAL;
     return make_history_record(kId, kT0, rep, out);
 }
 
@@ -236,6 +239,47 @@ int main() {
         Fake none;                                            // all went at once (nobody has anything left): kills decide, here nothing
         none.mode = 1;
         ASSERT_TRUE(record_of(none).draw);
+    } TEST_END();
+
+    TEST_CASE("HR2.4 Mode 187, the last ants of both final teams die within one check of the end rule (200 ms): a real engine's result has nobody standing, the record ranks by the kills, and equal kills are a DRAW (the end-rule fixes of the rules number 11 keep this as it was)") {
+        const auto record_of_engine = [](uint32_t kills_of_seat_0) {
+            sim::SimulationEngine e;
+            e.set_game_mode(sim::GameMode::Kills187);
+            e.init_test_world(40, 40, 11, 720000);
+            for (uint8_t p = 0; p < sim::MAX_PLAYERS; ++p) e.set_player_eggs(p, 0);
+            for (uint8_t team = 0; team < 2; ++team) {
+                for (int32_t i = 0; i < 2; ++i) e.spawn_unit(team, sim::AntType::Combat, sim::TileCoord{4 + 10 * team + 2 * i, 6});
+            }
+            for (uint32_t k = 0; k < kills_of_seat_0; ++k) {                       // seat 0 kills an ant of seat 1 in melee: a fresh pair side by side, the victim with one hit point left
+                const int32_t row = 15 + 3 * static_cast<int32_t>(k);
+                const uint32_t killer = e.spawn_unit(0, sim::AntType::Combat, sim::TileCoord{30, row});
+                const uint32_t victim = e.spawn_unit(1, sim::AntType::Combat, sim::TileCoord{31, row});
+                e.get_unit(victim).hp = 1;
+                e.execute_melee_attack(killer, victim);
+                for (int t = 0; t < 80; ++t) e.tick();
+            }
+            for (const sim::AntSnapshot& a : e.get_world_state().ants) {          // everything that is left dies before the rule looks again
+                if (a.hp > 0) e.kill_unit(a.id);
+            }
+            for (int t = 0; t < 10 && !e.is_match_over(); ++t) e.tick();
+            replay::Replay rep;
+            rep.head.map_name = "TINY.LVL";
+            rep.head.roster = 0x0F;                                              // (the test world seats all four teams, two of them with nothing)
+            rep.head.set_mode(1);
+            replay::Outcome out;
+            out.ran = true;
+            out.ok = true;
+            out.turns = 100;
+            out.match_over = e.is_match_over();
+            out.result = e.get_world_state().match_result;
+            return std::make_pair(make_history_record(kId, kT0, rep, out), out.result);
+        };
+        const auto ahead = record_of_engine(1);                  // seat 0 has a kill, both teams are wiped out together
+        ASSERT_TRUE(ahead.second.is_over && ahead.second.standing == sim::PLAYER_NEUTRAL);
+        ASSERT_TRUE(!ahead.first.draw && winners_of(ahead.first) == "0" && row_order(ahead.first).substr(0, 2) == "0 ");
+        const auto level = record_of_engine(0);                  // nobody has a kill: the same, and equal kills are a draw
+        ASSERT_TRUE(level.second.is_over && level.second.standing == sim::PLAYER_NEUTRAL);
+        ASSERT_TRUE(level.first.draw && winners_of(level.first).empty() && std::string(level.first.result()) == "draw");
     } TEST_END();
 
     TEST_CASE("HR2.3 Mode 187 stores the kills as the ranking value: a seat's and a row's `score` is its kills, whatever the engine's score was; highest-score keeps the score") {
@@ -401,6 +445,55 @@ int main() {
         three[2].killed = 11;
         ASSERT_FALSE(rank_history_rows("highest-score", -1, 255, three));
         ASSERT_TRUE(three[0].seats[0] == 2 && three[0].winner && three[1].seats[0] == 0 && three[2].seats[0] == 1 && !three[1].winner);       // (equal rows keep the order they came in)
+    } TEST_END();
+
+    TEST_CASE("HR7.2 The side left standing under the rules number 8 only wins a tie for the top score: a dead team ahead wins, a tie goes to the survivor before the kills do, equal rows are no draw, 187's standing stays unconditional") {
+        const auto rows3 = [](int32_t s0, int32_t s1, int32_t s2, int32_t k0, int32_t k1) {
+            std::vector<HistoryRow> r(3);
+            const int32_t sc[3] = {s0, s1, s2};
+            const int32_t kl[3] = {k0, k1, 0};
+            for (uint8_t k = 0; k < 3; ++k) {
+                r[k].seats = {k};
+                r[k].score = sc[k];
+                r[k].killed = kl[k];
+            }
+            return r;
+        };
+        std::vector<HistoryRow> ahead = rows3(20, 150, 0, 0, 0);                              // the survivor (seat 0) is behind a dead team
+        ASSERT_FALSE(rank_history_rows("highest-score", -1, 255, ahead, 0));
+        ASSERT_TRUE(ahead[0].seats[0] == 1 && ahead[0].winner && !ahead[1].winner);
+        std::vector<HistoryRow> tie = rows3(100, 100, 0, 0, 7);                               // a tie for the top: the dead team has more kills, the survivor still wins
+        ASSERT_FALSE(rank_history_rows("highest-score", -1, 255, tie, 0));
+        ASSERT_TRUE(tie[0].seats[0] == 0 && tie[0].winner);
+        std::vector<HistoryRow> equal = rows3(100, 100, 0, 3, 3);
+        ASSERT_FALSE(rank_history_rows("highest-score", -1, 255, equal, 1));                  // (equal on kills as well: no draw, the survivor wins)
+        ASSERT_TRUE(equal[0].seats[0] == 1 && equal[0].winner);
+        std::vector<HistoryRow> zero = rows3(0, 0, 0, 0, 0);
+        ASSERT_FALSE(rank_history_rows("highest-score", -1, 255, zero, 2));                   // (all zero)
+        ASSERT_TRUE(zero[0].seats[0] == 2 && zero[0].winner);
+        std::vector<HistoryRow> two_dead = rows3(0, 100, 100, 0, 0);                          // two dead teams tied above the survivor: a draw, as before
+        ASSERT_TRUE(rank_history_rows("highest-score", -1, 255, two_dead, 0));
+        std::vector<HistoryRow> none = rows3(100, 100, 0, 0, 0);                              // no survivor (the clock, the original's rule): a draw, as before
+        ASSERT_TRUE(rank_history_rows("highest-score", -1, 255, none));
+        std::vector<HistoryRow> k187 = rows3(1, 5, 0, 0, 0);                                  // 187: `standing` first whatever the kills; the tie field is not read
+        ASSERT_FALSE(rank_history_rows("187", -1, 0, k187, 1));
+        ASSERT_TRUE(k187[0].seats[0] == 0 && k187[0].winner);
+    } TEST_END();
+
+    TEST_CASE("HR7.3 A match that the last-side rule ended: the record names the winner that the engine's screens name (a tie goes to the side left, a higher score of a dead team wins), and a tie it decides is no draw") {
+        Fake tie;
+        tie.seat(0, 50, 2).seat(1, 50, 9);
+        tie.tie_standing = 0;
+        const HistoryRecord t = record_of(tie);
+        ASSERT_TRUE(winners_of(t) == "0" && !t.draw && std::string(t.result()) == "decided");
+        Fake dead_leads;
+        dead_leads.seat(0, 10, 2).seat(1, 80, 0);
+        dead_leads.tie_standing = 0;
+        const HistoryRecord d = record_of(dead_leads);
+        ASSERT_TRUE(winners_of(d) == "1" && !d.draw);
+        Fake clock;                                                 // the clock ended it (no side left): the tie is a draw as before
+        clock.seat(0, 50, 2).seat(1, 50, 2);
+        ASSERT_TRUE(record_of(clock).draw);
     } TEST_END();
 
     TEST_CASE("HR8.1 A record as JSON: the full form has the layout number, the bombs and fires, the mode and the result; the list's form leaves out the numbers of the page; details are given back as they were stored") {
