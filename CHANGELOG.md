@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.14.1 - 2026-11-09 - Discord names in games, the Players list, replay files, and a Hard bot that answers a blow
+
+**For players:**
+- **Your Discord name in rooms and games.** On the website nobody types a name any more: if you are logged in with Discord (Log in, in the chat), rooms and games show that name; everybody else plays as "Guest" and six digits, kept by this browser. A name with letters the game cannot show uses the Discord username instead.
+- **Display names in the chat.** The chat shows your Discord display name, and the More menu has a switch to show your username instead. A login from before this version shows the username until you log out and in again. Moderators see the username next to a display name.
+- **Who is here.** Home has a Players list: the people on the front page now, grouped as waiting in a room, playing and looking around (guests are counted, not named). The host of a public room that waits has a Join button in the list. On a phone the list opens from the Players button.
+- **The Games list** shows the picture of a map that a player made, and on a wide window the docked list sits in the middle. On a narrow phone the label of the Room's Public | Private switch stays inside its button.
+- **Watch a replay file you downloaded.** Matches has "Open a replay file" (or drop the file on the page): it plays in this tab and is not uploaded.
+- **The Hard computer player answers a blow.** When one of its ants is struck, that ant and the ants near it that can strike answer together, as many as the attacker has there and one more (five at most), and keep fighting while their side is at least three fifths as strong. Medium, Easy and the game type 187 play as before. The desktop game's Hard player does the same.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.0 page or game still joins. The rest of this release is internal: large source files split into smaller ones, tools and tests for the computer players, and computer-player work that is built but switched off.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/26714f6f...3b9261f6)
+
 ## v0.14.0 - 2026-11-07 - New rules: 187's closed hill, the last side standing, fire walls and long orders
 
 **For players:**
