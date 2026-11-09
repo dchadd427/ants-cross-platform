@@ -164,9 +164,9 @@ class TheLegalPage(unittest.TestCase):
                       "Moderators also see your username next to a display name", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
                       "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username and display name", "a ban or a mute, if there is one, stays",
                       "Reading the chat and playing need no login",
-                      "the name you play under", "Games and Players lists", "the match history and the replay files", "for ever in a file that someone has downloaded", "Forget me does not remove it", "whether they are looking around, waiting in a room or playing"):
+                      "the name you play under", "Games and Players lists", "the match history, which keeps results and names for good, and into the replay files", "for 30 days on the site, and for ever in a file that someone has downloaded", "Forget me does not remove it", "whether they are looking around, waiting in a room or playing"):
             self.assertIn(words, panel, words)
-        self.assertLessEqual(len(panel.split()), 340)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 60 more for the name that is played under and the Players list; 334 words now)
+        self.assertLessEqual(len(panel.split()), 345)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 342 words now)
         self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "display name", "Log out", "Forget me"])
         self.assertNotIn("two things only", panel)
         self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)
