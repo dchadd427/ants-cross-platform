@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "ants_ai/group_fight.hpp"
 #include "ants_ai/standard_bot.hpp"
 
 namespace ants::ai {
@@ -82,7 +83,7 @@ DefenceFrame defence_frame(const BotView& view, const LevelPlan& plan, sim::Tile
 bool FightTask::take_defenders(TaskContext& c, Fight& f, const AntView& target, size_t wanted, const Strength& theirs) {
     const BotView& v = c.view;
     const LevelPlan& plan = tactics_.plan;
-    const int32_t reach = plan.defend_by_strength ? std::min(plan.defend_reach, plan.leash_tiles) : std::numeric_limits<int32_t>::max();
+    const int32_t reach = plan.defend_by_strength ? recruit_reach(plan) : std::numeric_limits<int32_t>::max();
     // the ants that answer: any ant that can strike (defend_all_types), else the own default type and the Combat Ants, and no ant of a task of rank 3 or more
     const auto fit = [&](const AntView& a, bool struck) {
         if (plan.defend_all_types) return can_defend(v, a, tactics_, c.ledger, c.map, struck);

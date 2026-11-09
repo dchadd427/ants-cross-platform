@@ -57,6 +57,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.defend_keep_percent = 120;         // (the defence batch is built and OFF here: `--tune defence=1` turns it on with these numbers; docs/BOT_PEOPLE.md)
             p.defend_max = 3;
             p.defend_reach = 8;
+            p.group_reach = 14;                  // (the group batch is built and OFF here: `--tune group=1` turns it on with this number; docs/BOT_PEOPLE.md)
             p.heal_hp = 3;                       // (the heal batch is built and OFF here: `--tune heal=1` turns it on with these numbers; docs/BOT_PEOPLE.md)
             p.heal_danger_tiles = 3;
             p.heal_recent_ticks = 60;
@@ -99,6 +100,8 @@ LevelPlan plan_for(Level level) noexcept {
             p.victim_answers = true;
             p.defend_by_strength = true;
             p.defend_keep_percent = 60;          // a force of at least 60 percent of the enemy's near the target keeps the fight up; below that it is called off at the look
+            p.group_fight = false;               // the group batch (docs/BOT_PEOPLE.md): built and OFF; `--tune group=1` turns it on (the ants within 20 tiles of the target answer a blow, not those within 10)
+            p.group_reach = 20;
             p.heal = false;                      // the heal batch (docs/BOT_PEOPLE.md): built and OFF at every level; `--tune heal=1` turns it on with these numbers (a hurt ant that is in danger and within 16 tiles of the hill walks home to heal)
             p.heal_hp = 4;
             p.heal_danger_tiles = 3;
@@ -275,6 +278,8 @@ void without_defence_batch(LevelPlan& p) noexcept {
 }
 
 void without_heal(LevelPlan& p) noexcept { p.heal = false; }
+
+void without_group_fight(LevelPlan& p) noexcept { p.group_fight = false; }
 
 void without_war_batch(LevelPlan& p) noexcept {
     without_stand_batch(p);

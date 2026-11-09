@@ -56,6 +56,11 @@ struct LevelPlan {
     uint32_t defend_extra{1};            // ... defenders wanted beyond the enemy ants there (at least the level's defenders)
     uint32_t defend_max{5};              // ... the most defenders of one fight (Hard 5, Medium 3)
     int32_t defend_reach{10};            // ... a defender comes from at most this many tiles from the target (and never from beyond leash_tiles) (Hard 10, Medium 8)
+    // the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"; src/ants_ai/group_fight.cpp): the ants that answer a blow come from further away, so that the force at the fight is a group and not the ants that stood
+    // near. It reaches the fights of defend_by_strength only (Medium's defence batch is off, so `--tune group=1` changes nothing there unless `defence=1` turns the fights on too). Built and OFF at every level (the shipped
+// bots play as before; `--tune group=1` turns it on); without_group_fight() puts a plan back as it was before it
+    bool group_fight{false};             // the defence calls the ants within group_reach tiles of the target, which the leash does not cap
+    int32_t group_reach{20};             // ... a defender comes from at most this many tiles from the target (Hard 20, Medium 14: the numbers a plan has when the batch is turned on)
     // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; src/ants_ai/heal_task.cpp): a hurt ant that is in danger walks into its own hill, which restores all its hit points. Built and OFF in a plan made by hand and
     // at every level (`--tune heal=1` turns it on with the level's numbers); without_heal() puts a plan back as it was before. The game type 187 has a closed hill: the task does nothing there (BotView::hill_enterable)
     bool heal{false};                    // the task runs
@@ -396,6 +401,9 @@ void without_kill_batch(LevelPlan& plan) noexcept;
 void without_defence_batch(LevelPlan& plan) noexcept;
 /// The plan without the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): no ant is sent home to heal; the engine's own walk home at 1 hit point is all there is. For `bot_arena --tune heal=0` and the tests whose subject is an older rule.
 void without_heal(LevelPlan& plan) noexcept;
+/// The plan without the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"): the ants that answer a blow come from at most defend_reach tiles (and never from beyond the leash), and the fight is kept up at
+/// defend_keep_percent, as before the batch. For `bot_arena --tune group=0` and the tests whose subject is an older rule.
+void without_group_fight(LevelPlan& plan) noexcept;
 /// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
 /// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
 void without_war_batch(LevelPlan& plan) noexcept;
