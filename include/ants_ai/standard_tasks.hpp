@@ -346,7 +346,8 @@ private:
 ///                 from plan.behind_mine_tier on (earlier) the mines of the gate ring are laid too, plan.behind_mine_gate of the eight at a time
 ///   at home       (plan.mine_home, from plan.mine_home_after) round the own hill, where the enemy's walks to it go: open tiles five to nine tiles out whose two walking costs (the enemy's from his hill
 ///                 and the bot's from its own) add up to little more than the enemy's walk to the hill, never on a pile's edge, plan.mine_home_apart tiles apart from every other mine, and (plan.mine_home_off_route)
-///                 never on the estimated way of the bot's own carriers to a pile. The engine's path finder goes
+///                 never on the estimated way of the bot's own carriers to a pile (plan.home_on_route, off, opens that way to a mine within plan.home_route_lane cost units of the enemy's shortest way, and
+///                 plan.home_first lets a home mine come before a pile mine in turn: docs/BOT_PEOPLE.md, "Step 5"). The engine's path finder goes
 ///                 round an own bomb and straight through an enemy's, so the bot's carriers do not meet them and a rush (every ant of an enemy in one group, "select all and go") walks into them
 /// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up or a tile with an ant on it; the mines of a pile and of the gate never within
 /// six tiles of the own hill. Every job is

@@ -12,6 +12,7 @@
 //   AI39.7  the game type 187 plays the brawl: the batch changes nothing there (the same orders with it on and off)
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <set>
 #include <utility>
