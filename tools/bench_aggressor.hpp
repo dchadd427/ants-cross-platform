@@ -28,6 +28,7 @@
 #include "ants_ai/standard_tasks.hpp"
 #include "ants_ai/tactics.hpp"
 #include "bench_gang.hpp"
+#include "bench_gang2.hpp"
 
 namespace ants::ai::bench {
 
@@ -474,13 +475,13 @@ private:
     uint32_t guard_looks_{0};
 };
 
-// The kind name of the bench bot that `word` spells, in any case: aggressor, aggressor2, rusher, saboteur, aggr1 .. aggr9 or gang; "" for any other word. A bench bot is not in the registry:
+// The kind name of the bench bot that `word` spells, in any case: aggressor, aggressor2, rusher, saboteur, aggr1 .. aggr9, gang or gang2; "" for any other word. A bench bot is not in the registry:
 // a command line parses it as a worker and puts this kind back.
 inline std::string bench_kind_of(const std::string& word) {
     std::string w = word;
     for (char& c : w) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     const bool aggr_n = w.size() == 5 && w.rfind("aggr", 0) == 0 && w[4] >= '1' && w[4] <= '9';
-    const bool named = w == "aggressor" || w == "aggressor2" || w == "saboteur" || w == "rusher" || w == "gang";
+    const bool named = w == "aggressor" || w == "aggressor2" || w == "saboteur" || w == "rusher" || w == "gang" || w == "gang2";
     return named || aggr_n ? w : std::string();
 }
 
@@ -508,6 +509,7 @@ inline std::unique_ptr<Bot> make_bench_bot(const std::string& kind, Level level)
     }
     if (kind == "saboteur") return std::make_unique<SaboteurBot>();
     if (kind == "gang") return std::make_unique<GangBot>(level);
+    if (kind == "gang2") return std::make_unique<Gang2Bot>(level);
     return nullptr;
 }
 

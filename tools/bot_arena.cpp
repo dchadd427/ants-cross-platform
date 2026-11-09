@@ -11,7 +11,7 @@
 //   --seeds A..B      the engine and controller seeds: "3", "1..8", "1,4,9..12" (default 1)
 //   --seat N=SPEC     a bot on seat N (0 green, 1 red, 2 blue, 3 black); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE: KIND idle, worker, standard (or one of the
 //                     bench bots of tools/bench_aggressor.hpp, which are not bots of the game: aggressor, aggressor2 (a double-thief opening), rusher (the contested middle first),
-//                     saboteur, gang (harvests, raids and fights as a group), aggr1 .. aggr9 (an aggressor with that many strikers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
+//                     saboteur, gang (harvests, raids and fights as a group), gang2 (the same, every free ant in the group), aggr1 .. aggr9 (an aggressor with that many strikers)); LEVEL easy, medium, hard; STYLE aggressive, economic, raider, defensive or random (a standard
 //                     bot's style: Hard plays aggressive or raider only; none: it draws its own per match). KIND may be `standard+K=V,K=V`, a standard bot with its own tuning of
 //                     the keys of apply_tune (the tournaments' ablations).
 //                     Repeat it for every seat that plays. Default: four standard bots at medium level. A seat that is not named has no hill and no ants. idle stands still; worker harvests (B3, the frozen yardstick); standard is the standard bot (B4-1: the worker's economy plus the tactics of its level).
@@ -221,7 +221,7 @@ void print_usage(std::FILE* to) {
         "  --map NAMES        shipped maps by name (TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS, or 'shipped') or .LVL paths, comma separated (default TINY)\n"
         "  --seeds A..B       \"3\", \"1..8\" or \"1,4,9..12\" (default 1)\n"
         "  --seat N=SPEC      a bot on seat N (0 to 3); SPEC is KIND, KIND:LEVEL, LEVEL, KIND:LEVEL:STYLE or LEVEL:STYLE (kinds idle worker standard and the bench bots aggressor aggressor2\n"
-        "                     saboteur rusher gang aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
+        "                     saboteur rusher gang gang2 aggr1 .. aggr9; levels easy medium hard; styles aggressive economic raider defensive random, standard bots only: Hard plays aggressive or raider).\n"
         "                     KIND may be standard+K=V,K=V: a standard bot with its own tuning (see --tune). Default: four standard bots at medium level. %s.\n"
         "  --game-mode M      highest-score (the original's game, default) or 187 (no food, the kills are the score)\n"
         "  --ticks full|N     until the match is over (default) or at most N ticks\n"
@@ -649,7 +649,7 @@ ai::ArenaSpec spec_of(const Options& o, const LoadedMap& m, const Job& j, bool r
     s.latency_ticks = o.latency;
     s.game_mode = o.game_mode;
     s.record = record;
-    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "gang", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
+    s.extra_kinds = {"aggressor", "aggressor2", "saboteur", "rusher", "gang", "gang2", "aggr1", "aggr2", "aggr3", "aggr4", "aggr5", "aggr6", "aggr7", "aggr8", "aggr9"};
     for (const ai::BotSpec& b : j.bots) {
         if (b.kind.rfind("standard+", 0) == 0) s.extra_kinds.push_back(b.kind);
     }

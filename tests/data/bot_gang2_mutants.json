@@ -1,0 +1,369 @@
+{
+ "note": "Mutants of the bench bot gang2 (tools/bench_gang2.hpp, docs/BOT_PEOPLE.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_gang2_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI37.1 - AI37.12 of suite 2.20. Left out on purpose: the hunter's group-of-three and not-a-Combat-Ant strike rules (a Combat Ant strikes by reflex before the bot's first look: no scene shows what the bot orders), and a skipped look once in 512 (below the resolution of a match of 6,000 ticks).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "heal_threshold_zero",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint8_t kHomeHp = 3;",
+   "new": "static constexpr uint8_t kHomeHp = 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.4"
+  },
+  {
+   "id": "fire_ant_not_of_gang",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "new": "if (a.type == sim::AntType::Fire || carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.5"
+  },
+  {
+   "id": "thief_never_of_gang",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if ((a.type == sim::AntType::Thief && raid_open_) ||",
+   "new": "if (a.type == sim::AntType::Thief ||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.5"
+  },
+  {
+   "id": "carriers_are_targets",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (!enemy_of(view, e) || carries(e) || !attackable(view, e)) continue;",
+   "new": "if (!enemy_of(view, e) || !attackable(view, e)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.7"
+  },
+  {
+   "id": "no_thief_or_fire_first",
+   "file": "tools/bench_gang2.hpp",
+   "old": "e.type == sim::AntType::Thief || e.type == sim::AntType::Fire ? 1 : 0, -d,",
+   "new": "0, -d,",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.3"
+  },
+  {
+   "id": "raid_on_shut_hole",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (!hill.present || east_state(grid, hill).shut()) continue;",
+   "new": "if (!hill.present || (east_state(grid, hill).shut() && false)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.6"
+  },
+  {
+   "id": "one_ant_per_order",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (strikers.empty()) return;\n            orders.attack(strikers, target->tile, Priority::Urgent);\n            ++strike_orders_;\n            strike_ants_ += static_cast<uint32_t>(strikers.size());",
+   "new": "if (strikers.empty()) return;\n            strikers.resize(1);\n            orders.attack(strikers, target->tile, Priority::Urgent);\n            ++strike_orders_;\n            strike_ants_ += static_cast<uint32_t>(strikers.size());",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.2"
+  },
+  {
+   "id": "walkers_not_told_again",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint64_t kReorderGap = 24;",
+   "new": "static constexpr uint64_t kReorderGap = 100000;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.2"
+  },
+  {
+   "id": "combat_ant_never_of_the_gang",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "new": "if (a.type == sim::AntType::Combat || carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.8",
+   "build": "test_ai"
+  },
+  {
+   "id": "hunter_never_walks_to_its_post",
+   "file": "tools/bench_gang2.hpp",
+   "old": "orders.move({h->id}, post, Priority::Normal);\n            ordered_[h->id] = now_ + 48;",
+   "new": "(void)post;\n            ordered_[h->id] = now_ + 48;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.8",
+   "build": "test_ai"
+  },
+  {
+   "id": "r1_fire_ant_dropped_from_pool",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            pool.push_back(&a);",
+   "new": "            if (a.type != sim::AntType::Fire) pool.push_back(&a);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.5",
+   "build": "test_ai"
+  },
+  {
+   "id": "r2_heal_threshold_2",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint8_t kHomeHp = 3;",
+   "new": "static constexpr uint8_t kHomeHp = 2;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.4",
+   "build": "test_ai"
+  },
+  {
+   "id": "r2b_heal_threshold_5",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint8_t kHomeHp = 3;",
+   "new": "static constexpr uint8_t kHomeHp = 5;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.12",
+   "build": "test_ai"
+  },
+  {
+   "id": "r4_hunter_off",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        hunter(view, orders, *map);\n        gang(view, orders, *map);",
+   "new": "        gang(view, orders, *map);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.8",
+   "build": "test_ai"
+  },
+  {
+   "id": "r5_focus_never_kept",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        const AntView* target = target_ != 0 ? find(view.others(), target_) : nullptr;",
+   "new": "        const AntView* target = nullptr;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.10",
+   "build": "test_ai"
+  },
+  {
+   "id": "r5b_focus_leash_3",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr int32_t kTargetLeash = 10;",
+   "new": "static constexpr int32_t kTargetLeash = 3;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.10",
+   "build": "test_ai"
+  },
+  {
+   "id": "r6_victim_poorest",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            if (row.score > best) {",
+   "new": "            if (row.score < best || victim < 0) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.11 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.11",
+   "build": "test_ai"
+  },
+  {
+   "id": "r6b_victim_last_on_tie",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            if (row.score > best) {",
+   "new": "            if (row.score >= best) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.8",
+   "build": "test_ai"
+  },
+  {
+   "id": "r7_strikes_now_dropped",
+   "file": "tools/bench_gang2.hpp",
+   "old": "strikes_now(view, e) ? 1 : 0, e.type",
+   "new": "0, e.type",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.3b ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.3b",
+   "build": "test_ai"
+  },
+  {
+   "id": "r8_farthest_target",
+   "file": "tools/bench_gang2.hpp",
+   "old": "-d, -static_cast<int32_t>(e.hp)};",
+   "new": "d, -static_cast<int32_t>(e.hp)};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.9",
+   "build": "test_ai"
+  },
+  {
+   "id": "r9_most_hp_target",
+   "file": "tools/bench_gang2.hpp",
+   "old": "-d, -static_cast<int32_t>(e.hp)};",
+   "new": "-d, static_cast<int32_t>(e.hp)};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.10",
+   "build": "test_ai"
+  },
+  {
+   "id": "r11_blow_gap_0",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint64_t kBlowGap = 12;",
+   "new": "static constexpr uint64_t kBlowGap = 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.2",
+   "build": "test_ai"
+  },
+  {
+   "id": "r12_hurt_ants_recruited",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            if (carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "new": "            if (carries(a) || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.12",
+   "build": "test_ai"
+  },
+  {
+   "id": "r13_carriers_stay_in_gang",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            else if (carries(*a)) ledger_.release(a->id, kGang);",
+   "new": "            else if (false && carries(*a)) ledger_.release(a->id, kGang);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.12",
+   "build": "test_ai"
+  },
+  {
+   "id": "r14_gang_thief_never_raids",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            if (ganged) ledger_.release(a.id, kGang);\n            if (!ledger_.take(a.id, kRaid)) continue;",
+   "new": "            if (ganged) continue;\n            if (!ledger_.take(a.id, kRaid)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.12",
+   "build": "test_ai"
+  },
+  {
+   "id": "r15_gang_never_rallies",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        orders.move(walkers, stand, Priority::Normal);\n        for (const uint32_t id : walkers) ordered_[id] = now_;",
+   "new": "        (void)stand;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.11 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.11",
+   "build": "test_ai"
+  },
+  {
+   "id": "r16_rejoin_hp_4",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint8_t kRejoinHp = 8;",
+   "new": "static constexpr uint8_t kRejoinHp = 4;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.12",
+   "build": "test_ai"
+  },
+  {
+   "id": "r17_gang_from_tick_100",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint64_t kGangFromTick = 700;",
+   "new": "static constexpr uint64_t kGangFromTick = 100;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.4",
+   "build": "test_ai"
+  },
+  {
+   "id": "r18_raid_any_score",
+   "file": "tools/bench_gang2.hpp",
+   "old": "    int32_t best_score = 29;",
+   "new": "int32_t best_score = -1;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.5",
+   "build": "test_ai"
+  },
+  {
+   "id": "r19_no_thief_powerups",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        tactics_.wants[thief] = static_cast<uint8_t>(kThieves);",
+   "new": "        tactics_.wants[thief] = 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.1",
+   "build": "test_ai"
+  },
+  {
+   "id": "r20_no_combat_powerups",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        if (late || thieves_done) tactics_.wants[combat] = static_cast<uint8_t>(kCombats);",
+   "new": "        (void)combat;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.1",
+   "build": "test_ai"
+  },
+  {
+   "id": "r21_deny_dropped",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            orders.deny(view.invite_from());",
+   "new": "            (void)deny_after_;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.12",
+   "build": "test_ai"
+  },
+  {
+   "id": "r24_hunter_never_goes_home",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        if (h != nullptr && h->hp <= kHomeHp) {\n            send_home(view, orders, map, *h);\n            hunter_ = 0;\n            return;\n        }",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.12 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.12",
+   "build": "test_ai"
+  },
+  {
+   "id": "r25_gang_ant_hurt_not_sent_home",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            if (a->hp <= kHomeHp) send_home(view, orders, map, *a);\n            else if",
+   "new": "            if (false) send_home(view, orders, map, *a);\n            else if",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.4",
+   "build": "test_ai"
+  },
+  {
+   "id": "r26_thief_or_fire_first_only_thief",
+   "file": "tools/bench_gang2.hpp",
+   "old": "e.type == sim::AntType::Thief || e.type == sim::AntType::Fire ? 1 : 0, -d,",
+   "new": "e.type == sim::AntType::Thief ? 1 : 0, -d,",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.3",
+   "build": "test_ai"
+  },
+  {
+   "id": "r27_reorder_every_tick",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint64_t kReorderGap = 24;",
+   "new": "static constexpr uint64_t kReorderGap = 4;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.2",
+   "build": "test_ai"
+  },
+  {
+   "id": "r28_target_timeout_never",
+   "file": "tools/bench_gang2.hpp",
+   "old": "target_since_ + 400 < now_) target = nullptr;",
+   "new": "false) target = nullptr;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.4",
+   "build": "test_ai"
+  },
+  {
+   "id": "s3_raid_never",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            orders.special(a.id, click);",
+   "new": "            if (a.id == 0) orders.special(a.id, click);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.6",
+   "build": "test_ai"
+  },
+  {
+   "id": "s22b_skip_every_16th_look",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        now_ = view.tick();\n        if (view.invite_from()",
+   "new": "        now_ = view.tick();\n        { static uint64_t g_calls = 0; if ((++g_calls & 15) == 0) return; }\n        if (view.invite_from()",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.1",
+   "build": "test_ai"
+  },
+  {
+   "id": "s22c_skip_every_64th_look",
+   "file": "tools/bench_gang2.hpp",
+   "old": "        now_ = view.tick();\n        if (view.invite_from()",
+   "new": "        now_ = view.tick();\n        { static uint64_t g_calls = 0; if ((++g_calls & 63) == 0) return; }\n        if (view.invite_from()",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.1 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.1",
+   "build": "test_ai"
+  },
+  {
+   "id": "s6c_victim_ignores_score",
+   "file": "tools/bench_gang2.hpp",
+   "old": "            if (row.score > best) {",
+   "new": "            if (victim < 0 || row.score > best + 100000) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.11 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.11",
+   "build": "test_ai"
+  }
+ ]
+}
