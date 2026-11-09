@@ -109,7 +109,7 @@
   {
    "id": "opening_card_has_other_words",
    "file": "web/home/home.js",
-   "old": "opening: 'Opening the game\u2026',",
+   "old": "opening: 'Opening the game…',",
    "new": "opening: 'Please wait',",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -466,15 +466,15 @@
   {
    "id": "inert_does_nothing",
    "file": "web/home/home.js",
-   "old": "[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
+   "old": "[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
    "new": "[bar].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } });",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "home_asks_the_network",
    "file": "web/home/home.js",
-   "old": "            win.addEventListener('resize', function () { fit(); if (menuOpen) placeMenu(); });\n",
-   "new": "            win.addEventListener('resize', function () { fit(); if (menuOpen) placeMenu(); });\n            fetch('/stats');\n",
+   "old": "win.addEventListener('resize', function () { if (menuOpen) placeMenu();",
+   "new": "win.addEventListener('resize', function () { fetch('/stats'); if (menuOpen) placeMenu();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -655,64 +655,15 @@
   {
    "id": "style_loads_another_site",
    "file": "web/home/home.css",
-   "old": ".standin::before { content: \"\";",
-   "new": ".standin::before { background: url(https://example.test/x.png); content: \"\";",
+   "old": ".hmain { flex: 1 1 auto; min-height: 0; display: grid;",
+   "new": ".hmain { background: url(https://example.test/x.png); flex: 1 1 auto; min-height: 0; display: grid;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "yard_stand_in_on_every_site",
-   "file": "web/home/home.js",
-   "old": "var standIn = labelled(doc), yard",
-   "new": "var standIn = true, yard",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
-  },
-  {
-   "id": "yard_stand_in_on_no_site",
-   "file": "web/home/home.js",
-   "old": "return !!doc.getElementById('site-label');",
-   "new": "return false;",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
-  },
-  {
-   "id": "yard_size_printed_without_stand_in",
-   "file": "web/home/home.js",
-   "old": "if (reserved && r.width > 0 && r.height > 0) reserved.textContent",
-   "new": "if (r.width > 0 && r.height > 0) reserved.textContent",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
-  },
-  {
-   "id": "yard_ants_built_for_every_site",
-   "file": "web/home/home.js",
-   "old": "        if (standIn) {\n            var label = el('div', 'ylabel');",
-   "new": "        if (standIn || true) {\n            var label = el('div', 'ylabel');",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
-  },
-  {
-   "id": "plain_yard_has_the_dashed_edge",
-   "file": "web/home/home.css",
-   "old": ".standin::before { content:",
-   "new": ".yard::before { content:",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
-  },
-  {
-   "id": "plain_yard_has_the_picture",
-   "file": "web/home/home.css",
-   "old": ".standin { background: url(\"data:image/svg+xml",
-   "new": ".yard { background: url(\"data:image/svg+xml",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheYardsStandInIsForTheTestSiteOnly TheWayIntoTheImage"
   },
   {
    "id": "style_scrolls_sideways",
    "file": "web/home/home.css",
-   "old": ".yard { flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden;",
-   "new": ".yard { flex: 1 1 auto; min-height: 0; position: relative; overflow-x: auto;",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "ants_ignore_reduced_motion",
-   "file": "web/home/home.css",
-   "old": "@media (prefers-reduced-motion: reduce) { .yant .ant { animation: none; } }",
-   "new": "",
+   "old": ".hmain { flex: 1 1 auto; min-height: 0; display: grid;",
+   "new": ".hmain { overflow-x: auto; flex: 1 1 auto; min-height: 0; display: grid;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -788,15 +739,15 @@
   {
    "id": "menu_not_measured_again_on_resize",
    "file": "web/home/home.js",
-   "old": "win.addEventListener('resize', function () { fit(); if (menuOpen) placeMenu(); });",
-   "new": "win.addEventListener('resize', function () { fit(); });",
+   "old": "win.addEventListener('resize', function () { if (menuOpen) placeMenu(); var ph",
+   "new": "win.addEventListener('resize', function () { var ph",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "menu_measured_while_closed",
    "file": "web/home/home.js",
-   "old": "win.addEventListener('resize', function () { fit(); if (menuOpen) placeMenu(); });",
-   "new": "win.addEventListener('resize', function () { fit(); if (menuBox) placeMenu(); });",
+   "old": "win.addEventListener('resize', function () { if (menuOpen) placeMenu(); var ph",
+   "new": "win.addEventListener('resize', function () { if (menuBox) placeMenu(); var ph",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1162,6 +1113,90 @@
    "old": "$('how').hidden = true; inert(false);",
    "new": "$('how').hidden = true;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_chat_stays_open_for_every_view",
+   "file": "web/home/home.js",
+   "old": "if (dock && phone()) dock.open(name === 'chat');",
+   "new": "if (dock && phone()) dock.open(true);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_shuts_and_opens_the_dock_in_a_wide_window",
+   "file": "web/home/home.js",
+   "old": "if (dock && phone()) dock.open(name === 'chat');",
+   "new": "if (dock) dock.open(name === 'chat');",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_leaves_a_dock_that_comes_late_as_it_is",
+   "file": "web/home/home.js",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
+   "new": "inert(held); dockShown(); wantPlayers();",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_resize_opens_the_dock_in_a_short_window",
+   "file": "web/home/home.js",
+   "old": "dock.open(ph ? tab === 'chat' : (win.innerHeight || 0) >= 601)",
+   "new": "dock.open(ph ? tab === 'chat' : true)",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_games_count_not_followed",
+   "file": "web/home/home.js",
+   "old": "        mirror(gamesPill, tabBtns.games.pill);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_takes_a_press_while_the_game_opens",
+   "file": "web/home/home.js",
+   "old": "[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going)",
+   "new": "[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going)",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_says_the_wrong_view_is_shown",
+   "file": "web/home/home.js",
+   "old": "k === name ? 'true' : 'false'",
+   "new": "k === name ? 'false' : 'true'",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "games_button_leaves_the_view_as_it_is",
+   "file": "web/home/home.js",
+   "old": "        gamesBtn.addEventListener('click', function () { pick('games'); });\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "view_of_the_chat_leaves_the_chat_in_the_other_views",
+   "file": "web/home/home.css",
+   "old": "#home[data-tab=\"chat\"] .hmain, #home:not([data-tab=\"chat\"]) .gc, ",
+   "new": "#home[data-tab=\"chat\"] .hmain, ",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_is_drawn_in_a_wide_window",
+   "file": "web/home/home.css",
+   "old": ".htabs { display: none; }\n.htab .pill",
+   "new": ".htabs { display: flex; }\n.htab .pill",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "players_view_without_a_list",
+   "file": "web/home/home.css",
+   "old": "    #home:not(.pl-on) .htab.t-players { display: none; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "sidebar_is_a_column_without_a_list",
+   "file": "web/home/home.css",
+   "old": ".pl-on .hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }",
+   "new": ".hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   }
  ]
 }

@@ -882,7 +882,7 @@ function rig(o) {
     c.root.fire('keydown', { key: 'Escape' });
     check('Escape on a folded dock does nothing', c.root.getAttribute('data-open') === 'false' && c.errors.length === 0);
     const sw = rig({ width: 844, height: 390 });
-    check('a phone held sideways (844 x 390) starts folded too; a window of 721 x 501 is a desktop; 720 wide or 500 high is not', sw.root.getAttribute('data-open') === 'false' && rig({ width: 721, height: 501 }).root.getAttribute('data-open') === 'true' && rig({ width: 720, height: 900 }).root.getAttribute('data-open') === 'false' && rig({ width: 1280, height: 500 }).root.getAttribute('data-open') === 'false');
+    check('a phone held sideways (844 x 390) starts folded too; a window of 701 x 601 is a desktop; 700 wide or 600 high is not (the folded header, which a press opens)', sw.root.getAttribute('data-open') === 'false' && rig({ width: 701, height: 601 }).root.getAttribute('data-open') === 'true' && rig({ width: 700, height: 900 }).root.getAttribute('data-open') === 'false' && rig({ width: 1280, height: 600 }).root.getAttribute('data-open') === 'false');
 }
 {   // the log is read from the bottom: a log that is made again, and a line that comes to a reader at the bottom, scroll to the newest line; a reader who has scrolled up is not moved
     const r = rig();
@@ -938,19 +938,19 @@ function bring(env) {                                     // the two files arriv
 }
 {
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
-    check('a plain visit loads nothing of the chat before the first paint, opens no socket, and Home is as before', fresh(env).length === 0 && env.sockets.length === 0 && env.screen() === 'home' && env.$('home').children.length === 3);
+    check('a plain visit loads nothing of the chat before the first paint, opens no socket, and Home is as before', fresh(env).length === 0 && env.sockets.length === 0 && env.screen() === 'home' && env.$('home').children.length === 4);
     const hub = hubFor(env);
     env.advance(0);
     const parts = fresh(env);
     same('after the first paint the page asks for the style and the script of the dock, once, and nothing else', parts.map((n) => n.tagName + ':' + (n.href || n.src) + ':' + (n.rel || '')), ['link:home/chat.css:stylesheet', 'script:home/chat.js:']);
-    check('... the script is async, so it never holds the page', parts[1].async === true && hub.length === 0 && env.$('home').children.length === 3);
+    check('... the script is async, so it never holds the page', parts[1].async === true && hub.length === 0 && env.$('home').children.length === 4);
     parts[1].onload();
-    check('the dock mounts only when BOTH the style and the script are there (no unstyled dock)', env.$('home').children.length === 3 && hub.length === 0);
+    check('the dock mounts only when BOTH the style and the script are there (no unstyled dock)', env.$('home').children.length === 4 && hub.length === 0);
     env.win.AntsHomeChat = H.loadFile('home/chat.js', env.scope).AntsHomeChat;
     parts[0].onload();
-    check('... then it is the last child of Home\'s div, one socket to the hub is opened, and the game\'s own socket is not touched', env.$('home').children.length === 4 && env.$('home').children[3].id === 'gchat' && hub.length === 1 && hub[0].url === 'wss://play.test/hub/ws' && env.sockets.length === 0);
-    const dock = env.$('home').children[3];
-    check('Home\'s own parts are where they were (the bar, the Yard, the card)', env.$('home').children.slice(0, 3).map((c) => c.tagName).join() === 'header,main,div' && dock.getAttribute('data-open') === 'true');
+    check('... then it is the last child of Home\'s div, one socket to the hub is opened, and the game\'s own socket is not touched', env.$('home').children.length === 5 && env.$('home').children[4].id === 'gchat' && hub.length === 1 && hub[0].url === 'wss://play.test/hub/ws' && env.sockets.length === 0);
+    const dock = env.$('home').children[4];
+    check('Home\'s own parts are where they were (the bar, the body, the card, the strip)', env.$('home').children.slice(0, 4).map((c) => c.tagName).join() === 'header,main,div,nav' && dock.getAttribute('data-open') === 'true');
     env.home('mine').click();
     check('My room still makes the room (the page\'s own socket), and the Room shows: the dock is told (it is not on the screen)', env.sockets.length === 1 && env.screen() === 'room' && hub.length === 1);
     hub[0].readyState = 1; hub[0].onmessage({ data: JSON.stringify(W({ you: YOU, history: HISTORY })) });
@@ -959,12 +959,12 @@ function bring(env) {                                     // the two files arriv
     env.roomBar('rhome').click();
     check('Home again: the dock is read, the link is the same one', one(dock, 'gc-unread').hidden === true && hub.length === 1);
     env.advance(10);
-    check('show(home) again does not load the dock a second time', fresh(env).length === 2 && env.$('home').children.length === 4);
+    check('show(home) again does not load the dock a second time', fresh(env).length === 2 && env.$('home').children.length === 5);
 }
 {   // a dialog over the page, and the hand-off to the game, take the dock's keys and presses too (the focus does not go behind a modal)
     const env = runLobby('', { 'ants.name': 'Maya' }, { picker: true, stayHome: true });
     hubFor(env); env.advance(0); bring(env);
-    const root = env.$('home').children[3];
+    const root = env.$('home').children[4];
     check('(the dock is there and takes presses)', root.id === 'gchat' && !root.hasAttribute('inert'));
     env.home('mine').click();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
@@ -977,7 +977,7 @@ function bring(env) {                                     // the two files arriv
     const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     fresh(late).forEach((n) => n.onload());
-    const lateRoot = late.$('home').children[3];
+    const lateRoot = late.$('home').children[4];
     check('a dock that is mounted while the page is on its way to the game is inert from the start', late.assigned.length === 1 && lateRoot.id === 'gchat' && lateRoot.hasAttribute('inert') && late.home('hbar').hasAttribute('inert'));
     late.advance(15000);
     check('... and 15 s later, when Home is free, so is the dock', !lateRoot.hasAttribute('inert') && !late.home('hbar').hasAttribute('inert'));
@@ -996,7 +996,7 @@ function bring(env) {                                     // the two files arriv
     const down = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(down, { throws: true });
     down.advance(0); bring(down);
-    check('a hub that cannot be opened: the dock says "Chat is offline"; Home is whole', down.$('home').children[3].id === 'gchat' && one(down.$('home').children[3], 'gc-note').textContent === 'Chat is offline' && down.screen() === 'home');
+    check('a hub that cannot be opened: the dock says "Chat is offline"; Home is whole', down.$('home').children[4].id === 'gchat' && one(down.$('home').children[4], 'gc-note').textContent === 'Chat is offline' && down.screen() === 'home');
     down.home('mine').click();
     const s = down.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     down.roomBar('rhome').click();
@@ -1034,7 +1034,7 @@ function bring(env) {                                     // the two files arriv
     late.advance(0);
     late.win.AntsHomeChat = H.loadFile('home/chat.js', late.scope).AntsHomeChat;
     fresh(late).slice(0, 1).forEach((n) => n.onload());
-    check('a style that comes without the script (or the script without the style) mounts nothing, and there is no socket', late.$('home').children.length === 3);
+    check('a style that comes without the script (or the script without the style) mounts nothing, and there is no socket', late.$('home').children.length === 4);
     const nolink = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     nolink.env = nolink; nolink.body.appendChild = () => { throw new Error('no place for it'); };
     check('a page that cannot take the dock\'s two files does not throw', (() => { try { nolink.advance(0); return true; } catch (e) { return false; } })());

@@ -81,20 +81,21 @@ class TheLoaderInHome(unittest.TestCase):
     def test_it_asks_for_the_two_files_by_their_base_name_through_the_part_loader_and_only_after_the_dock(self):
         self.assertIn("lazy('home/players', function () {", self.js)
         self.assertEqual(self.js.count("wantPlayers();"), 1, "one call, where the dock has been mounted")
-        self.assertIn("inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("inert(held); dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("if (askedPlayers || !dock) return;\n            askedPlayers = true;", self.js, "once, and not before there is a dock to speak through")
         self.assertEqual(sorted(set(re.findall(r"home/players\w*", code_of(self.js)))), ["home/players"])
 
     def test_it_is_given_the_dock_and_the_parts_of_the_bar_that_it_uses_and_nothing_of_the_page_but_the_bridge(self):
-        self.assertIn("players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: yard, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); });", self.js)
+        self.assertIn("players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held);", self.js)
 
     def test_it_is_inert_with_the_bars_and_the_dock_and_a_list_that_comes_late_is_inert_from_the_start(self):
-        self.assertIn("[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) {", self.js)
-        self.assertIn("inert(held); });", self.js.split("function wantPlayers")[1], "a list that is mounted while a dialog or the hand-off holds the page takes no press either")
+        self.assertIn("[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) {", self.js)
+        self.assertIn("inert(held); var c = ", self.js.split("function wantPlayers")[1], "a list that is mounted while a dialog or the hand-off holds the page takes no press either")
 
     def test_the_part_loader_is_the_one_that_the_games_list_has_and_a_part_that_throws_stays_in_it(self):
         self.assertIn("function one() { if (--parts === 0) { try { onReady(); } catch (e) { /* the part is its own */ } } }", self.js)
         self.assertIn("if (win.AntsHomePlayers) players =", self.js, "a script that did not define the list mounts nothing")
+        self.assertIn("if (c) mirror(c, tabBtns.players.pill);", self.js, "the phone's Players tab shows the list's count")
 
 
 class TheFolderAndTheScript(unittest.TestCase):
@@ -157,38 +158,19 @@ class TheStyle(unittest.TestCase):
     def rule(self, selector):
         return next(body for sel, body in self.rules if sel.strip() == selector)
 
-    def test_the_breakpoint_of_the_docked_panel_is_the_scripts_and_the_panel_is_the_size_of_the_pictures(self):
-        wide = re.search(r"var WIDE = '(\([^']*\) and \([^']*\))';", self.js).group(1)
-        self.assertEqual(wide, "(min-width: 1180px) and (min-height: 501px)")
-        self.assertIn("@media " + wide + " {", self.css)
-        self.assertIn("width: 260px;", self.css.split("@media " + wide + " {")[1].split("}")[0])
-        self.assertIn("@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; }", self.css)
+    def test_the_panel_is_always_docked_a_column_of_homes_grid_or_the_phones_view(self):
+        wide = re.search(r"var WIDE = '([^']*)';", self.js).group(1)
+        self.assertEqual(wide, "all", "the script's question 'is the panel docked?' is answered yes by every window: there is no sheet and no drawer to open")
+        body = self.rule(".pl")
+        self.assertIn("display: flex; flex-direction: column; min-height: 0;", body)
+        for name in ("position", "z-index", "top:", "right:", "width"):
+            self.assertNotIn(name, body, "the panel is a box of Home's grid (home.css, .pl-on .hmain: 220 to 280 px), not a placed layer: " + name)
+        self.assertIn(".pl-on .hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }", read("web", "home", "home.css"))
 
-    def test_the_games_list_that_the_live_site_docks_in_the_yard_keeps_clear_of_the_panel_under_1280_px_and_is_centered_from_there(self):
-        rules = re.sub(r"/\*.*?\*/", "", self.games, flags=re.S)
-        left, cap = (int(g) for g in re.search(r"\.gdock \{ position: absolute; z-index: \d+; top: 12px; left: (\d+)px; right: \d+px; width: min\((\d+)px, calc\(100% - \d+px\)\);", rules).groups())
-        panel = re.search(r"\.pl \{ position: absolute; z-index: 6; display: flex; top: 14px; right: (\d+)px; width: (\d+)px;", self.css)
-        self.assertIsNotNone(panel)
-        edge, width = (int(g) for g in panel.groups())
-        moved = re.search(r"@media \(min-width: 1180px\) and \(max-width: 1279px\) and \(min-height: 501px\) \{ \.pl-on \.gdock \{ right: (\d+)px; width: min\(%dpx, calc\(100%% - (\d+)px\)\); \} \}" % cap, self.css)
-        self.assertIsNotNone(moved, "from 1180 to 1279 px the list moves left and is narrower")
-        right, taken = int(moved.group(1)), int(moved.group(2))
-        gap = right - edge - width        # (both are measured from the Yard's right edge: the panel's left edge is `edge + width` from it, the list's right edge is `right` from it)
-        self.assertGreater(gap, 0)
-        self.assertEqual(taken, left + right, "the list's width is what is left between its own left edge and its new right edge")
-        self.assertIn("ends %d px before it up to 1279 px wide" % gap, read("docs", "HOME_SCREEN.md"), "the document says the gap that these rules make (measured in a browser at every width from 1180 to 1279 px)")
-        # from 1280 px the list's own rule holds (it is centered in the window and ends well before the panel): nothing here says where it is, whatever the window
-        css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
-        placed = [(query.strip(), body) for query, body in re.findall(r"@media ([^{]+)\{((?:[^{}]|\{[^{}]*\})*)\}", css) if re.search(r"\.pl-on \.gdock \{[^}]*\bwidth:", body)]
-        self.assertEqual(len(placed), 1, "one rule of the list's width and place")
-        self.assertIn("max-width: 1279px", placed[0][0])
-
-    def test_the_games_list_goes_under_the_corner_button_or_beside_it(self):
-        height = int(re.search(r"min-height: (\d+)px", self.rule(".pl-btn")).group(1))
-        top = int(re.search(r"\.pl-btn \{ top: (\d+)px; right: 14px; \}", self.css).group(1))
-        self.assertIn(".pl-on .gdock { top: %dpx; max-height: calc(100%% - 80px); }" % (top + height + 8), self.css, "the list starts 8 px under the button (14 + 46 + 8)")
-        self.assertIn("(min-width: 721px) and (max-width: 760px) and (min-height: 501px) { .pl-on .gdock { max-height: calc(100% - 484px); } }", self.css, "above the chat panel, which the list's own rule keeps clear of (428 px) and the button's row takes 56 more")
-        self.assertIn("(orientation: landscape) and (min-height: 501px) { .pl-on .gdock { max-height: calc(100% - 150px); } }", self.css)
+    def test_the_parts_of_the_sheet_are_not_drawn_and_a_phone_has_no_fold_to_leave_the_view_shrunk(self):
+        self.assertIn(".pl-btn, .pl-bar, .pl-scrim, .pl-close { display: none; }", self.css)
+        self.assertIn('@media (max-width: 700px) { .pl-fold { display: none; } .pl[data-folded="true"] .pl-body { display: flex; } }', self.css)
+        self.assertNotIn("z-index", self.css, "nothing here is a layer over the page")
 
     def test_nothing_of_homes_own_changes_until_the_list_is_there(self):
         for selector, _body in self.rules:
@@ -199,42 +181,12 @@ class TheStyle(unittest.TestCase):
         self.assertIn("host.classList.add('pl-on')", self.js)
         self.assertIn("host.classList.remove('pl-on')", self.js)
 
-    def test_the_phone_gets_the_button_in_its_first_row_the_word_goes_before_the_picture_and_nothing_overlaps_the_logo(self):
-        css = self.css
-        self.assertIn("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {", css, "the bar's three rows (home.css has the same condition)")
-        phone = css.split("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {")[1].split("\n}")[0]
-        for part in (".pl-bar { display: inline-flex; }", ".pl-on .hbar .hbrand { grid-column: 1; grid-row: 1; }", ".pl-on .hbar .hright { grid-column: 1 / -1; min-width: 0; max-width: calc(100% - 102px); }", ".pl-btn { display: none; }"):
-            self.assertIn(part, phone, part)
-        self.assertIn("@media (max-width: 440px) { .pl-on .hbar .pl-bar { padding: 6px 10px; } }", css, "(the bar's own rule has two classes, so this one has three: Home's `.hbar .btn` padding is 16 px)")
-        self.assertIn("@media (max-width: 410px) { .pl-bar .pl-ppl { display: none; } }", css, "from 411 px the picture, the word and the number; under that the word and the number")
-        self.assertIn("@media (max-width: 380px) { .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }", css, "from 381 px the word has room even with \"99+\"; under that the picture and the number")
-        self.assertIn("@media (max-width: 359px) { .pl-on .hbar .hright { gap: 6px; } .pl-on .hbar .pl-bar { padding: 6px 8px; gap: 6px; } .pl-bar .pill { margin-left: 0; padding: 0 6px; font-size: 14px; } }", css, "a little closer under 360 px, so that \"99+\" fits at 320")
-        self.assertIn("@media (max-width: 340px) { .pl-on .hbar .hlogo { width: 76px; } .pl-on .hbar .hright { max-width: calc(100% - 86px); } }", css)
-
-    def test_the_sheet_clears_a_phones_system_bar_and_the_window_that_the_page_has(self):
-        phone = self.css.split("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {")[1].split("\n}")[0]
-        self.assertIn("bottom: calc(12px + env(safe-area-inset-bottom, 0px));", phone)
-        self.assertRegex(phone, r"max-height: calc\(100vh - 76px - env\(safe-area-inset-bottom, 0px\)\); max-height: calc\(100dvh - 76px - env\(safe-area-inset-bottom, 0px\)\);")
-
-    def test_the_layers_the_sheet_is_over_the_menu_and_the_games_popover_the_docked_panel_beside_the_chat_panel(self):
-        sheet = int(re.search(r"z-index: (\d+)", self.rule(".pl")).group(1))
-        scrim = int(re.search(r"z-index: (\d+)", self.rule(".pl-scrim")).group(1))
-        menu = int(re.search(r"\.hmenubox \{[^}]*z-index: (\d+)", read("web", "home", "home.css")).group(1))
-        popover = int(re.search(r"\.gpop \{[^}]*z-index: (\d+)", self.games).group(1))
-        chat = int(re.search(r"\.gc \{ position: absolute; left: \d+px; bottom: 22px; z-index: (\d+)", self.chat).group(1))
-        self.assertGreater(scrim, menu)
-        self.assertGreater(scrim, popover)
-        self.assertGreater(sheet, scrim)
-        docked = int(re.search(r"\.pl \{ position: absolute; z-index: (\d+)", self.css).group(1))
-        self.assertEqual(docked, chat, "the docked panel stands as the chat panel does, under the popover and the cards")
-        self.assertLess(docked, popover)
-
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".pl-fold", ".pl-join", ".pl-btn", ".pl-bar", ".pl-host"):
+        for selector in (".pl-fold", ".pl-join", ".pl-host"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             if selector.startswith((".pl-card", ".pl-head", ".pl-you", ".pl-guests")):
@@ -246,20 +198,13 @@ class TheStyle(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_site_and_the_one_picture_is_data(self):
         self.assertNotRegex(self.css, r"https?://|@import")
-        targets = re.findall(r"url\(\s*[\"']?([^\"')]+)", self.css)
-        self.assertEqual(len(targets), 1)
-        self.assertTrue(targets[0].startswith("data:image/svg+xml,"), targets[0])
+        self.assertEqual(re.findall(r"url\(", self.css), [], "no picture at all: the sheet's button picture is gone with the sheet")
 
     def test_nothing_scrolls_sideways_and_a_hidden_part_stays_hidden(self):
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)")
         hidden = next(sel for sel, body in self.rules if body.strip() == "display: none;" and ".pl-root[hidden]" in sel)
         for part in (".pl-root[hidden]", ".pl-bar[hidden]", ".pl-btn[hidden]", ".pl-scrim[hidden]", ".pill[hidden]", ".pl-dot[hidden]", ".pl-status:empty"):
             self.assertIn(part, hidden, part)
-
-    def test_the_drawer_of_a_phone_held_sideways_is_320_px_and_the_list_of_games_is_narrower_by_the_button(self):
-        self.assertIn(".pl { top: 10px; left: auto; right: 10px; bottom: auto; width: min(320px, calc(100vw - 20px)); max-height: calc(100% - 20px); }", self.css)
-        self.assertIn(".pl-on .gdock { right: 186px; }", self.css, "8 px of the list's own edge, the button (165 px) and 13 px between")
-        self.assertIn(".pl-on .gdock { right: 116px; }", self.css, "the button without its word (93 px)")
 
     def test_reduced_motion_needs_nothing_here(self):
         self.assertNotRegex(self.css, r"animation|transition")

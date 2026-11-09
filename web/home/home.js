@@ -1,4 +1,4 @@
-// The two screens of the front page (web/lobby.html, docs/HOME_SCREEN.md): Home (a top bar over the Yard) and the Room (the room page under a slim bar). One page, one WebSocket: the page's client, model and
+// The two screens of the front page (web/lobby.html, docs/HOME_SCREEN.md): Home (a top bar over the games, the players and the chat) and the Room (the room page under a slim bar). One page, one WebSocket: the page's client, model and
 // session storage are never touched here, so Home <-> Room is a class on <body> (data-screen, home.css) and one render(): no request, the seat is never dropped. Text and properties only, never markup. ES5:
 // a page gets AntsHome, node gets module.exports (tests/scripts/web_home_screen_check.js).
 //   * Home is "/", the Room "/#room" (pushState: Back goes to Home); a link ("?room=CODE") opens the Room; the page writes no history until a button is pressed.
@@ -20,13 +20,13 @@
     var TEXT = {
         quickHost: 'Quick host', quickJoin: 'Quick join', mine: 'My room', games: 'Games', menu: 'Menu', login: 'Log in', home: 'Home', leave: 'Leave room', opening: 'Opening the game…',
         slow: 'The game is slow to open. Reload this page to get your seat back.', failed: 'The game did not open. Reload this page to get your seat back.',
-        yardTitle: 'The Yard will live here', yardLine: 'Stand-in picture. The real Yard is a big shared map: your 3 ants appear in it as soon as the page opens. It fills everything under the top bar.',
-        yourAnts: 'Your 3 ants'
+        players: 'Players', chat: 'Chat', views: 'Home views'
     };
     // The Menu's links: the footer's and the header's (test_web_home_screen.py keeps them equal), and the page's How it works (no address)
     var MENU_MAIN = [['Matches', '/matches.html'], ['Live now', '/live.html'], ['Map maker', '/mapmaker.html'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
     var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog.html'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal.html']];
-    var YARD_ANTS = ['', '', '', 'red', 'blue'];                  // the stand-in's five ants (their places are the style's): the first three are yours
+    var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];      // the phone's strip (a window up to 700 px wide): one view at a time
+    var PHONE = '(max-width: 700px)';
 
     // ---- the pure parts ----
     // "3/4": the colors that play (a person or a computer player) of the colors that are not out of the match, from the page's model; null before the room has told its plan
@@ -47,8 +47,6 @@
     }
     // The screen that a page opens on: a link (or a test room) opens the Room; a reload keeps the screen that the address names; else Home
     function firstScreen(link, hasSeat, hash) { return link ? 'room' : hasSeat && hash === HASH ? 'room' : 'home'; }
-    function labelled(doc) { try { return !!doc.getElementById('site-label'); } catch (e) { return false; } }      // (the footer's site label, ANTS_SITE_LABEL)
-    function reservedText(width, height) { return 'reserved: ' + Math.round(width) + ' x ' + Math.round(height) + ' px (everything under the top bar)'; }
 
     // ---- the screens ----
     // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make(), leave(), how(), stalled(words) (optional), ... } })
@@ -95,20 +93,14 @@
         var menuHome = menuButton();
         right.appendChild(login); right.appendChild(menuHome);
         [logo(), quickHost, quickJoin, mine, gamesBtn, right].forEach(function (n) { bar.appendChild(n); });
-        var standIn = labelled(doc), yard = el('main', standIn ? 'yard standin' : 'yard'), reserved = null; yard.id = 'yard';       // (the stand-in: a labelled site only)
-        if (standIn) {
-            var label = el('div', 'ylabel'); reserved = el('p', 'yres');
-            label.appendChild(el('h2', 'ytitle', TEXT.yardTitle)); label.appendChild(el('p', 'yline', TEXT.yardLine)); label.appendChild(reserved);
-            yard.appendChild(label);
-            yard.appendChild(el('span', 'ytag', TEXT.yourAnts));
-            YARD_ANTS.forEach(function (team, i) {
-                var spot = el('div', 'yant y' + (i + 1)), ant = el('span', 'ant' + (team ? ' ant-' + team : ''));
-                spot.setAttribute('aria-hidden', 'true');
-                spot.appendChild(ant); yard.appendChild(spot);
-            });
-        }
+        var main = el('main', 'hmain'); main.id = 'hmain';       // the games list and the players list mount here, side by side; the chat dock comes after it
+        var tabs = el('nav', 'htabs'), tab = 'games', tabBtns = {}; tabs.setAttribute('aria-label', TEXT.views);
+        TABS.forEach(function (t) {
+            var b = button('htab t-' + t[0], '', function () { pick(t[0]); }), pill = el('span', 'pill'); pill.hidden = true;
+            b.appendChild(el('span', 'name', t[1])); b.appendChild(pill); tabs.appendChild(b); tabBtns[t[0]] = { b: b, pill: pill };
+        });
         var opening = el('div', 'hopen', TEXT.opening); opening.setAttribute('role', 'status'); opening.setAttribute('aria-live', 'polite'); opening.hidden = true;
-        host.appendChild(bar); host.appendChild(yard); host.appendChild(opening);
+        host.appendChild(bar); host.appendChild(main); host.appendChild(opening); host.appendChild(tabs); host.setAttribute('data-tab', tab);
 
         // The Room: the slim bar before the page's own room card
         var rbar = el('header', 'rbar');
@@ -195,10 +187,22 @@
                 win.history.pushState(stateOf(to), '', path() + (to === 'room' ? HASH : ''));
             } catch (e) { /* the address stays */ }
         }
-        function fit() {                                    // what the Yard has: the page under the bar, as the picture prints it
-            var r = host.getBoundingClientRect(), b = bar.getBoundingClientRect();
-            if (reserved && r.width > 0 && r.height > 0) reserved.textContent = reservedText(r.width, r.height - b.height);
+        // The phone's strip: Games, Players and Chat, one at a time (home.css shows it up to 700 px wide; a wider window shows all three and ignores it). The chat is open only on its own view, so what comes while it is away counts as unread.
+        function phone() { try { return !!win.matchMedia && win.matchMedia(PHONE).matches; } catch (e) { return false; } }
+        function pick(name) {
+            tab = name; host.setAttribute('data-tab', name);
+            Object.keys(tabBtns).forEach(function (k) { tabBtns[k].b.setAttribute('aria-pressed', k === name ? 'true' : 'false'); });
+            if (dock && phone()) dock.open(name === 'chat');
         }
+        function mirror(from, to) {                         // a count that games.js or players.js keeps: the strip shows the same
+            var copy = function () { to.hidden = from.hidden; to.textContent = from.textContent; };
+            copy();
+            try { if (win.MutationObserver) new win.MutationObserver(copy).observe(from, { childList: true, characterData: true, attributes: true, subtree: true }); } catch (e) { /* the strip has no count */ }
+        }
+        var was = phone();
+        pick(tab);
+        mirror(gamesPill, tabBtns.games.pill);
+        gamesBtn.addEventListener('click', function () { pick('games'); });
         // how: 'push' (a button: a new entry), 'pop' (the browser moved: no entry), 'first' (the page's first look: none either)
         function show(name, how) {
             closeMenu();
@@ -216,7 +220,6 @@
                 var next = name === 'room' ? homeBtn : mine;
                 if (next.focus) next.focus();
             }
-            fit();
         }
         function openRoom() {                               // My room: the first press makes the room; it and every later press show it
             if (!page.info().client) page.make();
@@ -251,7 +254,7 @@
             askedGames = true;
             lazy(GAMES, function () {
                 if (!win.AntsHomeGames) return;
-                games = win.AntsHomeGames.mount({ doc: doc, win: win, host: host, dock: standIn ? null : yard, page: page, parts: { quickHost: quickHost, quickJoin: quickJoin, games: gamesBtn, pill: gamesPill }, ctl: { show: show, screen: function () { return screen; } }, handoff: going || stalled });
+                games = win.AntsHomeGames.mount({ doc: doc, win: win, host: host, dock: main, page: page, parts: { quickHost: quickHost, quickJoin: quickJoin, games: gamesBtn, pill: gamesPill }, ctl: { show: show, screen: function () { return screen; } }, handoff: going || stalled });
                 gamesCall('shown', screen);
                 if (stalled) gamesCall('stalled', said);          // (the part came after START: it mounts waiting for the game, and after 15 s it says why its buttons are off)
                 gamesCall('inert', held || going);
@@ -262,7 +265,7 @@
             show(firstScreen(!!link, !!seat, win.location.hash), 'first');
             wantGames();
             win.addEventListener('popstate', function (e) { show(screenOf(e && e.state, win.location.hash, !!page.info().client), 'pop'); });
-            win.addEventListener('resize', function () { fit(); if (menuOpen) placeMenu(); });
+            win.addEventListener('resize', function () { if (menuOpen) placeMenu(); var ph = phone(); if (dock && ph !== was) dock.open(ph ? tab === 'chat' : (win.innerHeight || 0) >= 601); was = ph; });
         }
         // START reached this page: it is on its way to the game page, so both bars take no press, and Home says so
         function say() {
@@ -281,14 +284,14 @@
             try { if (page.stalled) page.stalled(words); } catch (e) { /* what the page says is its own */ }
             gamesCall('stalled', words);
         }
-        function inert(on) { held = !!on; [bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
+        function inert(on) { held = !!on; [bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) { if (held || going) n.setAttribute('inert', ''); else n.removeAttribute('inert'); } }); gamesCall('inert', held || going); }      // (a page that is on its way to the game takes no press again, whatever a dialog that closes says)
         // The chat dock (chat.js, chat.css) mounts into Home's div and is told which screen shows
         function dockShown() { try { if (dock) dock.shown(screen === 'home'); } catch (e) { /* the dock is its own */ } }
         function wantDock() {
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
@@ -303,11 +306,11 @@
         function wantPlayers() {                            // the players list (players.js, players.css), after the dock: it uses its socket
             if (askedPlayers || !dock) return;
             askedPlayers = true;
-            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: yard, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); });
+            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
         }
 
         return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };
     }
 
-    return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, screenOf: screenOf, firstScreen: firstScreen, reservedText: reservedText, mount: mount };
+    return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, screenOf: screenOf, firstScreen: firstScreen, mount: mount };
 });

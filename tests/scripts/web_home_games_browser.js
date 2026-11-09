@@ -5,11 +5,9 @@
 //      the map, the seats), joins it from the list (a second client that only joins; the page's own room goes when the new one welcomes it), and the first sees the guest in its room;
 //   2. what a screen shows: with --shots DIR, pictures of Home (the count on the Games button), the Games list (rows and the empty state), the Room (public and private, a guest's chip), the card of the question and the notices,
 //      at 390 x 844, 844 x 390 and 1280 x 800 (the sizes of the approved pictures), named games4_*.png, and a few measurements (every target at least 44 px, nothing wider than the window).
-//   0c. the Games list docked in the Yard of the live site is centered in the window from 1280 px wide (its middle is the window's within 1 px, the chat panel open or folded, at the common sizes from 1280 x 800 to
-//      1920 x 1080), keeps right of the chat panel in a window narrower than that (1024 x 768), and the pictures of its rows: a map of the players shows the library's (the picture is there, loaded), a map that has none
-//      leaves the plain square with no broken image, an original shows its own, and no list of maps is fetched for it.
-//   0. the Yard's stand-in: a page of a build with the site label "staging" (the build argument ANTS_SITE_LABEL, which the Dockerfile stamps into the title and the footer) has it (the card, the tag, five ants, the size that
-//      it prints); a page with no label (production) has the bar over a plain sandy field, #yard empty, and the box of everything is the same either way; at 1280 x 800, 900 x 700, 390 x 844, 844 x 390 and 568 x 320.
+//   0c. the pictures of the rows: a map of the players shows the library's (the picture is there, loaded), a map that has none leaves the plain square with no broken image, an original shows its own, and no list of maps is fetched for it.
+//   0. Home's body: the Games list is docked in #hmain (a region with a card for each room and a Join on each), the chat dock lies along the bottom under it, a window up to 700 px wide has the strip (Games, Players, Chat) and one view at a
+//      time (the chat view is open and fills the page), there is no Yard and no stand-in, and a build with the site label "staging" has the same Home; at 1280 x 800, 1366 x 640, 900 x 700, 800 x 600, 701 and 700 px wide, 390 x 844, 844 x 390 and 568 x 320.
 // usage: node web_home_games_browser.js --server PATH/ants_server --maps PATH/Original-Ants/Maps [--shots DIR]     (exit 0: every check holds; every failure is printed)
 'use strict';
 const fs = require('fs');
@@ -140,55 +138,58 @@ async function flows() {
     const emptySite = await standIn(server, { lobbies: () => ({ format: 1, lobbies: [], count: 0 }) });
     const offSite = await standIn(server, { lobbies: () => null });
     try {
-        // ---- 0. the Yard: the test site (the label "staging") has the stand-in and the Games popover; the site with no label (production) has the Games list docked in the Yard, always there --------------------------
+        // ---- 0. Home's body: the Games list is the panel at the left, the chat dock is the panel along the bottom, and a phone (up to 700 px wide) has one view at a time with a strip to pick it; a site with the label "staging" has the same Home --------------------------
         {
             const staging = await standIn(server, { label: 'staging', lobbies: FIVE });
             const prod = await standIn(server, { lobbies: FIVE });
             const look = (page) => page.evaluate(() => {
                 const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
-                const yard = document.getElementById('yard'), bar = document.querySelector('.hbar'), pop = document.querySelector('.gpop'), chat = document.querySelector('.gc'), cs = getComputedStyle(yard);
-                const covered = [...document.querySelectorAll('.gpop .gjoin, .gpop .gcode input')].filter((b) => {          // (a button that shows in the list's own window, and is under something else: the chat panel or its strip)
-                    const p = pop.getBoundingClientRect(), q = b.getBoundingClientRect(); if (q.top < p.top || q.bottom > p.bottom) return false;
+                const main = document.getElementById('hmain'), bar = document.querySelector('.hbar'), pop = document.querySelector('.gpop'), chat = document.querySelector('.gc'), tabs = document.querySelector('.htabs'), shown = (e) => !!e && e.getClientRects().length > 0;
+                const covered = [...document.querySelectorAll('.gpop .gjoin, .gpop .gcode input')].filter((b) => {          // (a button that shows in the list's own window, and is under something else)
+                    const q = b.getBoundingClientRect(), p = document.querySelector('.gpbody').getBoundingClientRect(); if (q.top < p.top || q.bottom > p.bottom || !shown(pop)) return false;
                     const top = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(top === b || b.contains(top));
                 }).length;
-                return { title: document.title, label: !!document.getElementById('site-label'), yard: r(yard), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), popIn: !!pop && pop.parentNode === yard, popShown: !!pop && !pop.hidden, role: pop && pop.getAttribute('role'),
-                    stand: yard.querySelectorAll('.ylabel, .ytag, .yant, .yres').length, standin: yard.classList.contains('standin'), text: yard.textContent, image: cs.backgroundImage, edge: getComputedStyle(yard, '::before').content, covered,
-                    rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, size: /reserved: (\d+) x (\d+) px/.exec(yard.textContent), hasPopup: document.querySelector('.hchip.games').getAttribute('aria-haspopup'),
-                    wide: document.documentElement.scrollWidth <= window.innerWidth, mid: pop ? (pop.getBoundingClientRect().left + pop.getBoundingClientRect().right) / 2 : null, half: window.innerWidth / 2 };
+                return { title: document.title, label: !!document.getElementById('site-label'), main: r(main), bar: r(bar), host: r(document.getElementById('home')), pop: r(pop), chat: r(chat), tabs: r(tabs), tabsShown: shown(tabs), popShown: shown(pop), chatShown: shown(chat), role: pop && pop.getAttribute('role'),
+                    yard: !!document.getElementById('yard') || !!document.querySelector('.standin, .ylabel, .yant'), rows: document.querySelectorAll('.gpop .gitem').length, joins: document.querySelectorAll('.gpop .gjoin').length, covered, tab: document.getElementById('home').getAttribute('data-tab'),
+                    hasPopup: document.querySelector('.hchip.games').getAttribute('aria-haspopup'), wide: document.documentElement.scrollWidth <= window.innerWidth, mapSize: (document.querySelector('.gpop .gmap') || { getBoundingClientRect: () => ({ width: 0 }) }).getBoundingClientRect().width };
             });
-            for (const size of [['desktop', 1280, 800], ['tablet', 900, 700], ['narrow tablet', 768, 1024], ['small window', 800, 600], ['stacked', 760, 700], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
+            for (const size of [['desktop', 1280, 800], ['laptop', 1366, 640], ['tablet', 900, 700], ['small window', 800, 600], ['701 wide', 701, 800], ['700 wide', 700, 800], ['phone', 390, 844], ['side', 844, 390], ['small side', 568, 320]]) {
                 const plain = await newPage(browser, prod, 'Maple', size, '/', true), test = await newPage(browser, staging, 'Maple', size, '/', true);
-                await plain.waitForSelector('.gpop .gitem'); await plain.waitForSelector('.gc'); await test.waitForFunction(() => /reserved: \d+/.test(document.getElementById('yard').textContent)); await test.waitForSelector('.gc'); await sleep(300);
-                const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')';
-                check('production, ' + at + ': no site label; the Games list is docked in the Yard (a region, shown, five rows with a Join each), the Yard has no stand-in (no card, tag, ants, size, class, picture or dashed edge), Games names no popup',
-                    !a.label && a.title.indexOf('staging') === -1 && a.popIn && a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && a.stand === 0 && !a.standin && a.text.indexOf('Yard will live') === -1 && /^radial-gradient/.test(a.image) && a.image.indexOf('url(') === -1
-                    && (a.edge === 'none' || a.edge === 'normal') && a.hasPopup === null, JSON.stringify(a));
-                const inside = a.pop && a.pop[0] >= a.yard[0] && a.pop[1] >= a.yard[1] && a.pop[0] + a.pop[2] <= a.yard[0] + a.yard[2] && a.pop[1] + a.pop[3] <= a.yard[1] + a.yard[3];
-                const clear = a.chat && a.pop && (a.pop[0] >= a.chat[0] + a.chat[2] || a.pop[1] + a.pop[3] <= a.chat[1]);
-                check('... the list is inside the Yard and clear of the chat dock (right of its panel, or above its strip), no Join or code field that it shows is under anything else, and there is no sideways scrollbar ' + at, inside && clear && a.covered === 0 && a.wide, JSON.stringify(a));
-                check('the test site, ' + at + ': the label "staging" is in the title and the footer, the stand-in is there (the card, the tag, five ants, the picture, the dashed edge, the size that it prints), and the list is the popover that it was: not in the Yard, hidden until Games is pressed',
-                    b.label && b.title.indexOf('(staging)') !== -1 && b.standin && b.stand === 8 && b.text.indexOf('The Yard will live here') !== -1 && b.text.indexOf('Your 3 ants') !== -1 && b.image.indexOf('url(') !== -1 && b.edge === '""' && !!b.size
-                    && Math.abs(+b.size[1] - b.host[2]) <= 1 && Math.abs(+b.size[2] - (b.host[3] - b.bar[3])) <= 1 && !b.popIn && !b.popShown && b.role === 'dialog' && b.hasPopup === 'dialog', JSON.stringify(b));
-                check('... and the page is the same size with and without the label: the bar, the Yard\'s box and Home\'s box are the same ' + at, JSON.stringify([a.bar, a.yard, a.host]) === JSON.stringify([b.bar, b.yard, b.host]), JSON.stringify([a.bar, a.yard, a.host]) + ' / ' + JSON.stringify([b.bar, b.yard, b.host]));
-                await plain.click('.hchip.games'); await test.click('.hchip.games'); await sleep(200);
-                const a2 = await look(plain), b2 = await look(test);
-                check('Games on production takes the focus into the list and the list stays; on the test site it opens the popover (a dialog, under the bar, over the stand-in)' + ' ' + at, a2.popShown && a2.popIn && await plain.evaluate(() => !!document.activeElement.closest('.gpop')) && b2.popShown && !b2.popIn && b2.role === 'dialog', JSON.stringify([a2.popShown, b2.popShown]));
+                await plain.waitForSelector('.gpop .gitem'); await plain.waitForSelector('.gc', { state: 'attached' }); await test.waitForSelector('.gpop .gitem'); await test.waitForSelector('.gc', { state: 'attached' }); await sleep(300);
+                const a = await look(plain), b = await look(test), at = size[0] + ' (' + size[1] + ' x ' + size[2] + ')', phone = size[1] <= 700;
+                check('Home, ' + at + ': the Games list is docked in the body (#hmain: a region, five cards with a Join each), there is no Yard and no stand-in, Games names no popup, nothing scrolls sideways', a.popShown && a.role === 'region' && a.rows === 5 && a.joins === 5 && !a.yard && a.hasPopup === null && a.wide
+                    && a.main && a.pop[0] >= a.main[0] && a.pop[1] >= a.main[1] && a.pop[0] + a.pop[2] <= a.main[0] + a.main[2] + 1 && a.pop[1] + a.pop[3] <= a.main[1] + a.main[3] + 1, JSON.stringify(a));
+                if (!phone) check('... a wide window: the chat panel lies under the list along the bottom of Home, as wide as the body (no strip: the games, the players and the chat are all there), and no Join or code field of the list is under anything else ' + at,
+                    a.chatShown && !a.tabsShown && a.chat[1] >= a.pop[1] + a.pop[3] && a.chat[1] + a.chat[3] <= a.host[1] + a.host[3] + 1 && a.chat[0] <= a.pop[0] && a.covered === 0, JSON.stringify(a));
+                else check('... a phone\'s width: the strip is at the bottom (Games, Players, Chat), the Games view shows the list and not the chat, one card to a row, and no Join is under anything else ' + at,
+                    a.tabsShown && a.tab === 'games' && a.popShown && !a.chatShown && a.tabs[1] >= a.main[1] + a.main[3] - 1 && a.tabs[1] + a.tabs[3] <= a.host[1] + a.host[3] + 1 && a.covered === 0 && a.mapSize === 56, JSON.stringify(a));
+                check('the test site, ' + at + ': the label "staging" is in the title and the footer and Home is the same: no stand-in, the same boxes (the bar, the body, Home)', b.label && b.title.indexOf('(staging)') !== -1 && !b.yard && b.role === 'region' && JSON.stringify([a.bar, a.main, a.host]) === JSON.stringify([b.bar, b.main, b.host]), JSON.stringify([a.bar, a.main, a.host]) + ' / ' + JSON.stringify([b.bar, b.main, b.host]));
+                if (phone) {
+                    await plain.click('.htab.t-chat'); await sleep(200);
+                    const c = await look(plain);
+                    check('a press on Chat in the strip shows the chat view (open, filling the page between the bar and the strip) and puts the list away, and Games brings the list back ' + at,
+                        c.tab === 'chat' && c.chatShown && !c.popShown && c.chat[1] >= c.bar[1] + c.bar[3] - 1 && c.chat[1] + c.chat[3] <= c.tabs[1] + 1 && await plain.evaluate(() => document.querySelector('.gc').getAttribute('data-open') === 'true')
+                        && (await plain.click('.htab.t-games'), await sleep(150), await plain.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.querySelector('.gc').getClientRects().length === 0)), JSON.stringify(c));
+                } else {
+                    await plain.click('.hchip.games'); await sleep(200);
+                    check('Games takes the focus into the list and the list stays ' + at, await plain.evaluate(() => !!document.activeElement.closest('.gpop')) && (await look(plain)).popShown);
+                }
                 check('... and neither page said anything wrong (no error of the page)', plain.errors.length === 0 && test.errors.length === 0, plain.errors.concat(test.errors).join('; '));
                 await plain.context().close(); await test.context().close();
             }
-            {   // an empty list and a long one, on production: the empty state with Host one!, and a list that scrolls inside itself with the Join by code box at its end
+            {   // an empty list and a long one: the empty state with Quick host and Quick join, and a list that scrolls inside itself with the Join by code box at its foot
                 const none = await standIn(server, { lobbies: () => ({ format: 1, lobbies: [], count: 0 }) });
                 const many = await standIn(server, { lobbies: () => ({ format: 1, count: 12, lobbies: Array.from({ length: 12 }, (_, i) => ({ code: 'm' + (i + 2) + 'x2q' + i, host: 'Host' + i, map: 'TREASURE.LVL', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 10 + i })) }) });
                 for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
                     const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
-                    await empty.waitForSelector('.gpop .gempty:not([hidden])'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc');
-                    check('production, ' + size[0] + ': no open games shows the empty state and Join by code in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'); return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcode input') && /none waiting/.test(p.textContent); }));
+                    await empty.waitForSelector('.gpop .gempty:not([hidden])'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
+                    check('' + size[0] + ': no open games shows the empty state (the two big buttons, Quick host and Quick join) and Join by code in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), b = [...p.querySelectorAll('.gempty .gerow .btn')]; return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcode input') && /none waiting/.test(p.textContent) && b.map((x) => x.textContent).join() === 'Quick host,Quick join' && b.every((x) => x.getBoundingClientRect().height >= 55); }));
                     const m = await long.evaluate(async () => {
-                        const p = document.querySelector('.gpop'), q = p.getBoundingClientRect(), y = document.getElementById('yard').getBoundingClientRect(); const scrolls = p.scrollHeight > p.clientHeight + 4;
-                        p.scrollTop = p.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcode input'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
-                        return { scrolls, bottom: q.bottom <= y.bottom + 1, codeReachable: top === c, count: document.querySelectorAll('.gpop .gitem').length, wide: document.documentElement.scrollWidth <= window.innerWidth };
+                        const p = document.querySelector('.gpop'), body = p.querySelector('.gpbody'), q = p.getBoundingClientRect(), y = document.getElementById('hmain').getBoundingClientRect(); const scrolls = body.scrollHeight > body.clientHeight + 4;
+                        body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcode input'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
+                        return { scrolls, bottom: q.bottom <= y.bottom + 1, codeReachable: top === c, lastReachable: lt === last || last.contains(lt), count: document.querySelectorAll('.gpop .gitem').length, wide: document.documentElement.scrollWidth <= window.innerWidth };
                     });
-                    check('production, ' + size[0] + ': twelve games scroll inside the list (it stays in the Yard) and Join by code is reachable at the end of it, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.count === 12 && m.wide, JSON.stringify(m));
+                    check('' + size[0] + ': twelve games scroll inside the list (it stays in the body), the last Join can be reached, Join by code is in view at the foot, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.lastReachable && m.count === 12 && m.wide, JSON.stringify(m));
                     await empty.context().close(); await long.context().close();
                 }
                 none.close(); many.close();
@@ -196,32 +197,13 @@ async function flows() {
             staging.close(); prod.close();
         }
 
-        // ---- 0c. the docked list is centered in the window from 1280 px wide (the chat panel open or folded), and the pictures of its rows ------------------------------------------------------------------------------
+        // ---- 0c. the pictures of the rows of the docked list ------------------------------------------------------------------------------
         {
             const rows = () => ({ format: 1, count: 3, lobbies: [
                 { code: 'k7m2xq', host: 'dAwGy', map: 'POPcOrN.lvl', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 90 },
                 { code: 'p4n8dz', host: 'Pebble', map: 'No Picture Yet.lvl', mode: 'highest-score', people: 2, bots: 0, free: 2, size: 4, age: 60 },
                 { code: 'c1v3rr', host: 'Clover', map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 1, free: 1, size: 4, age: 30 }] });
             const site = await standIn(server, { lobbies: rows });
-            const where = (page) => page.evaluate(() => {
-                const p = document.querySelector('.gpop').getBoundingClientRect(), c = document.querySelector('.gc').getBoundingClientRect();
-                return { mid: (p.left + p.right) / 2, half: window.innerWidth / 2, left: p.left, right: p.right, top: p.top, bottom: p.bottom, chat: [c.left, c.top, c.right, c.bottom], open: document.querySelector('.gc').getAttribute('data-open'), sideways: document.documentElement.scrollWidth > window.innerWidth };
-            });
-            for (const size of [['1280 x 800', 1280, 800], ['1366 x 768', 1366, 768], ['1536 x 864', 1536, 864], ['1920 x 1080', 1920, 1080], ['2560 x 1440', 2560, 1440], ['1024 x 768', 1024, 768], ['1279 x 800', 1279, 800]]) {
-                const page = await newPage(browser, site, 'Maple', size, '/', true);
-                await page.waitForSelector('.gpop .gitem'); await page.waitForSelector('.gc'); await sleep(300);
-                const centered = size[1] >= 1280;
-                for (const dock of ['open', 'folded']) {
-                    if (dock === 'folded') { await page.click('.gc-fold'); await sleep(250); }
-                    const w = await where(page);
-                    const clear = w.left >= w.chat[2] + 20 || w.right <= w.chat[0] || w.bottom <= w.chat[1] || w.top >= w.chat[3];       // (20 px: the chat panel's shadow and a gap)
-                    check(size[0] + ', chat panel ' + dock + ': the Games list docked in the Yard is clear of the chat panel with room to spare (right of it), and nothing scrolls sideways', w.open === (dock === 'open' ? 'true' : 'false') && clear && w.left >= w.chat[2] + 20 && !w.sideways, JSON.stringify(w));
-                    if (centered) check(size[0] + ', chat panel ' + dock + ': the list is centered in the window (its middle is the window\'s middle, within 1 px: ' + w.mid + ' / ' + w.half + ')', Math.abs(w.mid - w.half) <= 1, JSON.stringify(w));
-                    else check(size[0] + ', chat panel ' + dock + ': a window narrower than 1280 px cannot have the list in its middle and clear of the chat panel: it stays right of the panel, as it was', w.mid - w.half > 1, JSON.stringify(w));
-                }
-                check('(no script error in the page at ' + size[0] + ')', page.errors.length === 0, page.errors.join(' | '));
-                await page.context().close();
-            }
             const page = await newPage(browser, site, 'Maple', SIZES[2], '/', true);
             await page.waitForSelector('.gpop .gitem');
             await page.waitForFunction(() => [...document.querySelectorAll('.gpop .gmap')].every((q) => { const i = q.querySelector('img'); return !i || i.complete; }), null, { timeout: 10000 });
@@ -231,8 +213,8 @@ async function flows() {
                 return { host: li.querySelector('.gname').textContent, img: !!i, loaded: !!i && i.complete && i.naturalWidth > 0, src: i ? i.getAttribute('src') : null, w: Math.round(b.width), h: Math.round(b.height), bg: getComputedStyle(q).backgroundColor };
             }));
             const by = (host) => pics.find((x) => x.host === host) || {};
-            check('a map of the players shows the library\'s picture in its row: the picture is there and loaded (POPcOrN, at /maps/previews/POPcOrN.webp), 56 px square', by('dAwGy').loaded === true && by('dAwGy').src === '/maps/previews/POPcOrN.webp' && by('dAwGy').w === 56 && by('dAwGy').h === 56, JSON.stringify(pics));
-            check('a map that the library has no picture of (a 404) leaves the plain dark square: no image at all, so no broken image, and the square is still 56 px', by('Pebble').img === false && by('Pebble').w === 56 && by('Pebble').h === 56 && by('Pebble').bg === 'rgb(20, 32, 27)', JSON.stringify(by('Pebble')));
+            check('a map of the players shows the library\'s picture in its row: the picture is there and loaded (POPcOrN, at /maps/previews/POPcOrN.webp), 72 px square (56 on a phone)', by('dAwGy').loaded === true && by('dAwGy').src === '/maps/previews/POPcOrN.webp' && by('dAwGy').w === 72 && by('dAwGy').h === 72, JSON.stringify(pics));
+            check('a map that the library has no picture of (a 404) leaves the plain dark square: no image at all, so no broken image, and the square is still 72 px', by('Pebble').img === false && by('Pebble').w === 72 && by('Pebble').h === 72 && by('Pebble').bg === 'rgb(20, 32, 27)', JSON.stringify(by('Pebble')));
             check('an original shows its own picture, as before (front/preview_treasure.png, loaded)', by('Clover').loaded === true && by('Clover').src === 'front/preview_treasure.png', JSON.stringify(by('Clover')));
             check('the page asked the site for the two pictures by their percent-encoded names and for no list of maps (the 96 KB /maps/all or /maps)', site.hits.indexOf('/maps/previews/POPcOrN.webp') !== -1 && site.hits.indexOf('/maps/previews/No%20Picture%20Yet.webp') !== -1 && !site.hits.some((h) => /^\/maps(\/all)?(\?|$)/.test(h)), JSON.stringify(site.hits.filter((h) => /maps/.test(h))));
             check('(no script error in the page)', page.errors.length === 0, page.errors.join(' | '));
@@ -386,7 +368,7 @@ async function flows() {
             await page.click('.gstrip .btn:last-child');
             await page.click('.hchip.games'); await page.waitForSelector('.glist .gitem');
             await page.click('.gjoin');
-            check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the popover put away (the docked list of a site with no label stays), no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => { const p = document.querySelector('.gpop'); return p.classList.contains('gdock') ? !p.hidden : p.hidden; })) && sockets.length === 0);
+            check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list stays where it is (docked in the body), no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => { const p = document.querySelector('.gpop'); return p.classList.contains('gdock') ? !p.hidden : p.hidden; })) && sockets.length === 0);
             await page.click('.gstrip .btn:last-child');
             await page.click('.hchip.games'); await page.waitForSelector('.gcode input');
             await page.fill('.gcode input', 'abc234');
@@ -644,10 +626,10 @@ async function flows() {
             const badHome = [], badRoom = [];
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(OUT); if (o.length) badHome.push(w + 'x' + h + ': ' + o.join(', ')); }
             check('Home\'s bar at ' + sizes.length + ' sizes (900 to 1000 px wide, 844 x 390, 390 x 844, 360 x 640, every tenth width from 320 to 1300 px, and both sides of every limit) with the widest counts and a long name on the login chip: every button inside the window and no sideways scroll', badHome.length === 0, badHome.slice(0, 6).join(' | ') + (badHome.length > 6 ? ' ... ' + badHome.length + ' sizes' : ''));
-            // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 110 px, the Yard keeps the rest: 190 px at 568 x 320), every target at
+            // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 110 px, the body keeps the rest: 110 px or more at 568 x 320, beside the strip), every target at
             // least 44 px high and wide and no two of them over each other; one pixel narrower, one pixel higher, or upright, the phone's three rows stay (150 px or more); from 640 px wide it is the one low row (at most 70 px)
             const BARS = () => {
-                const box = (e) => e.getBoundingClientRect(), bar = document.querySelector('.hbar'), yard = document.querySelector('.yard'), small = [], over = [], cut = [], list = [];
+                const box = (e) => e.getBoundingClientRect(), bar = document.querySelector('.hbar'), yard = document.querySelector('#hmain'), small = [], over = [], cut = [], list = [];
                 bar.querySelectorAll('button').forEach((e) => { const r = box(e); if (r.width >= 3 && !e.closest('[hidden]')) list.push([e, r]); });
                 bar.querySelectorAll('button, button *').forEach((e) => { if (e.clientWidth && e.scrollWidth > e.clientWidth + 0.5 && !e.closest('[hidden]')) cut.push((e.className || e.tagName) + ' ' + (e.scrollWidth - e.clientWidth)); });       // (a word or a count that is wider than its box)
                 list.forEach(([e, r], i) => { if (r.height < 43.5 || r.width < 43.5) small.push(e.className + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); for (const [f, q] of list.slice(i + 1)) if (Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1) over.push(e.className + ' on ' + f.className); });
@@ -659,14 +641,14 @@ async function flows() {
                 if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
                 if (!two && w <= 639 && m.bar < 150) badRows.push(w + 'x' + h + ': the phone\'s three rows expected, the bar is ' + m.bar + ' px high');
                 if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
-                if (w === 568 && h === 320 && m.yard < 190) badRows.push('568x320: the Yard is only ' + m.yard + ' px high');
+                if (w === 568 && h === 320 && m.yard < 110) badRows.push('568x320: the body is only ' + m.yard + ' px high');
             }
-            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the Yard 190 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the phone\'s three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501, and upright 360 x 480 and 500 x 500) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
+            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the body 110 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the phone\'s three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501, and upright 360 x 480 and 500 x 500) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
             // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px): chat.css
             const badPanel = [];
             for (const [w, h] of [[568, 320], [480, 300], [600, 400], [630, 360], [640, 360], [844, 390]]) {
                 await bar.setViewportSize({ width: w, height: h });
-                await bar.evaluate(() => { const g = document.querySelector('.gc'); if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); });
+                await bar.evaluate((phone) => { const g = document.querySelector('.gc'); if (phone) document.querySelector('.htab.t-chat').click(); else if (g && g.getAttribute('data-open') !== 'true') document.querySelector('.gc-fold').click(); }, w <= 700);
                 await sleep(100);
                 const m = await bar.evaluate(() => { const g = document.querySelector('.gc'), b = document.querySelector('.hbar').getBoundingClientRect(); return g ? { open: g.getAttribute('data-open'), hidden: g.hidden, top: Math.round(g.getBoundingClientRect().top * 10) / 10, bar: Math.round(b.bottom * 10) / 10 } : null; });
                 if (!m || m.hidden || m.open !== 'true' || m.top < m.bar - 0.5) badPanel.push(w + 'x' + h + ': ' + JSON.stringify(m));
@@ -681,24 +663,24 @@ async function flows() {
             await bar.context().close();
         }
 
-        // ---- 1i. a phone whose page reaches under the system bar (viewport-fit=cover): the layout window is taller than what shows, and the browser says by how much (env(safe-area-inset-bottom), here the DevTools override of it). Home, its Yard and the
-        // chat strip (closed, and the panel open) end at or above the visible bottom (the window's height less the inset), at 448 x 998 and 390 x 880 (a 36 px bar), 844 x 390 (24 px), 1280 x 800 (none); Home still fills the window when there is no inset (docs/HOME_SCREEN.md, "The page's height") ----
+        // ---- 1i. a phone whose page reaches under the system bar (viewport-fit=cover): the layout window is taller than what shows, and the browser says by how much (env(safe-area-inset-bottom), here the DevTools override of it). Home, its body and the
+        // chat dock (folded, and the panel open; a phone's Games and Chat views) end at or above the visible bottom (the window's height less the inset), at 448 x 998 and 390 x 880 (a 36 px bar), 844 x 390 (24 px), 1280 x 800 (none); Home still fills the window when there is no inset (docs/HOME_SCREEN.md, "The page's height") ----
         {
             const bad = [];
             for (const [w, h, inset] of [[448, 998, 36], [390, 880, 36], [390, 844, 0], [844, 390, 24], [1280, 800, 0]]) {
                 const page = await newPage(browser, live, 'Maple', [0, w, h]); await lit(page);
                 await (await page.context().newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, bottom: inset, right: 0 } });
-                await page.waitForSelector('.gc:not([hidden])');
+                await page.waitForSelector('.gc', { state: 'attached' });
                 for (const open of [false, true]) {
-                    await page.evaluate((o) => { const g = document.querySelector('.gc'); if ((g.getAttribute('data-open') === 'true') !== o) document.querySelector('.gc-fold').click(); }, open);
+                    await page.evaluate(([o, phone]) => { const g = document.querySelector('.gc'); if (phone) document.querySelector(o ? '.htab.t-chat' : '.htab.t-games').click(); else if ((g.getAttribute('data-open') === 'true') !== o) document.querySelector('.gc-fold').click(); }, [open, w <= 700]);
                     await sleep(150);
-                    const m = await page.evaluate(() => { const b = (q) => Math.round(document.querySelector(q).getBoundingClientRect().bottom * 10) / 10; return { home: b('#home'), yard: b('.yard'), chat: b('.gc'), open: document.querySelector('.gc').getAttribute('data-open'), end: window.innerHeight }; });
+                    const m = await page.evaluate(() => { const b = (q) => Math.round(document.querySelector(q).getBoundingClientRect().bottom * 10) / 10; return { home: b('#home'), yard: b('#hmain'), chat: b('.gc'), open: document.querySelector('.gc').getAttribute('data-open'), end: window.innerHeight }; });
                     const limit = h - inset;
                     if (m.open !== String(open) || m.home > limit + 0.5 || m.yard > limit + 0.5 || m.chat > limit + 0.5 || (inset === 0 && m.home < limit - 0.5)) bad.push(w + 'x' + h + ' inset ' + inset + ' ' + (open ? 'open' : 'strip') + ': ' + JSON.stringify(m));
                 }
                 await page.context().close();
             }
-            check('with the system bar over the last 36 px (448 x 998, 390 x 880), 24 px (844 x 390) or nothing (390 x 844, 1280 x 800): Home, the Yard and the chat dock (strip and open panel) end at or above the visible bottom (the window less the inset), and Home fills the window when there is no inset', bad.length === 0, bad.join(' | '));
+            check('with the system bar over the last 36 px (448 x 998, 390 x 880), 24 px (844 x 390) or nothing (390 x 844, 1280 x 800): Home, the body and the chat dock (folded and open) end at or above the visible bottom (the window less the inset), and Home fills the window when there is no inset', bad.length === 0, bad.join(' | '));
         }
         // ---- 1j. the Room's Public | Private switch: the label sits in the middle of its button (docs/HOME_SCREEN.md, "The Room's switch"). The two words (the big "Private" / "Public" and the small "link only" / "listed") share a baseline; they were a flex row
         // with align-items: baseline, which hangs at the TOP of a 44 px button (the capitals' middle was 7 px above the button's middle, more empty space below the text than above). The middle of the big word's capitals (its baseline less half

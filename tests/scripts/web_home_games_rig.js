@@ -9,6 +9,7 @@ module.exports = function rig(lobbyPath) {
 if (!lobbyPath) { console.log('usage: web_home_games_check.js lobby.html'); process.exit(2); }
 const lobbyDir = path.dirname(path.resolve(lobbyPath));
 const Games = require(path.join(lobbyDir, 'home', 'games.js'));
+const PopoverGames = Object.assign({}, Games, { mount: (e) => Games.mount(Object.assign({}, e, { dock: null })) });       // (the list that is given no dock: the popover under the Games button; Home itself always docks it)
 const H = require('./web_page_harness.js')(lobbyPath);
 const { NET0, KEY, E, C, GUEST, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0 } = H;
 
@@ -47,7 +48,7 @@ const listOf = (rows) => ({ format: 1, lobbies: rows, count: rows.length });
 async function page(o) {
     o = o || {};
     const site = o.site || fakeSite();
-    const env = runLobby(o.search || '', o.stored || { 'ants.name': 'Maya' }, Object.assign({ stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch, label: process.env.YL === undefined ? 'staging' : process.env.YL }, o.options || {}));
+    const env = runLobby(o.search || '', o.stored || { 'ants.name': 'Maya' }, Object.assign({ stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch, popover: process.env.YL === undefined || process.env.YL === 'staging' }, o.options || {}));
     site.clock = () => env.clock;
     env.site = site;
     env.looks = () => site.calls.length;
@@ -103,5 +104,5 @@ const roomAs = (names, me, flags, o) => roomMessage(seatsOf(names), Object.assig
 const done = (title) => { console.log(title + ': ' + checks + ' checks, ' + failures + ' failed'); process.exit(failures === 0 ? 0 : 1); };
 const broke = (e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); };
 return { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
-         PUBLIC, PRIVATE, STARTING, myRoom, guestRoom, roomAs, Games, H, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0, lobbyDir, done, broke };
+         PUBLIC, PRIVATE, STARTING, myRoom, guestRoom, roomAs, Games, PopoverGames, H, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0, lobbyDir, done, broke };
 };

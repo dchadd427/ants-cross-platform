@@ -102,8 +102,8 @@ class TheLoaderInHome(unittest.TestCase):
 
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
-        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
-        self.assertIn("[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
+        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
         self.assertIn("} catch (e) { /* no chat */ }", self.js)
@@ -227,41 +227,36 @@ class TheStyle(unittest.TestCase):
     def rule(self, selector):
         return next(body for sel, body in self.rules if " ".join(sel.split()) == selector)
 
-    def test_the_panel_is_380_by_380_in_the_lower_left_corner_and_folds_to_its_header(self):
+    def test_the_panel_is_along_the_bottom_of_home_under_the_games_and_the_players_and_folds_to_its_header(self):
         body = self.rule(".gc")
-        for declaration in ("position: absolute;", "left: 24px;", "bottom: 22px;", "width: 380px;", "height: 380px;", "z-index: 6;"):
+        for declaration in ("order: 5;", "flex: none;", "margin: 0 24px 22px;", "height: clamp(160px, 28vh, 260px);"):
             self.assertIn(declaration, body)
-        self.assertLess(6, 60, "the Menu (home.css: z-index 60) stays above the dock")
-        self.assertIn("z-index: 60;", self.home_css)
+        self.assertNotIn("position: absolute", body, "the panel is a part of Home's column, as wide as the games and the players together: nothing lies over it and it lies over nothing")
+        self.assertNotIn("z-index", body)
+        self.assertIn("z-index: 60;", self.home_css, "the Menu stays above the dock")
         self.assertIn("height: auto;", self.rule('.gc[data-open="false"]'))
-        self.assertIn("min-height: 58px;", self.rule(".gc-head"))
+        self.assertIn("min-height: 50px;", self.rule(".gc-head"))
+        self.assertIn("#home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;", self.home_css, "the column that the dock is a part of")
 
-    def test_a_phone_and_a_short_window_have_a_strip_of_62_px_that_opens_upward(self):
-        self.assertIn("@media (max-width: 720px), (max-height: 500px) {", self.css)
-        self.assertIn("(min-width: 721px) and (min-height: 501px)", self.home_css, "the desktop's breakpoints are Home's own, and the script's: 721 x 501")
-        self.assertIn("(win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501", read("web", "home", "chat.js"))
-        compact = re.search(r"@media \(max-width: 720px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
-        self.assertIn('.gc[data-open="false"] { height: 62px; }', compact)
-        self.assertIn("left: 16px; right: 16px; bottom: 12px;", compact)
-        self.assertIn("height: min(490px, calc(100% - 200px));", compact, "under the bar of a phone (184 px)")
-        self.assertIn(".gc { --gc-min: 200px; left: 16px;", compact, "the least height of the open panel (chat.js reads it: with the strips above Home there is less room, and then the strip shows instead)")
-        self.assertIn('.gc[data-open="true"] { min-height: var(--gc-min); }', compact, "with the strips above Home there is less room: the open panel is never a sliver")
-        self.assertIn(".gc[hidden] { display: none; }", self.css, "a window that has no room even for the strip shows nothing")
-        self.assertIn('.gc[data-open="true"] { left: 10px; right: 10px; }', compact)
-        side = re.search(r"@media \(max-height: 500px\) and \(orientation: landscape\) \{(.*?)\n\}", self.css, re.S).group(1)
-        self.assertIn("width: 420px; height: min(286px, calc(100% - 76px)); }", side, "its top clears the bar of 62 px")
-        self.assertIn(".gc, .gc[data-open=\"true\"] { --gc-min: 150px; left: 14px;", side, "the least height of the open panel sideways (chat.js reads it)")
-        self.assertIn('.gc[data-open="true"] { min-height: var(--gc-min); }', side, "an open panel is never a sliver; a folded strip has no minimum")
-        self.assertNotIn("min-height: 150px", self.css.replace("--gc-min: 150px", ""), "the least height is the property's: one number for the style and the script")
-        self.assertIn('left: 14px; right: auto;', side)
-        self.assertIn('@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) { .gc, .gc[data-open="true"] { height: min(286px, calc(100% - 118px)); } }', self.css, "a phone held sideways has the two compact rows of home.css (106 px): the open panel's top clears them (the same limits as there)")
+    def test_the_field_and_the_account_line_share_a_row_in_a_wide_window(self):
+        wide = re.search(r"@media \(min-width: 701px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", wide)
+        self.assertIn(".gc-form { grid-area: 3 / 1; } .gc-slot { grid-area: 3 / 2; align-self: center; }", wide)
+        self.assertIn(".gc-log, .gc-note, .gc-guest { grid-column: 1 / -1; }", wide)
 
-    def test_the_title_of_a_folded_strip_is_the_short_one_and_the_long_one_stays_for_a_screen_reader(self):
-        compact = re.search(r"@media \(max-width: 720px\), \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
-        long_rule = re.search(r'\.gc\[data-open="false"\] \.gc-long \{([^}]*)\}', compact).group(1)
-        self.assertIn("clip: rect(0 0 0 0);", long_rule)
-        self.assertNotRegex(long_rule, r"display: *none|visibility: *hidden")
+    def test_a_phone_has_the_chat_as_its_own_view_open_and_without_a_fold_and_a_short_window_opens_it_folded(self):
+        self.assertIn("(win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601", read("web", "home", "chat.js"), "the script opens the panel for a window of 701 x 601 or more (home.js has the same limits)")
+        phone = re.search(r"@media \(max-width: 700px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        self.assertIn(".gc { flex: 1 1 auto; height: auto; min-height: 0; margin: 4px 12px 8px; overflow: hidden; }", phone, "the view fills the page between the bar and the strip")
+        self.assertIn(".gc-fold { display: none; }", phone, "home.js opens it with its view and shuts it with the others: no fold to leave it shrunk")
+        self.assertNotIn("--gc-min", self.css, "the panel is never put away for want of room: it is a part of the column, and the games take what is left")
+        self.assertIn(".gc[hidden] { display: none; }", self.css)
+        self.assertIn("@media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }", self.css)
+        self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head, .gc-slot { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the account line gives its place to the log and nothing of the panel reaches over the strip")
+
+    def test_the_header_stays_when_the_panel_is_folded_and_the_long_title_is_the_only_one(self):
         self.assertIn(".gc-short, .gc-peek { display: none; }", self.css)
+        self.assertNotIn(".gc-long", self.css)
 
     def test_every_target_is_at_least_44_px_and_the_field_and_send_48(self):
         heights = {}
@@ -288,7 +283,7 @@ class TheStyle(unittest.TestCase):
 
     def test_a_narrow_or_a_low_window_gives_the_log_its_room(self):
         self.assertIn("@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }", self.css, "the heading and the count on one line at 320 px")
-        self.assertIn("@media (max-width: 720px) and (max-height: 640px), (max-height: 500px) { .gc-guest { display: none; } }", self.css, "with notices above Home, or sideways, the guest line gives its place to the log")
+        self.assertIn("@media (max-height: 700px) { .gc-guest { display: none; } }", self.css, "in a short window the guest line gives its place to the log")
 
     def test_the_input_is_16_px_so_that_a_phone_does_not_zoom_into_it(self):
         self.assertIn("font-size: 16px;", self.rule(".gc-input"))
@@ -299,7 +294,8 @@ class TheStyle(unittest.TestCase):
 
     def test_the_card_that_says_that_the_game_is_opening_is_above_the_dock_and_the_summary_place_is_not_seen(self):
         card = re.search(r"\.hopen \{[^}]*z-index: (\d+);", self.home_css)
-        self.assertGreater(int(card.group(1)), int(re.search(r"z-index: (\d+);", self.rule(".gc")).group(1)), "an open panel does not hide it")
+        self.assertGreaterEqual(int(card.group(1)), 8, "the card is a layer over the page's columns, the dock's panel among them (it has none of its own)")
+        self.assertNotIn("z-index", self.rule(".gc"))
         news = self.rule(".gc-news")
         self.assertIn("clip: rect(0 0 0 0);", news)
         self.assertNotRegex(news, r"display: *none|visibility: *hidden", "a screen reader reads it")

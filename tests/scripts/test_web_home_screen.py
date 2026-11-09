@@ -226,9 +226,6 @@ class TheStyle(unittest.TestCase):
             self.assertTrue(target.startswith("data:image/svg+xml,") or target.startswith("front/"), target)
         self.assertNotRegex(self.css, r"url\(\s*[\"']?front/(?!clay)")
 
-    def test_the_ants_of_the_stand_in_hold_still_for_a_person_who_asks_for_it(self):
-        self.assertIn("@media (prefers-reduced-motion: reduce) { .yant .ant { animation: none; } }", self.css)
-
     def test_the_bars_have_a_layout_for_a_phone_upright_and_for_a_short_window(self):
         self.assertIn("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {", self.css)
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) {", self.css)
@@ -237,10 +234,9 @@ class TheStyle(unittest.TestCase):
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)", "nothing scrolls sideways")
 
 
-class TheYardsStandInIsForTheTestSiteOnly(unittest.TestCase):
-    """The stand-in of the Yard (the card "The Yard will live here", the sandy picture with its ants, the size that it prints) shows on a site that carries a site label (docs/HOME_SCREEN.md: the staging site, whose
-    web image the build argument ANTS_SITE_LABEL=staging stamps into the footer) and nowhere else: production has no label, so Home there is the bar over a plain sandy field. The decision is the page's own markup, the
-    same mechanism that puts "staging" into the title and the footer (the Dockerfile's step; tests/scripts/test_staging_stack.py): no second variable, no host name."""
+class TheBodyOfHome(unittest.TestCase):
+    """Home under its bar is the games (left), the players (right) and the chat (along the bottom); a phone (up to 700 px wide) has one of the three at a time and a strip to pick it. There is no Yard on Home yet:
+    no stand-in, no site label read, nothing that prints a size. The strip is the page's own small piece in home.js; the three parts keep their own files."""
 
     @classmethod
     def setUpClass(cls):
@@ -248,46 +244,41 @@ class TheYardsStandInIsForTheTestSiteOnly(unittest.TestCase):
         cls.css = read("web", "home", "home.css")
         cls.code = re.sub(r"//.*", "", cls.js)
 
-    def test_the_label_is_read_from_the_footer_that_the_dockerfile_stamps(self):
-        self.assertIn("doc.getElementById('site-label')", self.code)
-        self.assertIn('<strong id=\\"site-label\\">', read("Dockerfile"), "the id that Home looks for is the one that the Dockerfile's step stamps")
-        self.assertEqual(read("web", "lobby.html").count("@@SITE_FOOTER@@"), 1)
-        for name in ("hostname", "location.host", "playants", "ANTS_SITE_LABEL", "staging.", "localStorage", "sessionStorage"):
-            self.assertNotIn(name, self.code, "Home decides by the page's own site label, not by %s" % name)
+    def test_there_is_no_yard_and_no_label_is_read(self):
+        for name in ("'yard", "Yard", "standIn", "labelled", "site-label", "YARD_ANTS", "reservedText", "ylabel", "yant"):
+            self.assertFalse(name in self.code, name)
+        for name in (".yard", ".standin", ".ylabel", ".yant", ".ytag", ".yres"):
+            self.assertFalse(name in self.css, name)
 
-    def test_the_stand_in_is_built_only_where_there_is_a_label(self):
+    def test_the_body_is_one_main_that_the_list_of_games_and_the_list_of_players_mount_into(self):
         code = self.code
-        start = code.index("var standIn = labelled(doc)")
-        block = code[start:code.index("var opening = el('div', 'hopen'")]
-        self.assertIn("el('main', standIn ? 'yard standin' : 'yard')", block)
-        inside = block[block.index("if (standIn) {"):]
-        for part in ("'ylabel'", "'yres'", "TEXT.yardTitle", "TEXT.yardLine", "TEXT.yourAnts", "YARD_ANTS.forEach", "'yant y'"):
-            self.assertIn(part, inside, part)
-            self.assertNotIn(part, block[:block.index("if (standIn) {")], "%s is built outside the label's branch" % part)
-        for part in ("'ylabel'", "'yres'", "TEXT.yardTitle", "TEXT.yardLine", "TEXT.yourAnts", "YARD_ANTS.forEach"):
-            self.assertEqual(code.count(part), 1, "%s is used once, in the label's branch" % part)
-        self.assertEqual(code.count("reserved = null"), 1)
-        self.assertIn("if (reserved && r.width > 0 && r.height > 0) reserved.textContent", code, "the size is printed on the stand-in only")
-        self.assertIn("function labelled(doc) { try { return !!doc.getElementById('site-label'); } catch (e) { return false; } }", code, "no label (production, a local build) is the plain field")
+        self.assertIn("var main = el('main', 'hmain'); main.id = 'hmain';", code)
+        self.assertIn("host.appendChild(bar); host.appendChild(main); host.appendChild(opening); host.appendChild(tabs);", code)
+        self.assertEqual(code.count("dock: main, page: page"), 1, "the Games list docks in the body")
+        self.assertEqual(code.count("yard: main, bar: right,"), 1, "the players list mounts in the body")
 
-    def test_the_plain_field_is_the_page_s_own_sand_and_the_pictures_are_the_stand_ins(self):
-        rules = [(sel.strip(), body) for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", self.css, flags=re.S))]
-        yard = next(body for sel, body in rules if sel == ".yard")                    # (the first: the later ones only change its margin)
-        standin = next(body for sel, body in rules if sel == ".standin")
-        self.assertNotIn("url(", yard, "the plain field has no picture")
-        self.assertIn("--field: radial-gradient(ellipse at 50% 40%, #e0ca8f 0, #d3b676 46%, #a98848 100%)", yard, "the sand of the Yard's own colors")
-        self.assertIn("background: var(--field)", yard)
-        self.assertIn("flex: 1 1 auto", yard)                                         # (the box is the same with and without the stand-in: the bar's and the chat panel's room do not change)
-        self.assertIn("margin: 0 10px 10px", yard)
-        self.assertIn("border: 2px solid #8a5a1e", yard)
-        self.assertIn("url(\"data:image/svg+xml", standin)
-        self.assertTrue(standin.rstrip().endswith("var(--field);"), "the stand-in's picture lies on the same sand")
-        self.assertIn("border: 2px dashed", next(body for sel, body in rules if sel == ".standin::before"))
-        self.assertNotIn(".yard::before", [sel for sel, _ in rules])
-        self.assertRegex(self.css, r"@media \(orientation: portrait\) \{ \.standin \{ background-image: url\(")
-        for sel, body in rules:                                                       # (a picture of the Yard's ground is on a rule of the stand-in; the bar's two small icons are the buttons')
-            if "url(" in body and not sel.startswith(".quick"):
-                self.assertEqual(sel, ".standin", "a picture on %s" % sel)
+    def test_the_strip_has_three_buttons_and_the_chat_is_open_only_on_its_own_view_on_a_phone(self):
+        code = self.code
+        self.assertIn("var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];", code)
+        self.assertIn("var PHONE = '(max-width: 700px)';", code)
+        self.assertIn("if (dock && phone()) dock.open(name === 'chat');", code)
+        self.assertIn("host.setAttribute('data-tab', name);", code)
+        self.assertIn("if (dock && ph !== was) dock.open(ph ? tab === 'chat' : (win.innerHeight || 0) >= 601);", code, "a window that changes from a phone's width to a wide one (or back) opens or shuts the chat for its view")
+        self.assertIn("[bar, rbar, tabs, dock && dock.root, players && players.root]", code, "the strip takes no press while the page is on its way to the game")
+        self.assertIn("mirror(gamesPill, tabBtns.games.pill);", code)
+        self.assertIn("mirror(c, tabBtns.players.pill);", code)
+
+    def test_the_layout_is_a_grid_for_a_wide_window_and_one_view_for_a_phone(self):
+        css = self.css
+        self.assertIn(".hmain { flex: 1 1 auto; min-height: 0; display: grid;", css)
+        self.assertIn(".pl-on .hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }", css, "the players list is a sidebar of 220 to 280 px, and only once there is a list")
+        self.assertIn(".htabs { display: none; }", css)
+        phone = css[css.index("@media (max-width: 700px) {\n    .hmain"):]
+        phone = phone[:phone.index("\n}\n")]
+        self.assertIn(".htabs { order: 9; flex: none; display: flex;", phone)
+        self.assertIn('#home[data-tab="chat"] .hmain, #home:not([data-tab="chat"]) .gc, #home[data-tab="games"] .pl, #home[data-tab="players"] .gdock { display: none; }', phone)
+        self.assertIn("#home:not(.pl-on) .htab.t-players { display: none; }", phone, "a page with no players list has no Players view")
+        self.assertIn("min-height: 48px", phone)
 
 
 class TheWayIntoTheImage(unittest.TestCase):

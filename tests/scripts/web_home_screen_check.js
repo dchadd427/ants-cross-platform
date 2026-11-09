@@ -48,7 +48,6 @@ same('the screen of an address and a history entry: the entry that Home wrote wi
 same('the screen that a page opens on: a link (or a test room) opens the Room; a reload keeps the screen of the address when the tab holds a seat; else Home',
     [Home.firstScreen(true, false, ''), Home.firstScreen(true, true, ''), Home.firstScreen(false, true, '#room'), Home.firstScreen(false, false, '#room'), Home.firstScreen(false, true, ''), Home.firstScreen(false, false, '')],
     ['room', 'room', 'room', 'home', 'home', 'home']);
-same('the words of the Yard\'s size', Home.reservedText(1280, 721.4), 'reserved: 1280 x 721 px (everything under the top bar)');
 same('the address of the Room is the hash #room', Home.HASH, '#room');
 
 // The Menu's links are the page's own: the footer's, the header's (Matches, Discord), the Map maker's and How it works (a button, not a link)
@@ -77,7 +76,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('... and makes no room: no socket, nothing in this tab\'s session storage', env.sockets.length === 0 && env.session.data['ants.lobby'] === undefined);
     check('... and writes nothing to the history (the address stays what it is until a button is pressed), and moves nothing (no scroll, no focus: the first look is not a press)', env.pushed.length === 0 && env.replaced.length === 0 && env.marked.length === 0 && env.entries.length === 1 && env.scrolled.length === 0 && env.focused === null);
     const bar = env.$('home').children[0];
-    same('Home is a top bar, the Yard and the card that says that the game is opening, in that order', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#yard', 'div#hopen']);
+    same('Home is a top bar, the body (the games and the players), the card that says that the game is opening and the phone\'s strip, in that order (the chat dock comes after them, when it loads)', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'div#hopen', 'nav#htabs']);
     same('the bar has the logo (in the page\'s heading), Quick host, Quick join, My room, Games and the right-hand group (the login chip and the Menu)', bar.children.map((c) => classes(c).slice(0, 2).join(' ')), ['hbrand', 'btn quick', 'btn quick', 'btn hchip', 'btn hchip', 'hright']);
     const quickHost = env.home('host'), quickJoin = env.home('join'), mine = env.home('mine'), games = env.home('games');
     same('the words of the buttons are the picture\'s', [quickHost.textContent, quickJoin.textContent, mine.children[0].textContent, games.textContent], ['Quick host', 'Quick join', 'My room', 'Games']);
@@ -90,10 +89,15 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('every button that Home makes is a plain button (type="button": nothing submits), and Home put no markup into the page', buttonsOf(env).concat(env.roomBar('rhome'), env.roomBar('leave')).every((b) => b.getAttribute('type') === 'button' || b.type === 'button') && env.innerHTMLWrites.length === 0);
     const logo = env.$('home').findAll((e) => e.tagName === 'img')[0];
     check('the logo is the page\'s own picture, at the size of its file, with its words', logo.src === 'front/logo.png' && logo.getAttribute('width') === '581' && logo.getAttribute('height') === '218' && logo.alt === 'Ants!');
-    const yard = env.$('home').children[1];
-    // the site label (the Dockerfile's step, ANTS_SITE_LABEL: "staging" on the test site, none on production) decides whether the Yard shows its stand-in: here no label is stamped, as on production
-    check('the Yard\'s container is #yard, and with no site label it is the plain sandy field (the Games list docks into it when games.js has loaded: tests/scripts/web_home_games_check.js): no label card, no tag, no ants, no words, nothing that prints a size, and no stand-in class', yard.id === 'yard' && classes(yard).join() === 'yard'
-          && yard.children.length === 0 && yard.textContent === '' && !/Yard will live|reserved: /.test(env.dumpAll()));
+    const main = env.$('home').children[1];
+    check('the body\'s container is #hmain, and it is empty until the pieces that fill it are in (the Games list docks into it when games.js has loaded: tests/scripts/web_home_games_check.js; the players list when players.js has): no Yard, no stand-in, no words, nothing that prints a size', main.id === 'hmain' && classes(main).join() === 'hmain'
+          && main.children.length === 0 && main.textContent === '' && !env.$('yard') && !/Yard will live|reserved: /.test(env.dumpAll()));
+    const strip = env.$('home').children[3];
+    same('the phone\'s strip has Games, Players and Chat, each a plain button that says whether it is the one shown (Games, at first), with a count that is not shown until there is one', [strip.getAttribute('aria-label'), strip.children.map((b) => b.children[0].textContent + ':' + b.getAttribute('aria-pressed') + ':' + b.children[1].hidden)], ['Home views', ['Games:true:true', 'Players:false:true', 'Chat:false:true']]);
+    strip.children[2].click();
+    check('a press on Chat shows it (the page says which view: data-tab on Home), and a press on Games shows the list again', env.$('home').getAttribute('data-tab') === 'chat' && strip.children[2].getAttribute('aria-pressed') === 'true' && strip.children[0].getAttribute('aria-pressed') === 'false' && (strip.children[0].click(), env.$('home').getAttribute('data-tab') === 'games'));
+    strip.children[1].click(); env.home('games').click();
+    check('the Games button of the bar shows the Games view, whichever view was shown (the list is the thing that it is about)', env.$('home').getAttribute('data-tab') === 'games' && strip.children[0].getAttribute('aria-pressed') === 'true' && strip.children[1].getAttribute('aria-pressed') === 'false');
     const opening = env.$('home').children[2];
     check('the card that says that the game is opening is there and not shown, as a status', opening.hidden === true && opening.getAttribute('role') === 'status' && opening.textContent === 'Opening the game…');
     // the Room's slim bar: Home, the logo, Leave room, Menu, before the page's own room card
@@ -102,20 +106,38 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('... and the Menu button has its name and says whether it is open (it promises no other kind of popup)', rbar.children[4].getAttribute('aria-label') === 'Menu' && rbar.children[4].getAttribute('aria-haspopup') === null && rbar.children[4].getAttribute('aria-expanded') === 'false');
     check('each bar has the page\'s heading, an h1 around the logo (the screen that shows has one), and the chevron of the Home button is not read out', [bar, rbar].every((b) => b.children[b === bar ? 0 : 1].tagName === 'h1' && b.children[b === bar ? 0 : 1].children[0].tagName === 'img') && rbar.children[0].children[0].getAttribute('aria-hidden') === 'true');
 }
-{   // a page with a site label in its footer (the test site's build: ANTS_SITE_LABEL=staging) shows the Yard's stand-in; a build with no label (production, a local build) does not
+{   // a page with a site label in its footer (the test site's build) has the same Home: the label changes nothing of it
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, label: 'staging' });
-    const yard = env.$('home').children[1];
-    same('with the site label "staging" the order of Home is the same: the bar, the Yard, the opening card', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#yard', 'div#hopen']);
-    check('the Yard\'s container is #yard and it holds the stand-in: the label, the tag and five ants (three of them yours, the others a red and a blue), none of them read out', yard.id === 'yard' && classes(yard).join() === 'yard,standin' && yard.findAll((e) => classes(e).indexOf('yant') !== -1).length === 5
-          && yard.findAll((e) => classes(e).indexOf('ytag') !== -1)[0].textContent === 'Your 3 ants' && yard.findAll((e) => classes(e).indexOf('ant-red') !== -1).length === 1 && yard.findAll((e) => classes(e).indexOf('ant-blue') !== -1).length === 1
-          && yard.findAll((e) => classes(e).indexOf('yant') !== -1).every((a) => a.getAttribute('aria-hidden') === 'true'));
-    check('the label says that the Yard will live here and prints the size that it has', /The Yard will live here/.test(yard.textContent) && /reserved: \d+ x \d+ px \(everything under the top bar\)/.test(yard.textContent));
-    env.home('mine').click(); env.roomBar('rhome').click();
-    check('... and Home -> the Room -> Home keeps it as it is (the size is printed again, no second stand-in)', env.screen() === 'home' && yard.findAll((e) => classes(e).indexOf('yant') !== -1).length === 5 && yard.findAll((e) => classes(e).indexOf('ylabel') !== -1).length === 1);
-    for (const name of ['x', 'test-2']) {         // (a label is a label: whatever the build named the site)
-        const other = runLobby('', {}, { stayHome: true, label: name });
-        check('any label shows the stand-in (' + name + ')', classes(other.$('home').children[1]).indexOf('standin') !== -1);
-    }
+    same('with the site label "staging" the order of Home is the same, and there is no Yard and no stand-in', env.$('home').children.map((c) => c.tagName + '#' + (c.id || classes(c)[0])), ['header#hbar', 'main#hmain', 'div#hopen', 'nav#htabs']);
+    check('... the body is as empty as on the live site', env.$('home').children[1].children.length === 0 && !/Yard will live|reserved: |yant/.test(env.dumpAll()));
+}
+{   // the phone's strip (a window up to 700 px wide): the chat is open only on its own view, the counts follow the lists, and a wide window ignores the strip
+    const watchers = [], opens = [], phone = { on: true };
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, win: { matchMedia: (q) => ({ matches: q === '(max-width: 700px)' ? phone.on : false }), MutationObserver: function (fn) { this.observe = (node) => watchers.push({ node, fn }); } } });
+    const strip = env.$('home').children[3], pill = (i) => strip.children[i].children[1];
+    check('the strip watches the Games button\'s count (and only that one until the players list is there)', watchers.length === 1 && watchers[0].node === env.home('games').children[1]);
+    env.home('games').children[1].textContent = '7'; env.home('games').children[1].hidden = false; watchers[0].fn();
+    check('... and shows the same count, beside Games', pill(0).textContent === '7' && pill(0).hidden === false && pill(2).hidden === true);
+    env.home('games').children[1].hidden = true; watchers[0].fn();
+    check('... and hides it when the button hides it', pill(0).hidden === true);
+    env.advance(0);
+    const parts = env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/chat.js') || (c.tagName === 'link' && c.href === 'home/chat.css'));
+    env.win.AntsHomeChat = { mount() { return { root: new (env.$('home').constructor)(env, 'section', 'gchat'), shown() {}, open(on) { opens.push(on); } }; } };
+    parts.forEach((c) => c.onload && c.onload({}));
+    same('when the chat dock comes it is shut (the strip is on Games)', opens, [false]);
+    strip.children[2].click();
+    strip.children[1].click(); strip.children[2].click(); strip.children[0].click();
+    same('Chat opens it, any other view shuts it', opens, [false, true, false, true, false]);
+    phone.on = false;
+    strip.children[2].click(); strip.children[0].click();
+    same('a wide window shows all three and leaves the dock as it is (the views are only the strip\'s)', opens, [false, true, false, true, false]);
+    const resize = () => (env.win.listeners.resize || []).forEach((f) => f({}));
+    phone.on = false; resize(); phone.on = true; resize();
+    same('a window that becomes wide opens the dock (it is 800 px high), and one that becomes a phone\'s width shuts it again (the view is Games)', opens.slice(5), [true, false]);
+    env.win.innerHeight = 500; phone.on = false; resize();
+    same('... but a wide window that is only 500 px high leaves it shut (a press on its header opens it)', opens.slice(7), [false]);
+    resize();
+    same('... and a resize that changes nothing does nothing', opens.length, 8);
 }
 {   // without the script of Home the page cannot do anything, and says so (as for any of its scripts)
     const env = runLobby('', {}, { noHome: true });

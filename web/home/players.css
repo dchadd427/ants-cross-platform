@@ -1,14 +1,12 @@
 /* The players list of Home (web/home/players.js, docs/HOME_SCREEN.md, "The players list"), loaded after the first paint. The colors, .btn, .pill and the frame are the page's own (web/lobby.html, home.css). Nothing here
-   changes Home until the list is there (players.js puts the class pl-on on Home's div). A wide window: a panel at the right of the Yard. A phone upright: a button in the bar's first row and a sheet over the page.
-   Any other window: a button in the Yard's corner and a drawer at the right. Every target is at least 44 px. */
+   changes Home until the list is there (players.js puts the class pl-on on Home's div). The panel is the narrow sidebar at the right of the games list (home.css gives it its column), or, on a phone, the Players view. Every target is at least 44 px high and wide. */
 .pl, .pl * { box-sizing: border-box; }
 .pl-root { display: contents; }
 .pl-root[hidden], .pl-bar[hidden], .pl-btn[hidden], .pl-scrim[hidden], .pill[hidden], .pl-dot[hidden], .pl-status:empty { display: none; }
 
-/* ---- the panel: as a drawer (a window that is not wide), docked at the right on a wide one ---- */
-.pl { position: fixed; z-index: 70; top: 10px; right: 10px; display: none; flex-direction: column; width: min(320px, calc(100vw - 20px)); max-height: calc(100% - 20px); color: var(--cream); background: var(--inset);
+/* ---- the panel ---- */
+.pl { display: flex; flex-direction: column; min-height: 0; color: var(--cream); background: var(--inset);
     border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
-.pl[data-sheet="true"] { display: flex; }
 .pl[data-folded="true"] .pl-body { display: none; }
 .pl-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 4px 10px 4px 16px; }
 .pl-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
@@ -18,11 +16,6 @@
 .pl-fold { flex: none; min-width: 46px; min-height: 46px; padding: 0; }
 .pl-mark { display: block; width: 18px; height: 3px; background: var(--cream); border-radius: 1px; }
 .pl[data-folded="true"] .pl-mark { width: 12px; height: 12px; margin-top: -4px; background: none; border: solid var(--cream); border-width: 0 3px 3px 0; border-radius: 0; transform: rotate(45deg); }
-.pl-x { position: relative; display: block; width: 20px; height: 20px; }
-.pl-x::before, .pl-x::after { content: ""; position: absolute; left: 0; top: 8px; width: 20px; height: 3px; background: var(--cream); border-radius: 1px; transform: rotate(45deg); }
-.pl-x::after { transform: rotate(-45deg); }
-.pl-fold:not(.pl-close) { display: none; }
-.pl-scrim { position: fixed; inset: 0; z-index: 69; background: rgba(5, 10, 8, .62); }
 
 .pl-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0 12px 12px; }
 .pl-div { flex: none; height: 0; margin: 10px 2px 4px; border: 0; border-top: 2px solid #1d3a31; }
@@ -64,51 +57,7 @@
 .pl-note p.small { font-size: 14px; color: #a8cfc0; }
 .pl-host { min-height: 48px; }
 
-/* ---- the buttons that open it where it does not fit ---- */
-.pl-btn { position: absolute; z-index: 6; top: 10px; right: 10px; min-height: 46px; padding: 6px 16px; font-size: 16px; }
-.pl-bar { display: none; min-height: 46px; font-size: 16px; }
-.pl-ppl { flex: none; display: inline-block; width: 18px; height: 18px; background: var(--cream); -webkit-mask: var(--ppl) no-repeat center / contain; mask: var(--ppl) no-repeat center / contain; }
-:root { --ppl: url("data:image/svg+xml,%3Csvg xmlns='http:%2F%2Fwww.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Ccircle cx='6.5' cy='5.5' r='3'/%3E%3Cpath d='M1 15c0-3.3 2.4-5.4 5.5-5.4S12 11.7 12 15z'/%3E%3Ccircle cx='13' cy='6.5' r='2.3'/%3E%3Cpath d='M13 10c2.6 0 4.5 1.8 4.5 5H13.6c0-2-.5-3.6-1.4-4.6.2 0 .5-.4.8-.4z'/%3E%3C/svg%3E"); }
-.pl-btn .pill, .pl-bar .pill { margin-left: 2px; }
-
-/* ---- a wide window: the panel is docked at the right of the Yard; the Games list (docked in the Yard of the live site) keeps clear of it ---- */
-@media (min-width: 1180px) and (min-height: 501px) {
-    .pl { position: absolute; z-index: 6; display: flex; top: 14px; right: 14px; width: 260px; max-height: calc(100% - 26px); }
-    .pl-fold:not(.pl-close) { display: inline-flex; } .pl-close, .pl-btn, .pl-bar, .pl-scrim { display: none; }
-}
-@media (min-width: 1180px) and (max-width: 1279px) and (min-height: 501px) { .pl-on .gdock { right: 288px; width: min(560px, calc(100% - 716px)); } }      /* (from 1280 px the Games list is centered in the window: it ends well before the panel, and its own rule is the one that holds) */
-@media (min-width: 1600px) and (min-height: 900px) { .pl { width: 280px; } }
-
-/* ---- a phone upright, or any window under 640 px: the button is in the bar's first row (its picture goes first, then its word), the panel is a sheet over the bottom of the page ---- */
-@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {
-    .pl-btn { display: none; }
-    .pl-bar { display: inline-flex; }
-    .pl-on .hbar .hbrand { grid-column: 1; grid-row: 1; }
-    .pl-on .hbar .hright { grid-column: 1 / -1; min-width: 0; max-width: calc(100% - 102px); }
-    .pl { top: auto; left: 10px; right: 10px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: calc(100vh - 76px - env(safe-area-inset-bottom, 0px)); max-height: calc(100dvh - 76px - env(safe-area-inset-bottom, 0px)); }
-}
-@media (max-width: 440px) { .pl-on .hbar .pl-bar { padding: 6px 10px; } }
-@media (max-width: 410px) { .pl-bar .pl-ppl { display: none; } }
-@media (max-width: 380px) { .pl-bar .pl-ppl { display: inline-block; } .pl-bar .pl-word { display: none; } }
-@media (max-width: 359px) { .pl-on .hbar .hright { gap: 6px; } .pl-on .hbar .pl-bar { padding: 6px 8px; gap: 6px; } .pl-bar .pill { margin-left: 0; padding: 0 6px; font-size: 14px; } }
-@media (max-width: 340px) { .pl-on .hbar .hlogo { width: 76px; } .pl-on .hbar .hright { max-width: calc(100% - 86px); } }
-
-/* ---- a window that is not wide and not a phone upright: the button is in the Yard's corner and the Games list moves out of its way, under it ---- */
-@media (min-width: 721px) and (max-width: 1179px) and (min-height: 501px), (min-width: 640px) and (max-width: 720px) and (orientation: landscape) and (min-height: 501px) {
-    .pl-btn { top: 14px; right: 14px; }
-    .pl-on .gdock { top: 68px; max-height: calc(100% - 80px); }
-}
-@media (min-width: 721px) and (max-width: 760px) and (min-height: 501px) { .pl-on .gdock { max-height: calc(100% - 484px); } }
-@media (min-width: 640px) and (max-width: 720px) and (orientation: landscape) and (min-height: 501px) { .pl-on .gdock { max-height: calc(100% - 150px); } }
-
-/* ---- a phone held sideways (a short window): the button is in the Yard's corner, the Games list is narrower by it, the panel is a drawer that is 320 px wide ---- */
-@media (max-height: 500px) and (orientation: landscape) {
-    .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; }
-    .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; }
-    .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; }
-    .pl-btn { display: inline-flex; top: 10px; right: 10px; } .pl-bar { display: none; }
-    .pl { top: 10px; left: auto; right: 10px; bottom: auto; width: min(320px, calc(100vw - 20px)); max-height: calc(100% - 20px); }
-    .pl-on .gdock { right: 186px; }
-}
-@media (max-height: 500px) and (orientation: landscape) and (max-width: 639px) { .pl-btn .pl-word { display: none; } .pl-btn { padding: 6px 12px; } .pl-on .gdock { right: 116px; } }
-@media (max-height: 500px) and (orientation: landscape) and (max-width: 479px) { .pl-on .gdock { right: 8px; top: 64px; max-height: calc(100% - 146px); } }
+/* ---- the sheet's parts (players.js still makes them: a page whose window matches none of its queries) are not drawn; the panel is always docked ---- */
+.pl-btn, .pl-bar, .pl-scrim, .pl-close { display: none; }
+@media (max-width: 700px) { .pl-fold { display: none; } .pl[data-folded="true"] .pl-body { display: flex; } }
+@media (max-height: 500px) and (orientation: landscape) { .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; } .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; } .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; } }

@@ -3,17 +3,14 @@
 // account that a cookie names). The other people are raw sockets of the hub (their own masked frames, each from an address of its own, as nginx would tell the hub). It looks at what only a browser shows
 // (docs/HOME_SCREEN.md, "The players list"):
 //   1. the crowd of the approved pictures (a moderator, three who look, two who wait, two who play, four guests) at 1280 x 800, 900 x 700, 390 x 844, 844 x 390 and 568 x 320, and with none, 3, 12 and 200 others: the
-//      panel, the button or the sheet is inside the window, the page does not scroll sideways, the panel and the corner button are clear of the Games list and the chat dock, no Join (the list's or the panel's) and no
-//      field is under anything else, the bar of a phone keeps its three rows and the logo is not covered, and the count of the list is the count of the chat;
-//   2. the sheet: opened by the bar's button or the corner's, a dialog with the focus on Close, over the Menu, Escape and the scrim close it and the focus goes back, Tab stays inside it, it clears a phone's system bar;
+//      panel is the sidebar at the right of the Games list (a phone's width: the Players view), inside the window, no sideways scroll, the panel, the Games list and the chat dock do not meet, no Join (the list's or the panel's)
+//      and no field is under anything else, and the count of the list is the count of the chat;
+//   2. the phone's strip (Games, Players, Chat): one view at a time, the Players tab has the number, the chat is open on its own view and folded on the others;
 //   3. the states: nobody else (the note and the Host button), the hub gone ("Players list is off right now", the chat says it too) and back by itself, a person who comes, goes and changes what they do;
-//   4. Join: the Games list's own Join of that room is pressed (also from the sheet and the drawer);
+//   4. Join: the Games list's own Join of that room is pressed (from the panel, and from the phone's Players view);
 //   5. a hub that has no list (an older one): nothing shows, and Home is the same as with the list's two files not there at all, but for a few pixels at the edges of rounded buttons that Chromium draws either way (five sizes);
 //   6. the Room: the list is not on it, and it is back on Home;
-//   7. the bar of a phone at any count (13, 99, 100, 226, 480 people on the real hub, 9999 from a fake one) at 320, 360, 370, 375, 380, 390 and 412 px: nothing is cut off, nothing covers the logo or another
-//      button, the Menu keeps room at the edge, the button says 99+ over 99 and the sheet shows the whole number;
-//   8. the Games list that the live site docks in the Yard, at 1280 x 800, 1366 x 768, 1536 x 864, 1920 x 1080 and 2560 x 1440 with the list absent, open and folded and the chat dock open and folded: the
-//      Games list is centered in the window (to 1 px), clear of both panels, and no Join is under anything else.
+//   7. the sidebar from 701 to 2560 px wide, with the list absent and open and the chat dock open and folded: the panel is 220 to 280 px, as high as the Games list, the chat dock lies under both and is as wide as they are together.
 //   --shots DIR takes the pictures of the built page (built_*.png), the ones to put beside the approved pictures.
 //
 //   node tests/scripts/web_home_players_browser.js [--web DIR] [--shots DIR] [--only 1,3]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -160,45 +157,49 @@ async function openPage(r, size, account, o) {
     const page = await context.newPage();
     page.on('pageerror', (e) => errors.push(size[0] + ': ' + String(e && e.message || e)));
     await page.goto(r.origin + '/', { waitUntil: 'load' });
-    await page.waitForSelector('#gchat', { timeout: 15000 });
+    await page.waitForSelector('#gchat', { state: 'attached', timeout: 15000 });
     if (!o.noGames) await page.waitForSelector('.gpop .gitem', { timeout: 15000 });
     return page;
 }
 const listShows = (page, text) => until('the list shows ' + text, () => page.evaluate((t) => { const p = document.getElementById('players'); return !!p && p.textContent.indexOf(t) !== -1 && !p.closest('.pl-root').hidden; }, text), 15000);
 async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, 'built_' + name + '.png') }); } }
-const openList = async (page) => {                         // the button that opens the list in this window (none in a wide one)
-    const kind = await page.evaluate(() => { const v = (e) => !!e && e.getClientRects().length > 0; return v(document.querySelector('.pl-bar')) ? '.pl-bar' : v(document.querySelector('.pl-btn')) ? '.pl-btn' : ''; });
-    if (kind) await page.click(kind);
-    return kind;
+const PHONE_W = 700;                                       // (a window up to this wide has the strip and one view at a time)
+const showPlayers = async (page) => {                       // the Players view of a phone's width; in a wider window the list is on the page already
+    if (await page.evaluate(() => innerWidth <= 700)) { await page.click('.htab.t-players'); await sleep(150); }
 };
 
 // what a page must be at any size and with any crowd (the checks of docs/HOME_SCREEN.md that the list must not break)
 const LAYOUT = () => {
     const R = (e) => { if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { l: q.left, t: q.top, r: q.right, b: q.bottom }; };
     const meet = (a, b) => a && b && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
-    const panel = document.getElementById('players'), open = !!panel && panel.getAttribute('data-sheet') === 'true';
-    const pl = R(panel), btn = R(document.querySelector('.pl-btn')), bar = R(document.querySelector('.pl-bar')), dock = R(document.querySelector('.gdock')), chat = R(document.getElementById('gchat')), logo = R(document.querySelector('.hbar .hlogo'));
+    const panel = document.getElementById('players'), phone = innerWidth <= 700;
+    const pl = R(panel), dock = R(document.querySelector('.gdock')), chat = R(document.getElementById('gchat')), main = R(document.getElementById('hmain')), logo = R(document.querySelector('.hbar .hlogo')), tabs = R(document.querySelector('.htabs'));
     const iw = innerWidth, ih = innerHeight, out = [];
-    [['panel', pl], ['corner button', btn], ['bar button', bar]].forEach(([n, q]) => { if (q && (q.l < -0.5 || q.t < -0.5 || q.r > iw + 0.5 || q.b > ih + 0.5)) out.push(n + ' outside the window ' + JSON.stringify(q)); });
+    [['panel', pl], ['games', dock], ['chat', chat], ['strip', tabs]].forEach(([n, q]) => { if (q && (q.l < -0.5 || q.t < -0.5 || q.r > iw + 0.5 || q.b > ih + 0.5)) out.push(n + ' outside the window ' + JSON.stringify(q)); });
     if (document.documentElement.scrollWidth > iw) out.push('sideways scroll');
-    if (pl && !open && meet(pl, dock)) out.push('the docked panel is over the Games list');
-    if (pl && !open && meet(pl, chat)) out.push('the docked panel is over the chat dock');
-    if (btn && meet(btn, dock)) out.push('the corner button is over the Games list');
-    if (btn && meet(btn, chat)) out.push('the corner button is over the chat dock');
-    if (bar && logo && logo.r > bar.l - 4) out.push('the bar\'s button covers the logo');
-    const kids = [...document.querySelectorAll('.hbar .hright > *')].filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect());
-    if (kids.some((k) => k.left < 0 || k.right > iw + 0.5)) out.push('a button of the bar is cut off');
-    for (let i = 0; i < kids.length; i++) for (let j = i + 1; j < kids.length; j++) if (kids[i].left < kids[j].right - 0.5 && kids[j].left < kids[i].right - 0.5 && kids[i].top < kids[j].bottom - 0.5 && kids[j].top < kids[i].bottom - 0.5) out.push('two buttons of the bar overlap');
+    if (!phone) {
+        if (pl && meet(pl, dock)) out.push('the panel is over the Games list');
+        if (pl && meet(pl, chat)) out.push('the panel is over the chat dock');
+        if (pl && dock && !(pl.l >= dock.r)) out.push('the panel is not right of the Games list');
+        if (pl && dock && Math.abs(pl.t - dock.t) > 1) out.push('the panel and the Games list do not start at the same line');
+        if (pl && chat && !(chat.t >= pl.b - 0.5)) out.push('the chat dock is not under the panel');
+        if (pl && (pl.r - pl.l < 219.5 || pl.r - pl.l > 280.5)) out.push('the panel is ' + Math.round(pl.r - pl.l) + ' px wide (220 to 280)');
+        if (tabs) out.push('the phone\'s strip shows in a wide window');
+    } else {
+        if (!tabs) out.push('no strip on a phone');
+        if (chat && (dock || pl)) out.push('the chat shows with another view');
+    }
+    if (pl && main && (pl.t < main.t - 0.5 || pl.b > main.b + 0.5)) out.push('the panel is not inside the body');
     const covered = [...document.querySelectorAll('.gjoin, .pl-join, .gcode input, .pl-host')].filter((e) => {
         if (!e.getClientRects().length) return false;
-        const q = e.getBoundingClientRect(), box = e.closest('.gpop, .pl-list, .pl-body'), bq = box && box.getBoundingClientRect();
+        const q = e.getBoundingClientRect(), box = e.closest('.gpbody, .pl-list, .pl-body'), bq = box && box.getBoundingClientRect();
         if (bq && (q.top < bq.top - 0.5 || q.bottom > bq.bottom + 0.5)) return false;                  // (scrolled out of its own box: not on the screen)
         if (q.top < 0 || q.bottom > ih || q.left < 0 || q.right > iw) return false;
         const top = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2);
         return !(top === e || e.contains(top));
     }).length;
     if (covered) out.push(covered + ' Join or field under something else');
-    return { out, hasPanel: !!pl, hasCorner: !!btn, hasBar: !!bar, barHeight: document.querySelector('.hbar').getBoundingClientRect().height };
+    return { out, hasPanel: !!pl, barHeight: document.querySelector('.hbar').getBoundingClientRect().height };
 };
 // two pictures of a page, compared in a browser's canvas: how many pixels differ by more than a few levels of any color (the grain of the bar and the edges of the shadows are not drawn twice to the last level)
 async function pixelsThatDiffer(a, b) {
@@ -219,11 +220,11 @@ async function pixelsThatDiffer(a, b) {
 }
 const countsAgree = (page) => page.evaluate(() => {
     const chat = /^(\d+|500\+) here now$/.exec((document.querySelector('.gc-on') || {}).textContent || '');
-    const head = document.querySelector('.pl-count'), button = [...document.querySelectorAll('.pl-btn .pill, .pl-bar .pill')].find((e) => e.getClientRects().length);
+    const head = document.querySelector('.pl-count'), button = [...document.querySelectorAll('.htab.t-players .pill')].find((e) => e.getClientRects().length);
     return { chat: chat ? chat[1] : null, head: head && !head.hidden ? head.textContent : null, button: button && !button.hidden ? button.textContent : null };
 });
 const phoneChat = async (page, w, h) => {                  // a page that opened at this size has the dock as a fresh page has it: open on a desktop, a strip on a phone or in a short window
-    const want = w >= 721 && h >= 501 ? 'true' : 'false';
+    const want = w >= 701 && h >= 601 ? 'true' : 'false';
     if ((await page.getAttribute('#gchat', 'data-open')) !== want) { await page.evaluate(() => document.querySelector('#gchat .gc-fold').click()); await sleep(100); }
 };
 
@@ -246,84 +247,45 @@ async function main() {
                 for (const size of SIZES) {
                     const page = await openPage(r, size, '1000_maple');
                     await phoneChat(page, size[1], size[2]);
+                    await showPlayers(page);
                     const others = people.length + guests;
                     if (others) await listShows(page, people.length ? people[0][0].split(':')[1] : 'guest'); else await listShows(page, 'Just you here');
                     await sleep(400);
                     const m = await page.evaluate(LAYOUT);
-                    check(what + ', ' + size[0] + ' ' + size[1] + ' x ' + size[2] + ': the list is in the window, there is no sideways scroll, nothing of the Games list, the chat dock or a Join is covered, the logo is free', m.out.length === 0 && (m.hasPanel || m.hasCorner || m.hasBar), JSON.stringify(m));
+                    check(what + ', ' + size[0] + ' ' + size[1] + ' x ' + size[2] + ': the list is the sidebar at the right of the Games list (a phone: the Players view), in the window, no sideways scroll, nothing of the Games list, the chat dock or a Join is covered', m.out.length === 0 && m.hasPanel, JSON.stringify(m));
                     check('... the bar is as high as it is without the list (' + bare[size[0]] + ' px)', Math.abs(m.barHeight - bare[size[0]]) < 0.5, m.barHeight + ' / ' + bare[size[0]]);
                     const c = await countsAgree(page);
                     const total = people.length + guests + 1, shown = total > 500 ? '500+' : String(total);
                     check('... the count of the list is the count of the chat (' + total + ' people: the others and the visitor)' + (total > 1 ? '' : ' (one alone: no number)'), c.chat === String(total) && (total > 1 ? (c.head === shown || c.button === shown) : (c.head === null && c.button === null)), JSON.stringify(c));
                     await shot(page, what.replace(/[^a-z0-9]+/gi, '_').replace(/_$/, '') + '_' + size[1] + 'x' + size[2]);
-                    const kind = await openList(page);
-                    if (kind) {
-                        await until('the sheet is open', () => page.evaluate(() => document.getElementById('players').getAttribute('data-sheet') === 'true'), 3000);
-                        await sleep(150);
-                        const o = await page.evaluate(LAYOUT);
-                        const inside = await page.evaluate(() => { const q = document.getElementById('players').getBoundingClientRect(); return q.left >= -0.5 && q.top >= -0.5 && q.right <= innerWidth + 0.5 && q.bottom <= innerHeight + 0.5 && q.width > 150 && q.height > 100; });
-                        check(what + ', ' + size[0] + ': the open sheet is inside the window, nothing sideways', o.out.filter((x) => x.indexOf('under something') === -1).length === 0 && inside, JSON.stringify(o));
-                        const scrolls = await page.evaluate(() => { const l = document.querySelector('.pl-list'); return { more: l.scrollHeight > l.clientHeight + 2, rows: document.querySelectorAll('.pl-card').length }; });
-                        check('... the list scrolls inside the sheet when it is long (200 others: it is, 3: it need not be)', what !== '200 others' || (scrolls.more && scrolls.rows >= 150), JSON.stringify(scrolls));
-                        await shot(page, what.replace(/[^a-z0-9]+/gi, '_').replace(/_$/, '') + '_' + size[1] + 'x' + size[2] + '_open');
-                        await page.keyboard.press('Escape');
-                        await sleep(100);
-                    }
+                    const scrolls = await page.evaluate(() => { const l = document.querySelector('.pl-list'); return { more: l.scrollHeight > l.clientHeight + 2, rows: document.querySelectorAll('.pl-card').length }; });
+                    check('... the list scrolls inside its panel when it is long (200 others: it is, 3: it need not be)', what !== '200 others' || (scrolls.more && scrolls.rows >= 150), JSON.stringify(scrolls));
                     await page.context().close();
                 }
             }
         }
 
-        // ---- 2. the sheet: a dialog over the Menu, Escape and the scrim, the focus, Tab, the system bar ----------------------------------------------------------------------------------------------------
+        // ---- 2. the phone's strip: Games, Players and Chat, one view at a time; the Players tab shows the number and the list, and the chat counts what comes while it is away --------------------------------------------------
         if (want(2)) {
             await crowd(r, PICTURE, 4);
-            for (const size of [SIZES[1], SIZES[2], SIZES[3]]) {
+            for (const size of [SIZES[2], SIZES[4], ['700 wide', 700, 800, true]]) {
                 const page = await openPage(r, size, '1000_maple');
                 await phoneChat(page, size[1], size[2]);
                 await listShows(page, 'clover');
-                const kind = await page.evaluate(() => (document.querySelector('.pl-bar') && document.querySelector('.pl-bar').getClientRects().length ? '.pl-bar' : '.pl-btn'));
-                check(size[0] + ': the button says what it opens and that it is closed', await page.evaluate((k) => { const b = document.querySelector(k); return b.getAttribute('aria-haspopup') === 'dialog' && b.getAttribute('aria-expanded') === 'false' && /^Players \(\d+\)$/.test(b.getAttribute('aria-label')); }, kind));
-                await page.focus(kind); await page.keyboard.press('Enter');
-                await until('open', () => page.evaluate(() => document.getElementById('players').getAttribute('data-sheet') === 'true'), 3000);
-                const o = await page.evaluate((k) => { const p = document.getElementById('players'), a = document.activeElement; return { role: p.getAttribute('role'), modal: p.getAttribute('aria-modal'), name: p.getAttribute('aria-labelledby'), title: document.getElementById('players-title').textContent, focus: a && a.className, expanded: document.querySelector(k).getAttribute('aria-expanded'), scrim: !!document.querySelector('.pl-scrim') && document.querySelector('.pl-scrim').getClientRects().length > 0 }; }, kind);
-                check(size[0] + ': the keyboard opens it: a modal dialog named "Players", over a scrim, the focus on Close', o.role === 'dialog' && o.modal === 'true' && o.name === 'players-title' && o.title === 'Players' && /pl-close/.test(o.focus || '') && o.expanded === 'true' && o.scrim, JSON.stringify(o));
-                const order = [];
-                for (let i = 0; i < 40; i++) {
-                    await page.keyboard.press('Tab');
-                    const at = await page.evaluate(() => { const a = document.activeElement; return { in: !!a.closest('#players'), what: a.className.split(' ').slice(-1)[0] || a.tagName }; });
-                    order.push(at);
-                    if (!at.in) break;
-                }
-                check(size[0] + ': Tab stays inside the sheet (Close, the list, the Join of the room that waits, and round again): ' + order.slice(0, 5).map((x) => x.what).join(' > '), order.every((x) => x.in) && order.length === 40 && order.slice(0, 4).map((x) => x.what).indexOf('pl-join') !== -1, JSON.stringify(order.slice(0, 8)));
-                await page.keyboard.press('Shift+Tab');
-                check(size[0] + ': Shift+Tab goes back inside it too', await page.evaluate(() => !!document.activeElement.closest('#players')));
-                await page.keyboard.press('Escape');
-                await sleep(100);
-                check(size[0] + ': Escape closes it and the focus is on the button that opened it', await page.evaluate((k) => document.getElementById('players').getAttribute('data-sheet') === 'false' && document.activeElement === document.querySelector(k), kind));
-                await page.click(kind);
-                await sleep(100);
-                await page.mouse.click(size[1] / 2, 4);
-                await sleep(100);
-                check(size[0] + ': a press on the scrim closes it', await page.evaluate(() => document.getElementById('players').getAttribute('data-sheet') === 'false'));
-                // the Menu is under the sheet (where the Menu leaves the button free to press: a phone's bar; the Menu of the other windows covers the corner button, as a popup covers what is under it)
-                if (kind === '.pl-bar') {
-                    await page.click('.hmenu'); await page.waitForSelector('.hmenubox:not([hidden])');
-                    await page.click(kind);
-                    await sleep(100);
-                    const top = await page.evaluate(() => { const q = document.getElementById('players').getBoundingClientRect(), a = document.elementFromPoint(q.left + q.width / 2, q.top + 30); return { sheet: !!a && !!a.closest('#players'), menu: !document.querySelector('.hmenubox').hidden }; });
-                    check(size[0] + ': the sheet is over the Menu (a press on the button put the Menu away)', top.sheet && !top.menu, JSON.stringify(top));
-                    await page.keyboard.press('Escape');
-                }
-                await page.context().close();
-            }
-            // a phone whose page reaches under the system bar: the sheet clears it
-            for (const [w, h, inset] of [[390, 880, 36], [448, 998, 36]]) {
-                const page = await openPage(r, ['phone', w, h, true], '1000_maple');
-                await (await page.context().newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, bottom: inset, right: 0 } });
-                await phoneChat(page, w, h); await listShows(page, 'clover');
-                await page.click('.pl-bar'); await sleep(200);
-                const b = await page.evaluate(() => { const q = document.getElementById('players').getBoundingClientRect(); return { bottom: q.bottom, end: innerHeight }; });
-                check('a phone with the system bar over the last ' + inset + ' px (' + w + ' x ' + h + '): the sheet ends above it, 12 px over', b.bottom <= h - inset - 11.5 && b.bottom >= h - inset - 13, JSON.stringify(b));
+                const m = await page.evaluate(() => { const t = [...document.querySelectorAll('.htab')].map((b) => [b.textContent, b.getAttribute('aria-pressed')]); const d = (q) => document.querySelector(q).getClientRects().length > 0 ? 'shown' : 'none'; return { t, games: d('.gpop'), players: d('#players'), chat: d('#gchat') }; });
+                check(size[0] + ': the strip says Games (shown), Players and Chat, the Games view shows the list and neither the players nor the chat', m.t.length === 3 && m.t[0][1] === 'true' && m.t[1][1] === 'false' && m.t[2][1] === 'false' && m.games === 'shown' && m.players === 'none' && m.chat === 'none', JSON.stringify(m));
+                const pill = await page.evaluate(() => { const b = document.querySelector('.htab.t-players .pill'); return b && !b.hidden ? b.textContent : null; });
+                check(size[0] + ': the Players tab has the number of the list beside its name (' + (PICTURE.length + 5) + ' people)', pill === String(PICTURE.length + 5) || pill === String((await countsAgree(page)).chat), String(pill));
+                await page.click('.htab.t-players'); await sleep(200);
+                const p = await page.evaluate(() => { const d = (q) => (document.querySelector(q).getClientRects().length > 0 ? 'shown' : 'none'), q = document.getElementById('players').getBoundingClientRect(), t = document.querySelector('.htabs').getBoundingClientRect(), b = document.querySelector('.hbar').getBoundingClientRect(); return { games: d('.gpop'), players: d('#players'), chat: d('#gchat'), fold: getComputedStyle(document.querySelector('.pl-fold')).display, within: q.top >= b.bottom - 1 && q.bottom <= t.top + 1 && q.width >= innerWidth - 40, on: document.querySelector('.htab.t-players').getAttribute('aria-pressed') }; });
+                check(size[0] + ': the Players view shows the list alone, between the bar and the strip, with no fold to shrink it', p.games === 'none' && p.players === 'shown' && p.chat === 'none' && p.fold === 'none' && p.within && p.on === 'true', JSON.stringify(p));
+                await shot(page, 'phone_players_' + size[1] + 'x' + size[2]);
+                await page.click('.htab.t-chat'); await sleep(200);
+                const c = await page.evaluate(() => { const d = (q) => (document.querySelector(q).getClientRects().length > 0 ? 'shown' : 'none'); return { games: d('.gpop'), players: d('#players'), chat: d('#gchat'), open: document.getElementById('gchat').getAttribute('data-open'), fold: getComputedStyle(document.querySelector('#gchat .gc-fold')).display }; });
+                check(size[0] + ': the Chat view shows the open chat alone (no fold)', c.games === 'none' && c.players === 'none' && c.chat === 'shown' && c.open === 'true' && c.fold === 'none', JSON.stringify(c));
+                await shot(page, 'phone_chat_' + size[1] + 'x' + size[2]);
+                await page.click('.htab.t-games'); await sleep(200);
+                check(size[0] + ': Games brings the list back and the chat is folded again', await page.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'false'));
                 await page.context().close();
             }
         }
@@ -369,42 +331,22 @@ async function main() {
             await page.context().close();
         }
 
-        // ---- 4. Join: the Games list's own Join of that room is pressed (the docked list, from the panel, the drawer and the sheet) -----------------------------------------------------------------------
+        // ---- 4. Join: the Games list's own Join of that room is pressed (the docked list, from the panel and from the phone's Players view) -----------------------------------------------------------------------
         if (want(4)) {
             await crowd(r, PICTURE, 4);
             for (const size of [SIZES[0], SIZES[1], SIZES[2]]) {
                 const page = await openPage(r, size, '1000_maple');
                 await phoneChat(page, size[1], size[2]);
                 await listShows(page, 'clover');
-                await openList(page);
+                await showPlayers(page);
                 await sleep(200);
                 await page.evaluate(() => { window.__pressed = []; document.querySelector('.gdock').addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('.gjoin'); if (b) window.__pressed.push(b.getAttribute('data-code')); }, true); });
                 await page.click('.pl-join[data-code="c1v3rr"]');
                 await sleep(300);
-                const o = await page.evaluate(() => ({ pressed: window.__pressed, sheet: document.getElementById('players').getAttribute('data-sheet'), joining: !!document.querySelector('.gjoining:not([hidden])') || !!document.querySelector('.gpnote:not([hidden])') || !!document.querySelector('.gconfirm') || document.body.getAttribute('data-screen') === 'room' }));
-                check(size[0] + ': Join in the list presses the Games list\'s own Join of that room (c1v3rr), the sheet is put away, and the list\'s own flow goes on', o.pressed.join() === 'c1v3rr' && (size[0] === 'desktop' || o.sheet === 'false') && o.joining, JSON.stringify(o));
+                const o = await page.evaluate(() => ({ pressed: window.__pressed, joining: !!document.querySelector('.gjoining:not([hidden])') || !!document.querySelector('.gpnote:not([hidden])') || !!document.querySelector('.gconfirm') || document.body.getAttribute('data-screen') === 'room' }));
+                check(size[0] + ': Join in the list presses the Games list\'s own Join of that room (c1v3rr), and the list\'s own flow goes on', o.pressed.join() === 'c1v3rr' && o.joining, JSON.stringify(o));
                 await page.context().close();
             }
-            // a list that is not in the Yard (the test site: a popover that is closed draws no rows): the panel has no Join for a room that the Games list does not hold, and has it once the list was opened
-            const label = await startRig({ label: 'staging' });
-            try {
-                await person(label, '2004:clover', { at: 'wait', pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' });
-                const page = await openPage(label, SIZES[0], '1000_maple', { noGames: true });
-                await listShows(page, 'clover');
-                await sleep(1500);
-                check('the test site (the Games list is a popover that is closed and has drawn nothing): the room that waits has no Join in the list (what a person says is not enough for a Join)', await page.evaluate(() => document.querySelectorAll('.pl-join').length === 0 && !document.querySelector('.gjoin')));
-                await page.click('.games');
-                await until('the Games list draws the room', () => page.evaluate(() => !!document.querySelector('.gpop .gjoin[data-code="c1v3rr"]')), 10000);
-                await page.click('.games');
-                await until('the list has the Join now', () => page.evaluate(() => !!document.querySelector('.pl-join[data-code="c1v3rr"]')), 5000);
-                await page.evaluate(() => { window.__pressed = []; document.querySelector('.gpop').addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('.gjoin'); if (b) window.__pressed.push(b.getAttribute('data-code')); }, true); });
-                await page.click('.pl-join[data-code="c1v3rr"]');
-                await sleep(500);
-                const after = await page.evaluate(() => ({ pressed: window.__pressed, joining: !!document.querySelector('.gjoining:not([hidden])') || !!document.querySelector('.gpnote:not([hidden])') || !!document.querySelector('.gconfirm') }));
-                check('... the Games list has drawn the room: the Join presses the list\'s own Join of it, and the list\'s own flow goes on', after.pressed.join() === 'c1v3rr' && after.joining, JSON.stringify(after));
-                await shot(page, 'test_site_join_1280x800');
-                await page.context().close();
-            } finally { label.stop(); }
         }
 
         // ---- 6. the Room: not on it; Home again: back --------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -433,7 +375,7 @@ async function main() {
                         const page = await context.newPage();
                         page.on('pageerror', (e) => errors.push(size[0] + ': ' + String(e && e.message || e)));
                         await page.goto(fake.url + '/', { waitUntil: 'load' });
-                        await page.waitForSelector('#gchat'); await page.waitForSelector('.gpop .gitem');
+                        await page.waitForSelector('#gchat', { state: 'attached' }); await page.waitForSelector('.gpop .gitem');
                         await until('the dock is live', () => page.evaluate(() => document.getElementById('gchat').getAttribute('data-state') === 'live'), 8000);
                         await sleep(1500);
                         await phoneChat(page, size[1], size[2]);
@@ -451,83 +393,25 @@ async function main() {
                 }
             } finally { fake.close(); }
         }
-        // ---- 7. the bar of a phone at any count: nothing is cut off from 320 to 639 px, whatever the count ------------------------------------------------------------------------------------------------------
+        // ---- 7. the sidebar at the sizes of a desktop: the panel is a column of 220 to 280 px at the right of the Games list, as high as it, and the chat dock lies under both, open and folded, with the list absent, open and folded -----------------
         if (want(7)) {
-            const WIDTHS = [320, 360, 370, 375, 380, 390, 412];
-            const pillOf = (n) => (n > 99 ? '99+' : String(n));
-            const atWidths = async (page, count, who) => {
-                for (const w of WIDTHS) {
-                    await page.setViewportSize({ width: w, height: 740 });
-                    await sleep(120);
-                    const m = await page.evaluate(LAYOUT);
-                    const bar = await page.evaluate(() => { const b = document.querySelector('.pl-bar'), menu = document.querySelector('.hbar .hright > :last-child'), pill = b && b.querySelector('.pill'); return { visible: !!b && b.getClientRects().length > 0, text: pill && !pill.hidden ? pill.textContent : null, slack: menu ? innerWidth - menu.getBoundingClientRect().right : null, high: document.querySelector('.hbar').getBoundingClientRect().height }; });
-                    check(who + ', ' + count + ' people at ' + w + ' px: nothing of the bar is cut off, nothing covers the logo or another button, no sideways scroll', m.out.length === 0, JSON.stringify(m.out));
-                    check('... the button says ' + pillOf(count) + ', the Menu keeps 8 px at the edge, and the bar keeps its three rows (184 px)', bar.visible && bar.text === pillOf(count) && bar.slack >= 8 && Math.abs(bar.high - 184) < 0.5, JSON.stringify(bar));
-                }
-            };
-            const sheetAt = async (page, count, w) => {
-                await page.setViewportSize({ width: w, height: 740 });
-                await sleep(150);
-                await page.click('.pl-bar');
-                await until('the sheet is open', () => page.evaluate(() => document.getElementById('players').getAttribute('data-sheet') === 'true'), 3000);
-                await sleep(150);
-                const o = await page.evaluate(LAYOUT);
-                const head = await page.evaluate(() => { const c = document.querySelector('.pl-count'), q = document.querySelector('.pl-head').getBoundingClientRect(), x = document.querySelector('.pl-close').getBoundingClientRect(), t = c && c.getBoundingClientRect(); return { text: c && !c.hidden ? c.textContent : null, inside: !!t && t.left >= q.left && t.right <= x.left + 0.5 }; });
-                check('the sheet at ' + w + ' px with ' + count + ' people: inside the window, the header says the whole number (500+ over 500) and it stays clear of the Close button', o.out.filter((x) => x.indexOf('under something') === -1).length === 0 && head.text === (count > 500 ? '500+' : String(count)) && head.inside, JSON.stringify([o.out, head]));
-                await shot(page, 'bar_' + count + '_sheet_' + w);
-                await page.keyboard.press('Escape');
-                await sleep(100);
-            };
-            for (const count of [13, 99, 100, 226, 480]) {
-                await crowd(r, [], count - 1);
-                const page = await openPage(r, ['bar', 390, 740, true], '1000_maple', { noGames: true });
-                await until('the list says ' + count, () => page.evaluate((n) => { const b = document.querySelector('.pl-bar .pill'); return !!b && !b.hidden && b.textContent === (n > 99 ? '99+' : String(n)); }, count), 15000);
-                check('(the chat says the same number: ' + count + ')', (await countsAgree(page)).chat === String(count));
-                await atWidths(page, count, 'the hub');
-                if (count === 226) for (const w of [320, 375, 390, 412]) { await page.setViewportSize({ width: w, height: 740 }); await sleep(150); await shot(page, 'bar_226_' + w); }
-                if (count === 226 || count === 480) { await sheetAt(page, count, 320); await sheetAt(page, count, 375); }
-                await page.context().close();
-            }
-            await crowd(r, [], 0);
-            const many = await startFakeSite({ mode: 'custom' });                // a count that no hub has (it lets 500 sockets in): the page takes what a hub says
-            try {
-                const page = await openPage(many, ['bar', 390, 740, true], '1000_maple', { noGames: true });
-                await until('the fake hub has the page', () => many.hub.peers.length > 0, 10000);
-                const peer = many.hub.peers[0];
-                many.hub.send(peer, { t: 'welcome', v: 1, you: { name: 'maple', mod: false }, login: true, presence: true, me: 1, online: 9999, history: [] });
-                many.hub.send(peer, { t: 'who', full: true, n: 9999, g: 9998, more: 0, rows: [{ i: 1, name: 'maple', at: 'look' }] });
-                await until('the list says 99+', () => page.evaluate(() => { const b = document.querySelector('.pl-bar .pill'); return !!b && !b.hidden && b.textContent === '99+'; }), 10000);
-                await atWidths(page, 9999, 'a fake hub');
-                await sheetAt(page, 9999, 320);
-                await page.context().close();
-            } finally { many.close(); }
-        }
-
-        // ---- 8. the Games list that the live site docks in the Yard: centered in the window and clear of both panels, from 1280 px ----------------------------------------------------------------------------
-        if (want(8)) {
-            const BIG = [['w1280', 1280, 800], ['w1366', 1366, 768], ['w1536', 1536, 864], ['w1920', 1920, 1080], ['w2560', 2560, 1440]];
-            const where = () => {
-                const R = (e) => { if (!e || !e.getClientRects().length) return null; const q = e.getBoundingClientRect(); return { l: q.left, r: q.right, t: q.top, b: q.bottom }; };
-                const list = R(document.querySelector('.gdock')), panel = R(document.getElementById('players')), chat = R(document.getElementById('gchat'));
-                const meet = (a, c) => !!a && !!c && a.l < c.r - 0.5 && c.l < a.r - 0.5 && a.t < c.b - 0.5 && c.t < a.b - 0.5;
-                return { mid: list ? (list.l + list.r) / 2 : null, win: innerWidth / 2, list, overPanel: meet(list, panel), overChat: meet(list, chat), gap: list && panel ? panel.l - list.r : null };
-            };
+            const BIG = [['w1280', 1280, 800], ['w1366', 1366, 768], ['w1440', 1440, 900], ['w1536', 1536, 864], ['w1920', 1920, 1080], ['w2560', 2560, 1440], ['w1024', 1024, 768], ['w701', 701, 800]];
+            const widths = (page) => page.evaluate(() => { const R = (q) => { const e = document.querySelector(q); return e && e.getClientRects().length ? e.getBoundingClientRect() : null; }, d = R('.gdock'), p = R('#players'), c = R('#gchat'); return { games: d && Math.round(d.width), panel: p && Math.round(p.width), top: d && p && Math.abs(d.top - p.top) <= 1, bottom: d && p && Math.abs(d.bottom - p.bottom) <= 1, chatW: c && Math.round(c.width), under: d && c && c.top >= d.bottom - 0.5 }; });
             for (const [what, people, guests] of [['3 others', PICTURE.slice(0, 3), 1], ['12 others', PICTURE, 4]]) {
-                for (const state of ['absent', 'open', 'folded']) {
+                for (const state of ['absent', 'open']) {
                     r.blocked = state === 'absent';
                     await crowd(r, people, guests);
                     for (const size of BIG) {
                         const page = await openPage(r, [size[0], size[1], size[2], false], '1000_maple');
                         if (state !== 'absent') await listShows(page, people[0][0].split(':')[1]);
-                        if (state === 'folded') { await page.click('.pl-fold:not(.pl-close)'); await sleep(150); }
                         for (const chat of ['open', 'folded']) {
                             if (chat === 'folded') { await page.evaluate(() => document.querySelector('#gchat .gc-fold').click()); await sleep(200); }
                             await sleep(250);
-                            const m = await page.evaluate(where), lay = await page.evaluate(LAYOUT);
+                            const m = await widths(page), lay = await page.evaluate(LAYOUT);
                             const label = what + ', the list ' + state + ', the chat ' + chat + ', ' + size[1] + ' x ' + size[2];
-                            check(label + ': the Games list is centered in the window (to 1 px)', !!m.list && Math.abs(m.mid - m.win) <= 1, JSON.stringify(m));
-                            check('... and clear of the players panel and the chat dock, no Join or field under anything else, nothing sideways', !m.overPanel && !m.overChat && lay.out.length === 0 && (state === 'absent' || m.gap === null || m.gap >= 100), JSON.stringify([m, lay.out]));
-                            if (what === '12 others') await shot(page, 'center_' + size[1] + 'x' + size[2] + '_' + state + '_chat_' + chat);
+                            if (state === 'open') check(label + ': the panel is 220 to 280 px wide (24% of the window), as high as the Games list and starts at its line, the Games list has the rest, and the chat dock is under both and as wide as the two and the gap', m.panel >= 220 && m.panel <= 280 && m.top && m.bottom && m.games >= 300 && m.under && lay.out.length === 0 && m.chatW === m.games + m.panel + 14, JSON.stringify([m, lay.out]));
+                            else check(label + ': with no list the Games list has the whole body and nothing is cut off', m.panel === null && m.games >= 600 && m.under && lay.out.length === 0 && m.chatW === m.games, JSON.stringify([m, lay.out]));
+                            if (what === '12 others') await shot(page, 'sidebar_' + size[1] + 'x' + size[2] + '_' + state + '_chat_' + chat);
                         }
                         await page.context().close();
                     }

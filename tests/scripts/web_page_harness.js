@@ -4,7 +4,7 @@
 //   search: the address's query; stored: what local storage holds (THROWS: a browser that refuses its storage); options: session (what this tab's session storage holds), noSession, clipboard (false:
 //   none), copyResult, share, fetch, noFetch, me (what the hub's /hub/me answers, below: none, 'guest', a body, 'fail', 'hang' or a function), ua, random (what Math.random() says: 0.5), hash (the address's #...), innerHeight and innerWidth, historyThrows (a sandboxed frame: the history takes no
 //   entry), picker (the map list's script is loaded too), noWebSocket, WebSocket, realTime, noHome (without web/home/home.js: the page says that it could not load all of
-//   its parts), label (the site label that the Dockerfile stamps into the footer, as a labelled build has it: Home then shows the Yard's stand-in; none, the production site: it does not), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
+//   its parts), label (the site label that the Dockerfile stamps into the footer, as a labelled build has it: Home is the same either way), win (an object: more of the window: matchMedia, MutationObserver), popover (the Games list is mounted with no dock: the popover under the Games button, which Home itself never asks for), stayHome (the page opens on Home and nobody presses My room: without it, a plain visit presses My room, as a person does, so that the checks of the room itself have a room),
 //   fakeClock (Date.now() of the scripts that the page loads is the fake clock's: env.advance(ms) moves it, so the pace of the client's requests and the waits of web/home/games.js follow the clock that the
 //   timers follow), lazy (what the page loads after its first paint, web/home/games.js and games.css: true loads them when the page asks, which is when env.advance(0) runs the page's own
 //   timer; without it nothing comes, as a page whose script is slow; 'script': the script fails to load; an object: what the script puts on the window, for a script that is broken). env.hide(true | false) hides the tab or shows it (visibilitychange).
@@ -253,6 +253,7 @@ function runLobby(search, stored, options) {
         open(url, name, features) { env.opened.push({ url, name, features }); return { closed: false, focus() {} }; },
         confirm(q) { env.confirms.push(q); return true; },
     };
+    if (options.win) Object.assign(win, options.win);                       // (options.win: more of the window, for example matchMedia or MutationObserver)
     if (!options.noSession) win.sessionStorage = session;
     // a clock that stands still until env.advance(ms): the page's toasts and the client's waits. Like a browser's, it is called as a plain function or as a method of the window, and refuses to be the method of
     // any other object ("Illegal invocation": `env.later(fn, ms)` with setTimeout as `later` throws in a real browser, and so it does here)
@@ -297,6 +298,7 @@ function runLobby(search, stored, options) {
         if (c.tagName === 'script') {
             if (options.lazy === 'script') { if (c.onerror) c.onerror({}); return c; }
             Object.assign(win, options.lazy && typeof options.lazy === 'object' ? options.lazy : loadFile(file, scope));
+            if (options.popover && win.AntsHomeGames) { const real = win.AntsHomeGames.mount; win.AntsHomeGames = Object.assign({}, win.AntsHomeGames, { mount: (e) => real(Object.assign({}, e, { dock: null })) }); }       // (popover: the list is mounted with no dock, which is the popover under the Games button: Home itself always docks it)
         }
         if (c.onload) { try { c.onload({}); } catch (e) { env.lazyErrors.push(String(e && e.message || e)); } }       // (a handler that throws is an error of the page, which does not reach the one that appended the file)
         return c;

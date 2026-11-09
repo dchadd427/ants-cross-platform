@@ -998,28 +998,28 @@
   {
    "id": "desktop_starts_folded",
    "file": "web/home/chat.js",
-   "old": "var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;",
+   "old": "var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;",
    "new": "var open = false;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "phone_starts_open",
    "file": "web/home/chat.js",
-   "old": "var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;",
+   "old": "var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;",
    "new": "var open = true;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "desktop_needs_a_wider_window",
    "file": "web/home/chat.js",
-   "old": "(win.innerWidth || 0) >= 721 &&",
+   "old": "(win.innerWidth || 0) >= 701 && ",
    "new": "(win.innerWidth || 0) >= 1000 &&",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "a_short_window_is_a_desktop",
    "file": "web/home/chat.js",
-   "old": "(win.innerHeight || 0) >= 501;",
+   "old": "(win.innerHeight || 0) >= 601;",
    "new": "(win.innerHeight || 0) >= 1;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -1376,15 +1376,15 @@
   {
    "id": "dock_free_while_a_dialog_is_up",
    "file": "web/home/home.js",
-   "old": "[bar, rbar, dock && dock.root, players && players.root].forEach(",
-   "new": "[bar, rbar].forEach(",
+   "old": "[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(",
+   "new": "[bar, rbar, tabs].forEach(",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "dock_mounted_free_while_going",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; }",
-   "new": "dockShown(); wantPlayers(); } } catch (e) { dock = null; }",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; } ",
+   "new": "dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; } ",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1392,48 +1392,6 @@
    "file": "web/home/home.css",
    "old": "translate(-50%, -50%); z-index: 8;",
    "new": "translate(-50%, -50%); z-index: 5;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "open_panel_can_be_a_sliver",
-   "file": "web/home/chat.css",
-   "old": "with notices above it) */\n    .gc[data-open=\"true\"] { min-height: var(--gc-min); }\n",
-   "new": "with notices above it) */\n",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "sideways_panel_can_be_a_sliver",
-   "file": "web/home/chat.css",
-   "old": "height: min(286px, calc(100% - 76px)); }\n    .gc[data-open=\"true\"] { min-height: var(--gc-min); }\n",
-   "new": "height: min(286px, calc(100% - 76px)); }\n",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "folded_strip_has_a_minimum_height",
-   "file": "web/home/chat.css",
-   "old": "    .gc[data-open=\"true\"] { min-height: var(--gc-min); }\n    .gc[data-open=\"false\"] { left: 16px;",
-   "new": "    .gc { min-height: var(--gc-min); }\n    .gc[data-open=\"false\"] { left: 16px;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "phone_panel_covers_the_bar",
-   "file": "web/home/chat.css",
-   "old": "calc(100% - 200px)",
-   "new": "calc(100% - 196px)",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "sideways_panel_covers_the_bar",
-   "file": "web/home/chat.css",
-   "old": "calc(100% - 76px)",
-   "new": "calc(100% - 72px)",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "guest_line_in_a_cramped_window",
-   "file": "web/home/chat.css",
-   "old": "@media (max-width: 720px) and (max-height: 640px), (max-height: 500px) { .gc-guest { display: none; } }\n",
-   "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1544,8 +1502,8 @@
   {
    "id": "dock_mount_error_reaches_the_page",
    "file": "web/home/home.js",
-   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; }",
-   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); }",
+   "old": "try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; }",
+   "new": "if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1591,48 +1549,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "panel_is_300_wide",
-   "file": "web/home/chat.css",
-   "old": "width: 380px; height: 380px;",
-   "new": "width: 300px; height: 380px;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "panel_at_the_right",
-   "file": "web/home/chat.css",
-   "old": "left: 24px; bottom: 22px;",
-   "new": "right: 24px; bottom: 22px;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "panel_above_the_menu",
-   "file": "web/home/chat.css",
-   "old": "z-index: 6;",
-   "new": "z-index: 90;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "strip_is_40_high",
-   "file": "web/home/chat.css",
-   "old": ".gc[data-open=\"false\"] { height: 62px; }",
-   "new": ".gc[data-open=\"false\"] { height: 40px; }",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "phone_panel_is_600_high",
-   "file": "web/home/chat.css",
-   "old": "height: min(490px, calc(100% - 200px));",
-   "new": "height: min(600px, calc(100% - 200px));",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "sideways_panel_is_500_wide",
-   "file": "web/home/chat.css",
-   "old": "width: 420px; height: min(286px,",
-   "new": "width: 500px; height: min(286px,",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "fold_button_is_small",
    "file": "web/home/chat.css",
    "old": "min-width: 46px; min-height: 46px; padding: 0; }",
@@ -1656,7 +1572,7 @@
   {
    "id": "header_is_short",
    "file": "web/home/chat.css",
-   "old": "gap: 10px; min-height: 58px;",
+   "old": "gap: 10px; min-height: 50px;",
    "new": "gap: 10px; min-height: 30px;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -1710,13 +1626,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "long_title_loses_its_name",
-   "file": "web/home/chat.css",
-   "old": ".gc[data-open=\"false\"] .gc-long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }",
-   "new": ".gc[data-open=\"false\"] .gc-long { display: none; }",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "picture_from_another_site",
    "file": "web/home/chat.css",
    "old": ".gc-sys { font-size: 14px;",
@@ -1735,13 +1644,6 @@
    "file": "web/home/chat.css",
    "old": ".gc-me .gc-who { color: var(--gold); }",
    "new": ".gc-me .gc-who { color: #9fe0b8; }",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "compact_breakpoint_moved",
-   "file": "web/home/chat.css",
-   "old": "@media (max-width: 720px), (max-height: 500px) {\n    .gc {",
-   "new": "@media (max-width: 600px), (max-height: 500px) {\n    .gc {",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1987,20 +1889,6 @@
    "file": "web/home/chat.css",
    "old": ".gc[hidden] { display: none; }\n",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "narrow_least_height_is_150",
-   "file": "web/home/chat.css",
-   "old": ".gc { --gc-min: 200px; left: 16px;",
-   "new": ".gc { --gc-min: 150px; left: 16px;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "sideways_least_height_is_200",
-   "file": "web/home/chat.css",
-   "old": "{ --gc-min: 150px; left: 14px;",
-   "new": "{ --gc-min: 200px; left: 14px;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2641,20 +2529,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "sideways_two_row_panel_covers_the_bar",
-   "file": "web/home/chat.css",
-   "old": "calc(100% - 118px)",
-   "new": "calc(100% - 76px)",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "sideways_two_row_panel_rule_dropped",
-   "file": "web/home/chat.css",
-   "old": "(orientation: landscape) { .gc, .gc[data-open=\"true\"] { height: min(286px, calc(100% - 118px))",
-   "new": "(orientation: landscape) { .gcx, .gc[data-open=\"true\"] { height: min(286px, calc(100% - 118px))",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "err_of_another_kind_is_a_refused_line",
    "file": "web/home/chat.js",
    "old": "else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) refuse(m.code);",
@@ -2981,6 +2855,48 @@
    "file": "web/home/chat.css",
    "old": ".gc-pick { min-height: 46px;",
    "new": ".gc-pick { min-height: 30px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "panel_lies_over_the_page",
+   "file": "web/home/chat.css",
+   "old": ".gc { order: 5; flex: none; margin: 0 24px 22px;",
+   "new": ".gc { position: absolute; z-index: 6; order: 5; flex: none; margin: 0 24px 22px;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "panel_is_not_under_the_games",
+   "file": "web/home/chat.css",
+   "old": ".gc { order: 5;",
+   "new": ".gc { order: -1;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "panel_is_a_sliver",
+   "file": "web/home/chat.css",
+   "old": "height: clamp(160px, 28vh, 260px);",
+   "new": "height: clamp(40px, 28vh, 260px);",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "phone_chat_view_can_be_folded",
+   "file": "web/home/chat.css",
+   "old": "    .gc-fold { display: none; }\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "guest_line_in_a_short_window",
+   "file": "web/home/chat.css",
+   "old": "@media (max-height: 700px) { .gc-guest { display: none; } }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "field_and_account_line_not_on_one_row",
+   "file": "web/home/chat.css",
+   "old": ".gc-form { grid-area: 3 / 1; } .gc-slot { grid-area: 3 / 2; align-self: center; }",
+   "new": ".gc-form { grid-area: 3 / 1; } .gc-slot { grid-area: 4 / 1; align-self: center; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

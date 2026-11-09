@@ -16,7 +16,7 @@
 
     var LIMIT = { rows: 200, name: 32, seats: 4, ids: 1e9, here: 500, badge: 99, map: 28 };       // (the hub's own: 200 rows, names of 32, four colors; a map's name is cut for the line as the Games list cuts it)
     var MS = { poll: 1000, tell: 3000, note: 4000 };                      // (poll: the page looks at its own room this often; tell: the hub is told what changed at most this often)
-    var WIDE = '(min-width: 1180px) and (min-height: 501px)';             // the panel is docked at the right of the Yard (players.css has the same breakpoint); a narrower window has the button and the sheet
+    var WIDE = 'all';                                                     // the panel is always docked: a column at the right of the games (players.css has no sheet or drawer to show), or the Players view of a phone; a window that matches nothing keeps the button and the sheet
     var ROOM = /^[a-z0-9_-]{1,32}$/;
     var STATUS = ['look', 'wait', 'play'];
     var GROUPS = [['mod', 'Moderators'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing']];

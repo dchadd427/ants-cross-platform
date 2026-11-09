@@ -634,13 +634,13 @@ function bringPlayers(env) {
     check('it mounts only when BOTH files are there (no unstyled list)', home.children.length === kids);
     env.win.AntsHomePlayers = H.loadFile('home/players.js', env.scope).AntsHomePlayers;
     filesOf(env, 'players')[0].onload();
-    const yard = home.children.find((c) => c.id === 'yard');
-    check('... then its box is in the Yard, and Home\'s own parts are where they were', yard.children.some((c) => cls(c).indexOf('pl-root') !== -1) && home.children.slice(0, 3).map((c) => c.tagName).join() === 'header,main,div' && home.children[3].id === 'gchat');
+    const yard = home.children.find((c) => c.id === 'hmain');
+    check('... then its box is in Home\'s body, and Home\'s own parts are where they were', yard.children.some((c) => cls(c).indexOf('pl-root') !== -1) && home.children.slice(0, 4).map((c) => c.tagName).join() === 'header,main,div,nav' && home.children[4].id === 'gchat');
     hub[0].readyState = 1; hub[0].onmessage({ data: JSON.stringify(W({ you: { name: 'maya', mod: false }, online: 2 })) });
     check('the dock\'s socket carries the list\'s words: the visitor says where it is and asks for the list, on the same socket (no second socket)', hub.length === 1 && hub[0].sent.map((x) => JSON.parse(x)).filter((m) => m.t === 'here' || m.t === 'who').map((m) => m.t).join() === 'here,who');
     hub[0].onmessage({ data: JSON.stringify(FULL([row(1, 'maya'), row(2, 'sage')], { n: 2 })) });
     const box = yard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
-    check('a list from the hub shows (the chat dock\'s count says the same number, 2 here now)', box.hidden === false && one(box, 'pl-count').textContent === '2' && one(home.children[3], 'gc-on').textContent === '2 here now');
+    check('a list from the hub shows (the chat dock\'s count says the same number, 2 here now)', box.hidden === false && one(box, 'pl-count').textContent === '2' && one(home.children[4], 'gc-on').textContent === '2 here now');
     env.advance(10);
     check('the page does not ask for the list again (the same two files)', filesOf(env, 'players').length === 2);
     env.home('mine').click();
@@ -656,19 +656,19 @@ function bringPlayers(env) {
     hubFor(broken); broken.advance(0); bringChat(broken);
     broken.win.AntsHomePlayers = { mount() { throw new Error('a list that breaks'); } };
     filesOf(broken, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[3].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
+    check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
     const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(none); none.advance(0); bringChat(none);
     filesOf(none, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a script that did not define the list (no AntsHomePlayers) mounts nothing', none.win.AntsHomePlayers === undefined && none.$('home').children.length === 4);
+    check('a script that did not define the list (no AntsHomePlayers) mounts nothing', none.win.AntsHomePlayers === undefined && none.$('home').children.length === 5);
     const gone = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(gone); gone.advance(0); bringChat(gone);
-    check('(a style that never comes: nothing is mounted, as for the others)', filesOf(gone, 'players').length === 2 && gone.$('home').children.length === 4);
+    check('(a style that never comes: nothing is mounted, as for the others)', filesOf(gone, 'players').length === 2 && gone.$('home').children.length === 5);
 }
 {   // the hand-off to the game: the list is inert with the bars and the dock; a list mounted late is inert from the start
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, picker: true });
     hubFor(env); env.advance(0); bringChat(env); bringPlayers(env);
-    const yard = env.$('home').children.find((c) => c.id === 'yard');
+    const yard = env.$('home').children.find((c) => c.id === 'hmain');
     const box = yard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
     check('(the list is there and takes presses)', !!box && !box.hasAttribute('inert'));
     env.home('mine').click();
@@ -681,7 +681,7 @@ function bringPlayers(env) {
     const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     bringPlayers(late);
-    const lateYard = late.$('home').children.find((c) => c.id === 'yard');
+    const lateYard = late.$('home').children.find((c) => c.id === 'hmain');
     const lateBox = lateYard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
     check('a list that is mounted while the page is on its way to the game is inert from the start', late.assigned.length === 1 && !!lateBox && lateBox.hasAttribute('inert'));
     late.advance(15000);
