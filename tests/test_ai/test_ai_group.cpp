@@ -7,6 +7,8 @@
 //   AI38.4  the whole path: three enemy workers strike one ant; the two workers 15 tiles away are called and the fight stands; without the batch it is called off at the look and nobody is ordered
 //   AI38.5  the shipped bots of every level play as before: the same counters and state hash on a fixed scene whatever the number of the batch says; the game type 187 plays the brawl, the batch changes nothing there
 //   AI38.6  the edges: the walk check across a channel still holds for the ants of the far ring, a carrier is called from no distance, the struck ant still answers first
+//   AI38.7  the rules of the far ring: an ant with 3 hit points is not called from afar either, an ant that a job holds is called from afar when it is the only one, and a free ant 19 tiles away is called
+//           before an ant 3 tiles away that a job holds
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -71,12 +73,19 @@ struct Called {
     bool ordered{false};
 };
 
-Called call_from(const LevelPlan& plan, Level level, int dx, int dy, uint32_t seed) {
+// The ant that may be called: its hit points and the job that holds it (kNoTask: it is free; a job's claim is made again after every tick, as AI35.1 does)
+struct Who {
+    uint8_t hp{10};
+    TaskId job{kNoTask};
+};
+
+Called call_from(const LevelPlan& plan, Level level, int dx, int dy, uint32_t seed, Who who = Who{}) {
     sim::SimulationEngine sim;
     empty_field(sim, seed);
     sim.set_player_eggs(0, 5);
     const uint32_t victim = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 20});
     const uint32_t recruit = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22 + dx, 18 + dy});
+    sim.get_unit(recruit).hp = who.hp;
     sim.spawn_unit(0, sim::AntType::Worker, TileCoord{57, 57});
     const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 18});
     Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
@@ -85,6 +94,7 @@ Called call_from(const LevelPlan& plan, Level level, int dx, int dy, uint32_t se
     const uint64_t blow = sim.current_tick();
     Seen seen;
     for (int t = 0; t < 60; ++t) {
+        if (who.job != kNoTask) rig.as<StandardBot>().ledger_for_labs().claim(recruit, who.job);
         rig.tick();
         watch_fight(rig, enemy, seen);
     }
@@ -359,6 +369,42 @@ void run_group_tests() {
             LevelPlan plan = group_plan(Level::Hard, group);
             plan.defend_by_strength = false;
             ASSERT_TRUE(call_from(plan, Level::Hard, 0, 30, group ? 397 : 398).joined);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI38.7 The Rules Of The Far Ring: An Ant With 3 Hit Points Is Not Called From 15 Tiles (One With 4 Is); An Ant That A Job Holds Is Called From 15 Tiles When It Is The Only One (Not Without The Batch); A Free Ant 19 Tiles Away Is Called Before An Ant 3 Tiles Away That A Job Holds")
+    {
+        // (a) the hit points: the rule of can_defend holds for the far ring too
+        ASSERT_FALSE(call_from(group_plan(Level::Hard), Level::Hard, 0, 15, 399, Who{3, kNoTask}).joined);
+        ASSERT_TRUE(call_from(group_plan(Level::Hard), Level::Hard, 0, 15, 400, Who{4, kNoTask}).joined);
+        // (b) an ant of a power-up trip (rank 3) 15 tiles away, the only ant that could come: called with the batch, out of reach without it
+        ASSERT_TRUE(call_from(group_plan(Level::Hard), Level::Hard, 0, 15, 401, Who{10, StandardBot::kPowerUps}).joined);
+        ASSERT_FALSE(call_from(group_plan(Level::Hard, false), Level::Hard, 0, 15, 402, Who{10, StandardBot::kPowerUps}).joined);
+        // (c) one defender more than the struck ant is wanted (the level's defenders 2, no extra): a free ant 19 tiles away comes, the ant of the power-up trip 3 tiles away does not
+        {
+            sim::SimulationEngine sim;
+            empty_field(sim, 403);
+            sim.set_player_eggs(0, 5);
+            const uint32_t victim = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 20});
+            const uint32_t job_ant = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 21});
+            const uint32_t free_far = sim.spawn_unit(0, sim::AntType::Worker, TileCoord{22, 37});
+            sim.spawn_unit(0, sim::AntType::Worker, TileCoord{57, 57});
+            const uint32_t enemy = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{22, 18});
+            LevelPlan plan = group_plan(Level::Hard);
+            plan.defenders = 2;
+            plan.defend_extra = 0;
+            Rig rig(sim, 0, Level::Hard, std::make_unique<StandardBot>(plan), 4, 4);
+            rig.run(12);
+            sim.get_unit(victim).hp = 9;
+            Seen seen;
+            for (int t = 0; t < 60; ++t) {
+                rig.as<StandardBot>().ledger_for_labs().claim(job_ant, StandardBot::kPowerUps);
+                rig.tick();
+                watch_fight(rig, enemy, seen);
+            }
+            ASSERT_TRUE(seen.ever.count(victim) != 0 && seen.ever.count(free_far) != 0);
+            ASSERT_TRUE(seen.ever.count(job_ant) == 0);
+            ASSERT_EQ(seen.ever.size(), size_t{2});
         }
     } TEST_END();
 }

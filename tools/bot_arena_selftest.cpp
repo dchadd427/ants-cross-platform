@@ -995,9 +995,12 @@ int selftest() {
         ai::LevelPlan cg = ai::plan_for(ai::Level::Hard);
         t.check(cg.cantgo_aware && apply_tune(cg, "cg", 0, tune_err) && !cg.cantgo_aware && apply_tune(cg, "cg", 1, tune_err) && cg.cantgo_aware, "the key cg switches the can't-go fixes of the plan (on by default)");
         ai::LevelPlan grp = ai::plan_for(ai::Level::Hard);
-        t.check(!grp.group_fight && apply_tune(grp, "group", 1, tune_err) && grp.group_fight && apply_tune(grp, "group", 0, tune_err) && !grp.group_fight && apply_tune(grp, "greach", 16, tune_err) && grp.group_reach == 16 &&
+        ai::LevelPlan grp_medium = ai::plan_for(ai::Level::Medium);
+        const int32_t grp_leash = grp.leash_tiles;
+        t.check(!grp.group_fight && apply_tune(grp, "group", 1, tune_err) && grp.group_fight && grp.group_reach == 20 && apply_tune(grp, "group", 0, tune_err) && !grp.group_fight && apply_tune(grp, "greach", 16, tune_err) &&
+                    grp.group_reach == 16 && grp.leash_tiles == grp_leash && !grp_medium.group_fight && apply_tune(grp_medium, "group", 1, tune_err) && grp_medium.group_fight && grp_medium.group_reach == 14 &&
                     !apply_tune(grp, "gkeep", 40, tune_err),
-                "the keys group and greach switch the group batch of the fights (off at every level) and set the reach of its ants (20 tiles at Hard, 14 at Medium); a misspelt key is refused");
+                "the keys group and greach switch the group batch of the fights (off at every level) and set the reach of its ants (20 tiles at Hard, 14 at Medium, which also needs defence=1; the leash stays); a misspelt key is refused");
         t.check(cg.raid_min_free == 1u && apply_tune(cg, "raidfree", 2, tune_err) && cg.raid_min_free == 2u && apply_tune(cg, "raidfree", 1, tune_err) && cg.raid_min_free == 1u &&
                     !apply_tune(cg, "raidfree", 0, tune_err) && !apply_tune(cg, "raidfree", 4, tune_err) && cg.raid_min_free == 1u,
                 "the key raidfree sets the free tiles in front of a hole that a raid needs (1 by default, 1 to 3 allowed)");

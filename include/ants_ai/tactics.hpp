@@ -57,7 +57,8 @@ struct LevelPlan {
     uint32_t defend_max{5};              // ... the most defenders of one fight (Hard 5, Medium 3)
     int32_t defend_reach{10};            // ... a defender comes from at most this many tiles from the target (and never from beyond leash_tiles) (Hard 10, Medium 8)
     // the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"; src/ants_ai/group_fight.cpp): the ants that answer a blow come from further away, so that the force at the fight is a group and not the ants that stood
-    // near. It reaches the fights of defend_by_strength only. Built and OFF at every level (the shipped bots play as before; `--tune group=1` turns it on); without_group_fight() puts a plan back as it was before it
+    // near. It reaches the fights of defend_by_strength only (Medium's defence batch is off, so `--tune group=1` changes nothing there unless `defence=1` turns the fights on too). Built and OFF at every level (the shipped
+// bots play as before; `--tune group=1` turns it on); without_group_fight() puts a plan back as it was before it
     bool group_fight{false};             // the defence calls the ants within group_reach tiles of the target, which the leash does not cap
     int32_t group_reach{20};             // ... a defender comes from at most this many tiles from the target (Hard 20, Medium 14: the numbers a plan has when the batch is turned on)
     // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; src/ants_ai/heal_task.cpp): a hurt ant that is in danger walks into its own hill, which restores all its hit points. Built and OFF in a plan made by hand and

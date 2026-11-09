@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the group batch (include/ants_ai/group_fight.hpp, src/ants_ai/group_fight.cpp, the plan fields of tactics.hpp, docs/BOT_PEOPLE.md 'Step 3: fight as a group') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_group_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs the cases of the batch (AI38 and the shipped-plan pins AI9.5 and AI11.6) and the selftest of bot_arena.",
+ "note": "Mutants of the group batch (include/ants_ai/group_fight.hpp, src/ants_ai/group_fight.cpp, the plan fields of tactics.hpp, docs/BOT_PEOPLE.md 'Step 3: fight as a group') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_group_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs the cases of the batch (AI38 and the shipped-plan pins AI9.5 and AI11.6) and the selftest of bot_arena. The last four mutants were added after an independent check of the first seventeen. Two more mutants of that check are left out as equivalent: can_defend without the 'holding' test, and without the 'carried_points' test (a carrier has both set, so each test alone does the work of the other).",
  "defaults": {
   "build": "test_ai"
  },
@@ -151,6 +151,40 @@
    "new": "const int32_t reach = recruit_reach(plan);",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
    "expect": "AI38.6"
+  },
+  {
+   "id": "far_ants_below_four_hit_points_join",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (listed(a) || !fit(a, false) || a.tile.chebyshev_dist(target.tile) > reach) continue;",
+   "new": "if (listed(a) || (!fit(a, false) && !(a.hp < 4 && a.hp > 0 && a.tile.chebyshev_dist(target.tile) > 10 && !a.holding && a.carried_points == 0)) || a.tile.chebyshev_dist(target.tile) > reach) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.7"
+  },
+  {
+   "id": "far_ants_held_by_a_job_never_join",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if (listed(a) || !fit(a, false) || a.tile.chebyshev_dist(target.tile) > reach) continue;",
+   "new": "if (listed(a) || !fit(a, false) || (busy(a) && a.tile.chebyshev_dist(target.tile) > 10) || a.tile.chebyshev_dist(target.tile) > reach) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.7"
+  },
+  {
+   "id": "tune_key_group_forces_the_reach_to_20",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "        else p.group_fight = true;",
+   "new": "        else { p.group_fight = true; p.group_reach = 20; }",
+   "build": "bot_arena",
+   "test": "timeout 900 ./build/bot_arena --selftest",
+   "expect": "group"
+  },
+  {
+   "id": "tune_key_greach_also_sets_the_leash",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "if (key == \"greach\") { p.group_reach = static_cast<int32_t>(v); return true; }",
+   "new": "if (key == \"greach\") { p.group_reach = static_cast<int32_t>(v); p.leash_tiles = static_cast<int32_t>(v); return true; }",
+   "build": "bot_arena",
+   "test": "timeout 900 ./build/bot_arena --selftest",
+   "expect": "group"
   }
  ]
 }
