@@ -414,6 +414,9 @@ void run_b41_fight_tests() {
             ASSERT_EQ(p.defend_extra, 1u);
             ASSERT_EQ(p.defend_max, level == Level::Medium ? 3u : 5u);
             ASSERT_EQ(p.defend_reach, level == Level::Medium ? 8 : 10);
+            // the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"): built and off at every level; Hard's number is the one it has when it is turned on, Medium's is milder, Easy keeps the plan's own
+            ASSERT_FALSE(p.group_fight);
+            ASSERT_EQ(p.group_reach, level == Level::Medium ? 14 : 20);
             // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): built and off at every level; Hard's numbers are those it has when it is turned on, Medium's are milder, Easy keeps the plan's own
             ASSERT_FALSE(p.heal);
             ASSERT_EQ(p.heal_hp, level == Level::Medium ? 3u : 4u);

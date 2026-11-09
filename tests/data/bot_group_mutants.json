@@ -1,0 +1,156 @@
+{
+ "note": "Mutants of the group batch (include/ants_ai/group_fight.hpp, src/ants_ai/group_fight.cpp, the plan fields of tactics.hpp, docs/BOT_PEOPLE.md 'Step 3: fight as a group') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_group_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs the cases of the batch (AI38 and the shipped-plan pins AI9.5 and AI11.6) and the selftest of bot_arena.",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": [
+  {
+   "build": "test_ai",
+   "test": "timeout 900 sh -c \"for f in 'AI38.' 'AI9.5 ' 'AI11.6 ' 'AI35.'; do ANTS_TEST_FILTER=\\\"\\$f\\\" ./build/tests/test_ai/test_ai || exit 1; done\""
+  },
+  {
+   "build": "bot_arena",
+   "test": "timeout 900 ./build/bot_arena --selftest"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "reach_ignores_the_flag",
+   "file": "src/ants_ai/group_fight.cpp",
+   "old": "return plan.group_fight ? plan.group_reach : std::min(plan.defend_reach, plan.leash_tiles); }",
+   "new": "return std::min(plan.defend_reach, plan.leash_tiles); }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.1"
+  },
+  {
+   "id": "group_reach_capped_by_the_leash",
+   "file": "src/ants_ai/group_fight.cpp",
+   "old": "return plan.group_fight ? plan.group_reach : std::min(plan.defend_reach, plan.leash_tiles); }",
+   "new": "return plan.group_fight ? std::min(plan.group_reach, plan.leash_tiles) : std::min(plan.defend_reach, plan.leash_tiles); }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.1"
+  },
+  {
+   "id": "group_reach_one_too_long",
+   "file": "src/ants_ai/group_fight.cpp",
+   "old": "return plan.group_fight ? plan.group_reach : std::min(plan.defend_reach, plan.leash_tiles); }",
+   "new": "return plan.group_fight ? plan.group_reach + 1 : std::min(plan.defend_reach, plan.leash_tiles); }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.1"
+  },
+  {
+   "id": "far_ring_edge_is_exclusive",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "a.tile.chebyshev_dist(target.tile) > reach) continue;",
+   "new": "a.tile.chebyshev_dist(target.tile) >= reach) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.2"
+  },
+  {
+   "id": "far_ring_walks_unchecked",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "if ((plan.reach_fights && !walk_reaches(c.map, c.seat, a.tile, target.tile)) ||",
+   "new": "if ((false && plan.reach_fights && !walk_reaches(c.map, c.seat, a.tile, target.tile)) ||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.6"
+  },
+  {
+   "id": "keep_share_is_strict",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "return own.value() * 100u >= enemy.value() * plan.defend_keep_percent &&",
+   "new": "return own.value() * 100u > enemy.value() * plan.defend_keep_percent &&",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.3"
+  },
+  {
+   "id": "recruiting_uses_the_defence_reach_only",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "const int32_t reach = plan.defend_by_strength ? recruit_reach(plan) : std::numeric_limits<int32_t>::max();",
+   "new": "const int32_t reach = plan.defend_by_strength ? std::min(plan.defend_reach, plan.leash_tiles) : std::numeric_limits<int32_t>::max();",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.2"
+  },
+  {
+   "id": "hard_group_reach_is_ten",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.group_reach = 20;\n",
+   "new": "            p.group_reach = 10;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.1"
+  },
+  {
+   "id": "medium_plays_the_group",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.group_reach = 14;                  // (the group batch is built and OFF here: `--tune group=1` turns it on with this number; docs/BOT_PEOPLE.md)\n",
+   "new": "            p.group_reach = 14;                  // (the group batch is built and OFF here: `--tune group=1` turns it on with this number; docs/BOT_PEOPLE.md)\n            p.group_fight = true;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI9.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI9.5"
+  },
+  {
+   "id": "taking_the_batch_out_does_nothing",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "void without_group_fight(LevelPlan& p) noexcept { p.group_fight = false; }",
+   "new": "void without_group_fight(LevelPlan& p) noexcept { (void)p; }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.1"
+  },
+  {
+   "id": "tune_key_group_off_keeps_the_batch",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "        if (v == 0) ai::without_group_fight(p);\n        else p.group_fight = true;",
+   "new": "        if (v == 0) {}\n        else p.group_fight = true;",
+   "build": "bot_arena",
+   "test": "timeout 900 ./build/bot_arena --selftest",
+   "expect": "group"
+  },
+  {
+   "id": "tune_key_reach_sets_the_defence_reach",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "    if (key == \"greach\") { p.group_reach = static_cast<int32_t>(v); return true; }",
+   "new": "    if (key == \"greach\") { p.defend_reach = static_cast<int32_t>(v); return true; }",
+   "build": "bot_arena",
+   "test": "timeout 900 ./build/bot_arena --selftest",
+   "expect": "group"
+  },
+  {
+   "id": "hard_plan_plays_the_group",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.group_fight = false;               // the group batch (docs/BOT_PEOPLE.md): built and OFF; `--tune group=1` turns it on (the ants within 20 tiles of the target answer a blow, not those within 10)\n",
+   "new": "            p.group_fight = true;                // the group batch (docs/BOT_PEOPLE.md): built and OFF; `--tune group=1` turns it on (the ants within 20 tiles of the target answer a blow, not those within 10)\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI9.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI9.5"
+  },
+  {
+   "id": "medium_group_reach_is_ten",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.group_reach = 14;                  // (the group batch is built and OFF here: `--tune group=1` turns it on with this number; docs/BOT_PEOPLE.md)\n",
+   "new": "            p.group_reach = 10;                  // (the group batch is built and OFF here: `--tune group=1` turns it on with this number; docs/BOT_PEOPLE.md)\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.1"
+  },
+  {
+   "id": "the_group_changes_the_keep_share",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "enemy.value() * plan.defend_keep_percent && from_anchor",
+   "new": "enemy.value() * (plan.group_fight ? 100u : plan.defend_keep_percent) && from_anchor",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.3"
+  },
+  {
+   "id": "the_far_ring_ignores_the_carrier_rule",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "    if (ant.holding || ant.carried_points > 0 || ant.hp < kMinDefendHp ||",
+   "new": "    if (ant.hp < kMinDefendHp ||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.6"
+  },
+  {
+   "id": "the_batch_reaches_fights_that_are_not_by_strength",
+   "file": "src/ants_ai/defence.cpp",
+   "old": "const int32_t reach = plan.defend_by_strength ? recruit_reach(plan) : std::numeric_limits<int32_t>::max();",
+   "new": "const int32_t reach = recruit_reach(plan);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI38.' ./build/tests/test_ai/test_ai",
+   "expect": "AI38.6"
+  }
+ ]
+}
