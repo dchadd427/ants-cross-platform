@@ -75,7 +75,7 @@
   },
   {
    "id": "start_line_hud_not_told_the_mode",
-   "file": "src/ants_app/application.cpp",
+   "file": "src/ants_app/application_match.cpp",
    "old": "    hud_.set_game_mode(sim_.game_mode());\n    hud_.init(local_player_id_, !rejoin);",
    "new": "    hud_.init(local_player_id_, !rejoin);",
    "build": "test_network_app",
@@ -83,7 +83,7 @@
   },
   {
    "id": "results_page_not_told_the_mode",
-   "file": "src/ants_app/application.cpp",
+   "file": "src/ants_app/application_sim.cpp",
    "old": "scorecard_.show(world.match_result, local_player_id_, world.game_mode);",
    "new": "scorecard_.show(world.match_result, local_player_id_);",
    "build": "test_results_187",

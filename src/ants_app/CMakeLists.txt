@@ -70,6 +70,11 @@ add_library(ants_app STATIC
     room_chat.cpp
     host_lookup.cpp
     application.cpp
+    application_args.cpp
+    application_match.cpp
+    application_input.cpp
+    application_sim.cpp
+    application_render.cpp
     application_menu.cpp
     application_game_menu.cpp
     game_menu.cpp

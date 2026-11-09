@@ -508,7 +508,7 @@ class TheGamePage(PageCase):
         app = read("src", "ants_app", "application.cpp")
         self.assertIn('extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {', app)
         self.assertIn("if (g_web_app != nullptr) g_web_app->leave_network_match();", app)
-        self.assertIn("void Application::leave_network_match() {\n    if (net_) net_->leave();", app)
+        self.assertIn("void Application::leave_network_match() {\n    if (net_) net_->leave();", read("src", "ants_app", "application_match.cpp"))
 
     def test_the_catalog_link_has_one_name_on_both_pages(self):
         for name in ("shell.html", "lobby.html"):

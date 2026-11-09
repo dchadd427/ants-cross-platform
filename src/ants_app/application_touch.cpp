@@ -13,7 +13,7 @@
   #include <emscripten.h>
   #include <emscripten/html5.h>
 
-// A short buzz where the browser has one (Android's Chrome; an iPhone's Safari has none): never required, and nothing here can throw. (EM_JS and not EM_ASM: see application.cpp.)
+// A short buzz where the browser has one (Android's Chrome; an iPhone's Safari has none): never required, and nothing here can throw. (EM_JS and not EM_ASM: see application_sim.cpp.)
 extern "C" {
 EM_JS(void, ants_touch_buzz, (int milliseconds), {
     try { if (navigator.vibrate) navigator.vibrate(milliseconds); } catch (e) {}

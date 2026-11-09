@@ -434,7 +434,7 @@
     },
     {
       "id": "application_hands_no_marks_to_the_renderer",
-      "file": "src/ants_app/application.cpp",
+      "file": "src/ants_app/application_render.cpp",
       "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{health::When::Off, health::Style::Bar}, 1.0);",
       "build": [
@@ -444,7 +444,7 @@
     },
     {
       "id": "application_hands_the_default_marks",
-      "file": "src/ants_app/application.cpp",
+      "file": "src/ants_app/application_render.cpp",
       "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{}, 1.0);",
       "build": [
