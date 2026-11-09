@@ -639,6 +639,7 @@ void MineTask::collect_home_targets(TaskContext& c, std::vector<Target>& out) co
             }
             if (open < 7) continue;
             bool by_pile = false;
+            bool on_route = false;
             for (const PileView& p : v.piles()) {
                 const PileInfo* info = c.map.pile(p.index);
                 if (info == nullptr) continue;
@@ -649,15 +650,15 @@ void MineTask::collect_home_targets(TaskContext& c, std::vector<Target>& out) co
                 if (plan.mine_home_off_route && !by_pile && p.remaining >= plan.mine_min_units && info->approach[c.seat].reachable() && !info->cells.empty()) {
                     int32_t near = 1 << 20;
                     for (const sim::TileCoord& q : info->cells) near = std::min(near, q.chebyshev_dist(t));
-                    by_pile = own_field[idx] + 20 * near <= info->approach[c.seat].cost + kRouteSlack;
+                    on_route = on_route || own_field[idx] + 20 * near <= info->approach[c.seat].cost + kRouteSlack;
                 }
             }
-            if (by_pile) continue;
+            if (by_pile || (on_route && !(plan.home_on_route && lane <= plan.home_route_lane))) continue;      // (plan.home_on_route: the way of the carriers is open to a mine where the enemy's shortest way runs)
             bool crowded = false;
             for (const BombView& b : v.bombs()) crowded = crowded || b.tile.chebyshev_dist(t) < static_cast<int32_t>(plan.mine_home_apart);
             for (const auto& j : jobs_) crowded = crowded || j.second.tile.chebyshev_dist(t) < static_cast<int32_t>(plan.mine_home_apart);
             if (crowded) continue;
-            here.push_back(Target{t, 100 - lane - 12 * std::abs(ring - 7)});                // on the lane and about seven tiles out first
+            here.push_back(Target{t, 100 - lane - 12 * std::abs(ring - 7), true});          // on the lane and about seven tiles out first
         }
     }
     std::stable_sort(here.begin(), here.end(), [](const Target& x, const Target& y) { return x.score > y.score; });
@@ -670,6 +671,10 @@ void MineTask::collect_home_targets(TaskContext& c, std::vector<Target>& out) co
         if (apart) chosen.push_back(t);
     }
     for (const Target& t : chosen) out.push_back(t);
+}
+
+bool home_mine_turn(const LevelPlan& plan, uint32_t home_laid, uint32_t other_laid) noexcept {
+    return plan.home_first && plan.mine_home > 0 && home_laid < std::min<uint32_t>(plan.mine_home, other_laid / 2u + 2u);
 }
 
 void MineTask::step(TaskContext& c) {
@@ -700,6 +705,7 @@ void MineTask::step(TaskContext& c) {
             over = true;
         } else if (mines.count(key_of(j.tile)) != 0) {
             ++planted_;
+            home_planted_ += j.home ? 1u : 0u;
             over = true;
         } else if (j.sent != kPending && ((now >= j.sent + 200u && a->idle()) || now >= j.sent + 700u)) {
             cool_[key_of(j.tile)] = now + 300u;                                          // it did not get there (or did nothing): the tile is left alone for a while
@@ -719,8 +725,10 @@ void MineTask::step(TaskContext& c) {
     const bool free_to_mine = !plan.war_free_only || tactics_.surplus > 0 || behind_free || behind_mining();
     if (!on || (!free_to_mine && !(plan.mine_home > 0 && now >= plan.mine_home_after))) return;
     std::vector<Target> targets;
-    if (free_to_mine) collect_pile_targets(c, targets);
-    if (targets.empty()) collect_home_targets(c, targets);                              // (a few mines round the own hill: the Bomber has nothing else to do for them)
+    const bool home_turn = home_mine_turn(plan, home_planted_, planted_ - home_planted_);   // (plan.home_first: a home mine before a pile mine while fewer have been laid than the pile mines earn)
+    if (home_turn) collect_home_targets(c, targets);
+    if (targets.empty() && free_to_mine) collect_pile_targets(c, targets);
+    if (targets.empty() && !home_turn) collect_home_targets(c, targets);                // (a few mines round the own hill: the Bomber has nothing else to do for them)
     if (targets.empty() && free_to_mine) collect_gate_targets(c, targets);
     if (targets.empty()) return;
     std::stable_sort(targets.begin(), targets.end(), [](const Target& x, const Target& y) { return x.score > y.score; });
@@ -753,6 +761,7 @@ void MineTask::step(TaskContext& c) {
         Job j;
         j.tile = tile;
         j.decided = now;
+        j.home = targets[i].home;
         jobs_[actor->id] = j;
         return;
     }

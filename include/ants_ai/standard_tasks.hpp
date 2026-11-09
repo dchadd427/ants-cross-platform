@@ -361,6 +361,8 @@ public:
 
     // ---- for the tests and the reports ----
     uint32_t planted() const noexcept { return planted_; }
+    /// Of those, the mines laid round the own hill (home mines)
+    uint32_t home_planted() const noexcept { return home_planted_; }
     uint32_t gone() const noexcept { return gone_; }
     uint32_t failures() const noexcept { return failures_; }
     size_t jobs() const noexcept { return jobs_.size(); }
@@ -380,10 +382,12 @@ private:
         sim::TileCoord tile{};
         uint64_t decided{0};
         uint64_t sent{kPending};
+        bool home{false};                                // a mine round the own hill
     };
     struct Target {
         sim::TileCoord tile{};
         int32_t score{0};
+        bool home{false};
     };
     void collect_pile_targets(TaskContext& context, std::vector<Target>& out) const;
     void collect_gate_targets(TaskContext& context, std::vector<Target>& out) const;
@@ -393,9 +397,14 @@ private:
     std::map<int64_t, uint64_t> cool_;                   // tile -> not before this tick (a mine just went, or a job failed there)
     std::set<int64_t> known_;                            // the tiles of the bot's own mines at the last look
     uint32_t planted_{0};
+    uint32_t home_planted_{0};
     uint32_t gone_{0};
     uint32_t failures_{0};
 };
+
+/// Whether a home mine comes before a pile mine at this look (plan.home_first): fewer home mines have been laid than min(plan.mine_home, the other mines laid / 2 + 2). False without the flag or without mine_home,
+/// so that the pile mines come first as before
+bool home_mine_turn(const LevelPlan& plan, uint32_t home_laid, uint32_t other_laid) noexcept;
 
 /// Whether a bomb or a fire wall on `tile` is in the way of the seat's economy: within `plan.counter_hill_radius` of its hill, or within `plan.counter_pile_radius` tiles of a pile
 /// with units that its hill reaches

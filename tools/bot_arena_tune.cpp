@@ -271,6 +271,14 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "homeroute") return flag(p.mine_home_off_route);
     if (key == "mineapart") { p.mine_apart = static_cast<uint32_t>(v); return true; }
     if (key == "minehomeafter") { p.mine_home_after = static_cast<uint32_t>(v); return true; }
+    if (key == "homemines") {                                                         // the home-mine batch of docs/BOT_PEOPLE.md, "Step 5: home mines on the lanes" (0: the bot as it was before it; 1: its two rules on, with the level's numbers)
+        if (v == 0) ai::without_home_mines(p);
+        else p.home_on_route = p.home_first = true;
+        return true;
+    }
+    if (key == "homeonroute") return flag(p.home_on_route);
+    if (key == "homefirst") return flag(p.home_first);
+    if (key == "homelane") { p.home_route_lane = static_cast<int32_t>(v); return true; }
     if (key == "rush") return flag(p.rush);
     if (key == "rushtier") { p.rush_tier = static_cast<uint8_t>(v); return true; }
     if (key == "rushworkers") return flag(p.rush_workers);
