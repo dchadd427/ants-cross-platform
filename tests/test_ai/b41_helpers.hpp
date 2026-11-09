@@ -86,6 +86,7 @@ public:
     void count_with(CantGoTally* tally) { tally_ = tally; }
     void tick() {
         sim_.tick();
+        if (after_sim_tick) after_sim_tick();
         if (tally_ == nullptr) sim_.clear_news_events();
         sim_.clear_audio_events();
         const uint64_t now = sim_.current_tick();
@@ -130,6 +131,7 @@ public:
         for (const auto& e : proposed) n += e.second.type == t ? 1u : 0u;
         return n;
     }
+    std::function<void()> after_sim_tick;                  // (a test's hook) runs right after the simulation's tick, before the commands are released and the bot looks
     std::vector<std::pair<uint64_t, Command>> sent;        // (tick it left, command)
     std::vector<std::pair<uint64_t, Command>> proposed;    // (tick of the look, command): every intent of the bot
     std::vector<Priority> proposed_priority;               // the priority of each of those intents, in the same order

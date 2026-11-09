@@ -5,7 +5,7 @@
 //   AI9.2   hatching: only for a fight (a blow lately, enemy fighters at the hill, a strike), never for the economy; Medium and Hard; the points, an egg, nothing incubating, time
 //   AI9.3   the strike: behind and winnable leads to a fight on the leader's carriers, behind but hopeless to none, ahead to none; Medium and Hard
 //   AI9.4   the wipe-out focus (Hard only): an enemy that has lost most of its ants is hunted down by a far stronger force
-//   AI9.5   the shipped plans: strikes, wipe-out focus and hatching are off at every level, and nothing else of the fight rules is
+//   AI9.5   the shipped plans: strikes, wipe-out focus and hatching are off at every level, the defence batch is on at Hard only, and nothing else of the fight rules is
 #include "ai_test.hpp"
 #include "b41_helpers.hpp"
 
@@ -405,6 +405,25 @@ void run_b41_fight_tests() {
             ASSERT_FALSE(p.hatches);
             ASSERT_EQ(p.fight_reserve, 2u);
             ASSERT_EQ(p.bench_idle_ticks, 0u);                                                                    // (the tournaments' handicap is never part of a level)
+            // the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): on at Hard, built and off at Medium, off at Easy; the numbers are Hard's and Medium's (Easy keeps the plan's own)
+            ASSERT_EQ(p.defend_all_types, level == Level::Hard);
+            ASSERT_EQ(p.victim_answers, level == Level::Hard);
+            ASSERT_EQ(p.defend_by_strength, level == Level::Hard);
+            ASSERT_EQ(p.defend_keep_percent, level == Level::Medium ? 120u : level == Level::Hard ? 60u : 100u);
+            ASSERT_EQ(p.defend_radius, 5);
+            ASSERT_EQ(p.defend_extra, 1u);
+            ASSERT_EQ(p.defend_max, level == Level::Medium ? 3u : 5u);
+            ASSERT_EQ(p.defend_reach, level == Level::Medium ? 8 : 10);
+            // the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"): built and off at every level; Hard's number is the one it has when it is turned on, Medium's is milder, Easy keeps the plan's own
+            ASSERT_FALSE(p.group_fight);
+            ASSERT_EQ(p.group_reach, level == Level::Medium ? 14 : 20);
+            // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): built and off at every level; Hard's numbers are those it has when it is turned on, Medium's are milder, Easy keeps the plan's own
+            ASSERT_FALSE(p.heal);
+            ASSERT_EQ(p.heal_hp, level == Level::Medium ? 3u : 4u);
+            ASSERT_EQ(p.heal_danger_tiles, 3);
+            ASSERT_EQ(p.heal_recent_ticks, 60u);
+            ASSERT_EQ(p.heal_walk_tiles, level == Level::Medium ? 12 : 16);
+            ASSERT_EQ(p.heal_calm_hp, level == Level::Medium ? 0u : 2u);
         }
     } TEST_END();
 }

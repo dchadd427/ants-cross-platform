@@ -37,6 +37,8 @@ namespace ants::ai {
 /// The number of a task in the ledger of one bot: 0 is nobody
 using TaskId = uint32_t;
 inline constexpr TaskId kNoTask = 0;
+/// The number of the standard bot's healing task (StandardBot::kHeal): the tasks that guide a carrier home (the gate task, the carrier aid) leave a carrier that it holds to it
+inline constexpr TaskId kHealTaskId = 23;
 
 /// Which ant is claimed by which task. An ant has at most one owner. A task may have a RANK (set_rank; the standard bot gives every task one): a task of a higher rank may TAKE an
 /// ant from a task of a lower rank (take), which then finds out at its next look that the ant is no longer its own. Tasks without a rank all have rank 0 and take nothing.

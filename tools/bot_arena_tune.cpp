@@ -221,6 +221,35 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
         else p.opportunity = p.reach_fights = p.idle_hunt = p.chore_worth = true;
         return true;
     }
+    if (key == "defence") {                                                           // the defence batch of docs/BOT_PEOPLE.md, "Step 1: everyone hits back" (0: the bot as it was before it; 1: its three rules on, with the level's numbers)
+        if (v == 0) ai::without_defence_batch(p);
+        else p.defend_all_types = p.victim_answers = p.defend_by_strength = true;
+        return true;
+    }
+    if (key == "dall") return flag(p.defend_all_types);
+    if (key == "dvictim") return flag(p.victim_answers);
+    if (key == "dstr") return flag(p.defend_by_strength);
+    if (key == "dkeep") { p.defend_keep_percent = static_cast<uint32_t>(v); return true; }
+    if (key == "dradius") { p.defend_radius = static_cast<int32_t>(v); return true; }
+    if (key == "dextra") { p.defend_extra = static_cast<uint32_t>(v); return true; }
+    if (key == "dmax") { p.defend_max = static_cast<uint32_t>(v); return true; }
+    if (key == "dreach") { p.defend_reach = static_cast<int32_t>(v); return true; }
+    if (key == "group") {                                                             // the group batch of docs/BOT_PEOPLE.md, "Step 3: fight as a group" (0: the bot as it was before it; 1: on, with the level's reach)
+        if (v == 0) ai::without_group_fight(p);
+        else p.group_fight = true;
+        return true;
+    }
+    if (key == "greach") { p.group_reach = static_cast<int32_t>(v); return true; }
+    if (key == "heal") {                                                              // the heal batch of docs/BOT_PEOPLE.md, "Step 2: hurt ants heal" (0: the bot as it was before it; 1: the task on, with the level's numbers)
+        if (v == 0) ai::without_heal(p);
+        else p.heal = true;
+        return true;
+    }
+    if (key == "healhp") { p.heal_hp = static_cast<uint8_t>(v); return true; }
+    if (key == "healdanger") { p.heal_danger_tiles = static_cast<int32_t>(v); return true; }
+    if (key == "healrecent") { p.heal_recent_ticks = static_cast<uint32_t>(v); return true; }
+    if (key == "healwalk") { p.heal_walk_tiles = static_cast<int32_t>(v); return true; }
+    if (key == "healcalm") { p.heal_calm_hp = static_cast<uint8_t>(v); return true; }
     if (key == "opp") return flag(p.opportunity);
     if (key == "oppreach") { p.opportunity_reach = static_cast<int32_t>(v); return true; }
     if (key == "oppjobs") { p.opportunity_jobs = static_cast<uint32_t>(v); return true; }
@@ -248,6 +277,14 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "homeroute") return flag(p.mine_home_off_route);
     if (key == "mineapart") { p.mine_apart = static_cast<uint32_t>(v); return true; }
     if (key == "minehomeafter") { p.mine_home_after = static_cast<uint32_t>(v); return true; }
+    if (key == "homemines") {                                                         // the home-mine batch of docs/BOT_PEOPLE.md, "Step 5: home mines on the lanes" (0: the bot as it was before it; 1: its two rules on, with the level's numbers)
+        if (v == 0) ai::without_home_mines(p);
+        else p.home_on_route = p.home_first = true;
+        return true;
+    }
+    if (key == "homeonroute") return flag(p.home_on_route);
+    if (key == "homefirst") return flag(p.home_first);
+    if (key == "homelane") { p.home_route_lane = static_cast<int32_t>(v); return true; }
     if (key == "rush") return flag(p.rush);
     if (key == "rushtier") { p.rush_tier = static_cast<uint8_t>(v); return true; }
     if (key == "rushworkers") return flag(p.rush_workers);

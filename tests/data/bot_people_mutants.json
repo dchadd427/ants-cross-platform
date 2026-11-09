@@ -1,0 +1,144 @@
+{
+ "note": "Mutants of the people numbers of bot_watch (tools/bot_watch_people.cpp, docs/BOT_PEOPLE.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_people_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI34.6 - AI34.9 of suite 2.20.",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "striker_radius_three",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr int32_t kStrikerRadius = 2;",
+   "new": "constexpr int32_t kStrikerRadius = 3;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.6"
+  },
+  {
+   "id": "fight_gap_ticks_thirty",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr uint64_t kFightGapTicks = 300;",
+   "new": "constexpr uint64_t kFightGapTicks = 30;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.6"
+  },
+  {
+   "id": "fight_gap_tiles_hundred",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr int32_t kFightGapTiles = 10;",
+   "new": "constexpr int32_t kFightGapTiles = 100;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.6"
+  },
+  {
+   "id": "helper_may_be_first_victim",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "if (by_a && b.striker != fight->first_victim && !fight->helped) {",
+   "new": "if (by_a && !fight->helped) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.6"
+  },
+  {
+   "id": "crowd_radius_two",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr int32_t kCrowdRadius = 4;",
+   "new": "constexpr int32_t kCrowdRadius = 2;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.6"
+  },
+  {
+   "id": "focus_across_victims",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "if (b.victim == last.victim) ++striker.focus_same;",
+   "new": "++striker.focus_same;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.6"
+  },
+  {
+   "id": "focus_gap_long",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr uint64_t kFocusGapTicks = 200;",
+   "new": "constexpr uint64_t kFocusGapTicks = 2000;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.6"
+  },
+  {
+   "id": "heal_counts_every_look",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "if (a.hp > st.hp && a.hp > 0) ++mine.heals;",
+   "new": "if (a.hp >= st.hp && a.hp > 0) ++mine.heals;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.7"
+  },
+  {
+   "id": "gate_radius_five",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr int32_t kGateRadius = 4;",
+   "new": "constexpr int32_t kGateRadius = 5;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.7"
+  },
+  {
+   "id": "could_walk_home_flipped",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "static_cast<double>(dist) / speed < static_cast<double>(lived)",
+   "new": "static_cast<double>(dist) / speed >= static_cast<double>(lived)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.8"
+  },
+  {
+   "id": "hurt_at_three",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr uint16_t kHurtHp = 4;",
+   "new": "constexpr uint16_t kHurtHp = 3;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.8"
+  },
+  {
+   "id": "warning_window_long",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr uint64_t kWarningTicks = 1200;",
+   "new": "constexpr uint64_t kWarningTicks = 12000;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.8"
+  },
+  {
+   "id": "drowning_is_no_death",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "a.hp == 0 || a.state == sim::UnitState::Dead || a.state == sim::UnitState::Drowning",
+   "new": "a.hp == 0 || a.state == sim::UnitState::Dead",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.8"
+  },
+  {
+   "id": "home_mine_radius_three",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr int32_t kHomeRadius = 10;",
+   "new": "constexpr int32_t kHomeRadius = 3;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.9"
+  },
+  {
+   "id": "mine_last_bucket_is_six_thousand",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr uint64_t kMineEnds[3] = {3000, 6000, 12000};",
+   "new": "constexpr uint64_t kMineEnds[3] = {3000, 6000, 6000};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.9"
+  },
+  {
+   "id": "blast_radius_two",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr int32_t kBlastRadius = 1;",
+   "new": "constexpr int32_t kBlastRadius = 2;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.9"
+  },
+  {
+   "id": "blast_window_three_ticks",
+   "file": "tools/bot_watch_people.cpp",
+   "old": "constexpr uint64_t kBlastTicks = 2;",
+   "new": "constexpr uint64_t kBlastTicks = 3;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI34.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI34.9"
+  }
+ ]
+}

@@ -1,0 +1,300 @@
+{
+ "note": "Mutants of the heal batch (include/ants_ai/heal_task.hpp, src/ants_ai/heal_task.cpp, docs/BOT_PEOPLE.md 'Step 2: hurt ants heal') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_heal_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect; the baseline runs all the cases of the batch (AI36).",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": {
+  "build": "test_ai",
+  "test": "timeout 900 env ANTS_TEST_FILTER='AI36.' ./build/tests/test_ai/test_ai"
+ },
+ "mutants": [
+  {
+   "id": "hit_points_off_by_one",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (hp > plan.heal_hp || walk < 0 || walk > plan.heal_walk_tiles) return false;",
+   "new": "if (hp >= plan.heal_hp || walk < 0 || walk > plan.heal_walk_tiles) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.7"
+  },
+  {
+   "id": "danger_radius_30",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.heal_hp = 4;\n            p.heal_danger_tiles = 3;\n",
+   "new": "            p.heal_hp = 4;\n            p.heal_danger_tiles = 30;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.8"
+  },
+  {
+   "id": "walk_limit_removed",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (hp > plan.heal_hp || walk < 0 || walk > plan.heal_walk_tiles) return false;",
+   "new": "if (hp > plan.heal_hp || walk < 0) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.7"
+  },
+  {
+   "id": "no_guard_for_the_closed_hill",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (!plan.heal || !hill.present || !v.hill_enterable()) {",
+   "new": "if (!plan.heal || !hill.present) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.5"
+  },
+  {
+   "id": "raid_exclusion_removed",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (a.type == sim::AntType::Thief && (a.state == sim::UnitState::Infiltrating || (owner == StandardBot::kRaids && near_raid_tile(v, c.map, a.tile)))) continue;",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.9"
+  },
+  {
+   "id": "blow_window_edge",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "const bool blow = recent != hurt_.end() && now <= recent->second + plan.heal_recent_ticks;",
+   "new": "const bool blow = recent != hurt_.end() && now < recent->second + plan.heal_recent_ticks;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.8"
+  },
+  {
+   "id": "blows_forgotten_early",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "it = now > it->second + plan.heal_recent_ticks ? hurt_.erase(it) : std::next(it);",
+   "new": "it = now >= it->second + plan.heal_recent_ticks ? hurt_.erase(it) : std::next(it);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.8"
+  },
+  {
+   "id": "top_up_walk_60",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr int32_t kCalmWalkTiles = 6; ",
+   "new": "constexpr int32_t kCalmWalkTiles = 60; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.7"
+  },
+  {
+   "id": "top_up_hit_points_strict",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "return danger || recent_blow || (hp <= plan.heal_calm_hp && walk <= kCalmWalkTiles);",
+   "new": "return danger || recent_blow || (hp < plan.heal_calm_hp && walk <= kCalmWalkTiles);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.7"
+  },
+  {
+   "id": "keeper_may_go",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (tactics_.wall_demand && a.id == tactics_.wall_keeper) {",
+   "new": "if (false && tactics_.wall_demand && a.id == tactics_.wall_keeper) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.9"
+  },
+  {
+   "id": "keeper_thief_radius_40",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr int32_t kThiefTiles = 4; ",
+   "new": "constexpr int32_t kThiefTiles = 40; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.9"
+  },
+  {
+   "id": "order_gap_1",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr uint64_t kReorderTicks = 40; ",
+   "new": "constexpr uint64_t kReorderTicks = 1; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "orders_unlimited",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr uint32_t kMaxOrders = 8; ",
+   "new": "constexpr uint32_t kMaxOrders = 800; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "never_gives_up",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr uint64_t kGiveUpTicks = 600; ",
+   "new": "constexpr uint64_t kGiveUpTicks = 60000; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "not_left_alone",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr uint64_t kLeftAloneTicks = 600; ",
+   "new": "constexpr uint64_t kLeftAloneTicks = 0; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "enter_clip_not_waited_for",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": " && a->state != sim::UnitState::EnteringBase) || job.refused >= kMaxRefusals) {",
+   "new": " ) || job.refused >= kMaxRefusals) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "power_up_ant_goes",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (owner == StandardBot::kIslands || owner == StandardBot::kExpedition || v.standing(a)) continue;",
+   "new": "if (owner == StandardBot::kIslands || owner == StandardBot::kExpedition) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.9"
+  },
+  {
+   "id": "island_play_goes",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (owner == StandardBot::kIslands || owner == StandardBot::kExpedition || v.standing(a)) continue;",
+   "new": "if (v.standing(a)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.8"
+  },
+  {
+   "id": "engine_walker_ordered",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "        if (a.hp == 1 && nearer) continue;                                       // the engine walks an ant with 1 hit point home by itself\n",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "stale_last_look",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr uint64_t kSampleTicks = 40; ",
+   "new": "constexpr uint64_t kSampleTicks = 4000; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "held_ants_taken_anyway",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "        if (!c.ledger.take(a.id, id())) continue;                                // a fight, a rush or a gate goal has it\n",
+   "new": "        c.ledger.take(a.id, id());\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.8"
+  },
+  {
+   "id": "one_order_per_ant",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "        c.orders.move(go, hill.entrance, Priority::Urgent);                      // one group order for every ant that is due at this look\n",
+   "new": "        for (const uint32_t g : go) c.orders.move({g}, hill.entrance, Priority::Urgent);\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "order_not_urgent",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "c.orders.move(go, hill.entrance, Priority::Urgent);",
+   "new": "c.orders.move(go, hill.entrance, Priority::Normal);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "walls_of_fire_ignored",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (!plan.cantgo_aware || !v.has_grid()) return true;",
+   "new": "if (true || !plan.cantgo_aware || !v.has_grid()) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.9 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.9"
+  },
+  {
+   "id": "healed_ant_kept",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "if (a->hp >= sim::AntUnit::MAX_HP) {\n            c.ledger.release(it->first, id());",
+   "new": "if (a->hp > sim::AntUnit::MAX_HP) {\n            c.ledger.release(it->first, id());",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "rank_below_a_fight",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    ledger_.set_rank(kHeal, kRankFight); ",
+   "new": "    ledger_.set_rank(kHeal, kRankWalls); ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.8"
+  },
+  {
+   "id": "steps_before_the_fights",
+   "file": "src/ants_ai/standard_bot.cpp",
+   "old": "    fight_.step(context);\n    heal_.step(context); ",
+   "new": "    heal_.step(context);\n    fight_.step(context); ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.11 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.11"
+  },
+  {
+   "id": "gate_task_clicks_the_healing_carrier",
+   "file": "src/ants_ai/standard_tasks_gate.cpp",
+   "old": "c.ledger.owner(a.id) != kHealTaskId && ",
+   "new": "",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.4"
+  },
+  {
+   "id": "carrier_aid_clicks_the_healing_carrier",
+   "file": "src/ants_ai/standard_tasks_gate.cpp",
+   "old": " || c.ledger.owner(it->first) == kHealTaskId) {\n            it = aid_.erase(it);",
+   "new": "  ) {\n            it = aid_.erase(it);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.11 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.11"
+  },
+  {
+   "id": "heal_on_in_the_shipped_plan",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.heal = false; ",
+   "new": "            p.heal = true; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.6"
+  },
+  {
+   "id": "nearer_counts_equal",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "walk >= 0 && walk < before.walk;",
+   "new": "walk >= 0 && walk <= before.walk;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "ally_is_a_striker",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "        if (e.holding || (view.ally() < sim::MAX_PLAYERS && e.team == view.ally())) continue;\n",
+   "new": "        if (e.holding) continue;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.7"
+  },
+  {
+   "id": "food_carrier_is_a_striker",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "        if (e.holding || (view.ally() < sim::MAX_PLAYERS && e.team == view.ally())) continue;\n",
+   "new": "        if (view.ally() < sim::MAX_PLAYERS && e.team == view.ally()) continue;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.7"
+  },
+  {
+   "id": "danger_radius_exclusive",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "        if (e.tile.chebyshev_dist(tile) <= radius) return true;",
+   "new": "        if (e.tile.chebyshev_dist(tile) < radius) return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.7"
+  },
+  {
+   "id": "orders_into_a_pocket",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "due && job.orders < kMaxOrders && walk >= 0 && reaches(*a)) {",
+   "new": "due && job.orders < kMaxOrders && reaches(*a)) {",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  },
+  {
+   "id": "refusals_not_counted",
+   "file": "src/ants_ai/heal_task.cpp",
+   "old": "constexpr uint32_t kMaxRefusals = 2; ",
+   "new": "constexpr uint32_t kMaxRefusals = 200; ",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI36.10 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI36.10"
+  }
+ ]
+}
