@@ -1,8 +1,8 @@
 """hub.db: the chat lines kept for moderation, who is muted or banned, the logins, and who each account is (its profile) (docs/HUB.md, "Data").
 
 Everything is keyed by account id, so a mute or a ban survives a restart, a new session and a rename. The chat process and `python -m hub.admin` open the same file (WAL, so they
-do not block each other). A line is kept `retention_days` (7) and then deleted for good: the delete zeroes the freed pages (secure_delete) and the log file is cut. A line that a
-moderator deletes stays in the file, marked, until its time is up; the hub learns of a deletion that the command line made by reading `del_seq`. When the file comes near the size limit the hub makes
+do not block each other). A line is kept `retention_days` (7) days, and only while it is among the newest `max_lines` (200) lines (every line counts, a moderator's and a deleted one too), and then deleted for good: whichever limit is smaller deletes first. The delete zeroes the freed pages (secure_delete) and the log file is cut. A line that a
+moderator deletes stays in the file, marked, until its time is up or it is no longer among the newest 200; the hub learns of a deletion that the command line made by reading `del_seq`. When the file comes near the size limit the hub makes
 room: `make_room` deletes the oldest lines, and the pages they free are reused by the lines that follow, so the file stops growing.
 """
 import contextlib
@@ -11,7 +11,7 @@ import os
 import sqlite3
 import time
 
-from .base import PICKS, PROFILE_DAYS, PUBLIC, Line, Profile, StoreBase, StoreError, Usage
+from .base import MAX_LINES, PICKS, PROFILE_DAYS, PUBLIC, Line, Profile, StoreBase, StoreError, Usage
 
 SCHEMA = 3
 
@@ -30,11 +30,12 @@ def refusal_as_store_error(method, errors=sqlite3.OperationalError):
 class Store(StoreBase):
     log_max_bytes = 16 * 1024 * 1024                # a reader that holds hub.db (a backup tool, a shell that was left open) keeps the log file from being cut, and every chunk that make_room deletes adds its pages to it: when the log is this long and cannot be cut, no more lines go
 
-    def __init__(self, path, clock=time.time, retention_days=7, busy_ms=5000):
+    def __init__(self, path, clock=time.time, retention_days=7, busy_ms=5000, max_lines=MAX_LINES):
         self.path = path
         self.busy_ms = busy_ms                      # how long a write waits for another process's write (the hub uses a short time: its one thread must not wait for seconds)
         self.clock = clock
         self.retention = retention_days * 86400
+        self.max_lines = max_lines
         self.unsettled = False                      # True while the log file is to be cut: a reader held it, or a login ended (the hub's clock cuts it at its next look)
         new = not os.path.exists(path)
         self.db = sqlite3.connect(path, timeout=5.0, isolation_level=None)
@@ -111,13 +112,17 @@ class Store(StoreBase):
 
     def add_line(self, account, name, text, mod):
         at = int(self.clock())
-        cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)", (at, account, name, text, 1 if mod else 0))
+        with self.transaction():
+            cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)", (at, account, name, text, 1 if mod else 0))
+            over = self.db.execute("DELETE FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?)", (self.max_lines,)).rowcount
+        if over:
+            self.unsettled = True                   # (the lines past the newest max_lines are in the log file until it is cut: the hub's clock cuts it at its next look)
         return Line(cur.lastrowid, at, account, name, text, 1 if mod else 0)
 
     def recent_lines(self, count):
-        """The last `count` lines that are not deleted and not past their time, oldest first."""
-        rows = self.db.execute("SELECT id, at, account, name, text, mod FROM lines WHERE deleted = 0 AND at >= ? ORDER BY id DESC LIMIT ?",
-                               (int(self.clock()) - self.retention, count)).fetchall()
+        """The last `count` lines that are not deleted, not past their time and among the newest `max_lines` kept, oldest first."""
+        rows = self.db.execute("SELECT id, at, account, name, text, mod FROM lines WHERE deleted = 0 AND at >= ? AND id > COALESCE((SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?), 0) "
+                               "ORDER BY id DESC LIMIT ?", (int(self.clock()) - self.retention, self.max_lines, count)).fetchall()
         return [Line(*r) for r in reversed(rows)]
 
     def delete_line(self, line_id, by):
@@ -148,12 +153,15 @@ class Store(StoreBase):
         return self.db.execute("SELECT id, at, account, name, text, deleted FROM lines ORDER BY id DESC LIMIT ?", (count,)).fetchall()
 
     def purge(self, chunk=2000):
-        """Delete up to `chunk` lines that are past their time (call again while it returns `chunk`: a long backlog is not one long wait), the mutes that are over, the logins that
+        """Delete up to `chunk` lines that are past their time or past the newest `max_lines` (call again while it returns `chunk`: a long backlog is not one long wait), the mutes that are over, the logins that
         have run out and the profiles that no login has refreshed for PROFILE_DAYS (a login lasts 30 days, so such a profile belongs to nobody who is logged in), then cut the log file.
         Returns how many lines went."""
         now = int(self.clock())
         with self.transaction():
             gone = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE at < ? LIMIT ?)", (now - self.retention, chunk)).rowcount
+            if gone < chunk:                        # (then the lines past the newest max_lines: add_line keeps them away, so these are a file that held more before)
+                gone += self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) LIMIT ?)",
+                                        (self.max_lines, chunk - gone)).rowcount
             self.db.execute("DELETE FROM mutes WHERE until <= ?", (now,))
             self.db.execute("DELETE FROM sessions WHERE expires <= ?", (now,))
             self.db.execute("DELETE FROM profiles WHERE updated < ?", (now - PROFILE_DAYS * 86400,))

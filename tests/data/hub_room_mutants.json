@@ -451,6 +451,69 @@
    "old": "show_usage(store, limitmod.Limits().db_max_bytes, out)",
    "new": "show_usage(store, 100 * 1048576, out)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_room.TheStaffTool tests.scripts.test_hub_core.TheCommandLine"
+  },
+  {
+   "id": "newest200_a_line_keeps_one_more_than_the_limit",
+   "file": "hub/store/sqlite.py",
+   "old": "OFFSET ?)\", (self.max_lines,)).rowcount",
+   "new": "OFFSET ?)\", (self.max_lines + 1,)).rowcount",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_a_new_line_does_not_take_the_old_ones_out",
+   "file": "hub/store/sqlite.py",
+   "old": "OFFSET ?)\", (self.max_lines,)).rowcount",
+   "new": "OFFSET ?)\", (10 ** 9,)).rowcount",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_log_is_not_asked_to_be_cut_after_the_old_ones_went",
+   "file": "hub/store/sqlite.py",
+   "old": "        if over:\n            self.unsettled = True                   # (the lines past the newest max_lines",
+   "new": "        if False:\n            self.unsettled = True                   # (the lines past the newest max_lines",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_history_reaches_past_the_newest_lines",
+   "file": "hub/store/sqlite.py",
+   "old": "id > COALESCE((SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?), 0) ",
+   "new": "id > COALESCE((SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?), 0) - 1000000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_purge_leaves_the_lines_past_the_newest",
+   "file": "hub/store/sqlite.py",
+   "old": "            if gone < chunk:                        # (then the lines past",
+   "new": "            if False:                        # (then the lines past",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_purge_takes_a_chunk_for_each_kind",
+   "file": "hub/store/sqlite.py",
+   "old": "(self.max_lines, chunk - gone)).rowcount",
+   "new": "(self.max_lines, chunk)).rowcount",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_default_is_2000",
+   "file": "hub/store/base.py",
+   "old": "MAX_LINES = 200 ",
+   "new": "MAX_LINES = 2000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_hub_opens_the_store_without_the_limit",
+   "file": "hub/server.py",
+   "old": "storemod.Store(cfg.db, busy_ms=300)",
+   "new": "storemod.Store(cfg.db, busy_ms=300, max_lines=10 ** 9)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_age_limit_is_forgotten_by_the_history",
+   "file": "hub/store/sqlite.py",
+   "old": "(int(self.clock()) - self.retention, self.max_lines, count)",
+   "new": "(0, self.max_lines, count)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
   }
  ]
 }

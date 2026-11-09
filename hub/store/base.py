@@ -10,6 +10,7 @@ Line = collections.namedtuple("Line", "id at account name text mod")
 Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 Profile = collections.namedtuple("Profile", "username display pick")
 PICKS = ("display", "username")
+MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 PROFILE_DAYS = 35                       # a profile that has not been refreshed by a login for this long belongs to nobody who is logged in (a login lasts 30 days): purge() deletes it
 
 
@@ -26,6 +27,7 @@ class StoreBase:
 
     clock = None
     retention = 0
+    max_lines = MAX_LINES                       # at most this many lines are kept, the newest ones (an attribute, so that a test may lower it on one store)
 
     def close(self):
         raise NotImplementedError
@@ -33,11 +35,11 @@ class StoreBase:
     # ---- lines ----
 
     def add_line(self, account, name, text, mod):
-        """Keep a line and return it as a Line."""
+        """Keep a line and return it as a Line. The lines past the newest `max_lines` are deleted in the same step, so the store never holds more."""
         raise NotImplementedError
 
     def recent_lines(self, count):
-        """The last `count` lines that are not deleted and not past their time, oldest first."""
+        """The last `count` lines that are not deleted, not past their time and among the newest `max_lines` kept, oldest first."""
         raise NotImplementedError
 
     def lines(self, count):
@@ -61,7 +63,7 @@ class StoreBase:
         raise NotImplementedError
 
     def purge(self, chunk=2000):
-        """Delete up to `chunk` lines past their time, the mutes that are over, the logins that ran out and the profiles that no login has refreshed for PROFILE_DAYS; returns how many lines went."""
+        """Delete up to `chunk` lines past their time or past the newest `max_lines` (every line counts, a moderator's and a deleted one too), the mutes that are over, the logins that ran out and the profiles that no login has refreshed for PROFILE_DAYS; returns how many lines went."""
         raise NotImplementedError
 
     def size(self):
