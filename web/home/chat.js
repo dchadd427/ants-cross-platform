@@ -27,8 +27,10 @@
         title: 'Global chat', short: 'Chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', crowded: 'No room to open it: close a notice',  mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
-        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.'
+        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
+        shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my '
     };
+    var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
         young: 'Your account is too new to chat yet', quota: 'You have chatted a lot, try again later', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again'
@@ -72,10 +74,11 @@
         return m && typeof m === 'object' && typeof m.t === 'string' ? m : null;
     }
     function count(n) { return typeof n === 'number' && n >= 0 && n <= LIMIT.count && n === Math.floor(n) ? n : null; }
-    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod }, or null when it is not a line
+    function nameOf(s) { return typeof s === 'string' ? clip(plain(s.slice(0, LIMIT.name * 4), true), LIMIT.name) : ''; }       // (a name of the hub, or its key of an account)
+    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, k (its author's key), u (its author's username: moderators only) }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line);
-        return shows(text) ? { id: m.id, who: clip(plain(m.who.slice(0, LIMIT.name * 4), true), LIMIT.name) || '?', text: text, mod: m.mod === true } : null;
+        return shows(text) ? { id: m.id, who: nameOf(m.who) || '?', text: text, mod: m.mod === true, k: nameOf(m.k), u: nameOf(m.u) } : null;
     }
     function wordOf(code, login) {                                       // the words of an err code; "log in" is asked only where the hub has a login
         if (code === 'login' && !login) return ERR.readonly;
@@ -99,11 +102,12 @@
         var visit = env.go || function (url) { win.location.assign(url); };
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (unanswered: lines sent and not answered yet, oldest first)
+        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
         var busy = false, menuOn = false;                                       // (a POST of the login is on its way; the small menu of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 721 && (win.innerHeight || 0) >= 501;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
         var tight = 0;                                                           // what Home leaves under its bar: 0 the room for the panel, 1 too little for the open panel (the strip shows), 2 too little for the strip (nothing shows)
+        var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -114,6 +118,8 @@
         function put(parent, kids) { kids.forEach(function (k) { parent.appendChild(k); }); return parent; }
         function guard(fn) { return function () { try { return fn.apply(this, arguments); } catch (e) { if (env.error) env.error(e); return undefined; } }; }       // (nothing that goes wrong in here reaches the page)
         function stop(name) { if (timers[name]) { clearTimeout(timers[name]); timers[name] = 0; } }
+        function tell1(fn, kind, m) { try { fn(kind, m); } catch (e) { if (env.error) env.error(e); } }
+        function tapped(kind, m) { taps.forEach(function (fn) { tell1(fn, kind, m); }); }
 
         // The markup: a header (the title, the unread count, the last line for the strip, who is here, the fold button) and a body (the log, a note, the form, the login chip's place)
         var box = el('section', 'gc'); box.id = 'gchat'; box.setAttribute('aria-labelledby', 'gchat-title');
@@ -139,10 +145,10 @@
         var guest = el('p', 'gc-guest', TEXT.guest); guest.hidden = true;
         // the login chip's place: who the visitor is (the hub's welcome says), Log out, and a small menu with Forget me
         var slot = el('div', 'gc-slot'); slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;
-        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'gc-link', TEXT.logout), moreBtn = el('button', 'gc-link gc-more', '…'), menu = el('div', 'gc-menu'), forgetBtn = el('button', 'btn gc-forget', TEXT.forget);
-        outBtn.type = 'button'; moreBtn.type = 'button'; forgetBtn.type = 'button';
+        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'gc-link', TEXT.logout), moreBtn = el('button', 'gc-link gc-more', '…'), menu = el('div', 'gc-menu'), forgetBtn = el('button', 'btn gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
+        outBtn.type = 'button'; moreBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
         moreBtn.setAttribute('aria-label', TEXT.menu); moreBtn.setAttribute('aria-expanded', 'false'); moreBtn.setAttribute('aria-controls', 'gchat-menu');
-        menu.id = 'gchat-menu'; menu.hidden = true; put(menu, [el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
+        menu.id = 'gchat-menu'; menu.hidden = true; put(menu, [pickNote, pickBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName, outBtn, moreBtn]);
         put(slot, [acct, menu]);
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
@@ -167,9 +173,12 @@
         function row(e) {
             var r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (e.own ? ' gc-me' : ''));
             if (e.mod) r.appendChild(el('span', 'gc-badge', TEXT.mod + ' '));
-            put(r, [el('bdi', 'gc-who', e.who), el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
+            put(r, [el('bdi', 'gc-who', e.who)]);
+            if (e.u) r.appendChild(el('bdi', 'gc-u', e.u));
+            put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
             return r;
         }
+        function mine(e) { return !!you && (you.k ? e.k === you.k : e.who === you.name); }       // (by the hub's key; a hub that sends none: by the name)
         function atBottom() { var h = log.scrollHeight; return typeof h !== 'number' || h - log.scrollTop - log.clientHeight < 48; }
         function settle(force) {                                                 // one scroll to the newest line for a whole burst, and only when the reader was at the bottom (a log that is made again is read from the bottom)
             if (!stickTimer) {
@@ -220,6 +229,8 @@
             note.textContent = notice || (state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');
             slot.hidden = !(live && you && login); acctName.textContent = you ? you.name : '';
             outBtn.disabled = forgetBtn.disabled = busy;
+            pickNote.hidden = pickBtn.hidden = !(you && you.other);
+            if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
             moreBtn.setAttribute('aria-expanded', menuOn && you ? 'true' : 'false'); menu.hidden = !(menuOn && you && login);
             if (chip) {                                                         // (the bar: Log in where a login is offered, the visitor's name where they are named; nothing while the hub is not there)
                 chip.hidden = !(live && login);
@@ -247,8 +258,9 @@
         function lost() {                                                        // the socket is gone (closed, failed, silent, or it sent what no hub sends): say so, and try again later
             drop();
             if (liveSince !== null && now() - liveSince >= MS.stable) attempt = 0;       // (a link that held for a while starts over at 1 s; one that is closed at once keeps growing)
-            liveSince = null; welcomed = false; state = 'offline';
+            liveSince = null; welcomed = false; state = 'offline'; hello = null;
             if (!stopped) { timers.retry = setTimeout(guard(go), delayOf(attempt, rnd())); attempt++; }
+            tapped('lost');
             render();
         }
         function ping() {
@@ -288,27 +300,28 @@
         function onWelcome(m) {
             if (welcomed) return;                                                // (one welcome for each socket)
             if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }       // (a hub that speaks another version is no hub for this page)
-            var name = m.you && typeof m.you === 'object' && typeof m.you.name === 'string' ? clip(plain(m.you.name.slice(0, LIMIT.name * 4), true), LIMIT.name) : '';
-            you = name ? { name: name, mod: m.you.mod === true } : null;
+            var y = m.you && typeof m.you === 'object' ? m.you : {}, name = nameOf(y.name);
+            you = name ? { name: name, mod: y.mod === true, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '' } : null;
             login = m.login === true; people = count(m.online);
             var before = lastId;
             feed.length = 0;
             (m.history || []).slice(-LIMIT.history).forEach(function (raw) {
                 var e = lineOf(raw);
                 if (!e || known(e.id)) return;
-                e.own = !!you && e.who === you.name;
+                e.own = mine(e);
                 e.fresh = ever && e.id > before && !e.own && !seen();             // (the first welcome is the past; after a lost link, the lines that came meanwhile are news)
                 push(e);
             });
-            stop('connect'); stop('notice'); notice = ''; stale = true; welcomed = ever = true; state = 'live'; liveSince = now();
+            stop('connect'); stop('notice'); notice = ''; stale = true; welcomed = ever = true; state = 'live'; liveSince = now(); hello = m;
             ping();
             render();
+            tapped('live', m);
         }
         function onLine(m) {
             var e = lineOf(m);
             if (!e || known(e.id)) return;
-            e.own = !!you && e.who === you.name; e.fresh = !e.own && !seen();
-            if (e.own) { var key = nfc(e.text), at = -1; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; if (at < 0 && unanswered.length && points(key) * 2 >= points(unanswered[0].key) && within(key, unanswered[0].key)) at = 0; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
+            e.own = mine(e); e.fresh = !e.own && !seen();
+            if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
             render();
@@ -331,11 +344,21 @@
             else if (m.t === 'line') onLine(m);
             else if (m.t === 'del') onDel(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
-            else if (m.t === 'err') { waiting(); var refused = unanswered.shift(); tell(m.code); if (refused !== undefined) { if (!field.value) field.value = refused.text; delete said[refused.text]; } }       // (the hub answers in order: the refused line is the oldest without an answer; the hub forgets it)
+            else if (m.t === 'who') tapped('who', m);
+            else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) refuse(m.code);
+            else if (m.t === 'err' && m.code === 'pick') tell('failed');
         }                                                                        // (any other kind is ignored)
 
         // ---- what the visitor does ------------------------------------------------------------------------------------------------------------------------------------------------------------
-        function waiting() { var t = now(); unanswered = unanswered.filter(function (o) { return t - o.at < MS.pending; }); }       // (a line with no answer after 8 s is not waited for)
+        function waiting() { var t = now(); unanswered = unanswered.filter(function (o) { return t - o.at < MS.pending; }); }       // (a send with no answer after 8 s is not waited for)
+        function oldest(cmd) { for (var i = 0; i < unanswered.length; i++) if (!unanswered[i].cmd === !cmd) return i; return -1; }       // (the oldest line that waits, or with `cmd` the oldest command)
+        function refuse(code) {                                                 // the hub refused a send, in order: `bad` is what it says to a wrong command, any other code is for a line; nothing of ours waiting, no refusal of ours
+            waiting();
+            var at = oldest(code === 'bad'), refused = unanswered.splice(at < 0 ? 0 : at, 1)[0];
+            if (!refused) return;
+            tell(code); delete said[refused.text];
+            if (!refused.cmd && !field.value) field.value = refused.text;      // (a command is not put back: Enter would issue it again)
+        }
         function allowed(text) {                                                // this page's own pace, below the hub's; a text that was sent in the last 31 s is not sent again (the hub remembers every one of them, not only the last)
             var t = now(), old;
             tokens = Math.min(PACE.burst, tokens + Math.max(0, t - tokensAt) / PACE.every); tokensAt = t;
@@ -349,7 +372,8 @@
             var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
-            if (!(you.mod && text.charAt(0) === '/')) { waiting(); unanswered.push({ text: text, key: nfc(text), at: now() }); }       // (a moderator's command has no answer)
+            var cmd = you.mod && text.charAt(0) === '/';
+            waiting(); unanswered.push({ text: text, key: nfc(text), at: now(), cmd: cmd });       // (a command has no answer when the hub takes it, and `bad` when it is wrong)
             return '';
         }
         function setOpen(on) { open = !!on; if (seen()) stale = true; render(); }
@@ -359,7 +383,7 @@
         }
         function relink() {                                                     // the login changed (the hub closes the sockets of the old one): this page connects again at once, and is told who it is now
             drop();
-            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false;
+            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null;
             go();
             render();
         }
@@ -371,7 +395,9 @@
             var done = guard(function (ok) { busy = false; if (ok) relink(); else { tell('failed'); } render(); });
             try { f.call(win, path, { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }).then(function (r) { done(!!r && r.ok === true); }, function () { done(false); }); } catch (e) { done(false); }
         }
+        function out(obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false; try { sock.send(JSON.stringify(obj)); return true; } catch (e) { lost(); return false; } }
         enter.addEventListener('click', guard(startLogin));
+        pickBtn.addEventListener('click', guard(function () { if (you && you.other && !out({ t: 'pick', pick: you.pick === 'display' ? 'username' : 'display' })) tell('failed'); }));       // (the hub closes the account's sockets; the page connects again and reads the new name)
         outBtn.addEventListener('click', guard(function () { leave(LOGOUT); }));
         forgetBtn.addEventListener('click', guard(function () { leave(FORGET); }));
         moreBtn.addEventListener('click', guard(function () { setMenu(!menuOn); }));
@@ -403,7 +429,9 @@
         try { if (typeof win.ResizeObserver === 'function') new win.ResizeObserver(guard(function () { if (fit()) render(); })).observe(host); } catch (e) { /* the window's own resize is enough */ }       // (a notice that comes or goes above Home changes Home's height, not the window's)
         return {
             root: box, slot: slot, field: field, say: sendLine, state: function () { return state; },
-            shown: guard(function (on) { isHome = !!on; fit(); if (seen()) stale = true; render(); }), open: guard(setOpen)
+            tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
+            send: out,
+            shown: guard(function (on) { isHome = !!on; fit(); if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
         };
     }
 

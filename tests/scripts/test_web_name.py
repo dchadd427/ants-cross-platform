@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""The player's name on the web pages (run by ./run_tests.sh --fast and by the CI). The requirement: somebody can type in their name on beta.playants.org, so that their name goes into
-the game instead of a random one, and a link from somebody else asks first what the name should be.
+"""The player's name on the web pages (run by ./run_tests.sh --fast and by the CI). The requirement: nobody types a name on beta.playants.org. A person who is logged in with Discord plays under the
+login's name, made to fit the game's rules; everybody else plays under a guest name ("Guest" and six digits) that the browser keeps; a link from somebody else still asks first, with a card that shows the
+name and cannot be typed in. The name comes from front/player_name.js (tests/scripts/test_web_player_name.py).
 
-  - the pages' own code is RUN (node, when it is installed): the rules of a name (the desktop start menu's), the name step, the gate that holds the game of a shared link back until the name
-    is chosen, and the whole of web/lobby.html (the lobby: a room on the game server) with a small fake of the browser's DOM, its real scripts and a scripted server: a plain visit makes a room
-    under the remembered or picked name, the pencil renames the host, a shared link and a typed code ask for a name first and start nothing before it, bad names
-    start nothing, a name with < > & is only ever text, a link made for somebody else carries no name, START hands the seat over with the key in the storage (tests/scripts/web_name_check.js);
-  - what needs no browser is read from the files: the name card is the front page's only name field, the page makes no markup from text, the recording notice is in the footer and in the
-    card, docs/PLAY_IN_BROWSER.md and docs/NETWORK_PORT.md say what the page does.
+  - the pages' own code is RUN (node, when it is installed): the rules of a name (the desktop start menu's), the name step, the gate that holds the game of a shared link back until its card is done, and the
+    whole of web/lobby.html (the lobby: a room on the game server) with a small fake of the browser's DOM, its real scripts and a scripted server and hub: a plain visit makes a room under the login's name or the
+    guest name, a name that the browser remembered from earlier typing is ignored, a hub that does not answer in time, a log out without a reload, a seat that is held, a shared link and a typed code ask first and
+    start nothing before the card is done, a link made for somebody else carries no name, START hands the seat over with the key in the storage (tests/scripts/web_name_check.js);
+  - what needs no browser is read from the files: the name card is the front page's only name field and it is read-only, no page writes a name into the browser's storage, the page makes no markup from text,
+    the recording notice is in the footer and in the card, docs/PLAY_IN_BROWSER.md and docs/NETWORK_PORT.md say what the page does.
   What the fake DOM cannot say (the look, the phone widths, the pointer, the real focus, the real WebSocket) is the job of the browser checks.
 """
 import os
@@ -35,17 +36,45 @@ class TheMarkup(unittest.TestCase):
             self.assertNotIn(gone, page)
         self.assertEqual(len([t for t in re.findall(r"<input[^>]*>", page) if re.search(r'\bid="[^"]*name[^"]*"|placeholder="[^"]*name', t, re.I)]), 1)
         field = re.search(r'<input[^>]*id="name-step-input"[^>]*>', page).group(0)
-        self.assertIn('maxlength="32"', field)
-        self.assertIn('placeholder="Player"', field)
-        self.assertIn('autocomplete="off"', field)
+        self.assertIn(" readonly ", field)                                                    # (the name is shown, never typed)
+        for typing in ("maxlength", "placeholder", "autocomplete", "autocapitalize", "spellcheck"):
+            self.assertNotIn(typing, field, "a field that is not typed in has nothing for typing: " + typing)
         self.assertRegex(page, r'<label for="name-step-input">Your name</label>')                # (the field has a visible label)
         self.assertRegex(page, r'<div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>')      # (a card over the page, hidden until a link or a code asks)
         for part in ("name-step-title", "name-step-go", "name-step-msg", "name-step-hint", "who-notice", "name-step-own"):
             self.assertEqual(page.count('id="%s"' % part), 1, part)
-        self.assertRegex(page, r'<div class="name-step-msg" id="name-step-msg" role="alert"></div>')      # (a bad name is explained there, and said aloud)
+        self.assertRegex(page, r'<div class="name-step-msg" id="name-step-msg" role="alert"></div>')      # (a line about the room, such as a code that no room has, is said there, and aloud)
         self.assertLess(page.index('id="name-step-title"'), page.index('id="name-step-input"'))
         self.assertLess(page.index('id="name-step-input"'), page.index('id="name-step-go"'))
         self.assertLess(page.index('id="name-step-go"'), page.index('id="name-step-own"'))         # (and the way out is the last thing on the card)
+
+    def test_no_page_writes_a_name_into_the_browsers_storage_and_the_guest_name_has_one_key(self):
+        found, guest = {}, set()
+        for base, _dirs, names in os.walk(os.path.join(REPO, "web")):
+            for name in names:
+                if os.path.splitext(name)[1] not in (".html", ".js"):
+                    continue
+                path = os.path.join(base, name)
+                text = read(path)
+                rel = os.path.relpath(path, REPO).replace(os.sep, "/")
+                if "ants.name" in text:
+                    found[rel] = re.findall(r"[\w.]*\(\s*'ants\.name'", text)
+                if "ants.guest" in text:
+                    guest.add(rel)
+        self.assertEqual(found, {}, "a name that an earlier version remembered is read by nothing and written by nothing: the game on this computer takes the person's own name from the gate")
+        self.assertEqual(guest, {"web/front/player_name.js"}, "the guest name's key is the one script's own")
+
+    def test_the_login_link_of_the_card_is_a_plain_link_in_the_two_cards_and_goes_back_to_a_word_that_the_hub_has(self):
+        link = '<div class="name-step-hint" id="name-step-login" hidden><a href="/hub/login?next=home">Log in with Discord</a></div>'
+        for path in (LOBBY, SHELL):
+            page = read(path)
+            self.assertEqual(page.count(link), 1, path)
+            self.assertEqual(page.count("/hub/"), 1, "no other address of the hub in the page: " + path)
+            self.assertLess(page.index('id="name-step-hint"'), page.index('id="name-step-login"'), path)
+        hub = read(os.path.join(REPO, "hub", "login.py"))
+        words = re.search(r"^NEXT = \{([^}]*)\}", hub, re.M)
+        self.assertIsNotNone(words)
+        self.assertIn('"home"', words.group(1), "the hub's fixed list of places to go back to has the word that the link uses (the dock's own button says it on Home)")
 
     def test_the_page_makes_no_markup_from_text(self):
         page = read(LOBBY)
@@ -82,8 +111,10 @@ class TheMarkup(unittest.TestCase):
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_network_notes_say_what_the_pages_do(self):
         page = read(os.path.join(REPO, "docs", "PLAY_IN_BROWSER.md"))
-        self.assertIn("`ants.name`", page)
-        self.assertIn("asks for your name first, every time", page)
+        self.assertIn("Nobody types a name on the web.", page)
+        self.assertIn("`ants.guest`", page)                                                  # (the one key of a name that the page keeps)
+        self.assertIn("is not used", page)                                                   # (a name that an earlier version remembered, `ants.name`)
+        self.assertIn("asks first, every time", page)
         server = read(os.path.join(REPO, "docs", "SERVER.md"))
         self.assertIn("A line says what the server does with an online match", server)      # (the notice of the lobby's footer and of both name cards, and the step that has none)
         self.assertIn("not in the step of a game on this computer", server)

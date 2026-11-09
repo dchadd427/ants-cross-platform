@@ -10,9 +10,11 @@ add_library(ants_net STATIC
     latency.cpp
     loopback.cpp
     session.cpp
+    session_client.cpp
     session_hashes.cpp
     lobby.cpp
     netgame.cpp
+    netgame_match.cpp
 )
 
 # Raw sockets (TCP, the UDP of the LAN discovery, and the WebSocket server for browsers behind a proxy) exist on native platforms only (a browser itself

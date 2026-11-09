@@ -34,6 +34,17 @@ class Peer:
         self.closed = False
         self.closed_at = None                       # when it was closed (the hub cuts a closed socket whose output is still unsent after a while)
 
+    @property
+    def closed(self):
+        return self._closed
+
+    @closed.setter
+    def closed(self, value):
+        self._closed = value
+        peers = getattr(getattr(self.hub, "chat", None), "peers", None)
+        if hasattr(peers, "version"):
+            peers.version += 1                      # (a closed socket is nobody: the number of people is counted again)
+
     def send_text(self, data):
         self.write(ws.encode_frame(ws.TEXT, data))
 
@@ -100,7 +111,9 @@ class Hub:
         self.clock = clock
         self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)
         self.chat.on_store_error = self.store_trouble
+        self.chat.end_logins = self.end_logins            # (a switch of the shown name closes the account's sockets with the call that a logout uses)
         self.next_trouble_log = float("-inf")
+        self.next_presence_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
         self.pending = 0
         self.server = None
@@ -174,7 +187,7 @@ class Hub:
                 peer.closed = True
                 self.chat.peers.discard(peer)
                 self.per_address.remove(peer.key)
-                self.log.event("gone", tag=peer.tag, online=len(self.chat.peers))
+                self.log.event("gone", tag=peer.tag, sockets=len(self.chat.peers))
             writer.close()
 
     async def page(self, route, request, writer):
@@ -225,7 +238,7 @@ class Hub:
                 peer.closed = True
                 self.chat.peers.discard(peer)
             raise
-        self.log.event("open", tag=peer.tag, online=len(self.chat.peers), account="yes" if peer.identity else "no")
+        self.log.event("open", tag=peer.tag, sockets=len(self.chat.peers), account="yes" if peer.identity else "no")
         return peer
 
     def store_trouble(self, error):
@@ -235,6 +248,12 @@ class Hub:
             self.next_trouble_log = now + 10.0
             self.log.event("error", kind=type(error).__name__, where="store")
 
+    def presence_trouble(self, now, error):
+        """The list of the front page failed in the clock's work: one line in the log every ten seconds at the most, however long it goes on (the class of the error, never its text)."""
+        if now >= self.next_presence_log:
+            self.next_presence_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="presence")
+
     def end_logins(self, session=None, account=None):
         """The sockets of a login that was ended (its session key), or of every login of an account, are closed: a socket never outlives the login that it was let in with. The page
         connects again, as a reader."""
@@ -243,10 +262,20 @@ class Hub:
             if who is not None and not peer.closed and ((session is not None and who.session == session) or (account is not None and who.account_id == account)):
                 peer.close(1000, "logged out")
 
+    @staticmethod
+    def believable(who):
+        """Whether what the login layer handed out is an identity: an account id; a username (`valid_name`), which is what a moderator addresses the account by; the name that is shown, which is
+        that username or a display name that the text rules of a shown name leave as it is; and, for an account that has both, which one is shown and the other one."""
+        if not (configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.username) and (who.name == who.username or textrules.valid_shown(who.name))):
+            return False
+        if who.pick == "" and who.other == "":
+            return True
+        return who.pick in ("display", "username") and (who.other == who.username or textrules.valid_shown(who.other)) and who.other != who.name
+
     async def identify(self, headers):
         try:
             who = await asyncio.wait_for(self.sessions.identify(headers), self.limits.identify_seconds)
-            if who is not None and configmod.ACCOUNT_ID.match(who.account_id) and textrules.valid_name(who.name):
+            if who is not None and self.believable(who):
                 return who
         except Exception as e:                                       # (a login that fails or is late, or hands out what is not an identity: the visitor reads, and cannot write)
             self.log.event("error", kind=type(e).__name__, where="session")
@@ -275,16 +304,21 @@ class Hub:
             elif now - peer.last_ping >= self.limits.ping_seconds:
                 peer.last_ping = now
                 peer.write(ws.encode_frame(ws.PING))
-        count = len(self.chat.peers)
-        if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
-            self.online_shown, self.online_at = count, now
-            self.chat.online()
+        try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)
+            count = self.chat.presence.people()
+            if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
+                self.online_shown, self.online_at = count, now
+                self.chat.online()
+            self.chat.presence.flush(now)
+        except Exception as e:
+            self.presence_trouble(now, e)
         if now >= self.next_deletions:
             self.next_deletions = now + self.limits.deletions_seconds
             self.chat.sync_deletions()
         if now >= self.next_forget:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
+            self.chat.pick_limits.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)
         if now >= self.next_purge:

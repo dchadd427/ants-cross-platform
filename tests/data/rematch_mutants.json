@@ -171,7 +171,7 @@
   },
   {
    "id": "app_page_told_after_the_key_is_gone",
-   "file": "src/ants_app/application.cpp",
+   "file": "src/ants_app/application_sim.cpp",
    "old": "    if (on_match_over_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS) {      // (a server's room: the page may offer the rematch, with the key that is still kept)\n        const std::function<void(const std::string&)> fn = on_match_over_;\n        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));\n    }\n    if (net_) net_->freeze();",
    "new": "    if (net_) net_->freeze();\n    if (on_match_over_ && network_active() && !net_->join_target().room.empty() && net_->my_seat() < sim::MAX_PLAYERS) {      // (a server's room: the page may offer the rematch, with the key that is still kept)\n        const std::function<void(const std::string&)> fn = on_match_over_;\n        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));\n    }",
    "build": "test_network_app",
@@ -179,7 +179,7 @@
   },
   {
    "id": "app_page_never_told",
-   "file": "src/ants_app/application.cpp",
+   "file": "src/ants_app/application_sim.cpp",
    "old": "        fn(match_over_json(net_->join_target().room, net_->my_seat(), net_->start_info(), world.match_result));",
    "new": "",
    "build": "test_network_app",

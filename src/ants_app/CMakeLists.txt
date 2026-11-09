@@ -36,11 +36,18 @@ add_library(ants_app STATIC
     midi_player.cpp
     renderer.cpp
     renderer_health.cpp
+    renderer_text.cpp
+    renderer_terrain.cpp
+    renderer_units.cpp
     renderer_world_image.cpp
     hud.cpp
     hud_input.cpp
     hud_radar.cpp
     hud_match_start.cpp
+    hud_alliance.cpp
+    hud_chat.cpp
+    hud_keys.cpp
+    hud_pointer.cpp
     minimap_tables.cpp
     map_preview.cpp
     wide_page.cpp
@@ -63,6 +70,11 @@ add_library(ants_app STATIC
     room_chat.cpp
     host_lookup.cpp
     application.cpp
+    application_args.cpp
+    application_match.cpp
+    application_input.cpp
+    application_sim.cpp
+    application_render.cpp
     application_menu.cpp
     application_game_menu.cpp
     game_menu.cpp

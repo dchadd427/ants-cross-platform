@@ -1,11 +1,11 @@
-// The public Room and the Games list (docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md): the Public | Private switch of the Room's card, Quick host, and the Games popover under the Home bar (the list of GET /lobbies, Join,
-// Join by code). Loaded by web/home/home.js after the first paint, with games.css; until it is there the buttons that it lights stay disabled. ES5, no module system: a page gets AntsHomeGames, node gets module.exports
-// (tests/scripts/web_home_games_check.js). The client, the model and the session of the page are the page's own (web/lobby.html): this script reads them through `page` and sends what the leader may send.
-//   * The room's state is the server's word: the switch is drawn from the last Room message (never from what a press asked), a notice follows a Room message, and a request that the page's pace holds back sends nothing.
-//   * Everything that comes from the list is UNTRUSTED text (a host's name may hold < > " \ and have 32 characters; a map is a file name): it is checked field by field (parseList), drawn with textContent only,
-//     never into markup, never into a link or an address, and a row that is not exactly of the shape is dropped. At most 50 rows.
-//   * The list is polled: 30 s with the popover closed, 5 s while it is open and at once when it opens, never while the tab is hidden or the Room shows, +-20 % of jitter, and the wait doubles after a failure.
-//     Nothing that goes wrong here reaches Home, the Room or the hand-off to the game: every call out of this file is guarded and a failed look is only "the list is off".
+// The public Room and the Games list (docs/HOME_SCREEN.md, docs/PUBLIC_ROOMS.md): the Room's Public | Private switch, Quick host, and the Games list (GET /lobbies: rows, Join, Join by code), a popover under the Home bar or docked
+// in the Yard. Loaded by web/home/home.js after the first paint, with games.css (until then the buttons that it lights stay disabled). ES5: a page gets AntsHomeGames, node gets module.exports
+// (tests/scripts/web_home_games_check.js). The client, model and session are the page's own (web/lobby.html), read through `page`.
+//   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
+//   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
+//     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
+//   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
+//     every call out of this file is guarded, and a failed look is only "the list is off".
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -23,11 +23,11 @@
     var SCAN_MAX = 500;                                  // rows that are looked at before the cap, whatever the answer holds
     var ROWS_MAX = 50;                                   // rows that are shown (the server lists 50 at most: the count says "50+")
     var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes (the server's idle rule is 30)
-    var ACTIVE_MS = 1200000;                             // a leader who has touched nothing for this long (no pointer, key or touch) is not at the Room: the repeat stops, and the server's idle rule goes on
+    var ACTIVE_MS = 1200000;                             // a leader who touched nothing (pointer, key, touch) for this long is not at the Room: the repeat stops
     var ASK_MS = 10000;                                  // a Private that was asked for is told from a room that went private by itself for this long
     var TRIES_MAX = 3, TRY_GAP_MS = 300;                 // Quick join tries this many rooms, one after the other, with a wait of 0 to this many ms (random) between two
     var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows (a press on its button is quicker)
-    var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long: it stands where the Join button stood, and the second press of a double press is not a Cancel
+    var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long (it stands where Join stood: a double press is not a Cancel)
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
@@ -96,7 +96,7 @@
     //         ctl: { show(screen, how), screen() }, handoff (START is on its way already: the part mounts waiting), later, cancel, random, now (the clocks: tests give their own) }) returns { sync, shown, leaving, opening, stalled, inert, poll, state }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page, parts = env.parts, ctl = env.ctl;
-        var rules = win.AntsLobbyRules, Net = win.AntsLobbyNet;
+        var rules = win.AntsLobbyRules, Net = win.AntsLobbyNet, Picker = win.AntsMapPicker;
         var later = env.later || function (fn, ms) { return setTimeout(fn, ms); }, cancel = env.cancel || function (id) { clearTimeout(id); };
         var random = env.random || Math.random, now = env.now || function () { return Date.now(); };
 
@@ -120,7 +120,7 @@
         function client() { try { var c = page.client(); return c && !c.final() ? c : null; } catch (e) { return null; } }
         function ownCode() { var c = client(); return c ? c.code : ''; }
         function visible() { return !doc.hidden; }
-        function itsWay() {                                // a press while the page is on its way to a game: the page does not do it, and says why (a navigation that was stopped leaves the page here: a reload gets it back)
+        function itsWay() {                                // a press while the page is on its way to a game: it does nothing and says why (a stopped navigation leaves the page here: a reload gets it back)
             closeAll();
             notice('opening', TEXT.opening, 'warn', [{ text: TEXT.reload, run: function () { try { win.location.reload(); } catch (e) { /* none */ } return false; } }]);
         }
@@ -164,7 +164,7 @@
             notice('running', TEXT.running, 'warn', rejoinOffered() ? [{ text: TEXT.rejoin, run: function () { doc.getElementById('rejoin-go').click(); } }] : []);
         }
 
-        // ---- the Public | Private switch of the Room's card (a guest reads the state; the leader changes it) ----
+        // ---- the Public | Private switch of the Room's card (a guest reads it; the leader changes it) ----
         var visBox = el('div', 'vis'), visPrivate = el('button', 'btn vbtn'), visPublic = el('button', 'btn vbtn'), visTag = el('span', 'vistag'), visNote = el('p', 'visnote');
         visBox.setAttribute('role', 'group'); visBox.setAttribute('aria-label', TEXT.visLabel); visBox.hidden = true; visTag.hidden = true; visNote.hidden = true; visNote.setAttribute('role', 'status');
         [visPrivate, visPublic].forEach(function (b) { b.type = 'button'; visBox.appendChild(b); });
@@ -237,7 +237,7 @@
             else if (c.isLeader() && !room.starting) notice('idle', TEXT.idle, 'warn', [{ text: TEXT.makePublic, run: function () { var k = client(); return !!k && k.setPublic(true); } }]);
         }
 
-        // ---- the repeat that keeps a public room public: every 10 minutes, while the leader looks at the Room and the tab is visible ----
+        // ---- the repeat that keeps a public room public: every 10 minutes while the leader looks at the Room and the tab shows ----
         function wantRefresh() {
             var c = client(), room = c && c.room;
             return !!(!gone && room && room.lobby && room.isPublic && !room.starting && c.isLeader() && c.canAct() && visible() && !onHome() && now() - lastInput < ACTIVE_MS);
@@ -408,10 +408,11 @@
             parts.pill.textContent = shown ? countText(n) : '';
             parts.games.setAttribute('aria-label', shown ? 'Games, ' + countText(n) + ' open' : 'Games');
         }
-        // One row: the map's picture (an original's own), who hosts, which map, the seats as dots and as n/size, the bots, and (in the list) the Join button
+        // One row: the map's picture (an original's, else the library's by file name; one that does not come leaves the square), who hosts, which map, the seats, the bots, and (in the list) Join
         function rowNode(row, onList, best, yours) {
             var li = el(onList ? 'li' : 'div', 'gitem'), seats = seatsOf(row), pic = el('span', 'gmap'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
-            if (row.mapKey) { var img = el('img'); img.src = 'front/preview_' + row.mapKey + '.png'; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); pic.appendChild(img); }
+            var src = row.mapKey ? 'front/preview_' + row.mapKey + '.png' : Picker ? Picker.previewPath(row.map) : '';
+            if (src) { var img = el('img'); img.setAttribute('loading', 'lazy'); img.src = src; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); img.addEventListener('error', function () { pic.removeChild(img); }); pic.appendChild(img); }
             pic.setAttribute('aria-hidden', 'true'); dots.setAttribute('aria-hidden', 'true');
             top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
@@ -464,7 +465,7 @@
         }
         function closeAll() { closeAsk(false); closeList(false); }
 
-        // ---- Join: the page's probe (a second client that only joins: the old room is let go of when the new one welcomes it) and the words of what it says ----
+        // ---- Join: the page's probe (a second client that only joins: the old room goes when the new one welcomes it) and the words of what it says ----
         function needsAsk(c) {                             // somebody is in the room that this page leaves: a guest always (the host is there), the leader when others are
             return !!(c && c.room && c.room.lobby && (!c.isLeader() || others(c).length > 0));
         }
@@ -628,7 +629,7 @@
                 } catch (e) { finish(null); }
             });
         }
-        function poll() {                                  // a look at once (the popover opened, Home came back, the tab came back, the page started): one at a time, a second apart at least, never while the tab is hidden or the Room shows
+        function poll() {                                  // a look at once (the popover opened, Home or the tab came back, the page started): one at a time, a second apart at least
             if (!wanted() || polling) return;
             var wait = lastLook ? FLOOR_MS - (now() - lastLook) : 0;
             if (floorTimer !== null) { cancel(floorTimer); floorTimer = null; }
@@ -658,7 +659,7 @@
         parts.quickHost.addEventListener('click', guard(quickHost));
         parts.quickJoin.addEventListener('click', guard(quickJoin));
         enable(parts.games); enable(parts.quickHost); enable(parts.quickJoin);
-        doc.addEventListener('click', guard(function (e) {         // a press anywhere else puts the list away (seen in the capture phase: before the buttons of the question card and of a Join that is on its way change anything, and take themselves out of the page)
+        doc.addEventListener('click', guard(function (e) {         // a press anywhere else puts the list away (seen in the capture phase: before the buttons of a card or a Join take themselves out of the page)
             var t = e && e.target;
             if (!isOpen || dialog || joining || !t) return;
             if ((pop.contains && pop.contains(t)) || (parts.games.contains && parts.games.contains(t))) return;
@@ -682,12 +683,12 @@
             sync();
             schedule();
         }
-        function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more (the page is frozen: it is on its way to the game, or it is stuck and says so)
+        function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more
             gone = true; closeAll(); clearNotice();
             [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = null;
         }
-        function stalled(words) {                          // the hand-off did not come in 15 s (Home takes presses again, the page's room is still frozen): the buttons that need the page's room say why they do not work
+        function stalled(words) {                          // the hand-off did not come in 15 s (the page's room is still frozen): the buttons that need it say why they do not work
             [parts.quickHost, parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });
             hint = words; paintVis();
         }

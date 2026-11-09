@@ -117,11 +117,11 @@ class TheFrontPageMarkup(PageCase):
         for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):
             self.assertNotIn(banned, self.page)
         for needle in ("li.setAttribute('role', 'group');", "li.setAttribute('aria-label', card.label);", "grip.setAttribute('aria-label', 'Move ' + Rules.nameOf(m, seat) + ' to another color');",
-                       "select.setAttribute('aria-label', c.name + ' is');", "pencil.setAttribute('aria-label', 'Change your name');", "rm.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room');",
+                       "select.setAttribute('aria-label', c.name + ' is');", "rm.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room');",
                        "ask.setAttribute('aria-label', 'Remove ' + card.who[0].text + ' from the room?');", "set.setAttribute('aria-label', 'Team of ' + c.name);", "b.setAttribute('aria-pressed', String(t.pressed));",
                        "if (t.disabled) b.setAttribute('aria-disabled', 'true');", "b.setAttribute('aria-label', 'Team ' + t.side + ' for ' + c.name);"):
             self.assertIn(needle, script, needle)
-        for attribute in ("data-grip", "data-mode", "data-edit", "data-remove", "data-remove-yes", "data-remove-no", "data-side", "data-seat"):
+        for attribute in ("data-grip", "data-mode", "data-remove", "data-remove-yes", "data-remove-no", "data-side", "data-seat"):
             self.assertIn("setAttribute('%s'" % attribute, script, attribute + " is made on the card")
             self.assertTrue(("[%s]" % attribute) in script or ("getAttribute('%s')" % attribute) in script, attribute + " is looked for by a listener")
         # the drop-down of a color offers the plan's five words, the ones that the rules' planWith takes
@@ -254,7 +254,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertLess(typed.index("(before || function (go) { go(); })("), typed.index("askName({"), "and the question comes before the name card")
         # the look at the room: a client of its own that must find the room (join: true makes none), and this page's room is let go of only when that room has welcomed it
         probe = script[script.index("function probe(code, name, done) {"):]
-        probe = probe[:probe.index("p.connect();")]
+        probe = probe[:probe.index("open(p, name);")]
         self.assertIn("p = lastProbe = makeClient({ code: code, name: name, join: true })", probe)
         self.assertIn("join: !!p.join", script)
         self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
@@ -328,9 +328,9 @@ class TheFrontPageMarkup(PageCase):
         for gone in ("CARD_KEY", "CARD_ROOM_KEY", "hostSeatsText", "cardParse", "cardFromOld"):
             self.assertNotIn(gone, self.page, gone)
         written = set(re.findall(r"\bremember\(([A-Za-z_']+)", self.page))
-        self.assertEqual(written, {"key", "NAME_KEY", "ASPECT_KEY", "storage"})                       # (the definition, the name, the picture's shape and, through Modes.remember(storage, id), the leader's last game type under the key of front/game_modes.js: no other key is written to the local storage by name)
+        self.assertEqual(written, {"key", "ASPECT_KEY", "storage"})                       # (the definition, the picture's shape and, through Modes.remember(storage, id), the leader's last game type under the key of front/game_modes.js: no other key is written to the local storage by name)
         self.assertEqual(sorted(re.findall(r"localStorage\.setItem\(([^,]+),", self.page)), ["entry.name", "key"])       # (the one definition of remember, and the entry of a seat that the game page reads: ants.rejoin.<room>.<seat>)
-        self.assertIn("var NAME_KEY = 'ants.name';", self.page)
+        self.assertNotIn("ants.name", self.page, "nobody types a name any more: the page keeps none")
         self.assertIn("var ASPECT_KEY = 'ants.aspect.v2';", self.page)
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
 
@@ -352,15 +352,14 @@ class TheFrontPageMarkup(PageCase):
         # the name: asked on a card (a link, a code that was typed, an old address) and changed with the pencil on the player's own color; the field of the card takes the name rules of the game page
         self.assertEqual(len(re.findall(r'<input[^>]*id="name-step-input"', self.markup)), 1)
         self.found(self.markup, r'<div class="name-modal" id="name-step" role="dialog" aria-modal="true" aria-labelledby="name-step-title" hidden>')
-        self.found(self.markup, r'<input type="text" id="name-step-input" placeholder="Player" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="name-step-msg name-step-hint">')
+        self.found(self.markup, r'<input type="text" id="name-step-input" readonly aria-describedby="name-step-msg name-step-hint">')
         self.found(self.markup, r'<button type="button" id="name-step-go" class="btn">Join</button>')
         self.found(self.markup, r'<button type="button" class="btn sm name-step-back" id="name-step-own">Start a room of my own instead</button>')
         self.found(self.markup, r'<div class="name-step-msg" id="name-step-msg" role="alert"></div>')
-        self.assertIn("runNameStep(ui, { recall: recall, remember: remember }, function (name) { o.done(name || suggestion); });", self.script)       # (an empty name is the suggestion that the field's placeholder shows)
-        self.assertIn("ui.input.placeholder = suggestion;", self.script)
+        self.assertIn("runNameStep(ui, person, o.done);", self.script)                         # (the card shows the person's name: a login's, or the guest name)
+        self.assertNotIn("placeholder", self.script)
         self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 2, "the name card is asked for by a typed code and a link to a room")
-        self.assertIn("pencil.setAttribute('aria-label', 'Change your name');", self.script)
-        self.assertIn("if (client && client.rename(checked.name)) remember(NAME_KEY, checked.name);", self.script)
+        self.assertNotRegex(self.script, r"pencil|editName|\.rename\(", "nobody types a name any more: no pencil, no rename")
         # the picture's shape: the Picture row in the match column is a label, an empty dropdown that the script fills from the table (the first visit's shape is chosen by it) and the quiet line under it
         self.found(self.markup, r'<label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture"></select></span><span class="fit-note" id="fit-note" hidden></span>')
         self.assertNotIn('name="aspect"', self.markup)
@@ -395,7 +394,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertLess(start.index("forgetSession();"), start.index("window.location.assign("))                 # (Back from the match makes another room)
         self.assertIn("c.on('starting', mine(onStarting));", script)
         # the Rejoin button of the strip at the top does the same for a match that still runs
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);", script)
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);", script)
         # START with nobody else in the match: the game page's own single player, on this computer, in this tab (a room of the game server needs two); the room is let go of first
         self.assertIn("if (Rules.startsAlone(model)) { startAlone(); return; }", script)       # (a map of the players too: the game page fetches its file; no banner, no computer player needed)
         self.assertNotIn("needs a second player or a computer player", script)
@@ -451,14 +450,15 @@ class TheFrontPageMarkup(PageCase):
         for ref in re.findall(r'(?:\sfor|aria-labelledby|aria-describedby)="([^"]+)"', self.markup):
             for target in ref.split():
                 self.assertIn(target, ids, "an id that a label or a description names is not in the page: " + target)
-        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
-        for name in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js"):
+        self.assertIn('<script src="front/lobby_rules.js"></script>\n<script src="front/lobby_net.js"></script><script src="front/player_name.js"></script>\n<script src="front/lobby_chat.js"></script><script src="front/rematch.js"></script><script src="front/game_modes.js"></script><script src="front/game_type.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>', self.page)         # (the page's own script comes last and reads their globals)
+        for name in ("lobby_rules.js", "lobby_net.js", "player_name.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js"):
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", name)), name)
         self.assertIn("root.AntsLobbyRules = api", self.rules)
+        self.assertIn("root.AntsPlayerName = api", read("web", "front", "player_name.js"))
         self.assertIn("root.AntsLobbyNet = api", read("web", "front", "lobby_net.js"))
         self.assertIn("root.AntsLobbyChat = api", read("web", "front", "lobby_chat.js"))
         self.assertIn("root.AntsRematch = api", read("web", "front", "rematch.js"))
-        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, storage = null, newRoom = false, pendingMode = -1;\n        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }\n        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !window.AntsHome) {", self.script)
+        self.assertIn("var Rules = window.AntsLobbyRules;\n        var Net = window.AntsLobbyNet;\n        var Chat = window.AntsLobbyChat;\n        var Rematch = window.AntsRematch, Modes = window.AntsGameModes, GameType = window.AntsGameType, PlayerName = window.AntsPlayerName, storage = null, newRoom = false, pendingMode = -1;\n        try { storage = window.localStorage; } catch (e) { /* the leader's last game type is not kept: every room starts with the default */ }\n        if (!Rules || !Net || !Chat || !Rematch || !Modes || !GameType || !PlayerName || !window.AntsHome) {", self.script)
         self.assertIn("'This page could not load all of its parts. Reload it to try again.'", self.script)     # (a script that did not come: the page says so and does nothing else)
 
 
@@ -508,7 +508,7 @@ class TheGamePage(PageCase):
         app = read("src", "ants_app", "application.cpp")
         self.assertIn('extern "C" EMSCRIPTEN_KEEPALIVE void ants_leave_match() {', app)
         self.assertIn("if (g_web_app != nullptr) g_web_app->leave_network_match();", app)
-        self.assertIn("void Application::leave_network_match() {\n    if (net_) net_->leave();", app)
+        self.assertIn("void Application::leave_network_match() {\n    if (net_) net_->leave();", read("src", "ants_app", "application_match.cpp"))
 
     def test_the_catalog_link_has_one_name_on_both_pages(self):
         for name in ("shell.html", "lobby.html"):
@@ -520,8 +520,9 @@ class TheGamePage(PageCase):
 
     def test_the_local_parameters_are_read_only_for_a_game_that_joins_no_server(self):
         self.assertIn("if (joined.args.indexOf('--join-url') === -1) {", self.page)
-        self.assertIn("var local = ANTS_PAGE.localArguments(window.location.search, remembered); local.args.forEach", self.page)
-        self.assertIn("localStorage.getItem('ants.name')", self.page)
+        self.assertIn("var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach", self.page)
+        self.assertIn("ANTS_OWN_NAME = local.nameless;", self.page)
+        self.assertNotIn("ants.name", self.page)                        # (an old remembered name is used by nothing: the person's own name is put in by the gate)
         self.assertEqual(len(re.findall(r"LOCAL_MAPS\s*=\s*\{", self.page)), 1)
         self.assertIn("localArguments: localArguments", self.page)
 
@@ -684,7 +685,7 @@ class TheCheckIsNotVacuous(unittest.TestCase):
 
     def test_start_alone_uses_the_address_function(self):
         text = open(os.path.join(REPO, "web", "lobby.html"), encoding="utf-8").read()
-        self.assertIn("var address = soloAddress(model, myName(), pickedShape);", text)
+        self.assertIn("var address = soloAddress(model, client.name, pickedShape);", text)
         self.assertRegex(text, r"if \(!address\) \{ say\([^\n]*\); return; \}\n\s+handing = true; client\.leave\(\);")   # refused BEFORE the room is let go of
         self.assertIn("window.location.assign(new URL(address, window.location.href).href);", text)
 

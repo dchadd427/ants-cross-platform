@@ -165,8 +165,8 @@
   {
    "id": "the_embedded_map_comes_first",
    "file": "src/ants_replay/player.cpp",
-   "old": "if (load_map(replay.head, dirs, level, error)) return true;",
-   "new": "if (false && load_map(replay.head, dirs, level, error)) return true;",
+   "old": "if (load_map(replay.head, dirs, level, error)) {",
+   "new": "if (false && load_map(replay.head, dirs, level, error)) {",
    "build": "test_replay",
    "test": "timeout 300 ./build/tests/test_replay/test_replay"
   },
