@@ -2689,7 +2689,7 @@ Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat r
 ### 5.43 Input Task, Edge Scrolling and the Minimap Drag (Capstone-Verified; Supersedes Earlier Scrolling and Edge Pan Notes)
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/edge_scroll.hpp` (`edge_scroll_step`, `minimap_scroll_step`), `src/ants_app/hud*.cpp` (`HUD::input_tick`, the cursor
-strips of `evaluate_cursor`) and `src/ants_app/application.cpp` (`handle_camera_panning`, the 50 ms input task). Checked by `tests/test_app/test_input_model.cpp` (70 checks, among them the 1152 golden
+strips of `evaluate_cursor`) and `src/ants_app/application*.cpp` (`handle_camera_panning`, the 50 ms input task). Checked by `tests/test_app/test_input_model.cpp` (70 checks, among them the 1152 golden
 samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulation of the original's code) and test 7.7 of `test_app_integration*.cpp`.
 
 * **Everything runs at 20 Hz.** The INPUT task (`AddTask(delay 0, period 0x32)` at 0x100ae26, `FUN_010242c5`) runs `ProcessInput` (`FUN_0102603f`) every 50 ms; hover, cursor mode, edge scroll, minimap drag,
