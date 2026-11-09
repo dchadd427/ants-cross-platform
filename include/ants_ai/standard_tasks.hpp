@@ -346,7 +346,8 @@ private:
 ///                 from plan.behind_mine_tier on (earlier) the mines of the gate ring are laid too, plan.behind_mine_gate of the eight at a time
 ///   at home       (plan.mine_home, from plan.mine_home_after) round the own hill, where the enemy's walks to it go: open tiles five to nine tiles out whose two walking costs (the enemy's from his hill
 ///                 and the bot's from its own) add up to little more than the enemy's walk to the hill, never on a pile's edge, plan.mine_home_apart tiles apart from every other mine, and (plan.mine_home_off_route)
-///                 never on the estimated way of the bot's own carriers to a pile. The engine's path finder goes
+///                 never on the estimated way of the bot's own carriers to a pile (plan.home_on_route, off, opens that way to a mine within plan.home_route_lane cost units of the enemy's shortest way, and
+///                 plan.home_first lets a home mine come before a pile mine in turn: docs/BOT_PEOPLE.md, "Step 5"). The engine's path finder goes
 ///                 round an own bomb and straight through an enemy's, so the bot's carriers do not meet them and a rush (every ant of an enemy in one group, "select all and go") walks into them
 /// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up or a tile with an ant on it; the mines of a pile and of the gate never within
 /// six tiles of the own hill. Every job is
@@ -361,11 +362,15 @@ public:
 
     // ---- for the tests and the reports ----
     uint32_t planted() const noexcept { return planted_; }
+    /// Of those, the mines laid round the own hill (home mines)
+    uint32_t home_planted() const noexcept { return home_planted_; }
     uint32_t gone() const noexcept { return gone_; }
     uint32_t failures() const noexcept { return failures_; }
     size_t jobs() const noexcept { return jobs_.size(); }
     /// The tiles that the bot's mines stand on now (as the last look saw them)
     size_t standing() const noexcept { return known_.size(); }
+    /// Cost units (three steps over grass) that a home mine's tile may lie off the enemy's shortest way to the hill: the widest lane a candidate has, which is Hard's plan.home_route_lane (every candidate; AI39.1 pins the two together)
+    static constexpr int32_t kHomeLaneSlack = 60;
 
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};
@@ -373,17 +378,18 @@ private:
     static constexpr int32_t kHomeNear = 5;              // the home mines lie this far from the hill at least (never on the doorstep) ...
     static constexpr int32_t kHomeFar = 9;               // ... and at most
     static constexpr int32_t kRouteSlack = 80;           // cost units that a tile may lie off the estimated way of the own carriers to a pile and still count as on it
-    static constexpr int32_t kHomeLaneSlack = 60;        // cost units (three steps over grass) that a tile may lie off the enemy's shortest way to the hill
     /// The bot is far enough behind (plan.behind_mine_tier) to lay the mines of the gate ring with ants that the economy needs
     bool behind_mining() const noexcept { return tactics_.plan.behind_war && tactics_.standing.war >= 1 && tactics_.standing.war >= tactics_.plan.behind_mine_tier; }
     struct Job {
         sim::TileCoord tile{};
         uint64_t decided{0};
         uint64_t sent{kPending};
+        bool home{false};                                // a mine round the own hill
     };
     struct Target {
         sim::TileCoord tile{};
         int32_t score{0};
+        bool home{false};
     };
     void collect_pile_targets(TaskContext& context, std::vector<Target>& out) const;
     void collect_gate_targets(TaskContext& context, std::vector<Target>& out) const;
@@ -393,9 +399,14 @@ private:
     std::map<int64_t, uint64_t> cool_;                   // tile -> not before this tick (a mine just went, or a job failed there)
     std::set<int64_t> known_;                            // the tiles of the bot's own mines at the last look
     uint32_t planted_{0};
+    uint32_t home_planted_{0};
     uint32_t gone_{0};
     uint32_t failures_{0};
 };
+
+/// Whether a home mine comes before a pile mine at this look (plan.home_first): fewer home mines have been laid than min(plan.mine_home, the other mines laid / 2 + 2). False without the flag or without mine_home,
+/// so that the pile mines come first as before
+bool home_mine_turn(const LevelPlan& plan, uint32_t home_laid, uint32_t other_laid) noexcept;
 
 /// Whether a bomb or a fire wall on `tile` is in the way of the seat's economy: within `plan.counter_hill_radius` of its hill, or within `plan.counter_pile_radius` tiles of a pile
 /// with units that its hill reaches

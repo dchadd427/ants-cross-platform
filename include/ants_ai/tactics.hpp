@@ -345,6 +345,12 @@ struct LevelPlan {
     bool mine_home_off_route{true};      // ... never on the estimated way of the bot's own carriers to a pile (they walk round their own mines, and the enemy's lane to the gate is that way on a map with food between the hills)
     uint32_t mine_home_apart{3};         // ... the mines round the hill lie at least this many tiles apart
     uint32_t mine_home_after{2400};      // ... not before this tick of the match
+    // the home-mine batch (docs/BOT_PEOPLE.md, "Step 5: home mines on the lanes"): the rule above keeps the mines off the way of the own carriers, and on a map whose food lies between the hills that way is the enemy's lane as well,
+    // so no tile is left. Built and OFF in a plan made by hand and at every level (`--tune homemines=1` turns it on with the level's numbers); without_home_mines() puts a plan back as it was before.
+    // The game type 187 plays the brawl, which lays no mines
+    bool home_on_route{false};           // a home mine may lie on the estimated way of the own carriers to a pile when the tile is on the enemy's way to the hill: within home_route_lane cost units of its shortest way
+    int32_t home_route_lane{60};         // ... cost units (20 a step over grass) off the enemy's shortest way that such a tile may lie (Hard 60, the lane of the rule above; Medium 20)
+    bool home_first{false};              // a home mine comes before a pile mine whenever fewer home mines were laid than min(mine_home, the other mines laid / 2 + 2): the pile mines no longer keep the Bomber from them
     bool rush{false};                    // a bot that is far behind sends all its ants at the enemy ants (RushTask): it is not going to out-eat them
     uint8_t rush_tier{3};                // ... from this war tier on, with a deficit of at least rush_deficit points ...
     uint32_t rush_deficit{200};
@@ -385,6 +391,9 @@ Style draw_style(Level level, BotRng& rng) noexcept;
 /// The plan without the stand batch (docs/BOTS.md, "The stand batch"): no fire duel or draft, no ramp unjam, the mines of the war batch as they were, no mines at home, no rush. For `bot_arena --tune stand=0` and for the tests whose
 /// subject is an older rule (without_war_batch calls it).
 void without_stand_batch(LevelPlan& plan) noexcept;
+/// The plan without the home-mine batch (docs/BOT_PEOPLE.md, "Step 5: home mines on the lanes"): the home mines keep off the way of the own carriers to a pile and come only when no pile mine is wanted, as before. For
+/// `bot_arena --tune homemines=0` and the tests whose subject is an older rule.
+void without_home_mines(LevelPlan& plan) noexcept;
 /// The plan without the kill batch (docs/BOT_FIGHT.md): no opportunistic kills, fights at enemies that no walk reaches as before. For `bot_arena --tune kill=0` and the tests whose subject is an older rule.
 void without_kill_batch(LevelPlan& plan) noexcept;
 /// The plan without the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): the fights that answer a blow take the own default type and Combat Ants only, as many as the level's defenders, and

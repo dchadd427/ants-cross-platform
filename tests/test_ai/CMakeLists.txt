@@ -42,6 +42,7 @@ add_executable(test_ai
     test_ai_heal.cpp
     test_ai_gang2.cpp
     test_ai_group.cpp
+    test_ai_homemines.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/bot_watch_people.cpp
 )
 

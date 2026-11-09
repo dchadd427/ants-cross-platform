@@ -202,6 +202,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_mine_gate = 3;
             p.mine_home = 8;
             p.mine_home_apart = 2;
+            p.home_route_lane = 20;                  // (the home-mine batch is built and OFF here: `--tune homemines=1` turns it on with this number; docs/BOT_PEOPLE.md)
             p.rush = true;
             p.rush_deficit = 300;
             p.water_hunt = true;
@@ -231,6 +232,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_mine_gate = 5;
             p.mine_home = 12;
             p.mine_home_apart = 2;
+            p.home_on_route = false;                 // the home-mine batch (docs/BOT_PEOPLE.md): built and OFF; `--tune homemines=1` turns it on (a mine may lie on the way of the own carriers where the enemy comes, and comes in turn with the pile mines)
+            p.home_route_lane = 60;
+            p.home_first = false;
             p.rush = true;
             p.rush_deficit = 200;
             p.water_hunt = true;
@@ -257,6 +261,8 @@ void without_stand_batch(LevelPlan& p) noexcept {
     p.mine_apart = 2;
     p.mine_home_apart = 3;
 }
+
+void without_home_mines(LevelPlan& p) noexcept { p.home_on_route = p.home_first = false; }
 
 void without_kill_batch(LevelPlan& p) noexcept {
     p.opportunity = false;
