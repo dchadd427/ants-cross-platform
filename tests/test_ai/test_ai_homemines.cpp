@@ -10,6 +10,9 @@
 //   AI39.5  the ring: with the batch on every home mine lies five to nine tiles from the hill, never on the doorstep or the hill
 //   AI39.6  the other levels: Easy lays no mine, a Medium of the shipped plan lays none on the way of the carriers
 //   AI39.7  the game type 187 plays the brawl: the batch changes nothing there (the same orders with it on and off)
+//   AI39.8  two piles: the way to any pile counts whatever another pile says, and a pile's edge is never laid on, even beside an open way
+//   AI39.9  the turn rule with no home tile left: the pile mines are still laid
+// AI39.1 and AI39.2 are pins (the plans and the turn rule as a function); the others play scenes.
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -42,13 +45,14 @@ LevelPlan scene_plan(uint32_t mine_home = 6) {
 
 // The world: a Bomber and three workers of team 0, an enemy worker of team 1 that walks, and (`pile`) a pile of 60 units of 25 points on the row of the hill: at column 26, fourteen tiles east of the hill
 // (the carriers' way), or at column 38, near the hill of team 1 (the enemy walks to it much sooner than the bot: its mines score high)
-void build_world(sim::SimulationEngine& sim, bool pile, int32_t pile_col = 26) {
+void build_world(sim::SimulationEngine& sim, bool pile, int32_t pile_col = 26, const std::vector<std::pair<int32_t, int32_t>>& more = {}) {
     empty_field(sim, 96);
     const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{kFightHills[1].x - 3, kFightHills[1].y + 6});
     sim.apply_command(command_of(sim::CommandType::GroupMove, 1, {foe}, kFightHills[1].x - 3, kFightHills[1].y + 12));
     sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{14, 10});
     for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
     if (pile) add_pile(sim, pile_col, 10, 60, 25);
+    for (const auto& at : more) add_pile(sim, at.first, at.second, 60, 25);                          // (the piles after the first: the table keeps their order)
 }
 
 // What a scene laid: every tile that held a mine of team 0 at some tick (a mine that the enemy walked onto is gone, the tile was laid), and the task's counters at the end
@@ -58,6 +62,7 @@ struct Laid {
     uint32_t planted{0};
     uint32_t home{0};
     TileCoord origin{};
+    std::vector<std::vector<TileCoord>> piles;                    // the cells of every pile, in the order of the table
     // the mines on the way of the carriers to the pile: the rows of the hill's gate, between the hill and the pile
     size_t on_way() const {
         size_t n = 0;
@@ -76,9 +81,9 @@ struct Laid {
     }
 };
 
-Laid play(const LevelPlan& plan, bool pile, uint64_t ticks, Level level = Level::Hard, int32_t pile_col = 26) {
+Laid play(const LevelPlan& plan, bool pile, uint64_t ticks, Level level = Level::Hard, int32_t pile_col = 26, const std::vector<std::pair<int32_t, int32_t>>& more = {}) {
     sim::SimulationEngine sim;
-    build_world(sim, pile, pile_col);
+    build_world(sim, pile, pile_col, more);
     Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
     Laid out;
     std::set<std::pair<int32_t, int32_t>> seen;
@@ -93,6 +98,7 @@ Laid play(const LevelPlan& plan, bool pile, uint64_t ticks, Level level = Level:
     };
     rig.run(ticks);
     out.origin = rig.map().hill(0).origin;
+    for (uint32_t i = 0; rig.map().pile(i) != nullptr; ++i) out.piles.push_back(rig.map().pile(i)->cells);
     out.planted = rig.as<StandardBot>().mines().planted();
     out.home = rig.as<StandardBot>().mines().home_planted();
     return out;
@@ -114,6 +120,7 @@ void run_homemines_tests() {
         ASSERT_FALSE(by_hand.home_on_route);
         ASSERT_FALSE(by_hand.home_first);
         ASSERT_EQ(by_hand.home_route_lane, 60);
+        ASSERT_EQ(plan_for(Level::Hard).home_route_lane, MineTask::kHomeLaneSlack);                          // (Hard's lane is the widest a candidate has: it filters nothing; the two numbers move together)
         for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {
             const LevelPlan p = plan_for(level);
             ASSERT_FALSE(p.home_on_route);
@@ -257,5 +264,40 @@ void run_homemines_tests() {
             ASSERT_EQ(orders[0][i].second.tile_x, orders[1][i].second.tile_x);
             ASSERT_EQ(orders[0][i].second.tile_y, orders[1][i].second.tile_y);
         }
+    } TEST_END();
+
+    TEST_CASE("AI39.8 Two Piles: A Tile Is On The Way Of The Carriers If It Is On The Way To Any Pile, Whatever Another Pile Says; A Tile At A Pile's Edge Is Never Laid, Even When The Way To An Earlier Pile Is Open")
+    {
+        {   // (a) the lane of 20: the way to pile A (east) outside the lane stays shut, with a second pile far south that the tiles are not on the way to
+            const LevelPlan narrow = with_batch(scene_plan(), true, false, 20);
+            const Laid one = play(narrow, true, 4000);
+            const Laid two = play(narrow, true, 4000, Level::Hard, 26, {{4, 40}});
+            ASSERT_TRUE(one.on_way() >= 1u);
+            ASSERT_EQ(two.on_way(), one.on_way());
+        }
+        {   // (b) the lane of 60 opens the way to pile A (the first of the table); pile B lies beside the same way near the hill: no mine within two tiles of a cell of either
+            LevelPlan wide = with_batch(scene_plan(40), true, false, 60);
+            wide.mine_home_apart = 1;
+            const Laid laid = play(wide, true, 5000, Level::Hard, 26, {{12, 6}});
+            ASSERT_EQ(laid.piles.size(), 2u);
+            ASSERT_TRUE(laid.tiles.size() >= 4u);
+            for (const auto& t : laid.tiles) {
+                const TileCoord at{t.first, t.second};
+                for (const auto& cells : laid.piles) {
+                    for (const TileCoord& c : cells) ASSERT_TRUE(at.chebyshev_dist(c) > 2);
+                }
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI39.9 A Full Home Area On The Home Turn: With The Turn Rule On And No Home Tile Left (The Mines Keep Apart), The Pile Mines Are Still Laid")
+    {
+        LevelPlan plan = scene_plan(6);
+        plan.mine_per_pile = 10;
+        plan.war_free_only = false;
+        plan.mine_home_apart = 40;                                                                           // every tile is too near a mine that stands: the home area has no tile left (and the home mines laid stay under the turn's share)
+        const Laid laid = play(with_batch(plan, true, true), true, 3000, Level::Hard, 38);
+        ASSERT_TRUE(laid.home < 2u);
+        ASSERT_TRUE(laid.planted >= laid.home + 3u);                                                         // (the turn never starves the pile: three or more pile mines)
     } TEST_END();
 }

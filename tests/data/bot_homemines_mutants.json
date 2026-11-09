@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the home-mine batch (include/ants_ai/tactics.hpp, src/ants_ai/standard_tasks_build.cpp, src/ants_ai/tactics.cpp, tools/bot_arena_tune.cpp, docs/BOT_PEOPLE.md 'Step 5: home mines on the lanes') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_homemines_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect (AI39.n), or by the arena's self-test for the tune keys; the baselines run the cases of the batch (AI39) and the self-test.",
+ "note": "Mutants of the home-mine batch (include/ants_ai/tactics.hpp, include/ants_ai/standard_tasks.hpp, src/ants_ai/standard_tasks_build.cpp, src/ants_ai/tactics.cpp, tools/bot_arena_tune.cpp, docs/BOT_PEOPLE.md 'Step 5: home mines on the lanes') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_homemines_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect (AI39.n), or by the arena's self-test for the tune keys; the baselines run the cases of the batch (AI39) and the self-test. Not in the list: changes of the older code that the scenes do not reach (the width of the estimated way of the carriers, the order of the gate mines and the home mines, the cap of standing home mines) and a turn rule without the test of mine_home (the same answer).",
  "defaults": {
   "build": "test_ai"
  },
@@ -168,6 +168,38 @@
    "test": "timeout 300 ./build/bot_arena --selftest",
    "expect": "the keys homemines, homeonroute",
    "build": "bot_arena"
+  },
+  {
+   "id": "on_route_mark_not_sticky",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.mine_home_off_route && !by_pile && !on_route && p.remaining",
+   "new": "if (plan.mine_home_off_route && !by_pile && p.remaining",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.8"
+  },
+  {
+   "id": "break_on_route_with_flag_on",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (by_pile || (on_route && !plan.home_on_route)) break;",
+   "new": "if (by_pile || on_route) break;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.8"
+  },
+  {
+   "id": "pile_starves_on_home_turn",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (targets.empty() && free_to_mine) collect_pile_targets(c, targets);",
+   "new": "if (targets.empty() && free_to_mine && !home_turn) collect_pile_targets(c, targets);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.9"
+  },
+  {
+   "id": "lane_slack_widened",
+   "file": "include/ants_ai/standard_tasks.hpp",
+   "old": "kHomeLaneSlack = 60;",
+   "new": "kHomeLaneSlack = 120;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.1"
   }
  ]
 }
