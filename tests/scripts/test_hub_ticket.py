@@ -146,7 +146,7 @@ class TheRefusalsOfMakeTicket(unittest.TestCase):
         ticket.make_ticket(SECRET, "9223372036854775807", "Ann", 1700000000)          # (the largest is fine)
 
     def test_a_name_that_the_fit_would_not_give_back_as_itself(self):
-        for bad in ("", "a", "x" * 33, " Ann", "Ann ", "A  B", "José", "Bot (Easy)", "Pip (bot)", "Guest 1", "guest", "Иван", "A\tB", "A B", None, 5, b"Ann"):
+        for bad in ("", "a", "x" * 33, " Ann", "Ann ", "A  B", "Jos\u00e9", "Bot (Easy)", "Pip (bot)", "Guest 1", "guest", "\u0418\u0432\u0430\u043d", "A\tB", "A\u00a0B", None, 5, b"Ann"):
             self.refused(SECRET, "1", bad, 1700000000)
         for good in ("Al", "x" * 32, "Guest Star", "Pip (hard)"):
             ticket.make_ticket(SECRET, "1", good, 1700000000)
@@ -161,7 +161,7 @@ class TheRefusalsOfMakeTicket(unittest.TestCase):
     def test_a_nonce_that_is_not_8_bytes_and_a_secret_that_is_not_one(self):
         for bad in (b"", bytes(7), bytes(9), "12345678", 12345678, [0] * 8):
             self.refused(SECRET, "1", "Ann", 5, bad)
-        for bad in ("", "x" * 31, "x" * 257, "x" * 31 + " ", "x" * 32 + "\n", "x" * 31 + "\x01", "x" * 31 + "é", None, b"x" * 32):
+        for bad in ("", "x" * 31, "x" * 257, "x" * 31 + " ", "x" * 32 + "\n", "x" * 31 + "\x01", "x" * 31 + "\u00e9", None, b"x" * 32):
             self.refused(bad, "1", "Ann", 5)
         ticket.make_ticket("x" * 256, "1", "Ann", 5)
 
@@ -197,9 +197,9 @@ class TheFit(unittest.TestCase):
     def test_the_table_has_every_kind(self):
         given = [c[0] for c in fit_cases()]
         wanted = {c[0]: c[1] for c in fit_cases()}
-        self.assertIn("José", given)
-        self.assertEqual(wanted["José"], "Jose")
-        for name in ("Bot (Easy)", "Pip (bot, Hard)", "Guest 123456", "guest", "GUEST42", "Guest Star", "x" * 32, "x" * 33, "     ", "Иван", "Αλέξ", "Ａｎｎ"):
+        self.assertIn("Jos\u00e9", given)
+        self.assertEqual(wanted["Jos\u00e9"], "Jose")
+        for name in ("Bot (Easy)", "Pip (bot, Hard)", "Guest 123456", "guest", "GUEST42", "Guest Star", "x" * 32, "x" * 33, "     ", "\u0418\u0432\u0430\u043d", "\u0391\u03bb\u03ad\u03be", "\uff21\uff4e\uff4e"):
             self.assertIn(name, given)
         self.assertEqual(wanted["Guest Star"], "Guest Star")
         self.assertTrue(any(0xd800 <= ord(c) or ord(c) > 0xffff for g in given for c in g))                  # (emoji)
@@ -211,7 +211,7 @@ class TheFit(unittest.TestCase):
             self.assertEqual(ticket.fit_game_name(bad), "")
 
     def test_the_guest_rule_alone(self):
-        for form in ("Guest", "guest", "GUEST", "gUeSt", "Guest1", "Guest 123456", "guest0", "G U E S T 9 9", "Guest" + "9" * 20, "guest１"):
+        for form in ("Guest", "guest", "GUEST", "gUeSt", "Guest1", "Guest 123456", "guest0", "G U E S T 9 9", "Guest" + "9" * 20, "guest\uff11"):
             self.assertEqual(ticket.fit_game_name(form), "", form)
         for form in ("Guest Star", "Guests", "Gues", "Guest a", "Guest-1", "Guest#1", "Mr Guest", "Guest 1x", "xguest"):
             self.assertEqual(ticket.fit_game_name(form), form, form)
@@ -223,20 +223,20 @@ class TheFit(unittest.TestCase):
             self.assertEqual(ticket.fit_game_name(form), form, form)
 
     def test_a_letter_that_would_be_lost_refuses_but_a_sign_or_a_mark_just_goes(self):
-        self.assertEqual(ticket.fit_game_name("Søren"), "")
-        self.assertEqual(ticket.fit_game_name("Ann И"), "")
-        self.assertEqual(ticket.fit_game_name("Ann ٣"), "")                         # (a digit of another script)
-        self.assertEqual(ticket.fit_game_name("Ann ♥ \U0001f600"), "Ann")
-        self.assertEqual(ticket.fit_game_name("Anń̂"), "Ann")
-        self.assertEqual(ticket.fit_game_name("Ann" + " " * 253 + "И"), "Ann")          # (the cut at 256 code points comes first)
-        self.assertEqual(ticket.fit_game_name("Ann" + " " * 252 + "И"), "")
+        self.assertEqual(ticket.fit_game_name("S\u00f8ren"), "")
+        self.assertEqual(ticket.fit_game_name("Ann \u0418"), "")
+        self.assertEqual(ticket.fit_game_name("Ann \u0663"), "")                         # (a digit of another script)
+        self.assertEqual(ticket.fit_game_name("Ann \u2665 \U0001f600"), "Ann")
+        self.assertEqual(ticket.fit_game_name("Ann\u0301\u0302"), "Ann")
+        self.assertEqual(ticket.fit_game_name("Ann" + " " * 253 + "\u0418"), "Ann")          # (the cut at 256 code points comes first)
+        self.assertEqual(ticket.fit_game_name("Ann" + " " * 252 + "\u0418"), "")
 
     def test_nfkd_and_not_nfkc(self):
-        self.assertEqual(ticket.fit_game_name("Crème"), "Creme")                  # (NFKC would keep the accent and refuse)
-        self.assertEqual(ticket.fit_game_name("ée"), "ee")
+        self.assertEqual(ticket.fit_game_name("Cr\u00e8me"), "Creme")                  # (NFKC would keep the accent and refuse)
+        self.assertEqual(ticket.fit_game_name("e\u0301e"), "ee")
 
     def test_both_ends_are_trimmed_and_blanks_are_one(self):
-        for given, want in ((" Ann", "Ann"), ("Ann ", "Ann"), ("  A  B  ", "A B"), ("A \U0001f600 \U0001f600 B", "A B"), (" Ann ", "Ann"), ("　Ann", "Ann")):
+        for given, want in ((" Ann", "Ann"), ("Ann ", "Ann"), ("  A  B  ", "A B"), ("A \U0001f600 \U0001f600 B", "A B"), ("\u00a0Ann\u00a0", "Ann"), ("\u3000Ann", "Ann")):
             self.assertEqual(ticket.fit_game_name(given), want)
 
     def test_the_length_limits_are_2_and_32(self):
@@ -245,16 +245,16 @@ class TheFit(unittest.TestCase):
         self.assertEqual(ticket.fit_game_name("a" * 32), "a" * 32)
         self.assertEqual(ticket.fit_game_name("a" * 33), "")
         self.assertEqual(ticket.fit_game_name(" " + "a" * 32 + " "), "a" * 32)
-        self.assertEqual(ticket.fit_game_name("a" + "́" * 40), "")                  # (one character left)
+        self.assertEqual(ticket.fit_game_name("a" + "\u0301" * 40), "")                  # (one character left)
 
     def test_the_name_of_a_login_is_the_shown_name_then_the_other(self):
         def of(name, other):
             return ticket.game_name_of(Identity("1", name, False, "s", 0, "u", "display", other))
         self.assertEqual(of("Ann", "ann_99"), "Ann")
-        self.assertEqual(of("Иван", "ivan_77"), "ivan_77")
+        self.assertEqual(of("\u0418\u0432\u0430\u043d", "ivan_77"), "ivan_77")
         self.assertEqual(of("Guest 123456", "ann_99"), "ann_99")
         self.assertEqual(of("Bot (Easy)", "ann_99"), "ann_99")
-        self.assertEqual(of("И", "Иван"), "")
+        self.assertEqual(of("\u0418", "\u0418\u0432\u0430\u043d"), "")
         self.assertEqual(of("Ann", None), "Ann")
         self.assertEqual(of("A", "Bo"), "Bo")                                           # (the first is too short)
         self.assertEqual(of("Ann", "Bob"), "Ann")                                       # (never the other when the first fits)
@@ -264,8 +264,8 @@ class TheFit(unittest.TestCase):
 
 def mixed_text(r):
     """A random string that mixes the classes of the table: plain, accented, full-width, other scripts, signs, emoji, marks, controls, blanks, the words that are special."""
-    pieces = ["Ann", "bob", "José", "Å", "Ａｂ", "И", "Α", "田", "٣", "²", "♥", "\U0001f600", "́", "​", " ", "　", "\t", "\n", "\x00",
-              "\x7f", " ", "  ", "Bot (", "(bot)", "(bot, x)", "guest", "Guest ", "123", "(", ")", ",", "!", "~", "x" * 20, "ø", "ß"]
+    pieces = ["Ann", "bob", "Jos\u00e9", "\u00c5", "\uff21\uff42", "\u0418", "\u0391", "\u7530", "\u0663", "\u00b2", "\u2665", "\U0001f600", "\u0301", "\u200b", "\u00a0", "\u3000", "\t", "\n", "\x00",
+              "\x7f", " ", "  ", "Bot (", "(bot)", "(bot, x)", "guest", "Guest ", "123", "(", ")", ",", "!", "~", "x" * 20, "\u00f8", "\u00df"]
     return "".join(r.choice(pieces) for _ in range(r.randrange(0, 9)))
 
 
@@ -330,7 +330,7 @@ class TheSetting(unittest.TestCase):
         self.assertEqual({k: v for k, v in off.items() if k != "name_tickets"}, {k: v for k, v in on.items() if k != "name_tickets"})
 
     def test_a_wrong_value_stops_the_start_with_the_name_of_the_variable_and_not_the_value(self):
-        bad = ["x" * 31, "x" * 257, "x" * 15 + " " + "x" * 16, "x" * 32 + " ", " " + "x" * 32, "x" * 31 + "\t", "x" * 31 + "\n", "x" * 31 + "\x00", "x" * 31 + "\x7f", "x" * 31 + "é", "x" * 31 + "　", " ", "\n", "k" * 40 + "\r"]
+        bad = ["x" * 31, "x" * 257, "x" * 15 + " " + "x" * 16, "x" * 32 + " ", " " + "x" * 32, "x" * 31 + "\t", "x" * 31 + "\n", "x" * 31 + "\x00", "x" * 31 + "\x7f", "x" * 31 + "\u00e9", "x" * 31 + "\u3000", " ", "\n", "k" * 40 + "\r"]
         for value in bad:
             with self.assertRaises(config.ConfigError) as cm:
                 config.load({NAME_ENV: value})
