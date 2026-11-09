@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A short random-mutation run of the native replay reader and map reader on files that a visitor could hand to the page that opens a replay FILE of your own (opt-in; see tests/scripts/web_replay_open_fuzz.sh
+"""A short random-mutation run of the native replay reader and map reader on files that someone could hand to the page that opens a replay FILE of your own (opt-in; see tests/scripts/web_replay_open_fuzz.sh
 and docs/REPLAYS.md "A file of your own").
 
 Why: the page hands the bytes of a file to the game's own reader, and a file that CARRIES its map (the chunk tmap, at most 1 MiB) makes the game's map reader parse bytes that a stranger wrote (until now only

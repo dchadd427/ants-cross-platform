@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # OPT-IN, not part of ./run_tests.sh: opening a replay FILE of your own on the website (docs/REPLAYS.md "A file of your own") in a real browser (Chromium through Playwright): the strip of the Matches page
 # (the chooser, a dropped file, a refused file and its card, the page with the site down, a phone), the game page at play.html?local=<id> (the bytes that the game gets are the file's, a reload, a record that is
-# gone or too old, the header, no Copy link, Stats or Download) and every card (an older or newer version, a map that the site has not, a file that cannot be read, hostile names).
+# gone or too old, the header, no Copy link, Stats or Download) and every card (an older or newer version, a map that the site has not, a file that cannot be read, odd names).
 # It needs no web image, no game and no server: it serves web/ itself behind a stand-in for the site (GET /history, /live, /maps; POST and PUT are refused and every request is counted: none carries a body)
 # and puts a stand-in for the game's program (tests/scripts/web_live_stub.js) in the place of index.js, so what it shows is the pages' own part. With ANTS_WEB_URL (a running site: the web image, or
 # python3 tools/web_without_docker.py, which sets it) the part REAL also runs the same pages with the REAL game against that site: the game plays a file, says an older or newer version, reads a map that the file

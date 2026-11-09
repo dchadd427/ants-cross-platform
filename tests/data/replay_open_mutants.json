@@ -631,7 +631,7 @@
    "old": "if (isPlantTile(raw)) plants++;",
    "new": "if (false) plants++;",
    "test": "node tests/scripts/web_map_files_check.js web/map_files.js tests/data/replay_head.hex \"Community-Maps/eze jungal.lvl\" 0e9c57c705853de2 \"\" tests/data/replay_tmap.hex",
-   "why": "a map of 65,400 plants and 65,535 waypoints looks like a map of none: the page hands the game a freeze of a minute"
+   "why": "a map of 65,400 plants and 65,535 waypoints looks like a map of none: the page hands the game a stall of a minute"
   },
   {
    "id": "every_record_is_a_plant",

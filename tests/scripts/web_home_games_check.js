@@ -6,9 +6,9 @@
 //   3. the looks at /lobbies with the fake clock: the first one when the page is up, 30 s, 5 s while the popover is open and at once when it opens, none while the tab is hidden or the Room shows, one at a time,
 //      the jitter's bounds, the wait that doubles after every failure and starts again after a good answer, a look that never ends, the list that is off (404, 503, garbage, a network that fails);
 //   4. the popover: the rows as text (a name with markup, a map's file name), the seats as dots, the count on the Games button, the page's own public room as the first row (Yours), the empty state, "Games list is off right now", Escape and a
-//      press elsewhere put it away; a hostile list (markup, look-alike characters, 10,000 rows, wrong types, duplicate codes);
+//      press elsewhere put it away; a malformed list (markup, look-alike characters, 10,000 rows, wrong types, duplicate codes);
 //  10. the pictures of the rows: an original's own, the library's for a map of the players at the address that the server's own list gives (every map of Community-Maps/ and a table of the awkward names), a picture that does not
-//      come taken away, and nothing of a hostile name that is not percent-encoded;
+//      come taken away, and nothing of an odd name that is not percent-encoded;
 // The Room's switch, Quick host and Join are web_home_games_room_check.js. tests/scripts/test_web_home_games.py runs both with node (the quick tier).
 // usage: node web_home_games_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
@@ -330,13 +330,13 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     await wait(env, 5000);
     check('49 are "49"', pillOf(env).textContent === '49' && rowsOf(env).length === 49);
 }
-{   // a hostile list
+{   // a malformed list
     const site = fakeSite();
-    const hostile = [
+    const untrusted = [
         row('aaaaaa', '<img src=x onerror=alert(1)>'), row('a2a2a2', 'Evil map', { map: 'EVIL<script>.LVL' }), row('bbbbbb', '"><svg/onload=1>'), row('cccccc', '\\u0041\\x41&amp;&lt;b&gt;'), row('dddddd', 'Ann\u202eBob'), row('eeee', 'a'.repeat(33)), row('ffffff', 'Zo\u00eb'),
         row('gggggg', 'Ok', { people: '3' }), row('hhhhhh', 'Ok2', { map: '../../etc/passwd.LVL' }), row('aaaaaa', 'Same code'), row('jjjjjj', 'javascript:alert(1)'), row('kkkkkk', 'http://evil.example/x', { map: 'http.LVL' }), row('K7M2XQ', 'Capital'),
     ];
-    site.body = listOf(hostile);
+    site.body = listOf(untrusted);
     const env = await page({ site, options: { picker: true } });
     tap(env.home('games'));
     await flush();

@@ -522,7 +522,7 @@ async function partCards(browser, shot) {
         check('a map of exactly 8,000 start markers is handed to the game', (await page.evaluate(() => window.__stub.args.join(' '))).indexOf('--replay /replay.antsrep') !== -1 && !(await page.isVisible('#rm')));
         await ctx.close();
     }
-    // 3. the maps of a file: an original is in the game; a map of the library is fetched by its name and checked; a map that the file carries is used without asking; a hostile name asks for nothing
+    // 3. the maps of a file: an original is in the game; a map of the library is fetched by its name and checked; a map that the file carries is used without asking; an odd name asks for nothing
     const DUNE = TINY_MAP;
     const dune = (embed) => tools.withMap(FIXTURE, 'Dune.lvl', DUNE, embed);
     {
@@ -586,7 +586,7 @@ async function partCards(browser, shot) {
             const { ctx, page } = await newPage(browser, DESKTOP, null);
             const before = site.hits.length;
             const file = tools.withHead(FIXTURE, (fields) => { tools.setField(fields, 3, tools.text(name)); tools.setField(fields, 4, tools.hashBytes('0123456789abcdef')); });
-            await open(page, asFile('hostile.antsrep', file));
+            await open(page, asFile('damaged.antsrep', file));
             const card = await cardOf(page);
             const maps = askedFor(site.hits.slice(before), /^\/maps\/files\//);
             check(label + ': ' + (expectAsked ? 'the name is percent-encoded, one request, no game' : 'the site is not asked at all, no game'), maps.length === expectAsked && (!expectAsked || maps[0].path === '/maps/files/x%252e%252e%252fy.lvl') && (await page.evaluate(() => typeof window.__stub)) === 'undefined', JSON.stringify(maps));
@@ -753,7 +753,7 @@ async function partReal(browser, shot) {
     }
     const flip = (bytes, at, v) => { const b = Uint8Array.from(bytes); b[at] = v; return b; };
     const set32 = (bytes, at, v) => { const b = Uint8Array.from(bytes); for (let i = 0; i < 4; i++) b[at + i] = (v >>> (8 * i)) & 255; return b; };
-    const hostile = [['a map of nothing but zeros', new Uint8Array(1000)], ['a map cut after 100 bytes', DUNE.slice(0, 100)], ['a map cut in its middle', DUNE.slice(0, DUNE.length >> 1)], ['a map of random bytes of the longest size', Uint8Array.from({ length: 1 << 20 }, (_, i) => (i * 2654435761 >>> 7) & 255)],
+    const untrusted = [['a map of nothing but zeros', new Uint8Array(1000)], ['a map cut after 100 bytes', DUNE.slice(0, 100)], ['a map cut in its middle', DUNE.slice(0, DUNE.length >> 1)], ['a map of random bytes of the longest size', Uint8Array.from({ length: 1 << 20 }, (_, i) => (i * 2654435761 >>> 7) & 255)],
                      ['a map whose header says the grid is huge', set32(DUNE, 8, 0xffffffff)], ['a map with a changed first byte', flip(DUNE, 0, DUNE[0] ^ 255)], ['a map with a changed byte in its tiles', flip(DUNE, 5000, DUNE[5000] ^ 255)],
                      ['a map with 65,535 in its second word', set32(DUNE, 4, 0xffff)], ['a map with its middle zeroed', (() => { const b = Uint8Array.from(DUNE); b.fill(0, 2000, 9000); return b; })()]];
     // 3b. a crowd: a map that starts tens of thousands of ants, or has tens of thousands of plants and of waypoints (the engine looks the waypoint of every plant up among all of them), held the tab for seconds to minutes
@@ -808,11 +808,11 @@ async function partReal(browser, shot) {
         if (label.indexOf('grid') !== -1) { await sleep(400); await shot(page, 'built_real_refusedmap'); }
         await ctx.close();
     }
-    for (const [label, map] of hostile) {
+    for (const [label, map] of untrusted) {
         const ctx = await ctxOf(), page = await ctx.newPage();
         const errors = [];
         page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 100)));
-        await openOn(page, asFile('hostile.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', map, true)));
+        await openOn(page, asFile('damaged.antsrep', tools.withMap(FIXTURE, 'Dune.lvl', map, true)));
         const verdict = await Promise.race([up(page).then((s1) => 'plays ' + s1.state), anyCard(page).then((c) => 'card: ' + c.title), sleep(110000).then(() => 'neither')]);
         check(label + ': the real game plays it or the page says it cannot, within the start watchdog (' + verdict + ')', verdict !== 'neither');
         check(label + ': the page is still there (the way to the list answers)', await page.isVisible('#all-btn') || await page.isVisible('#rm'));

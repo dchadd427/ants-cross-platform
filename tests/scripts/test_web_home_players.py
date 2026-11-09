@@ -12,7 +12,7 @@ other window. It speaks through the chat dock's socket, is loaded by web/home/ho
     the number under that, closer under 360 px: so that \"99+\" is cut off nowhere from 320 to 639 px), nothing of Home's own changes until the list is there (every rule that reaches the bar or the Games list
     starts with the class that the script puts on Home), every target at least 44 px, the sheet clears a phone's system bar, the layers, nothing loaded from another site;
   - the way into the image: the CI's list of the image's files carries the two files, the Dockerfile and the local web build copy the folder;
-  - the code RUNS in node: tests/scripts/web_home_players_check.js (a fake dock and a fake clock: the pure parts, the phases, what the page tells the hub, what is drawn, Join, the sheet, hostile frames, the page);
+  - the code RUNS in node: tests/scripts/web_home_players_check.js (a fake dock and a fake clock: the pure parts, the phases, what the page tells the hub, what is drawn, Join, the sheet, malformed frames, the page);
   - tests/data/home_players_mutants.json changes one thing at a time in a COPY of the files (a count that is zero, a status that is not checked, a code for a private room, a flood of rows, a second socket, markup,
     the loader, the style's arithmetic, ...): the checks must then fail (the last class of this file; tools/mutate.py runs the same list).
 The pictures that were approved are compared by hand with the page in a real browser (tests/scripts/web_home_players_browser.js, opt-in, `--shots DIR`).

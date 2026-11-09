@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OPT-IN, not part of ./run_tests.sh: a short random-mutation run of the native replay reader and map reader on files that a visitor could hand to the page that opens a replay FILE of your own
+# OPT-IN, not part of ./run_tests.sh: a short random-mutation run of the native replay reader and map reader on files that someone could hand to the page that opens a replay FILE of your own
 # (docs/REPLAYS.md "A file of your own"): maps carried in a recording (the chunk tmap, at most 1 MiB) with bytes, sizes and counts changed, damaged heads and orders, chunks cut, doubled and dropped. Every
 # checksum and the head's map hash are made again, so the reader and not the checksums decides. Each file goes to `replay_tool info` and `replay_tool verify` with a limit of memory and of time; a crash
 # (a signal), a hang or a sanitizer report fails the run, an abort (an exception, an assertion) is listed.

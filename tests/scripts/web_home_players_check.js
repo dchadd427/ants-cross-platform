@@ -1,13 +1,13 @@
 // Runs the players list of Home (web/home/players.js, docs/HOME_SCREEN.md "The players list") against a FAKE chat dock (the hub's frames come from the test; what the page sends goes into a list) and a fake
 // clock, in the fake browser of tests/scripts/web_page_harness.js (its DOM). The page itself (web/lobby.html with web/home/home.js and the real chat dock) is section 7. What it checks:
-//   1. the pure parts: a row of the hub's list cleaned (hostile names, a map that the page's own rule accepts, numbers, a code only for a room that waits), the list that a frame makes, the groups, the words
+//   1. the pure parts: a row of the hub's list cleaned (odd names, a map that the page's own rule accepts, numbers, a code only for a room that waits), the list that a frame makes, the groups, the words
 //      under a name, and what the page tells the hub it is doing (looking, waiting, playing; a public room's details and never a private room's);
 //   2. the phases: nothing until the hub has said the list, nothing for a hub that has none, "off" for a hub that is gone, back by itself, the count (not for one person alone), the class that Home carries;
 //   3. what the page tells the hub: `here` (a named visitor) and `who` once for each socket, when the room changes and not oftener than every 3 seconds, again after a lost link, nothing for a guest;
 //   4. what is drawn: the groups in order with their counts, the visitor first and as the page knows it, the moderator mark, the guests, the empty note and its Host button, a Join where a public room waits
 //      (the Games list's own Join does it, a list that is a popover is opened for it, a game that is gone is said), "and N more", every line as text;
 //   5. the sheet: opened by the bar's button or the corner's, closed by its button, the scrim and Escape with the focus back where it was, closed when the Room shows or the window grows wide; the fold;
-//   6. what the hub may send: unknown kinds, a wrong frame, a hostile name, a flood of rows: nothing breaks, nothing becomes markup;
+//   6. what the hub may send: unknown kinds, a wrong frame, an odd name, a flood of rows: nothing breaks, nothing becomes markup;
 //   7. the page (web/lobby.html with web/home/home.js): the list is loaded once, after the dock, a missing or broken one changes nothing, the hand-off makes it inert;
 //   8. the source of the script: no markup, no storage, no link, no address.
 // tests/scripts/test_web_home_players.py runs this with node (the quick tier). usage: node web_home_players_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
@@ -591,7 +591,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     r.emit('nonsense', {}); r.emit('who'); r.emit('who', undefined);
     check('an unknown kind, a frame that is not there: nothing', r.names().join() === 'maple,sage' && r.errors.length === 0);
     r.who(FULL([row(1, 'maple'), row(2, '<img src=x onerror=alert(1)>'), row(3, '‮gnilleps'), row(4, 'long'.repeat(30)), row(5, 'z', 'wait', { pub: true, map: '<script>.LVL', code: '"><b>' })], { n: 6 }));
-    check('hostile text is text: no markup was made, no element but the list\'s own kinds, the name cut and clean, a map and a code that are not what they should be are none', r.env.innerHTMLWrites.length === 0
+    check('untrusted text is text: no markup was made, no element but the list\'s own kinds, the name cut and clean, a map and a code that are not what they should be are none', r.env.innerHTMLWrites.length === 0
         && r.names().join('|') === 'maple|<img src=x onerror=alert(1)>|gnilleps|' + 'long'.repeat(8) + '…|z'
         && r.panel().findAll((e) => ['img', 'script', 'a', 'iframe', 'style', 'link'].indexOf(e.tagName) !== -1).length === 0 && r.metaOf('z') === 'Public room' && r.joins().length === 0);
     // a thousand frames of garbage and a thousand of rows

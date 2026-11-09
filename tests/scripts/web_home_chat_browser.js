@@ -1,7 +1,7 @@
 // OPT-IN, not part of ./run_tests.sh: the chat dock of Home in a REAL browser (Chromium through Playwright), against the real front page (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js)
 // that shares the page's address, as nginx's /hub/ws does. It looks at what no fake DOM can: the places and sizes of the dock at 390 x 844 (a phone), 844 x 390 (a phone held sideways) and 1280 x 800 (a desktop) next to
 // the approved pictures, that nothing scrolls sideways, that every target is 44 px, that the dock covers none of the bar, that the dock comes after the first paint, that the page asks for its two files and for
-// nothing else, that no other page of the site opens a hub socket, the real WebSocket against the fake hub (read only, a writer, the two names and the switch between them, the hub's pace, hostile text, a hub that goes and comes back, a hub that is not
+// nothing else, that no other page of the site opens a hub socket, the real WebSocket against the fake hub (read only, a writer, the two names and the switch between them, the hub's pace, untrusted text, a hub that goes and comes back, a hub that is not
 // there, a site with no /hub/ws), and the Room bar's logo at 320 to 389 px.
 //
 //   node tests/scripts/web_home_chat_browser.js [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -273,7 +273,7 @@ async function main() {
         await mod.context.close();
     }
 
-    // ---- a writer, the hub's pace, hostile text, on the real socket in a real browser ----
+    // ---- a writer, the hub's pace, untrusted text, on the real socket in a real browser ----
     {
         hub.set({ you: { name: 'maple.leaf', mod: false }, login: true, mode: 'normal', history: HISTORY });
         const { page, context } = await open('desktop');
@@ -286,8 +286,8 @@ async function main() {
         check('the lines come back from the hub and are the visitor\'s own (gold name)', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-me').length)) === 2);
         hub.say('<b>evil</b>', '<img src=x onerror="window.pwned=1"><script>window.pwned=1</script> ‮ rtl javascript:alert(1) http://evil.example');
         await sleep(200);
-        const hostile = await page.evaluate(() => ({ pwned: window.pwned || 0, imgs: document.querySelectorAll('#gchat img, #gchat script, #gchat a, #gchat b, #gchat iframe').length, last: document.querySelector('#gchat .gc-log').lastElementChild.innerText }));
-        check('hostile text in a real browser is text: no element made from it, nothing ran, no link', hostile.pwned === 0 && hostile.imgs === 0 && hostile.last.indexOf('<b>evil</b>: <img src=x') === 0, JSON.stringify(hostile));
+        const untrusted = await page.evaluate(() => ({ pwned: window.pwned || 0, imgs: document.querySelectorAll('#gchat img, #gchat script, #gchat a, #gchat b, #gchat iframe').length, last: document.querySelector('#gchat .gc-log').lastElementChild.innerText }));
+        check('untrusted text in a real browser is text: no element made from it, nothing ran, no link', untrusted.pwned === 0 && untrusted.imgs === 0 && untrusted.last.indexOf('<b>evil</b>: <img src=x') === 0, JSON.stringify(untrusted));
         for (let i = 0; i < 300; i++) hub.say('u' + (i % 5), 'burst ' + i);
         await sleep(400);
         check('a burst of 300 lines leaves 100 in the page', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-line').length)) === 100);

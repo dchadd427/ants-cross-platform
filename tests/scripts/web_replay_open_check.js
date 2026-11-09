@@ -106,7 +106,7 @@ for (const [label, bytes] of [
 ]) {
     same('no replay: ' + label, kindOf(bytes), 'bad');
 }
-same('the magic of a PDF-sized hostile file with a head tag that is not HEAD', kindOf(file(chunk('CMDS', zeros(40)))), 'bad');
+same('the magic of a PDF-sized damaged or made-up file with a head tag that is not HEAD', kindOf(file(chunk('CMDS', zeros(40)))), 'bad');
 same('a lower case head is not a head', kindOf(file(chunk('head', zeros(40)))), 'bad');
 same('a head with a space in the tag is not one', kindOf(file(chunk('HEA ', zeros(40)))), 'bad');
 same('the first chunk is another one and HEAD comes second', kindOf(file(chunk('tmap', zeros(5)), chunk('HEAD', zeros(40)))), 'bad');
