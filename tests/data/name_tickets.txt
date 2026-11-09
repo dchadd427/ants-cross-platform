@@ -1,0 +1,10 @@
+# TEST VALUES ONLY: the secrets below are made up for these tests and belong to no stack. One ticket a line, fields separated by a TAB:
+# secret, account id, expires (Unix seconds), nonce (16 hex digits), name, the token that hub/ticket.py make_ticket gives (now = expires - 600).
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	1	1700000600	0001020304050607	Ann	n1.AQAAAAAAAABY81NlAAECAwQFBgf_RxBJ31eRktl_RT346Vbz
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	9223372036854775807	1700000600	ffffffffffffffff	Bob Smith	n1._________39Y81Nl__________9fkt8leXbg8fYi1-qChv3G
+J4St'*e-Ok(a<%,XV)?,gW(i0=qqk(jkS'=&h2FV3f0jHhx8.kjr9P-g|)i(p;`xeWI\k[OG@8z@+jGd`L~ZEn*0bV6L4_V&v*hjILyMm`k[),C]zv)(~zHsjxZE|RvM#\N6o/`(<E1@SS`+6ZTgD2XgD{VNxQ>4+74>u>"_l8BE!3VePoiI1ybptw'[xhSSTS.^rT(9);Y5/Lm'.!i4e-Oo$*;oQ4rAMnO]0/_\^^H+3.LB^y5c#;dO3yf$dGs,	123456789012345678	1893456000	a1b2c3d4e5f60718	xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	n1.TvMwpkubtgGA2NtwobLD1OX2Bxhrnr0QDuwjZHr-epYY5Zdb
+zBcO6N=efaKr=o9?T>:c`N~$$D]B9ynMZ}MO+=.>	80351110224678912	4294967295	0000000000000000	Al	n1.ABBAtuh2HQH_____AAAAAAAAAACWRyWLB6D8yTmspdDwkenN
+yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy	2	600	deadbeefdeadbeef	Jose de la Cruz	n1.AgAAAAAAAABYAgAA3q2-796tvu9vtLhlosZg45sIDOqh8_eC
+zBcO6N=efaKr=o9?T>:c`N~$$D]B9ynMZ}MO+=.>	1234567890	1700000600	0102030405060708	A_B-C.d!	n1.0gKWSQAAAABY81NlAQIDBAUGBwg4pIGUJU1ON9JffHvJHrsK
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	300000000000000000	1700000600	7f7f7f7f7f7f7f7f	Pip (hard)	n1.AACeGGnQKQRY81Nlf39_f39_f3_Djr1VEoA_1u7SXm1oUZQ3
+J4St'*e-Ok(a<%,XV)?,gW(i0=qqk(jkS'=&h2FV3f0jHhx8.kjr9P-g|)i(p;`xeWI\k[OG@8z@+jGd`L~ZEn*0bV6L4_V&v*hjILyMm`k[),C]zv)(~zHsjxZE|RvM#\N6o/`(<E1@SS`+6ZTgD2XgD{VNxQ>4+74>u>"_l8BE!3VePoiI1ybptw'[xhSSTS.^rT(9);Y5/Lm'.!i4e-Oo$*;oQ4rAMnO]0/_\^^H+3.LB^y5c#;dO3yf$dGs,	999999999999999999	2147483648	8000000000000000	Guest Star	n1.__9jp7O24A0AAACAgAAAAAAAAAB2B5xGuUyyWILeDJ3MD11s

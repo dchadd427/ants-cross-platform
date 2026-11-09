@@ -1,0 +1,267 @@
+{
+ "note": "Mutants of the hub's pass for the game server's name check (hub/ticket.py, the setting in hub/config.py, the life in hub/limits.py; docs/HUB.md 'Settings') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_ticket.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_ticket_mutants.json --keep-going --jobs 1 --baseline-every 40.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_ticket"
+ },
+ "mutants": [
+  {
+   "id": "fit_guest_names_let_through",
+   "file": "hub/ticket.py",
+   "old": "if BOT_LIKE.search(compact) or GUEST_LIKE.match(compact):",
+   "new": "if BOT_LIKE.search(compact):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_bot_names_let_through",
+   "file": "hub/ticket.py",
+   "old": "if BOT_LIKE.search(compact) or GUEST_LIKE.match(compact):",
+   "new": "if GUEST_LIKE.match(compact):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_bot_form_without_the_start",
+   "file": "hub/ticket.py",
+   "old": "BOT_LIKE = re.compile(r\"^bot\\(|\\(bot(,[^()]+)?\\)\\Z\")",
+   "new": "BOT_LIKE = re.compile(r\"\\(bot(,[^()]+)?\\)\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "name_of_login_tries_the_other_first",
+   "file": "hub/ticket.py",
+   "old": "return fit_game_name(getattr(identity, \"name\", None)) or fit_game_name(getattr(identity, \"other\", None))",
+   "new": "return fit_game_name(getattr(identity, \"other\", None)) or fit_game_name(getattr(identity, \"name\", None))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_lost_letters_are_not_refused",
+   "file": "hub/ticket.py",
+   "old": "unicodedata.category(c)[0] in \"LN\"",
+   "new": "unicodedata.category(c)[0] in \"X\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_lost_digits_are_not_refused",
+   "file": "hub/ticket.py",
+   "old": "unicodedata.category(c)[0] in \"LN\"",
+   "new": "unicodedata.category(c)[0] in \"L\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_nfkc_instead_of_nfkd",
+   "file": "hub/ticket.py",
+   "old": "unicodedata.normalize(\"NFKD\", text[:CUT])",
+   "new": "unicodedata.normalize(\"NFKC\", text[:CUT])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_no_cut_at_256",
+   "file": "hub/ticket.py",
+   "old": "unicodedata.normalize(\"NFKD\", text[:CUT])",
+   "new": "unicodedata.normalize(\"NFKD\", text)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_cut_in_utf16_units",
+   "file": "hub/ticket.py",
+   "old": "unicodedata.normalize(\"NFKD\", text[:CUT])",
+   "new": "unicodedata.normalize(\"NFKD\", text.encode(\"utf-16-le\")[:2 * CUT].decode(\"utf-16-le\", \"ignore\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_start_not_trimmed",
+   "file": "hub/ticket.py",
+   "old": ".strip(\" \")\n    if not NAME_MIN",
+   "new": ".rstrip(\" \")\n    if not NAME_MIN",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_end_not_trimmed",
+   "file": "hub/ticket.py",
+   "old": ".strip(\" \")\n    if not NAME_MIN",
+   "new": ".lstrip(\" \")\n    if not NAME_MIN",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_limit_of_32_off_by_one",
+   "file": "hub/ticket.py",
+   "old": "NAME_MIN, NAME_MAX = 2, 32",
+   "new": "NAME_MIN, NAME_MAX = 2, 33",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_minimum_of_2_off_by_one",
+   "file": "hub/ticket.py",
+   "old": "NAME_MIN, NAME_MAX = 2, 32",
+   "new": "NAME_MIN, NAME_MAX = 1, 32",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_blanks_not_collapsed",
+   "file": "hub/ticket.py",
+   "old": "re.sub(\" +\", \" \", \"\".join(c for c in s if 0x20 <= ord(c) <= 0x7e))",
+   "new": "\"\".join(c for c in s if 0x20 <= ord(c) <= 0x7e)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "fit_controls_kept",
+   "file": "hub/ticket.py",
+   "old": "\"\".join(c for c in s if 0x20 <= ord(c) <= 0x7e)",
+   "new": "\"\".join(c for c in s if 0x00 <= ord(c) <= 0x7e)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_mac_without_the_name",
+   "file": "hub/ticket.py",
+   "old": "DOMAIN + head + name.encode(\"ascii\")",
+   "new": "DOMAIN + head",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_domain_without_its_nul",
+   "file": "hub/ticket.py",
+   "old": "DOMAIN = b\"ants-name-ticket-1\\x00\"",
+   "new": "DOMAIN = b\"ants-name-ticket-1\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_end_big_endian",
+   "file": "hub/ticket.py",
+   "old": "head = struct.pack(\"<QI\", int(account_id), ticket_end(now)) + bytes(nonce)",
+   "new": "head = struct.pack(\"<Q\", int(account_id)) + struct.pack(\">I\", ticket_end(now)) + bytes(nonce)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_nonce_reversed",
+   "file": "hub/ticket.py",
+   "old": "ticket_end(now)) + bytes(nonce)",
+   "new": "ticket_end(now)) + bytes(nonce)[::-1]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_mac_of_32_bytes",
+   "file": "hub/ticket.py",
+   "old": "MAC_BYTES = 16",
+   "new": "MAC_BYTES = 32",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_mac_of_15_bytes",
+   "file": "hub/ticket.py",
+   "old": "MAC_BYTES = 16",
+   "new": "MAC_BYTES = 15",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_nonce_is_always_the_same",
+   "file": "hub/ticket.py",
+   "old": "nonce = os.urandom(8)",
+   "new": "nonce = bytes(8)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_account_above_63_bits_made",
+   "file": "hub/ticket.py",
+   "old": " or int(account_id) > ACCOUNT_MAX",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_empty_name_made",
+   "file": "hub/ticket.py",
+   "old": " or not name or fit_game_name(name) != name",
+   "new": " or fit_game_name(name) != name",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_name_that_does_not_fit_made",
+   "file": "hub/ticket.py",
+   "old": " or not name or fit_game_name(name) != name",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_end_outside_32_bits_made",
+   "file": "hub/ticket.py",
+   "old": " or not 0 <= ticket_end(now) < 2 ** 32",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_short_secret_made",
+   "file": "hub/ticket.py",
+   "old": "not config.NAME_TICKET_SECRET.match(secret)",
+   "new": "False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "pass_prefix_changed",
+   "file": "hub/ticket.py",
+   "old": "PREFIX = \"n1.\"",
+   "new": "PREFIX = \"n2.\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "setting_secret_printed_in_the_error",
+   "file": "hub/config.py",
+   "old": "raise ConfigError(\"ANTS_NAME_TICKET_SECRET must be 32 to 256 printable characters with no blank\")",
+   "new": "raise ConfigError(\"ANTS_NAME_TICKET_SECRET must be 32 to 256 printable characters with no blank (%s)\" % cfg.name_ticket_secret)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "setting_secret_in_the_repr",
+   "file": "hub/config.py",
+   "old": "name_ticket_secret: str = dataclasses.field(default=\"\", repr=False)",
+   "new": "name_ticket_secret: str = \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "setting_of_31_characters_taken",
+   "file": "hub/config.py",
+   "old": "{32,256}",
+   "new": "{31,256}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "setting_of_257_characters_taken",
+   "file": "hub/config.py",
+   "old": "{32,256}",
+   "new": "{32,257}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "setting_blank_at_the_ends_cut",
+   "file": "hub/config.py",
+   "old": "cfg.name_ticket_secret = env.get(\"ANTS_NAME_TICKET_SECRET\", \"\")",
+   "new": "cfg.name_ticket_secret = env.get(\"ANTS_NAME_TICKET_SECRET\", \"\").strip()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "setting_wrong_value_ignored",
+   "file": "hub/config.py",
+   "old": "if cfg.name_ticket_secret and not NAME_TICKET_SECRET.match(cfg.name_ticket_secret):",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "summary_says_on_without_the_secret",
+   "file": "hub/config.py",
+   "old": "out[\"name_tickets\"] = int(bool(self.name_ticket_secret))",
+   "new": "out[\"name_tickets\"] = 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "summary_holds_the_secret",
+   "file": "hub/config.py",
+   "old": "out[\"name_tickets\"] = int(bool(self.name_ticket_secret))",
+   "new": "out[\"name_tickets\"] = self.name_ticket_secret or 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
+   "id": "life_of_a_pass_is_one_minute",
+   "file": "hub/limits.py",
+   "old": "ticket_seconds: float = 600.0",
+   "new": "ticket_seconds: float = 60.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  }
+ ]
+}
