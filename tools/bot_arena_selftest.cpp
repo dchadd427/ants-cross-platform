@@ -1015,6 +1015,11 @@ int selftest() {
         t.check(cg.island_timed_row && !ai::plan_for(ai::Level::Medium).island_timed_row && !ai::plan_for(ai::Level::Easy).island_timed_row && apply_tune(cg, "itimed", 0, tune_err) && !cg.island_timed_row &&
                     apply_tune(cg, "itimed", 1, tune_err) && cg.island_timed_row,
                 "the key itimed switches the timed clicks through the hats of the rows of ISLANDS (on at Hard only)");
+        ai::LevelPlan hm = ai::plan_for(ai::Level::Hard);
+        t.check(!hm.home_on_route && !hm.home_first && hm.home_route_lane == 60 && ai::plan_for(ai::Level::Medium).home_route_lane == 20 && apply_tune(hm, "homemines", 1, tune_err) && hm.home_on_route && hm.home_first &&
+                    apply_tune(hm, "homemines", 0, tune_err) && !hm.home_on_route && !hm.home_first && apply_tune(hm, "homeonroute", 1, tune_err) && hm.home_on_route && !hm.home_first &&
+                    apply_tune(hm, "homefirst", 1, tune_err) && hm.home_first && apply_tune(hm, "homelane", 20, tune_err) && hm.home_route_lane == 20 && !apply_tune(hm, "homelan", 1, tune_err),
+                "the keys homemines, homeonroute, homefirst and homelane switch the home-mine batch of the mines at home (off at every level) and set the lane of its mines (60 cost units at Hard, 20 at Medium); a misspelt key is refused");
         ai::LevelPlan fl = ai::plan_for(ai::Level::Hard);
         const auto rules = [&fl]() {                                                                     // the five flower rules of the plan, as five digits: sides, fire, recover, recall, watch
             const bool on[5] = {fl.flower_sides, fl.flower_fire, fl.flower_recover, fl.flower_recall, fl.flower_watch};

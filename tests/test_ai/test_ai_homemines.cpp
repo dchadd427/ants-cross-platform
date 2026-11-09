@@ -51,7 +51,8 @@ void build_world(sim::SimulationEngine& sim, bool pile) {
 
 // What a scene laid: every tile that held a mine of team 0 at some tick (a mine that the enemy walked onto is gone, the tile was laid), and the task's counters at the end
 struct Laid {
-    std::set<std::pair<int32_t, int32_t>> tiles;
+    std::set<std::pair<int32_t, int32_t>> tiles;                  // the mines round the hill (within 14 tiles of it)
+    std::vector<bool> order;                                      // every mine in the order it was first seen: true for one round the hill, false for one at the pile
     uint32_t planted{0};
     uint32_t home{0};
     TileCoord origin{};
@@ -78,9 +79,14 @@ Laid play(const LevelPlan& plan, bool pile, uint64_t ticks, Level level = Level:
     build_world(sim, pile);
     Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
     Laid out;
+    std::set<std::pair<int32_t, int32_t>> seen;
     rig.after_sim_tick = [&] {
-        for (const BombView& b : BotView::build(sim, 0, &rig.map()).bombs()) {
-            if (b.owner == 0) out.tiles.insert({b.tile.x, b.tile.y});
+        const BotView view = BotView::build(sim, 0, &rig.map());
+        for (const BombView& b : view.bombs()) {
+            if (b.owner != 0 || !seen.insert({b.tile.x, b.tile.y}).second) continue;
+            const bool home = b.tile.chebyshev_dist(rig.map().hill(0).origin) <= 14;                  // (the pile's mines and the gate's lie further out)
+            out.order.push_back(home);
+            if (home) out.tiles.insert({b.tile.x, b.tile.y});
         }
     };
     rig.run(ticks);
@@ -179,17 +185,19 @@ void run_homemines_tests() {
         LevelPlan plan = scene_plan(6);
         plan.mine_per_pile = 10;
         plan.war_free_only = false;
-        {   // flag off: ten pile mines are wanted and the Bomber works through them: no home mine yet
-            const Laid off = play(with_batch(plan, true, false), true, 3000);
-            ASSERT_TRUE(off.planted >= 1u);
-            ASSERT_EQ(off.home, 0u);
-        }
-        {   // flag on: the first home mines come first, then the pile mines alternate with them (at least two home mines by now, and a pile mine as well)
-            const Laid on = play(with_batch(plan, true, true), true, 3000);
-            ASSERT_TRUE(on.home >= 2u);
-            ASSERT_TRUE(on.planted > on.home);
-            ASSERT_TRUE(on.home <= 6u);
-        }
+        const auto first_n = [](const Laid& laid, size_t n) {                                                // how many of the first n mines were laid round the hill
+            size_t home = 0;
+            for (size_t i = 0; i < n && i < laid.order.size(); ++i) home += laid.order[i] ? 1u : 0u;
+            return home;
+        };
+        const Laid off = play(with_batch(plan, true, false), true, 3000);
+        ASSERT_TRUE(off.order.size() >= 6u);
+        ASSERT_EQ(first_n(off, 6), 0u);                                                                      // flag off: the pile mines come first, the home mines when the pile has none to ask for
+        const Laid on = play(with_batch(plan, true, true), true, 3000);
+        ASSERT_TRUE(on.order.size() >= 6u);
+        ASSERT_TRUE(first_n(on, 4) >= 2u);                                                                   // flag on: the home mines come at once (the first mine is laid before the bot has seen the enemy walk) ...
+        ASSERT_TRUE(first_n(on, 6) >= 3u && first_n(on, 6) <= 4u);                                           // ... and the pile mines alternate with them
+        ASSERT_TRUE(on.home <= 6u);
     } TEST_END();
 
     TEST_CASE("AI39.5 The Ring: With The Batch On Every Home Mine Lies Five To Nine Tiles From The Hill, Never On The Doorstep Or The Hill, Whatever The Number Of Mines Or The Lane")
