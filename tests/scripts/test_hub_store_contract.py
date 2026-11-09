@@ -47,6 +47,7 @@ class Contract(unittest.TestCase):
     def setUp(self):
         self.clock = Clock()
         self.store = self.make_store(self.clock)
+        self.store.max_lines = 10 ** 9                  # (out of the way, so that the checks that need many lines have them: the checks of the limit lower it)
         self.addCleanup(self.store.close)
 
     def say(self, n, account="1001", name="alice", mod=False):
@@ -169,6 +170,123 @@ class Contract(unittest.TestCase):
         self.assertEqual([m[0] for m in self.store.mutes()], ["1002"])
         self.assertIsNone(self.store.session("k1"))
         self.assertIsNotNone(self.store.session("k2"))
+
+    # ---- the newest max_lines ----
+
+    def test_the_default_is_the_newest_200_lines(self):
+        self.assertEqual(base.MAX_LINES, 200)
+        self.assertEqual(base.StoreBase.max_lines, 200)
+
+    def test_only_the_newest_max_lines_are_kept_and_the_store_never_holds_more(self):
+        self.store.max_lines = 5
+        ids = []
+        for n in range(8):
+            ids.append(self.say(n).id)
+            self.assertLessEqual(self.store.usage().lines, 5, "the line that goes over takes the oldest out in the same step")
+        self.assertEqual([r[0] for r in self.store.lines(100)][::-1], ids[3:])
+        self.assertEqual([l.id for l in self.store.recent_lines(100)], ids[3:])
+        self.assertEqual(self.store.usage().lines, 5)
+        self.assertEqual(self.store.usage().oldest, self.store.lines(100)[-1][1])
+
+    def test_every_line_counts_the_moderators_and_the_deleted_ones_too_and_they_go_in_their_turn(self):
+        self.store.max_lines = 6
+        ids = [self.say(n, mod=n in (0, 1)).id for n in range(6)]
+        self.store.delete_line(ids[2], "me")
+        self.store.delete_line(ids[5], "me")
+        more = [self.say(n).id for n in range(10, 14)]
+        left = [r[0] for r in self.store.lines(100)][::-1]
+        self.assertEqual(left, ids[4:] + more, "the two lines of a moderator and the deleted one that is old went out with the rest; the deleted one among the newest stays")
+        self.assertEqual(self.store.last_deletion(), 2, "the counter of deletions keeps its number")
+        self.assertEqual([tuple(r) for r in self.store.deletions_since(0)], [(2, ids[5])], "a deletion whose line is gone is not told again")
+        self.assertEqual([l.id for l in self.store.recent_lines(100)], [ids[4]] + more)
+
+    def test_recent_lines_never_reach_past_the_newest_max_lines_to_find_lines_that_are_not_deleted(self):
+        ids = [self.say(n).id for n in range(8)]
+        for line_id in ids[4:]:
+            self.store.delete_line(line_id, "me")
+        self.store.max_lines = 5
+        self.assertEqual([l.id for l in self.store.recent_lines(10)], [ids[3]], "the newest 5 are lines 3 to 7: one of them is alive")
+
+    def test_purge_deletes_the_lines_past_the_newest_max_lines_a_chunk_at_a_time(self):
+        ids = [self.say(n).id for n in range(10)]
+        self.store.max_lines = 4                                            # (a store that held more: the limit is lowered, as a file of an earlier program is opened)
+        self.assertEqual(self.store.purge(2), 2)
+        self.assertEqual(self.store.purge(2), 2)
+        self.assertEqual(self.store.purge(2), 2)
+        self.assertEqual(self.store.purge(2), 0)
+        self.assertEqual([r[0] for r in self.store.lines(100)][::-1], ids[6:])
+
+    def test_a_chunk_of_the_purge_is_for_the_lines_of_both_limits_together(self):
+        for n in range(3):
+            self.say(n)
+        self.clock.now += 8 * DAY
+        fresh = [self.say(n).id for n in range(10, 16)]
+        self.store.max_lines = 4
+        self.assertEqual(self.store.purge(4), 4, "the 3 that are past their time and one that is past the newest 4: a chunk is 4 lines, not 4 and 4")
+        self.assertEqual(len(self.store.lines(100)), 5)
+        self.assertEqual(self.store.purge(4), 1)
+        self.assertEqual([r[0] for r in self.store.lines(100)][::-1], fresh[2:])
+
+    def test_a_purge_leaves_exactly_the_newest_lines_whatever_their_flags(self):
+        ids = [self.say(n, mod=n % 3 == 0).id for n in range(10)]
+        for line_id in (ids[1], ids[4], ids[8], ids[9]):
+            self.store.delete_line(line_id, "me")
+        self.store.max_lines = 4
+        self.assertEqual(self.store.purge(), 6)
+        self.assertEqual([r[0] for r in self.store.lines(100)][::-1], ids[6:], "the newest 4 stay: a moderator's line and a deleted line count as any other")
+
+    def test_a_line_takes_out_at_most_a_few_of_a_long_backlog_and_the_purge_takes_the_rest_by_chunks(self):
+        for n in range(300):
+            self.say(n)
+        self.store.max_lines = 200
+        self.say(300)
+        left = self.store.usage().lines
+        self.assertGreater(left, 280, "one chat line is not a long delete")
+        self.assertLess(left, 301)
+        self.assertEqual(self.store.purge(50), 50)
+        while self.store.purge(50):
+            pass
+        self.assertEqual(self.store.usage().lines, 200)
+
+    def test_the_age_limit_stays_whichever_limit_is_smaller_deletes_first(self):
+        self.store.max_lines = 6
+        for n in range(3):
+            self.say(n)
+        self.clock.now += 8 * DAY
+        fresh = [self.say(n).id for n in range(10, 13)]
+        self.assertEqual([l.id for l in self.store.recent_lines(100)], fresh)
+        self.assertEqual(len(self.store.lines(100)), 6, "the 3 old lines are among the newest 6, and are past their 7 days: they are not shown")
+        self.assertEqual(self.store.purge(), 3)
+        self.assertEqual([r[0] for r in self.store.lines(100)][::-1], fresh)
+        self.clock.now += 8 * DAY
+        self.assertEqual(self.store.purge(), 3)
+        self.assertEqual(self.store.lines(100), [])
+
+    def test_the_limit_on_lines_leaves_the_mutes_the_bans_the_logins_and_the_counters(self):
+        self.store.max_lines = 3
+        self.store.mute("1001", 600, "me", "alice")
+        self.store.ban("1002", "me", "bob")
+        self.store.add_session("k", "1001", "alice", 3600, 10, 100)
+        first = self.say(1).id
+        self.store.delete_line(first, "me")
+        before = (self.store.last_deletion(), self.store.last_restriction())
+        for n in range(10):
+            self.say(n)
+        self.store.purge()
+        self.assertEqual((self.store.last_deletion(), self.store.last_restriction()), before)
+        self.assertGreater(self.store.muted_until("1001"), 0)
+        self.assertTrue(self.store.is_banned("1002"))
+        self.assertIsNotNone(self.store.session("k"))
+        self.assertGreater(self.say(99).id, first, "a number is never used twice")
+
+    def test_a_deleted_line_is_not_kept_longer_than_the_others_by_the_limit(self):
+        self.store.max_lines = 3
+        a = self.say(1)
+        self.store.delete_line(a.id, "me")
+        for n in range(3):
+            self.say(n)
+        self.assertNotIn(a.id, [r[0] for r in self.store.lines(100)])
+        self.assertFalse(self.store.delete_line(a.id, "me"))
 
     def test_size_is_a_number_of_bytes_that_grows_with_what_is_kept(self):
         empty = self.store.size()

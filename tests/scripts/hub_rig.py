@@ -17,7 +17,7 @@ WAIT = 30           # seconds that the test thread waits for the hub's thread to
 
 
 class Rig:
-    def __init__(self, mods="", test_login=True, origin=SITE, db=None, discord=None, env=None, **limit_overrides):
+    def __init__(self, mods="", test_login=True, origin=SITE, db=None, discord=None, env=None, max_lines=10 ** 9, **limit_overrides):
         """discord: a tests/scripts/fake_discord.FakeDiscord: the hub then has the real Discord login (and no test login), with the fake as its Discord. env: more settings."""
         self.folder = None if db else tempfile.TemporaryDirectory()
         self.db = db or os.path.join(self.folder.name, "hub.db")
@@ -28,6 +28,7 @@ class Rig:
         if test_login:
             env["ANTS_HUB_TEST_LOGIN"] = "1"
         self.cfg = config.load(env)
+        self.max_lines = max_lines                  # (the newest lines the store keeps: out of the way by default, so that the tests that need a big backlog have one; a test of the limit passes 200)
         self.limits = dataclasses.replace(limitmod.Limits(), **limit_overrides)
         self.log_text = io.StringIO()
         self.port = None
@@ -41,7 +42,7 @@ class Rig:
         return self
 
     async def start(self):
-        self.store = store.Store(self.cfg.db, busy_ms=300)
+        self.store = store.Store(self.cfg.db, busy_ms=300, max_lines=self.max_lines)
         self.hub = server.Hub(self.cfg, self.store, session.make(self.cfg), Log(self.log_text), self.limits)
         return await self.hub.start("127.0.0.1", 0)
 
