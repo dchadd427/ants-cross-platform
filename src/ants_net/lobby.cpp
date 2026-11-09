@@ -3,6 +3,7 @@
 #include "ants_ai/bot_names.hpp"
 
 #include "ants_net/clock.hpp"
+#include "ants_net/person_name.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -537,6 +538,17 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].forgive_at_ms = now_ms + cfg_.forgive_ms;
     room_.slots[seat].state = SlotState::Client;
     room_.slots[seat].name = human_name(hello.name, "Player " + std::to_string(static_cast<unsigned>(seat) + 1u));
+    if (cfg_.unique_names) {                                     // (a server that checks names: the people of a room have names of their own)
+        std::vector<std::string> taken;
+        for (uint8_t s = 0; s < sim::MAX_PLAYERS; ++s) {
+            if (s != seat && (room_.slots[s].state == SlotState::Client || room_.slots[s].state == SlotState::Host) && (s == cfg_.host_seat || person(s))) taken.push_back(room_.slots[s].name);
+        }
+        const std::string own = unique_person_name(room_.slots[seat].name, taken, cfg_.make_key);
+        if (own != room_.slots[seat].name) {
+            room_.slots[seat].name = own;
+            ++renamed_unique_;
+        }
+    }
     room_.slots[seat].platform = hello.platform;
     elect_leader();                                              // the first guest to be welcomed leads (a server's room that allows an early start)
     WelcomeMsg welcome;
@@ -650,7 +662,7 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             if (!cfg_.lobby_room || !decode(msg, m)) return violation(seat);       // (a room that is no lobby room has no renames: the message is garbage there)
             // Any person is heard, while the room is open and its START does not wait. As for the plans: one that cannot be heard is no offence at first, every one after kIgnoredNamesAllowed is a
             // violation; one beyond the budget is dropped, and a connection that goes on beyond it is flooding.
-            if (phase_ == Phase::Room && !starting_.active) {
+            if (phase_ == Phase::Room && !starting_.active && !cfg_.fixed_names) {      // (fixed names: never heard, only counted below)
                 switch (guests_[seat].names.take(now_ms, kNameBurst, kNamesPerSecond, kNameExcessBurst)) {
                     case ChatBudget::Verdict::Relay: rename(seat, m.name); return;
                     case ChatBudget::Verdict::Drop: return;

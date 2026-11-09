@@ -5,7 +5,7 @@
 //               [--resume-countdown-seconds N] [--start-countdown-seconds N] [--log-mb N]
 //               [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds N] [--restart-budget-mb N]
 //               [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days N] [--replays-max-mb N] [--replay-port N] [--replay-any-interface]
-//               [--bot-match-every-min N] [--db FILE | --no-db] [--no-history]
+//               [--bot-match-every-min N] [--db FILE | --no-db] [--no-history] [--verified-names]
 //
 //   --maps DIR         the maps folder (the .lvl files that rooms may use); required
 //   --port N           the TCP port of native clients (0: none; default 4001); every interface with --public, else this machine only
@@ -17,6 +17,9 @@
 //                      from a container does not reach a program that listens on the container's loopback address. The host decides who can connect
 //                      (docker run -p 127.0.0.1:4010:4010 ...); never use these on a machine without that protection, the control interface speaks plain HTTP.
 //   --results-dir DIR  every ended room writes <code>.json there, and the site statistics (the counters of GET /stats) are kept in the database, or with --no-db in site-stats.json (without a results folder they live in memory)
+//   --verified-names   the server checks each person's name: a name that the hub signed (a pass in the Hello's token, made with ANTS_NAME_TICKET_SECRET, the same value as the hub's) is kept, any other person
+//                      plays as a guest ("Guest 123456"); in a room no two people go by the same name and a name stays what the seat was given. Off by default: the server takes the names that people give.
+//                      The secret comes from the environment only (32 to 256 visible characters, no blank); one that is set and not usable stops the start. Without a secret every person plays as a guest
 //   --secret-file PATH where the server keeps the control secret that it makes when ANTS_SERVER_SECRET is not set (default: control-secret in the results folder)
 //   --community-maps DIR  a second folder of maps, the players' maps (Community-Maps/ of the repository: the .lvl files with maps.json and previews.json; the image has it in /community-maps). The lobby
 //                      may choose every map of --maps and of this folder, and GET /maps on the replay port lists them. Left out: only the --maps folder (the default)
@@ -200,6 +203,7 @@ struct Options {
     std::string db_file;                       // --db (empty: ants.db in the results folder, when there is one)
     bool no_db{false};
     bool no_history{false};                    // --no-history
+    bool verified_names{false};                // --verified-names: the door checks names (name_ticket.hpp)
     uint16_t submit_port{0};                   // --submit-port: the door of the map submissions (0: none)
     bool submit_any_interface{false};
     std::string submissions_dir;               // --submissions-dir (empty: the folder "submissions" in the results folder)
@@ -222,7 +226,7 @@ void usage(FILE* to) {
                  "                    [--max-catch-up-seconds 10-3600] [--resume-countdown-seconds 0-60] [--start-countdown-seconds 0-60] [--log-mb 1-256]\n"
                  "                    [--restart-dir DIR | --no-restart-records] [--restart-vote-seconds 30-3600] [--restart-budget-mb 1-4096]\n"
                  "                    [--replays-dir DIR | --no-replays] [--replay-demo] [--replays-days 1-3650] [--replays-max-mb 1-4096]\n"
-                 "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history]\n"
+                 "                    [--replay-port N] [--replay-any-interface] [--bot-match-every-min 0|5-1440] [--db FILE | --no-db] [--no-history] [--verified-names]\n"
                  "                    [--submit-port N] [--submit-any-interface] [--submissions-dir DIR] [--submit-max-waiting N] [--submit-per-address N] [--submit-ignore-client-header]\n"
                  "                    [--test-map-port N] [--test-map-any-interface] [--test-maps-dir DIR] [--test-map-ignore-client-header]\n"
                  "       ants_server (--admin-create NAME | --admin-reset NAME) (--db FILE | --results-dir DIR)\n"
@@ -385,6 +389,8 @@ int main(int argc, char** argv) {
             }
             o.demo_lobbies = static_cast<size_t>(n);
             o.demo_lobbies_given = true;
+        } else if (a == "--verified-names") {
+            o.verified_names = true;
         } else if (a == "--reconnect") {
             o.reconnect = true;
         } else if (a == "--no-reconnect") {
@@ -609,6 +615,17 @@ int main(int argc, char** argv) {
     limits.max_catch_up_ms = static_cast<uint32_t>(o.max_catch_up_s * 1000);
     limits.resume_countdown_ms = static_cast<uint32_t>(o.resume_countdown_s * 1000);
     limits.countdown_s = static_cast<uint32_t>(o.start_countdown_s);
+    limits.verified_names = o.verified_names;
+    std::string name_secret;                                     // ANTS_NAME_TICKET_SECRET: from the environment only; one that is set and not usable stops the start (the value is never printed)
+    if (const char* text = std::getenv("ANTS_NAME_TICKET_SECRET")) {
+        if (text[0] != '\0') {
+            if (!ants::server::usable_secret_text(text)) {
+                std::fprintf(stderr, "ANTS_NAME_TICKET_SECRET must be 32 to 256 visible characters with no blank\n");
+                return 2;
+            }
+            name_secret = text;
+        }
+    }
     limits.room_log_bytes = static_cast<size_t>(o.log_mb) * 1024u * 1024u;
     ants::server::MapStore store{o.maps_dir, o.community_maps_dir};
     {
@@ -637,6 +654,10 @@ int main(int argc, char** argv) {
         }
     }
     ants::server::RoomManager rooms{std::move(store), limits};
+    rooms.set_name_secret(name_secret);
+    if (o.verified_names && name_secret.empty()) log("verified names are on and ANTS_NAME_TICKET_SECRET is not set: every person plays as a guest");
+    else if (o.verified_names) log("verified names are on: a name signed by the hub is kept, any other person plays as a guest");
+    else if (!name_secret.empty()) log("ANTS_NAME_TICKET_SECRET is set but --verified-names is not: names are not checked");
     if (o.demo_rooms > 0) {
         std::string chooseable;
         for (const std::string& name : o.demo_maps) chooseable += (chooseable.empty() ? "" : ", ") + name;

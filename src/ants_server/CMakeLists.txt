@@ -18,6 +18,7 @@ add_library(ants_server_core STATIC
     history_store.cpp
     db_schema.cpp
     crypto.cpp
+    name_ticket.cpp
     map_names.cpp
     map_preview.cpp
     submissions.cpp

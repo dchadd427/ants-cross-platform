@@ -16,11 +16,17 @@ namespace fs = std::filesystem;
 
 namespace ants::server {
 
-RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes), code_source_(random_bytes) {
+RoomManager::RoomManager(MapStore store, ServerLimits limits) : store_(std::move(store)), limits_(limits), log_budget_(limits.log_budget_bytes), code_source_(random_bytes),
+      unix_clock_([]() { return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count()); }) {
+    if (limits_.verified_names) name_gate_ = std::make_unique<NameGate>(std::string());       // (no secret yet: every person is a guest until set_name_secret)
     if (!store_.scanned()) store_.scan();           // (the server's main has scanned it and logged the notes; a manager made by hand lists its folders here)
 }
 
 RoomManager::~RoomManager() = default;
+
+void RoomManager::set_name_secret(std::string secret) {
+    if (limits_.verified_names) name_gate_ = std::make_unique<NameGate>(std::move(secret));
+}
 
 RoomSpec RoomManager::default_spec() const {
     RoomSpec spec;
@@ -31,6 +37,7 @@ RoomSpec RoomManager::default_spec() const {
     spec.resume_countdown_ms = limits_.resume_countdown_ms;
     spec.max_log_bytes = limits_.room_log_bytes;
     spec.countdown_s = limits_.countdown_s;
+    spec.verified_names = limits_.verified_names;
     return spec;
 }
 
@@ -583,7 +590,16 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
         }
         return;
     }
-    if (good && room->add_connection(connection, address, message, now_ms, made_here)) return;        // the room owns it now
+    // With verified names a Hello for a NEW seat (no key, or a key that no seat of the room holds) is seated under its checked name, and its token is not passed on: the room gets the Hello
+    // as the door re-wrote it. A key that fits a seat is a person who comes back: the seat keeps its name and the token is not looked at.
+    std::vector<uint8_t> checked;
+    if (good && name_gate_ != nullptr && !room->takes_over(hello.key)) {
+        net::HelloMsg named = hello;
+        named.name = name_gate_->name_for(hello.token, hello.name, unix_clock_());
+        named.token.clear();
+        checked = net::encode(named);
+    }
+    if (good && room->add_connection(connection, address, checked.empty() ? message : checked, now_ms, made_here)) return;        // the room owns it now
     reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
 }
 
@@ -818,6 +834,11 @@ std::vector<std::string> RoomManager::take_notices() {
     bot_notes_.clear();
     for (std::string& line : room_notes_) notes.push_back(std::move(line));
     room_notes_.clear();
+    if (name_gate_ != nullptr) {
+        for (const auto& kv : rooms_) name_gate_->add_renamed(kv.second->take_name_renames());
+        for (const auto& room : retired_) name_gate_->add_renamed(room->take_name_renames());
+        for (std::string& line : name_gate_->report(unix_clock_())) notes.push_back(std::move(line));
+    }
     if (replays_ != nullptr) {
         for (std::string& line : replays_->take_notes()) notes.push_back(std::move(line));
     }

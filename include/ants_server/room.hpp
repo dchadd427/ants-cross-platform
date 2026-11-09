@@ -142,6 +142,8 @@ struct RoomSpec {
     /// 0 = none (the plain 5 s "Get ready" dialog of protocol 12). A spec built by code says what it wants (0 here); the server's rooms start from RoomManager::default_spec(), which has the server's own setting
     /// (--start-countdown-seconds, default 30; the control key "countdown_seconds"). A room of one person, with or without computer players, never counts down.
     uint32_t countdown_s{0};
+    /// A server run with --verified-names: the room's people have names of their own (no two the same: HostLobby::Config::unique_names) that stay what the seat was given (fixed_names). Off: as before.
+    bool verified_names{false};
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -431,6 +433,15 @@ public:
     /// A Hello with a key reaches a match that runs (the door: RoomManager) when the room holds seats and the match runs: the session decides (HostSession::accept_rejoin). True: the room
     /// owns the connection (the session points at it until it has been replaced). False: the room takes nothing; the session has answered with a Reject and closed the connection, which the
     /// caller keeps until the answer has arrived. A room that keeps max_connections connections that are all in use answers Full (it never keeps more).
+    /// A Hello with this key takes a seat of the waiting room over (it is not a newcomer: the door leaves its name and its token alone)
+    bool takes_over(const net::SeatKey& key) const noexcept { return state_ == RoomState::Waiting && lobby_.takes_over(key); }
+    /// How many new seats had their name changed (another person of the room had it) since the last call
+    uint32_t take_name_renames() noexcept {
+        const uint32_t now = lobby_.renamed_for_uniqueness();
+        const uint32_t delta = now - renames_taken_;
+        renames_taken_ = now;
+        return delta;
+    }
     bool can_rejoin() const noexcept { return state_ == RoomState::Running && session_ != nullptr && spec_.reconnect; }
     bool rejoin(std::unique_ptr<net::Connection>& connection, const net::HelloMsg& hello, uint32_t now_ms);
 
@@ -503,6 +514,7 @@ private:
     std::string map_notice_;                 // a lobby room: what the leader is to be told at the next pass (a map that the plan asked for is not played online)
 
     net::HostLobby lobby_;
+    uint32_t renames_taken_{0};                              // (take_name_renames: what was already told)
     LobbyServices services_;                 // protocol 16: what a lobby room asks of its server
     bool empty_{false};                      // a lobby room: nobody is in it, since empty_since_ms_
     bool arrived_{false};                    // a lobby room: a connection was given to it since its last pass (its Hello is read in the next one: empty_ is stale until then)

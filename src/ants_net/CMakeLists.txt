@@ -13,6 +13,7 @@ add_library(ants_net STATIC
     session_client.cpp
     session_hashes.cpp
     lobby.cpp
+    person_name.cpp
     netgame.cpp
     netgame_match.cpp
 )
