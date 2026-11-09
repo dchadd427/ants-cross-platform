@@ -220,6 +220,25 @@ class TheNewest200Lines(unittest.TestCase):
         self.assertIn("purge lines=300", room.log.getvalue())
         self.assertEqual([r[0] for r in room.store.lines(1000)], list(range(500, 300, -1)))
 
+    def test_an_old_backlog_is_not_deleted_by_the_first_line_and_the_clock_cuts_it_down_a_chunk_at_a_time(self):
+        room = Room(max_lines=10 ** 9, purge_chunk=500, **LOOSE)                  # (a file of the earlier program: 3,000 lines)
+        self.addCleanup(room.close)
+        fill(room.store, 3000)
+        room.store.max_lines = 200                                              # (the limit of the program: 200, as the hub opens the store)
+        speaker = room.person(1)
+        room.say(speaker, "the first line after the upgrade")
+        self.assertEqual(speaker.codes(), [])
+        self.assertGreater(room.store.usage().lines, 2900, "one chat line took out a few lines, not the backlog")
+        counts = []
+        for _ in range(40):
+            room.tick()
+            counts.append(room.store.usage().lines)
+            if counts[-1] == 200:
+                break
+        self.assertEqual(counts[-1], 200)
+        self.assertGreater(len(counts), 3, "a chunk of 500 at a time: several ticks")
+        self.assertEqual(room.store.lines(1)[0][4], "the first line after the upgrade")
+
     def test_a_line_that_went_past_the_newest_200_is_in_neither_file_once_the_log_is_cut_and_the_hub_cuts_it_by_itself(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)

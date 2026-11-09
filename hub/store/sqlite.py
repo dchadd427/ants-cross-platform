@@ -14,6 +14,7 @@ import time
 from .base import MAX_LINES, PICKS, PROFILE_DAYS, PUBLIC, Line, Profile, StoreBase, StoreError, Usage
 
 SCHEMA = 3
+TRIM_ROWS = 8                                       # the most lines that a new line takes out: one is the rule, a few make up for a limit that was lowered
 
 
 def refusal_as_store_error(method, errors=sqlite3.OperationalError):
@@ -114,7 +115,8 @@ class Store(StoreBase):
         at = int(self.clock())
         with self.transaction():
             cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)", (at, account, name, text, 1 if mod else 0))
-            over = self.db.execute("DELETE FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?)", (self.max_lines,)).rowcount
+            over = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?)",
+                                   (self.max_lines, TRIM_ROWS)).rowcount      # (a few rows: a file that holds a long backlog is cut down by the purge, a chunk at a time, never by one chat line)
         if over:
             self.unsettled = True                   # (the lines past the newest max_lines are in the log file until it is cut: the hub's clock cuts it at its next look)
         return Line(cur.lastrowid, at, account, name, text, 1 if mod else 0)

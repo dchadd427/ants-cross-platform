@@ -160,13 +160,13 @@ class TheLegalPage(unittest.TestCase):
     def test_the_panel_of_the_chat_says_what_is_kept_for_how_long_the_cookies_and_how_to_leave(self):
         start = self.main.index('<section class="panel" id="chat-login">')
         panel = plain(self.main[start:self.main.index("</section>", start)])
-        for words in ("Discord id, username and display name", "three things only", "shows the name that you pick", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for up to 7 days", "only while they are among the newest 200", "with the id and the name that wrote them",
+        for words in ("Discord id, username and display name", "three things only", "shows the name that you pick", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for up to 7 days", "only while they are among the newest 200 lines", "with the id and the name that wrote them",
                       "Moderators also see your username next to a display name", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
                       "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username and display name", "a ban or a mute, if there is one, stays",
                       "Reading the chat and playing need no login",
                       "the name you play under", "Games and Players lists", "the match history, which keeps results and names for good, and into the replay files", "for 30 days on the site, and for ever in a file that someone has downloaded", "Forget me does not remove it", "whether they are looking around, waiting in a room or playing"):
             self.assertIn(words, panel, words)
-        self.assertLessEqual(len(panel.split()), 352)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 342 words now)
+        self.assertLessEqual(len(panel.split()), 352)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 351 words now: the newest 200 lines, 9 words more)
         self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "display name", "Log out", "Forget me"])
         self.assertNotIn("two things only", panel)
         self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)

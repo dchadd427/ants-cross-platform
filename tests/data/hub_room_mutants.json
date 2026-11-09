@@ -455,15 +455,15 @@
   {
    "id": "newest200_a_line_keeps_one_more_than_the_limit",
    "file": "hub/store/sqlite.py",
-   "old": "OFFSET ?)\", (self.max_lines,)).rowcount",
-   "new": "OFFSET ?)\", (self.max_lines + 1,)).rowcount",
+   "old": "(self.max_lines, TRIM_ROWS)).rowcount",
+   "new": "(self.max_lines + 1, TRIM_ROWS)).rowcount",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
   },
   {
    "id": "newest200_a_new_line_does_not_take_the_old_ones_out",
    "file": "hub/store/sqlite.py",
-   "old": "OFFSET ?)\", (self.max_lines,)).rowcount",
-   "new": "OFFSET ?)\", (10 ** 9,)).rowcount",
+   "old": "(self.max_lines, TRIM_ROWS)).rowcount",
+   "new": "(10 ** 9, TRIM_ROWS)).rowcount",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
   },
   {
@@ -513,6 +513,27 @@
    "file": "hub/store/sqlite.py",
    "old": "(int(self.clock()) - self.retention, self.max_lines, count)",
    "new": "(0, self.max_lines, count)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_one_line_may_take_out_a_whole_backlog",
+   "file": "hub/store/sqlite.py",
+   "old": "TRIM_ROWS = 8 ",
+   "new": "TRIM_ROWS = 10 ** 9 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_purge_spares_moderators_and_deleted_lines_past_the_newest",
+   "file": "hub/store/sqlite.py",
+   "old": "ORDER BY id DESC LIMIT 1 OFFSET ?) LIMIT ?)\",",
+   "new": "ORDER BY id DESC LIMIT 1 OFFSET ?) AND mod = 0 AND deleted = 0 LIMIT ?)\",",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
+  },
+  {
+   "id": "newest200_the_purge_counts_the_newest_among_the_undeleted_only",
+   "file": "hub/store/sqlite.py",
+   "old": "(SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) LIMIT ?)\",",
+   "new": "(SELECT id FROM lines WHERE deleted = 0 ORDER BY id DESC LIMIT 1 OFFSET ?) LIMIT ?)\",",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_room.TheNewest200Lines"
   }
  ]

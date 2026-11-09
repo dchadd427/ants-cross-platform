@@ -227,6 +227,27 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.store.purge(4), 1)
         self.assertEqual([r[0] for r in self.store.lines(100)][::-1], fresh[2:])
 
+    def test_a_purge_leaves_exactly_the_newest_lines_whatever_their_flags(self):
+        ids = [self.say(n, mod=n % 3 == 0).id for n in range(10)]
+        for line_id in (ids[1], ids[4], ids[8], ids[9]):
+            self.store.delete_line(line_id, "me")
+        self.store.max_lines = 4
+        self.assertEqual(self.store.purge(), 6)
+        self.assertEqual([r[0] for r in self.store.lines(100)][::-1], ids[6:], "the newest 4 stay: a moderator's line and a deleted line count as any other")
+
+    def test_a_line_takes_out_at_most_a_few_of_a_long_backlog_and_the_purge_takes_the_rest_by_chunks(self):
+        for n in range(300):
+            self.say(n)
+        self.store.max_lines = 200
+        self.say(300)
+        left = self.store.usage().lines
+        self.assertGreater(left, 280, "one chat line is not a long delete")
+        self.assertLess(left, 301)
+        self.assertEqual(self.store.purge(50), 50)
+        while self.store.purge(50):
+            pass
+        self.assertEqual(self.store.usage().lines, 200)
+
     def test_the_age_limit_stays_whichever_limit_is_smaller_deletes_first(self):
         self.store.max_lines = 6
         for n in range(3):
