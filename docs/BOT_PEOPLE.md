@@ -324,9 +324,9 @@ Commands: orders per match 522 -> 525, can't-go reactions 1875 -> 1862, orders f
 
 ## The bench bot `gang2`
 
-`gang` (above) is far weaker than the strong players whose games it stands for. The reference figures from games against people, round numbers, say what a strong player does against the standard bot on TREASURE: two to four of the four Thief power-ups in the first 20 seconds; Thieves that harvest between raids and raid 16 to 34 times in a game; an economy as good as the bot's with about 64 orders a minute (the bot gives 19 to 25); all six ants, Thieves and the Fire Ant too, in one group from about 40 seconds on, told again after every blow (about 2.5 ants to an order) and 68 percent of the consecutive blows on the same ant; hurt ants that go home and come back healed; one hunter near the other side's door; few walls and no bombs. The Hard bots against him got no points, lost 16 ants and killed none, and every one of their Fire Ants died. `gang` does not do that: Hard keeps 3,308 points against its 243 (the bot before Step 1), the Hard Fire Ant dies in 42 of 116 cases and all the raids of `gang` together take about 20 points a match from Hard.
+`gang` (above) is far weaker than the strong players whose games it stands for. The reference figures from games against people, round numbers, say what a strong player does against the standard bot on TREASURE: two to four of the four Thief power-ups in the first half minute; Thieves that harvest between raids and raid about 15 to 35 times in a game; an economy as good as the bot's with about 65 orders a minute (the bot gives about 20); all six ants, Thieves and the Fire Ant too, in one group from the first minute on, told again after every blow (two to three ants to an order), and two thirds of the consecutive blows on the same ant; hurt ants that go home and come back healed; one hunter near the other side's door; few walls and no bombs. The Hard bots against such a player got no points, lost about 15 ants and killed none, and all of their Fire Ants died. `gang` does not do that: Hard keeps 3,308 points against its 243 (the bot before Step 1), the Hard Fire Ant dies in 42 of 116 cases and all the raids of `gang` together take about 20 points a match from Hard.
 
-`gang2` is a second test-only bench bot (`tools/bench_gang2.hpp`; `gang` and every shipped bot play exactly as before, see "The identity of the shipped bots" below). `bot_arena` and `bot_watch` seat it as `--seat N=gang2:LEVEL`. It is a client like every bot: the view, the orders, the controller and its level's profile; it reads nothing that a player cannot see, and at Hard it gives about 63 orders a minute (the reference is 64; `gang` gives 23, the standard bot at Hard 38). In the order of its looks:
+`gang2` is a second test-only bench bot (`tools/bench_gang2.hpp`; `gang` and every shipped bot play exactly as before, see "The identity of the shipped bots" below). `bot_arena` and `bot_watch` seat it as `--seat N=gang2:LEVEL`. It is a client like every bot: the view, the orders, the controller and its level's profile; it reads nothing that a player cannot see, and at Hard it gives about 63 orders a minute (the reference is about 65; `gang` gives 23, the standard bot at Hard 38). In the order of its looks:
 
 1. **The economy.** The standard bot's own harvest and power-up tasks, with none of its fight tasks, walls, mines or eggs. Thief power-ups first (three, those of the other sides too), then two Combat Ants, then one Fire Ant.
 2. **Raids.** A Thief with empty hands raids the hill with the highest score box (30 points or more) whose thief hole is open, the moment it is, and harvests between raids. A Thief of the gang leaves it for a raid at once.
@@ -340,15 +340,15 @@ Commands: orders per match 522 -> 525, can't-go reactions 1875 -> 1862, orders f
 
 | measure | reference figure (target) | seeds 1 to 24 | five sets | now: seeds 1 to 24 | now: five sets | met against the bot before Step 1 |
 |---|---|---|---|---|---|---|
-| Hard Fire Ants that die | 14 of 14 (at least 70%) | 93 of 115 (81%) | 449 of 572 (78%) | 75 of 115 (65%) | 412 of 583 (71%) | yes |
-| raids of `gang2` a match | 16 to 34 (at least 10) | 13.7 | 11.3 | 8.5 | 9.3 | yes |
-| ants Hard lost a match | 16 in a game (at least 6) | 4.40 | 4.12 | 3.96 | 3.85 | no |
+| Hard Fire Ants that die | all (at least 70%) | 93 of 115 (81%) | 449 of 572 (78%) | 75 of 115 (65%) | 412 of 583 (71%) | yes |
+| raids of `gang2` a match | about 15 to 35 (at least 10) | 13.7 | 11.3 | 8.5 | 9.3 | yes |
+| ants Hard lost a match | about 15 in a game (at least 6) | 4.40 | 4.12 | 3.96 | 3.85 | no |
 | ants Hard killed a match | none (at most 1.5) | 0.75 | 1.23 | 1.81 | 1.99 | yes |
 | Hard's score | none (at most 1,654, half of 3,308) | 1,561 | 1,769 | 1,867 | 1,816 | on seeds 1 to 24 only |
 | `gang2`'s score | (at least 2,000) | 421 | 323 | 241 | 272 | no |
-| orders a minute of `gang2` | about 64 | 63.5 | 63.4 | 61.6 | 60.5 | |
+| orders a minute of `gang2` | about 65 | 63.5 | 63.4 | 61.6 | 60.5 | |
 
-Two targets are not reached and a third only on seeds 1 to 24; the bench bot was not given what a person lacks to reach them. **Hard loses 4 ants a match, not 6**: an ant that is left with 1 hit point walks home by itself and is healed, and only the Combat Ants' 2-point blow and the water finish an ant that has 2 left. **Hard's score** is 1,561 on seeds 1 to 24 and 1,769 on the five sets (the standard error of the mean of 240 matches is about 54); against `gang` it is 3,308. **`gang2` scores 300 to 400, not 2,000**: it banks about 900 a match (the standard bot at Hard against an idle seat scores 3,598 on this map, seeds 1 to 8) because the ants of its group do not harvest, and the Hard Thieves take about 550 from it, since it lights no wall at its own hole. A bench bot that harvests in the pauses of the fight and shuts its own hole would score more, and would be a different opponent from the one that the reference figures describe; the reference player's score came from his raids on bots that had nothing left to defend with.
+Two targets are not reached and a third only on seeds 1 to 24; the bench bot was not given what a person lacks to reach them. **Hard loses 4 ants a match, not 6**: an ant that is left with 1 hit point walks home by itself and is healed, and only the Combat Ants' 2-point blow and the water finish an ant that has 2 left. **Hard's score** is 1,561 on seeds 1 to 24 and 1,769 on the five sets (the standard error of the mean of 240 matches is about 54); against `gang` it is 3,308. **`gang2` scores 240 to 420, not 2,000**: it banks about 900 a match (the standard bot at Hard against an idle seat scores 3,598 on this map, seeds 1 to 8) because the ants of its group do not harvest, and the Hard Thieves take about 550 from it, since it lights no wall at its own hole. A bench bot that harvests in the pauses of the fight and shuts its own hole would score more, and would be a different opponent from the one that the reference figures describe; the reference figures describe players whose raids met bots with little left to defend with.
 
 **Hard against `gang2`, seeds 1 to 24** (both seats of each seed, TREASURE, Release build, the arena's sink latency of 3 ticks; "before Step 1" is `standard+styled=1,defence=0:hard`, see below; `gang2` at Hard unless the row says Medium; Medium and Easy are seeds 1 to 8). The same three tables as above, with the points the seat banked, the points raids took from it and its orders a minute added:
 
@@ -384,29 +384,29 @@ Two targets are not reached and a third only on seeds 1 to 24; the bench bot was
 
 **Points and ants**
 
-| run | seat | seats | score | ants killed | ants lost | ants left | banked | raided | orders a minute |
-|---|---|---|---|---|---|---|---|---|---|
-| Hard before Step 1 vs gang2:hard | standard+styled=1,defence=0:hard | 48 | 1561 | 0.75 | 4.40 | 2.0 | 2320 | 680 | 35.4 |
-| Hard before Step 1 vs gang2:hard | gang2:hard | 48 | 421 | 4.40 | 0.75 | 5.3 | 1015 | 594 | 63.5 | raids per match 13.7 (raid orders 16.4)
-| Hard now vs gang2:hard | standard:hard | 48 | 1867 | 1.81 | 3.96 | 2.5 | 2341 | 409 | 37.5 |
-| Hard now vs gang2:hard | gang2:hard | 48 | 241 | 3.96 | 1.83 | 4.3 | 745 | 497 | 61.6 | raids per match 8.5 (raid orders 11.4)
-| Medium vs gang2:hard | standard:medium | 16 | 604 | 0.44 | 6.00 | 1.2 | 1730 | 962 | 12.0 |
-| Medium vs gang2:hard | gang2:hard | 16 | 823 | 6.00 | 0.44 | 5.6 | 1295 | 471 | 55.8 | raids per match 20.7 (raid orders 23.4)
-| Easy vs gang2:hard | standard:easy | 16 | 8 | 0.00 | 10.12 | 0.7 | 1049 | 979 | 6.0 |
-| Easy vs gang2:hard | gang2:hard | 16 | 1400 | 10.12 | 0.00 | 6.0 | 1406 | 6 | 48.4 | raids per match 22.8 (raid orders 23.7)
-| Hard now vs gang2:medium | standard:hard | 48 | 2893 | 3.50 | 1.17 | 4.8 | 2990 | 97 | 45.5 |
-| Hard now vs gang2:medium | gang2:medium | 48 | 2 | 1.17 | 3.50 | 2.8 | 474 | 472 | 43.2 | raids per match 1.9 (raid orders 5.3)
+| run | seat | seats | score | ants killed | ants lost | ants left | banked | raided | orders a minute | raids a match (raid orders) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Hard before Step 1 vs gang2:hard | standard+styled=1,defence=0:hard | 48 | 1561 | 0.75 | 4.40 | 2.0 | 2320 | 680 | 35.4 | - |
+| Hard before Step 1 vs gang2:hard | gang2:hard | 48 | 421 | 4.40 | 0.75 | 5.3 | 1015 | 594 | 63.5 | 13.7 (16.4) |
+| Hard now vs gang2:hard | standard:hard | 48 | 1867 | 1.81 | 3.96 | 2.5 | 2341 | 409 | 37.5 | - |
+| Hard now vs gang2:hard | gang2:hard | 48 | 241 | 3.96 | 1.83 | 4.3 | 745 | 497 | 61.6 | 8.5 (11.4) |
+| Medium vs gang2:hard | standard:medium | 16 | 604 | 0.44 | 6.00 | 1.2 | 1730 | 962 | 12.0 | - |
+| Medium vs gang2:hard | gang2:hard | 16 | 823 | 6.00 | 0.44 | 5.6 | 1295 | 471 | 55.8 | 20.7 (23.4) |
+| Easy vs gang2:hard | standard:easy | 16 | 8 | 0.00 | 10.12 | 0.7 | 1049 | 979 | 6.0 | - |
+| Easy vs gang2:hard | gang2:hard | 16 | 1400 | 10.12 | 0.00 | 6.0 | 1406 | 6 | 48.4 | 22.8 (23.7) |
+| Hard now vs gang2:medium | standard:hard | 48 | 2893 | 3.50 | 1.17 | 4.8 | 2990 | 97 | 45.5 | - |
+| Hard now vs gang2:medium | gang2:medium | 48 | 2 | 1.17 | 3.50 | 2.8 | 474 | 472 | 43.2 | 1.9 (5.3) |
 
 The five sets of seeds 1 to 120 (240 seat-matches each):
 
 **Points and ants**
 
-| run | seat | seats | score | ants killed | ants lost | ants left | banked | raided | orders a minute |
-|---|---|---|---|---|---|---|---|---|---|
-| five sets, Hard before Step 1 | standard+styled=1,defence=0:hard | 240 | 1769 | 1.23 | 4.12 | 2.1 | 2386 | 560 | 36.8 |
-| five sets, Hard before Step 1 | gang2:hard | 240 | 323 | 4.10 | 1.23 | 4.9 | 892 | 569 | 63.4 | raids per match 11.3 (raid orders 14.2)
-| five sets, Hard now | standard:hard | 240 | 1816 | 1.99 | 3.85 | 2.5 | 2333 | 456 | 36.8 |
-| five sets, Hard now | gang2:hard | 240 | 272 | 3.84 | 2.00 | 4.2 | 788 | 511 | 60.5 | raids per match 9.3 (raid orders 12.2)
+| run | seat | seats | score | ants killed | ants lost | ants left | banked | raided | orders a minute | raids a match (raid orders) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| five sets, Hard before Step 1 | standard+styled=1,defence=0:hard | 240 | 1769 | 1.23 | 4.12 | 2.1 | 2386 | 560 | 36.8 | - |
+| five sets, Hard before Step 1 | gang2:hard | 240 | 323 | 4.10 | 1.23 | 4.9 | 892 | 569 | 63.4 | 11.3 (14.2) |
+| five sets, Hard now | standard:hard | 240 | 1816 | 1.99 | 3.85 | 2.5 | 2333 | 456 | 36.8 | - |
+| five sets, Hard now | gang2:hard | 240 | 272 | 3.84 | 2.00 | 4.2 | 788 | 511 | 60.5 | 9.3 (12.2) |
 
 **What was tried** (Hard before Step 1, TREASURE, both seats of every seed, the sets of seeds 25 to 96 unless the matches are fewer; one change at a time on top of the row above it for the first six rows, then each on top of the third row unless it says otherwise; Hard's score, ants Hard lost / killed, Hard Fire Ants that died, raids a match of the bench bot, the bench bot's score). A difference of about 150 points of Hard's score is within the noise of 144 matches (the standard error of the mean is about 70).
 
@@ -446,7 +446,7 @@ Changes that did not help (each on top of the third row of the table above unles
 
 What did not help or hurt: a group of at most four ants, Thieves kept out of the group (Hard keeps 3,488: the three Thieves are half of the ants), a different number of Thief power-ups, forming the group at tick 300 or only on demand (the ants that harvest are too far to come), a shorter gap between two blows, going home at 4 hit points, measuring reach and leash from the group's centre, waiting at the victim's pile instead of in front of its hole, making the group gather before it strikes, carriers as targets (the fights are with the ants that carry food and they hit back), a Fire Ant that puts out a wall of the hole (the wall keeper lights it again within about 100 ticks, before a Thief is there), preferring targets that the water would kill, letting only Combat Ants strike at an even number of hit points (to finish with the 2-point blow, with or without stopping the others: it halves the strikes), not chasing an ant that walks home at 1 hit point, a third Combat power-up, and keeping the hunter out of the group (the last two are the same within the noise).
 
-**The tests.** `tests/test_ai/test_ai_gang2.cpp` (suite 2.20, [TESTING.md](TESTING.md)), AI37.1 to AI37.8, on the 60 by 60 field of grass with four hills and the Hard profile (a look every 4 ticks, a reaction of 8): the kind is known to the bench factory and not to `make_bot`, no order is filtered or refused, and a match is played twice alike (AI37.1); four workers strike the nearer of two idle enemy workers, one order names them all, the walking ones are told again, and no blow falls on the other one until the first is down to 1 hit point (AI37.2); a Thief or a Fire Ant is struck before a worker that is nearer (AI37.3); a gang ant with 3 hit points is sent home at once, is healed and strikes again (AI37.4); a Fire Ant and, while no raid is open, a Thief strike beside the workers (AI37.5); a Thief raids a hill whose hole is open and takes loot, and does not raid one whose three tiles are shut (AI37.6); an enemy ant that carries food is left alone (AI37.7); the first Combat Ant walks to its post alone and the second one is of the gang (AI37.8). The mutants are `tests/data/bot_gang2_mutants.json` (`python3 tools/mutate.py tests/data/bot_gang2_mutants.json --keep-going --jobs 1 --timeout 900`).
+**The tests.** `tests/test_ai/test_ai_gang2.cpp` (suite 2.20, [TESTING.md](TESTING.md)), AI37.1 to AI37.12, on the 60 by 60 field of grass with four hills and the Hard profile (a look every 4 ticks, a reaction of 8): the kind is known to the bench factory and not to `make_bot`, no order is filtered or refused, a match is played twice alike, and the bot takes Thief and Combat power-ups in the opening (AI37.1); four workers strike the nearer of two idle enemy workers, one order names them all, the walking ones are told again, and no blow falls on the other one until the first is down to 1 hit point (AI37.2); a Thief or a Fire Ant is struck before a worker that is nearer, and the ant that strikes one of the gang before a Thief that is as near (AI37.3); a gang ant with 3 hit points is sent home at once, is healed and strikes again (AI37.4); a Fire Ant and, while no raid is open, a Thief strike beside the workers (AI37.5); a Thief raids a hill whose hole is open and takes loot, and does not raid one whose three tiles are shut (AI37.6); an enemy ant that carries food is left alone (AI37.7); the first Combat Ant walks to its post alone and the second one is of the gang (AI37.8); the nearer of two enemy ants is struck first, whichever is older (AI37.9); at equal distances the one with fewer hit points, and an ant that comes nearer later does not take the blows from the victim (AI37.10); with no enemy ant in reach the gang stands in front of the thief hole of the richest enemy hill (AI37.11); a hurt gang ant is in no strike order, a gang ant that takes food leaves the gang, an invitation to team up is refused, the hunter goes home at 3 hit points, and a Thief of the gang leaves it for a raid when a hole opens (AI37.12). Not covered: the hunter's own strike rules (a Combat Ant strikes an enemy in reach by reflex before the bot looks, so no scene shows what the bot orders). The 41 mutants are `tests/data/bot_gang2_mutants.json` (`python3 tools/mutate.py tests/data/bot_gang2_mutants.json --keep-going --jobs 1 --timeout 900`).
 
 **The identity of the shipped bots.** Nothing under `src/ants_ai` or `include/ants_ai` changed. `bot_arena --selftest` passes (182 checks); `bot_arena --write-baselines` is byte for byte `tests/test_ai/baselines.inc`; 24 seeds of Hard against `gang:hard` (both seats, with `--replay-check`), 8 matches of Medium against Easy and the mixed arena matches give reports that `cmp` finds identical for a build of the base and a build with `gang2`; and `test_ai` in full has the cases and assertions of the base plus those of AI37.
 

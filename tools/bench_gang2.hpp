@@ -466,7 +466,8 @@ private:
             for (const uint32_t id : strikers) ordered_[id] = now_;
             return;
         }
-        // no target in reach: to the tile in front of the victim's thief hole, and wait there
+        // no target in reach: to the tile in front of the victim's thief hole, and wait there (with no enemy team left there is no hole)
+        if (victim_ < 0) return;
         const sim::TileCoord hole = east_tiles(map.hill(static_cast<uint8_t>(victim_)))[1];
         sim::TileCoord stand;
         if (!free_tile_near(view, sim::TileCoord{hole.x + kRallyOut, hole.y}, 3, stand)) return;
