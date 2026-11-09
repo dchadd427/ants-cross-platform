@@ -26,7 +26,7 @@ from hub import config, server, ticket  # noqa: E402
 from hub.limits import Limits  # noqa: E402
 from hub.session import Identity  # noqa: E402
 
-SECRET = "x" * 32                       # a test value
+SECRET = "x" * 32                       # a test value (obviously fake; so is every secret of the tables)
 FIXED = ("n1.AQAAAAAAAABY81NlAAECAwQFBgf_RxBJ31eRktl_RT346Vbz", SECRET, "1", 1700000600, bytes(range(8)), "Ann")     # the pass of the first line of the table, pinned here by hand
 NAME_ENV = "ANTS_NAME_TICKET_SECRET"
 
@@ -230,6 +230,13 @@ class TheFit(unittest.TestCase):
         self.assertEqual(ticket.fit_game_name("Ann\u0301\u0302"), "Ann")
         self.assertEqual(ticket.fit_game_name("Ann" + " " * 253 + "\u0418"), "Ann")          # (the cut at 256 code points comes first)
         self.assertEqual(ticket.fit_game_name("Ann" + " " * 252 + "\u0418"), "")
+
+    def test_the_cut_counts_code_points_and_not_utf16_units(self):
+        e = chr(0x1f600)
+        self.assertEqual(ticket.fit_game_name(e * 127 + " Ann"), "Ann")               # (131 code points, 258 units: the page's old cut would lose the end)
+        self.assertEqual(ticket.fit_game_name("Ann" + e * 200 + chr(0x418)), "")       # (204 code points: the letter is inside the cut)
+        self.assertEqual(ticket.fit_game_name("Ann" + e * 252 + chr(0x418)), "")       # (it is the 256th)
+        self.assertEqual(ticket.fit_game_name("Ann" + e * 253 + chr(0x418)), "Ann")    # (the 257th)
 
     def test_nfkd_and_not_nfkc(self):
         self.assertEqual(ticket.fit_game_name("Cr\u00e8me"), "Creme")                  # (NFKC would keep the accent and refuse)

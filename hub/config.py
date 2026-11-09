@@ -39,7 +39,7 @@ class Config:
     def summary(self):
         """Safe to log: no secret, no account id, no address."""
         out = {"port": self.port, "origin": self.origin or "none", "mods": len(self.mods), "test_login": int(self.test_login), "login_configured": int(self.login_on),
-                "min_account_days": self.min_account_days}
+               "min_account_days": self.min_account_days}
         out["name_tickets"] = int(bool(self.name_ticket_secret))
         return out
 

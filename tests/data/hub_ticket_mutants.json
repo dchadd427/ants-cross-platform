@@ -61,6 +61,13 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
   },
   {
+   "id": "fit_cut_in_utf16_units",
+   "file": "hub/ticket.py",
+   "old": "unicodedata.normalize(\"NFKD\", text[:CUT])",
+   "new": "unicodedata.normalize(\"NFKD\", text.encode(\"utf-16-le\")[:2 * CUT].decode(\"utf-16-le\", \"ignore\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_ticket"
+  },
+  {
    "id": "fit_start_not_trimmed",
    "file": "hub/ticket.py",
    "old": ".strip(\" \")\n    if not NAME_MIN",

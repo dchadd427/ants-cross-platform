@@ -56,7 +56,7 @@ class Limits:
     login_inflight: int = 6             # logins that wait for Discord at one time (the 7th gets the page "Login unavailable" at once, and the sockets never wait for it)
     login_states_max: int = 10000       # logins that were started and not finished (each is about 200 bytes of memory); the oldest go first
     state_seconds: float = 600.0        # how long a login may take, from /hub/login to /hub/callback
-    ticket_seconds: float = 600.0       # how long a pass for the game server's name check lasts (a new one is made at every /hub/me; the game server accepts one for 630 seconds at most)
+    ticket_seconds: float = 600.0       # how long a pass for the game server's name check lasts (read by the hub's own pass code; nothing else uses it yet)
     session_seconds: float = 30 * 86400.0       # how long a login lasts (30 days)
     sessions_per_account: int = 10      # logins that one account keeps at a time (browsers, phones); the oldest go first
     sessions_total: int = 100000        # logins that the hub keeps in all (a crowd of throwaway accounts cannot make the table grow without end): the oldest go first
