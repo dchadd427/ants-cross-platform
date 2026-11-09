@@ -18,6 +18,8 @@
 #include "ants_replay/player.hpp"
 #include "ants_replay/replay.hpp"
 #include "ants_server/control.hpp"
+#include "ants_server/crypto.hpp"
+#include "ants_server/name_ticket.hpp"
 #include "ants_server/map_store.hpp"
 #include "ants_server/replay_store.hpp"
 #include "ants_server/room.hpp"
@@ -201,6 +203,7 @@ struct Client {
     uint8_t platform{0};
     uint8_t kind{net::kClientGame};          // protocol 16: what the Hello says it is: a game, or the front page's lobby (a page cannot play a match)
     net::SeatKey key{};                      // the key that the Hello shows (a game that takes the seat of a page over, a page that was reloaded)
+    std::string token;                       // the token that the Hello shows (a name pass, name_ticket.hpp)
     net::Connection* end{nullptr};
     net::Connection* server_end{nullptr};    // the other end of the link (the server's): open until the server closes it, whatever this client has or has not read
     std::unique_ptr<net::ClientLobby> lobby;
@@ -235,6 +238,7 @@ struct Client {
         cc.platform = platform;
         cc.client_kind = kind;
         cc.key = key;
+        cc.token = token;
         lobby = std::make_unique<net::ClientLobby>(end, cc);
     }
     uint32_t next_random() {
@@ -315,6 +319,7 @@ struct World {
     uint8_t next_platform{0};                                               // the platform byte that the next connect() puts in its Hello (0: not told); it stays until it is set again
     uint8_t next_kind{net::kClientGame};                                    // the client kind of the next connect()'s Hello (protocol 16), and the key it shows: connect_page and connect_game set them for one call
     net::SeatKey next_key{};
+    std::string next_token;                                                 // the token that the next connect()'s Hello shows (a name pass); it stays until it is set again
     bool next_fail_load{false};                                             // the next connect()'s machine cannot load the map (connect_game sets it for one call)
     std::string next_map_folder;                                            // the next connect()'s machine is one of the newest version with this folder of maps (see Client::map_folder)
     std::string next_address{"127.0.0.1"};                                  // where the next connect()'s link comes from (the address that the door is given with it); it stays until it is set again
@@ -331,6 +336,7 @@ struct World {
         c.platform = next_platform;
         c.kind = next_kind;
         c.key = next_key;
+        c.token = next_token;
         c.fail_load = next_fail_load;
         c.map_folder = next_map_folder;
         c.server_end = ends.first;
@@ -684,6 +690,7 @@ struct RClient {
     std::optional<net::CreateBlock> create;  // the create block of its Hello (protocol 15): what makes a public room on a server that offers them
     uint8_t platform{0};
     uint8_t kind{net::kClientGame};          // what its Hello says it is (protocol 16): a game, or a lobby page (which never gets a Start)
+    std::string token;                       // what its Hello shows as the token (a name pass)
 
     void start(net::Connection* client_end, uint32_t seed) {
         end = client_end;
@@ -697,6 +704,7 @@ struct RClient {
         cc.create = create;
         cc.platform = platform;
         cc.client_kind = kind;
+        cc.token = token;
         lobby = std::make_unique<net::ClientLobby>(end, cc);
     }
     uint32_t next_random() {
@@ -1446,7 +1454,9 @@ void run_persist_review_tests();
 void run_persist_process_tests();
 void run_persist_review_process_tests();
 void run_persist_review_process_tests_2();
+void run_name_process_tests();
 void run_restore_tests();
 void run_lobby_room_tests();
+void run_name_ticket_tests();
 void run_rematch_tests();
 void run_public_room_tests();

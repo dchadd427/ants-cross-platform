@@ -10,6 +10,7 @@ int main() {
     run_manager_tests();
     run_demo_tests();
     run_lobby_room_tests();
+    run_name_ticket_tests();
     run_rematch_tests();
     run_public_room_tests();
     run_hardening_tests();
@@ -40,6 +41,7 @@ int main() {
     run_persist_process_tests();
     run_persist_review_process_tests();
     run_persist_review_process_tests_2();
+    run_name_process_tests();
 #endif
     std::cout << "=======================================================\n";
     std::cout << " Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count << "\n Failed:           " << g_test_failures << "\n";

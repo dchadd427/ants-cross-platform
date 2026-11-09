@@ -11,6 +11,7 @@ int main() {
     run_lobby_rooms_tests();
     run_lobby_rematch_tests();
     run_lobby_public_tests();
+    run_lobby_names_tests();
 
     std::cout << "\n=======================================================\n Total Test Cases: " << g_test_count << "\n Total Assertions: " << g_assert_count
               << "\n Failed:           " << g_test_failures << "\n=======================================================\n";

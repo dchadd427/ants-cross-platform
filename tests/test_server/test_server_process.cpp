@@ -23,6 +23,7 @@ uint16_t free_tcp_port() {
 struct ServerProcess {
     pid_t pid{-1};
     int started{0};
+    std::vector<std::pair<std::string, std::string>> env;                              // more variables of the child's environment (a setting of the server that is read from there)
     bool start(const std::vector<std::string>& args, const std::string& secret, const std::string& log_file) {
         std::vector<std::string> storage;
         storage.push_back(ANTS_SERVER_BINARY);
@@ -40,6 +41,7 @@ struct ServerProcess {
                 ::close(fd);
             }
             ::setenv("ANTS_SERVER_SECRET", secret.c_str(), 1);
+            for (const auto& kv : env) ::setenv(kv.first.c_str(), kv.second.c_str(), 1);
             ::execv(argv[0], argv.data());
             ::_exit(127);
         }
@@ -121,6 +123,7 @@ struct RealWorld : LinkSource {
         links.push_back(net::TcpConnection::connect("127.0.0.1", port));
         return links.back().get();
     }
+    std::string next_token;                                                             // what the next Hello shows as its token (a name pass)
     RClient& connect(const std::string& name, const std::string& room, const std::optional<net::CreateBlock>& create = std::nullopt, uint8_t kind = net::kClientGame, const net::SeatKey& key = net::SeatKey{}) {
         net::Connection* end = open_link();
         clients.push_back(std::make_unique<RClient>());
@@ -130,6 +133,7 @@ struct RealWorld : LinkSource {
         c.create = create;                                                              // (the block of a Hello that makes a public room, protocol 15)
         c.kind = kind;                                                                  // (protocol 16: a lobby page, or a game)
         c.key = key;
+        c.token = next_token;
         c.record_hashes = true;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;
@@ -847,6 +851,85 @@ void run_persist_review_process_tests_2() {
             ASSERT_TRUE(again.prepare(why));
         }
 #endif
+    } TEST_END();
+}
+
+// The real program with --verified-names: the start lines for each setting, a secret that cannot be used stops the start without the value in the log, and what the log holds after a bad pass and a good one
+void run_name_process_tests() {
+    TEST_CASE("S3.275 ants_server --verified-names As A Real Program: A Secret That Is Set And Too Short Stops The Start (Exit 2, The Variable Named, The Value Never Printed); The Start Line Says What The Settings Make (On With A Secret, On Without, Off With One); A Bad And A Good Pass Seat A Guest And The Named Person; The Log Has The Counts And No Name, Pass, Number, Nonce Or Secret") {
+        const fs::path root = temp_dir_for("name-process");
+        const std::string secret = "test-secret-0123456789abcdef0123456789abcdef";
+        const std::string name_secret = "Tn" + hex_u64(static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count())) + "0123456789abcdefghij";
+        {   // too short: no start
+            const uint16_t port = free_tcp_port();
+            const std::string log_file = (root / "short.log").string();
+            ServerProcess server;
+            server.env = {{"ANTS_NAME_TICKET_SECRET", "shortvalue12345"}};
+            ASSERT_TRUE(server.start({"--maps", maps_dir(), "--port", std::to_string(port), "--verified-names"}, secret, log_file));
+            int status = 0;
+            ASSERT_TRUE(server.wait_exit(10000, status) >= 0);
+            ASSERT_TRUE(WIFEXITED(status) && WEXITSTATUS(status) == 2);
+            const std::string log = text_of_file(log_file);
+            ASSERT_TRUE(log.find("ANTS_NAME_TICKET_SECRET") != std::string::npos && log.find("shortvalue12345") == std::string::npos);
+        }
+        const auto start_line = [&](const char* tag, const std::vector<std::string>& extra, bool with_secret, const std::string& expect) {
+            const uint16_t port = free_tcp_port();
+            const std::string log_file = (root / (std::string(tag) + ".log")).string();
+            ServerProcess server;
+            if (with_secret) server.env = {{"ANTS_NAME_TICKET_SECRET", name_secret}};
+            std::vector<std::string> args = {"--maps", maps_dir(), "--port", std::to_string(port)};
+            for (const std::string& a : extra) args.push_back(a);
+            if (!server.start(args, secret, log_file) || !port_accepts(port, 15000)) return false;
+            const std::string log = text_of_file(log_file);
+            return log.find(expect) != std::string::npos && log.find(name_secret) == std::string::npos;
+        };
+        ASSERT_TRUE(start_line("on-secret", {"--verified-names"}, true, "verified names are on: a name signed by the hub is kept, any other person plays as a guest"));
+        ASSERT_TRUE(start_line("on-none", {"--verified-names"}, false, "verified names are on and ANTS_NAME_TICKET_SECRET is not set: every person plays as a guest"));
+        ASSERT_TRUE(start_line("off-secret", {}, true, "ANTS_NAME_TICKET_SECRET is set but --verified-names is not: names are not checked"));
+        {   // a bad and a good pass against the real program (the wall clock)
+            const uint16_t port = free_tcp_port();
+            const std::string log_file = (root / "run.log").string();
+            ServerProcess server;
+            server.env = {{"ANTS_NAME_TICKET_SECRET", name_secret}};
+            ASSERT_TRUE(server.start({"--maps", maps_dir(), "--port", std::to_string(port), "--demo-rooms", "2", "--demo-map", "TINY.LVL", "--verified-names"}, secret, log_file));
+            ASSERT_TRUE(port_accepts(port, 15000));
+            RealWorld w;
+            w.port = port;
+            w.maps = maps_dir();
+            w.next_token = "n1." + std::string(48, 'A');
+            RClient& mallory = w.connect("Mallory Typed", "namelog1", block_of("", 4, net::kNoTeam, net::kNoTeam, true));
+            w.next_token.clear();
+            ASSERT_TRUE(w.until([&]() { return mallory.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 15000));
+            const std::string mallory_name = mallory.lobby->room().slots[mallory.lobby->my_seat()].name;
+            ASSERT_TRUE(is_guest_name(mallory_name));
+            const std::string zelda = "Zelda Quartz";
+            const uint32_t end = static_cast<uint32_t>(std::time(nullptr)) + 600u;
+            const uint64_t account = 987654321012ull;
+            const uint64_t nonce = 0x0badc0de0ddba11ull;
+            std::string b(20, '\0');
+            for (int i = 0; i < 8; ++i) b[static_cast<size_t>(i)] = static_cast<char>(account >> (8 * i));
+            for (int i = 0; i < 4; ++i) b[static_cast<size_t>(8 + i)] = static_cast<char>(end >> (8 * i));
+            for (int i = 0; i < 8; ++i) b[static_cast<size_t>(12 + i)] = static_cast<char>(nonce >> (8 * i));
+            std::string signed_bytes("ants-name-ticket-1", 18);
+            signed_bytes.push_back('\0');
+            signed_bytes += b + zelda;
+            const std::string pass = "n1." + base64url_encode(b + hmac_sha256(name_secret, signed_bytes).substr(0, 16));
+            w.next_token = pass;
+            RClient& zed = w.connect(zelda, "namelog1");
+            w.next_token.clear();
+            ASSERT_TRUE(w.until([&]() { return zed.lobby->phase() == net::ClientLobby::Phase::InRoom; }, 15000));
+            ASSERT_EQ(zed.lobby->room().slots[zed.lobby->my_seat()].name, zelda);
+            std::string log;
+            ASSERT_TRUE(w.until([&]() { log = text_of_file(log_file); return log.find("name tickets:") != std::string::npos; }, 5000));
+            server.signal_it(SIGTERM);
+            int status = 0;
+            ASSERT_TRUE(server.wait_exit(20000, status) >= 0);
+            log = text_of_file(log_file);
+            ASSERT_TRUE(log.find("name tickets: good ") != std::string::npos);
+            for (const std::string& secret_text : {name_secret, zelda, std::string("Zelda"), pass, pass.substr(3), mallory_name, std::string("Mallory"), std::to_string(account), std::string("0badc0de0ddba11"), std::string("0ddba11")}) {
+                ASSERT_MSG(log.find(secret_text) == std::string::npos, secret_text);
+            }
+        }
     } TEST_END();
 }
 #endif
