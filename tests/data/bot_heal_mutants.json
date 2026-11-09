@@ -226,7 +226,7 @@
   },
   {
    "id": "gate_task_clicks_the_healing_carrier",
-   "file": "src/ants_ai/standard_tasks.cpp",
+   "file": "src/ants_ai/standard_tasks_gate.cpp",
    "old": "c.ledger.owner(a.id) != kHealTaskId && ",
    "new": "",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI36.4 ' ./build/tests/test_ai/test_ai",
@@ -234,7 +234,7 @@
   },
   {
    "id": "carrier_aid_clicks_the_healing_carrier",
-   "file": "src/ants_ai/standard_tasks.cpp",
+   "file": "src/ants_ai/standard_tasks_gate.cpp",
    "old": " || c.ledger.owner(it->first) == kHealTaskId) {\n            it = aid_.erase(it);",
    "new": "  ) {\n            it = aid_.erase(it);",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI36.11 ' ./build/tests/test_ai/test_ai",

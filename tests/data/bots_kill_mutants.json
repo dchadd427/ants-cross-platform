@@ -157,7 +157,7 @@
   },
   {
    "id": "sabotage_worth_ignored",
-   "file": "src/ants_ai/standard_tasks.cpp",
+   "file": "src/ants_ai/standard_tasks_harass.cpp",
    "old": "(plan.chore_worth && !fire_in_worth_it(v, c.map, t))",
    "new": "false",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI31.7 ' ./build/tests/test_ai/test_ai",

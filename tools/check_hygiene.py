@@ -34,7 +34,6 @@ TEST_LINES = 2500
 PROD_LINES = 1500
 LINE_SLACK = 0.10  # a file more than 10% below its ceiling: lower the ceiling
 LINE_CEILINGS = {
-    "src/ants_ai/standard_tasks.cpp": 3911,
     "web/shell.html": 3927,   # lowered from 3928 by the picker (the dropdowns are made by web/shape_picker.js), from 3966 by the dropdowns (the markup and the style of the shape buttons are gone) and from 3998 by the one shape table (web/shapes.js); that was raised once from 3989 by the maintainer's word, for the settings menu's loader (docs/GAME_MENU.md): the call, the 8-line antsLoadGameMenu and two help sentences; the panel itself is in web/game_menu.js
     "src/ants_app/application.cpp": 3420,
     "tools/map_sweep.cpp": 2626,

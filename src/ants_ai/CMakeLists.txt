@@ -17,6 +17,11 @@ add_library(ants_ai STATIC
     tasks.cpp
     tactics.cpp
     standard_tasks.cpp
+    standard_tasks_powerup.cpp
+    standard_tasks_build.cpp
+    standard_tasks_raid.cpp
+    standard_tasks_harass.cpp
+    standard_tasks_gate.cpp
     defence.cpp
     heal_task.cpp
     knock.cpp
