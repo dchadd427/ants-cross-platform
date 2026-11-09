@@ -1,0 +1,90 @@
+{
+ "note": "Mutants of the bench bot gang2 (tools/bench_gang2.hpp, docs/BOT_PEOPLE.md) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_gang2_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. The tests are AI37.2 - AI37.8 of suite 2.20.",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "mutants": [
+  {
+   "id": "heal_threshold_zero",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint8_t kHomeHp = 3;",
+   "new": "static constexpr uint8_t kHomeHp = 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.4 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.4"
+  },
+  {
+   "id": "fire_ant_not_of_gang",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "new": "if (a.type == sim::AntType::Fire || carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.5"
+  },
+  {
+   "id": "thief_never_of_gang",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if ((a.type == sim::AntType::Thief && raid_open_) ||",
+   "new": "if (a.type == sim::AntType::Thief ||",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.5 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.5"
+  },
+  {
+   "id": "carriers_are_targets",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (!enemy_of(view, e) || carries(e) || !attackable(view, e)) continue;",
+   "new": "if (!enemy_of(view, e) || !attackable(view, e)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.7 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.7"
+  },
+  {
+   "id": "no_thief_or_fire_first",
+   "file": "tools/bench_gang2.hpp",
+   "old": "e.type == sim::AntType::Thief || e.type == sim::AntType::Fire ? 1 : 0, -d,",
+   "new": "0, -d,",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.3 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.3"
+  },
+  {
+   "id": "raid_on_shut_hole",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (!hill.present || east_state(grid, hill).shut()) continue;",
+   "new": "if (!hill.present || (east_state(grid, hill).shut() && false)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.6 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.6"
+  },
+  {
+   "id": "one_ant_per_order",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (strikers.empty()) return;\n            orders.attack(strikers, target->tile, Priority::Urgent);\n            ++strike_orders_;\n            strike_ants_ += static_cast<uint32_t>(strikers.size());",
+   "new": "if (strikers.empty()) return;\n            strikers.resize(1);\n            orders.attack(strikers, target->tile, Priority::Urgent);\n            ++strike_orders_;\n            strike_ants_ += static_cast<uint32_t>(strikers.size());",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.2"
+  },
+  {
+   "id": "walkers_not_told_again",
+   "file": "tools/bench_gang2.hpp",
+   "old": "static constexpr uint64_t kReorderGap = 24;",
+   "new": "static constexpr uint64_t kReorderGap = 100000;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.2 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.2"
+  },
+  {
+   "id": "combat_ant_never_of_the_gang",
+   "file": "tools/bench_gang2.hpp",
+   "old": "if (carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "new": "if (a.type == sim::AntType::Combat || carries(a) || a.hp < kRejoinHp || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.8",
+   "build": "test_ai"
+  },
+  {
+   "id": "hunter_never_walks_to_its_post",
+   "file": "tools/bench_gang2.hpp",
+   "old": "orders.move({h->id}, post, Priority::Normal);\n            ordered_[h->id] = now_ + 48;",
+   "new": "(void)post;\n            ordered_[h->id] = now_ + 48;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI37.8 ' ./build/tests/test_ai/test_ai",
+   "expect": "AI37.8",
+   "build": "test_ai"
+  }
+ ]
+}
