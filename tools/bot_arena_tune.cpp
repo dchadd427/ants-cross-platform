@@ -234,6 +234,12 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "dextra") { p.defend_extra = static_cast<uint32_t>(v); return true; }
     if (key == "dmax") { p.defend_max = static_cast<uint32_t>(v); return true; }
     if (key == "dreach") { p.defend_reach = static_cast<int32_t>(v); return true; }
+    if (key == "group") {                                                             // the group batch of docs/BOT_PEOPLE.md, "Step 3: fight as a group" (0: the bot as it was before it; 1: on, with the level's reach)
+        if (v == 0) ai::without_group_fight(p);
+        else p.group_fight = true;
+        return true;
+    }
+    if (key == "greach") { p.group_reach = static_cast<int32_t>(v); return true; }
     if (key == "heal") {                                                              // the heal batch of docs/BOT_PEOPLE.md, "Step 2: hurt ants heal" (0: the bot as it was before it; 1: the task on, with the level's numbers)
         if (v == 0) ai::without_heal(p);
         else p.heal = true;
