@@ -1,0 +1,173 @@
+{
+ "note": "Mutants of the home-mine batch (include/ants_ai/tactics.hpp, src/ants_ai/standard_tasks_build.cpp, src/ants_ai/tactics.cpp, tools/bot_arena_tune.cpp, docs/BOT_PEOPLE.md 'Step 5: home mines on the lanes') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_homemines_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect (AI39.n), or by the arena's self-test for the tune keys; the baselines run the cases of the batch (AI39) and the self-test.",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": [
+  {
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "build": "bot_arena",
+   "test": "timeout 300 ./build/bot_arena --selftest"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "route_rule_dropped",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (by_pile || (on_route && !(plan.home_on_route && lane <= plan.home_route_lane))) continue;",
+   "new": "if (by_pile) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.3"
+  },
+  {
+   "id": "own_lane_check_inverted",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (by_pile || (on_route && !(plan.home_on_route && lane <= plan.home_route_lane))) continue;",
+   "new": "if (by_pile || (on_route && (plan.home_on_route && lane <= plan.home_route_lane))) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.3"
+  },
+  {
+   "id": "lane_compare_flipped",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "!(plan.home_on_route && lane <= plan.home_route_lane)",
+   "new": "!(plan.home_on_route && lane >= plan.home_route_lane)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.3"
+  },
+  {
+   "id": "flag_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "!(plan.home_on_route && lane <= plan.home_route_lane)",
+   "new": "!(lane <= plan.home_route_lane)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.3"
+  },
+  {
+   "id": "turn_flag_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "return plan.home_first && plan.mine_home > 0 && home_laid <",
+   "new": "return plan.mine_home > 0 && home_laid <",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.2"
+  },
+  {
+   "id": "turn_share_doubled",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "other_laid / 2u + 2u",
+   "new": "other_laid * 2u + 2u",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.2"
+  },
+  {
+   "id": "turn_never_stops",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "home_laid < std::min<uint32_t>(plan.mine_home, other_laid / 2u + 2u)",
+   "new": "home_laid < other_laid / 2u + 2u",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.2"
+  },
+  {
+   "id": "home_mines_not_counted",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "home_planted_ += j.home ? 1u : 0u;",
+   "new": "home_planted_ += 0u;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.4"
+  },
+  {
+   "id": "job_not_marked_home",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "j.home = targets[i].home;",
+   "new": "j.home = false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.4"
+  },
+  {
+   "id": "order_pile_always_asked",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (targets.empty() && free_to_mine) collect_pile_targets(c, targets);",
+   "new": "if (free_to_mine) collect_pile_targets(c, targets);",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.4"
+  },
+  {
+   "id": "mine_on_the_hill",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (ring < kHomeNear || ring > kHomeFar || !grid.in_bounds(t)) continue;",
+   "new": "if (ring > kHomeFar || !grid.in_bounds(t)) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.5"
+  },
+  {
+   "id": "medium_on",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.home_route_lane = 20;                  // (the home-mine batch is built and OFF here",
+   "new": "            p.home_on_route = true;\n            p.home_route_lane = 20;                  // (the home-mine batch is built and OFF here",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.1"
+  },
+  {
+   "id": "hard_on",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.home_on_route = false;                 // the home-mine batch",
+   "new": "            p.home_on_route = true;                  // the home-mine batch",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.1"
+  },
+  {
+   "id": "hard_lane_20",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.home_route_lane = 60;\n",
+   "new": "            p.home_route_lane = 20;\n",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.1"
+  },
+  {
+   "id": "without_clears_nothing",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "void without_home_mines(LevelPlan& p) noexcept { p.home_on_route = p.home_first = false; }",
+   "new": "void without_home_mines(LevelPlan& p) noexcept { (void)p; }",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.1"
+  },
+  {
+   "id": "flag_default_on",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "    bool home_on_route{false};",
+   "new": "    bool home_on_route{true};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI39.' ./build/tests/test_ai/test_ai",
+   "expect": "AI39.1"
+  },
+  {
+   "id": "tune_key_ignored",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "if (key == \"homeonroute\") return flag(p.home_on_route);",
+   "new": "if (key == \"homeonroute\") return true;",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "the keys homemines, homeonroute",
+   "build": "bot_arena"
+  },
+  {
+   "id": "tune_lane_ignored",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "if (key == \"homelane\") { p.home_route_lane = static_cast<int32_t>(v); return true; }",
+   "new": "if (key == \"homelane\") { return true; }",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "the keys homemines, homeonroute",
+   "build": "bot_arena"
+  },
+  {
+   "id": "tune_homemines_one_flag",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "else p.home_on_route = p.home_first = true;",
+   "new": "else p.home_on_route = true;",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "the keys homemines, homeonroute",
+   "build": "bot_arena"
+  }
+ ]
+}

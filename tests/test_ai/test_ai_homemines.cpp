@@ -39,14 +39,15 @@ LevelPlan scene_plan(uint32_t mine_home = 6) {
     return plan;
 }
 
-// The world: a Bomber and three workers of team 0, an enemy worker of team 1 that walks, and (`pile`) a pile of 60 units of 25 points fourteen tiles east of the hill
-void build_world(sim::SimulationEngine& sim, bool pile) {
+// The world: a Bomber and three workers of team 0, an enemy worker of team 1 that walks, and (`pile`) a pile of 60 units of 25 points on the row of the hill: at column 26, fourteen tiles east of the hill
+// (the carriers' way), or at column 38, near the hill of team 1 (the enemy walks to it much sooner than the bot: its mines score high)
+void build_world(sim::SimulationEngine& sim, bool pile, int32_t pile_col = 26) {
     empty_field(sim, 96);
     const uint32_t foe = sim.spawn_unit(1, sim::AntType::Worker, TileCoord{kFightHills[1].x - 3, kFightHills[1].y + 6});
     sim.apply_command(command_of(sim::CommandType::GroupMove, 1, {foe}, kFightHills[1].x - 3, kFightHills[1].y + 12));
     sim.spawn_unit(0, sim::AntType::Bomber, TileCoord{14, 10});
     for (int i = 0; i < 3; ++i) sim.spawn_unit(0, sim::AntType::Worker, TileCoord{8 + i, 12});
-    if (pile) add_pile(sim, 26, 10, 60, 25);
+    if (pile) add_pile(sim, pile_col, 10, 60, 25);
 }
 
 // What a scene laid: every tile that held a mine of team 0 at some tick (a mine that the enemy walked onto is gone, the tile was laid), and the task's counters at the end
@@ -74,9 +75,9 @@ struct Laid {
     }
 };
 
-Laid play(const LevelPlan& plan, bool pile, uint64_t ticks, Level level = Level::Hard) {
+Laid play(const LevelPlan& plan, bool pile, uint64_t ticks, Level level = Level::Hard, int32_t pile_col = 26) {
     sim::SimulationEngine sim;
-    build_world(sim, pile);
+    build_world(sim, pile, pile_col);
     Rig rig(sim, 0, level, std::make_unique<StandardBot>(plan), 4, 4);
     Laid out;
     std::set<std::pair<int32_t, int32_t>> seen;
@@ -190,10 +191,10 @@ void run_homemines_tests() {
             for (size_t i = 0; i < n && i < laid.order.size(); ++i) home += laid.order[i] ? 1u : 0u;
             return home;
         };
-        const Laid off = play(with_batch(plan, true, false), true, 3000);
+        const Laid off = play(with_batch(plan, true, false), true, 3000, Level::Hard, 38);
         ASSERT_TRUE(off.order.size() >= 6u);
         ASSERT_EQ(first_n(off, 6), 0u);                                                                      // flag off: the pile mines come first, the home mines when the pile has none to ask for
-        const Laid on = play(with_batch(plan, true, true), true, 3000);
+        const Laid on = play(with_batch(plan, true, true), true, 3000, Level::Hard, 38);
         ASSERT_TRUE(on.order.size() >= 6u);
         ASSERT_TRUE(first_n(on, 4) >= 2u);                                                                   // flag on: the home mines come at once (the first mine is laid before the bot has seen the enemy walk) ...
         ASSERT_TRUE(first_n(on, 6) >= 3u && first_n(on, 6) <= 4u);                                           // ... and the pile mines alternate with them
