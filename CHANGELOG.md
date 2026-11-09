@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.0 page or game still joins. The rest of this release is internal: large source files split into smaller ones, tools and tests for the computer players, and computer-player work that is built but switched off.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/26714f6f...3b9261f6)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/26714f6f...4fd8a6ad)
 
 ## v0.14.0 - 2026-11-07 - New rules: 187's closed hill, the last side standing, fire walls and long orders
 
