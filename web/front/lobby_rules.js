@@ -31,7 +31,6 @@
     ];
     // Treasure is the map that is played most: it is the default of everything (requested)
     var DEFAULT_MAP_KEY = 'treasure';
-    var NAMES = ['Maple', 'Clover', 'Pebble', 'Sorrel', 'Fern', 'Bramble', 'Juniper', 'Flint', 'Willow', 'Cedar', 'Moss', 'Thistle'];
 
     function mapByKey(key) {
         var k = typeof key === 'string' ? key.toLowerCase() : '';
@@ -53,7 +52,7 @@
 
     // ---- names ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     // The rules of a name, the same as the game page's own name step (the NAME block of web/shell.html and web/lobby.html, which tests/scripts/web_lobby_rules_check.js compares with this): printable ASCII only,
-    // the blanks at both ends cut off, at most 32 characters, nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored). Empty is fine: the page picks one. { ok: true, name } or { ok: false, why }.
+    // the blanks at both ends cut off, at most 32 characters, nothing that starts with "Bot (" or ends with "(bot)" or "(bot, ...)" (blanks and case ignored). Empty is fine: it is no name. { ok: true, name } or { ok: false, why }.
     function nameCheck(text) {
         var raw = typeof text === 'string' ? text.replace(/[\t\r\n]/g, '') : '';
         if (/[^\x20-\x7e]/.test(raw)) return { ok: false, why: 'A name can hold printable ASCII characters only: letters, digits and signs without accents.' };
@@ -61,11 +60,6 @@
         if (name.length > 32) return { ok: false, why: 'A name has at most 32 characters.' };
         if (/^bot\(|\(bot(,[^()]+)?\)$/.test(name.replace(/ /g, '').toLowerCase())) return { ok: false, why: 'A name like "Bot (...)" or "Pip (bot)" is for computer players. Please choose another name.' };
         return { ok: true, name: name };
-    }
-    // A name for a visitor who typed none: one of the NAMES, `random` being a number from 0 up to (not including) 1
-    function pickName(random) {
-        var r = typeof random === 'number' && random >= 0 && random < 1 ? random : 0;
-        return NAMES[Math.floor(r * NAMES.length)];
     }
 
     // ---- room codes -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -293,7 +287,7 @@
     // ---- what each card and the side show -------------------------------------------------------------------------------------------------------------------------------------------
     // ctx: { sides (the leader's own switches), picked (the color that was tapped to be moved, -1), removing (the color of the open question, -1), offline (false, 'lost', 'none' or 'join'), refusal, back (the rematch, above) }.
     // The cards come back in seat order; the page builds them in GRID order. A card: { seat, color, kind, who: [{ text, cls }], mode (the plan word of a color that the leader can set, else ''), stat, statCls,
-    // pencil, remove (a Remove button), ask (the question is open), grip, tab (read-only team tab), teams: [{ side, pressed, disabled }] or null, label, drop (what a tap on it does while a color is picked) }.
+    // remove (a Remove button), ask (the question is open), grip, tab (read-only team tab), teams: [{ side, pressed, disabled }] or null, label, drop (what a tap on it does while a color is picked) }.
     function viewOf(model, ctx) {
         var g = model.guest, busy = model.starting, off = ctx.offline || false, ro = g || busy || !!off, away = notBack(model, ctx);
         var play = playing(model), sides = sidesFix(g ? model.sides : ctx.sides, play), shown = shownOf(sides, play), can = play.length >= 3;
@@ -302,9 +296,8 @@
         var cards = [];
         for (var i = 0; i < PLAYERS; i++) {
             var s = model.slots[i], c = COLORS[i], human = s.kind === 'person';
-            var card = { seat: i, color: c, kind: s.kind, who: [], mode: '', stat: '', statCls: 'pstat', pencil: false, remove: false, ask: false, grip: !ro, tab: '', teams: null, label: '', drop: '' };
+            var card = { seat: i, color: c, kind: s.kind, who: [], mode: '', stat: '', statCls: 'pstat', remove: false, ask: false, grip: !ro, tab: '', teams: null, label: '', drop: '' };
             if (human) {
-                card.pencil = !!s.me && !busy && !off;
                 card.who.push({ text: s.name, cls: 'nm' });
                 if (s.leader && s.me) { card.who.push({ text: 'You', cls: 'you' }); card.stat = 'Host. You start the match.'; }
                 else if (s.leader) { card.who.push({ text: 'Host', cls: 'you' }); card.stat = 'Starts the match.'; }
@@ -436,8 +429,8 @@
     }
 
     return {
-        COLORS: COLORS, GRID: GRID, MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, NAMES: NAMES, KINDS: KINDS, CODE_CHARS: CODE_CHARS, TEXT: TEXT, HINT: HINT, META: META, ACTS: ACTS,
-        mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, pickName: pickName, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
+        COLORS: COLORS, GRID: GRID, MAPS: MAPS, DEFAULT_MAP_KEY: DEFAULT_MAP_KEY, KINDS: KINDS, CODE_CHARS: CODE_CHARS, TEXT: TEXT, HINT: HINT, META: META, ACTS: ACTS,
+        mapByKey: mapByKey, mapOfFile: mapOfFile, validMapFile: validMapFile, communityName: communityName, nameCheck: nameCheck, makeCode: makeCode, codeText: codeText, typedCode: typedCode,
         levelWord: levelWord, article: article, listOf: listOf, modelOf: modelOf, playing: playing, hostName: hostName, nameOf: nameOf, nameAt: nameAt,
         sidesFix: sidesFix, pairOf: pairOf, shownOf: shownOf, sideOpen: sideOpen, pressSide: pressSide, teamBytes: teamBytes, teamsText: teamsText, reconcileSides: reconcileSides,
         planWith: planWith, withMode: withMode, pendingAfter: pendingAfter, teamNeedsFix: teamNeedsFix, moveOf: moveOf, startsAlone: startsAlone, viewOf: viewOf, sideView: sideView, noticeKind: noticeKind, banner: banner,

@@ -395,10 +395,12 @@ void run_b41_tests() {
             Rig rig(sim, 0, level, std::make_unique<StandardBot>(peace_plan(level)), 4, 4);
             const size_t want = level == Level::Easy ? 1u : level == Level::Medium ? 2u : 3u;
             bool hit = false;
+            unsigned lowest = 10;                                                             // (the enemy's hit points at their lowest: one that is down to a hit point walks home and heals)
             for (int t = 0; t < 700; ++t) {
                 keep_attacking(sim, 1, enemy, victim);
                 rig.tick();
                 if (!hit && sim.get_unit(victim).hp < 10) hit = true;
+                lowest = alive(sim, enemy) ? std::min<unsigned>(lowest, sim.get_unit(enemy).hp) : 0u;
             }
             ASSERT_TRUE(hit);                                                                 // the enemy did hit
             const std::pair<uint64_t, Command>* first = nullptr;
@@ -413,7 +415,7 @@ void run_b41_tests() {
             ASSERT_TRUE(std::find(first->second.ants.begin(), first->second.ants.end(), combat) != first->second.ants.end());      // the Combat Ant first
             for (const uint32_t id : first->second.ants) ASSERT_TRUE(id == combat || id == victim || id == near1 || id == near2);   // the nearest, never the far one
             ASSERT_TRUE(ever.count(carrier) == 0 && ever.count(weak) == 0);                   // a carrier and a hurt ant are never sent
-            ASSERT_TRUE(!alive(sim, enemy) || sim.get_unit(enemy).hp < 10);                   // the attackers hit back
+            ASSERT_TRUE(lowest < 10);                                                         // the defenders hit back
             const StandardBot& bot = rig.as<StandardBot>();
             ASSERT_TRUE(bot.fight().fights_started() >= 1);
             if (!alive(sim, enemy)) {                                                         // the enemy is dead: the fight is over and every ant is back in the pool

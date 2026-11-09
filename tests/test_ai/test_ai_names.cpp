@@ -121,37 +121,17 @@ std::string unescape(const std::string& t) {
     return out;
 }
 
-/// the twelve names that the page offers a visitor (web/front/lobby_rules.js NAMES)
-std::vector<std::string> web_placeholder_names() {
-    std::ifstream in(std::string(ANTS_SOURCE_DIR) + "/web/front/lobby_rules.js", std::ios::binary);
-    std::stringstream all;
-    all << in.rdbuf();
-    const std::string text = all.str();
-    const size_t at = text.find("var NAMES = [");
-    std::vector<std::string> out;
-    if (at == std::string::npos) return out;
-    const size_t end = text.find(']', at);
-    for (const std::string& piece : split(text.substr(at + 13, end - at - 13), ',')) {
-        const size_t a = piece.find('\'');
-        const size_t b = piece.rfind('\'');
-        if (a != std::string::npos && b > a) out.push_back(piece.substr(a + 1, b - a - 1));
-    }
-    return out;
-}
-
 std::string render(const BotLabel& p) { return p.name + "|" + p.tag + "|" + (p.legacy ? "1" : "0"); }
 
 }  // namespace
 
 void run_name_tests() {
-    TEST_CASE("AI2.40 Names: The List Is 240 To 260 Short ASCII Names, Unique In Any Case, Not The Page's Twelve, None On The Blocklist") {
+    TEST_CASE("AI2.40 Names: The List Is 240 To 260 Short ASCII Names, Unique In Any Case, None On The Blocklist") {
         const size_t n = bot_name_count();
         ASSERT_TRUE(n >= 240 && n <= 260);
         ASSERT_EQ(std::string(bot_name_at(n)), std::string());
         ASSERT_EQ(std::string(bot_name_at(100000)), std::string());
         std::set<std::string> seen;
-        const std::vector<std::string> web = web_placeholder_names();
-        ASSERT_EQ(web.size(), size_t{12});
         const std::vector<std::string> block = lines_of(data_path("bot_names_blocklist.txt"));
         ASSERT_TRUE(block.size() >= 100);
         for (size_t i = 0; i < n; ++i) {
@@ -162,7 +142,6 @@ void run_name_tests() {
                 if (k > 0) ASSERT_TRUE(name[k] >= 'a' && name[k] <= 'z');
             }
             ASSERT_TRUE(seen.insert(lower_of(name)).second);                                         // (unique in any case)
-            ASSERT_TRUE(std::find(web.begin(), web.end(), name) == web.end());
             ASSERT_TRUE(valid_bot_label_name(name));
             for (const std::string& w : block) {
                 const std::string l = lower_of(name);

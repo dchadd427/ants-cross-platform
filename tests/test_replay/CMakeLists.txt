@@ -117,3 +117,22 @@ target_include_directories(test_rules_end_fix PRIVATE
 )
 
 add_test(NAME test_rules_end_fix COMMAND test_rules_end_fix)
+
+# A replay file of your own, opened on the website (run_tests.sh suite 2.29.6): the limit on the starting ants of a map that a file carries, and the recording kept in tests/data plays to its last hash.
+add_executable(test_replay_own_file
+    test_replay_own_file.cpp
+)
+
+target_link_libraries(test_replay_own_file PRIVATE
+    ants_replay
+    ants_net
+    ants_sim
+    ants_assets
+    ants_test_paths
+)
+
+target_include_directories(test_replay_own_file PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+)
+
+add_test(NAME test_replay_own_file COMMAND test_replay_own_file)

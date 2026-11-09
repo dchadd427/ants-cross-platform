@@ -28,7 +28,7 @@ def read(*parts):
 class TheGameSide(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = read("src", "ants_app", "application.cpp")
+        cls.app = "".join(read("src", "ants_app", name) for name in sorted(os.listdir(os.path.join(REPO, "src", "ants_app"))) if name.startswith("application") and name.endswith(".cpp"))
         cls.header = read("include", "ants_app", "application.hpp")
 
     def test_the_web_build_installs_the_hook_and_nothing_else_does(self):

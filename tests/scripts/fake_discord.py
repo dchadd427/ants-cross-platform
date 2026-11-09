@@ -30,7 +30,8 @@ def snowflake(age_days, now=None, worker=7):
 class FakeDiscord:
     def __init__(self, redirect, user=("261842000123456789", "maple.leaf"), client_id=CLIENT_ID, client_secret=CLIENT_SECRET):
         self.redirect = redirect                         # the address that Discord sends the visitor back to (the hub's /hub/callback, as the application has it)
-        self.user = user                                 # who the visitor is when they authorize: (id, username)
+        self.user = user                                 # who the visitor is when they authorize: (id, username) or (id, username, global_name): the display name that Discord says (null when a person set none: the default, and
+                                                         # whatever else a test puts there, of any kind and size, as Discord's answer carries it)
         self.client_id, self.client_secret = client_id, client_secret
         self.consent = True                              # a first visit shows a consent page; False is a visitor who said yes before (no page: the way back at once)
         self.token_mode = "ok"
@@ -132,7 +133,7 @@ class FakeDiscord:
         user = self.tokens.get(authorization[len("Bearer "):]) if authorization.startswith("Bearer ") else None
         if user is None:
             return 401, {"message": "401: Unauthorized", "code": 0}
-        return 200, {"id": user[0], "username": user[1], "discriminator": "0", "global_name": "Maple", "avatar": None, "email": "canary-email@example.org", "verified": True}
+        return 200, {"id": user[0], "username": user[1], "discriminator": "0", "global_name": user[2] if len(user) > 2 else None, "avatar": "canary-avatar-hash", "email": "canary-email@example.org", "verified": True}
 
     def answer(self, h, mode, make):
         status, data = make()

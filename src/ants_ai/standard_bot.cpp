@@ -48,6 +48,7 @@ void StandardBot::start(const BotContext& context) {
     ledger_.set_rank(kGateGoals, kRankGates);                     // (the Fire ant and the Bomber of a gate goal)
     ledger_.set_rank(kField, kRankGates);                         // (the ant of the field breach)
     ledger_.set_rank(kOpportunity, kRankFight);                   // (the kill that one blow gives: an ant is taken from the chores and the economy, never from a pick-up, a raid or a fight)
+    ledger_.set_rank(kHeal, kRankFight);                          // (the same rank as a fight: it takes the ants of the ranks below, never one that a fight, a rush or a gate goal holds, and a fight never takes an ant that it holds)
     ledger_.set_rank(kFerry, kRankGuard);                         // (the Swimmers that carry food: the island task takes one when a bridge is wanted)
 }
 
@@ -166,6 +167,7 @@ void StandardBot::think(const BotView& view, Orders& orders) {
     tactics_.gate_goals_live = tactics_.gate_map && !fallback && (!gate_goals_.exhausted() || (tactics_.field_map && field_.live()));    // (the counters spare the map's own bombs only while the goals are there to deal with them)
     opportunity_.step(context);                                                              // (before the fights and every chore: an enemy that one blow kills is struck at once; nothing when the plan has none)
     fight_.step(context);
+    heal_.step(context);                                                                      // (after the fights, which give back the defenders that are too hurt; nothing when the plan has no heal: it gives back what it held)
     if (plan.rush || rush_.active()) rush_.step(context);                                   // (when the plan has no rush the task only gives back what it held)
     if (!gate_breaching) walls_.step(context);
     powerups_.step(context);

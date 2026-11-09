@@ -1,0 +1,131 @@
+{
+ "note": "Mutants of the limits on a map that a replay file carries: its starting ants and its pairs of a plant and a waypoint (include/ants_replay/replay.hpp kMaxEmbeddedStartAnts and kMaxEmbeddedPlantWaypointPairs, checked by fits_a_replay in src/ants_replay/player.cpp for the map that a file carries, whichever copy the game reads; docs/REPLAYS.md \"A file of your own\", the paragraph \"A damaged or made-up file\") for tools/mutate.py (docs/WORKFLOW.md): RP9.11 of tests/test_replay/test_replay_own_file.cpp (the limit, the plants, 65,535 ants refused in no time, a folder's map never counted) and RA7.10 - RA7.13 of tests/test_app/test_replay_app.cpp (the application refuses at once with failure 4 and the count; the pairs; the folder's copy of the file's map; the whole library). Run from a build folder: python3 tools/mutate.py tests/data/replay_ants_guard_mutants.json --keep-going --jobs 3 --timeout 900. Every mutant must be caught. Each `why` names what the mutant loses.",
+ "defaults": {
+  "build": [
+   "test_replay_own_file",
+   "test_replay_app"
+  ],
+  "test": "ANTS_TEST_FILTER=RP9.11 ./build/tests/test_replay/test_replay_own_file && for t in RA7.10 RA7.11 RA7.12 RA7.13; do ANTS_TEST_FILTER=$t ./build/tests/test_app/test_replay_app || exit 1; done"
+ },
+ "mutants": [
+  {
+   "id": "the_guard_is_gone",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (ants > kMaxEmbeddedStartAnts) {",
+   "new": "if (false) {",
+   "why": "a map of 65,535 ants is set up by the game: seconds natively, minutes in a browser"
+  },
+  {
+   "id": "the_limit_is_one_more",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (ants > kMaxEmbeddedStartAnts) {",
+   "new": "if (ants > kMaxEmbeddedStartAnts + 1) {",
+   "why": "a map of 8,001 ants is played"
+  },
+  {
+   "id": "the_limit_refuses_the_limit",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (ants > kMaxEmbeddedStartAnts) {",
+   "new": "if (ants >= kMaxEmbeddedStartAnts) {",
+   "why": "a map of exactly 8,000 ants is refused"
+  },
+  {
+   "id": "plants_are_ants",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (spawn.team_id < 4) ++ants;",
+   "new": "if (spawn.team_id < 4 || spawn.team_id == 255) ++ants;",
+   "why": "a map with plants in block 1 is refused for ants that it does not start"
+  },
+  {
+   "id": "only_green_ants_are_counted",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (spawn.team_id < 4) ++ants;",
+   "new": "if (spawn.team_id == 0) ++ants;",
+   "why": "three quarters of a crowd are not counted"
+  },
+  {
+   "id": "the_refusal_is_no_refusal",
+   "file": "src/ants_replay/player.cpp",
+   "old": "with_commas(kMaxEmbeddedStartAnts) + \" that a replay is set up with\";\n        return false;",
+   "new": "with_commas(kMaxEmbeddedStartAnts) + \" that a replay is set up with\";\n        return true;",
+   "why": "the sentence is said and the map is used"
+  },
+  {
+   "id": "a_refused_map_is_another_failure",
+   "file": "src/ants_app/application_replay.cpp",
+   "old": "        replay_failure_ = ReplayFailure::NoMap;\n        replay_failure_text_ = why;",
+   "new": "        replay_failure_ = ReplayFailure::Unreadable;\n        replay_failure_text_ = why;",
+   "why": "the page learns of a refused map as of a file that cannot be read"
+  },
+  {
+   "id": "the_pairs_are_not_counted",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (plants * waypoints > kMaxEmbeddedPlantWaypointPairs) {",
+   "new": "if (false) {",
+   "why": "a map of 65,400 plants and 65,535 waypoints is set up by the game: seconds natively, a minute on a phone"
+  },
+  {
+   "id": "the_pairs_limit_is_double",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (plants * waypoints > kMaxEmbeddedPlantWaypointPairs) {",
+   "new": "if (plants * waypoints > 2 * kMaxEmbeddedPlantWaypointPairs) {",
+   "why": "a map of 1,001 plants and 1,000 waypoints is played"
+  },
+  {
+   "id": "the_pairs_limit_refuses_the_limit",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (plants * waypoints > kMaxEmbeddedPlantWaypointPairs) {",
+   "new": "if (plants * waypoints >= kMaxEmbeddedPlantWaypointPairs) {",
+   "why": "a map of exactly 1,000,000 pairs is refused"
+  },
+  {
+   "id": "every_record_is_a_plant",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (sim::movement::is_dropper_plant_tile(spawn.tile_id)) ++plants;",
+   "new": "++plants;",
+   "why": "the start markers and the records that are no plant are counted as plants"
+  },
+  {
+   "id": "the_waypoints_are_not_counted",
+   "file": "src/ants_replay/player.cpp",
+   "old": "const uint64_t waypoints = level.waypoints.size();",
+   "new": "const uint64_t waypoints = 0;",
+   "why": "a crowd of plants and waypoints is no work"
+  },
+  {
+   "id": "numbers_have_no_commas",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (i != 0 && (digits.size() - i) % 3 == 0) out += ',';",
+   "new": "if (false) out += ',';",
+   "why": "the game says 65535 where the page says 65,535"
+  },
+  {
+   "id": "the_folder_copy_of_a_carried_map_is_not_counted",
+   "file": "src/ants_replay/player.cpp",
+   "old": "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);",
+   "new": "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return true;",
+   "why": "the page writes the map into the maps folder, the game reads that copy and counts nothing"
+  },
+  {
+   "id": "a_map_of_the_folder_that_the_file_does_not_carry_is_counted",
+   "file": "src/ants_replay/player.cpp",
+   "old": "net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);",
+   "new": "net::hash_bytes(carried.data(), carried.size()) != replay.head.map_hash) return fits_a_replay(level, error);",
+   "why": "a library map in the folder is counted as if the file carried it"
+  },
+  {
+   "id": "a_plant_object_is_a_plant",
+   "file": "src/ants_replay/player.cpp",
+   "old": "if (sim::movement::is_dropper_plant_tile(spawn.tile_id)) ++plants;",
+   "new": "if (sim::movement::is_plant_object_tile(spawn.tile_id)) ++plants;",
+   "why": "a record whose tile has only the 0x20 flag of a plant object (422) is counted as a plant that the engine looks a waypoint up for: a map that is no work is refused"
+  },
+  {
+   "id": "the_folder_copy_is_counted_for_any_carried_bytes",
+   "file": "src/ants_replay/player.cpp",
+   "old": "&& net::hash_bytes(carried.data(), carried.size()) == replay.head.map_hash) return fits_a_replay(level, error);",
+   "new": ") return fits_a_replay(level, error);",
+   "why": "bytes that are not the head's map, in a Replay made by hand, make the server's own file in the folder a map that the file carries"
+  }
+ ]
+}

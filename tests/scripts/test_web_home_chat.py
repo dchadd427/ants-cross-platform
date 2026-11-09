@@ -36,7 +36,8 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_check.js")
 HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 51000, 15900           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer): they load after the first paint, so they cost the first look nothing
+LOGIN_LINK = 'href="/hub/login?next=home"'      # (the one thing that a page may say of the hub in its markup: the plain link of the name card that logs a guest in; tests/scripts/test_web_name.py)
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 52500, 16400           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer; raised from 51,000 and 15,900 on purpose for the two names (docs/HUB.md, "Names"): the switch in the account menu, the key that tells a line's author, the username that a moderator sees, about 1,550 bytes and 460 gzipped, when 204 and 37 were left, with the one cleaner of a name that replaced two): they load after the first paint, so they cost the first look nothing
 
 
 def read(*parts):
@@ -55,12 +56,12 @@ class ThePageAndTheOtherPages(unittest.TestCase):
 
     def test_the_front_page_does_not_link_the_dock_home_loads_it_later(self):
         for word in ("home/chat", "gchat", "AntsHomeChat", "/hub", "hub/ws"):
-            self.assertNotIn(word, self.page, word)
+            self.assertNotIn(word, self.page.replace(LOGIN_LINK, ""), word)        # (but for the plain link of the name card that logs a guest in)
         self.assertEqual(self.page.count('<script src="home/home.js"></script>'), 1)
         self.assertFalse([src for src in re.findall(r'<script src="([^"]*)"', self.page) if "chat" in src and "lobby_chat" not in src], "the page's scripts are the ones that it had: the dock is not one of them")
 
     def test_no_other_file_of_the_site_names_the_dock_or_the_hubs_door(self):
-        naming_the_dock, naming_the_door = set(), set()
+        naming_the_dock, naming_the_door, naming_the_socket = set(), set(), set()
         for base, _dirs, names in os.walk(WEB):
             for name in names:
                 if os.path.splitext(name)[1] not in (".html", ".js", ".css"):
@@ -71,14 +72,17 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                     text = f.read()
                 if re.search(r"home/chat\.(js|css)", text):
                     naming_the_dock.add(rel)
-                if re.search(r"/hub/ws|/hub\b", text):
+                if re.search(r"/hub/ws|/hub\b", text.replace(LOGIN_LINK, "")):
                     naming_the_door.add(rel)
+                if re.search(r"/hub/ws", text):
+                    naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
-        self.assertEqual(sorted(naming_the_door), ["web/home/chat.js"], "only the dock's script knows the address of the hub: a page that opens a socket to it is a page that has a chat")
+        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
+        self.assertEqual(sorted(naming_the_door), ["web/front/player_name.js", "web/home/chat.js"], "the one other script that names the hub is the one that asks for the name to play under: its one page, GET /hub/me (tests/scripts/test_web_player_name.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):
-            self.assertNotRegex(read(*rel), r"/hub\b", rel[-1])
+            self.assertNotRegex(read(*rel).replace(LOGIN_LINK, ""), r"/hub\b", rel[-1])
 
 
 class TheLoaderInHome(unittest.TestCase):
@@ -98,8 +102,8 @@ class TheLoaderInHome(unittest.TestCase):
 
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
-        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); } } catch (e) { dock = null; } }", self.js)
-        self.assertIn("[bar, rbar, dock && dock.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
+        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("[bar, rbar, dock && dock.root, players && players.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
         self.assertIn("} catch (e) { /* no chat */ }", self.js)
@@ -132,6 +136,13 @@ class TheFolderAndTheScript(unittest.TestCase):
             self.assertIsNone(re.search(token, self.code), token)
         self.assertIn("'use strict';", self.js)
         self.assertNotRegex(self.code, r"\b(var|function)\s+(near|far)\b|\b(near|far)\s*=", "Windows has macros of these names")
+
+    def test_it_lets_the_players_list_listen_and_speak_through_its_socket_and_nothing_else_opens_one(self):
+        for part in ("tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },", "function out(obj) { if (!sock || sock.readyState !== 1 || !welcomed) return false;", "send: out,",
+                     "else if (m.t === 'who') tapped('who', m);", "tapped('live', m);", "tapped('lost');", "tapped('shown', !!on);",
+                     "function tell1(fn, kind, m) { try { fn(kind, m); } catch (e) { if (env.error) env.error(e); } }"):
+            self.assertIn(part, self.js, part)
+        self.assertEqual(self.code.count("new Socket("), 1, "one socket for the page, whoever speaks through it")
 
     def test_nothing_that_the_hub_says_becomes_markup_a_link_or_code(self):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
@@ -167,6 +178,25 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertIn("var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };", self.js)
         self.assertIn("var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };", self.js, "the wait is spread from half a step to one and a half, within 1 to 60 s")
         self.assertIn("var PACE = { burst: 2, every: 2500, same: 31000 };", self.js, "below the hub's: 3 at once, one every 2 s, the same text twice within 30 s")
+
+
+    def test_the_switch_of_the_name_is_one_frame_and_the_page_sends_nothing_else_of_its_own_about_it(self):
+        self.assertEqual(self.code.count("{ t: 'pick'"), 1, "one place writes the frame")
+        self.assertIn("pick: you.pick === 'display' ? 'username' : 'display'", self.js, "the other of the two words, never the one that is shown")
+        self.assertEqual(sorted(re.findall(r"out\(\{ t: '(\w+)'", self.code)), ["pick"], "the dock's own frames (a line and a ping are written where they were); the players list's come through send()")
+        self.assertIn("else if (m.t === 'err' && m.code === 'pick') tell('failed');", self.js)
+        self.assertNotIn("'pick'", re.search(r"var SAID = \[(.*?)\];", self.code).group(1), "a refused switch is no line's refusal")
+        self.assertIn("function mine(e) { return !!you && (you.k ? e.k === you.k : e.who === you.name); }", self.js, "a line is the visitor's by the hub's key; by the name only for a hub that sends none")
+        self.assertNotIn("own = !!you && e.who", self.code, "no other place tells a line's author by its name")
+
+    def test_the_words_of_the_switch_are_these(self):
+        for words in ("shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my '", "pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'", "pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other;"):
+            self.assertIn(words, self.js, words)
+
+    def test_a_name_is_cleaned_in_one_place_and_the_username_of_a_line_and_the_key_are_text_like_it(self):
+        self.assertEqual(self.code.count("clip(plain("), 2, "one cleaner of a name (nameOf) and one of a line's text")
+        for part in ("k: nameOf(m.k), u: nameOf(m.u)", "k: nameOf(y.k)", "nameOf(y.other)", "who: nameOf(m.who) || '?'"):
+            self.assertIn(part, self.js, part)
 
     def test_the_words_are_the_agreed_ones(self):
         for words in ("Chat is offline", "reconnecting…", "Chat is read-only for now", "Slow down a little", "Log in with Discord to chat", "Global chat"):
@@ -287,6 +317,12 @@ class TheStyle(unittest.TestCase):
         self.assertIn("min-width: 44px;", self.rule(".gc-link"))
         self.assertIn("-webkit-mask: var(--dc) no-repeat center / contain; mask: var(--dc) no-repeat center / contain;", self.css, "the mark takes the color of the text around it")
 
+    def test_the_switch_is_a_target_and_the_username_of_a_line_is_drawn_in_brackets_by_the_style_so_that_the_text_stays_the_name(self):
+        self.assertRegex(self.rule(".gc-pick"), r"min-height: (4[4-9]|[5-9]\d)px;")
+        self.assertIn('content: "(";', self.rule(".gc-u::before"))
+        self.assertIn('content: ")";', self.rule(".gc-u::after"))
+        self.assertIn("font-size: 13px;", self.rule(".gc-u"))
+
     def test_the_hidden_parts_are_hidden_even_where_the_style_gives_them_a_display(self):
         self.assertIn(".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }", self.css)
         self.assertIn(".gc-unread[hidden], .gc-online[hidden] { display: none; }", self.css)
@@ -349,6 +385,37 @@ class TheInvisibleCharactersAreTheHubs(unittest.TestCase):
         self.assertGreater(len(every), 200)
         self.assertEqual(self.run_list([{"cp": cp} for cp in every]), [], "code points (hex) that hub/text.py removes and web/home/chat.js does not: add them to HIDDEN")
 
+    def test_every_name_that_the_hub_makes_comes_through_the_pages_cleaning_whole_in_a_line_and_as_a_username(self):
+        sys.path.insert(0, REPO)
+        sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
+        try:
+            from hub import text as hub_text
+            import test_hub_text as table
+        finally:
+            sys.path.remove(REPO)
+            sys.path.remove(os.path.join(REPO, "tests", "scripts"))
+        import random
+        rnd = random.Random(20261108)
+        names = set(table.SHOWN_KEPT) | {hub_text.clean_shown(raw) for _, raw, _ in table.SHOWN_CASES}
+        plain, awkward = table.alphabet()
+        for _ in range(6000):
+            raw = "".join(rnd.choice(plain + awkward) for _ in range(rnd.randint(2, 40)))
+            names.add(hub_text.clean_shown(raw))
+            names.add(hub_text.clean_shown("".join(chr(rnd.randrange(0x110000)) for _ in range(rnd.randint(2, 24)))))
+        names.discard("")
+        names = sorted(names)
+        self.assertGreater(len(names), 1500)
+        script = ("const Chat = require(process.argv[1]); const list = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));"
+                  "const bad = list.filter((n) => { const m = Chat.lineOf({ id: 1, who: n, text: 'x', u: n }); return m.who !== n || m.u !== n || Chat.plain(n, true) !== n || Chat.clip(n, 32) !== n; });"
+                  "console.log(JSON.stringify(bad));")
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "names.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(names, f)
+            done = subprocess.run([NODE, "-e", script, os.path.join(HOME, "chat.js"), path], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        self.assertEqual(json.loads(done.stdout), [], "names that the hub makes and that the page's own cleaning changes: the page would show another name than the hub sent")
+
     def test_the_variation_selectors_leave_a_name_and_stay_in_a_line(self):
         selectors = [cp for cp in range(0x110000) if not 0xd800 <= cp <= 0xdfff and "VARIATION SELECTOR" in unicodedata.name(chr(cp), "")]
         self.assertGreater(len(selectors), 250)
@@ -372,7 +439,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["web/lobby.html", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

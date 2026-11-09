@@ -45,6 +45,30 @@ struct LevelPlan {
     bool carrier_aid{true};              // a carrier that was hit stands idle with its food (the blow cleared its walk): it is sent home at once, as a person would click it
     bool cantgo_aware{true};             // no order that the engine is bound to refuse for a reason that the view shows (a ring of fire shuts the hill, an ant holds a hole or the ramp): docs/BOTS.md,
                                          // "The can't-go loop"; false (the ablation cg=0): the bot as it was before
+    // the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"; src/ants_ai/defence.cpp): the fights that answer a blow of an enemy ant. The flags are OFF in a plan made by hand and at Easy and
+    // Medium, ON at Hard; without_defence_batch() puts a plan back as it was before
+    bool defend_all_types{false};        // any ant that can strike may answer (a Thief, a Fire Ant, a Bomber, a Swimmer too), apart from the few that a job of their own holds (can_defend); false: the own default type and Combat Ants only
+    bool victim_answers{false};          // the ant that was struck is the first defender of the fight that its blow opens (it strikes as soon as its hit clip is over)
+    bool defend_by_strength{false};      // the defence is sized by the enemy ants near the target (defend_extra, defend_max, defend_reach), and kept up through the target's hit clips while the own strength
+                                         // is at least defend_keep_percent of theirs, the target is within the leash and blows fall (keep_defence); called off at once when the force is weaker
+    uint32_t defend_keep_percent{100};   // ... the own strength in percent of the enemy's that keeps the fight up (Hard 60, Medium 120)
+    int32_t defend_radius{5};            // ... the tiles round the target in which the enemy ants are counted and weighed (5, Hard and Medium)
+    uint32_t defend_extra{1};            // ... defenders wanted beyond the enemy ants there (at least the level's defenders)
+    uint32_t defend_max{5};              // ... the most defenders of one fight (Hard 5, Medium 3)
+    int32_t defend_reach{10};            // ... a defender comes from at most this many tiles from the target (and never from beyond leash_tiles) (Hard 10, Medium 8)
+    // the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"; src/ants_ai/group_fight.cpp): the ants that answer a blow come from further away, so that the force at the fight is a group and not the ants that stood
+    // near. It reaches the fights of defend_by_strength only (Medium's defence batch is off, so `--tune group=1` changes nothing there unless `defence=1` turns the fights on too). Built and OFF at every level (the shipped
+// bots play as before; `--tune group=1` turns it on); without_group_fight() puts a plan back as it was before it
+    bool group_fight{false};             // the defence calls the ants within group_reach tiles of the target, which the leash does not cap
+    int32_t group_reach{20};             // ... a defender comes from at most this many tiles from the target (Hard 20, Medium 14: the numbers a plan has when the batch is turned on)
+    // the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"; src/ants_ai/heal_task.cpp): a hurt ant that is in danger walks into its own hill, which restores all its hit points. Built and OFF in a plan made by hand and
+    // at every level (`--tune heal=1` turns it on with the level's numbers); without_heal() puts a plan back as it was before. The game type 187 has a closed hill: the task does nothing there (BotView::hill_enterable)
+    bool heal{false};                    // the task runs
+    uint8_t heal_hp{4};                  // an ant with at most this many hit points may be sent home (Hard 4, Medium 3; the numbers of Hard are those the task has when it is turned on)
+    int32_t heal_danger_tiles{3};        // ... when an enemy ant that can strike (it carries nothing, no ally's) stands within this many tiles of it ...
+    uint32_t heal_recent_ticks{60};      // ... or it lost hit points within this many ticks ...
+    int32_t heal_walk_tiles{16};         // ... and its walk home is at most this many tiles (Hard 16, Medium 12)
+    uint8_t heal_calm_hp{2};             // ... or, with no danger, when it has at most this many hit points and is at most 6 tiles from the hill (top up between jobs; Medium 0: never)
     // the economy
     bool contest_aware{false};           // the contest-aware pile order: the piles that several enemies reach first, then those that one reaches, the safe ones, those of the ally, the hopeless (HarvestTask::Params::contest_aware)
     uint32_t contest_low{70};            // an enemy whose cost to a pile is below this percentage of the own cost is there first
@@ -321,6 +345,12 @@ struct LevelPlan {
     bool mine_home_off_route{true};      // ... never on the estimated way of the bot's own carriers to a pile (they walk round their own mines, and the enemy's lane to the gate is that way on a map with food between the hills)
     uint32_t mine_home_apart{3};         // ... the mines round the hill lie at least this many tiles apart
     uint32_t mine_home_after{2400};      // ... not before this tick of the match
+    // the home-mine batch (docs/BOT_PEOPLE.md, "Step 5: home mines on the lanes"): the rule above keeps the mines off the way of the own carriers, and on a map whose food lies between the hills that way is the enemy's lane as well,
+    // so no tile is left. Built and OFF in a plan made by hand and at every level (`--tune homemines=1` turns it on with the level's numbers); without_home_mines() puts a plan back as it was before.
+    // The game type 187 plays the brawl, which lays no mines
+    bool home_on_route{false};           // a home mine may lie on the estimated way of the own carriers to a pile when the tile is on the enemy's way to the hill: within home_route_lane cost units of its shortest way
+    int32_t home_route_lane{60};         // ... cost units (20 a step over grass) off the enemy's shortest way that such a tile may lie (Hard 60, the lane of the rule above; Medium 20)
+    bool home_first{false};              // a home mine comes before a pile mine whenever fewer home mines were laid than min(mine_home, the other mines laid / 2 + 2): the pile mines no longer keep the Bomber from them
     bool rush{false};                    // a bot that is far behind sends all its ants at the enemy ants (RushTask): it is not going to out-eat them
     uint8_t rush_tier{3};                // ... from this war tier on, with a deficit of at least rush_deficit points ...
     uint32_t rush_deficit{200};
@@ -361,8 +391,19 @@ Style draw_style(Level level, BotRng& rng) noexcept;
 /// The plan without the stand batch (docs/BOTS.md, "The stand batch"): no fire duel or draft, no ramp unjam, the mines of the war batch as they were, no mines at home, no rush. For `bot_arena --tune stand=0` and for the tests whose
 /// subject is an older rule (without_war_batch calls it).
 void without_stand_batch(LevelPlan& plan) noexcept;
+/// The plan without the home-mine batch (docs/BOT_PEOPLE.md, "Step 5: home mines on the lanes"): the home mines keep off the way of the own carriers to a pile and come only when no pile mine is wanted, as before. For
+/// `bot_arena --tune homemines=0` and the tests whose subject is an older rule.
+void without_home_mines(LevelPlan& plan) noexcept;
 /// The plan without the kill batch (docs/BOT_FIGHT.md): no opportunistic kills, fights at enemies that no walk reaches as before. For `bot_arena --tune kill=0` and the tests whose subject is an older rule.
 void without_kill_batch(LevelPlan& plan) noexcept;
+/// The plan without the defence batch (docs/BOT_PEOPLE.md, "Step 1: everyone hits back"): the fights that answer a blow take the own default type and Combat Ants only, as many as the level's defenders, and
+/// end at the target's hit clip unless a kill is in reach. For `bot_arena --tune defence=0` and the tests whose subject is an older rule.
+void without_defence_batch(LevelPlan& plan) noexcept;
+/// The plan without the heal batch (docs/BOT_PEOPLE.md, "Step 2: hurt ants heal"): no ant is sent home to heal; the engine's own walk home at 1 hit point is all there is. For `bot_arena --tune heal=0` and the tests whose subject is an older rule.
+void without_heal(LevelPlan& plan) noexcept;
+/// The plan without the group batch (docs/BOT_PEOPLE.md, "Step 3: fight as a group"): the ants that answer a blow come from at most defend_reach tiles (and never from beyond the leash), and the fight is kept up at
+/// defend_keep_percent, as before the batch. For `bot_arena --tune group=0` and the tests whose subject is an older rule.
+void without_group_fight(LevelPlan& plan) noexcept;
 /// The plan without the war batch (docs/BOTS.md, "The war batch"): the assault, the raider hunt, the mines, the extra Bomber and Fire Ants and the fire-in of Medium and Hard are taken out again, so that
 /// the plan is what it was before (the fire-in stays where the Hard aggressive style has always had it, and is safe). For `bot_arena --tune war=0` and for the tests whose subject is an older rule.
 void without_war_batch(LevelPlan& plan) noexcept;

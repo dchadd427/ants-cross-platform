@@ -1037,7 +1037,7 @@ When an ant perishes due to HP depletion (melee combat damage, bomb blast shockw
 
 ### 5.14 In-Game Typography: Label Fonts, the Wrap Algorithm and the Health Number (Capstone-Verified; Supersedes the Earlier 12 / 14 / 18 Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/renderer.hpp` (`FontSize`, `font_cell_height`), `src/ants_app/renderer.cpp` (font loading,
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/renderer.hpp` (`FontSize`, `font_cell_height`), `src/ants_app/renderer*.cpp` (font loading,
 `Renderer::ttf_point_size`, `draw_text`, `draw_fixed_text`), `include/ants_app/text_layout.hpp` / `src/ants_app/text_layout.cpp` (`wrap_label_text`, `draw_label`, `fit_text`) and the text sites of
 `hud.cpp`, `map_select.cpp`, `scorecard.cpp`. Checked by `tests/test_app/test_hud_layout_screens.cpp` (`test_text_sizes`, `test_label_wrap`) and `tests/test_app/test_render_parity.cpp` (`test_text_sizes`,
 `test_fixed_digits`). (The first version of this section listed three heights, 12 / 14 / 18, and the renderer did not even honour those: its three tiers were 9 / 11 / 13 px em, cell heights 11 / 13 / 15,
@@ -2628,7 +2628,7 @@ the end-of-match cases of `test_sim_rules.cpp` (1.3, 12.1, 12.2) and `test_chall
 ### 5.42 Alliance Texts, News Flash Lines and the Chat Log (Capstone-Verified; Supersedes Earlier Alliance Banner and Chat Notes)
 
 Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_sim/sim_engine.cpp` (`propose_alliance`, `accept_alliance`, `deny_alliance`, `withdraw_alliance_offer`,
-`break_alliance`, `trigger_player_dropout`, player names), `include/ants_sim/game_strings.hpp` and `src/ants_app/hud.cpp` (`add_chat_entry`, `add_news_flash`, `receive_chat_message`, the log drawing).
+`break_alliance`, `trigger_player_dropout`, player names), `include/ants_sim/game_strings.hpp` and `src/ants_app/hud*.cpp` (`add_chat_entry`, `add_news_flash`, `receive_chat_message`, the log drawing).
 Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat rendering, gate and filter) and the alliance / drop-out cases of `test_challenger_m2_2.cpp` (4.2 - 4.5) and
 `test_app_integration*.cpp` (9.7, 12.9, 12.54, 12.68).
 
@@ -2688,8 +2688,8 @@ Checked by `tests/test_app/test_status_messages.cpp` (alliance, chat log, chat r
 
 ### 5.43 Input Task, Edge Scrolling and the Minimap Drag (Capstone-Verified; Supersedes Earlier Scrolling and Edge Pan Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/edge_scroll.hpp` (`edge_scroll_step`, `minimap_scroll_step`), `src/ants_app/hud.cpp` (`HUD::input_tick`, the cursor
-strips of `evaluate_cursor`) and `src/ants_app/application.cpp` (`handle_camera_panning`, the 50 ms input task). Checked by `tests/test_app/test_input_model.cpp` (70 checks, among them the 1152 golden
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `include/ants_app/edge_scroll.hpp` (`edge_scroll_step`, `minimap_scroll_step`), `src/ants_app/hud*.cpp` (`HUD::input_tick`, the cursor
+strips of `evaluate_cursor`) and `src/ants_app/application*.cpp` (`handle_camera_panning`, the 50 ms input task). Checked by `tests/test_app/test_input_model.cpp` (70 checks, among them the 1152 golden
 samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulation of the original's code) and test 7.7 of `test_app_integration*.cpp`.
 
 * **Everything runs at 20 Hz.** The INPUT task (`AddTask(delay 0, period 0x32)` at 0x100ae26, `FUN_010242c5`) runs `ProcessInput` (`FUN_0102603f`) every 50 ms; hover, cursor mode, edge scroll, minimap drag,
@@ -2741,7 +2741,7 @@ samples in `tests/data/edge_scroll_samples.csv`, produced by a bit-exact emulati
 
 ### 5.44 Pointer Model: Hit Boxes, Cursor Table, Clicks, the Rubber Band, the Right Button and the Pedestals (Capstone-Verified; Supersedes Earlier Click, Marquee, Armed-Order-Mode and Pedestal Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_app/hud_input.cpp` (the model) and `src/ants_app/hud.cpp` (event dispatch, drawing), with the group orders in
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src/ants_app/hud_input.cpp` (the model) and `src/ants_app/hud*.cpp` (event dispatch, drawing), with the group orders in
 `src/ants_sim/sim_engine.cpp` (`issue_group_special_order`, `is_special_target_valid`). Checked by `tests/test_app/test_pointer_model.cpp` (236 checks), the rubber band drawing in
 `tests/test_app/test_hud_layout*.cpp`, and the click tests of `test_app_integration*.cpp` (7.x, 8.7, 9.6, 10.4, 10.5, 12.15, 12.17, 12.20, 12.62, 12.68, 12.75, 12.125, 12.126, 12.144).
 
@@ -2817,8 +2817,8 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `src
 
 ### 5.45 Keyboard, Button Class and Chat (Capstone-Verified; Supersedes Earlier Hotkey, Chat Focus and Button Notes)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD::handle_key_down`, `HUD::handle_text_input`, `HUD::send_chat`, `HUD::handle_mouse_down / up / motion` (`src/ants_app/hud.cpp`) and
-`Application::handle_key_down` (`src/ants_app/application.cpp`, developer shortcuts and routing only). Checked by `tests/test_app/test_pointer_model.cpp` (`test_keyboard`, `test_buttons`) and the integration tests
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Implemented in `HUD::handle_key_down`, `HUD::handle_text_input`, `HUD::send_chat`, `HUD::handle_mouse_down / up / motion` (`src/ants_app/hud*.cpp`) and
+`Application::handle_key_down` (`src/ants_app/application*.cpp`, developer shortcuts and routing only). Checked by `tests/test_app/test_pointer_model.cpp` (`test_keyboard`, `test_buttons`) and the integration tests
 7.5, 9.7, 11.3, 12.58, 12.59, 12.75.
 
 * **Key ids** (`0x1031bbd`): Up 0xE, Down 0xF, Left 0x10, Right 0x11, F1 0x12, F9 - F12 0x13 - 0x16, Ctrl 0x17, Enter 0x18, Backspace 0x19, Esc 0x1a, Shift 0x1b, printable ASCII 0x20 - 0x7e (Ctrl is cleared before
@@ -3040,7 +3040,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::render_
 
 ### 5.54 The Fog of War's Reveal and the Layer-2 Scan Margin (Capstone-Verified; Ported in v0.0.70)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::update_fog_of_war` (`src/ants_sim/sim_engine_impl.hpp`), `AntUnit::fog_tile_x / y`, `Renderer::render_terrain_layer2_structures` (`src/ants_app/renderer.cpp`). Checked by integration test 12.76b (and 12.76), `test_render_parity`.
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::update_fog_of_war` (`src/ants_sim/sim_engine_impl.hpp`), `AntUnit::fog_tile_x / y`, `Renderer::render_terrain_layer2_structures` (`src/ants_app/renderer_terrain.cpp`). Checked by integration test 12.76b (and 12.76), `test_render_parity`.
 
 * **The reveal** (`FUN_01006af4`, called only from an ant's position update `FUN_0101a93a` at 0x101a9f8): a 13 x 13 square (+-6 around the ant's **pixel tile**, clamped with signed words, sticky), and only for the ants of the viewer and of its teammate (`+0x68`) **at that moment**. There is **no reveal around a hill** (the remake revealed a 16 x 16 box around every own and allied hill each tick: +9 % to +43 % more explored ground at the start of every fog game) and **nothing is revealed when a team forms** (the remake's per-tick scan of the ally's ants revealed 210 to 531 cells at once; in the original an allied ant reveals when it next moves). The start ants of the viewer reveal at their creation.
 
@@ -3081,7 +3081,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::render_
 
 ### 5.56 The Chat Log Window and the chat.txt Transcript (Capstone-Verified; Supersedes Earlier Chat Scroll Notes; Ported in v0.0.72)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::push_chat_entry`, `layout_chat_entry`, `update_chat_tasks`, `chat_scroll_by`, `start_chat_drag` / `move_chat_drag` / `end_chat_drag`, `render_chat_log` (`src/ants_app/hud.cpp`), `IRenderer::set_clip_rect`, `draw_single_line_label` (`text_layout.cpp`), `Application::write_chat_transcript`. Checked by `test_hud_layout` (`test_chat_log`), `test_status_messages` (chat rendering), integration tests 12.9 and 12.9b.
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::push_chat_entry`, `layout_chat_entry`, `update_chat_tasks`, `chat_scroll_by`, `start_chat_drag` / `move_chat_drag` / `end_chat_drag`, `render_chat_log` (`src/ants_app/hud*.cpp`), `IRenderer::set_clip_rect`, `draw_single_line_label` (`text_layout.cpp`), `Application::write_chat_transcript`. Checked by `test_hud_layout` (`test_chat_log`), `test_status_messages` (chat rendering), integration tests 12.9 and 12.9b.
 
 * **The window** (object `[W + 0x4acc]`, 0x54 bytes, constructor `FUN_01011e78`, vtable 0x10026a0, made at 0x100e1b4 inside the view object `[W + 0x4a80]` whose rectangle `W + 0x4a6c` is (482, 299) - (620, 400), **138 x 101 px**). Members: the list of lines `+0x10`; `+0x24` the top of the part of the log that the window shows while nobody drags it (here: "the position"), `+0x28` the position it moves to (the target), `+0x2c` the end of the log, `+0x30` the view, `+0x34` the drag flag, `+0x38 .. +0x44` the pointer of the last drag event (x at `+0x40`, y at `+0x44`), `+0x48` the dragged position, `+0x4c` the task CHATSCRL, `+0x50` the task CHATAPPD.
 
@@ -3099,7 +3099,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `HUD::push_ch
 
 ### 5.57 The Layer-2 Pass Under Fog: Body Cells and the Live Food Footprint (Capstone-Verified; Ported in v0.0.73)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::render_terrain_layer2_structures`, `draw_object_from_body_cell`, `draw_static_object`, `food_stage_anim` (`src/ants_app/renderer.cpp`). Checked by `test_render_parity` (`test_fog_objects`: 54 fog patterns on the six maps against a model of the pass, `test_food_fog_footprint`).
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::render_terrain_layer2_structures`, `draw_object_from_body_cell`, `draw_static_object`, `food_stage_anim` (`src/ants_app/renderer_terrain.cpp`). Checked by `test_render_parity` (`test_fog_objects`: 54 fog patterns on the six maps against a model of the pass, `test_food_fog_footprint`).
 
 * **The pass** (`FUN_01008089`, mode 2, 0x10081cb - 0x100835e; the layer array is `W + 0xd8`, cells of 4 bytes: word 0 = `id << 1 | anchor bit`, byte 2 the anchor's row, byte 3 its column): one row-major pass (rows outer, columns inner) over the rows `top / 32 - 3` .. `bottom / 32 + 3` and the columns likewise (docs 5.54), for every cell:
 
@@ -3125,7 +3125,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEn
 
 ### 5.59 Every Clip Steps in Real Time: Walking, Idle, Swimming ... (Capstone-Verified; Ported in v0.0.75)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::predict_ant_clip`, `draw_single_ant`, `collect_ant_units`, `collect_selection_markers` (`src/ants_app/renderer.cpp`). Checked by `test_render_parity` (`test_subtick_locomotion`, `test_subtick_prediction`, `test_marker_and_digit_position`).
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::predict_ant_clip`, `draw_single_ant`, `collect_ant_units`, `collect_selection_markers` (`src/ants_app/renderer_units.cpp`). Checked by `test_render_parity` (`test_subtick_locomotion`, `test_subtick_prediction`, `test_marker_and_digit_position`).
 
 * **The original** moves a sprite along its clip with `timeGetTime()`: the animation step (`FUN_0102b997`) runs for every sprite on each scheduler pass and, for every frame whose end time has passed, applies the frame's displacement and moves on to the next frame (at the last frame the clip's step callback decides what comes next); the screen is redrawn by the REFRESH task (period 0: on every pass, 0x102c4d1). A frame or a step therefore shows up within one redraw of the moment it ends.
 
@@ -3139,7 +3139,7 @@ Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `Renderer::pr
 
 ### 5.60 The Death Clips Are the Ant's Own; the Burn Overlay Is a View Child (Capstone-Verified; Ported in v0.0.76)
 
-Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::set_action` (death), `Renderer::collect_ant_units`, `collect_burn_overlays`, `predict_ant_clip` (`src/ants_sim/movement_system.cpp`, `src/ants_app/renderer.cpp`). Checked by integration tests 12.52 and 12.117, `test_render_parity` (`test_dying_ant`, `test_burn_overlay_layer`, `test_frozen_ant`).
+Addresses are virtual addresses in `Original-Ants/Ants.exe`. Code: `SimulationEngineImpl::set_action` (death), `Renderer::collect_ant_units`, `collect_burn_overlays`, `predict_ant_clip` (`src/ants_sim/movement_system.cpp`, `src/ants_app/renderer_units.cpp`). Checked by integration tests 12.52 and 12.117, `test_render_parity` (`test_dying_ant`, `test_burn_overlay_layer`, `test_frozen_ant`).
 
 * **Death** (`SetAction(0xC)`, 0x101b3fd): `death1` .. `death4` (Table-4 animations 102 .. 105, variant `rand() % 4`) are clips of the **ant's own sprite**; no other sprite is made. The clip's frames hold no displacement (11 / 12 / 10 / 7 frames: 920 / 1000 / 980 / 600 ms); the first frame is booked twice when the clip starts inside a callback, so the ant lives 1020 / 1100 / 1080 / 660 ms until `FinishDeath` removes it (docs 5.35). Until then it is an ordinary ant of the display list: its hit-point number (Ctrl+L, "0") and its minimap dot stay, it is drawn and sorted like every ant. The remake started a `death1 .. death4` **effect** beside the ant's own clip and skipped the dying ant in the draw: the effect began about 20 ms after the clip and ended about 80 to 100 ms before the ant's removal (the audit's probe: clip at 1480 ms, effect 1500 - 2420 ms, nothing drawn 2420 - 2500 ms, removal at 2500 ms), and the ant's number and sort order were missing. The effect is gone; a dying ant is drawn through its loco clip with the sub-tick stepping of 5.59. The death sprites' names start with a digit, which exempts them from the team color shift.
 

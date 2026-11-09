@@ -740,6 +740,22 @@ void run_b41_style_tests() {
                 ASSERT_FALSE(p.combat_when_attacked);                                                            // taken in the opening, by every style
             }
         }
+        for (const Level level : {Level::Easy, Level::Medium, Level::Hard}) {                                 // the defence batch (AI35.6): Hard's, whatever the style and the variations of the bot's own
+            for (uint32_t seed = 1; seed <= 12; ++seed) {
+                const LevelPlan p = plan_in_match(level, Style::Random, seed, static_cast<uint8_t>(seed % 4));
+                ASSERT_EQ(p.defend_all_types && p.victim_answers && p.defend_by_strength, level == Level::Hard);
+                ASSERT_EQ(p.defend_all_types || p.victim_answers || p.defend_by_strength, level == Level::Hard);
+                ASSERT_EQ(p.defend_keep_percent, level == Level::Medium ? 120u : level == Level::Hard ? 60u : 100u);
+                ASSERT_FALSE(p.group_fight);                                                                     // the group batch (AI38.1): off at every level, whatever the style and the variations of the bot's own
+                ASSERT_EQ(p.group_reach, level == Level::Medium ? 14 : 20);
+                ASSERT_FALSE(p.heal);                                                                            // the heal batch (AI36.6): off at every level, whatever the style and the variations of the bot's own
+                ASSERT_EQ(p.heal_hp, level == Level::Medium ? 3u : 4u);
+                ASSERT_EQ(p.heal_danger_tiles, 3);
+                ASSERT_EQ(p.heal_recent_ticks, 60u);
+                ASSERT_EQ(p.heal_walk_tiles, level == Level::Medium ? 12 : 16);
+                ASSERT_EQ(p.heal_calm_hp, level == Level::Medium ? 0u : 2u);
+            }
+        }
         const LevelPlan hard = plan_for(Level::Hard);
         ASSERT_TRUE(hard.gate && hard.steals && hard.max_thief == 2u && hard.max_combat == 1u && hard.combat_extra == 1u);
         ASSERT_FALSE(plan_for(Level::Medium).gate);

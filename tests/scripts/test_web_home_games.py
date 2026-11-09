@@ -69,7 +69,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_old_room_is_let_go_of_only_when_the_new_one_welcomes_the_page(self):
         probe = self.page[self.page.index("function probe(code, name, done) {"):]
-        probe = probe[:probe.index("p.connect();")]
+        probe = probe[:probe.index("open(p, name);")]
         self.assertLess(probe.index("p.on('welcome'"), probe.index("if (old) old.leave();"))
         self.assertLess(probe.index("client = p;"), probe.index("if (old) old.leave();"))
         self.assertEqual(probe.count("old.leave()"), 1, "the one place where the old room is let go of")
@@ -95,6 +95,9 @@ class ThePage(unittest.TestCase):
         for call in ("gamesCall('shown', name);", "gamesCall('sync');", "gamesCall('opening');"):
             self.assertIn(call, self.home, call)
         self.assertIn("function gamesCall(name, arg) { try { if (games) games[name](arg); } catch (e) { /* the list is its own */ } }", self.home, "what goes wrong in the list stays in it")
+
+    def test_the_map_picker_comes_before_home_so_that_it_is_there_when_the_list_runs(self):
+        self.assertLess(self.page.index('<script src="front/map_picker.js"></script>'), self.page.index('<script src="home/home.js"></script>'), "the list's script (loaded after the first paint) reads AntsMapPicker from the window")
 
     def test_the_page_is_under_its_line_limit(self):
         self.assertLessEqual(len(self.page.split("\n")) - 1, LINES, "tools/check_hygiene.py: the page's line limit")
@@ -134,9 +137,25 @@ class TheFolder(unittest.TestCase):
         for word in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "createContextualFragment", "DOMParser", "eval(", "new Function", "setAttribute('href'", "setAttribute('src'", "setAttribute('style'", ".href =", ".onclick", "srcdoc",
                      "location.assign", "location.href", "window.open", ".style.cssText"):
             self.assertNotIn(word, self.code, word)
-        self.assertEqual(len(re.findall(r"\.src = ", self.code)), 1, "one address is made, a picture of the page's own folder from a key of the page's own table")
-        self.assertIn("img.src = 'front/preview_' + row.mapKey + '.png';", self.js)
+        self.assertEqual(len(re.findall(r"\.src = ", self.code)), 1, "one address is made, for a picture: an original's own, or the library's")
+        self.assertIn("var src = row.mapKey ? 'front/preview_' + row.mapKey + '.png' : Picker ? Picker.previewPath(row.map) : '';", self.js, "an original's picture comes from a key of the page's own table, a map of the players' from the map picker's rule")
+        self.assertIn("img.src = src;", self.js)
         self.assertIn("mapKey: known ? known.key : ''", self.js, "the key is the page's table's, never the row's text")
+        self.assertIn("Net = win.AntsLobbyNet, Picker = win.AntsMapPicker;", self.js, "the picker is read from the page's window, and a page without it has no picture of the players' maps (never a break)")
+
+    def test_the_picture_of_a_map_of_the_players_is_the_pickers_rule_and_not_a_second_copy_of_it(self):
+        for word in ("percentEncode", "encodeURIComponent", "escape(", "/maps/previews", ".webp", "decodeURI"):
+            self.assertNotIn(word, self.js, "%s: the address is made by AntsMapPicker.previewPath (web/front/map_picker.js), which checks the file name and the shape of what it makes" % word)
+        picker = read("web", "front", "map_picker.js")
+        self.assertIn("function previewPath(map) {", picker)
+        self.assertIn("previewPath: previewPath", picker)
+        self.assertIn("return ownPath('/maps/previews/' + percentEncode(base) + '.webp');", picker, "what the list's script relies on: one shape, the library's, checked")
+
+    def test_a_picture_that_does_not_come_is_taken_away_and_the_square_stays(self):
+        self.assertEqual(self.js.count("img.addEventListener('error', function () { pic.removeChild(img); });"), 1)
+        self.assertIn("img.setAttribute('loading', 'lazy');", self.js, "a list of 50 rows is not 50 requests at once, and a closed popover asks for none")
+        self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
+        self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
     def test_nothing_is_kept_in_the_browser_and_the_one_address_has_no_query_and_no_cookies(self):
         for word in ("localStorage", "sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
@@ -204,6 +223,11 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".vbtn[aria-pressed=\"true\"] {", self.css)
         self.assertIn(".vwide { display: none; }", self.css)
 
+    def test_the_switch_label_is_centered_by_the_browser_not_hung_at_the_top_by_a_baseline_row(self):
+        vbtn = next(body for selector, body in self.rules if selector.strip() == ".vbtn")
+        self.assertIn("display: block;", vbtn, "a flex row with align-items: baseline hangs the label at the top of the 44 px button (tests/scripts/web_home_games_browser.js, part 1j, measures it)")
+        self.assertNotRegex(self.css, r"\.vbtn[^{]*\{[^}]*(baseline|inline-flex)")
+
     def test_the_classes_that_the_script_makes_are_the_styles_and_the_page_s_own(self):
         made = set()
         for m in re.finditer(r"el\('[a-z0-9]+', '([\w -]+)'", read("web", "home", "games.js")):
@@ -217,7 +241,8 @@ class TheStyle(unittest.TestCase):
 
 class TheListIsTheYardsOnAUnlabelledSite(unittest.TestCase):
     """A site with no site label (production: docs/HOME_SCREEN.md, "The Yard") shows the Games list as the page under the bar, docked in the Yard (home.js hands it #yard as `dock`), always there, the same rows and Join as the
-    popover's (one code); a site with the label (the test site) keeps the popover and the stand-in. The list sits right of the chat panel on a wide window and above its strip on a phone, so that no Join is covered."""
+    popover's (one code); a site with the label (the test site) keeps the popover and the stand-in. The list is centered in the window from 1280 px wide, right of the chat panel in a window of 761 to 1279 px and above its strip
+    on a phone, so that no Join is covered."""
 
     @classmethod
     def setUpClass(cls):
@@ -255,6 +280,27 @@ class TheListIsTheYardsOnAUnlabelledSite(unittest.TestCase):
         self.assertIn("(max-width: 720px), (max-height: 500px) {", self.chat, "the strip's own breakpoint is the one that the list uses")
         self.assertIn("@media (min-width: 721px) and (max-width: 760px) and (min-height: 501px) { .gdock { left: 12px; right: 12px; width: auto; max-height: calc(100% - 428px); } }", rules)
 
+    def test_the_docked_list_is_centered_in_the_window_where_the_chat_panel_leaves_room(self):
+        """The Yard has the same margin on both sides of the window, so the same room on both sides of the list is a list in the window's middle. The chat panel is at the left only, and the list keeps clear of it by that room
+        (so no height of the panel or of the list can make one cover the other): the default rule puts the list right of the panel, in the middle of the space there, and from the window width at which the list is still
+        400 px wide the same room at the right as at the left puts its middle in the window's. A narrower window cannot have both (the panel is 404 px of it), so it keeps the list right of the panel."""
+        rules = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        base = re.search(r"\.gdock \{ position: absolute; z-index: \d+; top: 12px; left: (\d+)px; right: 12px; width: min\((\d+)px, calc\(100% - (\d+)px\)\);", rules)
+        wide = re.search(r"@media \(min-width: (\d+)px\) \{ \.gdock \{ right: (\d+)px; width: min\((\d+)px, calc\(100% - (\d+)px\)\); \} \}", rules)
+        self.assertIsNotNone(base)
+        self.assertIsNotNone(wide, "the rule that centers the list in the window")
+        left, cap = int(base.group(1)), int(base.group(2))
+        edge, right, wide_cap, taken = (int(g) for g in wide.groups())
+        self.assertEqual(right, left, "the same room on both sides of the list")
+        self.assertEqual(taken, left + right, "and the width is what is left between them")
+        self.assertEqual(wide_cap, cap, "up to the same 560 px")
+        self.assertEqual(edge, taken + 24 + 400, "from this window width the list is at least 400 px wide (24 px: the Yard's margins and borders); below it the list keeps to the right of the chat panel")
+        chat = re.search(r"\.gc \{ position: absolute; left: (\d+)px; bottom: 22px; z-index: (\d+);[^}]*width: (\d+)px;", self.chat)
+        self.assertGreaterEqual(right, int(chat.group(1)) + int(chat.group(3)), "the room at the right is the chat panel's too: the list's left edge is clear of the panel at every width")
+        self.assertLess(rules.index(base.group(0)), rules.index(wide.group(0)), "after the rule that it changes")
+        for later in ("@media (min-width: 721px) and (max-width: 760px) and (min-height: 501px) {", "@media (max-width: 720px), (max-height: 500px) { .gdock {"):
+            self.assertLess(rules.index(wide.group(0)), rules.index(later), "the rules for a short window and the stacked layout come after it and win: " + later)
+
 
 class TheWayIntoTheImage(unittest.TestCase):
     def test_the_dockerfile_copies_the_folder_to_where_nginx_serves_home(self):
@@ -283,7 +329,8 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_games_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the copy with
     nothing changed must pass"""
-    FILES = ["web/lobby.html", "web/home/home.js", "web/home/home.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
+    FILES = ["web/lobby.html", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
+             "tests/data/home_games_thumbs.json", "Community-Maps/previews.json",
              "tests/scripts/web_home_games_room_check.js", "tests/scripts/web_home_games_quickjoin_check.js", "tests/scripts/web_home_games_rig.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] \
         + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 

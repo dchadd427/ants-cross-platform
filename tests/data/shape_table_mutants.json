@@ -409,15 +409,15 @@
     {
       "id": "page_lobby_solo_hands_on_the_shown_shape",
       "file": "web/lobby.html",
-      "old": "soloAddress(model, myName(), pickedShape)",
-      "new": "soloAddress(model, myName(), aspect)",
+      "old": "soloAddress(model, client.name, pickedShape)",
+      "new": "soloAddress(model, client.name, aspect)",
       "test": "python3 tests/scripts/test_web_aspect_default.py"
     },
     {
       "id": "page_lobby_rejoin_hands_on_the_shown_shape",
       "file": "web/lobby.html",
-      "old": "remembered.ok ? remembered.name : '', pickedShape)",
-      "new": "remembered.ok ? remembered.name : '', aspect)",
+      "old": "rejoinQuery(rejoinOffered, '', pickedShape)",
+      "new": "rejoinQuery(rejoinOffered, '', aspect)",
       "test": "python3 tests/scripts/test_web_aspect_default.py"
     },
     {

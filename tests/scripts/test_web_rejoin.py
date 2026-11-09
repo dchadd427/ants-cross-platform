@@ -106,7 +106,7 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("function rejoinServer(secure, host) { return (secure ? 'wss://' : 'ws://') + host + '/ws'; }", self.block)
         app = read("src", "ants_app", "application.cpp")
         self.assertIn("const std::string server = rejoin_server_text(config_.net_address, config_.net_port, config_.net_url);", app)   # (the entry that a join looks up)
-        self.assertIn("cfg.net_url = argv[++i];", app)                                                                  # (--join-url, as the page gave it)
+        self.assertIn("cfg.net_url = argv[++i];", read("src", "ants_app", "application_args.cpp"))                                                                  # (--join-url, as the page gave it)
         self.assertIn("if (!url.empty()) return url;", read("src", "ants_app", "rejoin_store.cpp"))                    # (a browser build's server is its URL)
 
     def test_the_key_is_not_in_what_the_blocks_make(self):
@@ -138,9 +138,9 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertIn("document.addEventListener('visibilitychange', poller.visibility);", self.page)
         self.assertEqual(len(re.findall(r"addEventListener\('visibilitychange'", self.page)), 2)                        # (the client's wake and the line of numbers' own: tests/scripts/web_name_check.js counts them)
 
-    def test_the_press_takes_this_tab_to_the_game_page_with_the_remembered_name_and_shape_and_no_key(self):
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);", self.wiring)
-        self.assertIn("var remembered = nameCheck(recall(NAME_KEY));", self.wiring)
+    def test_the_press_takes_this_tab_to_the_game_page_with_the_remembered_shape_and_no_name_and_no_key(self):
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);", self.wiring)      # (the key takes the seat, which the room has named: the address says "no name chosen")
+        self.assertNotIn("NAME_KEY", self.wiring)
         self.assertNotIn("window.open", self.wiring)                                                                    # (no new tab: the other join links of the page stay in this one)
         self.assertNotIn("window.open(", self.page)                                                                      # (the page opens no window at all: the test room's "separate windows" went with "More ways to play")
 
@@ -207,15 +207,15 @@ class TheGamePageDoesNotAskARejoinerForAName(unittest.TestCase):
         self.assertIn("try { window.history.replaceState(null, '', window.location.pathname + changed + window.location.hash); } catch (e) { /* the address stays as it is */ }", self.shell)
         app = read("src", "ants_app", "application.cpp")
         self.assertIn('"try{if(window.antsSeatKnown)window.antsSeatKnown(" + std::to_string(static_cast<unsigned>(seat)) + ");}catch(e){}"', app)      # (the web build's own function: the page is told)
-        self.assertIn("    track_net_state();\n    note_seat();\n", app)                                          # (looked at every frame of a network game)
+        self.assertIn("    track_net_state();\n    note_seat();\n", read("src", "ants_app", "application_net.cpp"))                                          # (looked at every frame of a network game)
         self.assertIn("void set_on_seat_known(std::function<void(uint8_t)> fn)", read("include", "ants_app", "application.hpp"))
 
     def test_the_vote_keys_of_the_game_are_kept_from_the_browser_like_help(self):
         """The review's L4: F2 and F3 are the vote's keys (keep waiting, go on without them); F3 is the browser's search."""
         self.assertIn("if (ANTS_PAGE.cancelsBrowserKey(e)) e.preventDefault();", self.shell)
         self.assertIn("return !!(gameCtrlKey || key === 'f1' || key === 'f2' || key === 'f3' || pageScrollKey);", self.shell)
-        self.assertIn("SDLK_F2", read("src", "ants_app", "application.cpp"))                                        # (the keys that the game takes for the vote)
-        self.assertIn("SDLK_F3", read("src", "ants_app", "application.cpp"))
+        self.assertIn("SDLK_F2", read("src", "ants_app", "application_input.cpp"))                                        # (the keys that the game takes for the vote)
+        self.assertIn("SDLK_F3", read("src", "ants_app", "application_input.cpp"))
 
 
 class TheBrowserCheckAndTheGame(unittest.TestCase):
@@ -231,8 +231,8 @@ class TheBrowserCheckAndTheGame(unittest.TestCase):
         self.assertIn("int net_overlay_probe(const NetOverlayLine& overlay, int what);", read("include", "ants_app", "net_overlay.hpp"))
         for needle in ("Module._ants_probe(16)", "Module._ants_probe(10000 + 1000 * l + i)", "Module._ants_probe(5)", "Module._ants_match_running()"):
             self.assertIn(needle, self.check, needle)
-        self.assertIn("window.parent.postMessage({ants: 'sync'", app)                                           # (a top-level game posts its hashes on the channel that the check listens to)
-        self.assertIn('new BroadcastChannel("ants-sync")', app)
+        self.assertIn("window.parent.postMessage({ants: 'sync'", read("src", "ants_app", "application_sim.cpp"))                                           # (a top-level game posts its hashes on the channel that the check listens to)
+        self.assertIn('new BroadcastChannel("ants-sync")', read("src", "ants_app", "application_sim.cpp"))
         self.assertIn("new BroadcastChannel('ants-sync')", self.check)
 
     def test_the_probes_touch_the_game_only_once_the_page_says_that_it_is_ready(self):

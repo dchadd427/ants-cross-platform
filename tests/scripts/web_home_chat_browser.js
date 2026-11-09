@@ -1,7 +1,7 @@
 // OPT-IN, not part of ./run_tests.sh: the chat dock of Home in a REAL browser (Chromium through Playwright), against the real front page (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js)
 // that shares the page's address, as nginx's /hub/ws does. It looks at what no fake DOM can: the places and sizes of the dock at 390 x 844 (a phone), 844 x 390 (a phone held sideways) and 1280 x 800 (a desktop) next to
 // the approved pictures, that nothing scrolls sideways, that every target is 44 px, that the dock covers none of the bar, that the dock comes after the first paint, that the page asks for its two files and for
-// nothing else, that no other page of the site opens a hub socket, the real WebSocket against the fake hub (read only, a writer, the hub's pace, hostile text, a hub that goes and comes back, a hub that is not
+// nothing else, that no other page of the site opens a hub socket, the real WebSocket against the fake hub (read only, a writer, the two names and the switch between them, the hub's pace, untrusted text, a hub that goes and comes back, a hub that is not
 // there, a site with no /hub/ws), and the Room bar's logo at 320 to 389 px.
 //
 //   node tests/scripts/web_home_chat_browser.js [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -218,7 +218,62 @@ async function main() {
         await context.close();
     }
 
-    // ---- a writer, the hub's pace, hostile text, on the real socket in a real browser ----
+    // ---- the two names (docs/HUB.md "Names"): the menu says which name the chat shows and offers the other one, a press sends one `pick`, the hub closes the socket and the page connects again with the new name; a line is
+    // the visitor's by the hub's key and not by its name, so the lines that were written under the other name stay the visitor's, and another account that shows the same name is not; an older hub (no `pick`, no key) shows no
+    // switch; a moderator's line carries the username in brackets ----
+    const until = async (fn, ms) => { const end = Date.now() + ms; while (Date.now() < end) { if (fn()) return true; await sleep(50); } return fn(); };
+    for (const size of ['desktop', 'phone']) {
+        const KEY = 'aaaaaaaaaaaa';
+        const NAMES = [line(1, 'pebble', 'hello', false, { k: 'bbbbbbbbbbbb' }), line(2, 'Maple Leaf', 'a line of the visitor', false, { k: KEY }), line(3, 'Maple Leaf', 'another account that shows the same name', false, { k: 'cccccccccccc' })];
+        hub.set({ you: { name: 'Maple Leaf', mod: false, k: KEY, pick: 'display', other: 'maple.leaf' }, login: true, mode: 'normal', online: 7, history: NAMES });
+        const { page, context } = await open(size);
+        await waitState(page, size === 'desktop' ? 'live/true' : 'live/false');
+        if (size === 'phone') await page.click('#gchat .gc-head');
+        check(size + ': the dock is live and open', await waitState(page, 'live/true'));
+        const gold = () => page.evaluate(() => [...document.querySelectorAll('#gchat .gc-line')].map((e) => (e.classList.contains('gc-me') ? '1' : '0')).join(''));
+        check(size + ': of two lines that show one name only the visitor\'s own (by the hub\'s key) is the visitor\'s', (await gold()) === '010', await gold());
+        await page.click('#gchat .gc-more');
+        await sleep(150);
+        const menu = () => page.evaluate(() => {
+            const m = document.querySelector('#gchat .gc-menu'), n = document.querySelector('#gchat .gc-pn'), b = document.querySelector('#gchat .gc-pick'), d = document.getElementById('gchat').getBoundingClientRect(), r = b.getBoundingClientRect();
+            return { open: !m.hidden, shown: b.getClientRects().length > 0 && n.getClientRects().length > 0, note: n.innerText, button: b.innerText, h: Math.round(r.height), inside: r.left >= d.left - 1 && r.right <= d.right + 1, name: document.querySelector('#gchat .gc-an').innerText };
+        });
+        let m = await menu();
+        check(size + ': the menu says which name the chat shows and offers the other one, in a button of at least 44 px inside the dock', m.open && m.shown && m.note === 'Chat shows your display name.' && m.button === 'Show my username: maple.leaf' && m.h >= 44 && m.inside && m.name === 'Maple Leaf', JSON.stringify(m));
+        await shot(page, 'pick_display', size);
+        hub.received.length = 0;
+        const upgrades = hub.upgrades;
+        await page.click('#gchat .gc-pick');
+        const again = (await until(() => hub.upgrades > upgrades, 9000)) && (await waitState(page, 'live/true', 9000));       // (the hub closes the socket: the page connects again, and the welcome is live)
+        check(size + ': one pick for the username went to the hub, and the page connected again (one more socket)', again && hub.received.filter((x) => x.t === 'pick').length === 1 && hub.received.filter((x) => x.t === 'pick')[0].pick === 'username' && hub.upgrades === upgrades + 1, JSON.stringify(hub.received) + ' ' + hub.upgrades + ' ' + upgrades);
+        if ((await menu()).open === false) { await page.click('#gchat .gc-more'); await sleep(150); }
+        m = await menu();
+        check(size + ': after it the page says username, offers the display name, and the lines written under the display name are still the visitor\'s', m.note === 'Chat shows your username.' && m.button === 'Show my display name: Maple Leaf' && m.name === 'maple.leaf' && (await gold()) === '010', JSON.stringify(m) + ' ' + await gold());
+        await shot(page, 'pick_username', size);
+        await context.close();
+
+        hub.set({ you: { name: 'maple.leaf', mod: false }, login: true, mode: 'normal', online: 7, history: HISTORY });
+        const old = await open(size);
+        await waitState(old.page, size === 'desktop' ? 'live/true' : 'live/false');
+        if (size === 'phone') await old.page.click('#gchat .gc-head');
+        await waitState(old.page, 'live/true');
+        await old.page.click('#gchat .gc-more');
+        await sleep(150);
+        check(size + ': a hub that says nothing of two names shows no switch (the note and the button are not there, Forget me is)', await old.page.evaluate(() => { const m = document.querySelector('#gchat .gc-menu'); return !m.hidden && document.querySelector('#gchat .gc-pick').getClientRects().length === 0 && document.querySelector('#gchat .gc-pn').getClientRects().length === 0 && document.querySelector('#gchat .gc-forget').getClientRects().length > 0; }));
+        await old.context.close();
+
+        hub.set({ you: { name: 'Mod Person', mod: true, k: 'dddddddddddd' }, login: true, mode: 'normal', online: 7, history: [line(1, 'Maple Leaf', 'hello', false, { k: KEY, u: 'maple.leaf' }), line(2, 'pebble', 'hi', false, { k: 'bbbbbbbbbbbb' })] });
+        const mod = await open(size);
+        await waitState(mod.page, size === 'desktop' ? 'live/true' : 'live/false');
+        if (size === 'phone') await mod.page.click('#gchat .gc-head');
+        await waitState(mod.page, 'live/true');
+        const u = await mod.page.evaluate(() => { const e = document.querySelector('#gchat .gc-u'); if (!e) return null; const b = getComputedStyle(e, '::before').content, a = getComputedStyle(e, '::after').content; return { text: e.innerText, before: b, after: a, count: document.querySelectorAll('#gchat .gc-u').length, row: e.parentElement.innerText }; });
+        check(size + ': a moderator\'s line shows the username in brackets after the name, and only for the line that has one', !!u && u.text === 'maple.leaf' && u.before === '"("' && u.after === '")"' && u.count === 1 && /^Maple Leaf\s*maple\.leaf: hello$/.test(u.row), JSON.stringify(u));
+        await shot(mod.page, 'moderator_username', size);
+        await mod.context.close();
+    }
+
+    // ---- a writer, the hub's pace, untrusted text, on the real socket in a real browser ----
     {
         hub.set({ you: { name: 'maple.leaf', mod: false }, login: true, mode: 'normal', history: HISTORY });
         const { page, context } = await open('desktop');
@@ -231,8 +286,8 @@ async function main() {
         check('the lines come back from the hub and are the visitor\'s own (gold name)', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-me').length)) === 2);
         hub.say('<b>evil</b>', '<img src=x onerror="window.pwned=1"><script>window.pwned=1</script> ‮ rtl javascript:alert(1) http://evil.example');
         await sleep(200);
-        const hostile = await page.evaluate(() => ({ pwned: window.pwned || 0, imgs: document.querySelectorAll('#gchat img, #gchat script, #gchat a, #gchat b, #gchat iframe').length, last: document.querySelector('#gchat .gc-log').lastElementChild.innerText }));
-        check('hostile text in a real browser is text: no element made from it, nothing ran, no link', hostile.pwned === 0 && hostile.imgs === 0 && hostile.last.indexOf('<b>evil</b>: <img src=x') === 0, JSON.stringify(hostile));
+        const untrusted = await page.evaluate(() => ({ pwned: window.pwned || 0, imgs: document.querySelectorAll('#gchat img, #gchat script, #gchat a, #gchat b, #gchat iframe').length, last: document.querySelector('#gchat .gc-log').lastElementChild.innerText }));
+        check('untrusted text in a real browser is text: no element made from it, nothing ran, no link', untrusted.pwned === 0 && untrusted.imgs === 0 && untrusted.last.indexOf('<b>evil</b>: <img src=x') === 0, JSON.stringify(untrusted));
         for (let i = 0; i < 300; i++) hub.say('u' + (i % 5), 'burst ' + i);
         await sleep(400);
         check('a burst of 300 lines leaves 100 in the page', (await page.evaluate(() => document.querySelectorAll('#gchat .gc-line').length)) === 100);

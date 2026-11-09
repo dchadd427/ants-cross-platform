@@ -56,7 +56,7 @@ class Contract(unittest.TestCase):
 
     def test_the_store_is_a_store_and_does_every_operation_of_the_contract(self):
         self.assertIsInstance(self.store, base.StoreBase)
-        self.assertGreater(len(base.PUBLIC), 15)
+        self.assertGreater(len(base.PUBLIC), 18)
         for name in base.PUBLIC:
             self.assertIsNot(getattr(type(self.store), name), getattr(base.StoreBase, name), name)
         self.assertTrue(issubclass(base.StoreUnavailable, base.StoreError))
@@ -65,7 +65,8 @@ class Contract(unittest.TestCase):
         self.say(1)
         writes = (lambda: self.say(2), lambda: self.store.delete_line(1, "me"), lambda: self.store.purge(), lambda: self.store.forget("1001"),
                   lambda: self.store.mute("1001", 5, "me"), lambda: self.store.ban("1001", "me"), lambda: self.store.unban("1001"),
-                  lambda: self.store.add_session("k", "1001", "alice", 60, 10, 100), lambda: self.store.delete_session("k"), lambda: self.store.make_room(0, 10, 0))
+                  lambda: self.store.add_session("k", "1001", "alice", 60, 10, 100), lambda: self.store.delete_session("k"), lambda: self.store.make_room(0, 10, 0),
+                  lambda: self.store.set_profile("1001", "alice", "Alice A", 100), lambda: self.store.set_pick("1001", "username"))
         with self.refusing_writes(self.store):
             for write in writes:
                 with self.assertRaises(base.StoreError):
@@ -73,6 +74,7 @@ class Contract(unittest.TestCase):
         self.assertEqual([l.text for l in self.store.recent_lines(10)], ["line 1"])
         self.assertFalse(self.store.is_banned("1001"))
         self.assertEqual(self.store.last_deletion(), 0)
+        self.assertIsNone(self.store.profile("1001"))
 
     # ---- lines ----
 
@@ -102,15 +104,14 @@ class Contract(unittest.TestCase):
         self.assertEqual(rows, [(b.id, b.at, "1001", "alice", "line 2", 0), (a.id, a.at, "1001", "alice", "line 1", 1)])
         self.assertEqual(len(self.store.lines(1)), 1)
 
-    def test_the_account_of_a_name_and_the_name_of_an_account_are_the_last_spoken(self):
-        self.assertIsNone(self.store.account_of_name("alice"))
+    def test_the_name_of_an_account_is_the_one_it_last_spoke_under_and_a_name_is_not_a_way_to_an_account(self):
         self.assertEqual(self.store.last_name("1001"), "")
         self.say(1, "1001", "alice")
         self.say(2, "1001", "alicia")
         self.say(3, "1002", "alice")
-        self.assertEqual(self.store.account_of_name("alice"), "1002")
-        self.assertEqual(self.store.account_of_name("alicia"), "1001")
         self.assertEqual(self.store.last_name("1001"), "alicia")
+        self.assertEqual(self.store.last_name("1002"), "alice")
+        self.assertFalse(hasattr(self.store, "account_of_name"), "names are not unique: an account is found by its username (account_of_username), never by a name that was shown")
 
     def test_text_is_kept_as_it_is(self):
         text = "caf\u00e9 \u4e2d\u6587 'quote' \"double\" % _ ; --"
@@ -300,6 +301,168 @@ class Contract(unittest.TestCase):
         self.assertFalse(self.store.is_banned("1001"))
         self.assertFalse(self.store.unban("1001"))
 
+
+    # ---- profiles ----
+
+    def test_a_profile_is_what_the_last_login_said_and_a_new_one_picks_the_display_name_where_there_is_one(self):
+        self.assertIsNone(self.store.profile("1001"))
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.assertIsInstance(self.store.profile("1001"), base.Profile)
+        self.assertEqual(tuple(self.store.profile("1001")), ("alice", "Alice A", "display"))
+        self.store.set_profile("1002", "bob", "", 100)
+        self.assertEqual(tuple(self.store.profile("1002")), ("bob", "", "username"))
+        self.assertIsNone(self.store.profile("1003"))
+
+    def test_a_login_refreshes_both_names_and_keeps_the_pick(self):
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.assertTrue(self.store.set_pick("1001", "username"))
+        self.store.set_profile("1001", "alicia", "Alice B", 100)
+        self.assertEqual(tuple(self.store.profile("1001")), ("alicia", "Alice B", "username"))
+        self.assertTrue(self.store.set_pick("1001", "display"))
+        self.store.set_profile("1001", "alicia", "", 100)                       # (the display name is gone: the pick stays, and there is nothing to choose between)
+        self.assertEqual(tuple(self.store.profile("1001")), ("alicia", "", "display"))
+        self.store.set_profile("1001", "alicia", "Alice C", 100)
+        self.assertEqual(tuple(self.store.profile("1001")), ("alicia", "Alice C", "display"))
+
+    def test_an_account_that_had_no_display_name_and_now_has_one_is_shown_by_it_and_a_choice_that_was_made_stays(self):
+        self.store.set_profile("1001", "alice", "", 100)
+        self.assertEqual(self.store.profile("1001").pick, "username")
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.assertEqual(self.store.profile("1001").pick, "display")
+        self.assertTrue(self.store.set_pick("1001", "username"))
+        self.store.set_profile("1001", "alice", "Alice B", 100)
+        self.assertEqual(self.store.profile("1001").pick, "username")
+
+    def test_a_pick_needs_a_profile_with_a_display_name_and_one_of_the_two_words(self):
+        self.assertFalse(self.store.set_pick("1001", "display"))               # (no profile)
+        self.store.set_profile("1001", "alice", "", 100)
+        self.assertFalse(self.store.set_pick("1001", "display"))
+        self.assertFalse(self.store.set_pick("1001", "username"))
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        for word in ("other", "", None, 5, "Display", ["display"]):
+            self.assertFalse(self.store.set_pick("1001", word), repr(word))
+        self.assertEqual(self.store.profile("1001").pick, "display")
+        self.assertTrue(self.store.set_pick("1001", "username"))
+        self.assertTrue(self.store.set_pick("1001", "username"))
+        self.assertEqual(self.store.profile("1001").pick, "username")
+        self.assertIsNone(self.store.profile("1002"))
+
+    def test_a_pick_is_no_login_and_does_not_make_a_profile_newer(self):
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.clock.now += 20 * DAY
+        self.assertTrue(self.store.set_pick("1001", "username"))
+        self.clock.now += base.PROFILE_DAYS * DAY - 20 * DAY + 1
+        self.store.purge()
+        self.assertIsNone(self.store.profile("1001"))                           # (only a login keeps a profile: it is as old as the last login that refreshed it)
+
+    def test_an_account_is_found_by_its_username_when_exactly_one_has_it(self):
+        self.assertIsNone(self.store.account_of_username("alice"))
+        self.store.set_profile("1001", "alice", "Shown Name", 100)
+        self.assertEqual(self.store.account_of_username("alice"), "1001")
+        self.assertIsNone(self.store.account_of_username("Shown Name"))          # (a name that is shown is not a username)
+        self.assertIsNone(self.store.account_of_username("nobody"))
+        self.store.set_profile("1002", "alice", "", 100)                         # (a username that was given up and taken: two profiles have it, each as old as its last login)
+        self.assertIsNone(self.store.account_of_username("alice"))
+        self.store.set_profile("1001", "alicia", "Shown Name", 100)              # (the first account logs in again, under its new username)
+        self.assertEqual(self.store.account_of_username("alice"), "1002")
+        self.assertEqual(self.store.account_of_username("alicia"), "1001")
+        self.say(1, "1003", "carol")
+        self.assertIsNone(self.store.account_of_username("carol"))              # (a line is no profile: a name that was spoken is not looked up)
+
+    def test_two_accounts_may_show_one_name_and_each_is_found_by_its_own_username(self):
+        self.store.set_profile("1001", "aaa.one", "Maple", 100)
+        self.store.set_profile("1002", "bbb.two", "Maple", 100)
+        self.assertEqual((self.store.account_of_username("aaa.one"), self.store.account_of_username("bbb.two")), ("1001", "1002"))
+        self.assertIsNone(self.store.account_of_username("Maple"))
+
+    def test_the_profiles_that_are_kept_are_the_newest_and_the_ones_refreshed_longest_ago_go(self):
+        for n in range(4):
+            self.store.set_profile("100%d" % n, "user%d" % n, "", 3)
+            self.clock.now += 1
+        self.assertEqual([self.store.profile("100%d" % n) is not None for n in range(4)], [False, True, True, True])
+        self.store.set_profile("1001", "user1", "", 3)                           # (a login refreshes: this one is the newest now)
+        self.clock.now += 1
+        self.store.set_profile("1004", "user4", "", 3)
+        self.assertEqual([self.store.profile("100%d" % n) is not None for n in range(5)], [False, True, False, True, True])
+
+    def test_forget_removes_the_profile_with_the_rest_of_the_account_and_no_other(self):
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.store.set_profile("1002", "bob", "Bobby", 100)
+        self.say(1, "1001", "Alice A")
+        self.store.forget("1001")
+        self.assertIsNone(self.store.profile("1001"))
+        self.assertIsNone(self.store.account_of_username("alice"))
+        self.assertEqual(tuple(self.store.profile("1002")), ("bob", "Bobby", "display"))
+        self.assertFalse(self.store.set_pick("1001", "username"))
+
+    def test_a_profile_lives_as_long_as_a_login_can_and_a_little_longer_and_a_login_makes_it_live_on(self):
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.store.set_profile("1002", "bob", "", 100)
+        self.clock.now += 20 * DAY
+        self.store.set_profile("1002", "bob", "", 100)                           # (bob logs in again)
+        self.clock.now += base.PROFILE_DAYS * DAY - 20 * DAY
+        self.store.purge()
+        self.assertIsNotNone(self.store.profile("1001"), "35 days to the second: kept")
+        self.clock.now += 1
+        self.store.purge()
+        self.assertIsNone(self.store.profile("1001"))
+        self.assertIsNotNone(self.store.profile("1002"))
+        self.assertEqual(base.PROFILE_DAYS, 35)
+
+    def test_the_size_counts_the_profiles_that_are_kept(self):
+        empty = self.store.size()
+        for n in range(300):
+            self.store.set_profile(str(2000 + n), "user%d" % n, "A Display Name Number %d" % n, 1000)
+        full = self.store.size()
+        self.assertGreater(full, empty)
+        self.clock.now += (base.PROFILE_DAYS + 1) * DAY
+        self.store.purge()
+        self.assertLess(self.store.size(), full)
+
+    def test_a_display_name_is_kept_as_it_is(self):
+        name = "Zo\u00eb \u4e2d\u6587 \u0645\u0631\u064a\u0645 'quote' - _ ."
+        self.store.set_profile("1001", "zoe", name, 100)
+        self.assertEqual(self.store.profile("1001").display, name)
+
+    # ---- the number of the last change of the bans and the mutes ----
+
+    def test_the_last_restriction_goes_up_at_every_ban_unban_and_mute_and_at_nothing_else(self):
+        numbers = [self.store.last_restriction()]
+
+        def goes_up(what):
+            numbers.append(self.store.last_restriction())
+            self.assertGreater(numbers[-1], numbers[-2], what)
+
+        def stays(what):
+            self.assertEqual(self.store.last_restriction(), numbers[-1], what)
+        self.store.ban("1001", "me", "alice")
+        goes_up("a ban")
+        self.store.ban("1001", "me", "alice")
+        goes_up("a ban made again")
+        self.assertTrue(self.store.unban("1001"))
+        goes_up("a ban lifted")
+        self.store.mute("1002", 10, "me", "bob")
+        goes_up("a mute")
+        self.store.mute("1002", 30, "me", "bob")
+        goes_up("a mute made again")
+        self.store.mute("1002", 0, "me")
+        goes_up("a mute lifted")
+        self.store.mute("1003", 1, "me", "carol")
+        goes_up("a mute that is to run out")
+        before = self.store.last_restriction()
+        a = self.say(1)
+        self.store.delete_line(a.id, "me")
+        self.store.add_session("k1", "1001", "alice", 1000, 10, 100)
+        self.store.delete_session("k1")
+        self.store.forget("1003")
+        for read in (self.store.bans, self.store.mutes, lambda: self.store.is_banned("1003"), lambda: self.store.muted_until("1003"), lambda: self.store.recent_lines(10), self.store.size):
+            read()
+        stays("lines, a deletion, a login, forget and every read: the bans and the mutes are as they were")
+        self.clock.now += 3 * DAY
+        self.assertEqual(self.store.mutes(), [], "the mute has run out")
+        self.store.purge()
+        self.assertEqual(self.store.last_restriction(), before, "a mute that runs out, and the purge that deletes it, change no number: its end is in mutes()")
+
     # ---- logins ----
 
     def test_a_login_is_found_by_its_key_until_it_runs_out(self):
@@ -382,6 +545,92 @@ class SqliteContract(Contract):
             self.assertNotIn(name, base.PUBLIC)
             self.assertFalse(hasattr(base.StoreBase, name), name)
         self.assertEqual(self.store.db.execute("PRAGMA secure_delete").fetchone()[0], 1)
+
+    def test_another_connection_to_the_file_sees_the_number_and_the_bans_and_mutes_that_changed_it(self):
+        other = storemod.Store(self.path, clock=self.clock, busy_ms=50)           # (the command line: a process of its own that opens the same file)
+        self.addCleanup(other.close)
+        start = self.store.last_restriction()
+        other.ban("1001", "command line", "alice")
+        first = self.store.last_restriction()
+        self.assertGreater(first, start)
+        self.assertTrue(self.store.is_banned("1001"))
+        self.store.mute("1002", 10, "me", "bob")
+        second = other.last_restriction()
+        self.assertGreater(second, first)
+        other.mute("1002", 0, "command line")
+        self.assertGreater(self.store.last_restriction(), second)
+        self.assertEqual(self.store.last_restriction(), other.last_restriction())
+
+    def test_a_file_without_the_counter_reads_as_nothing_changed_yet_and_makes_it_at_the_first_change(self):
+        self.store.db.execute("DELETE FROM meta WHERE k = 'restrict_seq'")        # (a file that an older hub made: its `meta` has the deletions' counter only)
+        self.assertEqual(self.store.last_restriction(), 0)
+        self.store.ban("1001", "me", "alice")
+        self.assertEqual(self.store.last_restriction(), 1)
+        self.assertEqual(self.store.last_deletion(), 0, "the deletions' counter is a row of its own")
+
+
+    def test_the_profiles_are_an_additive_table_that_no_version_of_the_schema_came_with(self):
+        self.assertEqual(storemod.SCHEMA, 3)
+        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(self.store.db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'profiles'").fetchone(), ("profiles",))
+        self.assertEqual([r[1] for r in self.store.db.execute("PRAGMA table_info(profiles)")], ["account", "username", "display", "pick", "updated"])
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.say(1)
+        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 3)       # (nothing that the hub does with profiles moves it: an earlier hub opens the file)
+
+    def test_a_file_that_an_earlier_hub_made_gets_the_table_and_loses_nothing_and_opening_again_changes_nothing(self):
+        path = os.path.join(os.path.dirname(self.path), "earlier.db")
+        db = sqlite3.connect(path, isolation_level=None)               # (the three versions of the schema as an earlier hub makes them, and a little of everything in them)
+        db.executescript("""
+            CREATE TABLE lines (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, account TEXT NOT NULL, name TEXT NOT NULL, text TEXT NOT NULL,
+                                mod INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0, del_seq INTEGER NOT NULL DEFAULT 0, del_by TEXT);
+            CREATE INDEX lines_at ON lines (at);
+            CREATE INDEX lines_name ON lines (name);
+            CREATE INDEX lines_del_seq ON lines (del_seq);
+            CREATE TABLE mutes (account TEXT PRIMARY KEY, until INTEGER NOT NULL, at INTEGER NOT NULL, by TEXT NOT NULL, name TEXT NOT NULL);
+            CREATE TABLE bans (account TEXT PRIMARY KEY, at INTEGER NOT NULL, by TEXT NOT NULL, name TEXT NOT NULL);
+            CREATE TABLE meta (k TEXT PRIMARY KEY, v INTEGER NOT NULL);
+            CREATE TABLE sessions (id TEXT PRIMARY KEY, account TEXT NOT NULL, name TEXT NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL);
+            INSERT INTO meta (k, v) VALUES ('del_seq', 0);
+            PRAGMA user_version = 3;
+            INSERT INTO lines (at, account, name, text) VALUES (%d, '1001', 'alice', 'a line from before');
+            INSERT INTO sessions (id, account, name, created, expires) VALUES ('k1', '1001', 'alice', %d, %d);
+            INSERT INTO bans (account, at, by, name) VALUES ('1002', 1, 'cli', 'bob');""" % (int(self.clock.now), int(self.clock.now), int(self.clock.now) + 1000))
+        db.close()
+        for opening in range(3):
+            store = storemod.Store(path, clock=self.clock, busy_ms=50)
+            self.assertEqual(store.db.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual([l.text for l in store.recent_lines(10)], ["a line from before"])
+            self.assertEqual(tuple(store.session("k1"))[:2], ("1001", "alice"))
+            self.assertTrue(store.is_banned("1002"))
+            if opening == 0:
+                self.assertIsNone(store.profile("1001"))                               # (an account that logged in before profiles were kept has none: it is not made up)
+                store.set_profile("1001", "alice", "Alice A", 100)
+            else:
+                self.assertEqual(tuple(store.profile("1001")), ("alice", "Alice A", "display"))      # (opening again keeps what is in the table)
+            store.close()
+
+    def test_a_file_that_is_from_a_newer_hub_is_still_refused_and_the_table_does_not_make_the_file_look_newer(self):
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.store.close()
+        db = sqlite3.connect(self.path, isolation_level=None)
+        try:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], storemod.SCHEMA)       # (what an earlier hub compares with its own number: the same)
+            db.execute("PRAGMA user_version = %d" % (storemod.SCHEMA + 1))
+        finally:
+            db.close()
+        with self.assertRaises(RuntimeError):
+            storemod.Store(self.path, clock=self.clock)
+
+    def test_a_forget_by_an_earlier_hub_would_leave_the_profile_which_the_next_purge_of_this_one_deletes_in_time(self):
+        self.store.set_profile("1001", "alice", "Alice A", 100)
+        self.say(1)
+        self.store.db.execute("DELETE FROM sessions WHERE account = '1001'")              # (what an earlier hub's forget does: logins, lines, names of the mute and the ban; it does not know the table)
+        self.store.db.execute("DELETE FROM lines WHERE account = '1001'")
+        self.assertIsNotNone(self.store.profile("1001"))
+        self.clock.now += (base.PROFILE_DAYS + 1) * DAY
+        self.store.purge()
+        self.assertIsNone(self.store.profile("1001"))
 
     def test_the_default_store_is_the_sqlite_one(self):
         self.assertIs(storemod.Store, __import__("hub.store.sqlite", fromlist=["Store"]).Store)

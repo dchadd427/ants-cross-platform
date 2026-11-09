@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "ants_ai/chore_worth.hpp"
+#include "ants_ai/defence.hpp"
 #include "ants_ai/opportunity_task.hpp"
 #include "ants_ai/tactics.hpp"
 #include "ants_ai/tasks.hpp"
@@ -33,6 +34,8 @@ namespace ants::ai {
 ///               hold nothing (Combat Ants first), as many as the level says, are taken from whatever they were doing and ordered to attack it, and ordered again each time they are
 ///               idle after their blow (one attack order is one blow), while the target stays within the leash of the place of the first blow.
 ///   a thief     (Medium and Hard) an enemy Thief ant that holds no loot and is within reach of the own raid tile: attacked the same way until it is gone or has raided.
+/// The fights that answer a blow follow the defence rules of the plan where they are on (defence.hpp; Hard): any ant that can strike answers, the struck one first, as many as the enemy has near the
+/// target and one more, and the fight is kept up through the target's hit clips while the force is at least plan.defend_keep_percent of the enemy's.
 /// A fight ends when the target dies, leaves sight or the leash, stands on a power-up, or no blow has been seen for the level's linger time; an attack that was acknowledged and then
 /// shows "can't go" within a few ticks tells that the target is out of reach (it stands on something that no order reaches): that ant is left alone for 900 ticks. The ants go back
 /// to the pool when the fight ends.
@@ -99,6 +102,9 @@ private:
         uint32_t abort_percent{0};           // (with assault) the strength below which it is called off, in percent of the enemy's (80 percent of the odds it was started with, those eased for a bot that is behind, but never more than plan.skirmish_abort_percent)
         bool hunt{false};                    // a kill that is available (plan.hunt): an offence that ends when the target is dead or out of reach, nobody is left to hunt it, or its clock runs out
         bool vicinity{false};                // (with hunt) a 3-HP zero-Combat vicinity hunt (plan.vicinity_hunt)
+        std::vector<uint32_t> victims;       // the own ants that were struck since the last look at this fight (plan.victim_answers: they are its first defenders)
+        uint64_t last_hurt{0};               // the last look at which the target had lost hit points
+        uint8_t seen_hp{0};                  // the target's hit points at the last look
         std::map<uint32_t, Defender> defenders;
     };
 
@@ -106,6 +112,8 @@ private:
     void start_offence(TaskContext& context);
     void start_fire_defence(TaskContext& context);
     void run_fight(TaskContext& context, Fight& fight, bool& end, std::vector<std::pair<sim::TileCoord, std::vector<uint32_t>>>& attacks);
+    /// (defence.cpp) the ants that join a fight that answers a blow; false: the force is weaker than the enemy's and the fight is called off (plan.defend_by_strength)
+    bool take_defenders(TaskContext& context, Fight& fight, const AntView& target, size_t wanted, const Strength& theirs);
 
     Tactics& tactics_;
     std::map<uint32_t, Fight> fights_;       // by the target's id
@@ -338,7 +346,8 @@ private:
 ///                 from plan.behind_mine_tier on (earlier) the mines of the gate ring are laid too, plan.behind_mine_gate of the eight at a time
 ///   at home       (plan.mine_home, from plan.mine_home_after) round the own hill, where the enemy's walks to it go: open tiles five to nine tiles out whose two walking costs (the enemy's from his hill
 ///                 and the bot's from its own) add up to little more than the enemy's walk to the hill, never on a pile's edge, plan.mine_home_apart tiles apart from every other mine, and (plan.mine_home_off_route)
-///                 never on the estimated way of the bot's own carriers to a pile. The engine's path finder goes
+///                 never on the estimated way of the bot's own carriers to a pile (plan.home_on_route, off, opens that way to a mine within plan.home_route_lane cost units of the enemy's shortest way, and
+///                 plan.home_first lets a home mine come before a pile mine in turn: docs/BOT_PEOPLE.md, "Step 5"). The engine's path finder goes
 ///                 round an own bomb and straight through an enemy's, so the bot's carriers do not meet them and a rush (every ant of an enemy in one group, "select all and go") walks into them
 /// A tile that held a mine which went off or was defused is laid again after plan.mine_replant_ticks. Never on a power-up or a tile with an ant on it; the mines of a pile and of the gate never within
 /// six tiles of the own hill. Every job is
@@ -353,11 +362,15 @@ public:
 
     // ---- for the tests and the reports ----
     uint32_t planted() const noexcept { return planted_; }
+    /// Of those, the mines laid round the own hill (home mines)
+    uint32_t home_planted() const noexcept { return home_planted_; }
     uint32_t gone() const noexcept { return gone_; }
     uint32_t failures() const noexcept { return failures_; }
     size_t jobs() const noexcept { return jobs_.size(); }
     /// The tiles that the bot's mines stand on now (as the last look saw them)
     size_t standing() const noexcept { return known_.size(); }
+    /// Cost units (three steps over grass) that a home mine's tile may lie off the enemy's shortest way to the hill: the widest lane a candidate has, which is Hard's plan.home_route_lane (every candidate; AI39.1 pins the two together)
+    static constexpr int32_t kHomeLaneSlack = 60;
 
 private:
     static constexpr uint64_t kPending = ~uint64_t{0};
@@ -365,17 +378,18 @@ private:
     static constexpr int32_t kHomeNear = 5;              // the home mines lie this far from the hill at least (never on the doorstep) ...
     static constexpr int32_t kHomeFar = 9;               // ... and at most
     static constexpr int32_t kRouteSlack = 80;           // cost units that a tile may lie off the estimated way of the own carriers to a pile and still count as on it
-    static constexpr int32_t kHomeLaneSlack = 60;        // cost units (three steps over grass) that a tile may lie off the enemy's shortest way to the hill
     /// The bot is far enough behind (plan.behind_mine_tier) to lay the mines of the gate ring with ants that the economy needs
     bool behind_mining() const noexcept { return tactics_.plan.behind_war && tactics_.standing.war >= 1 && tactics_.standing.war >= tactics_.plan.behind_mine_tier; }
     struct Job {
         sim::TileCoord tile{};
         uint64_t decided{0};
         uint64_t sent{kPending};
+        bool home{false};                                // a mine round the own hill
     };
     struct Target {
         sim::TileCoord tile{};
         int32_t score{0};
+        bool home{false};
     };
     void collect_pile_targets(TaskContext& context, std::vector<Target>& out) const;
     void collect_gate_targets(TaskContext& context, std::vector<Target>& out) const;
@@ -385,9 +399,14 @@ private:
     std::map<int64_t, uint64_t> cool_;                   // tile -> not before this tick (a mine just went, or a job failed there)
     std::set<int64_t> known_;                            // the tiles of the bot's own mines at the last look
     uint32_t planted_{0};
+    uint32_t home_planted_{0};
     uint32_t gone_{0};
     uint32_t failures_{0};
 };
+
+/// Whether a home mine comes before a pile mine at this look (plan.home_first): fewer home mines have been laid than min(plan.mine_home, the other mines laid / 2 + 2). False without the flag or without mine_home,
+/// so that the pile mines come first as before
+bool home_mine_turn(const LevelPlan& plan, uint32_t home_laid, uint32_t other_laid) noexcept;
 
 /// Whether a bomb or a fire wall on `tile` is in the way of the seat's economy: within `plan.counter_hill_radius` of its hill, or within `plan.counter_pile_radius` tiles of a pile
 /// with units that its hill reaches

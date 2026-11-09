@@ -333,7 +333,7 @@
     },
     {
       "id": "fog_culling_dropped",
-      "file": "src/ants_app/renderer.cpp",
+      "file": "src/ants_app/renderer_units.cpp",
       "old": "            continue; // Concealed enemy ant under fog of war",
       "new": "",
       "build": [
@@ -373,7 +373,7 @@
     },
     {
       "id": "mark_of_the_tick_position",
-      "file": "src/ants_app/renderer.cpp",
+      "file": "src/ants_app/renderer_units.cpp",
       "old": "note_health_mark(a, a.px + pred.dx, a.py + pred.dy);",
       "new": "note_health_mark(a, a.px, a.py);",
       "build": [
@@ -404,7 +404,7 @@
     },
     {
       "id": "no_hook_in_the_ant_collector",
-      "file": "src/ants_app/renderer.cpp",
+      "file": "src/ants_app/renderer_units.cpp",
       "old": "        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);\n",
       "new": "",
       "build": [
@@ -414,7 +414,7 @@
     },
     {
       "id": "allied_ants_wear_no_mark",
-      "file": "src/ants_app/renderer.cpp",
+      "file": "src/ants_app/renderer_units.cpp",
       "old": "        note_health_mark(a, a.px + pred.dx, a.py + pred.dy);",
       "new": "        if (!allied || a.player_id == hud_team_id_) note_health_mark(a, a.px + pred.dx, a.py + pred.dy);",
       "build": [
@@ -424,7 +424,7 @@
     },
     {
       "id": "ears_green_from_ten",
-      "file": "src/ants_app/renderer.cpp",
+      "file": "src/ants_app/renderer_units.cpp",
       "old": "(ant->hp >= health::kGreenFrom) ? 58u",
       "new": "(ant->hp >= 10) ? 58u",
       "build": [
@@ -434,7 +434,7 @@
     },
     {
       "id": "application_hands_no_marks_to_the_renderer",
-      "file": "src/ants_app/application.cpp",
+      "file": "src/ants_app/application_render.cpp",
       "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{health::When::Off, health::Style::Bar}, 1.0);",
       "build": [
@@ -444,7 +444,7 @@
     },
     {
       "id": "application_hands_the_default_marks",
-      "file": "src/ants_app/application.cpp",
+      "file": "src/ants_app/application_render.cpp",
       "old": "renderer_->set_health_marks(hud_.ant_health(), hud_.ant_health().when == health::When::Off ? 1.0 : canvas_density().per_css, kPhoneDigits);",
       "new": "renderer_->set_health_marks(health::Setting{}, 1.0);",
       "build": [
@@ -564,7 +564,7 @@
     },
     {
       "id": "number_at_the_tick_position",
-      "file": "src/ants_app/renderer.cpp",
+      "file": "src/ants_app/renderer_units.cpp",
       "old": "this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy);",
       "new": "this->draw_ant_number(a, a.px, a.py);",
       "build": [
@@ -615,7 +615,7 @@
     },
     {
       "id": "no_number_hook_in_the_ant_draw",
-      "file": "src/ants_app/renderer.cpp",
+      "file": "src/ants_app/renderer_units.cpp",
       "old": " this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy); };",
       "new": " };",
       "build": [

@@ -487,7 +487,7 @@ class TheGamePageHasNoFrameModeButTheMatchPages(PageCase):
     def test_the_one_frame_is_the_replay_in_a_match_page_and_asks_for_nothing_else(self):
         # play.html?replay=<file>&embed=1, in the frame of web/match.html (docs/REPLAYS.md "The match pages"): only a replay, never a match played, a room or a live match
         self.assertIn("if (/(^|[?&])replay=/.test(window.location.search) && /(^|[?&])embed=1(&|$)/.test(window.location.search)) document.body.className += ' embed';", self.page)
-        self.assertIn("var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);", self.page)
+        self.assertIn("var ANTS_EMBED = ANTS_REPLAY_MODE && !ANTS_LIVE_MODE && !ANTS_OWN_MODE && /(^|[?&])embed=1(&|$)/.test(window.location.search);", self.page)
         embed_css = read("web", "replay_stats.css")                                                                  # (its own stylesheet: the game page may not grow, tools/check_hygiene.py)
         self.assertIn('<link rel="stylesheet" href="replay_stats.css">', self.page)
         self.assertEqual(embed_css.count("body.embed header, body.embed footer, body.embed #mobile-tip-banner, body.embed .mstats, body.embed #stats-btn { display: none !important; }"), 1)

@@ -212,9 +212,9 @@ class TheFrontPageHandsTheShapeOnToTheGame(unittest.TestCase):
     def test_the_start_the_rejoin_and_the_game_for_one_pass_the_live_shape(self):
         page = read(LOBBY)
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery({ room: code, seat: seat }, name, pickedShape), window.location.href).href);", page)                              # START (onStarting)
-        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, remembered.ok ? remembered.name : '', pickedShape), window.location.href).href);", page)         # the Rejoin button
+        self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);", page)         # the Rejoin button
         self.assertIn("window.location.assign(new URL(address, window.location.href).href);", page)                               # START with nobody else (startAlone)
-        self.assertIn("var address = soloAddress(model, myName(), pickedShape);", page)                                                  # (the game for one's address carries the live pick)
+        self.assertIn("var address = soloAddress(model, client.name, pickedShape);", page)                                                  # (the game for one's address carries the live pick)
         block = page[page.index("// SELECTOR_BEGIN"):page.index("// SELECTOR_END")]
         self.assertIn("aspect = value;", block)                                                                                            # (a pick in the lobby changes the live variable, which the calls above read)
         self.assertIn("pickedShape = value;", block)                                                                                            # (and it is a pick, the shown shape too)

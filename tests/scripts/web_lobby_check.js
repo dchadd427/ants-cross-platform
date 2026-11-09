@@ -209,7 +209,7 @@ try {
     // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     const FILES = { tiny: 'TINY.LVL', small: 'SMALL.LVL', medium: 'MEDIUM.LVL', gauntlet: 'GAUNTLET.LVL', treasure: 'TREASURE.LVL', islands: 'ISLANDS.LVL' };
     const bots = (level) => [1, 2, 3].flatMap((seat) => ['--bot', seat + ':' + level]);
-    const local = (search, remembered) => P.localArguments(search, remembered).args;
+    const local = (search) => P.localArguments(search).args;
     same('the whole of Play: the map, the setup screen\'s own start, the bots of the other three bases, the name', local('?map=treasure&bots=medium&name=Bob&aspect=16:9'),
          ['--map', 'Original-Ants/Maps/TREASURE.LVL', '--play', ...bots('medium'), '--name', 'Bob']);
     same('alone (no bots): the map, the start, --alone (a game for one: no colony but the player\'s) and the name; no --bot at all', local('?map=islands&name=Bob'), ['--map', 'Original-Ants/Maps/ISLANDS.LVL', '--play', '--alone', '--name', 'Bob']);
@@ -227,7 +227,7 @@ try {
     same('a map of the players alone: its file in the maps folder, the start, --alone (a game for one) and the name', local('?mapfile=' + encodeURIComponent(COMMUNITY) + '&name=Bob'), ['--map', 'Original-Ants/Maps/' + COMMUNITY, '--play', '--alone', '--name', 'Bob']);
     same('... and the page keeps the file for its fetch, none for an original or no map', [P.localArguments('?mapfile=' + encodeURIComponent(COMMUNITY), '').file, P.localArguments('?map=tiny', '').file, P.localArguments('', '').file], [COMMUNITY, '', '']);
     same('a map of the players with a bot: the bot is seated as for an original', local('?mapfile=' + encodeURIComponent(COMMUNITY) + '&bots=easy').slice(3), bots('easy'));
-    same('a game on a map of the players with no name in the address plays under the name that the browser remembers', local('?mapfile=' + encodeURIComponent(COMMUNITY), 'Zed').slice(-2), ['--name', 'Zed']);
+    same('a game on a map of the players with no name in the address has no --name here: the page puts the person\'s own name in (nameless), and an old remembered name is nowhere', [local('?mapfile=' + encodeURIComponent(COMMUNITY)).includes('--name'), P.localArguments('?mapfile=' + encodeURIComponent(COMMUNITY)).nameless], [false, true]);
     same('a map by its key wins over a file', local('?map=tiny&mapfile=' + encodeURIComponent(COMMUNITY)), ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']);
     for (const bad of ['', 'a.lv', '.lvl', 'x'.repeat(61) + '.lvl', '../evil.lvl', 'a/b.lvl', 'a\\b.lvl', '.hidden.lvl', 'noending', 'map.txt', 'caf\u00e9 map.lvl', 'tiny.lvl', 'TREASURE.LVL', 'Islands.lvl', 'a:b.lvl', 'a\nb.lvl', 'x --bot 1:easy.lvl']) {
         same('mapfile=' + JSON.stringify(bad) + ' is no map for the game: no arguments at all (an original\'s file is chosen by its key)', local('?mapfile=' + encodeURIComponent(bad)), []);
@@ -270,7 +270,8 @@ try {
     for (const bad of NOT_LEVELS) same('a level "' + bad.slice(0, 24).replace(/\n/g, '\\n') + '" is no level: no --bot, a game for one', local('?map=small&bots=' + encodeURIComponent(bad)), ['--map', 'Original-Ants/Maps/SMALL.LVL', '--play', '--alone']);
     same('a repeated map parameter: the first one', local('?map=tiny&map=small')[1], 'Original-Ants/Maps/TINY.LVL');
     same('a map that is no text at all (an array in the query) is nothing', local('?map[]=tiny'), []);
-    same('an address with no local parameter at all: nothing is given to the game (today\'s front page: the setup screen), whatever the browser remembered', [local('', 'Bob'), local('?aspect=4:3', 'Bob'), local('?x=1&y=2', 'Bob')], [[], [], []]);
+    same('an address with no local parameter at all: nothing is given to the game (today\'s front page: the setup screen), and it asks for no name', [local(''), local('?aspect=4:3'), local('?x=1&y=2')], [[], [], []]);
+    same('... nameless only for a game here with no name in its address (a map, a map file, bots or a test game), never when the address has a name, even an empty one', ['?map=tiny', '?mapfile=' + encodeURIComponent(COMMUNITY), '?bots=easy', '?map=tiny&name=Bob', '?map=tiny&name=', '', '?aspect=4:3', '?join=/ws&room=abc'].map((t) => P.localArguments(t).nameless), [true, true, true, false, false, false, false, false]);
     same('another page\'s parameters are not local ones (join, room, fill, seat, embed)', local('?join=/ws&room=abc&fill=hard&seat=2&embed=1'), []);
 
     // a test game from the map maker (play.html?testmap=<id>&seats=<four letters>; web/front/test_game.js, docs/MAP_EDITOR.md "Play this map"): the map is the one name of the game's maps folder, you sit at the seat of the letter y,
@@ -279,7 +280,7 @@ try {
         const ID = 'k7m2xq9abc12', TEST = ['--map', 'Original-Ants/Maps/playtest.lvl', '--play'];
         same('a test game: the map, the start, you at Green and a Medium bot at Red', local('?testmap=' + ID + '&seats=ymnn'), [...TEST, '--player', '0', '--bot', '1:medium']);
         same('you at Black with a bot of each level at the others, and the name', local('?testmap=' + ID + '&seats=ehmy&name=Bob'), [...TEST, '--player', '3', '--bot', '0:easy', '--bot', '1:hard', '--bot', '2:medium', '--name', 'Bob']);
-        same('the remembered name is used for a test game too', local('?testmap=' + ID + '&seats=ymnn', 'Maya').slice(-2), ['--name', 'Maya']);
+        same('a test game with no name in its address asks for the person\'s own name too (nameless), and has none of its own', [local('?testmap=' + ID + '&seats=ymnn').includes('--name'), P.localArguments('?testmap=' + ID + '&seats=ymnn').nameless], [false, true]);
         same('never --alone: a test game has a bot at least', local('?testmap=' + ID + '&seats=nnym').indexOf('--alone'), -1);
         same('the page keeps the hand-over (and no map file to fetch)', [P.localArguments('?testmap=' + ID + '&seats=ymnn', '').test.id, P.localArguments('?testmap=' + ID + '&seats=ymnn', '').file, P.localArguments('?map=tiny', '').test], [ID, '', null]);
         for (const bad of ['yyyy', 'nnnn', 'ynnn', 'mmmm', 'YMNN', 'ymn', 'ymnnn', 'ymnx', 'ymnn&x=1', '']) same('seats ' + JSON.stringify(bad) + ' start no test game', local('?testmap=' + ID + '&seats=' + encodeURIComponent(bad)), []);
@@ -294,10 +295,8 @@ try {
     same('the name is cut like the game\'s own: printable ASCII only, the blanks at both ends gone, 32 characters at most', [local('?map=tiny&name=' + encodeURIComponent('  Zoë Ann  ')).slice(-2), local('?map=tiny&name=' + 'x'.repeat(40)).slice(-2), local('?map=tiny&name=' + encodeURIComponent('a\tb\nc')).slice(-2)],
          [['--name', 'Zo Ann'], ['--name', 'x'.repeat(32)], ['--name', 'abc']]);
     same('a name with other characters than ASCII only is cleaned, and one of nothing but those is none', [local('?map=tiny&name=' + encodeURIComponent('名前')), local('?map=tiny&name=' + encodeURIComponent('   '))], [['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone'], ['--map', 'Original-Ants/Maps/TINY.LVL', '--play', '--alone']]);
-    same('with no name in the address the name that this browser remembered is used (a reload keeps it: the page strips the name from its address bar)', local('?map=tiny&bots=easy', 'Maya').slice(-2), ['--name', 'Maya']);
-    same('the address\'s name beats the remembered one, an empty address name (a name that was chosen: none) beats it too', [local('?map=tiny&name=Bob', 'Maya').slice(-2), local('?map=tiny&name=', 'Maya').indexOf('--name')], [['--name', 'Bob'], -1]);
-    same('a remembered name is cleaned the same way', local('?map=tiny', 'Mäya   ').slice(-2), ['--name', 'Mya']);
-    same('a remembered name that is no text is nothing', [local('?map=tiny', null).indexOf('--name'), local('?map=tiny', undefined).indexOf('--name'), local('?map=tiny', 5).indexOf('--name')], [-1, -1, -1]);
+    same('with no name in the address no name is given here (the page puts the person\'s own in, by the gate; a reload keeps it because the page strips the name from its address bar and asks again)', [local('?map=tiny&bots=easy').indexOf('--name'), P.localArguments('?map=tiny&bots=easy').nameless], [-1, true]);
+    same('the address\'s name is the game\'s name, and an empty address name (a name that was chosen: none) is none and asks for none', [local('?map=tiny&name=Bob').slice(-2), local('?map=tiny&name=').indexOf('--name'), P.localArguments('?map=tiny&name=').nameless], [['--name', 'Bob'], -1, false]);
     same('the name alone (no map, no bots) is given to the game: the setup screen under that name', local('?name=Bob'), ['--name', 'Bob']);
 
     // what can reach the game: only the fixed table, the tested word, the cleaned name and flags

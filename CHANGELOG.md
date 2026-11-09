@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.14.1 - 2026-11-09 - Discord names in games, the Players list, replay files, and a Hard bot that answers a blow
+
+**For players:**
+- **Your Discord name in rooms and games.** On the website nobody types a name any more: if you are logged in with Discord (Log in, in the chat), rooms and games show that name; everybody else plays as "Guest" and six digits, kept by this browser. A name with letters the game cannot show uses the Discord username instead.
+- **Display names in the chat.** The chat shows your Discord display name, and the More menu has a switch to show your username instead. A login from before this version shows the username until you log out and in again. Moderators see the username next to a display name.
+- **Who is here.** Home has a Players list: the people on the front page now, grouped as waiting in a room, playing and looking around (guests are counted, not named). The host of a public room that waits has a Join button in the list. On a phone the list opens from the Players button.
+- **The Games list** shows the picture of a map that a player made, and on a wide window the docked list sits in the middle. On a narrow phone the label of the Room's Public | Private switch stays inside its button.
+- **Watch a replay file you downloaded.** Matches has "Open a replay file" (or drop the file on the page): it plays in this tab and is not uploaded.
+- **The Hard computer player answers a blow.** When one of its ants is struck, that ant and the ants near it that can strike answer together, as many as the attacker has there and one more (five at most), and keep fighting while their side is at least three fifths as strong. Medium, Easy and the game type 187 play as before. The desktop game's Hard player does the same.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.0 page or game still joins. The rest of this release is internal: large source files split into smaller ones, tools and tests for the computer players, and computer-player work that is built but switched off.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/26714f6f...4fd8a6ad)
+
 ## v0.14.0 - 2026-11-07 - New rules: 187's closed hill, the last side standing, fire walls and long orders
 
 **For players:**
@@ -490,19 +504,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/86afa1dc...1a1f55e3)
 
-## v0.12.114 - 2026-10-23 - A settings menu on Esc and a Settings button
+## Older versions (v0.12.114 and before)
 
-**For players:**
-- **A settings menu, on the Esc key or a Settings button.** In the browser, press Esc (with nothing selected and no dialog open) or click **Settings** to open a panel over your game with Sound, Video, Controls and Game, and **Resume** and **Leave game** at the bottom. **The game keeps running** while it is open, so be quick in an online match. Esc still deselects first, as the original does; the next Esc opens the menu. A click on the dimmed area does not close it.
-- **Where the button is:** in the page's header next to Menu, under the picture on a phone or a narrow window, over the picture (beside the cross that leaves fullscreen) in fullscreen, and in the bar of a replay. Safari and Firefox keep Esc for themselves in fullscreen, and a phone has no Esc: use the button there.
-- **New: Master volume, Mute and remembered hit point numbers.** Master volume scales every sound and the music; Mute silences everything and keeps your sliders where they are; the white hit point numbers (Ctrl+L) now stay on or off from one game to the next. The menu also has the sound sliders, picture shape, Fullscreen, fullscreen mouse, map scroll speed, chat, quick help and a list of the mouse, touch and keys. The original's Options window is unchanged.
-- **Leave game says what will happen** before it does it: with one opponent left it is a forfeit that ends the match for everybody and counts as a loss; with more it drops you out and the others play on; at home it ends the game. There is no separate Surrender button.
-- **Replays and live watching** have the same panel without the Game section ("Back to the matches" leaves, asking nothing); the frame of a match page has none.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged; the panel is the page and the game's own sound, picture and screens; Leave game is the Quit that the game always had. The desktop app has no panel yet; its Esc is what it was.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/14bbbfdb...feb90e21)
-
-## Older versions (v0.12.113 and before)
-
-Every release before v0.12.114, and the long notes of v0.12.113 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.115, and the long notes of v0.12.114 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

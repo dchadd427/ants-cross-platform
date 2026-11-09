@@ -54,6 +54,15 @@ LevelPlan plan_for(Level level) noexcept {
             p.defenders = 2;
             p.leash_tiles = 10;
             p.fight_linger_ticks = 100;
+            p.defend_keep_percent = 120;         // (the defence batch is built and OFF here: `--tune defence=1` turns it on with these numbers; docs/BOT_PEOPLE.md)
+            p.defend_max = 3;
+            p.defend_reach = 8;
+            p.group_reach = 14;                  // (the group batch is built and OFF here: `--tune group=1` turns it on with this number; docs/BOT_PEOPLE.md)
+            p.heal_hp = 3;                       // (the heal batch is built and OFF here: `--tune heal=1` turns it on with these numbers; docs/BOT_PEOPLE.md)
+            p.heal_danger_tiles = 3;
+            p.heal_recent_ticks = 60;
+            p.heal_walk_tiles = 12;
+            p.heal_calm_hp = 0;
             p.wall_trigger = WallTrigger::ThiefPossible;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 200;
@@ -87,6 +96,18 @@ LevelPlan plan_for(Level level) noexcept {
             p.defenders = 3;
             p.leash_tiles = 12;
             p.fight_linger_ticks = 60;
+            p.defend_all_types = true;           // the defence batch (docs/BOT_PEOPLE.md): every ant that can strike answers a blow, the struck ant first, as many as the enemy has there and one more
+            p.victim_answers = true;
+            p.defend_by_strength = true;
+            p.defend_keep_percent = 60;          // a force of at least 60 percent of the enemy's near the target keeps the fight up; below that it is called off at the look
+            p.group_fight = false;               // the group batch (docs/BOT_PEOPLE.md): built and OFF; `--tune group=1` turns it on (the ants within 20 tiles of the target answer a blow, not those within 10)
+            p.group_reach = 20;
+            p.heal = false;                      // the heal batch (docs/BOT_PEOPLE.md): built and OFF at every level; `--tune heal=1` turns it on with these numbers (a hurt ant that is in danger and within 16 tiles of the hill walks home to heal)
+            p.heal_hp = 4;
+            p.heal_danger_tiles = 3;
+            p.heal_recent_ticks = 60;
+            p.heal_walk_tiles = 16;
+            p.heal_calm_hp = 2;
             p.wall_trigger = WallTrigger::Early;
             p.wall_latch_ticks = 3600;
             p.renew_lead_ticks = 130;
@@ -181,6 +202,7 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_mine_gate = 3;
             p.mine_home = 8;
             p.mine_home_apart = 2;
+            p.home_route_lane = 20;                  // (the home-mine batch is built and OFF here: `--tune homemines=1` turns it on with this number; docs/BOT_PEOPLE.md)
             p.rush = true;
             p.rush_deficit = 300;
             p.water_hunt = true;
@@ -210,6 +232,9 @@ LevelPlan plan_for(Level level) noexcept {
             p.behind_mine_gate = 5;
             p.mine_home = 12;
             p.mine_home_apart = 2;
+            p.home_on_route = false;                 // the home-mine batch (docs/BOT_PEOPLE.md): built and OFF; `--tune homemines=1` turns it on (a mine may lie on the way of the own carriers where the enemy comes, and comes in turn with the pile mines)
+            p.home_route_lane = 60;
+            p.home_first = false;
             p.rush = true;
             p.rush_deficit = 200;
             p.water_hunt = true;
@@ -237,12 +262,24 @@ void without_stand_batch(LevelPlan& p) noexcept {
     p.mine_home_apart = 3;
 }
 
+void without_home_mines(LevelPlan& p) noexcept { p.home_on_route = p.home_first = false; }
+
 void without_kill_batch(LevelPlan& p) noexcept {
     p.opportunity = false;
     p.reach_fights = false;
     p.idle_hunt = false;
     p.chore_worth = false;
 }
+
+void without_defence_batch(LevelPlan& p) noexcept {
+    p.defend_all_types = false;
+    p.victim_answers = false;
+    p.defend_by_strength = false;
+}
+
+void without_heal(LevelPlan& p) noexcept { p.heal = false; }
+
+void without_group_fight(LevelPlan& p) noexcept { p.group_fight = false; }
 
 void without_war_batch(LevelPlan& p) noexcept {
     without_stand_batch(p);

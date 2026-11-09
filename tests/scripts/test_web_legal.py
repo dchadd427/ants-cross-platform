@@ -137,7 +137,7 @@ class TheLegalPage(unittest.TestCase):
         for sentence in NOTICE:
             self.assertIn(sentence, self.text)
         self.assertIn("not legal advice", self.text)
-        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable", "id", "username", "Log out", "Forget me"])       # the two phrases that matter are in bold (and the words of the chat panel)
+        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main), ["no warranty of any kind", "not liable", "id", "username", "display name", "Log out", "Forget me"])       # the two phrases that matter are in bold (and the words of the chat panel)
 
     def test_it_says_what_the_readme_says_of_the_original_game(self):
         for words in ("belong to their copyright holders", "does not own them and cannot license them", "open an issue", "it will be taken out"):
@@ -160,12 +160,15 @@ class TheLegalPage(unittest.TestCase):
     def test_the_panel_of_the_chat_says_what_is_kept_for_how_long_the_cookies_and_how_to_leave(self):
         start = self.main.index('<section class="panel" id="chat-login">')
         panel = plain(self.main[start:self.main.index("</section>", start)])
-        for words in ("Discord id and username", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for up to 7 days", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
-                      "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username", "a ban or a mute, if there is one, stays",
-                      "Reading the chat and playing need no login"):
+        for words in ("Discord id, username and display name", "three things only", "shows the name that you pick", "for nothing else", "no email address", "no avatar", "keeps no Discord access token", "kept for up to 7 days", "with the id and the name that wrote them",
+                      "Moderators also see your username next to a display name", "moderators", "deleted for good", "ban or a mute is kept by Discord id",
+                      "__Host-ants_oauth", "10 minutes at most", "__Host-ants_hub", "30 days", "Log out", "Forget me", "deletes your chat lines", "removes your username and display name", "a ban or a mute, if there is one, stays",
+                      "Reading the chat and playing need no login",
+                      "the name you play under", "Games and Players lists", "the match history, which keeps results and names for good, and into the replay files", "for 30 days on the site, and for ever in a file that someone has downloaded", "Forget me does not remove it", "whether they are looking around, waiting in a room or playing"):
             self.assertIn(words, panel, words)
-        self.assertLessEqual(len(panel.split()), 230)
-        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "Log out", "Forget me"])
+        self.assertLessEqual(len(panel.split()), 345)                                                           # (230 until the display name: the third thing that the site gets, the name that is shown, and what moderators see; 252 words, then 90 more for the name that is played under and the Players list; 342 words now)
+        self.assertEqual(re.findall(r"<strong>(.*?)</strong>", self.main[start:self.main.index("</section>", start)]), ["id", "username", "display name", "Log out", "Forget me"])
+        self.assertNotIn("two things only", panel)
         self.assertNotRegex(self.main[start:self.main.index("</section>", start)], r"href=|src=|<script|<img")        # (the panel loads nothing and links nothing)
 
     def test_it_links_the_licence_the_third_party_notices_and_the_issues_page_of_the_repository(self):
