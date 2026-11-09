@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 ACCOUNT_ID = re.compile(r"[1-9][0-9]{0,19}\Z")           # a Discord id: digits, no leading zero
 CLIENT_ID = re.compile(r"[0-9]{5,30}\Z")                 # the number of the Discord application
 CLIENT_SECRET = re.compile(r"[\x21-\x7e]{8,256}\Z")      # printable characters, no blank
+NAME_TICKET_SECRET = re.compile(r"[\x21-\x7e]{32,256}\Z")  # printable characters, no blank (ANTS_NAME_TICKET_SECRET: the same value as the game server's)
 MAX_MIN_ACCOUNT_DAYS = 3650
 MIN_ACCOUNT_DAYS = 7                                                         # the default age that a Discord account needs to write (ANTS_HUB_MIN_ACCOUNT_DAYS)
 
@@ -27,6 +28,7 @@ class Config:
     login_client_id: str = dataclasses.field(default="", repr=False)
     login_client_secret: str = dataclasses.field(default="", repr=False)    # the Discord login's (hub/login.py); never printed
     min_account_days: int = MIN_ACCOUNT_DAYS                                               # a Discord account younger than this cannot write (its age is in its id)
+    name_ticket_secret: str = dataclasses.field(default="", repr=False)     # signs the pass that lets the game server check a name (hub/ticket.py); empty: no pass is made; never printed
     discord_test_url: str = ""                                              # TESTS ONLY: where the fake Discord of the tests listens (a loopback address, refused for any other)
 
     @property
@@ -36,8 +38,10 @@ class Config:
 
     def summary(self):
         """Safe to log: no secret, no account id, no address."""
-        return {"port": self.port, "origin": self.origin or "none", "mods": len(self.mods), "test_login": int(self.test_login), "login_configured": int(self.login_on),
+        out = {"port": self.port, "origin": self.origin or "none", "mods": len(self.mods), "test_login": int(self.test_login), "login_configured": int(self.login_on),
                 "min_account_days": self.min_account_days}
+        out["name_tickets"] = int(bool(self.name_ticket_secret))
+        return out
 
 
 def parse_origin(url):
@@ -103,6 +107,9 @@ def load(env):
         raise ConfigError("ANTS_HUB_DISCORD_CLIENT_ID must be the application's number (digits only)")
     if cfg.login_client_secret and not CLIENT_SECRET.match(cfg.login_client_secret):
         raise ConfigError("ANTS_HUB_DISCORD_CLIENT_SECRET must be 8 to 256 printable characters with no blank")
+    cfg.name_ticket_secret = env.get("ANTS_NAME_TICKET_SECRET", "")
+    if cfg.name_ticket_secret and not NAME_TICKET_SECRET.match(cfg.name_ticket_secret):
+        raise ConfigError("ANTS_NAME_TICKET_SECRET must be 32 to 256 printable characters with no blank")
     try:
         cfg.min_account_days = int(env.get("ANTS_HUB_MIN_ACCOUNT_DAYS", str(MIN_ACCOUNT_DAYS)).strip())
     except ValueError:
