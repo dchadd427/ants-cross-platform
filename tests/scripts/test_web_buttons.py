@@ -109,16 +109,16 @@ class TheStates(unittest.TestCase):
             self.assertLess(text.index(found.group(0)), text.index("{", text.index(".btn {")) , where + ": the guard comes after the tokens")
 
     def test_the_press_is_the_deepest(self):
-        pressed = {"web/lobby.html": r"\.btn:active \{ transform: translate\(3px, 4px\); box-shadow: var\(--bevel-dn\), 0 0 0 var\(--shadow\); \}",
-                   "web/matches.css": r"\.btn:active \{ transform: translate\(3px, 4px\); box-shadow: var\(--bevel-dn\), 0 0 0 var\(--shadow\); \}",
-                   "web/shell.html": r"\.btn:active \{\s*transform: translate\(3px, 4px\);\s*box-shadow: var\(--bevel-dn\), 0 0 0 var\(--shadow\);",
-                   "web/front/classic.css": r"\.btn:active \{ transform: translate\(3px, 4px\); box-shadow: var\(--btn-shadow-down\); \}"}
+        pressed = {"web/lobby.html": r"\.btn:active:not\(\[disabled\]\) \{ transform: translate\(3px, 4px\); box-shadow: var\(--bevel-dn\), 0 0 0 var\(--shadow\); \}",
+                   "web/matches.css": r"\.btn:active:not\(\[disabled\]\) \{ transform: translate\(3px, 4px\); box-shadow: var\(--bevel-dn\), 0 0 0 var\(--shadow\); \}",
+                   "web/shell.html": r"\.btn:active:not\(\[disabled\]\) \{\s*transform: translate\(3px, 4px\);\s*box-shadow: var\(--bevel-dn\), 0 0 0 var\(--shadow\);",
+                   "web/front/classic.css": r"\.btn:active:not\(\[disabled\]\) \{ transform: translate\(3px, 4px\); box-shadow: var\(--btn-shadow-down\); \}"}
         for path, pattern in pressed.items():
             self.assertRegex(strip(read(path)), pattern, path)
         # (the press comes after `.btn.sm`, which says a box-shadow too, so a small button is pressed in as well)
         for path in ("web/lobby.html", "web/matches.css"):
             text = strip(read(path))
-            self.assertLess(text.index(".btn.sm {"), text.index(".btn:active {"), path)
+            self.assertLess(text.index(".btn.sm {"), text.index(".btn:active:not([disabled]) {"), path)
 
     def test_a_chosen_button_has_no_weave(self):
         text = strip(read("web/lobby.html"))
@@ -129,6 +129,14 @@ class TheStates(unittest.TestCase):
             self.assertIsNotNone(found, selector)
             self.assertIn("background-color: #0b1a17;", found.group(1), selector)
             self.assertNotIn("background:", found.group(1).replace("background-color:", ""), selector)
+
+    def test_the_count_pills_and_the_leave_button(self):
+        # a count pill (dark words on gold) inside a button has no shadow under its digits; Leave game has the same double frame as Resume, in red
+        self.assertIn(".btn .pill { text-shadow: none; }", strip(read("web/lobby.html")))
+        leave = re.search(r"\.gm-leave \{([^}]*)\}", strip(read("web/game_menu.css"))).group(1)
+        self.assertIn("box-shadow: var(--bevel), ", leave)
+        # the light of the sheen is gone by 18% of the height: a two-line label (the Play this map choices, the changelog's version tabs) is still 4.5:1 when hovered
+        self.assertIn("rgba(255, 255, 255, 0) 18%", token(read("web/lobby.html"), "sheen"))
 
     def test_focus_and_disabled_are_as_they_were(self):
         self.assertIn(":focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }", strip(read("web/lobby.html")))

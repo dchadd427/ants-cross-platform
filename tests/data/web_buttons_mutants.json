@@ -32,8 +32,8 @@
   {
    "id": "press_moves_the_old_way",
    "file": "web/lobby.html",
-   "old": ".btn:active { transform: translate(3px, 4px);",
-   "new": ".btn:active { transform: translate(2px, 3px);",
+   "old": ".btn:active:not([disabled]) { transform: translate(3px, 4px);",
+   "new": ".btn:active:not([disabled]) { transform: translate(2px, 3px);",
    "test": "python3 -m unittest tests.scripts.test_web_buttons"
   },
   {
@@ -90,6 +90,34 @@
    "file": "web/lobby.html",
    "old": ".btn[disabled] { cursor: default; filter: saturate(.45) brightness(.78); transform: none; }",
    "new": ".btn[disabled] { cursor: default; transform: none; }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "pill_keeps_the_shadow",
+   "file": "web/lobby.html",
+   "old": ".btn .pill { text-shadow: none; }",
+   "new": ".btn .pill { }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "the_light_reaches_26_percent",
+   "file": "web/front/classic.css",
+   "old": "rgba(255, 255, 255, 0) 18%",
+   "new": "rgba(255, 255, 255, 0) 26%",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons tests.scripts.test_web_game"
+  },
+  {
+   "id": "leave_has_the_old_bevel",
+   "file": "web/game_menu.css",
+   "old": ".gm-leave { background: var(--sheen) #9d0d17; box-shadow: var(--bevel), 3px 4px 0 #3b0d10; }",
+   "new": ".gm-leave { background: var(--sheen) #9d0d17; box-shadow: inset 1px 1px 0 #ffd4cf, 3px 4px 0 #3b0d10; }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "a_disabled_button_is_pressed",
+   "file": "web/matches.css",
+   "old": ".btn:active:not([disabled]) { transform",
+   "new": ".btn:active { transform",
    "test": "python3 -m unittest tests.scripts.test_web_buttons"
   }
  ]

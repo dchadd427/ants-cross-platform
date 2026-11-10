@@ -114,8 +114,8 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertEqual(btn[name], theirs[name], name)
         for name in ("min-height", "padding", "font-size"):
             self.assertEqual(rule(self.style, ".btn.sm")[name], rule(self.lobby_style, ".btn.sm")[name], name)
-        self.assertEqual(rule(self.style, ".btn:active")["box-shadow"], rule(self.lobby_style, ".btn:active")["box-shadow"])
-        self.assertEqual(rule(self.style, ".btn:active")["transform"], rule(self.lobby_style, ".btn:active")["transform"])
+        self.assertEqual(rule(self.style, ".btn:active:not([disabled])")["box-shadow"], rule(self.lobby_style, ".btn:active:not([disabled])")["box-shadow"])
+        self.assertEqual(rule(self.style, ".btn:active:not([disabled])")["transform"], rule(self.lobby_style, ".btn:active:not([disabled])")["transform"])
         self.assertEqual(rule(self.style, ".btn:hover")["background-color"], rule(self.lobby_style, ".btn:hover")["background-color"])
         self.assertIn("outline: 3px solid var(--gold);", self.page)                                  # (the focused control shows it, as on the front page)
         self.assertEqual(rule(self.lobby_style, ":focus-visible")["outline"], "3px solid var(--gold)")
@@ -242,7 +242,7 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertRegex(declarations["background-color"], r"^(?:var\(--teal(?:-hi)?\)|#[0-9a-f]{6})$", where)
         for where, declarations in (("the game page's chosen pair", rule(self.style, '.seg button[aria-checked="true"]')),):
             self.assertEqual(declarations["background"], "#102b25", where)                           # (flat and dark: pressed in)
-        # The sheen is the weave (a faint 45 degree canvas: a light and a dark line pattern, 4 px apart) and a soft light from above. The light sits at the top and is gone by 26% of the height, above the
+        # The sheen is the weave (a faint 45 degree canvas: a light and a dark line pattern, 4 px apart) and a soft light from above. The light sits at the top and is gone by 18% of the height, above the
         # words, and the weave has no light dots that matter (its light lines are at most 4% white), so every text is still at least 4.5:1 on its face, hovered too (the pairs of the tests above are the colors
         # without the sheen; tests/scripts/test_web_buttons.py has the measured numbers' limits). The color of the face goes LAST in `background` (a color may only be in the last layer of several).
         weave = rule(self.lobby_style, ":root")["--weave"]
@@ -256,7 +256,7 @@ class TheLookIsTheFrontPages(PageCase):
         light = [(alpha, position) for color, alpha, position in stops if color == (255, 255, 255)]
         self.assertEqual([position for alpha, position in light if alpha > 0], ["0"], sheen)           # (the light starts at the top edge ...)
         self.assertLessEqual(max(alpha for alpha, position in light), 0.15, sheen)
-        self.assertTrue(all(re.fullmatch(r"[\d.]+%", position) and float(position[:-1]) <= 26 for alpha, position in light if alpha == 0), sheen)   # (... and is gone by 26%)
+        self.assertTrue(all(re.fullmatch(r"[\d.]+%", position) and float(position[:-1]) <= 18 for alpha, position in light if alpha == 0), sheen)   # (... and is gone by 18%)
         shade = [alpha for color, alpha, position in stops if color == (0, 0, 0)]
         self.assertTrue(shade and max(shade) <= 0.3, sheen)
         self.assertEqual(stops[-1][0], (0, 0, 0), sheen)                                               # (the bottom is the darkest part)
@@ -281,8 +281,8 @@ class TheLookIsTheFrontPages(PageCase):
         for where, declarations in self.faces_and_corners().items():
             self.assertRegex(declarations["box-shadow"], r"^var\(--(?:bevel|bevel-sm|btn-shadow|btn-shadow-sm)\)", where)
         # the pressed button goes 3 px right and 4 px down, is dark inside and has lost its red shadow; the small buttons (`.btn.sm`) are from the same tokens
-        for where, declarations in (("the front page's pressed button", rule(self.lobby_style, ".btn:active")), ("the game page's pressed button", rule(self.style, ".btn:active")),
-                                    ("the changelog pages' pressed button", rule(classic, ".btn:active"))):
+        for where, declarations in (("the front page's pressed button", rule(self.lobby_style, ".btn:active:not([disabled])")), ("the game page's pressed button", rule(self.style, ".btn:active:not([disabled])")),
+                                    ("the changelog pages' pressed button", rule(classic, ".btn:active:not([disabled])"))):
             self.assertEqual(declarations["transform"], "translate(3px, 4px)", where)
             self.assertIn(declarations.get("box-shadow", "var(--btn-shadow-down)"), ("var(--bevel-dn), 0 0 0 var(--shadow)", "var(--btn-shadow-down)"), where)
         self.assertEqual(roots["the style sheet of the changelog pages"]["--btn-shadow-down"], "var(--bevel-dn), 0 0 0 var(--shadow)")

@@ -79,7 +79,7 @@
 .gm-clock::after { height: 5px; transform: rotate(90deg); }
 .gm-btns { grid-area: btns; display: flex; gap: 14px; }
 .gm-btns .btn { min-width: 150px; font-size: 18px; }
-.gm-leave { background: var(--sheen) #9d0d17; box-shadow: inset 1px 1px 0 #ffd4cf, inset 2px 2px 0 #e45a5a, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -3px -4px 2px #5e0a10, 3px 4px 0 #3b0d10; }
+.gm-leave { background: var(--sheen) #9d0d17; box-shadow: var(--bevel), 3px 4px 0 #3b0d10; }
 .gm-back { background: var(--sheen) var(--teal, #1f4f40); box-shadow: var(--bevel), 3px 4px 0 var(--shadow, #9d0d17); }
 @media (hover: hover) { .gm-leave:not(.gm-back):hover { background-color: #b5222c; } }
 

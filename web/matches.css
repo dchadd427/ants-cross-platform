@@ -6,7 +6,7 @@
 :root {
     --muted: #8fb3a6;
     --weave: repeating-linear-gradient(45deg, rgba(255, 255, 255, .03) 0 1px, rgba(255, 255, 255, 0) 1px 4px), repeating-linear-gradient(-45deg, rgba(0, 0, 0, .12) 0 1px, rgba(0, 0, 0, 0) 1px 4px);
-    --sheen: var(--weave), linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 26%, rgba(0, 0, 0, .28) 100%);
+    --sheen: var(--weave), linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 18%, rgba(0, 0, 0, .28) 100%);
     --bevel: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -4px 0 3px rgba(0, 0, 0, .14);
     --bevel-sm: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -3px 0 3px rgba(0, 0, 0, .14);
     --bevel-dn: inset 0 0 0 1px rgba(0, 0, 0, .5), inset 0 5px 8px 1px rgba(0, 0, 0, .65), inset 0 -1px 0 rgba(255, 255, 255, .22);
@@ -33,7 +33,7 @@ button { font: inherit; color: inherit; }
     background: var(--sheen) var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
 .btn:hover { background-color: var(--teal-hi); }
 .btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
-.btn:active { transform: translate(3px, 4px); box-shadow: var(--bevel-dn), 0 0 0 var(--shadow); }
+.btn:active:not([disabled]) { transform: translate(3px, 4px); box-shadow: var(--bevel-dn), 0 0 0 var(--shadow); }
 .dl { color: var(--cream); font-size: 15px; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; padding: 6px 2px; }
 .dl:hover { color: var(--gold); }
 

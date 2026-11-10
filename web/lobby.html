@@ -18,7 +18,7 @@
         --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b;
         --tile: url("front/clay.png?v=ef1e7ee6");
         --weave: repeating-linear-gradient(45deg, rgba(255, 255, 255, .03) 0 1px, rgba(255, 255, 255, 0) 1px 4px), repeating-linear-gradient(-45deg, rgba(0, 0, 0, .12) 0 1px, rgba(0, 0, 0, 0) 1px 4px);
-        --sheen: var(--weave), linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 26%, rgba(0, 0, 0, .28) 100%);
+        --sheen: var(--weave), linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 18%, rgba(0, 0, 0, .28) 100%);
         --bevel: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -4px 0 3px rgba(0, 0, 0, .14);
         --bevel-sm: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -3px 0 3px rgba(0, 0, 0, .14);
         --bevel-dn: inset 0 0 0 1px rgba(0, 0, 0, .5), inset 0 5px 8px 1px rgba(0, 0, 0, .65), inset 0 -1px 0 rgba(255, 255, 255, .22);
@@ -46,10 +46,11 @@
         background: var(--sheen) var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
     .btn:hover { background-color: var(--teal-hi); }
     .btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
-    .btn:active { transform: translate(3px, 4px); box-shadow: var(--bevel-dn), 0 0 0 var(--shadow); }
+    .btn:active:not([disabled]) { transform: translate(3px, 4px); box-shadow: var(--bevel-dn), 0 0 0 var(--shadow); }
     .btn.big { min-height: 64px; font-size: 28px; padding: 10px 26px; letter-spacing: .04em; }
     .btn.square { min-width: 44px; padding: 4px 0 8px; font-size: 30px; line-height: 1; }
     .btn[disabled] { cursor: default; filter: saturate(.45) brightness(.78); transform: none; }
+    .btn .pill { text-shadow: none; }
     .btn[aria-pressed="true"], .btn[aria-expanded="true"], .btn.on { background-image: none; }       /* a chosen button is the flat dark plate (Home's own rules give the color): no weave on it */
 
     /* ---- the mast: the logo and nothing else ---- */
