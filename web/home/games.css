@@ -39,7 +39,7 @@
 .glegend .gdot.player { --c: #79bf93; } .glegend .gdot.bot { --c: #d4707f; }
 .gjoin { min-width: 72px; min-height: 44px; }
 .gempty, .goff { display: grid; justify-items: center; gap: 6px; padding: 22px 16px 18px; text-align: center; background: #080d12; border: 1px solid #17382f; border-radius: 4px; }
-.gempty[hidden], .goff[hidden], .glist[hidden], .glegend[hidden], .gpnote[hidden], .gjoining[hidden], .gtoast[hidden] { display: none; }
+.gempty[hidden], .goff[hidden], .glist[hidden], .glegend[hidden], .gpnote[hidden], .gjoining[hidden] { display: none; }
 .gempty .ant { --k: 2; margin: 0 auto 4px; filter: brightness(0) invert(1); opacity: .13; animation: none; }       /* (a shadow of the ant of an open color) */
 .gemtitle { margin: 0; font-size: 22px; line-height: 1.2; }
 .gemline { margin: 0 0 4px; font-size: 15px; line-height: 1.35; color: #a8cfc0; }
@@ -81,6 +81,7 @@
 
 /* ---- the toast of a notice: over the page, out of the flow ---- */
 .gtoast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 65; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; width: max-content; max-width: min(560px, calc(100vw - 24px)); padding: 8px 8px 8px 16px; transform: translateX(-50%); animation: gtoastin .2s; }
+.gtoast[hidden] { display: none; }
 .gtoast.warn { border-color: var(--gold); }
 .gtoast span { flex: 1 1 200px; min-width: 0; }
 .gtoast .gbtns { display: flex; gap: 10px; margin-left: auto; }

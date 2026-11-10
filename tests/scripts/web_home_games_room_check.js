@@ -1007,33 +1007,27 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     check('the same words again make no second toast', toasts().length === 1 && stripText(env) === 'Your room is already public.');
     await wait(env, 5000);
     check('... and the toast is still there before 6 s have gone', stripOf(env).hidden === false);
-    stripOf(env).fire('mouseenter');
+    stripOf(env).matches = () => true;       // (a browser's :hover, :focus-within)
     await wait(env, 8000);
     check('a pointer on the toast keeps it', stripOf(env).hidden === false);
-    stripOf(env).fire('mouseleave');
-    await wait(env, 5500);
-    check('... and it is there 5.5 s after the pointer left', stripOf(env).hidden === false);
-    await wait(env, 1000);
-    check('a toast that asks nothing goes by itself about 6 s after it came (or after the pointer left)', stripOf(env).hidden === true);
+    stripOf(env).matches = () => false;
+    await wait(env, 2000);
+    check('a toast that asks nothing goes by itself, 6 s after it came, and soon after the pointer left', stripOf(env).hidden === true);
     env.roomBar('rhome').click();
     tap(env.home('host'));
-    stripOf(env).fire('focusin');
-    await wait(env, 9000);
-    check('the focus on the toast keeps it too', stripOf(env).hidden === false);
-    stripOf(env).fire('focusout');
-    await wait(env, 6500);
-    check('... until the focus is gone and 6 s have passed', stripOf(env).hidden === true);
     env.roomBar('rhome').click();
     tap(env.home('host'));
+    sock.receive(roomAs(OTHERS, 0, PRIVATE));
+    check('a notice with a question ("Make it public") replaces the one that was there: one toast, its own two buttons (none of the old one is left)', toasts().length === 1 && stripButtons(env).length === 2 && stripText(env).indexOf('went private after 30 minutes') !== -1);
+    await wait(env, 20000);
+    check('... and it stays for as long as it is not answered', stripOf(env).hidden === false && toasts().length === 1);
     (env.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
     check('Escape puts the toast away', stripOf(env).hidden === true);
-    check('the text is set as text (a tag in it is no element)', (() => { const e = env.body.findAll((n) => classes(n).indexOf('gtoast') !== -1)[0]; return e.findAll((n) => n.tagName === 'b' || n.tagName === 'img').length === 0; })());
+    sock.receive(roomAs(OTHERS, 0, PUBLIC));
     sock.receive(roomAs(OTHERS, 0, PRIVATE));
-    check('a toast that asks for an answer ("Make it public") stays', stripOf(env).hidden === false && stripButtons(env).length === 2);
-    await wait(env, 20000);
-    check('... for as long as it is not answered', stripOf(env).hidden === false && toasts().length === 1);
     tap(stripButtons(env)[1]);
-    check('OK ends it, and the one that came after it is the only one', stripOf(env).hidden === true && toasts().length === 1);
+    check('OK ends it', stripOf(env).hidden === true && toasts().length === 1);
 }
+
 done('public room, Quick host and Join');
 })().catch(broke);

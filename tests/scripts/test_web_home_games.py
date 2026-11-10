@@ -58,7 +58,7 @@ class ThePage(unittest.TestCase):
 
     def test_what_the_script_reads_of_the_page_is_there_once(self):
         js = read("web", "home", "games.js")
-        for ident in ("banner", "rejoin", "rejoin-go", "room-h", "slots"):
+        for ident in ("rejoin", "rejoin-go", "room-h", "slots"):
             self.assertIn("getElementById('%s')" % ident, js, ident)
             self.assertEqual(self.page.count('id="%s"' % ident), 1, ident)
 
@@ -182,12 +182,31 @@ class TheStyle(unittest.TestCase):
         cls.css = read("web", "home", "games.css")
         cls.rules = re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", cls.css, flags=re.S))
 
+    def test_the_toast_is_over_the_page_and_takes_no_room(self):
+        toast = next(body for selector, body in self.rules if selector.strip() == ".gtoast")
+        self.assertIn("position: fixed;", toast, "a notice is out of the flow: nothing under it moves")
+        for word in ("position: relative", "position: static", "position: sticky", "float:"):
+            self.assertNotIn(word, toast)
+        self.assertIn("animation: gtoastin", toast)
+        self.assertRegex(self.css, r"@media \(prefers-reduced-motion: reduce\) \{[^}]*\.gtoast \{ animation: none; \}", "no motion for a reader who asks for none")
+        self.assertIn(".gtoast[hidden]", self.css, "a hidden toast is not drawn")
+
+    def test_the_toast_is_placed_above_the_chat_and_its_field_and_goes_by_itself(self):
+        js = read("web", "home", "games.js")
+        self.assertIn("rectOf('#gchat') || rectOf('.htabs')", js, "above the chat, else above the strip of views")
+        self.assertIn("rectOf('.gc-form') || r", js, "a phone's Chat view: above the field, not over it")
+        self.assertIn("strip.style.bottom = r ?", js)
+        self.assertIn("TOAST_MS = 6000;", js)
+        self.assertIn("strip.hidden || toastAsks ? null : later(", js, "a toast with a question stays; the others have a timer")
+        self.assertIn("strip.matches(':hover, :focus-within')", js, "a toast under the pointer or the focus waits")
+        self.assertIn("doc.body.appendChild(strip)", js, "the toast is the body's, not part of Home's flow")
+
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".gjoin", ".gcode .gcgo", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gstrip .btn", ".gjoining .btn"):
+        for selector in (".gjoin", ".gcode .gcgo", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             for value in values:
@@ -210,9 +229,11 @@ class TheStyle(unittest.TestCase):
 
     def test_the_popover_is_over_the_page_under_the_menu_and_the_card_is_over_the_popover(self):
         z = {sel.strip(): int(re.search(r"z-index: (\d+)", body).group(1)) for sel, body in self.rules if re.search(r"z-index: (\d+)", body)}
-        self.assertEqual(sorted(z), [".gpop", ".gshade"])          # (the list docked in Home's body has no layer of its own: home.css, ".hmain .gdock", is a box of the page's grid)
+        self.assertEqual(sorted(z), [".gpop", ".gshade", ".gtoast"])          # (the list docked in Home's body has no layer of its own: home.css, ".hmain .gdock", is a box of the page's grid)
         self.assertLess(z[".gpop"], 60, "the Menu (home.css) is 60")
         self.assertGreater(z[".gshade"], z[".gpop"])
+        self.assertGreater(z[".gtoast"], z[".gpop"], "a toast is over the list")
+        self.assertLess(z[".gtoast"], z[".gshade"], "the question card is over a toast")
         self.assertIn("position: fixed;", next(body for sel, body in self.rules if sel.strip() == ".gpop"))
         self.assertIn("overflow-y: auto;", next(body for sel, body in self.rules if sel.strip() == ".gpop"), "the list scrolls inside itself")
 
