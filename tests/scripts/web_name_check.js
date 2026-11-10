@@ -1158,6 +1158,14 @@ async function codeBox(env) {
     own.last().open().receive(reject(5));
     check('the page\'s own room refused for a reason that nothing knows: no new room (no loop), the strip is the busy one with its Try again button, and no strip promises that the page is trying again', own.sockets.length === 1 && !own.$('banner').hidden && own.$('banner-x').textContent === 'Try again' && own.$('banner-text').textContent.indexOf('trying again') === -1);
 }
+{   // a server of another number refuses the page's OWN first socket (every open page after an upgrade: its link drops, its Hello of the old number is refused): the strip asks for a reload, nothing is tried again and no room of its own is made
+    const own = runLobby('', { 'ants.name': 'Sam' });
+    own.last().open().receive(reject(2));
+    own.advance(60000);
+    check('the page\'s own room refused for its version: the strip says a newer version is out, with the Reload button (not the busy strip)', !own.$('banner').hidden && /A newer version of Ants is out/.test(own.$('banner-text').textContent) && own.$('banner-x').textContent === 'Reload');
+    check('... no second socket after a minute (no retry, no room of its own)', own.sockets.length === 1);
+}
+
 
 
 // ---- 5.6 the Rejoin strip at the top of the page (the block REJOIN has its own check, web_rejoin_block_check.js; here is the page as a whole: when it is there, what it says, where it goes)

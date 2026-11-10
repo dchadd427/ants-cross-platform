@@ -4,7 +4,7 @@ The names in a server's rooms are checked. This page says where a name comes fro
 
 ## Where a name comes from
 
-- **A person who is logged in** plays under the name that the hub fits from the account's Discord name (its display name first, then its user name; the rules are the page's `player_name.js` and the hub's `hub/ticket.py`, which read one table of cases, `tests/data/game_name_fit.txt`). No logged-in name can look like a guest name.
+- **A person who is logged in** plays under the name that the hub fits from the name the account is shown by, else from its other Discord name (the rules are the page's `player_name.js` and the hub's `hub/ticket.py`, which read one table of cases, `tests/data/game_name_fit.txt`). No logged-in name can look like a guest name.
 - **Everybody else is a guest.** A guest's name is `Guest` and a six-digit number (`Guest 123456`), kept in the browser until its data is cleared.
 - The native client and any program that sends a Hello without a pass are guests on a server that checks names. A game on the local network, or on a host started by hand, is not affected: it never checks names.
 
@@ -61,4 +61,4 @@ Protocol 24 changes no layout. The number changed because the server's handling 
 
 - `test_lockstep` and `test_lobby` pin the number and read `tests/data/lobby_messages.txt`, the bytes of the lobby page's messages as the C++ encoders write them; `tests/scripts/web_lobby_net_check.js` reads the same file with the page's codec.
 - `test_server` checks the pass and the door (`tests/test_server/test_name_ticket.cpp`) and the refusal of a Hello of another number (S3.73, which lists 23); `test_lobby` checks the unique names and the fixed names (`tests/test_net/test_lobby_names.cpp`) and the refusal of 23 by a room; `test_netgame` refuses it for a host on the local network. `tests/data/name_ticket_mutants.json` lists the changes that these tests must catch.
-- `tests/scripts/web_lobby_client_check.js` checks the Hello that the page sends and the banner for a refused version.
+- `tests/scripts/web_lobby_client_check.js` checks the Hello that the page sends and that a refusal for the version is final (no new try). The banner is checked in `tests/scripts/web_name_check.js`: the page's own first socket refused for its version shows the strip that says a newer version is out, with its Reload button, opens no second socket and makes no room of its own; the same file and `web_home_games_room_check.js` check the strip after a refused Join.

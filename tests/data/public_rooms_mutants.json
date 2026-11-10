@@ -1167,6 +1167,31 @@
     "test_server"
    ],
    "test": "ANTS_TEST_FILTER=S3.73 timeout 900 ./build/tests/test_server/test_server"
+  },
+  {
+   "id": "codec_protocol_still_23",
+   "file": "include/ants_net/protocol.hpp",
+   "old": "inline constexpr uint16_t kProtocolVersion = 24;",
+   "new": "inline constexpr uint16_t kProtocolVersion = 23;",
+   "build": [
+    "test_lockstep",
+    "test_lobby"
+   ],
+   "test": "ANTS_TEST_FILTER=N2.1 timeout 900 ./build/tests/test_net/test_lockstep && ANTS_TEST_FILTER=N4.5 timeout 900 ./build/tests/test_net/test_lobby"
+  },
+  {
+   "id": "page_protocol_still_23",
+   "file": "web/front/lobby_net.js",
+   "old": "var PROTOCOL = 24;",
+   "new": "var PROTOCOL = 23;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js && node tests/scripts/web_lobby_net_check.js web/front/lobby_net.js tests/data/lobby_messages.txt"
+  },
+  {
+   "id": "page_own_room_version_banner_is_busy",
+   "file": "web/lobby.html",
+   "old": "else if (e.reason === R.VersionMismatch) { offline = 'none'; showBanner('version'); render(); }",
+   "new": "else if (e.reason === R.VersionMismatch) { offline = 'none'; showBanner('busy'); render(); }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
   }
  ]
 }
