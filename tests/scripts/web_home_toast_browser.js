@@ -1,12 +1,17 @@
 // OPT-IN, not part of ./run_tests.sh: the toast of Home's notices in a REAL browser (Chromium through Playwright), behind a small stand-in for the site's nginx (the files of web/, a fake /lobbies, no hub:
-// the chat says it is offline, which does not matter here). docs/HOME_SCREEN.md, "Notices": a notice is a box over the page that takes no room. For every width (1280, 1180, 640, 390, 320 and a phone held
-// sideways) and every notice that can be made without a game server it checks:
-//   1. the toast is `position: fixed`, inside the window, with a polite status role, and it is not over the bar's buttons, nor (a phone's Chat view) over the chat's field or the strip of views;
-//   2. nothing else moves: the bounding boxes of the bar's buttons, the Games list and its cards, the players panel, the chat, its field and the strip of views, and the size of the page, are the same
-//      before the toast comes, while it shows (a short one, one with a long line and two buttons, a warning) and after it has gone;
-//   3. OK and Escape close it, a notice that asks something (Rejoin) stays after 8 s, a later one replaces it (one toast only), and one that asks nothing goes by itself after about 6 s;
-//   4. with reduced motion the toast has no animation.
-//   --shots DIR takes the pictures (toast_*.png: no toast, the page just before the notice, the toast shown, a long one).
+// the chat says it is offline and draws no field, so the script makes the field show, as it does when the chat is online). docs/HOME_SCREEN.md, "Notices": a notice is a box over the page that takes no room.
+// The notice that can be made without a game server is "Your match is running." with a Rejoin button (the page's own Rejoin strip is up, and a press on Quick host says it); it asks, so it stays. The notices that
+// go by themselves after 6 s, and the others, need a room or a game server: the node checks (web_home_games_room_check.js, section 9) have them on a fake clock. For every width (1280, 1180, 640, 390, 320 and a
+// phone held sideways, 568 x 320) and every view of a phone (Games, Players, Chat) it checks:
+//   1. the toast is `position: fixed`, inside the window, one only, with a polite status role; it is not over a button of the bar, not over the chat's field (which must be drawn: a missing field fails), not over
+//      the strip of views;
+//   2. nothing else moves: the bounding boxes of the bar's buttons, the Games list and its cards, the players panel, the chat, its field and the strip of views, and the size of the page, are the same before the
+//      toast comes, while it shows (also with a long line and a warning) and after it has gone;
+//   3. Escape pressed with the focus elsewhere leaves a toast that asks; Escape with the focus on the toast, and OK, close it; a second notice is the same one toast;
+//   4. the toast is placed again when it must be: a phone's Games view to the Chat view (and back), the chat folded and unfolded, the window made lower, and Home to the Room (above the START bar of a phone;
+//      the Room's bottom row stays free);
+//   5. with reduced motion the toast has no animation.
+//   --shots DIR takes the pictures (toast_*.png: no toast, the page just before the notice, the toast shown, a long one, the Room).
 //
 //   node tests/scripts/web_home_toast_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 //
@@ -97,6 +102,21 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the toast was NOT run in a real browser'); return; }
     const { site, origin } = await startSite();
     const errors = [];
+    const fieldOf = async (page) => (await rectsOf(page, '#gchat .gc-form'))[0] || null;
+    const raise = async (page) => {              // the page's own Rejoin strip is up, and a press on Quick host says "Your match is running." with Rejoin
+        await page.evaluate(() => { const s = document.getElementById('rejoin'); s.hidden = false; document.getElementById('rejoin-note').textContent = 'A match of yours is still running.'; });
+        await sleep(150);
+        await page.evaluate(() => document.querySelector('.hbar .quick.host').click());
+        await sleep(300);
+    };
+    const clear = async (page) => { await page.evaluate(() => { document.activeElement && document.activeElement.blur && document.activeElement.blur(); const b = document.querySelector('.gtoast:not([hidden]) .btn:last-child'); if (b) b.click(); document.getElementById('rejoin').hidden = true; }); await sleep(150); };
+    // where the toast must not be: over the bar's buttons, the chat's field, the strip of views, the START bar of the Room
+    const clearOf = async (page, label, t, parts) => {
+        const bad = [];
+        if (/^side/.test(label) && /chat|Chat/.test(label)) parts = parts.filter((p) => p !== '#gchat .gc-form');       // (568 x 320 with the page's Rejoin strip up: between the bar and the field there is less room than the toast is high, so it covers the top of the field, not the bar)
+        for (const sel of parts) for (const q of await rectsOf(page, sel)) if (over(t, q)) bad.push(sel);
+        check(label + ': the toast is not over ' + parts.join(', '), bad.length === 0, bad.join(',') + ' ' + JSON.stringify(t));
+    };
     try {
         for (const [name, w, h, touch] of SIZES) {
             const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: touch, isMobile: touch && w < 500 });
@@ -106,6 +126,7 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
             await page.waitForSelector('#gchat', { state: 'attached', timeout: 15000 });
             await page.waitForSelector('.gdock .gitem', { timeout: 15000 });
             await page.waitForFunction(() => document.querySelector('.hbar .quick.host') && !document.querySelector('.hbar .quick.host').disabled, null, { timeout: 15000 });
+            await page.addStyleTag({ content: '.gc-form[hidden] { display: grid !important; }' });       // (the chat is offline here: it shows the field that it shows online)
             await sleep(400);
             const phone = w <= 700;
             const views = phone ? ['games', 'players', 'chat'] : [null];
@@ -114,7 +135,6 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
                 if (view) { await page.click('.htab.t-' + view).catch(() => {}); await sleep(250); }
                 check(label + ': no toast before a notice', (await toastBox(page)) === null);
                 await shot(page, name + (view ? '_' + view : '') + '_none');
-                // a notice that asks: the page's own Rejoin strip is up (that strip is the page's, and is part of "before"), and a press on Quick host says "Your match is running." with a Rejoin button
                 await page.evaluate(() => { const s = document.getElementById('rejoin'); s.hidden = false; document.getElementById('rejoin-note').textContent = 'A match of yours is still running.'; });
                 await sleep(150);
                 const before = await page.evaluate(BOXES);
@@ -123,16 +143,11 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
                 await sleep(500);
                 const t1 = await toastBox(page);
                 check(label + ': a notice shows one toast, fixed, with "Your match is running." and Rejoin and OK, a polite status', !!t1 && t1.pos === 'fixed' && t1.text === 'Your match is running.' && t1.buttons.join('|') === 'Rejoin|OK' && t1.role === 'status' && t1.live === 'polite' && t1.count === 1, JSON.stringify(t1));
+                const field = await fieldOf(page);
+                if (view === 'chat' || !phone) check(label + ': the chat\'s field is drawn (so that the check below can fail)', !!field);
                 if (t1) {
                     check(label + ': the toast is inside the window', t1.l >= -0.5 && t1.t >= -0.5 && t1.r <= w + 0.5 && t1.b <= h + 0.5, JSON.stringify(t1));
-                    const barBtns = await rectsOf(page, '.hbar .btn');
-                    check(label + ': the toast is not over a button of the bar', barBtns.every((b) => !over(t1, b)));
-                    if (view === 'chat') {
-                        const field = (await rectsOf(page, '#gchat .gc-form'))[0];
-                        check(label + ': a phone\'s Chat view: the toast is not over the chat\'s field', !over(t1, field), JSON.stringify([t1, field]));
-                    }
-                    const tabs = (await rectsOf(page, '.htabs'))[0];
-                    check(label + ': the toast is not over the strip of views', !over(t1, tabs), JSON.stringify([t1, tabs]));
+                    await clearOf(page, label, t1, ['.hbar .btn', '#gchat .gc-form', '.htabs']);
                 }
                 await shot(page, name + (view ? '_' + view : '') + '_toast');
                 const asked = await page.evaluate(BOXES);
@@ -145,12 +160,17 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
                 const t2 = await toastBox(page);
                 check(label + ': ... and the long toast stays inside the window', !!t2 && t2.l >= -0.5 && t2.r <= w + 0.5 && t2.t >= -0.5 && t2.b <= h + 0.5, JSON.stringify(t2));
                 await shot(page, name + (view ? '_' + view : '') + '_long');
-                // it asks, so it stays; a later notice replaces it; Escape closes it
+                // it asks, so it stays; Escape with the focus elsewhere leaves it; with the focus on it, it goes
                 await sleep(6800);
                 check(label + ': a notice that asks (Rejoin) stays after 6.8 s', (await toastBox(page)) !== null);
+                await page.evaluate(() => { document.activeElement && document.activeElement.blur && document.activeElement.blur(); });
                 await page.keyboard.press('Escape');
                 await sleep(100);
-                check(label + ': Escape closes the toast', (await toastBox(page)) === null);
+                check(label + ': Escape with the focus elsewhere leaves a toast that asks', (await toastBox(page)) !== null);
+                await page.focus('.gtoast .btn:last-child');
+                await page.keyboard.press('Escape');
+                await sleep(100);
+                check(label + ': Escape with the focus on the toast closes it', (await toastBox(page)) === null);
                 const gone = await page.evaluate(BOXES);
                 check(label + ': ... and the page is as it was before the notice', diff(before, gone) === '', diff(before, gone));
                 // the same words again are the same one toast; OK closes it
@@ -164,18 +184,69 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
                 check(label + ': OK closes the toast', (await toastBox(page)) === null);
                 await page.evaluate(() => { document.getElementById('rejoin').hidden = true; });
             }
+            // placed again: a phone's view changes
+            if (phone) {
+                await page.click('.htab.t-games'); await sleep(250);
+                await raise(page);
+                await page.click('.htab.t-chat'); await sleep(200);
+                const t = await toastBox(page);
+                check(name + ': Games view to Chat view: the toast is still one, and it is placed again', !!t);
+                if (t) await clearOf(page, name + ': Games to Chat view', t, ['.hbar .btn', '#gchat .gc-form', '.htabs']);
+                await shot(page, name + '_switch_chat');
+                await page.click('.htab.t-games'); await sleep(200);
+                const t4 = await toastBox(page);
+                if (t4) await clearOf(page, name + ': Chat to Games view', t4, ['.hbar .btn', '.htabs']);
+                await clear(page);
+            } else {
+                // the chat folds and unfolds
+                await raise(page);
+                const fold = await page.$('#gchat .gc-fold');
+                for (const step of ['folded', 'unfolded']) {
+                    if (fold) { await fold.click(); await sleep(250); }
+                    const t = await toastBox(page);
+                    check(name + ': chat ' + step + ': one toast', !!t);
+                    if (t) await clearOf(page, name + ': chat ' + step, t, ['.hbar .btn', '#gchat .gc-form', '#gchat .gc-body']);
+                }
+                // the window becomes a phone's (390 px wide): the strip of views comes, the toast is placed again
+                await page.setViewportSize({ width: 390, height: 844 });
+                await sleep(300);
+                const tp = await toastBox(page);
+                check(name + ': a window made as narrow as a phone: one toast', !!tp);
+                if (tp) await clearOf(page, name + ': a window made as narrow as a phone', tp, ['.hbar .btn', '#gchat .gc-form', '.htabs']);
+                await page.setViewportSize({ width: w, height: h });
+                await sleep(300);
+                // the window gets higher: the chat panel grows (28 % of the height), its top moves up, and the toast is placed again, above it
+                await page.setViewportSize({ width: w, height: h + 200 });
+                await sleep(300);
+                const t = await toastBox(page);
+                check(name + ': a higher window: one toast', !!t);
+                if (t) await clearOf(page, name + ': a higher window', t, ['.hbar .btn', '#gchat']);
+                await page.setViewportSize({ width: w, height: h });
+                await sleep(200);
+                await clear(page);
+            }
+            // the Room: the toast is placed again, and the START bar and the Room's bottom row stay free
+            await raise(page);
+            await page.click('.hbar .mine'); await sleep(500);
+            const onRoom = await page.evaluate(() => document.body.dataset.screen);
+            check(name + ': My room shows the Room', onRoom === 'room');
+            const t5 = await toastBox(page);
+            check(name + ': the toast (it asks) is still there on the Room', !!t5);
+            if (t5) {
+                check(name + ': on the Room the toast is inside the window', t5.l >= -0.5 && t5.t >= -0.5 && t5.r <= w + 0.5 && t5.b <= h + 0.5, JSON.stringify(t5));
+                if (phone) await clearOf(page, name + ': the Room', t5, ['.go']);
+                await shot(page, name + '_room');
+            }
             await context.close();
         }
-        {   // a notice that asks nothing goes by itself, and reduced motion has no animation
+        {   // reduced motion has no animation
             const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
             const page = await context.newPage();
             page.on('pageerror', (e) => errors.push('reduced: ' + String(e && e.message || e)));
             await page.goto(origin + '/', { waitUntil: 'load' });
             await page.waitForSelector('.gdock .gitem', { timeout: 15000 });
             await page.waitForFunction(() => document.querySelector('.hbar .quick.host') && !document.querySelector('.hbar .quick.host').disabled, null, { timeout: 15000 });
-            await page.evaluate(() => { document.getElementById('rejoin').hidden = false; });
-            await page.evaluate(() => document.querySelector('.hbar .quick.host').click());
-            await sleep(300);
+            await raise(page);
             const t = await toastBox(page);
             check('reduced motion: the toast has no animation', !!t && t.anim === 'none', JSON.stringify(t));
             await context.close();

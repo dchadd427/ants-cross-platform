@@ -3,7 +3,7 @@
 // (tests/scripts/web_home_games_check.js). The client, model and session are the page's own (web/lobby.html), read through `page`.
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
-//     row's text makes is its map's picture
+//     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
 //     every call out of this file is guarded, and a failed look is only "the list is off".
 (function (root, factory) {
@@ -18,21 +18,21 @@
     var CAP_CLOSED = 300000, CAP_OPEN = 60000;           // the longest wait after failures
     var JITTER = 0.2;                                    // every wait is its base +-20 %
     var FETCH_MS = 8000;                                 // a look that takes longer is a failed look
-    var BODY_MAX = 2000000;                              // characters of an answer that are read at all
+    var BODY_MAX = 2000000;                              // characters of an answer that are read at all (and the length that an answer may say that it has)
     var FLOOR_MS = 1000;                                 // two looks are at least this far apart, whatever the tab and the screens do
     var SCAN_MAX = 500;                                  // rows that are looked at before the cap, whatever the answer holds
-    var ROWS_MAX = 50;                                   // rows that are shown
-    var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes
+    var ROWS_MAX = 50;                                   // rows that are shown (the server lists 50 at most: the count says "50+")
+    var REFRESH_MS = 600000;                             // a public room that the leader looks at says "public" again every 10 minutes (the server's idle rule is 30)
     var ACTIVE_MS = 1200000;                             // a leader who touched nothing (pointer, key, touch) for this long is not at the Room: the repeat stops
     var ASK_MS = 10000;                                  // a Private that was asked for is told from a room that went private by itself for this long
     var TRIES_MAX = 3, TRY_GAP_MS = 300;                 // Quick join tries this many rooms, one after the other, with a wait of 0 to this many ms (random) between two
-    var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows
-    var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long
+    var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows (a press on its button is quicker)
+    var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long (it stands where Join stood: a double press is not a Cancel)
     var TOAST_MS = 6000;                                 // a toast with no question goes after this long
-    var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long
-    var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready
-    var NARROW = 720;                                    // px: the page's phone layout
-    var SEAT_PERSON = 1, SEAT_CLIENT = 2;                // the Room message's states of a color that a person holds
+    var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
+    var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
+    var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
+    var SEAT_PERSON = 1, SEAT_CLIENT = 2;                // the Room message's states of a color that a person holds (lobby_net.js SLOT)
     var TEXT = {
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
         emptyTitle: 'No open games right now.', emptyLine: 'Rooms show up here when their host switches them to Public.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
@@ -73,7 +73,7 @@
         }
         return rows;
     }
-    // The wait before the next look: the base (30 s closed, 5 s open) doubled for every failure in a row, up to the cap, +-20 %
+    // The wait before the next look: the base (30 s closed, 5 s open) doubled for every failure in a row, up to the cap, +-20 % (random: 0 to 1)
     function delayOf(open, failures, random) {
         var base = open ? EVERY_OPEN : EVERY_CLOSED, cap = open ? CAP_OPEN : CAP_CLOSED;
         var wait = Math.min(cap, base * Math.pow(2, Math.min(failures, 10)));
@@ -138,32 +138,37 @@
         }
 
         // ---- the notices: one toast, over the page (it takes no room), a later one replaces it ----
-        var strip = el('div', 'gtoast'), stripText = el('span'), stripBtns = el('div', 'gbtns'), toastTimer = null, toastAsks = false;
-        strip.setAttribute('role', 'status'); strip.setAttribute('aria-live', 'polite'); strip.hidden = true; strip.appendChild(stripText); strip.appendChild(stripBtns);
+        var toast = el('div', 'gtoast'), toastText = el('span'), toastBtns = el('div', 'gbtns'), toastTimer = null, toastAsks = false;
+        toast.setAttribute('role', 'status'); toast.setAttribute('aria-live', 'polite'); toast.hidden = true; toast.appendChild(toastText); toast.appendChild(toastBtns);
         function rectOf(sel) { var n = doc.querySelector && doc.querySelector(sel), r = n && n.getBoundingClientRect && n.getBoundingClientRect(); return r && r.height ? r : null; }
-        function placeStrip() {                            // above the chat (a phone's Chat view: its field) or the strip of views, else near the bottom
-            if (strip.parentNode !== doc.body) doc.body.appendChild(strip);
-            var h = win.innerHeight || 0, r = rectOf('#gchat') || rectOf('.htabs'), y = r && !rectOf('#hmain') ? (rectOf('.gc-form') || { top: r.bottom - 6 }).top : r && r.top;
-            strip.style.bottom = r ? Math.round(h - y + 10) + 'px' : '';
+        function placeToast() {                            // above what is at the bottom: the chat (a phone's Chat view: its field), the strip of views, the Room's START bar; never into the bar at the top
+            if (toast.parentNode !== doc.body) doc.body.appendChild(toast);
+            var h = win.innerHeight || 0, bar = rectOf('.hbar'), r = rectOf('#gchat') || rectOf('.htabs'), y = null, up;
+            if (r) y = rectOf('#hmain') ? r.top : (rectOf('.gc-form') || { top: r.bottom - 6 }).top;
+            else if (win.innerWidth <= 700 && (r = rectOf('.go'))) y = r.top;
+            if (y === null || toast.hidden) { toast.style.bottom = ''; return; }
+            up = h - y + 10;
+            if (bar && toast.offsetHeight && h - up - toast.offsetHeight < bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;
+            toast.style.bottom = Math.round(up) + 'px';
         }
-        placeStrip();
+        placeToast();
         var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join with no toast, the card that closes by itself: this line tells a screen reader)
         function armToast(ms) {                            // a toast with a question stays; the others go after 6 s (not under the pointer or the focus)
             if (toastTimer !== null) cancel(toastTimer);
-            toastTimer = strip.hidden || toastAsks ? null : later(guard(function () { if (strip.matches && strip.matches(':hover, :focus-within')) armToast(1500); else clearNotice(); }), ms || TOAST_MS);
+            toastTimer = toast.hidden || toastAsks ? null : later(guard(function () { if (toast.matches && toast.matches(':hover, :focus-within')) armToast(1500); else clearNotice(); }), ms || TOAST_MS);
         }
-        function clearNotice(kind) { if (!kind || kind === noticeKind) { strip.hidden = true; noticeKind = ''; armToast(); } }
-        // kind: what it is, tone: '' or 'warn', actions: [{ text, run }] (run says false: the toast stays); OK is always last
+        function clearNotice(kind) { if (!kind || kind === noticeKind) { toast.hidden = true; noticeKind = ''; armToast(); } }
+        // kind: what the notice is (a later one replaces it), tone: '' or 'warn', actions: [{ text, run }]: run says false when it could not do it (the toast stays); OK is always the last button
         function notice(kind, text, tone, actions) {
             noticeKind = kind; toastAsks = !!(actions && actions.length);
-            stripText.textContent = text;
-            strip.className = 'gtoast' + (tone ? ' ' + tone : '');
-            while (stripBtns.firstChild) stripBtns.removeChild(stripBtns.firstChild);
+            toastText.textContent = text;
+            toast.className = 'gtoast' + (tone ? ' ' + tone : '');
+            while (toastBtns.firstChild) toastBtns.removeChild(toastBtns.firstChild);
             (actions || []).concat([{ text: TEXT.ok, run: null }]).forEach(function (a) {
-                stripBtns.appendChild(button('sm', a.text, guard(function () { if (!a.run || a.run() !== false) clearNotice(); })));
+                toastBtns.appendChild(button('sm', a.text, guard(function () { if (!a.run || a.run() !== false) clearNotice(); })));
             });
-            strip.hidden = false;
-            placeStrip(); armToast();
+            toast.hidden = false;
+            placeToast(); armToast();
         }
         function rejoinOffered() { var s = doc.getElementById('rejoin'); return !!s && !s.hidden; }
         function matchRunning(c) { return !!(c && c.room && c.room.starting) || rejoinOffered(); }    // (a START that waits, or a match of this browser that is still running: the Rejoin strip is up)
@@ -271,7 +276,7 @@
         // ---- Quick host ----
         function stopPending() { if (pendingTimer !== null) { cancel(pendingTimer); pendingTimer = null; } }
         function endPending() { pending = null; stopPending(); }
-        function startPending(forClient) {                     // forClient: the client whose room is to be made public
+        function startPending(forClient) {                     // forClient: the client whose room is to be made public (a room that is left meanwhile is not the one: a later room is never made public by it)
             pending = { forClient: forClient || null, sent: false, tries: 0 };
             stopPending();
             pendingTimer = later(guard(function () {
@@ -330,7 +335,7 @@
             if (!on) { quiet.forEach(function (k) { k.removeAttribute('inert'); }); quiet = []; }
         }
         function hold(on) { try { if (page.hold) page.hold(on); } catch (e) { /* the page's own */ } }       // (the page behind a card takes no key or tap, whichever screen shows)
-        function holdOff(b) {                              // a button that stands where another stood takes no press for a moment
+        function holdOff(b) {                              // a button that stands where another stood takes no press for a moment (a double press is not an answer)
             b.disabled = true;
             if (cancelTimer !== null) cancel(cancelTimer);
             cancelTimer = later(guard(function () { cancelTimer = null; b.disabled = false; }), CANCEL_AFTER_MS);
@@ -407,7 +412,7 @@
         codeInput.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') joinTyped(); }));
         codeGo.addEventListener('click', guard(function () { joinTyped(); }));
 
-        function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first
+        function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first (Quick join and BEST)
         function listRows() { var own = ownCode(); return rows.filter(function (r) { return r.code === own; }).concat(visibleRows()); }      // the list: the page's own public room first (tagged Yours), then the others
         function paintPill() {
             var n = listRows().length, shown = loaded && !off;
@@ -537,7 +542,7 @@
         }
 
         // ---- Quick join: the best open room, by one look at the list and the page's probe (the old room goes when the new one welcomes the page) ----
-        function look1(done) {                             // a look for a press
+        function look1(done) {                             // a look for a press (one of less than a second ago is as good)
             if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }
             lastLook = now();
             if (typeof win.fetch !== 'function') { settle(null); done(); return; }
@@ -560,7 +565,7 @@
             dropCard(); told.textContent = 'Joined ' + possessive(row.host) + ' room.';
             card({ mark: 'check', title: 'Joined ' + possessive(row.host) + ' room', row: seen, after: [TEXT.roomOpening], bar: 'fill', acts: [{ text: TEXT.goRoom, cls: 'gyes' }], focus: 0, timer: JOINED_MS, onClose: function () { if (!gone) ctl.show('room', 'push'); } });
         }
-        function tries(cands, mine) {                      // up to three rooms, one after the other
+        function tries(cands, mine) {                      // up to three rooms, one after the other (a room that is gone, full or started is a reason for the next)
             var n = Math.min(TRIES_MAX, cands.length), k = 0;
             function next() {
                 if (mine !== joinSeq) return;
@@ -616,7 +621,7 @@
             if (!wanted() || polling) return;
             pollTimer = later(guard(function () { pollTimer = null; poll(); }), delayOf(isOpen, failures, random()));
         }
-        function look() {                                  // one request: a promise of the parsed JSON, or of null for anything that is not a good answer
+        function look() {                                  // one request: a promise of the parsed JSON, or of null for anything that is not a good answer (it never fails)
             return new Promise(function (resolve) {
                 var finished = false, ctrl = null, timer = null;
                 function finish(v) { if (finished) return; finished = true; if (timer !== null) cancel(timer); resolve(v); }
@@ -666,7 +671,7 @@
         parts.quickHost.addEventListener('click', guard(quickHost));
         parts.quickJoin.addEventListener('click', guard(quickJoin));
         enable(parts.games); enable(parts.quickHost); enable(parts.quickJoin);
-        doc.addEventListener('click', guard(function (e) {         // a press anywhere else puts the list away
+        doc.addEventListener('click', guard(function (e) {         // a press anywhere else puts the list away (seen in the capture phase: before the buttons of a card or a Join take themselves out of the page)
             var t = e && e.target;
             if (!isOpen || dialog || joining || !t) return;
             if ((pop.contains && pop.contains(t)) || (parts.games.contains && parts.games.contains(t))) return;
@@ -675,18 +680,18 @@
         ['pointerdown', 'keydown', 'touchstart'].forEach(function (t) { doc.addEventListener(t, guard(touched), true); });
         doc.addEventListener('keydown', guard(function (e) {
             if (!e || e.key !== 'Escape') return;
-            if (!dialog) clearNotice();       // (Escape puts the toast away too)
+            if (!dialog && toast.contains(doc.activeElement)) clearNotice();       // (Escape puts a toast away that has the focus)
             if (dialog) closeAsk(true); else if (isOpen) closeList(true);
         }));
         doc.addEventListener('visibilitychange', guard(function () {
             if (!visible() && pollTimer !== null) { cancel(pollTimer); pollTimer = null; }
             poll(); schedule(); armRefresh();
         }));
-        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeStrip(); }));
+        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeToast(); }));
+        if (win.MutationObserver) new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); })).observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen'] });       // (a phone's view or the chat's fold changes: the toast is placed again)
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (isOpen) { paintList(); place(); } }
         function shown(name) {
-            placeStrip();
             if (name === 'room') { closeAll(); placeVis(); } else poll();
             sync();
             schedule();
@@ -700,7 +705,7 @@
             [parts.quickHost, parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });
             hint = words; paintVis();
         }
-        function inert(on) { [strip, pop].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a dialog of the page, or the hand-off, is over this part: it takes no key or tap)
+        function inert(on) { [toast, pop].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a dialog of the page, or the hand-off, is over this part: it takes no key or tap)
         sync();
         poll();
         return {

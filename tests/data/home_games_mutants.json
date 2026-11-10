@@ -1110,7 +1110,7 @@
   {
    "id": "part_not_inert_with_the_page_strip",
    "file": "web/home/games.js",
-   "old": "[strip, pop].forEach(function (n) { if (on)",
+   "old": "[toast, pop].forEach(function (n) { if (on)",
    "new": "[pop].forEach(function (n) { if (on)",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -2580,14 +2580,14 @@
   {
    "id": "dismiss_ends_the_wrong_notice",
    "file": "web/home/games.js",
-   "old": "if (!kind || kind === noticeKind) { strip.hidden = true;",
-   "new": "if (!kind || kind !== noticeKind) { strip.hidden = true;",
+   "old": "if (!kind || kind === noticeKind) { toast.hidden = true;",
+   "new": "if (!kind || kind !== noticeKind) { toast.hidden = true;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "toast_buttons_pile_up",
    "file": "web/home/games.js",
-   "old": "            while (stripBtns.firstChild) stripBtns.removeChild(stripBtns.firstChild);\n",
+   "old": "            while (toastBtns.firstChild) toastBtns.removeChild(toastBtns.firstChild);\n",
    "new": "",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -2601,7 +2601,7 @@
   {
    "id": "toast_goes_under_the_pointer",
    "file": "web/home/games.js",
-   "old": "if (strip.matches && strip.matches(':hover, :focus-within')) armToast(1500); else clearNotice();",
+   "old": "if (toast.matches && toast.matches(':hover, :focus-within')) armToast(1500); else clearNotice();",
    "new": "clearNotice();",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -2609,21 +2609,21 @@
    "id": "toast_covers_the_chat_field",
    "file": "web/home/games.js",
    "old": "(rectOf('.gc-form') || { top: r.bottom - 6 }).top",
-   "new": "r.bottom - 6",
+   "new": "r.top",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "escape_leaves_the_toast",
    "file": "web/home/games.js",
-   "old": "            if (!dialog) clearNotice();",
-   "new": "            if (!dialog) noticeKind = noticeKind;",
+   "old": "if (!dialog && toast.contains(doc.activeElement)) clearNotice();",
+   "new": "if (!dialog && toast.contains(doc.activeElement)) noticeKind = noticeKind;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "toast_text_is_markup",
    "file": "web/home/games.js",
-   "old": "stripText.textContent = text;",
-   "new": "stripText.innerHTML = text;",
+   "old": "toastText.textContent = text;",
+   "new": "toastText.innerHTML = text;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -2636,8 +2636,50 @@
   {
    "id": "toast_is_in_the_page_flow",
    "file": "web/home/games.js",
-   "old": "if (strip.parentNode !== doc.body) doc.body.appendChild(strip);",
-   "new": "if (!strip.parentNode) host.appendChild(strip);",
+   "old": "if (toast.parentNode !== doc.body) doc.body.appendChild(toast);",
+   "new": "if (!toast.parentNode) host.appendChild(toast);",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "escape_elsewhere_closes_the_toast",
+   "file": "web/home/games.js",
+   "old": "if (!dialog && toast.contains(doc.activeElement)) clearNotice();",
+   "new": "if (!dialog) clearNotice();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "escape_under_a_card_closes_the_toast",
+   "file": "web/home/games.js",
+   "old": "if (!dialog && toast.contains(doc.activeElement)) clearNotice();",
+   "new": "if (toast.contains(doc.activeElement)) clearNotice();",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "toast_not_placed_again_on_resize",
+   "file": "web/home/games.js",
+   "old": "placeVis(); placeToast(); }));",
+   "new": "placeVis(); }));",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "toast_not_placed_again_on_a_view_change",
+   "file": "web/home/games.js",
+   "old": "if (!toast.hidden) placeToast(); }))",
+   "new": "}))",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "toast_over_the_start_bar",
+   "file": "web/home/games.js",
+   "old": "else if (win.innerWidth <= 700 && (r = rectOf('.go'))) y = r.top;",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "toast_into_the_bar",
+   "file": "web/home/games.js",
+   "old": "if (bar && toast.offsetHeight && h - up - toast.offsetHeight < bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;",
+   "new": "",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }
  ]

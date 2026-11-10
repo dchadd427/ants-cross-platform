@@ -33,7 +33,7 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 71 * 1000, 20000      # bytes, raw and gzipped, both files together (about 69,950 and 19,980, with Quick join, its cards and the question before Leave room): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 78 * 1000, 22500      # bytes, raw and gzipped, both files together (about 71,800 and 20,600, with Quick join, its cards, the question before Leave room and the toast; room is left on purpose for the Watch button): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -195,12 +195,18 @@ class TheStyle(unittest.TestCase):
         js = read("web", "home", "games.js")
         self.assertIn("rectOf('#gchat') || rectOf('.htabs')", js, "above the chat, else above the strip of views")
         self.assertIn("(rectOf('.gc-form') || { top: r.bottom - 6 }).top", js, "a phone's Chat view: above the field, not over it")
-        self.assertIn("r && !rectOf('#hmain') ?", js, "the chat fills the view (no body above it): over its field, not over the bar")
-        self.assertIn("strip.style.bottom = r ? Math.round(h - y + 10)", js)
+        self.assertIn("rectOf('#hmain') ? r.top :", js, "the chat fills the view (no body above it): over its field, not over the bar")
+        self.assertIn("(r = rectOf('.go'))) y = r.top;", js, "the Room on a phone: above the sticky START bar")
+        self.assertIn("< bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;", js, "never into the bar at the top")
+        self.assertIn("toast.style.bottom = Math.round(up) + 'px';", js)
         self.assertIn("TOAST_MS = 6000;", js)
-        self.assertIn("strip.hidden || toastAsks ? null : later(", js, "a toast with a question stays; the others have a timer")
-        self.assertIn("strip.matches(':hover, :focus-within')", js, "a toast under the pointer or the focus waits")
-        self.assertIn("doc.body.appendChild(strip)", js, "the toast is the body's, not part of Home's flow")
+        self.assertIn("toast.hidden || toastAsks ? null : later(", js, "a toast with a question stays; the others have a timer")
+        self.assertIn("toast.matches(':hover, :focus-within')", js, "a toast under the pointer or the focus waits")
+        self.assertIn("doc.body.appendChild(toast)", js, "the toast is the body's, not part of Home's flow")
+        self.assertIn("placeVis(); placeToast(); }));", js, "placed again when the window changes")
+        self.assertIn("if (!toast.hidden) placeToast(); }))", js, "placed again when a phone's view or the chat's fold changes")
+        self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen']", js)
+        self.assertIn("if (!dialog && toast.contains(doc.activeElement)) clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}
