@@ -83,6 +83,8 @@ const looksAtLive = (env) => env.site.live.calls.length;
     await wait(env, 10500);
     same('a match that ended is gone from the list and the one that goes on says its new time', liveRows(env).map((li) => [first(li, 'gname').textContent, first(li, 'glen').textContent]), [['Treasure', '2:15 so far']]);
     check('... and the head follows', headOf(env) === '1 open, 1 in progress', headOf(env));
+    await wait(env, 31000);
+    check('the Games button still counts the open game only, after the list and the matches have both been looked at again', R.pillOf(env).textContent === '1' && env.home('games').getAttribute('aria-label') === 'Games, 1 open');
 }
 {   // text only: names with markup, a very long name, a map of the players
     const hostile = [LIVE('Pop_Corn-20261109-120000Z', { map: 'Pop_Corn', players: ['Green (<img src=x onerror=alert(1)>)', 'Red (' + 'W'.repeat(60) + ')', 'Blue (a "b" & \'c\' <\/script>)'] })];
