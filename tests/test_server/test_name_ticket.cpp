@@ -392,6 +392,16 @@ void run_name_ticket_tests() {
             ASSERT_TRUE(is_guest_name(seat_name(a)));
             ASSERT_EQ(w.mgr.name_gate()->check().counts().good, uint64_t{0});
         }
+        {   // the check is off unless the server is told: default limits check nothing, and a name is kept as it was typed
+            ASSERT_FALSE(ServerLimits().verified_names);
+            World w;
+            ASSERT_TRUE(w.mgr.name_gate() == nullptr && !w.mgr.default_spec().verified_names);
+            ASSERT_TRUE(w.mgr.create_room(spec_of("DF-1", 2), w.now).ok);
+            Client& a = w.connect("Ann", "DF-1");
+            Client& b = w.connect("Ann", "DF-1");
+            w.run(300);
+            ASSERT_TRUE(seat_name(a) == "Ann" && seat_name(b) == "Ann");
+        }
         {
             World w(gate_limits(false));
             ASSERT_TRUE(w.mgr.name_gate() == nullptr);

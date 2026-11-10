@@ -59,6 +59,13 @@ void run_lobby_names_tests() {
             const size_t c = room.join_seat("Ann");
             ASSERT_EQ(name_of(room, c), std::string("Ann (2)"));
         }
+        {   // a name of no characters (a Hello that gave none) is a name too: the second one is "(2)", with no blank before the bracket
+            Room room(checked_room_config(204));
+            const size_t a = room.join_seat("");
+            const size_t b = room.join_seat("");
+            ASSERT_EQ(name_of(room, a), std::string());
+            ASSERT_EQ(name_of(room, b), std::string("(2)"));
+        }
         {   // without the setting a name is taken as it is: two Anns
             Room room(lobby_room_config(203));
             const size_t a = room.join_seat("Ann");
