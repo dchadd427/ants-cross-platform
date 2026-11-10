@@ -1,3 +1,5 @@
+// NOT YET UPDATED for the three-panel layout (the chat is a panel along the bottom of Home, and the Chat view of a phone): the checks of the 380 x 380 corner panel, the 62 px strip, the short title and the last-line
+// preview, the no-room strip and `--gc-min`, and the presses on the folded header of a phone (it is not drawn outside the Chat view) describe the layout before it, and the script stops at the first of them.
 // OPT-IN, not part of ./run_tests.sh: the chat dock of Home in a REAL browser (Chromium through Playwright), against the real front page (web/lobby.html with web/home/) and the FAKE hub (tests/scripts/fake_hub.js)
 // that shares the page's address, as nginx's /hub/ws does. It looks at what no fake DOM can: the places and sizes of the dock at 390 x 844 (a phone), 844 x 390 (a phone held sideways) and 1280 x 800 (a desktop) next to
 // the approved pictures, that nothing scrolls sideways, that every target is 44 px, that the dock covers none of the bar, that the dock comes after the first paint, that the page asks for its two files and for

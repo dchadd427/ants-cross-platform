@@ -210,8 +210,7 @@ class TheStyle(unittest.TestCase):
 
     def test_the_popover_is_over_the_page_under_the_menu_and_the_card_is_over_the_popover(self):
         z = {sel.strip(): int(re.search(r"z-index: (\d+)", body).group(1)) for sel, body in self.rules if re.search(r"z-index: (\d+)", body)}
-        self.assertEqual(sorted(z), [".gdock", ".gpop", ".gshade"])          # (.gdock: the list docked in the Yard on a site with no label, under the chat panel's 6 where they meet)
-        self.assertLess(z[".gdock"], 6)
+        self.assertEqual(sorted(z), [".gpop", ".gshade"])          # (the list docked in Home's body has no layer of its own: home.css, ".hmain .gdock", is a box of the page's grid)
         self.assertLess(z[".gpop"], 60, "the Menu (home.css) is 60")
         self.assertGreater(z[".gshade"], z[".gpop"])
         self.assertIn("position: fixed;", next(body for sel, body in self.rules if sel.strip() == ".gpop"))
@@ -234,25 +233,24 @@ class TheStyle(unittest.TestCase):
             made.update(m.group(1).split())
         for m in re.finditer(r"button\('([\w -]+)'", read("web", "home", "games.js")):
             made.update(m.group(1).split())
-        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr"}      # (the page's: web/lobby.html, "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
+        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr", "gerow"}      # (the page's: web/lobby.html, "gerow" the two big buttons of the empty state in Home's body (home.css), "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
         for name in sorted(made - theirs):
             self.assertRegex(self.css, r"\." + re.escape(name) + r"\b", "the class %s has no style" % name)
 
 
-class TheListIsTheYardsOnAUnlabelledSite(unittest.TestCase):
-    """A site with no site label (production: docs/HOME_SCREEN.md, "The Yard") shows the Games list as the page under the bar, docked in the Yard (home.js hands it #yard as `dock`), always there, the same rows and Join as the
-    popover's (one code); a site with the label (the test site) keeps the popover and the stand-in. The list is centered in the window from 1280 px wide, right of the chat panel in a window of 761 to 1279 px and above its strip
-    on a phone, so that no Join is covered."""
+class TheListIsDockedInHomesBody(unittest.TestCase):
+    """Home docks the Games list in its body (home.js hands it #hmain as `dock`): always there, as the games panel at the left of the players list, with the same rows and Join as the popover's (one code). Each room is a
+    card (home.css); the popover (a list that is given no dock) is the same code with the switches below. The docked box has no layer of its own and no place of its own: it is a box of Home's grid, so nothing can cover it."""
 
     @classmethod
     def setUpClass(cls):
         cls.js = read("web", "home", "games.js")
         cls.css = read("web", "home", "games.css")
         cls.home = read("web", "home", "home.js")
-        cls.chat = read("web", "home", "chat.css")
+        cls.homecss = read("web", "home", "home.css")
 
-    def test_home_docks_the_list_in_the_yard_only_where_there_is_no_label(self):
-        self.assertEqual(self.home.count("dock: standIn ? null : yard,"), 1)
+    def test_home_docks_the_list_in_its_body(self):
+        self.assertEqual(self.home.count("dock: main, page: page"), 1)
         self.assertEqual(self.js.count("env.dock"), 2)
         self.assertIn("(env.dock || host).appendChild(pop);", self.js)
 
@@ -266,40 +264,23 @@ class TheListIsTheYardsOnAUnlabelledSite(unittest.TestCase):
                      "if (docked) pop.className += ' gdock';"):
             self.assertEqual(js.count(part), 1, part)
 
-    def test_the_docked_list_keeps_clear_of_the_chat_dock_and_its_strip(self):
-        rules = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
-        wide = re.search(r"\.gdock \{ position: absolute; z-index: (\d+); top: 12px; left: (\d+)px; right: 12px; width: min\((\d+)px, calc\(100% - (\d+)px\)\); max-height: calc\(100% - 24px\); margin: 0 auto; \}", rules)
-        self.assertIsNotNone(wide)
-        z, left, cap, taken = (int(g) for g in wide.groups())
-        chat = re.search(r"\.gc \{ position: absolute; left: (\d+)px; bottom: 22px; z-index: (\d+);[^}]*width: (\d+)px;", self.chat)
-        self.assertLess(z, int(chat.group(2)), "the chat panel is over the list where they meet")
-        self.assertGreaterEqual(left, int(chat.group(1)) + int(chat.group(3)), "on a wide window the list is right of the chat panel (24 + 380 px)")
-        self.assertEqual(left + 12, taken)
-        self.assertLess(z, 55, "under the Menu and the cards")
-        self.assertIn("@media (max-width: 720px), (max-height: 500px) { .gdock { top: 8px; left: 8px; right: 8px; width: auto; max-height: calc(100% - 90px); } }", rules)
-        self.assertIn("(max-width: 720px), (max-height: 500px) {", self.chat, "the strip's own breakpoint is the one that the list uses")
-        self.assertIn("@media (min-width: 721px) and (max-width: 760px) and (min-height: 501px) { .gdock { left: 12px; right: 12px; width: auto; max-height: calc(100% - 428px); } }", rules)
+    def test_the_docked_list_is_a_box_of_the_grid_and_the_cards_are_a_grid_of_their_own(self):
+        self.assertNotIn(".gdock", self.css, "games.css has the popover's rows; the docked list's place and cards are Home's (home.css)")
+        rules = re.sub(r"/\*.*?\*/", "", self.homecss, flags=re.S)
+        box = re.search(r"\.hmain \.gdock \{([^}]*)\}", rules).group(1)
+        self.assertIn("position: relative; z-index: auto;", box, "no layer: the popover's fixed place and layer are put away")
+        self.assertIn("min-height: 0; overflow: hidden;", box, "the panel does not grow past its cell: the cards scroll inside it")
+        self.assertIn(".gdock .gpbody { flex: 1 1 auto; min-height: 0; overflow-y: auto;", rules, "the heading and the foot (Join by code) stay, the cards scroll")
+        self.assertIn(".gdock .glist { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));", rules)
+        self.assertIn('grid-template-areas: "m t t" "m l j";', rules, "the map at the left, the host and the map's name, then the seats and Join")
+        self.assertIn(".gdock .gitem:has(.gyours) { border-color: var(--gold); }", rules)
+        self.assertIn(".gdock .glist { grid-template-columns: minmax(0, 1fr); }", rules, "one column on a phone")
 
-    def test_the_docked_list_is_centered_in_the_window_where_the_chat_panel_leaves_room(self):
-        """The Yard has the same margin on both sides of the window, so the same room on both sides of the list is a list in the window's middle. The chat panel is at the left only, and the list keeps clear of it by that room
-        (so no height of the panel or of the list can make one cover the other): the default rule puts the list right of the panel, in the middle of the space there, and from the window width at which the list is still
-        400 px wide the same room at the right as at the left puts its middle in the window's. A narrower window cannot have both (the panel is 404 px of it), so it keeps the list right of the panel."""
-        rules = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
-        base = re.search(r"\.gdock \{ position: absolute; z-index: \d+; top: 12px; left: (\d+)px; right: 12px; width: min\((\d+)px, calc\(100% - (\d+)px\)\);", rules)
-        wide = re.search(r"@media \(min-width: (\d+)px\) \{ \.gdock \{ right: (\d+)px; width: min\((\d+)px, calc\(100% - (\d+)px\)\); \} \}", rules)
-        self.assertIsNotNone(base)
-        self.assertIsNotNone(wide, "the rule that centers the list in the window")
-        left, cap = int(base.group(1)), int(base.group(2))
-        edge, right, wide_cap, taken = (int(g) for g in wide.groups())
-        self.assertEqual(right, left, "the same room on both sides of the list")
-        self.assertEqual(taken, left + right, "and the width is what is left between them")
-        self.assertEqual(wide_cap, cap, "up to the same 560 px")
-        self.assertEqual(edge, taken + 24 + 400, "from this window width the list is at least 400 px wide (24 px: the Yard's margins and borders); below it the list keeps to the right of the chat panel")
-        chat = re.search(r"\.gc \{ position: absolute; left: (\d+)px; bottom: 22px; z-index: (\d+);[^}]*width: (\d+)px;", self.chat)
-        self.assertGreaterEqual(right, int(chat.group(1)) + int(chat.group(3)), "the room at the right is the chat panel's too: the list's left edge is clear of the panel at every width")
-        self.assertLess(rules.index(base.group(0)), rules.index(wide.group(0)), "after the rule that it changes")
-        for later in ("@media (min-width: 721px) and (max-width: 760px) and (min-height: 501px) {", "@media (max-width: 720px), (max-height: 500px) { .gdock {"):
-            self.assertLess(rules.index(wide.group(0)), rules.index(later), "the rules for a short window and the stacked layout come after it and win: " + later)
+    def test_the_empty_state_has_two_big_buttons_and_both_are_a_press_that_the_script_handles(self):
+        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickHost, guard(function () { quickHost(); })));", self.js)
+        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickJoin, guard(function () { quickJoin(); })));", self.js)
+        rules = re.sub(r"/\*.*?\*/", "", self.homecss, flags=re.S)
+        self.assertRegex(rules, r"\.gdock \.gerow \.btn \{[^}]*min-height: 56px;")
 
 
 class TheWayIntoTheImage(unittest.TestCase):

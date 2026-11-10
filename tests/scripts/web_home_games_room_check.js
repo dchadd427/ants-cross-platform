@@ -923,7 +923,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 {   // START comes before the script of the list does, and the 15 s are over before it comes: it mounts into a page that waits for the game, and says so at once
     const SLOW = 'The game is slow to open. Reload this page to get your seat back.';
     const site = fakeSite();
-    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, label: 'staging' });
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, popover: true });
     env.advance(0);
     const parts = () => env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css'));
     check('(the script and the style of the list were asked for, and have not come)', parts().length === 2 && env.home('host').disabled === true);
@@ -933,7 +933,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING }));
     await wait(env, 16000);
     check('(START came while Home showed, and was not taken: the page says that the game is slow)', env.screen() === 'home' && env.assigned.length === 1 && env.$('banner-text').textContent === SLOW);
-    env.win.AntsHomeGames = R.Games;
+    env.win.AntsHomeGames = R.PopoverGames;
     parts().forEach((c) => c.onload && c.onload({}));
     await flush();
     check('the list comes now: its buttons are off with the same reason, and it asked for nothing (Home shows, and a list that is mounted on Home looks at once: this one does not)', [env.home('host'), env.home('games')].every((b) => b.disabled === true && b.getAttribute('title') === SLOW) && site.calls.length === 0);
@@ -943,13 +943,13 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 }
 {   // a script that comes while START is on its way (not slow yet) waits as well
     const site = fakeSite();
-    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, label: 'staging' });
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, popover: true });
     env.advance(0);
     env.home('mine').click();
     const sock = env.arrive({ key: KEY, seats: seatsOf(OTHERS), room: { flags: PRIVATE } });
     env.roomBar('rhome').click();
     sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING }));
-    env.win.AntsHomeGames = R.Games;
+    env.win.AntsHomeGames = R.PopoverGames;
     env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css')).forEach((c) => c.onload && c.onload({}));
     await flush();
     env.home('games').click(); env.home('host').click();
@@ -959,13 +959,13 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
 }
 {   // a script that comes while a dialog of the page is open is under it as well
     const site = fakeSite();
-    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, label: 'staging' });
+    const env = R.runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, fetch: site.fetch, popover: true });
     env.advance(0);
     env.home('mine').click();
     env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PUBLIC } });
     env.roomBar('rhome').click();
     env.$('how-open').click();
-    env.win.AntsHomeGames = R.Games;
+    env.win.AntsHomeGames = R.PopoverGames;
     env.body.children.filter((c) => (c.tagName === 'script' && c.src === 'home/games.js') || (c.tagName === 'link' && c.href === 'home/games.css')).forEach((c) => c.onload && c.onload({}));
     await flush();
     env.home('host').click();
