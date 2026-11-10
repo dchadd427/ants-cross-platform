@@ -144,8 +144,8 @@
   {
    "id": "names_make_the_row_as_tall_as_they_are",
    "file": "web/home/games.css",
-   "old": "display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; flex: 1 0 9em;",
-   "new": "flex: 1 0 9em;",
+   "old": "display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; flex: 1 1 9em;",
+   "new": "flex: 1 1 9em;",
    "test": "node tests/scripts/web_home_watch_browser.js"
   },
   {
@@ -221,7 +221,7 @@
   {
    "id": "live_a_bot_is_a_filled_dot",
    "file": "web/home/games.js",
-   "old": "(/^Bot \\(/.test(w.name) ? 'bot' : 'player')",
+   "old": "(BOT_NAME.test(w.name) ? 'bot' : 'player')",
    "new": "'player'",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
@@ -256,8 +256,8 @@
   {
    "id": "names_are_not_clipped",
    "file": "web/home/games.css",
-   "old": "flex: 1 0 9em; min-width: 0; overflow: hidden; overflow-wrap",
-   "new": "flex: 1 0 9em; min-width: 0; overflow-wrap",
+   "old": "flex: 1 1 9em; min-width: 0; overflow: hidden; overflow-wrap",
+   "new": "flex: 1 1 9em; min-width: 0; overflow-wrap",
    "test": "node tests/scripts/web_home_watch_browser.js"
   },
   {
@@ -266,6 +266,90 @@
    "old": ".gfrow { flex: 0 0 auto; margin: -6px 0 -6px auto; }",
    "new": ".gfrow { flex: 1 0 100%; margin: -6px 0 -6px auto; }",
    "test": "node tests/scripts/web_home_watch_browser.js"
+  },
+  {
+   "id": "live_a_bot_is_the_old_label_only",
+   "file": "web/home/games.js",
+   "old": "var BOT_NAME = /^Bot \\(|\\(bot(, [^()]+)?\\)$/;",
+   "new": "var BOT_NAME = /^Bot \\(/;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_a_bot_is_any_name_with_bot_in_it",
+   "file": "web/home/games.js",
+   "old": "var BOT_NAME = /^Bot \\(|\\(bot(, [^()]+)?\\)$/;",
+   "new": "var BOT_NAME = /bot/i;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_a_bot_needs_a_level_after_bot",
+   "file": "web/home/games.js",
+   "old": "var BOT_NAME = /^Bot \\(|\\(bot(, [^()]+)?\\)$/;",
+   "new": "var BOT_NAME = /^Bot \\(|\\(bot, [^()]+\\)$/;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "watch_names_cannot_shrink",
+   "file": "web/home/games.css",
+   "old": "-webkit-line-clamp: 3; flex: 1 1 9em;",
+   "new": "-webkit-line-clamp: 3; flex: 1 0 9em;",
+   "test": "node tests/scripts/web_home_watch_browser.js"
+  },
+  {
+   "id": "watch_names_cannot_shrink_pinned",
+   "file": "web/home/games.css",
+   "old": "-webkit-line-clamp: 3; flex: 1 1 9em;",
+   "new": "-webkit-line-clamp: 3; flex: 1 0 9em;",
+   "test": "python3 tests/scripts/test_web_home_games.py TheStyle"
+  },
+  {
+   "id": "live_id_stem_may_have_25_characters",
+   "file": "web/home/games.js",
+   "old": "var LIVE_ID = /^[A-Za-z0-9_]{1,24}-",
+   "new": "var LIVE_ID = /^[A-Za-z0-9_]{1,25}-",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_id_stem_may_have_a_dot",
+   "file": "web/home/games.js",
+   "old": "var LIVE_ID = /^[A-Za-z0-9_]{1,24}-",
+   "new": "var LIVE_ID = /^[A-Za-z0-9_.]{1,24}-",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_wait_is_counted_from_the_start_of_a_look",
+   "file": "web/home/games.js",
+   "old": "            liveBusy = true;\n            var mine = ++liveRound;\n            look(LIVE_URL).then(function (data) { if (mine === liveRound) { liveBusy = false; settleLive(data); } }, function () { if (mine === liveRound) { liveBusy = false; settleLive(null); } });\n        }\n        function settleLive(data) {\n            var list = null;\n            try { list = parseLive(data, rules); } catch (e) { list = null; }\n            lastLive = now();",
+   "new": "            liveBusy = true; lastLive = now();\n            var mine = ++liveRound;\n            look(LIVE_URL).then(function (data) { if (mine === liveRound) { liveBusy = false; settleLive(data); } }, function () { if (mine === liveRound) { liveBusy = false; settleLive(null); } });\n        }\n        function settleLive(data) {\n            var list = null;\n            try { list = parseLive(data, rules); } catch (e) { list = null; }\n            void 0;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_a_good_answer_keeps_the_backoff",
+   "file": "web/home/games.js",
+   "old": "liveOff = false; liveFails = 0; live = list;",
+   "new": "liveOff = false; live = list;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_an_answer_after_the_switch_went_off_is_taken",
+   "file": "web/home/games.js",
+   "old": "look(LIVE_URL).then(function (data) { if (mine === liveRound) {",
+   "new": "look(LIVE_URL).then(function (data) { if (true) {",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_seconds_have_no_cap",
+   "file": "web/home/games.js",
+   "old": "Math.min(Math.floor(secs), 359999)",
+   "new": "Math.floor(secs)",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_a_neutral_dot_has_the_color_of_black",
+   "file": "web/home/games.css",
+   "old": ".gdot.cn { --c: #8a8693; }",
+   "new": ".gdot.cn { --c: #b3afb9; }",
+   "test": "python3 tests/scripts/test_web_home_games.py TheStyle"
   }
  ]
 }

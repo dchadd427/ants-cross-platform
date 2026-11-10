@@ -41,7 +41,7 @@ const M = 'TREASURE.LVL';
     same('the map is the one in the id when the entry names none; a map of the players has its name and no picture of its own', [Games.liveOf({ id: 'Pop_Corn-20261109-120000Z' }, RULES0).map, Games.liveOf({ id: 'Pop_Corn-20261109-120000Z' }, RULES0).mapKey], ['Pop_Corn.LVL', '']);
     same('at most four players, and one that is no text or has a character that a name has not is dropped', Games.liveOf(LIVE('A-20261109-120000Z', { players: ['Green', 7, 'Red\u202ex', 'Blue', 'Black', 'Green', 'Red'] }), RULES0).who.map((w) => w.name), ['Green', 'Blue', 'Black', 'Green']);
     same('a player that is not a color word keeps its text and takes no color of the four', Games.liveOf(LIVE('A-20261109-120000Z', { players: ['Purple (Sam)'] }), RULES0).who, [{ seat: -1, name: 'Purple (Sam)' }]);
-    for (const [what, value] of [['no object', null], ['a list', []], ['a text', 'x'], ['no id', { map: 'A.LVL' }], ['an id that is a number', { id: 5, map: M }], ['an id with a slash', { id: 'A/../B-20261109-120000Z', map: M }], ['an id with no time', { id: 'A-2026', map: M }], ['an id of 40 characters', { id: 'A'.repeat(40) + '-20261109-120000Z', map: M }],
+    for (const [what, value] of [['no object', null], ['a list', []], ['a text', 'x'], ['no id', { map: 'A.LVL' }], ['an id that is a number', { id: 5, map: M }], ['an id with a slash', { id: 'A/../B-20261109-120000Z', map: M }], ['an id with no time', { id: 'A-2026', map: M }], ['an id of 40 characters', { id: 'A'.repeat(40) + '-20261109-120000Z', map: M }], ['an id with a stem of 25 characters (the door cuts a stem at 24)', { id: 'A'.repeat(25) + '-20261109-120000Z', map: M }], ['an id with a dot in its stem', { id: 'A.B-20261109-120000Z', map: M }],
                                  ['an id with markup', { id: '<b>-20261109-120000Z', map: M }], ['an id with a query', { id: 'A-20261109-120000Z?x=1', map: M }], ['an id with a second parameter', { id: 'A-20261109-120000Z&a=b', map: M }], ['an id with a fragment', { id: 'A-20261109-120000Z#x', map: M }],
                                  ['an id with five digits after the second', { id: 'A-20261109-120000Z-12345', map: M }], ['an id with a negative count', { id: 'A-20261109-120000Z--1', map: M }], ['an id that starts with javascript:', { id: 'javascript:A-20261109-120000Z', map: M }], ['an id with a blank in front', { id: ' A-20261109-120000Z', map: M }],
                                  ['an id with a line end after it', { id: 'A-20261109-120000Z\n', map: M }], ['a map with markup', { id: 'A-20261109-120000Z', map: '<b>' }], ['a map with a dot', { id: 'A-20261109-120000Z', map: '..' }], ['a map that is a bare name', { id: 'A-20261109-120000Z', map: 'TREASURE' }],
@@ -54,6 +54,7 @@ const M = 'TREASURE.LVL';
     same('a map is the file name as the door sends it: an original by its key, a community map (with a blank, a dash or a test suffix) under its name', named.map((e) => [e.map, e.mapKey, e.mapName]), [['TREASURE.LVL', 'treasure', 'Treasure'], ['DRY LAND.lvl', '', 'DRY LAND'], ['Dry Land.LVL', '', 'Dry Land'], ['A-B.LVL', '', 'A-B'], ['Pop Corn ~test-0a1b2c3d.lvl', '', 'Pop Corn']]);
     check('the very rule of a room\'s row decides which file name is good (a name of 64 characters is, one of 65 is not; no ending is not)', Games.liveOf({ id: 'X-20261109-120000Z', map: 'A'.repeat(60) + '.LVL' }, RULES0) !== null && Games.liveOf({ id: 'X-20261109-120000Z', map: 'A'.repeat(61) + '.LVL' }, RULES0) === null && Games.liveOf({ id: 'X-20261109-120000Z', map: 'TREASURE.TXT' }, RULES0) === null);
     same('a match of a map with a long name has the name cut at 28 characters', Games.liveOf({ id: 'X-20261109-120000Z', map: 'A'.repeat(40) + '.lvl' }, RULES0).mapName, 'A'.repeat(28));
+    check('an id with a stem of 24 characters is good (the longest the door makes)', Games.liveOf({ id: 'A'.repeat(24) + '-20261109-120000Z', map: M }, RULES0) !== null);
     same('an id with a count after the second is good', Games.liveOf({ id: 'A-20261109-120000Z-2' }, RULES0).id, 'A-20261109-120000Z-2');
     same('a list: its matches in the order given, a bad one dropped, an id once', Games.parseLive(answer([LIVE('A-20261109-120000Z'), 'x', LIVE('B-20261109-120001Z'), LIVE('A-20261109-120000Z', { map: 'Z' }), { id: 'bad' }]), RULES0).map((e) => e.id), ['A-20261109-120000Z', 'B-20261109-120001Z']);
     const many = Games.parseLive(answer(Array.from({ length: 10000 }, (_, i) => LIVE('M-20261109-' + String(100000 + i) + 'Z'))), RULES0);
@@ -64,6 +65,7 @@ const M = 'TREASURE.LVL';
     check('an empty list is a list (nothing is playing)', Games.parseLive({ live: [] }, RULES0).length === 0);
     same('the waits: 10 s doubled for every failure up to 5 minutes, then 0 to +20 % (never less than 10 s)', [Games.liveDelay(0, 0), Games.liveDelay(0, 1), Games.liveDelay(0, 0.5), Games.liveDelay(1, 0), Games.liveDelay(2, 0), Games.liveDelay(5, 0), Games.liveDelay(50, 0), Games.liveDelay(0, -5), Games.liveDelay(0, 9)],
         [10000, 12000, 11000, 20000, 40000, 300000, 300000, 10000, 12000]);
+    same('the seconds are at most 359999 (99:59:59), and a number below it is whole', [Games.liveOf({ id: 'A-20261109-120000Z', seconds: 1e9 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: 359999.9 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', turns: 1e12 }, RULES0).seconds], [359999, 359999, 359999]);
     same('the least wait is the door\'s own pace: 10 s', Games.LIVE_EVERY, 10000);
     same('how long it has run, as a clock', [Games.clockText(0), Games.clockText(7), Games.clockText(60), Games.clockText(125), Games.clockText(3665)], ['0:00', '0:07', '1:00', '2:05', '61:05']);
 }
@@ -169,6 +171,9 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     site.live.reject = false; site.live.body = answer(SAMPLE);
     await wait(env, 25000);
     check('a door that answers later brings the rows (the switch with them)', liveRows(env).length === 2 && boxOf(env).hidden === false && first(popOf(env), 'gfrow').hidden === false);
+    await wait(env, 13000);
+    const t = site.live.times;
+    check('a good answer ends the slow pace: the next look is 10 to 12 s after it, not 20 s or more', t.length === 3 && t[2] - t[1] >= 10000 && t[2] - t[1] <= 12500, JSON.stringify(t));
 }
 {   // the hand-off: START reaches the page; no more looks
     const env = await livePage({ search: '?room=k7m2xq', options: { stayHome: false } });
@@ -239,6 +244,35 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     await wait(env, 25000);
     check('... and a second failure waits 40 s: nothing 25 s after it', looksAtLive(env) === 2, looksAtLive(env));
 }
+{   // the 10 s are counted from the END of a look: a look that takes 7 s holds the next one back until 10 s after its end
+    const site = R.fakeSite(); site.live.reject = false; site.live.defer = true; site.live.body = answer(SAMPLE);
+    const env = await page({ site, options: { popover: false } });
+    await wait(env, 7000);
+    check('(a look is out for 7 s)', looksAtLive(env) === 1 && site.live.waiting.length === 1);
+    site.live.waiting[0]();
+    await flush();
+    await wait(env, 3000);
+    check('(it ended 3 s ago: 10 s after its start)', liveRows(env).length === 2 && looksAtLive(env) === 1, looksAtLive(env));
+    env.hide(true); env.hide(false);
+    await flush();
+    check('a tab that shows again 10 s after the START of a look and 3 s after its END asks nothing (the 10 s run from the end)', looksAtLive(env) === 1, looksAtLive(env));
+    await wait(env, 8500);
+    check('... the next look comes 10 to 12 s after the end', looksAtLive(env) === 2, looksAtLive(env));
+}
+{   // an answer that comes after the switch was turned off is not taken
+    const site = R.fakeSite(); site.live.reject = false; site.live.defer = true; site.live.body = answer([LIVE('STALE-20261109-120000Z')]);
+    const env = await page({ site, options: { popover: false } });
+    await wait(env, 2000);
+    check('(a look is out)', looksAtLive(env) === 1 && site.live.waiting.length === 1);
+    const box = checkboxOf(env);
+    box.checked = false; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
+    await flush();
+    site.live.waiting[0]();
+    await flush();
+    box.checked = true; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
+    await flush();
+    check('the answer of a look that was out when the switch went off is thrown away: no row of it when the switch is on again, and a new look is asked at once', liveRows(env).length === 0 && looksAtLive(env) === 2, [liveRows(env).length, looksAtLive(env)].join());
+}
 {   // the focus on a Watch stays when the rows are made again
     const env = await livePage();
     const first0 = watchOf(liveRows(env)[0]), id0 = first0.getAttribute('data-live');
@@ -255,6 +289,8 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
 {   // the dots of the players: a ring for a computer player, a neutral dot for a color that is none of the four
     const env = await livePage({ rows: [LIVE('TREASURE-20261109-120000Z', { players: ['Green (Ann)', 'Red (Bot (Hard))', 'Purple (Sam)', 'Black (Bot (Easy))'] })] });
     same('a person is a filled dot of the color, a bot a ring of the color, an unknown color a neutral dot (never the Black one)', find(liveRows(env)[0], 'gdot').map((d) => d.className.replace('gdot ', '')), ['player c0', 'bot c1', 'player cn', 'bot c3']);
+    const modern = await livePage({ rows: [LIVE('TREASURE-20261109-120000Z', { players: ['Green (Ann)', 'Red (Pip (bot, Hard))', 'Blue (Kit (bot, idle))', 'Black (Abbott)'] }), LIVE('ISLANDS-20261109-115900Z', { map: 'ISLANDS.LVL', players: ['Green (Robot)', 'Red (Pip (bot))', 'Blue (O\'Neil (x))', 'Black (Bot (Medium))'] })] });
+    same('a server names its computer players "Pip (bot, Hard)" or "Kit (bot, idle)" (a ring), and a person whose name only has bot in it (Abbott, Robot) or a bracket (O\'Neil (x)) stays a filled dot', liveRows(modern).map((li) => find(li, 'gdot').map((d) => d.className.replace('gdot ', ''))), [['player c0', 'bot c1', 'bot c2', 'player c3'], ['player c0', 'bot c1', 'player c2', 'bot c3']]);
 }
 
 // ---- 4. the switch ----

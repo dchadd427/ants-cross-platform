@@ -61,7 +61,7 @@
 .gsub { margin: 16px 0 8px; font-size: 18px; font-weight: 500; line-height: 1.2; color: #a8cfc0; }
 .gnolive { margin: 0; padding: 12px 4px; }
 .glive-mark { display: inline-block; align-self: center; padding: 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; line-height: 18px; text-transform: uppercase; color: #fff; background: #c0392b; border-radius: 3px; }
-.gwho { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; flex: 1 0 9em; min-width: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--cream); }       /* (three lines of names at the most: the whole list is the button's name and the tip) */
+.gwho { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; flex: 1 1 9em; min-width: 0; overflow: hidden; overflow-wrap: anywhere; color: var(--cream); }       /* (three lines of names at the most: the whole list is the button's name and the tip) */
 .glen { color: #a8cfc0; font-variant-numeric: tabular-nums; }
 .gwatch { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 72px; min-height: 44px; text-decoration: none; }
 

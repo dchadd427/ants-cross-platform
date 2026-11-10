@@ -38,6 +38,7 @@
     var LIVE_EVERY = 10000, LIVE_CAP = 300000;           // ms between two looks at /live (never less: the page's own door asks no faster), the longest wait after failures
     var LIVE_MAX = 50;                                   // matches that are shown (the door lists 50 at the most)
     var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
+    var BOT_NAME = /^Bot \(|\(bot(, [^()]+)?\)$/;           // a computer player's name as a server writes it ("Pip (bot, Hard)", "Kit (bot, idle)"; the older "Bot (Medium)"): the rule of the lobby's name check, which keeps these names from people
     var SEATS = ['Green', 'Red', 'Blue', 'Black'];       // the colors of seats 0 - 3, in the words of the door's players strings
     var CHOICE_KEY = 'ants.home.games.live';             // the one thing that the Games list keeps in this browser: '0' when the matches in progress are turned off
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
@@ -498,7 +499,7 @@
             var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', clockText(e.seconds) + TEXT.soFar);
             var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch);
             dots.setAttribute('aria-hidden', 'true');
-            e.who.forEach(function (w) { var d = el('i', 'gdot ' + (/^Bot \(/.test(w.name) ? 'bot' : 'player')); d.className += w.seat < 0 ? ' cn' : ' c' + w.seat; dots.appendChild(d); });          // (a computer player is a ring, as in the open rooms; a color that the door does not know is a neutral dot)
+            e.who.forEach(function (w) { var d = el('i', 'gdot ' + (BOT_NAME.test(w.name) ? 'bot' : 'player')); d.className += w.seat < 0 ? ' cn' : ' c' + w.seat; dots.appendChild(d); });          // (a computer player is a ring, as in the open rooms; a color that the door does not know is a neutral dot)
             who.textContent = names; who.setAttribute('title', names);
             top.appendChild(el('span', 'gname', e.mapName)); top.appendChild(el('span', 'glive-mark', TEXT.liveMark));
             line.appendChild(dots); line.appendChild(who); line.appendChild(len);
@@ -823,7 +824,7 @@
         }));
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeToast(); }));
         var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); pollLive(); })) : null, lastFocus = null;
-        if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden', 'class'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
+        if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
         doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (isOpen) { paintList(); place(); } }

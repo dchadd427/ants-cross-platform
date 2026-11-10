@@ -193,6 +193,15 @@ class TheStyle(unittest.TestCase):
     def test_watch_has_the_grid_place_of_join(self):
         self.assertIn(".gdock .gjoin, .gdock .gwatch { grid-area: j; }", read("web", "home", "home.css"), "without its area Watch is put by the grid's own order, not at the row's right edge")
 
+    def test_a_dot_of_an_unknown_color_is_neutral_and_not_the_color_of_a_seat(self):
+        color = {selector.strip(): body.strip() for selector, body in self.rules if selector.strip().startswith(".gdot.c")}
+        self.assertEqual(color[".gdot.cn"], "--c: #8a8693;", "a color that the door does not know has its own neutral dot")
+        self.assertEqual(len({color[".gdot.c%s" % k] for k in ("0", "1", "2", "3", "n")}), 5, "no seat's color is used for the neutral dot (nor twice)")
+
+    def test_the_names_of_a_match_can_shrink_so_they_stay_out_of_watch(self):
+        who = next(body for selector, body in self.rules if selector.strip() == ".gwho")
+        self.assertIn("flex: 1 1 9em;", who, "a names box that cannot shrink (flex-shrink 0) runs under Watch in a narrow row")
+
     def test_the_toast_is_over_the_page_and_takes_no_room(self):
         toast = next(body for selector, body in self.rules if selector.strip() == ".gtoast")
         self.assertIn("position: fixed;", toast, "a notice is out of the flow: nothing under it moves")
