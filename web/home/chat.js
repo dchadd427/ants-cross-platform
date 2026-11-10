@@ -21,12 +21,11 @@
     var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
     var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
-    var STRIP = 62, BELOW = 12;                                        // px: the strip's height, and the room under the dock (chat.css)
     var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
     var TEXT = {
-        title: 'Global chat', short: 'Chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
+        title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
-        fold: 'Fold chat', open: 'Open chat', crowded: 'No room to open it: close a notice',  mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
+        fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my '
     };
@@ -102,11 +101,10 @@
         var visit = env.go || function (url) { win.location.assign(url); };
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
-        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], crowded = false, stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0, crowd: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
+        var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
         var busy = false, menuOn = false;                                       // (a POST of the login is on its way; the small menu of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
-        var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a desktop opens with the panel out, a phone or a short window with the strip (home.css has the same breakpoints)
-        var tight = 0;                                                           // what Home leaves under its bar: 0 the room for the panel, 1 too little for the open panel (the strip shows), 2 too little for the strip (nothing shows)
+                var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
@@ -124,14 +122,12 @@
         // The markup: a header (the title, the unread count, the last line for the strip, who is here, the fold button) and a body (the log, a note, the form, the login chip's place)
         var box = el('section', 'gc'); box.id = 'gchat'; box.setAttribute('aria-labelledby', 'gchat-title');
         var head = el('div', 'gc-head'), title = el('h2', 'gc-title'); title.id = 'gchat-title';
-        var shortTitle = el('span', 'gc-short', TEXT.short); shortTitle.setAttribute('aria-hidden', 'true');
-        put(title, [el('span', 'gc-long', TEXT.title), shortTitle]);
+        title.textContent = TEXT.title;
         var pill = el('span', 'gc-unread'); pill.setAttribute('aria-hidden', 'true'); pill.hidden = true;
-        var peek = el('span', 'gc-peek'), peekWho = el('bdi', 'gc-pw'), peekText = el('bdi', 'gc-pt'), here = el('span', 'gc-online'), hereText = el('span', 'gc-on');
-        put(peek, [peekWho, peekText]);
+        var here = el('span', 'gc-online'), hereText = el('span', 'gc-on');
         put(here, [el('i', 'gc-dot'), hereText]);
         var fold = el('button', 'btn gc-fold'); fold.type = 'button'; fold.setAttribute('aria-controls', 'gchat-body'); fold.appendChild(el('i', 'gc-mark'));
-        put(head, [title, pill, peek, here, fold]);
+        put(head, [title, pill, here, fold]);
         var body = el('div', 'gc-body'); body.id = 'gchat-body';
         var log = el('div', 'gc-log'); log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite'); log.setAttribute('aria-label', TEXT.log); log.setAttribute('tabindex', '0');
         log.appendChild(el('p', 'gc-sys', TEXT.welcome));
@@ -159,16 +155,7 @@
 
         // ---- what is seen -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function visible() { return !doc.hidden; }
-        function fit() {                                                         // the panel stays under Home's bar: with too little room the strip shows instead, or nothing when not even the strip fits
-            var bar = host.querySelector ? host.querySelector('.hbar') : null, least = 0, room, was = tight;
-            try { least = parseFloat(win.getComputedStyle(box).getPropertyValue('--gc-min')) || 0; } catch (e) { least = 0; }       // (the least height of the open panel is the style's: chat.css)
-            if (least && typeof host.clientHeight === 'number' && bar && typeof bar.offsetHeight === 'number') {
-                room = host.clientHeight - bar.offsetHeight;
-                tight = room >= least + BELOW ? 0 : room >= STRIP + BELOW ? 1 : 2;
-            } else tight = 0;
-            return tight !== was;
-        }
-        function seen() { return isHome && open && !tight && visible(); }                 // the log is on the screen and somebody can read it
+        function seen() { return isHome && open && visible(); }                 // the log is on the screen and somebody can read it
         function unread() { var n = 0; for (var i = 0; i < feed.length; i++) if (feed[i].fresh) n++; return n; }
         function row(e) {
             var r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (e.own ? ' gc-me' : ''));
@@ -209,15 +196,13 @@
         }
         function paint() {                                                       // everything that is not a line, from the model
             if (seen()) feed.forEach(function (e) { e.fresh = false; });
-            var n = unread(), last = feed.length ? feed[feed.length - 1] : null, dead = typeof Socket !== 'function';
-            var out = open && !tight;                                                // (the panel that shows: a window with no room for it shows the strip, and the visitor's wish stays for when the room is back)
-            box.setAttribute('data-state', state); box.setAttribute('data-open', out ? 'true' : 'false'); box.setAttribute('data-you', you ? 'yes' : 'no'); box.hidden = tight === 2;
+            var n = unread(), dead = typeof Socket !== 'function';
+            var out = open;
+            box.setAttribute('data-state', state); box.setAttribute('data-open', out ? 'true' : 'false'); box.setAttribute('data-you', you ? 'yes' : 'no');
             body.hidden = !out;
             fold.setAttribute('aria-expanded', out ? 'true' : 'false');
-            fold.setAttribute('aria-label', out ? TEXT.fold : TEXT.open + (open && tight ? ', ' + TEXT.crowded : '') + (n ? ', ' + n + TEXT.unread : ''));
+            fold.setAttribute('aria-label', out ? TEXT.fold : TEXT.open + (n ? ', ' + n + TEXT.unread : ''));
             pill.textContent = n > 99 ? '99+' : String(n); pill.hidden = !n;
-            peekWho.textContent = !crowded && state !== 'offline' && last ? last.who + ': ' : '';
-            peekText.textContent = crowded ? TEXT.crowded : state === 'offline' ? TEXT.offline : last ? last.text : state === 'connecting' ? TEXT.connecting : you ? '' : ERR.readonly;
             hereText.textContent = state === 'live' ? (people !== null ? (people > LIMIT.here ? TEXT.many : people) + TEXT.online : '') : state === 'connecting' ? TEXT.connecting : TEXT.reconnecting;
             here.hidden = dead || !hereText.textContent;
             var live = state === 'live';
@@ -402,18 +387,12 @@
         forgetBtn.addEventListener('click', guard(function () { leave(FORGET); }));
         moreBtn.addEventListener('click', guard(function () { setMenu(!menuOn); }));
         if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setOpen(true); if (outBtn.focus) outBtn.focus(); }));
-        function crowd() {                                                       // a press that wants the panel with no room for it: the strip says so for a few seconds
-            if (!tight) return;
-            crowded = true; stop('crowd');
-            timers.crowd = setTimeout(guard(function () { timers.crowd = 0; crowded = false; render(); }), MS.notice);
-            render();
-        }
         form.addEventListener('submit', guard(function (e) {
             if (e && e.preventDefault) e.preventDefault();
             if (sendLine(field.value) === '') field.value = '';
         }));
-        fold.addEventListener('click', guard(function () { setOpen(tight ? true : !open); crowd(); if (fold.focus) fold.focus(); }));
-        head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) { setOpen(true); crowd(); } else if (tight && !(e && e.target && fold.contains && fold.contains(e.target))) crowd(); }));       // (a folded strip opens wherever it is pressed)
+        fold.addEventListener('click', guard(function () { setOpen(!open); if (fold.focus) fold.focus(); }));
+        head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) setOpen(true); }));       // (a folded header opens wherever it is pressed)
         box.addEventListener('keydown', guard(function (e) {
             if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (moreBtn.focus) moreBtn.focus(); return; }       // (the small menu first, then the panel)
             if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); }
@@ -425,13 +404,11 @@
 
         paint();
         go();
-        win.addEventListener('resize', guard(function () { if (fit()) render(); }));
-        try { if (typeof win.ResizeObserver === 'function') new win.ResizeObserver(guard(function () { if (fit()) render(); })).observe(host); } catch (e) { /* the window's own resize is enough */ }       // (a notice that comes or goes above Home changes Home's height, not the window's)
         return {
             root: box, slot: slot, field: field, say: sendLine, state: function () { return state; },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
-            shown: guard(function (on) { isHome = !!on; fit(); if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
+            shown: guard(function (on) { isHome = !!on; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
         };
     }
 

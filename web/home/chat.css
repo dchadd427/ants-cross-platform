@@ -3,11 +3,9 @@
 .gc { order: 5; flex: none; margin: 0 24px 22px; display: flex; flex-direction: column; height: clamp(160px, 28vh, 260px); color: var(--cream); background: var(--inset);
     border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
 .gc[data-open="false"] { height: auto; }
-.gc[hidden] { display: none; }
 .gc-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 2px 10px 2px 16px; }
 .gc[data-open="false"] .gc-head { cursor: pointer; }
 .gc-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
-.gc-short, .gc-peek { display: none; }
 .gc-unread { flex: none; min-width: 24px; padding: 0 9px; font-size: 15px; line-height: 22px; text-align: center; color: var(--cream); background: #0b1a17; border: 1px solid #1f5a49; border-radius: 12px; }
 .gc-unread[hidden], .gc-online[hidden] { display: none; }
 .gc-online { flex: none; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: #a8cfc0; }

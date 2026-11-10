@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """The players list of Home (web/home/players.js and players.css, docs/HOME_SCREEN.md "The players list", docs/HUB.md "Presence"; run by ./run_tests.sh --fast and by the CI).
 
-The list shows who has the front page open right now: a panel at the right of the Yard on a wide window, a button in the bar's first row and a sheet on a phone, a button in the Yard's corner and a drawer in any
-other window. It speaks through the chat dock's socket, is loaded by web/home/home.js after the dock, and every word it shows is text from strangers. What this file checks:
+The list shows who has the front page open right now: a narrow column at the right of the Games list, or the Players view of a phone. It speaks through the chat dock's socket, is loaded by web/home/home.js after the dock, and every word it shows is text from strangers. What this file checks:
 
   - the page and the other pages: web/lobby.html does not link the list, no other file names it, and the hub's door is still the dock's script alone;
   - the loader in home.js: the two files, once, after the dock is mounted, mounted when BOTH have come, given the parts of the bar that it needs, inert with the bars during the hand-off, and what goes wrong stays;
@@ -86,7 +85,7 @@ class TheLoaderInHome(unittest.TestCase):
         self.assertEqual(sorted(set(re.findall(r"home/players\w*", code_of(self.js)))), ["home/players"])
 
     def test_it_is_given_the_dock_and_the_parts_of_the_bar_that_it_uses_and_nothing_of_the_page_but_the_bridge(self):
-        self.assertIn("players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held);", self.js)
+        self.assertIn("players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held);", self.js)
 
     def test_it_is_inert_with_the_bars_and_the_dock_and_a_list_that_comes_late_is_inert_from_the_start(self):
         self.assertIn("[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) {", self.js)
@@ -95,7 +94,7 @@ class TheLoaderInHome(unittest.TestCase):
     def test_the_part_loader_is_the_one_that_the_games_list_has_and_a_part_that_throws_stays_in_it(self):
         self.assertIn("function one() { if (--parts === 0) { try { onReady(); } catch (e) { /* the part is its own */ } } }", self.js)
         self.assertIn("if (win.AntsHomePlayers) players =", self.js, "a script that did not define the list mounts nothing")
-        self.assertIn("if (c) mirror(c, tabBtns.players.pill);", self.js, "the phone's Players tab shows the list's count")
+        self.assertIn("if (c) mirror(c, tabBtns.players.pill);", read("web", "home", "home.js"), "the phone's Players tab shows the list's count")
 
 
 class TheFolderAndTheScript(unittest.TestCase):
@@ -159,16 +158,17 @@ class TheStyle(unittest.TestCase):
         return next(body for sel, body in self.rules if sel.strip() == selector)
 
     def test_the_panel_is_always_docked_a_column_of_homes_grid_or_the_phones_view(self):
-        wide = re.search(r"var WIDE = '([^']*)';", self.js).group(1)
-        self.assertEqual(wide, "all", "the script's question 'is the panel docked?' is answered yes by every window: there is no sheet and no drawer to open")
+        for name in ("WIDE", "docked(", "data-sheet", "pl-scrim", "pl-btn", "pl-bar", "pl-close", "tabbable"):
+            self.assertNotIn(name, self.js, "there is no sheet, drawer or button to open the panel: " + name)
         body = self.rule(".pl")
         self.assertIn("display: flex; flex-direction: column; min-height: 0;", body)
         for name in ("position", "z-index", "top:", "right:", "width"):
             self.assertNotIn(name, body, "the panel is a box of Home's grid (home.css, .pl-on .hmain: 220 to 280 px), not a placed layer: " + name)
         self.assertIn(".pl-on .hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }", read("web", "home", "home.css"))
 
-    def test_the_parts_of_the_sheet_are_not_drawn_and_a_phone_has_no_fold_to_leave_the_view_shrunk(self):
-        self.assertIn(".pl-btn, .pl-bar, .pl-scrim, .pl-close { display: none; }", self.css)
+    def test_a_phone_has_no_fold_to_leave_the_view_shrunk(self):
+        for name in (".pl-btn", ".pl-bar", ".pl-scrim", ".pl-close", ".pl-x", ".pl-ppl"):
+            self.assertNotIn(name, self.css, name)
         self.assertIn('@media (max-width: 700px) { .pl-fold { display: none; } .pl[data-folded="true"] .pl-body { display: flex; } }', self.css)
         self.assertNotIn("z-index", self.css, "nothing here is a layer over the page")
 
@@ -203,7 +203,7 @@ class TheStyle(unittest.TestCase):
     def test_nothing_scrolls_sideways_and_a_hidden_part_stays_hidden(self):
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)")
         hidden = next(sel for sel, body in self.rules if body.strip() == "display: none;" and ".pl-root[hidden]" in sel)
-        for part in (".pl-root[hidden]", ".pl-bar[hidden]", ".pl-btn[hidden]", ".pl-scrim[hidden]", ".pill[hidden]", ".pl-dot[hidden]", ".pl-status:empty"):
+        for part in (".pl-root[hidden]", ".pill[hidden]", ".pl-dot[hidden]", ".pl-status:empty"):
             self.assertIn(part, hidden, part)
 
     def test_reduced_motion_needs_nothing_here(self):

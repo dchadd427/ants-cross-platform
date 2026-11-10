@@ -81,7 +81,7 @@
             return b;
         }
 
-        // Home: the top bar, the Yard's stand-in and the card that says that the game is opening
+        // Home: the top bar, the body and the card that says that the game is opening
         var bar = el('header', 'hbar');
         var quickHost = stub('quick host', TEXT.quickHost), quickJoin = stub('quick join', TEXT.quickJoin);
         var mine = button('hchip mine', '', function () { openRoom(); });
@@ -306,7 +306,7 @@
         function wantPlayers() {                            // the players list (players.js, players.css), after the dock: it uses its socket
             if (askedPlayers || !dock) return;
             askedPlayers = true;
-            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, bar: right, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
+            lazy('home/players', function () { if (win.AntsHomePlayers) players = win.AntsHomePlayers.mount({ doc: doc, win: win, host: host, yard: main, quickHost: quickHost, games: gamesBtn, dock: dock, page: page }); inert(held); var c = players && players.root.querySelector ? players.root.querySelector('.pl-count') : null; if (c) mirror(c, tabBtns.players.pill); });
         }
 
         return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };

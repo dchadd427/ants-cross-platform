@@ -1,5 +1,4 @@
-// The players list of Home (docs/HOME_SCREEN.md, "The players list"): who has the front page open right now. A panel at the right of the Yard on a wide window; on a phone a button, "Players (N)", that opens
-// the same panel as a sheet (a drawer on the right where the bar has no room). It speaks through the chat dock's socket (docs/HUB.md, "Presence": up {"t":"who"} and {"t":"here","at",...}, down {"t":"who",...}),
+// The players list of Home (docs/HOME_SCREEN.md, "The players list"): who has the front page open right now. A panel: the narrow column at the right of the Games list on Home, or the Players view of a phone. It speaks through the chat dock's socket (docs/HUB.md, "Presence": up {"t":"who"} and {"t":"here","at",...}, down {"t":"who",...}),
 // so a page has one hub socket; web/home/home.js loads it after the chat dock, with web/home/players.css. ES5, no module system: a page gets AntsHomePlayers, node gets module.exports
 // (tests/scripts/web_home_players_check.js).
 //   * Everything the hub sends is text from strangers: names are cleaned and cut as the chat's are, a map is a file name that the page's own rule accepts, every number is checked, a frame that is wrong in any
@@ -14,19 +13,18 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
-    var LIMIT = { rows: 200, name: 32, seats: 4, ids: 1e9, here: 500, badge: 99, map: 28 };       // (the hub's own: 200 rows, names of 32, four colors; a map's name is cut for the line as the Games list cuts it)
+    var LIMIT = { rows: 200, name: 32, seats: 4, ids: 1e9, here: 500, map: 28 };       // (the hub's own: 200 rows, names of 32, four colors; a map's name is cut for the line as the Games list cuts it)
     var MS = { poll: 1000, tell: 3000, note: 4000 };                      // (poll: the page looks at its own room this often; tell: the hub is told what changed at most this often)
-    var WIDE = 'all';                                                     // the panel is always docked: a column at the right of the games (players.css has no sheet or drawer to show), or the Players view of a phone; a window that matches nothing keeps the button and the sheet
     var ROOM = /^[a-z0-9_-]{1,32}$/;
     var STATUS = ['look', 'wait', 'play'];
     var GROUPS = [['mod', 'Moderators'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing']];
     var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing' };
     var TEXT = {
         title: 'Players', here: ' here now', you: 'you', mod: 'mod', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
-        guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', badges: '99+', player: ' player', players: ' players', of: ' of ',
+        guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
         empty: 'Just you here. Host a game!', emptyNote: 'People who log in with Discord show up here by name.', host: '+ Host a game',
         off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.',
-        fold: 'Fold the list', unfold: 'Open the list', close: 'Close the list', button: 'Players'
+        fold: 'Fold the list', unfold: 'Open the list'
     };
 
     // ---- the pure parts ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -108,7 +106,7 @@
     }
 
     // ---- the list ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, win, host (Home's div), yard, bar (the bar's right side), quickHost and games (the bar's buttons), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, state, model, open, sync }, or null
+    // mount({ doc, win, host (Home's div), yard (the box that it mounts into), quickHost and games (the bar's buttons), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, state, model, open, sync }, or null
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, dock = env.dock, page = env.page || {};
         var Chat = win.AntsHomeChat, rules = win.AntsLobbyRules, Home = win.AntsHome;
@@ -116,7 +114,7 @@
         var now = env.now || function () { return Date.now(); };
         var yard = env.yard || host;
         var phase = 'none', supported = null, live = false, asked = false, you = null, model = fresh();      // phase: 'none' (nothing shows), 'off' (the hub is not there), 'on'
-        var me = null, open = false, opener = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], timers = { poll: 0, note: 0 };
+        var me = null, doing = null, sentSig = null, lastSent = null, painted = '', joins = [], timers = { poll: 0, note: 0 };
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -128,40 +126,26 @@
         function guard(fn) { return function () { try { return fn.apply(this, arguments); } catch (e) { if (env.error) env.error(e); return undefined; } }; }
         function button(cls, text, onclick) { var b = el('button', 'btn ' + cls, text); b.type = 'button'; if (onclick) b.addEventListener('click', guard(onclick)); return b; }
         function stop(name) { if (timers[name]) { clearTimeout(timers[name]); timers[name] = 0; } }
-        function docked() { try { return !!win.matchMedia && win.matchMedia(WIDE).matches; } catch (e) { return false; } }
         function countText(n) { return n > LIMIT.here ? TEXT.many : String(n); }
-        function badge(n) { return n > LIMIT.badge ? TEXT.badges : String(n); }          // (the buttons are small: 99+)
         function find(selector) { try { return host.querySelector ? host.querySelector(selector) : null; } catch (e) { return null; } }
         function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
-        // The markup. The panel, the corner button and the scrim stand in the Yard (one box, `root`, that Home can make inert); the bar's own button stands at the right of the bar (a phone's first row).
+        // The markup: one box, `root`, that Home can make inert, with the panel in it
         var panel = el('section', 'pl'); panel.id = 'players'; panel.setAttribute('aria-labelledby', 'players-title');
-        panel.setAttribute('data-state', 'off'); panel.setAttribute('data-folded', 'false'); panel.setAttribute('data-sheet', 'false');
+        panel.setAttribute('data-state', 'off'); panel.setAttribute('data-folded', 'false');
         var head = el('div', 'pl-head'), title = el('h2', 'pl-title', TEXT.title); title.id = 'players-title';
-        var total = el('span', 'pill pl-count'), dot = el('i', 'pl-dot'), fold = button('pl-fold'), close = button('pl-fold pl-close');
+        var total = el('span', 'pill pl-count'), dot = el('i', 'pl-dot'), fold = button('pl-fold');
         dot.setAttribute('aria-hidden', 'true'); total.hidden = true; dot.hidden = true;
         fold.appendChild(el('i', 'pl-mark')); fold.setAttribute('aria-controls', 'players-body');
-        close.appendChild(el('i', 'pl-x')); close.setAttribute('aria-label', TEXT.close);
-        put(head, [title, total, dot, fold, close]);
+        put(head, [title, total, dot, fold]);
         var body = el('div', 'pl-body'), youBox = el('div', 'pl-you'), youList = el('ul', 'pl-cards'), rule = el('hr', 'pl-div'), status = el('p', 'pl-status'), list = el('div', 'pl-list'), offBox = el('div', 'pl-note');
         body.id = 'players-body'; youBox.appendChild(youList);
         status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
         list.setAttribute('tabindex', '0'); list.setAttribute('role', 'region'); list.setAttribute('aria-label', TEXT.title);
         put(panel, [head, body]);
-        var corner = button('pl-btn'), barBtn = button('pl-bar'), scrim = el('div', 'pl-scrim'), cornerPill = el('span', 'pill'), barPill = el('span', 'pill');
-        [[corner, cornerPill], [barBtn, barPill]].forEach(function (p) {
-            var icon = el('i', 'pl-ppl'), word = el('span', 'pl-word', TEXT.button);
-            icon.setAttribute('aria-hidden', 'true'); p[1].hidden = true;
-            put(p[0], [icon, word, p[1]]);
-            p[0].setAttribute('aria-haspopup', 'dialog'); p[0].setAttribute('aria-expanded', 'false'); p[0].setAttribute('aria-label', TEXT.title);
-            p[0].addEventListener('click', guard(function () { show(p[0]); }));
-        });
-        scrim.hidden = true;
         var root = el('div', 'pl-root'); root.hidden = true;
-        put(root, [panel, corner, scrim]);
+        root.appendChild(panel);
         yard.appendChild(root);
-        barBtn.hidden = true;
-        if (env.bar) env.bar.insertBefore(barBtn, env.bar.firstChild || null);
 
         // ---- what is drawn ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function ownCode() { var c = page.client ? page.client() : null; return c && c.code ? c.code : ''; }
@@ -228,7 +212,7 @@
             }
             body.appendChild(status);
             if (empty) {
-                var n = el('div', 'pl-note'), hostBtn = button('pl-host', TEXT.host, function () { var b = quick(); hide(false); if (b && !b.disabled) b.click(); });
+                var n = el('div', 'pl-note'), hostBtn = button('pl-host', TEXT.host, function () { var b = quick(); if (b && !b.disabled) b.click(); });
                 hostBtn.disabled = !(q && !q.disabled);
                 list.appendChild(put(n, [el('p', '', TEXT.empty), el('p', 'small', TEXT.emptyNote), hostBtn]));
             } else {
@@ -243,42 +227,15 @@
         }
         function paint() {
             var shown = phase !== 'none', on = phase === 'on';
-            if (!shown) hide(false);                                     // (a list that goes away takes its sheet with it)
-            root.hidden = !shown; barBtn.hidden = !shown;
+            root.hidden = !shown;
             try { if (host.classList) { if (shown) host.classList.add('pl-on'); else host.classList.remove('pl-on'); } } catch (e) { /* the style needs it */ }
             panel.setAttribute('data-state', on ? 'on' : 'off');
             var counted = on && model.n > 1;                             // (just the visitor is no count)
             total.hidden = !counted; dot.hidden = on; total.textContent = countText(model.n); total.setAttribute('aria-label', countText(model.n) + TEXT.here);
-            [[cornerPill, corner], [barPill, barBtn]].forEach(function (p) {
-                p[0].hidden = !counted; p[0].textContent = badge(model.n);
-                p[1].setAttribute('aria-label', counted ? TEXT.title + ' (' + countText(model.n) + ')' : TEXT.title);
-            });
             if (shown) paintBody();
         }
 
         // ---- what the visitor does ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-        function tabbable() {                                            // the buttons and the list that the sheet shows, in order
-            var all = panel.querySelectorAll ? panel.querySelectorAll('button, [tabindex="0"]') : [], out = [];
-            for (var i = 0; i < all.length; i++) if (!all[i].disabled && all[i].getClientRects && all[i].getClientRects().length) out.push(all[i]);
-            return out;
-        }
-        function show(from) {                                            // the panel as a sheet (a phone) or a drawer (a window that is not wide), over a scrim: its button, the scrim and Escape close it
-            if (open || docked()) return;
-            open = true; opener = from || null;
-            panel.setAttribute('data-sheet', 'true'); scrim.hidden = false;
-            [corner, barBtn].forEach(function (b) { b.setAttribute('aria-expanded', 'true'); });
-            panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true');
-            if (close.focus) close.focus();
-        }
-        function hide(back) {                                          // back: the focus goes back to the button that opened it
-            if (!open) return;
-            open = false;
-            panel.setAttribute('data-sheet', 'false'); scrim.hidden = true;
-            [corner, barBtn].forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
-            panel.removeAttribute('role'); panel.removeAttribute('aria-modal');
-            var to = opener; opener = null;
-            if (back && to && to.focus) to.focus();
-        }
         function say(words) {                                            // a few words in place of a Join that finds no game
             status.textContent = words; stop('note');
             timers.note = setTimeout(guard(function () { timers.note = 0; status.textContent = ''; }), MS.note);
@@ -289,24 +246,14 @@
                 games = env.games;
                 if (games && games.getAttribute('aria-haspopup') === 'dialog' && games.getAttribute('aria-expanded') !== 'true') { games.click(); b = find(sel); }
             }
-            hide(false);
             if (b) b.click(); else say(TEXT.gone);
         }
         function setFold(on) { panel.setAttribute('data-folded', on ? 'true' : 'false'); fold.setAttribute('aria-expanded', on ? 'false' : 'true'); fold.setAttribute('aria-label', on ? TEXT.unfold : TEXT.fold); }
         setFold(false);
         fold.addEventListener('click', guard(function () { setFold(panel.getAttribute('data-folded') !== 'true'); }));
-        close.addEventListener('click', guard(function () { hide(true); }));
-        scrim.addEventListener('click', guard(function () { hide(true); }));
-        panel.addEventListener('keydown', guard(function (e) {
-            if (!e) return;
-            if (e.key === 'Escape') { if (open) hide(true); else if (docked() && (!fold.getClientRects || fold.getClientRects().length)) { setFold(true); if (fold.focus) fold.focus(); } return; }
-            if (e.key !== 'Tab' || !open) return;                        // (a sheet is a dialog: the focus stays in it)
-            var items = tabbable(), first = items[0], last = items[items.length - 1], active = doc.activeElement;
-            if (e.shiftKey && active === first && last) { if (e.preventDefault) e.preventDefault(); last.focus(); }
-            else if (!e.shiftKey && active === last && first) { if (e.preventDefault) e.preventDefault(); first.focus(); }
+        panel.addEventListener('keydown', guard(function (e) {         // Escape folds the panel, where its fold button is drawn (a phone's Players view has none)
+            if (e && e.key === 'Escape' && (!fold.getClientRects || fold.getClientRects().length)) { setFold(true); if (fold.focus) fold.focus(); }
         }));
-        doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && open) hide(true); }));
-        win.addEventListener('resize', guard(function () { if (open && docked()) hide(false); }));
 
         // ---- what the page says, and what the hub says ----------------------------------------------------------------------------------------------------------------------------------------------
         function look() {
@@ -343,14 +290,13 @@
             } else if (kind === 'lost') {
                 live = false; asked = false; model = fresh(); me = null;
                 phase = supported === false ? 'none' : 'off';
-            } else if (kind === 'shown') { if (!m) hide(false); return; }          // (the Room shows: a sheet that was open is closed)
-            else return;
+            } else return;
             paint();
         }));
         doing = look();
         clock();
-        return { root: root, state: function () { return phase; }, model: function () { return model; }, open: function (on) { if (on) show(null); else hide(false); }, sheet: function () { return open; }, sync: guard(sync) };
+        return { root: root, state: function () { return phase; }, model: function () { return model; }, sync: guard(sync) };
     }
 
-    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, WIDE: WIDE, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, seatsText: seatsText, announceOf: announceOf, possessive: possessive, mount: mount };
+    return { LIMIT: LIMIT, MS: MS, TEXT: TEXT, GROUPS: GROUPS, rowOf: rowOf, apply: apply, listOf: listOf, metaOf: metaOf, seatsText: seatsText, announceOf: announceOf, possessive: possessive, mount: mount };
 });

@@ -169,7 +169,7 @@ class TheFolderAndTheScript(unittest.TestCase):
     def test_it_opens_no_socket_when_it_is_loaded_only_when_it_is_mounted(self):
         self.assertNotRegex(self.code, r"new\s+WebSocket", "the socket class is the page's (win.WebSocket), made in go() only")
         self.assertEqual(len(re.findall(r"new Socket\(", self.code)), 1)
-        self.assertEqual(self.code.count("        paint();\n        go();\n        win.addEventListener('resize'"), 1, "go() runs when the dock is mounted, never when the file is loaded")
+        self.assertEqual(self.code.count("        paint();\n        go();\n        return {"), 1, "go() runs when the dock is mounted, never when the file is loaded")
         self.assertNotRegex(self.code, r"\n    go\(|\n\}\)\(.*go\(")
         self.assertIn("root.AntsHomeChat = api;", self.js)
 
@@ -250,12 +250,12 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".gc { flex: 1 1 auto; height: auto; min-height: 0; margin: 4px 12px 8px; overflow: hidden; }", phone, "the view fills the page between the bar and the strip")
         self.assertIn(".gc-fold { display: none; }", phone, "home.js opens it with its view and shuts it with the others: no fold to leave it shrunk")
         self.assertNotIn("--gc-min", self.css, "the panel is never put away for want of room: it is a part of the column, and the games take what is left")
-        self.assertIn(".gc[hidden] { display: none; }", self.css)
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }", self.css)
         self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head, .gc-slot { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the account line gives its place to the log and nothing of the panel reaches over the strip")
 
-    def test_the_header_stays_when_the_panel_is_folded_and_the_long_title_is_the_only_one(self):
-        self.assertIn(".gc-short, .gc-peek { display: none; }", self.css)
+    def test_the_header_stays_when_the_panel_is_folded_and_the_title_is_one_word_group(self):
+        self.assertNotIn(".gc-short", self.css)
+        self.assertNotIn(".gc-peek", self.css)
         self.assertNotIn(".gc-long", self.css)
 
     def test_every_target_is_at_least_44_px_and_the_field_and_send_48(self):

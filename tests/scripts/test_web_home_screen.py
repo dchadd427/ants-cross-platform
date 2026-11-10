@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The two screens of the front page, Home and the Room (web/home/, docs/HOME_SCREEN.md; run by ./run_tests.sh --fast and by the CI).
 
-The front page (web/lobby.html) is one page with one WebSocket: <body data-screen="home|room"> says whether Home (a top bar over a stand-in picture of the Yard) or the Room (today's room card under a slim
+The front page (web/lobby.html) is one page with one WebSocket: <body data-screen="home|room"> says whether Home (a top bar over the games, the players and the chat) or the Room (today's room card under a slim
 bar) shows, and going from one to the other is a class and one render of the page, never a request. Everything new is in web/home/ (home.js, home.css), whose size has a cap of its own because web/front/ is
 at its cap and web/lobby.html at its line limit.
 
@@ -9,7 +9,7 @@ at its cap and web/lobby.html at its line limit.
     room, the page calls Home from render(), from the hand-off to the game and from the dialog's inert, and it is still under its line limit;
   - the folder: exactly home.js and home.css, under their budgets (raw and gzipped), nothing of it in web/front/;
   - the style: which screen shows what, every target at least 44 px, nothing loaded from another site, the pictures are data;
-  - the Yard's stand-in: built only where the page carries the site label that the Dockerfile stamps (the test site); production's Yard is the plain sandy field in the same box;
+  - the body of Home (the grid that the games and the players list mount into) and the phone's strip: no Yard, no stand-in, no site label read;
   - the way into the image: the Dockerfile, the local web build and the CI's list of the image's files carry the folder;
   - the code RUNS in the fake browser of tests/scripts/web_page_harness.js (node, when it is installed: tests/scripts/web_home_screen_check.js: a plain visit, My room, Home, Back and Forward, a link, a reload,
     Leave room, START while a guest sits on Home, the strips, the Menu);
@@ -255,7 +255,7 @@ class TheBodyOfHome(unittest.TestCase):
         self.assertIn("var main = el('main', 'hmain'); main.id = 'hmain';", code)
         self.assertIn("host.appendChild(bar); host.appendChild(main); host.appendChild(opening); host.appendChild(tabs);", code)
         self.assertEqual(code.count("dock: main, page: page"), 1, "the Games list docks in the body")
-        self.assertEqual(code.count("yard: main, bar: right,"), 1, "the players list mounts in the body")
+        self.assertEqual(code.count("yard: main, quickHost"), 1, "the players list mounts in the body")
 
     def test_the_strip_has_three_buttons_and_the_chat_is_open_only_on_its_own_view_on_a_phone(self):
         code = self.code

@@ -2,7 +2,7 @@
    changes Home until the list is there (players.js puts the class pl-on on Home's div). The panel is the narrow sidebar at the right of the games list (home.css gives it its column), or, on a phone, the Players view. Every target is at least 44 px high and wide. */
 .pl, .pl * { box-sizing: border-box; }
 .pl-root { display: contents; }
-.pl-root[hidden], .pl-bar[hidden], .pl-btn[hidden], .pl-scrim[hidden], .pill[hidden], .pl-dot[hidden], .pl-status:empty { display: none; }
+.pl-root[hidden], .pill[hidden], .pl-dot[hidden], .pl-status:empty { display: none; }
 
 /* ---- the panel ---- */
 .pl { display: flex; flex-direction: column; min-height: 0; color: var(--cream); background: var(--inset);
@@ -57,7 +57,5 @@
 .pl-note p.small { font-size: 14px; color: #a8cfc0; }
 .pl-host { min-height: 48px; }
 
-/* ---- the sheet's parts (players.js still makes them: a page whose window matches none of its queries) are not drawn; the panel is always docked ---- */
-.pl-btn, .pl-bar, .pl-scrim, .pl-close { display: none; }
 @media (max-width: 700px) { .pl-fold { display: none; } .pl[data-folded="true"] .pl-body { display: flex; } }
 @media (max-height: 500px) and (orientation: landscape) { .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; } .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; } .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; } }
