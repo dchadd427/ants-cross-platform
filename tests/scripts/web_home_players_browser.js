@@ -286,7 +286,7 @@ async function main() {
                 await shot(page, 'phone_chat_' + size[1] + 'x' + size[2]);
                 await page.click('.htab.t-games'); await sleep(200);
                 await page.click('.hlogin'); await sleep(300);
-                check(size[0] + ': the login chip (logged in) shows the Chat view with the chat open and the focus on Log out', await page.evaluate(() => document.getElementById('home').getAttribute('data-tab') === 'chat' && document.getElementById('gchat').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'true' && document.activeElement.classList.contains('gc-link')));
+                check(size[0] + ': the login chip (logged in) opens its dropdown over the Games view (the view stays Games, the chat stays away), with the focus on Log out', await page.evaluate(() => document.getElementById('home').getAttribute('data-tab') === 'games' && document.getElementById('gchat').getClientRects().length === 0 && document.getElementById('gchat-login-slot').getClientRects().length > 0 && document.activeElement.classList.contains('gc-out')));
                 await page.click('.htab.t-games'); await sleep(200);
                 check(size[0] + ': Games brings the list back and the chat is folded again', await page.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'false'));
                 await page.context().close();

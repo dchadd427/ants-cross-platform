@@ -81,8 +81,8 @@ async function main() {
         await page.setViewportSize({ width: w, height: h });
         return page;
     }
-    async function logIn(context, name) {
-        await site.cmd('user ' + OLD + ' ' + (name === name.toLowerCase() && /^[a-z0-9_.]+$/.test(name) ? name : 'plain_user ' + name));      // (a name that Discord would not give out as a username is the display name)
+    async function logIn(context, name, both) {
+        if (both) await site.cmd('user ' + OLD + ' ' + name.toLowerCase().replace(/[^a-z0-9_.]/g, 'x') + ' ' + name.charAt(0).toUpperCase() + name.slice(1)); else await site.cmd('user ' + OLD + ' ' + (name === name.toLowerCase() && /^[a-z0-9_.]+$/.test(name) ? name : 'plain_user ' + name));      // (a name that Discord would not give out as a username is the display name)
         const page = await openAt(context, 1280, 800);
         await page.goto(info.site + '/', { waitUntil: 'load' });
         await live(page, 'no');
@@ -157,6 +157,83 @@ async function main() {
             }
             if (['w320', 'w390', 'w412', 'side568', 'side667', 'w1280'].indexOf(s[0]) !== -1 && (n[0] === 'one' || n[0] === 'longest' || n[0] === 'typical')) await shot(page, n[0] + '_' + s[0]);
             await page.close();
+        }
+        await context.close();
+    }
+
+    // ---- the chip's dropdown (the name, the choice of the name, Log out, Forget me) on the real hub: where it stands, what is in it, the keyboard, a press elsewhere, the view of a phone, Log out and Forget me ----
+    const DROP = () => {
+        const q = (x) => document.querySelector(x), r = (e) => { const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, r: b.right, b: b.bottom, w: b.width, h: b.height }; };
+        const slot = q('#gchat-login-slot'), chip = q('.hbar .hlogin'), out = slot.querySelector('.gc-out'), forget = slot.querySelector('.gc-forget');
+        return { shown: slot.getClientRects().length > 0, box: r(slot), chip: r(chip), expanded: chip.getAttribute('aria-expanded'), haspopup: chip.getAttribute('aria-haspopup'), controls: chip.getAttribute('aria-controls'), text: slot.innerText,
+            overflowY: getComputedStyle(slot).overflowY, scrolls: slot.scrollHeight > slot.clientHeight + 1, focus: document.activeElement && document.activeElement.className, tab: document.getElementById('home').getAttribute('data-tab'),
+            chatShown: !!document.getElementById('gchat') && document.getElementById('gchat').getClientRects().length > 0, outBox: r(out), forgetBox: r(forget), win: [innerWidth, innerHeight], inPanel: document.getElementById('gchat').contains(slot),
+            panelText: document.getElementById('gchat').innerText, formH: r(q('#gchat .gc-form')).h };
+    };
+    for (const n of NAMES.filter((x) => (x[0] === 'typical' || x[0] === 'longest') && (!arg('--only') || x[0] === arg('--only')))) {
+        const context = await browser.newContext({ deviceScaleFactor: 1 });
+        await logIn(context, n[1], true);
+        for (const s of SIZES.filter((x) => ['w320', 'w390', 'w412', 'w700', 'w1280', 'side568', 'side667'].indexOf(x[0]) !== -1)) {
+            const page = await openAt(context, s[1], s[2]);
+            await page.goto(info.site + '/', { waitUntil: 'load' });
+            await live(page, 'yes');
+            const L = label(n, s) + 'dropdown: ', disp = n[1].charAt(0).toUpperCase() + n[1].slice(1);
+            let d = await page.evaluate(DROP);
+            check(L + 'shut at first, and the chip says it has one (aria-haspopup, aria-expanded false, aria-controls)', !d.shown && d.expanded === 'false' && d.haspopup === 'true' && d.controls === 'gchat-login-slot', JSON.stringify([d.shown, d.expanded, d.haspopup, d.controls]));
+            check(L + 'the chat panel has no account line (no Chatting as, no Log out in it)', !d.inPanel && d.panelText.indexOf('Chatting as') === -1 && d.panelText.indexOf('Log out') === -1);
+            await page.focus('.hbar .hlogin');
+            await page.keyboard.press('Enter');
+            await sleep(120);
+            d = await page.evaluate(DROP);
+            check(L + 'the keyboard (Enter on the chip) opens it, the chip says so, and the focus is on Log out', d.shown && d.expanded === 'true' && /gc-out/.test(d.focus || ''), JSON.stringify([d.shown, d.expanded, d.focus]));
+            check(L + 'it says "Chatting as <name>", the choice of the name, Log out and Forget me', d.text.indexOf('Chatting as ' + disp) === 0 || d.text.replace(/\s+/g, ' ').indexOf('Chatting as ' + disp) !== -1, d.text);
+            check(L + 'the choice of the name is in it (the account has a display name too)', /Chat shows your/.test(d.text) && /Show my/.test(d.text) && /Log out/.test(d.text) && /Forget me/.test(d.text) && /Deletes your lines/.test(d.text), d.text);
+            check(L + 'it is under the chip, at the right of the window, inside the window, and scrolls inside itself where it is taller than the room it has (Log out and Forget me can be reached)', d.box.y >= d.chip.b && d.box.x >= 0 && d.box.r <= s[1] + 0.5 && d.box.b <= s[2] + 0.5 && d.overflowY === 'auto' && Math.abs(d.box.r - (s[1] - 10)) < 12, JSON.stringify(d.box));
+            if (d.scrolls) {
+                await page.evaluate(() => document.querySelector('#gchat-login-slot .gc-forget').scrollIntoView({ block: 'nearest' }));
+                const e = await page.evaluate(DROP);
+                check(L + 'taller than the window: scrolled, Forget me comes into view, inside the window', e.forgetBox.b <= s[2] + 1 && e.forgetBox.y >= 0, JSON.stringify(e.forgetBox));
+                await page.evaluate(() => { document.querySelector('#gchat-login-slot').scrollTop = 0; });
+            }
+            check(L + 'Log out and Forget me are targets of 44 px or more', d.outBox.h >= 44 && d.outBox.w >= 44 && d.forgetBox.h >= 44, JSON.stringify([d.outBox, d.forgetBox]));
+            if (s[1] <= 720 && s[2] > s[1]) check(L + 'on a phone the view stays what it was (the chip does not show the Chat view)', d.tab === 'games' && !d.chatShown, d.tab);
+            if (n[0] === 'typical' && ['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'dropdown_open_' + s[0]);
+            await page.keyboard.press('Escape');
+            await sleep(80);
+            d = await page.evaluate(DROP);
+            check(L + 'Escape closes it, the focus goes back to the chip, aria-expanded is false', !d.shown && d.expanded === 'false' && /hlogin/.test(d.focus || ''), JSON.stringify([d.shown, d.expanded, d.focus]));
+            await page.click('.hbar .hlogin'); await sleep(80);
+            check(L + 'a press on the chip opens it, and a second one closes it', (await page.evaluate(DROP)).shown && (await page.click('.hbar .hlogin'), await sleep(80), !(await page.evaluate(DROP)).shown));
+            await page.click('.hbar .hlogin'); await sleep(80);
+            await page.mouse.click(4, s[2] - 4); await sleep(80);
+            check(L + 'a press elsewhere puts it away', !(await page.evaluate(DROP)).shown);
+            if (n[0] === 'typical' && ['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) {
+                await shot(page, 'closed_' + s[0]);
+                if (s[1] <= 700) { await page.click('.htab.t-chat'); await sleep(250); await shot(page, 'chatbottom_' + s[0]); await page.click('.htab.t-players'); await sleep(250); await shot(page, 'players_' + s[0]); }
+                else { await shot(page, 'chatbottom_' + s[0]); await shot(page, 'players_' + s[0]); }
+            }
+            await page.close();
+        }
+        // Log out and Forget me of the dropdown on the real hub
+        {
+            const page = await openAt(context, 390, 844);
+            await page.goto(info.site + '/', { waitUntil: 'load' });
+            await live(page, 'yes');
+            await page.click('.hbar .hlogin'); await sleep(80);
+            await page.click('#gchat-login-slot .gc-out');
+            await live(page, 'no');
+            const d = await page.evaluate(() => ({ chip: document.querySelector('.hbar .hlogin').getAttribute('aria-label'), slot: document.getElementById('gchat-login-slot').getClientRects().length, expanded: document.querySelector('.hbar .hlogin').getAttribute('aria-expanded') }));
+            check(n[0] + ': Log out in the dropdown logs out on the real hub: the chip says Log in again and the dropdown is gone', d.chip === 'Log in with Discord' && d.slot === 0 && d.expanded === null, JSON.stringify(d));
+            await page.close();
+            await logIn(context, n[1], true);
+            const p2 = await openAt(context, 390, 844);
+            await p2.goto(info.site + '/', { waitUntil: 'load' });
+            await live(p2, 'yes');
+            await p2.click('.hbar .hlogin'); await sleep(80);
+            await p2.click('#gchat-login-slot .gc-forget');
+            await live(p2, 'no');
+            check(n[0] + ': Forget me in the dropdown works on the real hub (a reader afterwards)', await p2.evaluate(() => document.querySelector('.hbar .hlogin').getAttribute('aria-label') === 'Log in with Discord'));
+            await p2.close();
         }
         await context.close();
     }

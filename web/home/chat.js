@@ -6,8 +6,8 @@
 //   * The chat never blocks Home, the Room or START: a hub that is not there, slow or garbage is "Chat is offline" and a retry (1 s, doubling to 60 s, plus jitter; a hub that opens and closes again at once does not
 //     reset it); every handler is guarded; nothing is kept in the browser (no storage), the state is in memory.
 //   * It reads for everybody; the field and Send are there only when the welcome names the visitor (`you`). The login (docs/HUB.md, "Login") is the hub's: where the welcome says login:true and names nobody, the field is off and a
-//     Log in button takes its place, here and in the bar's chip (`env.chip`), and it is a full navigation to /hub/login (Discord, then back to this screen); where it names the visitor, #gchat-login-slot says "Chatting as <name>"
-//     with Log out and a small menu with Forget me, which are POSTs of this page to the hub (same origin, with the cookie, which this script never sees: it is HttpOnly). Nothing of the login is read, kept or sent by this script.
+//     Log in button takes its place, here and in the bar's chip (`env.chip`), and it is a full navigation to /hub/login (Discord, then back to this screen); where it names the visitor, the chip is a button that opens #gchat-login-slot (a dropdown under the chip): "Chatting as <name>",
+//     the choice of the name that the chat shows, Log out and Forget me, which are POSTs of this page to the hub (same origin, with the cookie, which this script never sees: it is HttpOnly). Nothing of the login is read, kept or sent by this script.
 //   * While the tab is hidden the socket stays and the model follows, but nothing is painted (the screen is made again when the tab is back); a line that arrives while the dock is folded, on the Room or in a hidden tab is unread.
 (function (root, factory) {
     var api = factory();
@@ -26,7 +26,7 @@
         title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
-        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', menu: 'More', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
+        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my '
     };
     var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
@@ -102,7 +102,7 @@
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
         var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
-        var busy = false, menuOn = false;                                       // (a POST of the login is on its way; the small menu of the account is open)
+        var busy = false, menuOn = false;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
@@ -139,19 +139,17 @@
         enter.type = 'button'; enter.setAttribute('aria-label', TEXT.loginWith); enter.hidden = true; put(enter, [el('i', 'gc-dc'), el('span', '', TEXT.login)]);      // (where a login is offered and nobody is named: the field is off and this is in Send's place)
         put(form, [field, send, enter]); form.hidden = true;
         var guest = el('p', 'gc-guest', TEXT.guest); guest.hidden = true;
-        // the login chip's place: who the visitor is (the hub's welcome says), Log out, and a small menu with Forget me
+        // the account's dropdown (the chip opens it): who the visitor is (the hub's welcome says), the choice of the name, Log out, and Forget me. It stands in the body, not in the panel (which a phone hides on its Games and Players views)
         var slot = el('div', 'gc-slot'); slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;
-        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'gc-link', TEXT.logout), moreBtn = el('button', 'gc-link gc-more', '…'), menu = el('div', 'gc-menu'), forgetBtn = el('button', 'btn gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
-        outBtn.type = 'button'; moreBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
-        moreBtn.setAttribute('aria-label', TEXT.menu); moreBtn.setAttribute('aria-expanded', 'false'); moreBtn.setAttribute('aria-controls', 'gchat-menu');
-        menu.id = 'gchat-menu'; menu.hidden = true; put(menu, [pickNote, pickBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
-        put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName, outBtn, moreBtn]);
-        put(slot, [acct, menu]);
+        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'btn gc-out', TEXT.logout), forgetBtn = el('button', 'btn gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
+        outBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
+        put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
+        put(slot, [acct, pickNote, pickBtn, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
         if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
-        put(body, [log, note, news, form, guest, slot]);
+        put(body, [log, note, news, form, guest]);
         put(box, [head, body]);
-        host.appendChild(box);
+        host.appendChild(box); (doc.body || host).appendChild(slot);
 
         // ---- what is seen -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function visible() { return !doc.hidden; }
@@ -212,18 +210,24 @@
             send.hidden = !you; enter.hidden = !!you;
             guest.hidden = !(live && !you);
             note.textContent = notice || (state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');
-            slot.hidden = !(live && you && login); acctName.textContent = you ? you.name : '';
+            slot.hidden = !(live && you && login && menuOn); acctName.textContent = you ? you.name : '';
             outBtn.disabled = forgetBtn.disabled = busy;
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
             if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
-            moreBtn.setAttribute('aria-expanded', menuOn && you ? 'true' : 'false'); menu.hidden = !(menuOn && you && login);
+            if (!slot.hidden) place();
             if (chip) {                                                         // (the bar: Log in where a login is offered, the visitor's name where they are named; nothing while the hub is not there)
                 chip.hidden = !(live && login);
                 chipAv.hidden = !you; chipMark.hidden = !!you;
                 chipAv.textContent = you ? initial(you.name) : ''; chipName.textContent = you ? you.name : TEXT.login;
                 chip.setAttribute('aria-label', you ? TEXT.chatting + you.name : TEXT.loginWith);
+                if (you) { chip.setAttribute('aria-haspopup', 'true'); chip.setAttribute('aria-controls', slot.id); chip.setAttribute('aria-expanded', menuOn ? 'true' : 'false'); } else { chip.removeAttribute('aria-haspopup'); chip.removeAttribute('aria-controls'); chip.removeAttribute('aria-expanded'); }
             }
             if (stale && seen()) repaint();
+        }
+        function place() {                                                       // the dropdown is under the chip, to its right edge, and no taller than what is left of the window (the rest scrolls inside it)
+            if (!chip || !chip.getBoundingClientRect) return;
+            var r = chip.getBoundingClientRect(), top = Math.round(r.bottom + 6);
+            slot.style.top = top + 'px'; slot.style.maxHeight = Math.max(160, (win.innerHeight || 0) - top - 10) + 'px';
         }
         function render() { if (visible()) paint(); else stale = true; }       // (a hidden tab is not painted; the model goes on, and the tab's return paints it all)
         function tell(code) {                                                    // a word for the note, for a few seconds
@@ -385,8 +389,10 @@
         pickBtn.addEventListener('click', guard(function () { if (you && you.other && !out({ t: 'pick', pick: you.pick === 'display' ? 'username' : 'display' })) tell('failed'); }));       // (the hub closes the account's sockets; the page connects again and reads the new name)
         outBtn.addEventListener('click', guard(function () { leave(LOGOUT); }));
         forgetBtn.addEventListener('click', guard(function () { leave(FORGET); }));
-        moreBtn.addEventListener('click', guard(function () { setMenu(!menuOn); }));
-        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setOpen(true); if (outBtn.focus) outBtn.focus(); }));
+        if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn && outBtn.focus) outBtn.focus(); }));       // (the chip opens the dropdown and puts the focus on Log out; a second press closes it)
+        doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
+        win.addEventListener('resize', guard(function () { if (menuOn) render(); }));
+        slot.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); if (e.stopPropagation) e.stopPropagation(); } }));       // (Escape closes it and the focus goes back to the chip)
         form.addEventListener('submit', guard(function (e) {
             if (e && e.preventDefault) e.preventDefault();
             if (sendLine(field.value) === '') field.value = '';
@@ -394,7 +400,6 @@
         fold.addEventListener('click', guard(function () { setOpen(!open); if (fold.focus) fold.focus(); }));
         head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) setOpen(true); }));       // (a folded header opens wherever it is pressed)
         box.addEventListener('keydown', guard(function (e) {
-            if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (moreBtn.focus) moreBtn.focus(); return; }       // (the small menu first, then the panel)
             if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); }
         }));
         doc.addEventListener('visibilitychange', guard(function () { if (visible()) { stale = true; render(); nudge(); } }));
@@ -408,7 +413,7 @@
             root: box, slot: slot, field: field, say: sendLine, state: function () { return state; },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
-            shown: guard(function (on) { isHome = !!on; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
+            shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)
         };
     }
 

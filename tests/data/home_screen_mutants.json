@@ -1131,8 +1131,8 @@
   {
    "id": "strip_leaves_a_dock_that_comes_late_as_it_is",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); pick(tab); login.addEventListener",
-   "new": "inert(held); dockShown(); login.addEventListener",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
+   "new": "inert(held); dockShown(); wantPlayers();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
@@ -1199,10 +1199,10 @@
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
-   "id": "login_chip_leaves_the_chat_view_away",
+   "id": "login_chip_shows_the_chat_view_again",
    "file": "web/home/home.js",
-   "old": "login.addEventListener('click', function () { if (phone()) pick('chat'); }, true);",
-   "new": "",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
+   "new": "inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {

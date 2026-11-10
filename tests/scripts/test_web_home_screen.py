@@ -281,7 +281,7 @@ class TheBodyOfHome(unittest.TestCase):
         self.assertIn("mirror(gamesPill, tabBtns.games.pill);", code)
         self.assertIn("mirror(c, tabBtns.players.pill);", code)
         self.assertIn("to.textContent = /^\\d{3}/.test(t) ? '99+' : t;", code, "a count of three digits or more (500+ too) is 99+ in the strip, as on the old bar's badge")
-        self.assertIn("login.addEventListener('click', function () { if (phone()) pick('chat'); }, true);", code, "the login chip shows the Chat view on a phone before the dock opens it")
+        self.assertNotIn("login.addEventListener('click'", code, "the chip opens the account's dropdown (chat.js): it does not change the view of a phone")
 
     def test_the_layout_is_a_grid_for_a_wide_window_and_one_view_for_a_phone(self):
         css = self.css

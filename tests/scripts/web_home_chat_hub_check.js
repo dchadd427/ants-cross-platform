@@ -117,21 +117,21 @@ async function main() {
         const v = dockFor(hub);
         await until(() => v.dock.state() === 'live');
         const mineRows = () => v.log.children.slice(1).map((r) => cls(r).indexOf('gc-me') !== -1);
-        one(v.dock.root, 'gc-more').click();
-        check('a hub that says that the account has both names: the history has the visitor\'s line marked by the key and not the other account\'s of the same name; the menu offers the other name', JSON.stringify(mineRows()) === '[true,false]' && one(v.dock.root, 'gc-pick').textContent === 'Show my username: maple.leaf');
-        one(v.dock.root, 'gc-pick').click();
+        (v.chip && v.chip.click());
+        check('a hub that says that the account has both names: the history has the visitor\'s line marked by the key and not the other account\'s of the same name; the menu offers the other name', JSON.stringify(mineRows()) === '[true,false]' && one(v.dock.slot, 'gc-pick').textContent === 'Show my username: maple.leaf');
+        one(v.dock.slot, 'gc-pick').click();
         check('a press sends one pick frame with the other name', await until(() => hub.received.filter((m) => m.t === 'pick').length === 1) && hub.received.filter((m) => m.t === 'pick')[0].pick === 'username');
         const cut = Date.now();
         check('the hub closes the socket, the dock is offline for a moment and then connects again (a second socket, a second welcome, after about a second)', await until(() => hub.upgrades === 2 && v.dock.state() === 'live', 4000) && Date.now() - cut < 3000);
-        check('the new welcome names the account by its username, and the menu offers the display name; the old line is still the visitor\'s (by its key)', one(v.dock.root, 'gc-an').textContent === 'maple.leaf' && one(v.dock.root, 'gc-pick').textContent === 'Show my display name: Maple Leaf' && JSON.stringify(mineRows()) === '[true,false]' && v.errors.length === 0);
+        check('the new welcome names the account by its username, and the menu offers the display name; the old line is still the visitor\'s (by its key)', one(v.dock.slot, 'gc-an').textContent === 'maple.leaf' && one(v.dock.slot, 'gc-pick').textContent === 'Show my display name: Maple Leaf' && JSON.stringify(mineRows()) === '[true,false]' && v.errors.length === 0);
         v.dock.say('and now by the username');
         check('a new line is by the new name, and comes back as the visitor\'s own', await until(() => v.rows().length === 3) && v.rows()[2] === 'maple.leaf: and now by the username' && cls(v.log.children[3]).indexOf('gc-me') !== -1);
         await hub.close();
         const plain = await startHub({ login: true, you: { name: 'maple.leaf', mod: false }, history: [], online: 1 });
         const w = dockFor(plain);
         await until(() => w.dock.state() === 'live');
-        one(w.dock.root, 'gc-more').click();
-        check('an account that cannot choose has no button, and a pick that is made anyway is refused by the hub without closing anything (the hub says err pick; the dock says that it did not work)', one(w.dock.root, 'gc-pick').hidden === true
+        (w.chip && w.chip.click());
+        check('an account that cannot choose has no button, and a pick that is made anyway is refused by the hub without closing anything (the hub says err pick; the dock says that it did not work)', one(w.dock.slot, 'gc-pick').hidden === true
               && (plain.send(plain.peers[0], { t: 'err', code: 'pick' }), await until(() => w.note() === 'That did not work, try again')) && plain.upgrades === 1 && w.dock.state() === 'live');
         await plain.close();
     }

@@ -80,7 +80,7 @@ class TheLoaderInHome(unittest.TestCase):
     def test_it_asks_for_the_two_files_by_their_base_name_through_the_part_loader_and_only_after_the_dock(self):
         self.assertIn("lazy('home/players', function () {", self.js)
         self.assertEqual(self.js.count("wantPlayers();"), 1, "one call, where the dock has been mounted")
-        self.assertIn("inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("inert(held); dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("if (askedPlayers || !dock) return;\n            askedPlayers = true;", self.js, "once, and not before there is a dock to speak through")
         self.assertEqual(sorted(set(re.findall(r"home/players\w*", code_of(self.js)))), ["home/players"])
 

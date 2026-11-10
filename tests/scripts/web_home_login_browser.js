@@ -139,7 +139,7 @@ async function main() {
         check(label + 'every target is at least 44 px (the chip 46 high, the button and field 48)', !!chip && chip.h >= 44 && chip.w >= 44 && (size === 'desktop' ? chip.w > 80 : chip.w <= 50), JSON.stringify(chip));
         if (size === 'desktop') check(label + 'the chip says Log in with the mark of Discord and the dock says it too, and the field says why it is off', (await text(page, '.hlogin')).trim() === 'Log in' && (await page.evaluate(() => document.querySelector('#gchat .gc-input').disabled && document.querySelector('#gchat .gc-input').placeholder)) === 'Log in with Discord to chat');
         check(label + 'nothing scrolls sideways', await noSideways(page));
-        check(label + 'the dock is read only for the visitor: the guest line is there, the account line is not', (await rect(page, '#gchat .gc-acct')) === null);
+        check(label + 'the dock is read only for the visitor: the guest line is there, the account line is not', (await rect(page, '#gchat-login-slot')) === null);
         check(label + 'the field and the button are on the screen with the panel out, each 44 px or more (48 as drawn)', !!button && button.h >= 44 && !!field && field.h >= 44, JSON.stringify([button, field]));
         await shot(page, 'x_chat_out', size);
         await context.close();
@@ -160,7 +160,7 @@ async function main() {
     await page.waitForURL(info.site + '/**', { timeout: 10000 });
     await waitYou(page, 'yes');
     check('the way back ends on the front page at Home, with no code, no state and no token in the address (the callback was a redirect, not a page)', page.url() === info.site + '/' && !/code=|state=|access_token/.test(page.url()));
-    check('the dock knows who it is: Chatting as maple.leaf, and the chip is the circle and the name', (await plain(page, '#gchat .gc-acct')).indexOf('Chatting as maple.leaf') === 0 && (await plain(page, '.hlogin .gc-av')) === 'm' && (await plain(page, '.hlogin .gc-cn')) === 'maple.leaf');
+    check('the dock knows who it is: Chatting as maple.leaf, and the chip is the circle and the name', (await plain(page, '#gchat-login-slot .gc-acct')).indexOf('Chatting as maple.leaf') === 0 && (await plain(page, '.hlogin .gc-av')) === 'm' && (await plain(page, '.hlogin .gc-cn')) === 'maple.leaf');
     const cookie = await sessionCookie(desk.context);
     check('the cookie is __Host-ants_hub: Secure, HttpOnly, SameSite=Strict, Path=/, with no Domain (the host only), 30 days, 32 hex digits', !!cookie && cookie.secure === true && cookie.httpOnly === true && cookie.sameSite === 'Strict' && cookie.path === '/' && cookie.domain === '127.0.0.1'
         && /^[0-9a-f]{32}$/.test(cookie.value) && Math.abs((cookie.expires - Date.now() / 1000) - 30 * 86400) < 120, JSON.stringify(cookie));
@@ -196,11 +196,12 @@ async function main() {
     await page.reload({ waitUntil: 'load' });
     await waitYou(page, 'yes');
     check('a reload keeps the login (the cookie, a new socket, the same name, the history that includes the line)', (await text(page, '#gchat .gc-log')).indexOf('maple.leaf: hello from the browser') !== -1);
-    await page.click('#gchat .gc-more');
+    await page.click('.hlogin');
     await shot(page, 'x_menu', 'desktop');
-    check('the small menu holds Forget me and says what it does; Escape puts it away and the panel stays', (await text(page, '#gchat .gc-menu')).indexOf('Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.') !== -1 && (await page.keyboard.press('Escape'), !(await rect(page, '#gchat .gc-menu'))) && (await rect(page, '#gchat .gc-acct')) !== null);
-    for (const sel of ['#gchat .gc-link', '#gchat .gc-more']) { const r = await rect(page, sel); check('the target ' + sel + ' is at least 44 px', !!r && r.h >= 44 && r.w >= 44, JSON.stringify(r)); }
-    await page.click('#gchat .gc-link');
+    check('the small menu holds Forget me and says what it does; Escape puts it away and the panel stays', (await text(page, '#gchat-login-slot')).indexOf('Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.') !== -1 && (await page.keyboard.press('Escape'), !(await rect(page, '#gchat-login-slot'))) && (await rect(page, '.hlogin')) !== null);
+    await page.click('.hlogin');
+    for (const sel of ['#gchat-login-slot .gc-out', '.hlogin']) { const r = await rect(page, sel); check('the target ' + sel + ' is at least 44 px', !!r && r.h >= 44 && r.w >= 44, JSON.stringify(r)); }
+    await page.click('#gchat-login-slot .gc-out');
     await waitYou(page, 'no');
     check('Log out: the visitor is a reader again (the chip says Log in, the field is off), the cookie is gone from the browser, the old lines are still there', (await text(page, '.hlogin')).trim() === 'Log in' && !(await sessionCookie(desk.context)) && (await page.evaluate(() => document.querySelector('#gchat .gc-input').disabled))
         && (await text(page, '#gchat .gc-log')).indexOf('maple.leaf: hello from the browser') !== -1);
@@ -217,8 +218,8 @@ async function main() {
     await page.fill('#gchat .gc-input', 'a second line to forget');
     await page.click('#gchat .gc-send');
     await other.page.waitForFunction(() => /a second line to forget/.test(document.querySelector('#gchat .gc-log').innerText), null, { timeout: 8000 });
-    await page.click('#gchat .gc-more');
-    await page.click('#gchat .gc-forget');
+    await page.click('.hlogin');
+    await page.click('#gchat-login-slot .gc-forget');
     await waitYou(page, 'no');
     await other.page.waitForFunction(() => !/a second line to forget/.test(document.querySelector('#gchat .gc-log').innerText), null, { timeout: 8000 });
     check('Forget me: the visitor is a reader, the cookie is gone, and the lines that the account wrote are gone from the other browser\'s screen too, and from a new one\'s',
@@ -231,7 +232,7 @@ async function main() {
     await page.click('#gchat .gc-send');
     await page.waitForFunction(() => /You cannot chat here/.test(document.querySelector('#gchat .gc-note').innerText), null, { timeout: 5000 });
     check('a banned account can log in and read, and is told that it cannot write; nobody else sees a line', (await text(other.page, '#gchat .gc-log')).indexOf('let me in') === -1 && (await you(page)) === 'yes');
-    await page.click('#gchat .gc-link'); await waitYou(page, 'no');
+    await page.click('.hlogin'); await page.click('#gchat-login-slot .gc-out'); await waitYou(page, 'no');
     await site.cmd('unban ' + OLD);
     await site.cmd('user ' + snowflake(2) + ' newcomer');
     await logIn(page, 'chip');
@@ -239,7 +240,7 @@ async function main() {
     await page.click('#gchat .gc-send');
     await page.waitForFunction(() => /too new/.test(document.querySelector('#gchat .gc-note').innerText), null, { timeout: 5000 });
     check('an account of two days is told that it is too new, and writes nothing', (await text(other.page, '#gchat .gc-log')).indexOf('hello, I am new') === -1);
-    await page.click('#gchat .gc-link'); await waitYou(page, 'no');
+    await page.click('.hlogin'); await page.click('#gchat-login-slot .gc-out'); await waitYou(page, 'no');
     await site.cmd('user ' + OLD + ' maple.leaf');
 
     // ---- Discord that does not answer: a calm page and a link back; the chat goes on ----
@@ -255,7 +256,7 @@ async function main() {
     check('the link goes back to Home, which is a reader with the Log in button', page.url() === info.site + '/' && (await you(page)) === 'no');
     await site.cmd('token_mode ok');
     await logIn(page, 'chip');
-    await page.click('#gchat .gc-link'); await waitYou(page, 'no');
+    await page.click('.hlogin'); await page.click('#gchat-login-slot .gc-out'); await waitYou(page, 'no');
     await desk.context.close();
     await other.context.close();
 
@@ -266,12 +267,13 @@ async function main() {
         check(label + 'the chip is the mark of Discord alone, a target of 44 px or more', (await rect(o.page, '.hlogin')) && (await rect(o.page, '.hlogin')).w <= 50 && (await rect(o.page, '.hlogin')).h >= 44 && (await text(o.page, '.hlogin')).trim() === '');
         await logIn(o.page, 'chip');
         const chip = await rect(o.page, '.hlogin');
-        check(label + 'logged in the chip is the circle alone (a target of 44 px or more), nothing scrolls sideways', !!chip && chip.w <= 50 && chip.h >= 44 && (await noSideways(o.page)), JSON.stringify(chip));
+        check(label + 'logged in the chip is a target of 44 px or more, nothing scrolls sideways', !!chip && chip.h >= 44 && (await noSideways(o.page)), JSON.stringify(chip));
         await o.page.click('#gchat .gc-head').catch(() => {});
         await sleep(150);
-        check(label + 'the account line is in the panel, with Log out and the dots, each 44 px', !!(await rect(o.page, '#gchat .gc-acct')) && (await rect(o.page, '#gchat .gc-link')).h >= 44 && (await rect(o.page, '#gchat .gc-more')).h >= 44);
+        await o.page.click('.hlogin'); await sleep(100);
+        check(label + 'the chip opens its dropdown with Log out and Forget me, each 44 px or more, inside the window', !!(await rect(o.page, '#gchat-login-slot')) && (await rect(o.page, '#gchat-login-slot .gc-out')).h >= 44 && (await rect(o.page, '#gchat-login-slot .gc-forget')).h >= 44);
         await shot(o.page, 'x_chat_in', size);
-        await o.page.click('#gchat .gc-link'); await waitYou(o.page, 'no');
+        await o.page.click('#gchat-login-slot .gc-out'); await waitYou(o.page, 'no');
         await o.context.close();
     }
 
