@@ -79,7 +79,7 @@ class World:
         self.limits = limits
         self.mods = frozenset(mods)
         self.login = login
-        self.store = storemod.Store(self.db, clock=self.wall, retention_days=limits.retention_days)
+        self.store = storemod.Store(self.db, clock=self.wall, retention_days=limits.retention_days, max_lines=10 ** 9)
         self.chat = chatmod.Chat(self.store, self.mods, limits, self.clock, login)
 
     def join(self, identity=None):
@@ -1030,7 +1030,7 @@ class TheStore(unittest.TestCase):
         self.addCleanup(self.folder.cleanup)
         self.db = os.path.join(self.folder.name, "hub.db")
         self.wall = Clock(1_800_000_000.0)
-        self.store = storemod.Store(self.db, clock=self.wall)
+        self.store = storemod.Store(self.db, clock=self.wall, max_lines=10 ** 9)
         self.addCleanup(self.store.close)
 
     def test_lines_are_kept_in_order_with_their_ids(self):

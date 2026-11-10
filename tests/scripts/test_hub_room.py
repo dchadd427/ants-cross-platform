@@ -103,12 +103,12 @@ def answer(client):
 class Room:
     """A hub without sockets: the store in a temporary folder, one clock for the lines (`wall`) and one for the limits (`mono`), the hub's clock work in `tick()`, and `person()`s that say things."""
 
-    def __init__(self, mods=("9001",), busy_ms=300, **limits):
+    def __init__(self, mods=("9001",), busy_ms=300, max_lines=10 ** 9, **limits):
         self.folder = tempfile.TemporaryDirectory()
         self.path = os.path.join(self.folder.name, "hub.db")
         self.wall, self.mono = Clock(1_800_000_000.0), Clock(1000.0)
         self.limits = dataclasses.replace(limitmod.Limits(), **limits)
-        self.store = storemod.Store(self.path, clock=self.wall, busy_ms=busy_ms)
+        self.store = storemod.Store(self.path, clock=self.wall, busy_ms=busy_ms, max_lines=max_lines)
         self.store.db.execute("PRAGMA synchronous=OFF")                         # (a test has no use for the disk's promise, and a machine that is busy takes milliseconds for each)
         if self.limits.db_max_bytes < 16 * 1024 * 1024:
             self.store.db.execute("PRAGMA wal_autocheckpoint=4")            # (the log file is folded into the database every 4 pages, as it is every 1000 at the default size: next to a small store it stays as small as the default's is next to 64 MB)
@@ -183,6 +183,94 @@ class TheStoreAtItsLimit(unittest.TestCase):
         self.check_the_store_makes_room(room, batch=50, ticks_to_resume=3, ticks_to_settle=40)
 
 
+class TheNewest200Lines(unittest.TestCase):
+    """The store keeps the newest 200 lines (and none past 7 days): what the hub, the clock and the tool see of it."""
+
+    def test_the_programs_store_keeps_200_and_the_hub_and_the_tool_open_it_so(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        store = storemod.Store(os.path.join(folder.name, "hub.db"))
+        self.addCleanup(store.close)
+        self.assertEqual(store.max_lines, 200)
+        self.assertEqual(store.retention, 7 * 86400)
+        with open(os.path.join(REPO, "hub", "server.py"), encoding="utf-8") as f:
+            self.assertIn("storemod.Store(cfg.db, busy_ms=300)", f.read(), "the hub opens the store with the defaults: 200 lines, 7 days")
+
+    def test_a_chat_that_goes_on_keeps_200_lines_and_the_page_still_gets_its_last_50(self):
+        room = Room(max_lines=200, **LOOSE)
+        self.addCleanup(room.close)
+        people = [room.person(n) for n in range(1, 4)]
+        for n in range(330):
+            room.say(people[n % 3], "line %d" % n)
+            room.tick(0.01)
+        rows = room.store.lines(10 ** 6)
+        self.assertEqual(len(rows), 200)
+        self.assertEqual([r[4] for r in rows][::-1], ["line %d" % n for n in range(130, 330)])
+        self.assertEqual([l.text for l in room.chat.recent()], ["line %d" % n for n in range(280, 330)])
+        self.assertEqual([l.text for l in room.store.recent_lines(50)], ["line %d" % n for n in range(280, 330)])
+
+    def test_the_hourly_purge_cuts_a_store_that_holds_more_down_to_200_and_says_how_many(self):
+        room = Room(max_lines=10 ** 9, **LOOSE)
+        self.addCleanup(room.close)
+        fill(room.store, 500)
+        room.store.max_lines = 200                      # (a file that an earlier program wrote: more than the newest 200)
+        self.assertEqual(room.store.usage().lines, 500)
+        room.tick(room.limits.purge_seconds)
+        self.assertEqual(room.store.usage().lines, 200)
+        self.assertIn("purge lines=300", room.log.getvalue())
+        self.assertEqual([r[0] for r in room.store.lines(1000)], list(range(500, 300, -1)))
+
+    def test_an_old_backlog_is_not_deleted_by_the_first_line_and_the_clock_cuts_it_down_a_chunk_at_a_time(self):
+        room = Room(max_lines=10 ** 9, purge_chunk=500, **LOOSE)                  # (a file of the earlier program: 3,000 lines)
+        self.addCleanup(room.close)
+        fill(room.store, 3000)
+        room.store.max_lines = 200                                              # (the limit of the program: 200, as the hub opens the store)
+        speaker = room.person(1)
+        room.say(speaker, "the first line after the upgrade")
+        self.assertEqual(speaker.codes(), [])
+        self.assertGreater(room.store.usage().lines, 2900, "one chat line took out a few lines, not the backlog")
+        counts = []
+        for _ in range(40):
+            room.tick()
+            counts.append(room.store.usage().lines)
+            if counts[-1] == 200:
+                break
+        self.assertEqual(counts[-1], 200)
+        self.assertGreater(len(counts), 3, "a chunk of 500 at a time: several ticks")
+        self.assertEqual(room.store.lines(1)[0][4], "the first line after the upgrade")
+
+    def test_a_line_that_went_past_the_newest_200_is_in_neither_file_once_the_log_is_cut_and_the_hub_cuts_it_by_itself(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = os.path.join(folder.name, "hub.db")
+        wall = Clock(1_800_000_000.0)
+        store = storemod.Store(path, clock=wall, busy_ms=50, max_lines=3)
+        self.addCleanup(store.close)
+        store.add_line("1", "ann", "a words-that-must-go-1 line", False)
+        for n in range(3):
+            store.add_line("1", "ann", "later %d" % n, False)
+        self.assertTrue(store.unsettled, "the line that went over is in the log file: the hub's clock is asked to cut it")
+        self.assertTrue(store.checkpoint())
+        for name in sorted(os.listdir(folder.name)):
+            with open(os.path.join(folder.name, name), "rb") as f:
+                self.assertNotIn(b"words-that-must-go-1", f.read(), name)
+
+    def test_the_moderators_command_still_deletes_a_line_that_is_on_the_page_and_counts_the_deletion(self):
+        room = Room(max_lines=200, **LOOSE)
+        self.addCleanup(room.close)
+        moderator = FakePeer(session.Identity("9001", "moddy", False))
+        for n in range(230):
+            room.store.add_line("2001", "visitor1", "line %d" % n, False)
+        newest = room.store.lines(1)[0][0]
+        room.say(moderator, "/del %d" % newest)
+        self.assertEqual(room.store.last_deletion(), 1)
+        self.assertEqual(room.store.usage().lines, 200)
+        self.assertEqual(moderator.codes(), [])
+        self.assertEqual(room.store.deletions_since(0)[0][1], newest)
+        room.tick(room.limits.deletions_seconds)
+        self.assertEqual(room.store.last_deletion(), 1)
+
+
 class StoreTest(unittest.TestCase):
     """A store in a temporary folder, with a clock that the test moves."""
 
@@ -191,7 +279,7 @@ class StoreTest(unittest.TestCase):
         self.addCleanup(self.folder.cleanup)
         self.path = os.path.join(self.folder.name, "hub.db")
         self.wall = Clock(1_800_000_000.0)
-        self.store = storemod.Store(self.path, clock=self.wall, busy_ms=50)
+        self.store = storemod.Store(self.path, clock=self.wall, busy_ms=50, max_lines=10 ** 9)
         self.store.db.execute("PRAGMA synchronous=OFF")
         self.addCleanup(self.store.close)
 
@@ -780,7 +868,7 @@ class TheStaffTool(unittest.TestCase):
         self.addCleanup(self.folder.cleanup)
         self.db = os.path.join(self.folder.name, "hub.db")
         self.wall = Clock(1_800_000_000.0)
-        self.store = storemod.Store(self.db, clock=self.wall)
+        self.store = storemod.Store(self.db, clock=self.wall, max_lines=10 ** 9)
         self.store.db.execute("PRAGMA synchronous=OFF")
         self.addCleanup(self.store.close)
 
@@ -896,7 +984,7 @@ class TheStaffTool(unittest.TestCase):
         limits = dataclasses.replace(limitmod.Limits(), **CLI)
         fill(self.store, 3000)
         self.store.checkpoint()
-        hub = storemod.Store(self.db, clock=self.wall, busy_ms=30)                      # (the hub's own connection: it waits 30 ms at the most for the tool)
+        hub = storemod.Store(self.db, clock=self.wall, busy_ms=30, max_lines=10 ** 9)                      # (the hub's own connection: it waits 30 ms at the most for the tool)
         self.addCleanup(hub.close)
         chunks, waits = [], []
         real = self.store.make_room
