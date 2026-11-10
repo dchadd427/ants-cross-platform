@@ -38,7 +38,7 @@ const looksAtLive = (env) => env.site.live.calls.length;
         ['TREASURE-20261109-120000Z', 'TREASURE.LVL', 'treasure', 'Treasure', 125, [{ seat: 0, name: 'Ann' }, { seat: 1, name: 'Bot (Medium)' }, { seat: 2, name: 'Blue' }, { seat: 3, name: '<b>x</b>' }]]);
     same('the seconds come from the turns when they are not there; a number that is not one is 0', [Games.liveOf({ id: 'A-20261109-120000Z', turns: 400 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: 'x' }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: -4 }, RULES0).seconds, Games.liveOf({ id: 'A-20261109-120000Z', seconds: Infinity }, RULES0).seconds], [20, 0, 0, 0]);
     same('the map is the one in the id when the entry names none; a map of the players has its name and no picture of its own', [Games.liveOf({ id: 'Pop_Corn-20261109-120000Z' }, RULES0).map, Games.liveOf({ id: 'Pop_Corn-20261109-120000Z' }, RULES0).mapKey], ['Pop_Corn.LVL', '']);
-    same('at most four players, and one that is no text or has a character that a name has not is dropped', Games.liveOf(LIVE('A-20261109-120000Z', { players: ['Green', 7, 'Red‮x', 'Blue', 'Black', 'Green', 'Red'] }), RULES0).who.map((w) => w.name), ['Green', 'Blue', 'Black', 'Green']);
+    same('at most four players, and one that is no text or has a character that a name has not is dropped', Games.liveOf(LIVE('A-20261109-120000Z', { players: ['Green', 7, 'Red\u202ex', 'Blue', 'Black', 'Green', 'Red'] }), RULES0).who.map((w) => w.name), ['Green', 'Blue', 'Black', 'Green']);
     same('a player that is not a color word keeps its text and takes no color of the four', Games.liveOf(LIVE('A-20261109-120000Z', { players: ['Purple (Sam)'] }), RULES0).who, [{ seat: -1, name: 'Purple (Sam)' }]);
     for (const [what, value] of [['no object', null], ['a list', []], ['a text', 'x'], ['no id', { map: 'A' }], ['an id that is a number', { id: 5 }], ['an id with a slash', { id: 'A/../B-20261109-120000Z' }], ['an id with no time', { id: 'A-2026' }], ['an id of 40 characters', { id: 'A'.repeat(40) + '-20261109-120000Z' }],
                                  ['an id with markup', { id: '<b>-20261109-120000Z' }], ['an id with a query', { id: 'A-20261109-120000Z?x=1' }], ['a map with markup', { id: 'A-20261109-120000Z', map: '<b>' }], ['a map with a dot', { id: 'A-20261109-120000Z', map: '..' }]]) {
@@ -144,7 +144,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     const env = await page({ site, options: { popover: false } });
     await wait(env, 9000);
     const text = env.dumpAll();
-    check('a server with ' + what + ' at /live: the section is hidden, the switch is hidden, and the open rooms go on as they were', boxOf(env).hidden === true && first(popOf(env), 'gfrow').hidden === true && openRows(env).length === 1 && headOf(env) === '1 waiting · updates live', headOf(env));
+    check('a server with ' + what + ' at /live: the section is hidden, the switch is hidden, and the open rooms go on as they were', boxOf(env).hidden === true && first(popOf(env), 'gfrow').hidden === true && openRows(env).length === 1 && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
     check('... with no error, no notice and no toast', R.toastTextOf(env) === '' && first(popOf(env), 'gpnote').hidden === true);
     const times = site.live.times.slice();
     await wait(env, 100000);
@@ -192,7 +192,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('the browser holds nothing yet (the default is not kept)', env.storage.getItem('ants.home.games.live') === null);
     box.checked = false; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
     await flush();
-    check('off: the rows and their box are gone, the head is as it was without them, the "no games in progress" line is not shown', boxOf(env).hidden === true && liveRows(env).every((li) => li.hidden === true || boxOf(env).hidden) && headOf(env) === '1 waiting · updates live', headOf(env));
+    check('off: the rows and their box are gone, the head is as it was without them, the "no games in progress" line is not shown', boxOf(env).hidden === true && liveRows(env).every((li) => li.hidden === true || boxOf(env).hidden) && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
     check('... the choice is kept in the browser (that word only), and the Games button has not changed', env.storage.getItem('ants.home.games.live') === '0' && R.pillOf(env).textContent === '1');
     const n = looksAtLive(env);
     await wait(env, 90000);

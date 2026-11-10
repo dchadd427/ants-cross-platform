@@ -529,7 +529,7 @@
                 if (l) { l.node.textContent = clockText(e.seconds) + TEXT.soFar; l.link.setAttribute('aria-label', 'Watch the match on ' + l.map + ', ' + l.names + ', ' + clockText(e.seconds) + TEXT.soFar); }
             });
         }
-        function countLine(n) {                            // the list's head: "3 open, 2 in progress" while the matches are shown, else "3 waiting · updates live"
+        function countLine(n) {                            // the list's head: "3 open, 2 in progress" while the matches are shown, else "3 waiting - updates live"
             if (!loaded || off) return '';
             if (liveShown()) return !n && !live.length ? TEXT.none : countText(n) + ' open, ' + countText(live.length) + ' in progress';
             return n === 0 ? TEXT.none : countText(n) + ' waiting' + TEXT.live;
