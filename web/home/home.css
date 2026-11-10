@@ -52,7 +52,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 .gdock .gitem:has(.gyours) { border-color: var(--gold); }
 .gdock .gmap { grid-area: m; width: 72px; height: 72px; }
 .gdock .gtxt { display: contents; }
-.gdock .gtop { grid-area: t; } .gdock .gline { grid-area: l; } .gdock .gjoin { grid-area: j; }
+.gdock .gtop { grid-area: t; } .gdock .gline { grid-area: l; } .gdock .gjoin, .gdock .gwatch { grid-area: j; }
 .gdock .gempty { align-content: center; min-height: 100%; background: none; border: 0; }
 .gdock .gemtitle { font-size: 26px; }
 .gerow { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 10px; }

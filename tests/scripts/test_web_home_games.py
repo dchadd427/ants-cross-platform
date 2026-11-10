@@ -30,10 +30,10 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HOME = os.path.join(REPO, "web", "home")
 FRONT = os.path.join(REPO, "web", "front")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
-CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js")]
+CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js", "web_home_games_live_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 78 * 1000, 22500      # bytes, raw and gzipped, both files together (about 71,800 and 20,600, with Quick join, its cards, the question before Leave room and the toast; room is left on purpose for the Watch button): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 90 * 1000, 25500      # bytes, raw and gzipped, both files together (about 86,000 and 24,200; raised on purpose from 78,000 and 22,500 for the rows of the matches in progress with Watch, their switch, the parser of GET /live and its looks): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -157,12 +157,18 @@ class TheFolder(unittest.TestCase):
         self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
-    def test_nothing_is_kept_in_the_browser_and_the_one_address_has_no_query_and_no_cookies(self):
-        for word in ("localStorage", "sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
+    def test_only_the_switch_of_the_matches_in_progress_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
+        for word in ("sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
             self.assertNotIn(word, self.code, word)
+        self.assertEqual(len(re.findall(r"localStorage", self.code)), 3, "the one choice, in two small functions that each have a try: read, and written or removed")
+        self.assertIn("function readChoice() { try { return win.localStorage.getItem(CHOICE_KEY) !== '0'; } catch (e) { return true; } }", self.js, "a browser that keeps nothing: the default, on")
+        self.assertIn("function keepChoice(on) { try { if (on) win.localStorage.removeItem(CHOICE_KEY); else win.localStorage.setItem(CHOICE_KEY, '0'); } catch (e) {", self.js)
+        self.assertIn("var CHOICE_KEY = 'ants.home.games.live';", self.js)
         self.assertIn("var LIST_URL = '/lobbies';", self.js)
-        self.assertEqual(len(re.findall(r"win\.fetch\(", self.code)), 1)
-        self.assertIn("win.fetch(LIST_URL, { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })", self.js)
+        self.assertIn("var LIVE_URL = '/live';", self.js)
+        self.assertEqual(len(re.findall(r"win\.fetch\(", self.code)), 1, "one fetch, in look(url), for both addresses")
+        self.assertIn("win.fetch(url, { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })", self.js)
+        self.assertEqual(sorted(set(re.findall(r"look\((\w+)\)", self.code)) - {"url"}), ["LIST_URL", "LIVE_URL"], "the two addresses and no other")
 
     def test_the_numbers_of_the_polling_are_the_ones_of_the_notes(self):
         for line in ("var EVERY_CLOSED = 30000, EVERY_OPEN = 5000;", "var JITTER = 0.2;", "var ROWS_MAX = 50;", "var REFRESH_MS = 600000;", "var FETCH_MS = 8000;", "var CAP_CLOSED = 300000, CAP_OPEN = 60000;"):

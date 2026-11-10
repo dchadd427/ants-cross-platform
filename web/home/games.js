@@ -4,6 +4,9 @@
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
 //     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
+//   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (a new tab on /play.html?live=<id>); a switch in the list's head (kept in this browser
+//     only) turns them off. The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 10 s at the most, only while the list shows, and a
+//     server without that door (404) or a failed look only hides the section.
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
 //     every call out of this file is guarded, and a failed look is only "the list is off".
 (function (root, factory) {
@@ -31,6 +34,12 @@
     var TOAST_MS = 6000;                                 // a toast with no question goes after this long
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
+    var LIVE_URL = '/live';                              // the site's own address of the matches that run now (no query, no credentials)
+    var LIVE_EVERY = 10000, LIVE_CAP = 300000;           // ms between two looks at /live (never less: the page's own door asks no faster), the longest wait after failures
+    var LIVE_MAX = 50;                                   // matches that are shown (the door lists 50 at the most)
+    var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
+    var SEATS = ['Green', 'Red', 'Blue', 'Black'];       // the colors of seats 0 - 3, in the words of the door's players strings
+    var CHOICE_KEY = 'ants.home.games.live';             // the one thing that this browser keeps: '0' when the matches in progress are turned off
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
     var SEAT_PERSON = 1, SEAT_CLIENT = 2;                // the Room message's states of a color that a person holds (lobby_net.js SLOT)
     var TEXT = {
@@ -43,6 +52,7 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
+        watch: 'Watch', liveMark: 'Live', inProgress: 'In progress', filter: 'Show games in progress', noLive: 'No games in progress.', soFar: ' so far', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
@@ -60,6 +70,39 @@
         if (raw.size < 1 || raw.free < 1 || raw.people + raw.bots + raw.free !== raw.size) return null;
         var known = rules.mapOfFile(raw.map);
         return { code: raw.code, host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size, age: raw.age };
+    }
+    // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map's file stem (else the one in the id), the seconds it has run (or its turns / 20), and at most four
+    // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only. Everything is text, and the only address that is made is /play.html?live=<id> from the checked id.
+    function liveOf(raw, rules) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw) || typeof raw.id !== 'string' || !LIVE_ID.test(raw.id)) return null;
+        var stem = typeof raw.map === 'string' ? raw.map : raw.id.replace(/-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/, ''), file = stem + '.LVL';
+        if (!/^[A-Za-z0-9_]{1,24}$/.test(stem) || !rules.validMapFile(file)) return null;
+        var secs = typeof raw.seconds === 'number' ? raw.seconds : typeof raw.turns === 'number' ? raw.turns / 20 : 0, who = [], known = rules.mapOfFile(file), list = Array.isArray(raw.players) ? raw.players : [];
+        for (var i = 0; i < list.length && who.length < 4; i++) {
+            if (typeof list[i] !== 'string' || !/^[\x20-\x7e]{1,80}$/.test(list[i])) continue;
+            var m = /^(Green|Red|Blue|Black)(?: \(([\s\S]*)\))?$/.exec(list[i]);
+            who.push(m ? { seat: SEATS.indexOf(m[1]), name: m[2] || m[1] } : { seat: -1, name: list[i] });
+        }
+        return { id: raw.id, map: file, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(file).slice(0, 28), seconds: isFinite(secs) && secs > 0 ? Math.min(Math.floor(secs), 359999) : 0, who: who };
+    }
+    // The matches of an answer ({ live: [...] }), at most 50, an id once, in the door's order (newest first); null when the answer is not that shape (the section is hidden)
+    function parseLive(data, rules) {
+        if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.live)) return null;
+        var out = [], seen = Object.create(null);
+        for (var i = 0; i < data.live.length && i < SCAN_MAX && out.length < LIVE_MAX; i++) {
+            var e = liveOf(data.live[i], rules);
+            if (!e || seen[e.id] === true) continue;
+            seen[e.id] = true;
+            out.push(e);
+        }
+        return out;
+    }
+    // How long a match has run, as a clock: 0:07, 12:00, 61:05
+    function clockText(s) { return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); }
+    // The wait before the next look at /live: 10 s doubled for every failure in a row up to 5 minutes, then 0 to +20 % (random: 0 to 1): never under 10 s
+    function liveDelay(failures, random) {
+        var wait = Math.min(LIVE_CAP, LIVE_EVERY * Math.pow(2, Math.min(failures, 10)));
+        return Math.round(wait * (1 + JITTER * Math.max(0, Math.min(1, random))));
     }
     // The rows of an answer ({ format: 1, lobbies: [...] }), at most 50, a code once; null when the answer is not that shape (the list is "off"). A row that is not of the shape is dropped, the others stay.
     function parseList(data, rules) {
@@ -104,6 +147,9 @@
         var docked = !!env.dock, rows = [], loaded = false, off = false, failures = 0, isOpen = docked, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [], finding = false;
+        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [], showLive = readChoice();
+        function readChoice() { try { return win.localStorage.getItem(CHOICE_KEY) !== '0'; } catch (e) { return true; } }          // (a browser that keeps nothing: the default, on)
+        function keepChoice(on) { try { if (on) win.localStorage.removeItem(CHOICE_KEY); else win.localStorage.setItem(CHOICE_KEY, '0'); } catch (e) { /* not kept: the choice lasts until the page is left */ } }
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -392,10 +438,13 @@
         // ---- the list's popover ----
         var pop = el('section', 'gpop'), popHead = el('div', 'gphead'), popTitle = el('h2', 'gptitle', TEXT.title), popCount = el('span', 'gpcount'), popNote = el('p', 'gpnote');
         var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popEmpty = el('div', 'gempty'), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
+        var popFilter = el('div', 'gfrow'), filterLabel = el('label', 'gfilter'), filterBox = el('input'), liveBox = el('div', 'glivebox'), liveHead = el('h3', 'gsub', TEXT.inProgress), liveList = el('ul', 'glist glivelist'), liveNone = el('p', 'gemline gnolive', TEXT.noLive);
         var popJoin = el('div', 'gjoining'), popJoinText = el('span'), popJoinStop = button('sm', TEXT.cancel, guard(function () { cancelJoin(); }));
         var codeBox = el('div', 'gcode'), codeLabel = el('label', 'gclabel', TEXT.code), codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
         pop.hidden = !docked; pop.setAttribute('role', docked ? 'region' : 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
         popHead.appendChild(popTitle); popHead.appendChild(popCount);
+        filterBox.type = 'checkbox'; filterBox.checked = showLive; filterLabel.appendChild(filterBox); filterLabel.appendChild(el('span', '', TEXT.filter)); popFilter.appendChild(filterLabel);
+        liveBox.hidden = true; popFilter.hidden = false; liveBox.appendChild(liveHead); liveBox.appendChild(liveList); liveBox.appendChild(liveNone);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
         popEmpty.appendChild(el('p', 'gemtitle', TEXT.emptyTitle)); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine)); var emptyRow = el('div', 'gerow'); emptyRow.appendChild(button('ghostbtn', TEXT.quickHost, guard(function () { quickHost(); }))); emptyRow.appendChild(button('ghostbtn', TEXT.quickJoin, guard(function () { quickJoin(); }))); popEmpty.appendChild(emptyRow);
@@ -404,8 +453,8 @@
         codeInput.type = 'text'; codeInput.setAttribute('placeholder', TEXT.codePlaceholder); codeInput.setAttribute('aria-label', TEXT.code); codeInput.setAttribute('autocomplete', 'off'); codeInput.setAttribute('autocapitalize', 'off');
         codeInput.setAttribute('spellcheck', 'false'); codeInput.setAttribute('aria-describedby', 'gc-hint'); codeHint.id = 'gc-hint';
         codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeBox.appendChild(codeLabel); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
-        [popList, popLoad, popEmpty, popOff].forEach(function (n) { popBody.appendChild(n); });
-        [popHead, popJoin, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
+        [popList, popLoad, popEmpty, popOff, liveBox].forEach(function (n) { popBody.appendChild(n); });
+        [popHead, popFilter, popJoin, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
         if (docked) pop.className += ' gdock';
         (env.dock || host).appendChild(pop);
         codeInput.addEventListener('input', guard(function () { codeHint.textContent = ''; }));
@@ -421,11 +470,16 @@
             parts.games.setAttribute('aria-label', shown ? 'Games, ' + countText(n) + ' open' : 'Games');
         }
         // One row: the map's picture (an original's, else the library's by file name; one that does not come leaves the square), who hosts, which map, the seats, the bots, and (in the list) Join
-        function rowNode(row, onList, best, yours) {
-            var li = el(onList ? 'li' : 'div', 'gitem'), seats = seatsOf(row), pic = el('span', 'gmap'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
+        function picOf(row) {                              // the square of a row (a room's or a running match's)
+            var pic = el('span', 'gmap');
             var src = row.mapKey ? 'front/preview_' + row.mapKey + '.png' : Picker ? Picker.previewPath(row.map) : '';
             if (src) { var img = el('img'); img.setAttribute('loading', 'lazy'); img.src = src; img.alt = ''; img.setAttribute('width', '300'); img.setAttribute('height', '300'); img.addEventListener('error', function () { pic.removeChild(img); }); pic.appendChild(img); }
-            pic.setAttribute('aria-hidden', 'true'); dots.setAttribute('aria-hidden', 'true');
+            pic.setAttribute('aria-hidden', 'true');
+            return pic;
+        }
+        function rowNode(row, onList, best, yours) {
+            var li = el(onList ? 'li' : 'div', 'gitem'), seats = seatsOf(row), pic = picOf(row), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots');
+            dots.setAttribute('aria-hidden', 'true');
             top.appendChild(el('span', 'gname', row.host)); top.appendChild(el('span', 'gmapname', row.mapName));
             seats.dots.forEach(function (kind, i) { dots.appendChild(el('i', 'gdot ' + kind + ' c' + i)); });
             line.appendChild(dots); line.appendChild(el('span', 'gcount', seats.count)); line.appendChild(el('span', 'gbots', seats.bots));
@@ -438,9 +492,52 @@
             }
             return li;
         }
+        // One match that runs now: the map's square, the map (the room's host is not known: the door carries no room), a red Live mark, the players (a dot of their color and their names) and how long it has run; Watch opens the
+        // player on it in a NEW tab, so the seat in the room that this page holds stays
+        function liveNode(e) {
+            var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', clockText(e.seconds) + TEXT.soFar);
+            var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch);
+            dots.setAttribute('aria-hidden', 'true');
+            e.who.forEach(function (w) { var d = el('i', 'gdot player'); d.className += ' c' + (w.seat < 0 ? 3 : w.seat); dots.appendChild(d); });
+            who.textContent = names;
+            top.appendChild(el('span', 'gname', e.mapName)); top.appendChild(el('span', 'glive-mark', TEXT.liveMark));
+            line.appendChild(dots); line.appendChild(who); line.appendChild(len);
+            text.appendChild(top); text.appendChild(line); li.appendChild(picOf(e)); li.appendChild(text);
+            go.setAttribute('href', '/play.html?live=' + e.id); go.setAttribute('target', '_blank'); go.setAttribute('rel', 'noopener'); go.setAttribute('data-live', e.id);
+            go.setAttribute('aria-label', 'Watch the match on ' + e.mapName + ', ' + names + ', ' + clockText(e.seconds) + TEXT.soFar);
+            li.appendChild(go);
+            liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName });
+            return li;
+        }
+        function liveShown() { return showLive && liveLoaded && !liveOff && loaded; }          // (the section stands only with the switch on, an answer of /live that was good, and the list's own first look done)
+        function paintLive() {
+            var on = liveShown(), active = doc.activeElement, focusId = active && active.getAttribute ? active.getAttribute('data-live') : null;
+            liveBox.hidden = !on;
+            popFilter.hidden = showLive && liveLoaded && liveOff;                 // (a server with no live door: nothing to switch)
+            filterBox.checked = showLive;
+            if (!on) { liveSig = null; return; }
+            liveNone.hidden = live.length > 0; liveList.hidden = live.length === 0;
+            var sig = JSON.stringify(live.map(function (e) { return [e.id, e.map, e.who]; }));
+            if (sig !== liveSig) {                                              // (made again only when a match, its map or its players came or went: a focus stays, and the clocks tick in place)
+                liveSig = sig; liveLens = [];
+                while (liveList.firstChild) liveList.removeChild(liveList.firstChild);
+                live.forEach(function (e) { liveList.appendChild(liveNode(e)); });
+                if (focusId) { var again = liveList.querySelector('[data-live="' + focusId + '"]'); if (again && again.focus) again.focus(); }
+            }
+            live.forEach(function (e, i) {
+                var l = liveLens[i];
+                if (l) { l.node.textContent = clockText(e.seconds) + TEXT.soFar; l.link.setAttribute('aria-label', 'Watch the match on ' + l.map + ', ' + l.names + ', ' + clockText(e.seconds) + TEXT.soFar); }
+            });
+        }
+        function countLine(n) {                            // the list's head: "3 open, 2 in progress" while the matches are shown, else "3 waiting · updates live"
+            if (!loaded || off) return '';
+            if (liveShown()) return !n && !live.length ? TEXT.none : countText(n) + ' open, ' + countText(live.length) + ' in progress';
+            return n === 0 ? TEXT.none : countText(n) + ' waiting' + TEXT.live;
+        }
         function paintList() {
             var shown = listRows(), lead = shown.length - visibleRows().length, active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null;
-            popCount.textContent = !loaded || off ? '' : shown.length === 0 ? TEXT.none : countText(shown.length) + ' waiting' + TEXT.live;
+            popCount.textContent = countLine(shown.length);
+            paintLive();
             popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
             var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
@@ -464,7 +561,7 @@
             if (isOpen || gone || !onHome()) return;
             isOpen = true; pop.hidden = false; popNote.textContent = ''; codeHint.textContent = '';
             parts.games.setAttribute('aria-expanded', 'true');
-            place(); paintList(); poll();
+            place(); paintList(); poll(); pollLive();
             focusList();
         }
         function focusList() { var first = popList.querySelector('button') || popEmpty.querySelector('button') || codeInput; if (first && first.focus) first.focus(); }
@@ -473,7 +570,7 @@
             isOpen = false; pop.hidden = true;
             parts.games.setAttribute('aria-expanded', 'false');
             if (back && parts.games.focus) parts.games.focus();
-            schedule();
+            schedule(); scheduleLive();
         }
         function closeAll() { closeAsk(false); closeList(false); }
 
@@ -546,7 +643,7 @@
             if (loaded && lastLook && now() - lastLook < FLOOR_MS) { done(); return; }
             lastLook = now();
             if (typeof win.fetch !== 'function') { settle(null); done(); return; }
-            look().then(function (data) { settle(data); done(); });
+            look(LIST_URL).then(function (data) { settle(data); done(); });
         }
         function stopFinding() { finding = false; joinSeq++; try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ } }
         function lookLine(n) { return 'Looking through ' + n + (n === 1 ? ' open game' : ' open games') + ' for the best one.'; }
@@ -621,14 +718,14 @@
             if (!wanted() || polling) return;
             pollTimer = later(guard(function () { pollTimer = null; poll(); }), delayOf(isOpen, failures, random()));
         }
-        function look() {                                  // one request: a promise of the parsed JSON, or of null for anything that is not a good answer (it never fails)
+        function look(url) {                               // one request: a promise of the parsed JSON, or of null for anything that is not a good answer (it never fails)
             return new Promise(function (resolve) {
                 var finished = false, ctrl = null, timer = null;
                 function finish(v) { if (finished) return; finished = true; if (timer !== null) cancel(timer); resolve(v); }
                 try { ctrl = win.AbortController ? new win.AbortController() : null; } catch (e) { ctrl = null; }
                 timer = later(function () { finish(null); try { if (ctrl) ctrl.abort(); } catch (e) { /* it was over */ } }, FETCH_MS);
                 try {
-                    win.fetch(LIST_URL, { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
+                    win.fetch(url, { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined }).then(function (res) {
                         if (!res || res.status !== 200) { finish(null); return null; }
                         var length = res.headers && res.headers.get ? Number(res.headers.get('content-length')) : NaN;
                         if (length > BODY_MAX) { finish(null); try { if (ctrl) ctrl.abort(); } catch (e) { /* it was over */ } return null; }          // (an answer that says that it is huge is not read)
@@ -651,7 +748,7 @@
             if (typeof win.fetch !== 'function') { settle(null); return; }
             polling = true;
             var mine = ++round;
-            look().then(function (data) { if (mine === round) { polling = false; settle(data); } }, function () { if (mine === round) { polling = false; settle(null); } });
+            look(LIST_URL).then(function (data) { if (mine === round) { polling = false; settle(data); } }, function () { if (mine === round) { polling = false; settle(null); } });
         }
         function settle(data) {
             var list = null;
@@ -662,6 +759,41 @@
             if (isOpen) paintList();
             schedule();
         }
+
+        // ---- the looks at GET /live: the matches that run now, only while the switch is on and the list shows (Home, a visible tab), 10 s apart at the least ----
+        function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen; }
+        function scheduleLive(ms) {
+            if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
+            if (!liveWanted() || liveBusy) return;
+            liveTimer = later(guard(function () { liveTimer = null; pollLive(); }), ms === undefined ? liveDelay(liveFails, random()) : ms);
+        }
+        function pollLive() {                              // a look at once when 10 s have gone since the last one, else when they have
+            if (!liveWanted() || liveBusy) return;
+            var wait = lastLive ? LIVE_EVERY - (now() - lastLive) : 0;
+            if (wait > 0) { if (liveTimer === null) scheduleLive(wait); return; }
+            if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
+            lastLive = now();
+            if (typeof win.fetch !== 'function') { settleLive(null); return; }
+            liveBusy = true;
+            var mine = ++liveRound;
+            look(LIVE_URL).then(function (data) { if (mine === liveRound) { liveBusy = false; settleLive(data); } }, function () { if (mine === liveRound) { liveBusy = false; settleLive(null); } });
+        }
+        function settleLive(data) {
+            var list = null;
+            try { list = parseLive(data, rules); } catch (e) { list = null; }
+            liveLoaded = true;
+            if (list === null) { liveOff = true; liveFails++; live = []; } else { liveOff = false; liveFails = 0; live = list; }
+            if (isOpen) paintList();
+            scheduleLive();
+        }
+        function chooseLive(on) {                          // the switch: the choice is kept in this browser; off stops the looks at /live and puts the section away, on looks again
+            if (on === showLive) return;
+            showLive = on; keepChoice(on);
+            if (!on) { liveRound++; liveBusy = false; live = []; liveLoaded = false; liveOff = false; liveFails = 0; if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; } }
+            if (isOpen) paintList();
+            if (on) pollLive();
+        }
+        filterBox.addEventListener('change', guard(function () { chooseLive(!!filterBox.checked); }));
 
         // ---- the page's own events ----
         function enable(b) { b.disabled = false; b.removeAttribute('aria-disabled'); }
@@ -685,7 +817,8 @@
         }));
         doc.addEventListener('visibilitychange', guard(function () {
             if (!visible() && pollTimer !== null) { cancel(pollTimer); pollTimer = null; }
-            poll(); schedule(); armRefresh();
+            if (!visible() && liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
+            poll(); schedule(); armRefresh(); pollLive();
         }));
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeToast(); }));
         var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); })) : null, lastFocus = null;
@@ -694,15 +827,15 @@
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (isOpen) { paintList(); place(); } }
         function shown(name) {
-            if (name === 'room') { closeAll(); placeVis(); } else poll();
+            if (name === 'room') { closeAll(); placeVis(); scheduleLive(); } else { poll(); pollLive(); }
             sync();
             schedule();
         }
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more
             gone = true; closeAll(); clearNotice();
             if (toastWatch) toastWatch.disconnect();
-            [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer].forEach(function (t) { if (t !== null) cancel(t); });
-            pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = null;
+            [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer, liveTimer].forEach(function (t) { if (t !== null) cancel(t); });
+            pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = liveTimer = null; liveRound++;
         }
         function stalled(words) {                          // the hand-off did not come in 15 s (the page's room is still frozen): the buttons that need it say why they do not work
             [parts.quickHost, parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });
@@ -711,11 +844,12 @@
         function inert(on) { [toast, pop].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a dialog of the page, or the hand-off, is over this part: it takes no key or tap)
         sync();
         poll();
+        pollLive();
         return {
             sync: guard(sync), shown: guard(shown), leaving: leaving, opening: opening, stalled: stalled, inert: inert, poll: poll,
-            state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind }; }
+            state: function () { return { rows: rows, loaded: loaded, off: off, failures: failures, open: isOpen, pending: !!pending, joining: joining, notice: noticeKind, live: live, liveOff: liveOff, liveLoaded: liveLoaded, showLive: showLive }; }
         };
     }
 
-    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
+    return { TEXT: TEXT, rowOf: rowOf, parseList: parseList, liveOf: liveOf, parseLive: parseLive, liveDelay: liveDelay, clockText: clockText, LIVE_EVERY: LIVE_EVERY, delayOf: delayOf, countText: countText, bestOrder: bestOrder, seatsOf: seatsOf, mount: mount, EVERY_CLOSED: EVERY_CLOSED, EVERY_OPEN: EVERY_OPEN, REFRESH_MS: REFRESH_MS, ROWS_MAX: ROWS_MAX };
 });
