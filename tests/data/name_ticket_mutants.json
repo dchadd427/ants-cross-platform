@@ -228,8 +228,8 @@
   {
    "id": "suffix_base_not_trimmed",
    "file": "src/ants_net/person_name.cpp",
-   "old": "const std::string candidate = trim_blanks(base + suffix);",
-   "new": "const std::string candidate = base + suffix;",
+   "old": "return trim_blanks(trim_blanks(name.substr(0, kMaxNameChars - suffix.size())) + suffix);",
+   "new": "return trim_blanks(name.substr(0, kMaxNameChars - suffix.size())) + suffix;",
    "build": "test_lobby",
    "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
   },
