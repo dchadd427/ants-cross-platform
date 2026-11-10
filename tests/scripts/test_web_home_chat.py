@@ -7,7 +7,7 @@ is text from strangers. It is loaded by web/home/home.js, after the first paint 
   - the page and the other pages: web/lobby.html does not link the dock, no other page names it or the hub's door, and the only script that knows the address /hub/ws is chat.js;
   - the loader in home.js: the two files, once, after the first paint, only when Home shows, mounted when BOTH have come, and whatever goes wrong with them stays with them;
   - the folder: its own budgets (raw and gzipped), plain ES5, no markup made from text, no link, no storage, no other site, nothing that opens a socket by itself;
-  - the style: the sizes of the approved pictures (380 x 380 in the corner, folded to its header, the strip of 62 px, the panel of a phone and of a phone held sideways), every target at least 44 px (the
+  - the style: the panel along the bottom of Home (folded to its header), the Chat view of a phone and of a phone held sideways, every target at least 44 px (the
     field and Send 48), nothing sideways, reduced motion, nothing that the Menu's layer does not stay above, the login chip's place hidden, nothing loaded from another site;
   - the way into the image: the CI's list of the image's files carries the two files, the Dockerfile and the local web build copy the folder;
   - the code RUNS in node: tests/scripts/web_home_chat_check.js (a fake hub and a fake clock: the pure parts, what the dock shows, hostile text, the link and its backoff, the visitor, the page) and
@@ -37,7 +37,7 @@ HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
 LOGIN_LINK = 'href="/hub/login?next=home"'      # (the one thing that a page may say of the hub in its markup: the plain link of the name card that logs a guest in; tests/scripts/test_web_name.py)
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 52500, 16400           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with the dock's fit to the room under Home's bar and its queue of lines that wait for an answer; raised from 51,000 and 15,900 on purpose for the two names (docs/HUB.md, "Names"): the switch in the account menu, the key that tells a line's author, the username that a moderator sees, about 1,550 bytes and 460 gzipped, when 204 and 37 were left, with the one cleaner of a name that replaced two): they load after the first paint, so they cost the first look nothing
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 52500, 16400           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with its queue of lines that wait for an answer; raised from 51,000 and 15,900 on purpose for the two names (docs/HUB.md, "Names"): the switch in the account menu, the key that tells a line's author, the username that a moderator sees, about 1,550 bytes and 460 gzipped, when 204 and 37 were left, with the one cleaner of a name that replaced two): they load after the first paint, so they cost the first look nothing
 
 
 def read(*parts):
@@ -239,7 +239,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("#home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;", self.home_css, "the column that the dock is a part of")
 
     def test_the_field_and_the_account_line_share_a_row_in_a_wide_window(self):
-        wide = re.search(r"@media \(min-width: 701px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        wide = re.search(r"@media \(min-width: 701px\), \(max-width: 700px\) and \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", wide)
         self.assertIn(".gc-form { grid-area: 3 / 1; } .gc-slot { grid-area: 3 / 2; align-self: center; }", wide)
         self.assertIn(".gc-log, .gc-note, .gc-guest { grid-column: 1 / -1; }", wide)
@@ -251,7 +251,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".gc-fold { display: none; }", phone, "home.js opens it with its view and shuts it with the others: no fold to leave it shrunk")
         self.assertNotIn("--gc-min", self.css, "the panel is never put away for want of room: it is a part of the column, and the games take what is left")
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }", self.css)
-        self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head, .gc-slot { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the account line gives its place to the log and nothing of the panel reaches over the strip")
+        self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head, .gc-as, .gc-slot .gc-dc { display: none; } .gc-menu { width: 260px; max-width: calc(100vw - 24px); } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the heading gives its place to the log (the account line stays, on the field's row) and nothing of the panel reaches over the strip")
 
     def test_the_header_stays_when_the_panel_is_folded_and_the_title_is_one_word_group(self):
         self.assertNotIn(".gc-short", self.css)

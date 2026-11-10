@@ -9,7 +9,7 @@ The list shows who has the front page open right now: a narrow column at the rig
   - the style: the breakpoint of the script, the sizes of the approved pictures (260 px, 280 from 1600 x 900), the room that the Games list leaves for it under 1280 px (the arithmetic; from 1280 px the
     list's own rule centers it, and no rule of this file says where it is), the labels of the bar's button (the picture, the word and the number from 411 px, the word and the number from 381 px, the picture and
     the number under that, closer under 360 px: so that \"99+\" is cut off nowhere from 320 to 639 px), nothing of Home's own changes until the list is there (every rule that reaches the bar or the Games list
-    starts with the class that the script puts on Home), every target at least 44 px, the sheet clears a phone's system bar, the layers, nothing loaded from another site;
+    starts with the class that the script puts on Home), every target at least 44 px, the layers, nothing loaded from another site;
   - the way into the image: the CI's list of the image's files carries the two files, the Dockerfile and the local web build copy the folder;
   - the code RUNS in node: tests/scripts/web_home_players_check.js (a fake dock and a fake clock: the pure parts, the phases, what the page tells the hub, what is drawn, Join, the sheet, malformed frames, the page);
   - tests/data/home_players_mutants.json changes one thing at a time in a COPY of the files (a count that is zero, a status that is not checked, a code for a private room, a flood of rows, a second socket, markup,
@@ -32,7 +32,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_players_check.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 FILES = ("players.js", "players.css")
-PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 42 * 1000, 12600       # bytes, raw and gzipped, both files together (about 39,600 and 11,900: the panel, the sheet and the drawer, the groups and the rows, Join, the guests, the empty and the off notes, the phone's bar button); they load after the first paint, after the chat dock, so they cost the first look nothing
+PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 42 * 1000, 12600       # bytes, raw and gzipped, both files together (about 39,600 and 11,900: the panel, the groups and the rows, Join, the guests, the empty and the off notes); they load after the first paint, after the chat dock, so they cost the first look nothing
 
 
 def read(*parts):

@@ -1,4 +1,4 @@
-// The global chat dock of Home (docs/HOME_SCREEN.md, "The chat dock"): a panel in the lower-left corner (a strip along the bottom on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
+// The global chat dock of Home (docs/HOME_SCREEN.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
 // (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
 // other page opens no hub socket. ES5, no module system: a page gets AntsHomeChat, node gets module.exports (tests/scripts/web_home_chat_check.js).
 //   * Everything the hub sends is text from strangers: it becomes DOM text with createElement and textContent only (never markup, never a link); names and lines are cut for display, the bidirectional and zero-width
@@ -104,7 +104,7 @@
         var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
         var busy = false, menuOn = false;                                       // (a POST of the login is on its way; the small menu of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
-                var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
+        var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {

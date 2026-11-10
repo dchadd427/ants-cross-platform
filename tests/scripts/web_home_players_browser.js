@@ -1,5 +1,5 @@
 // OPT-IN, not part of ./run_tests.sh: the players list of Home in a REAL browser (Chromium through Playwright) against the REAL hub (`python3 -m hub`, with its test login), behind a small stand-in for the site's nginx that
-// serves the files of web/ (stamped as the Dockerfile stamps them), a fake /lobbies (the Games list that the live site docks in the Yard: it has rooms that the list's Join can press) and /hub/ws (to the hub, with the
+// serves the files of web/ (stamped as the Dockerfile stamps them), a fake /lobbies (the Games list that Home docks in its body: it has rooms that the list's Join can press) and /hub/ws (to the hub, with the
 // account that a cookie names). The other people are raw sockets of the hub (their own masked frames, each from an address of its own, as nginx would tell the hub). It looks at what only a browser shows
 // (docs/HOME_SCREEN.md, "The players list"):
 //   1. the crowd of the approved pictures (a moderator, three who look, two who wait, two who play, four guests) at 1280 x 800, 900 x 700, 390 x 844, 844 x 390 and 568 x 320, and with none, 3, 12 and 200 others: the
@@ -286,7 +286,7 @@ async function main() {
                 await shot(page, 'phone_chat_' + size[1] + 'x' + size[2]);
                 await page.click('.htab.t-games'); await sleep(200);
                 await page.click('.hlogin'); await sleep(300);
-                check(size[0] + ': the login chip (logged in) shows the Chat view with the chat open and the focus on Log out', await page.evaluate(() => document.getElementById('home').getAttribute('data-tab') === 'chat' && document.getElementById('gchat').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'true' && (innerHeight <= 500 || document.activeElement.classList.contains('gc-link'))));
+                check(size[0] + ': the login chip (logged in) shows the Chat view with the chat open and the focus on Log out', await page.evaluate(() => document.getElementById('home').getAttribute('data-tab') === 'chat' && document.getElementById('gchat').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'true' && document.activeElement.classList.contains('gc-link')));
                 await page.click('.htab.t-games'); await sleep(200);
                 check(size[0] + ': Games brings the list back and the chat is folded again', await page.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'false'));
                 await page.context().close();

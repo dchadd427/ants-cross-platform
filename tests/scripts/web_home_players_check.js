@@ -98,7 +98,7 @@ function rig(o) {
     const sent = [], taps = [], errors = [], link = { open: true };
     const dock = { tap(fn) { taps.push(fn); }, send(obj) { if (!link.open) return false; sent.push(JSON.parse(JSON.stringify(obj))); return true; } };
     const page = { client: () => state.client, info: () => ({ client: !!state.client, model: null }), handing: () => state.handing };
-    const list = Players.mount({ doc, win, host, dock, page, yard, bar: right, quickHost: quick, games: gamesButton, now: clock.now, error: (e) => errors.push(e) });
+    const list = Players.mount({ doc, win, host, dock, page, yard, quickHost: quick, games: gamesButton, now: clock.now, error: (e) => errors.push(e) });
     const r = { env, clock, Players, doc, win, host, yard, right, quick, games: gamesButton, list, dock, sent, taps, errors, state, pressed, found, link };
     r.emit = (kind, m) => taps.forEach((fn) => fn(kind, m));
     r.live = (welcome) => { r.link.open = true; r.emit('live', welcome || W({})); return r; };
