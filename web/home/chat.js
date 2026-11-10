@@ -102,7 +102,7 @@
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
         var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
-        var busy = false, menuOn = false, forgetSure = false;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
+        var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
@@ -211,11 +211,13 @@
             guest.hidden = !(live && !you);
             note.textContent = notice || (state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');
             slot.hidden = !(live && you && login && menuOn); acctName.textContent = you ? you.name : '';
-            if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) chip.focus();       // (the dropdown goes under the focus: a Log out, a Forget me, a name that is picked; the focus goes to the chip, not to nowhere)
+            if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) { if (live && login) chip.focus(); else refocus = true; }       // (the dropdown goes under the focus: a Log out, a Forget me: the focus goes to the chip, not to nowhere; a name that is picked closes the socket and hides the chip too, so the focus waits for the dropdown to come back)
             outBtn.disabled = forgetBtn.disabled = busy;
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
             if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
             if (!slot.hidden) place();
+            if (!slot.hidden && refocus) { refocus = false; var back = pickBtn.hidden ? outBtn : pickBtn; if (back.focus) back.focus(); }       // (it is back: the focus is where it was, on the button of the name)
+            if (!menuOn) refocus = false;
             if (slot.hidden && forgetSure) sure(false);
             if (chip) {                                                         // (the bar: Log in where a login is offered, the visitor's name where they are named; nothing while the hub is not there)
                 chip.hidden = !(live && login);
@@ -391,7 +393,7 @@
         pickBtn.addEventListener('click', guard(function () { if (you && you.other && !out({ t: 'pick', pick: you.pick === 'display' ? 'username' : 'display' })) tell('failed'); }));       // (the hub closes the account's sockets; the page connects again and reads the new name)
         outBtn.addEventListener('click', guard(function () { leave(LOGOUT); }));
         function sure(on) { forgetSure = !!on; forgetBtn.textContent = on ? TEXT.sure : TEXT.forget; forgetBtn.setAttribute('data-sure', on ? 'true' : 'false'); }       // (Forget me asks once more: the second press does it; another place, Escape or the dropdown going away puts the question back)
-        forgetBtn.addEventListener('click', guard(function () { if (!forgetSure) { sure(true); return; } sure(false); leave(FORGET); }));
+        forgetBtn.addEventListener('click', guard(function () { if (!forgetSure) { forgetAt = now(); sure(true); return; } if (now() - forgetAt < 400) return; sure(false); leave(FORGET); }));       // (a double press is one press: the answer to the question comes after a moment)
         forgetBtn.addEventListener('blur', guard(function () { sure(false); }));
         if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn && outBtn.focus) outBtn.focus(); }));       // (the chip opens the dropdown and puts the focus on Log out; a second press closes it)
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)

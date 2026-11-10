@@ -219,7 +219,7 @@ async function main() {
     await page.click('#gchat .gc-send');
     await other.page.waitForFunction(() => /a second line to forget/.test(document.querySelector('#gchat .gc-log').innerText), null, { timeout: 8000 });
     await page.click('.hlogin');
-    await page.click('#gchat-login-slot .gc-forget'); await page.click('#gchat-login-slot .gc-forget');
+    await page.click('#gchat-login-slot .gc-forget'); await sleep(450); await page.click('#gchat-login-slot .gc-forget');
     await waitYou(page, 'no');
     await other.page.waitForFunction(() => !/a second line to forget/.test(document.querySelector('#gchat .gc-log').innerText), null, { timeout: 8000 });
     check('Forget me: the visitor is a reader, the cookie is gone, and the lines that the account wrote are gone from the other browser\'s screen too, and from a new one\'s',

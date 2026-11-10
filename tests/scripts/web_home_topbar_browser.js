@@ -236,6 +236,10 @@ async function main() {
             await page.goto(info.site + '/', { waitUntil: 'load' });
             await live(page, 'yes');
             await page.click('.hbar .hlogin'); await sleep(80);
+            await page.click('#gchat-login-slot .gc-pick');
+            await page.waitForFunction(() => document.querySelector('#gchat-login-slot') && /Chat shows your username/.test(document.querySelector('#gchat-login-slot').innerText) && document.getElementById('gchat').getAttribute('data-state') === 'live' && document.querySelector('#gchat-login-slot').getClientRects().length > 0, null, { timeout: 12000 });
+            await sleep(150);
+            check(n[0] + ': a name pick on the real hub (the socket closes, the chip goes for a moment, the dropdown comes back): the focus is on the pick button again, not on the page', await page.evaluate(() => /gc-pick/.test(document.activeElement.className)), await page.evaluate(() => document.activeElement.className + '|' + document.activeElement.tagName));
             await page.click('#gchat-login-slot .gc-out');
             await live(page, 'no');
             const d = await page.evaluate(() => ({ chip: document.querySelector('.hbar .hlogin').getAttribute('aria-label'), slot: document.getElementById('gchat-login-slot').getClientRects().length, expanded: document.querySelector('.hbar .hlogin').getAttribute('aria-expanded') }));
@@ -248,7 +252,7 @@ async function main() {
             await p2.click('.hbar .hlogin'); await sleep(80);
             await p2.click('#gchat-login-slot .gc-forget');
             check(n[0] + ': the first press on Forget me only asks (Are you sure? Press again), the account is still named', (await p2.evaluate(() => document.querySelector('#gchat-login-slot .gc-forget').textContent)) === 'Are you sure? Press again' && (await p2.evaluate(() => document.getElementById('gchat').getAttribute('data-you'))) === 'yes');
-            await p2.click('#gchat-login-slot .gc-forget');
+            await sleep(450); await p2.click('#gchat-login-slot .gc-forget');
             await live(p2, 'no');
             check(n[0] + ': Forget me in the dropdown works on the real hub (a reader afterwards)', await p2.evaluate(() => document.querySelector('.hbar .hlogin').getAttribute('aria-label') === 'Log in with Discord'));
             await p2.close();

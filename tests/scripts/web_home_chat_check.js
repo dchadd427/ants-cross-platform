@@ -1095,6 +1095,8 @@ function bring(env) {                                     // the two files arriv
     check('... Escape (the dropdown goes) puts the question back too, and nothing was sent', forget.textContent === 'Forget me' && r.fetches.length === 0 && r.dock.slot.hidden === true);
     r.chip.click();
     forget.click(); forget.click();
+    check('a double press on Forget me counts once: nothing is sent, the question is still there', r.fetches.length === 0 && forget.textContent === 'Are you sure? Press again');
+    r.clock.advance(450); forget.click();
     same('Forget me is ONE POST of the page to /hub/forget, the same kind of request as Log out', [r.fetches.length, r.fetches[0].path, r.fetches[0].init], [1, '/hub/forget', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }]);
     r.s().recv({ t: 'del', id: 1 }); r.s().recv({ t: 'del', id: 2 });
     r.answer({ ok: true });
@@ -1103,7 +1105,7 @@ function bring(env) {                                     // the two files arriv
     const two = rig();
     two.live(W({ login: true, you: YOU }));
     one(two.dock.slot, 'gc-out').click();
-    (two.chip && two.chip.click()); one(two.dock.slot, 'gc-forget').click(); one(two.dock.slot, 'gc-forget').click();
+    (two.chip && two.chip.click()); one(two.dock.slot, 'gc-forget').click(); two.clock.advance(450); one(two.dock.slot, 'gc-forget').click();
     check('Forget me while Log out is on its way is not a second request (one thing at a time)', two.fetches.length === 1);
 }
 {   // the name is text, whatever it is
@@ -1206,10 +1208,13 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     check('... the page does not change what it shows by itself: the name is the hub\'s to change (it closes the socket and the page connects again)', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && note.textContent === 'Chat shows your display name.');
     const first = r.s();
     button.focus();
-    first.fail();
-    check('the dropdown goes while the hub closes the socket and the focus that was on its button is on the chip, not nowhere', r.dock.slot.hidden === true && r.env.focused === r.chip);
+    const dropHidden = () => { for (let e = r.env.focused; e; e = e.parent) if (e.hidden) { r.env.focused = null; r.env.doc.activeElement = null; return; } };       // (a browser drops the focus from an element that is hidden, or in one)
+    first.fail(); dropHidden();
+    check('the dropdown goes while the hub closes the socket, and the chip goes with it (offline): the focus is nowhere for the moment, as in a browser', r.dock.slot.hidden === true && r.chip.hidden === true && r.env.focused === null);
     check('the hub closes the socket: "Chat is offline" for a moment, the account line is away, and the page connects again after its first wait', r.dock.state() === 'offline' && r.dock.slot.hidden === true && (r.clock.advance(1500), r.sockets.length === 2));
     r.s().open().recv(W({ login: true, you: { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: 'Maple Leaf' } }));
+    dropHidden();
+    check('the dropdown is back with the new welcome and the focus is back on the button of the name (not left on the page)', r.dock.slot.hidden === false && r.env.focused === button);
     check('the new welcome says the other name: the account line, the sentence and the button follow, and the small menu is as open as it was', one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && note.textContent === 'Chat shows your username.' && button.textContent === 'Show my display name: Maple Leaf' && menu.hidden === false);
     button.click();
     same('... and a press now sends the first name', r.s().sent.filter((x) => x.indexOf('pick') !== -1), ['{"t":"pick","pick":"display"}']);
