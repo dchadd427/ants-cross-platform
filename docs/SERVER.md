@@ -67,6 +67,7 @@ A later start does not print the secret again. With demo rooms, a line "public r
 | `--bot-match-every-min N` | 0 (none) | The server plays a match of computer players of its own every N minutes (5 - 1440; 0 = none), so that the site always has a match to watch (["Matches of computer players"](#matches-of-computer-players)). It needs the replays. The stack file asks for 60 (`ANTS_BOT_MATCH_EVERY_MIN`). |
 | `--demo-rooms N`, `--demo-map NAME`, `--demo-maps A.LVL,B.LVL,...` | off | Demo rooms for a public page that has no secret (`web/lobby.html`): see "Demo rooms" below. |
 | `--demo-lobbies N` | 200 with `--demo-rooms` and reconnect, else 0 | The most lobby rooms (network protocol 16) that wait at a time, for a page that waits in a room from its first second: see "Lobby rooms" below. 0 switches them off. |
+| `--verified-names` | off | Checks each person's name: a name that the hub signed is kept and any other person plays as a guest ("Guest 123456"); no two people of a room share a name. The secret is `ANTS_NAME_TICKET_SECRET` (environment only, 32 to 256 visible characters, the hub's value). |
 | `--help`, `-h`, `--version` | | `--help` prints the usage and exits. `--version` prints the version, the build id and the network protocol, for example `ants_server vX.Y.Z build abc1234 (network protocol N)`, and exits. The server's log says the same near its start. |
 
 A value outside its range, or one that is no number, stops the server with status 2.

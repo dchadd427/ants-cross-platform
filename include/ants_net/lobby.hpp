@@ -189,6 +189,12 @@ public:
         /// all zero, that equals the key of another guest, or a maker that returns false, gives the guest NO key (the zero key in its Welcome: no way back for it); the lobby tries a few
         /// times before it gives up. Unset (the default: a LAN or direct host): no guest has a key.
         std::function<bool(SeatKey&)> make_key;
+        /// A server that checks its names (ants_server --verified-names) sets both; a LAN or direct host never does, and then nothing below changes. `unique_names`: no two people of the room go by the
+        /// same name (case ignored): a new seat whose name is another person's gets a new guest name (when it has the guest form; the digits come from make_key's bytes) or the name with " (2)", " (3)" ...
+        /// added (still at most kMaxNameChars characters). `fixed_names`: a person's name stays what the seat was given: a NameMsg is read as ever (garbage is a violation) but not acted on, and counts
+        /// as an ignored one (ignored_names(), the free allowance and then a violation each).
+        bool unique_names{false};
+        bool fixed_names{false};
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -319,6 +325,10 @@ public:
     uint32_t ignored_plans() const noexcept { return ignored_plans_; }
     /// NameMsgs that were heard and not acted on (the room is no open lobby room, the START waits): no offence up to kIgnoredNamesAllowed per guest, a violation each after those
     uint32_t ignored_names() const noexcept { return ignored_names_; }
+    /// New seats whose name was changed because another person of the room had it (Config::unique_names)
+    uint32_t renamed_for_uniqueness() const noexcept { return renamed_unique_; }
+    /// A Hello with this key takes a seat of the open room over (the key of a person who sits, is held or is reserved): the Hello is not a newcomer
+    bool takes_over(const SeatKey& key) const noexcept { return phase_ == Phase::Room && !key_is_zero(key) && seat_of_key(key) != 255; }
     /// Names that changed (a NameMsg that gave a person a name that was not theirs already)
     uint32_t renames() const noexcept { return renames_; }
     /// RemoveMsgs that were heard and not acted on (the sender does not lead, the room is no open lobby room or its match loads, the seating is not the one the guard was made for, the seat holds nobody to remove or the leader):
@@ -484,6 +494,7 @@ private:
     Starting starting_;
     uint32_t ignored_plans_{0};
     uint32_t ignored_names_{0};
+    uint32_t renamed_unique_{0};
     uint32_t renames_{0};
     uint32_t ignored_removes_{0};
     uint32_t removals_{0};

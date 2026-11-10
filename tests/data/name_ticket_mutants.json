@@ -1,0 +1,325 @@
+{
+ "note": "Mutants of the game server's check of names (src/ants_server/name_ticket.cpp, the door in room_manager.cpp, the guest and unique-name rules in src/ants_net/person_name.cpp and lobby.cpp, the --verified-names start in main.cpp; docs/TESTING.md 'Mutation checks') for tools/mutate.py: each breaks one rule on purpose, and some test of tests/test_server/test_name_ticket.cpp (S3.264 - S3.274), test_server_process.cpp (S3.275) or tests/test_net/test_lobby_names.cpp (N4.55 - N4.57) must notice. Run from the checkout with the build folder in ANTS_BUILD_DIR when it is not ./build: python3 tools/mutate.py tests/data/name_ticket_mutants.json --keep-going --jobs 2 --baseline-every 10 --timeout 1500. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "expiry_le_for_lt",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "if (now_unix >= end) return Result::Late;",
+   "new": "if (now_unix > end) return Result::Late;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "far_end_allowed_to_skew_edge",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "if (end > now_unix + kNameTicketLifeS + kNameTicketSkewS) return Result::Bad;",
+   "new": "if (end > now_unix + kNameTicketLifeS) return Result::Bad;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "far_end_not_refused",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "if (end > now_unix + kNameTicketLifeS + kNameTicketSkewS) return Result::Bad;",
+   "new": "if (false) return Result::Bad;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "window_not_filled",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "    seen_.emplace(nonce, static_cast<uint32_t>(end));\n",
+   "new": "    (void)nonce;\n",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "reused_not_looked_for",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "if (seen_.count(nonce) != 0) return Result::Reused;",
+   "new": "if (false) return Result::Reused;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "window_evicts_live_entries_when_full",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "if (seen_.size() >= cap_) return Result::Full;",
+   "new": "if (seen_.size() >= cap_ && !by_end_.empty()) {\n        seen_.erase(by_end_.top().nonce);\n        by_end_.pop();\n    }",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "ended_entries_not_dropped",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "    drop_ended(now_unix);\n    const uint64_t nonce",
+   "new": "    const uint64_t nonce",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "mac_compare_on_15_bytes",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "std::string_view(mac).substr(0, kMacBytes), std::string_view(raw).substr(20, kMacBytes)",
+   "new": "std::string_view(mac).substr(0, kMacBytes - 1), std::string_view(raw).substr(20, kMacBytes - 1)",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "name_not_under_the_mac",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "    signed_bytes.append(name);\n",
+   "new": "    (void)name;\n",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "end_not_under_the_mac",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "    signed_bytes.append(raw, 0, 20);",
+   "new": "    signed_bytes.append(raw, 0, 8);\n    signed_bytes.append(raw, 12, 8);",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "name_rule_lets_guest_look_alikes_in",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "if (compact.compare(0, 5, \"guest\") == 0 && compact.find_first_not_of(\"0123456789\", 5) == std::string::npos) return false;",
+   "new": "(void)compact;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "name_rule_lets_bot_names_in",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "    if (ai::is_reserved_bot_name(name)) return false;\n",
+   "new": "    (void)0;\n",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "failed_pass_keeps_the_typed_name",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "    if (is_guest_name(name)) return name;\n    std::string drawn",
+   "new": "    return name;\n    std::string drawn",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "empty_token_is_not_none",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "if (secret_.empty() || token.empty()) return Result::None;",
+   "new": "if (secret_.empty()) return Result::None;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "minute_line_every_time",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "now_unix >= last_line_unix_ + 60 &&",
+   "new": "now_unix >= last_line_unix_ &&",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "minute_line_without_a_change",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "(!(c == shown_counts_) || guests_named_ != shown_guests_ || renamed_ != shown_renamed_)",
+   "new": "true",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "window_cap_changed",
+   "file": "include/ants_server/name_ticket.hpp",
+   "old": "kNameWindowCap = 32768;",
+   "new": "kNameWindowCap = 32769;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "guest_form_allows_a_leading_zero",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "if (name[6] < '1' || name[6] > '9') return false;",
+   "new": "if (name[6] < '0' || name[6] > '9') return false;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "guest_draw_keeps_the_uneven_rest",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "if (v >= kGuestLimit) return false;",
+   "new": "if (false) return false;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "keyed_takeover_spends_the_pass",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (good && name_gate_ != nullptr && !room->takes_over(hello.key)) {",
+   "new": "if (good && name_gate_ != nullptr) {",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "door_leaves_names_alone_without_a_check",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "if (good && name_gate_ != nullptr && !room->takes_over(hello.key)) {",
+   "new": "if (good && false && !room->takes_over(hello.key)) {",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "gate_on_by_default",
+   "file": "include/ants_server/room_manager.hpp",
+   "old": "    bool verified_names{false};                                     // --verified-names",
+   "new": "    bool verified_names{true};                                      // --verified-names",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "rooms_ignore_the_setting",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "    spec.verified_names = limits_.verified_names;\n",
+   "new": "    spec.verified_names = false;\n",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "flag_on_by_default",
+   "file": "src/ants_server/main.cpp",
+   "old": "    bool verified_names{false};                // --verified-names:",
+   "new": "    bool verified_names{true};                 // --verified-names:",
+   "build": "ants_server test_server",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.275 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "secret_printed",
+   "file": "src/ants_server/main.cpp",
+   "old": "log(\"verified names are on: a name signed by the hub is kept, any other person plays as a guest\");",
+   "new": "log(\"verified names are on: a name signed by the hub is kept, any other person plays as a guest \" + name_secret);",
+   "build": "ants_server test_server",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.275 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "short_secret_accepted",
+   "file": "src/ants_server/main.cpp",
+   "old": "if (!ants::server::usable_secret_text(text)) {",
+   "new": "if (false) {",
+   "build": "ants_server test_server",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.275 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "unique_names_compare_case_sensitively",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "char lower(char c) { return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c; }",
+   "new": "char lower(char c) { return c; }",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "suffix_not_cut_to_32_characters",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "name.substr(0, kMaxNameChars - suffix.size())",
+   "new": "name",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "suffix_base_not_trimmed",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "return trim_blanks(trim_blanks(name.substr(0, kMaxNameChars - suffix.size())) + suffix);",
+   "new": "return trim_blanks(name.substr(0, kMaxNameChars - suffix.size())) + suffix;",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "second_equal_guest_keeps_the_name",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "if (is_guest_name(name) && make_key) {",
+   "new": "if (false && make_key) {",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "unique_rename_for_the_first_person",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "    if (!is_taken(name, taken)) return name;\n",
+   "new": "",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "fixed_names_still_rename",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "if (phase_ == Phase::Room && !starting_.active && !cfg_.fixed_names) {",
+   "new": "if (phase_ == Phase::Room && !starting_.active) {",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "unique_names_ignore_held_seats",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "(s == cfg_.host_seat || person(s))",
+   "new": "(s == cfg_.host_seat || guests_[s].conn != nullptr)",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "unique_names_setting_ignored",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "    if (cfg_.unique_names) {                                     // (a server",
+   "new": "    if (false) {                                                 // (a server",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "room_does_not_set_unique_names",
+   "file": "src/ants_server/room.cpp",
+   "old": "    cfg.unique_names = spec.verified_names;",
+   "new": "    cfg.unique_names = false;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "room_does_not_set_fixed_names",
+   "file": "src/ants_server/room.cpp",
+   "old": "    cfg.fixed_names = spec.verified_names;",
+   "new": "    cfg.fixed_names = false;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "guest_form_skips_the_second_digit",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "for (size_t i = 7; i < 12; ++i) {",
+   "new": "for (size_t i = 8; i < 12; ++i) {",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "guest_redraw_may_be_taken",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "if (guest_name_from_bytes(key.data() + at, drawn) && !is_taken(drawn, taken)) return drawn;",
+   "new": "if (guest_name_from_bytes(key.data() + at, drawn)) return drawn;",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "empty_secret_is_a_secret",
+   "file": "src/ants_server/main.cpp",
+   "old": "        if (text[0] != '\\0') {",
+   "new": "        if (true) {",
+   "build": "ants_server test_server",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.275 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "suffix_may_look_like_a_bot",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "if (ai::is_reserved_bot_name(candidate)) candidate",
+   "new": "if (false) candidate",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  }
+ ]
+}

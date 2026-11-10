@@ -38,6 +38,7 @@
 #include "ants_net/turnlog.hpp"
 #include "ants_server/history_store.hpp"
 #include "ants_server/map_store.hpp"
+#include "ants_server/name_ticket.hpp"
 #include "ants_server/restart_record.hpp"
 #include "ants_server/room.hpp"
 
@@ -89,6 +90,7 @@ struct ServerLimits {
     uint32_t countdown_s{0};                                        // protocol 21: the seconds that a room with two or more people holds the first turn (--start-countdown-seconds, 0 - 60; the ants_server default is net::kMatchCountdownSeconds, a Limits made by code has none)
     size_t room_log_bytes{net::TurnLog::kDefaultMaxBytes};          // the limit of one room's turn log (16 MiB)
     uint64_t log_budget_bytes{256ull * 1024ull * 1024ull};          // the memory that all the rooms' logs may take together; a log that cannot grow is not kept (its room drops a lost seat at once)
+    bool verified_names{false};                                     // --verified-names (name_ticket.hpp): the door checks the name of a new seat, and the rooms keep the names of their people apart and fixed. Off: as before
 };
 
 /// A public room's cap on the match's pauses: the match of a page's link that nobody comes back to must not hold one of the few public places for the server's 30 minutes. A public room takes the smaller of
@@ -157,6 +159,13 @@ class RoomManager {
 public:
     RoomManager(MapStore store, ServerLimits limits = ServerLimits());
     ~RoomManager();
+
+    /// A server run with --verified-names (ServerLimits::verified_names): the secret of the name passes ("": there is none, every person is seated as a guest). Call it before any Hello arrives.
+    void set_name_secret(std::string secret);
+    /// The check of names (null unless ServerLimits::verified_names): a test reads its counts
+    NameGate* name_gate() noexcept { return name_gate_.get(); }
+    /// The wall clock that the passes are judged by, Unix seconds (a test sets its own)
+    void set_unix_clock(std::function<uint64_t()> clock) { unix_clock_ = std::move(clock); }
 
     /// The bytes that the codes of the rooms of the control interface are drawn from (draw_room_code): the operating system's generator unless a test says otherwise (secret.hpp random_bytes)
     void set_code_source(RandomBytes source) { code_source_ = std::move(source); }
@@ -354,6 +363,8 @@ private:
     uint64_t created_{0};
     uint64_t refused_{0};
     RandomBytes code_source_;                    // (set in the constructor)
+    std::unique_ptr<NameGate> name_gate_;        // (verified names: the check of the name of every new seat; before the rooms are gone it is not needed, after the pending links nothing uses it)
+    std::function<uint64_t()> unix_clock_;       // (the wall clock in Unix seconds)
     uint32_t bot_every_ms_{0};                   // the server's own matches of computer players: how often (0: none)
     uint32_t next_bot_match_ms_{0};
     std::mt19937 bot_rng_;

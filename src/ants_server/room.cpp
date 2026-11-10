@@ -49,6 +49,8 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.start_wait_ms = spec.start_wait_ms;
     cfg.silence_ms = spec.silence_ms;
     cfg.reserve_ms = spec.reserve_ms;
+    cfg.unique_names = spec.verified_names;                          // (a server that checks names: the people of a room have names of their own, and a seat keeps the name it was given)
+    cfg.fixed_names = spec.verified_names;
     // A room that holds seats gives every player a key (128 random bits of the operating system's generator: ants_net never reads it itself, the library is built for the web too).
     // A room that does not has none: its Welcomes carry the zero key and a Hello with a key is just a Hello.
     if (spec.reconnect) cfg.make_key = [](net::SeatKey& key) { return random_bytes(key.data(), key.size()); };
