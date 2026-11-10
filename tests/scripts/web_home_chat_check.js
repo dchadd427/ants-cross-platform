@@ -1086,7 +1086,15 @@ function bring(env) {                                     // the two files arriv
     const r = rig({ chip: true });
     const first = r.live(W({ login: true, you: YOU, history: HISTORY }));
     (r.chip && r.chip.click());
-    one(r.dock.slot, 'gc-forget').click();
+    const forget = one(r.dock.slot, 'gc-forget');
+    forget.click();
+    check('Forget me asks once more first: the first press sends nothing and the control says "Are you sure? Press again"', r.fetches.length === 0 && forget.textContent === 'Are you sure? Press again' && forget.getAttribute('data-sure') === 'true');
+    forget.blur();
+    check('... a press elsewhere (the focus leaves it) puts the question back, and the next press asks again', forget.textContent === 'Forget me' && (forget.click(), r.fetches.length === 0 && forget.textContent === 'Are you sure? Press again'));
+    r.dock.slot.hidden === false && (r.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+    check('... Escape (the dropdown goes) puts the question back too, and nothing was sent', forget.textContent === 'Forget me' && r.fetches.length === 0 && r.dock.slot.hidden === true);
+    r.chip.click();
+    forget.click(); forget.click();
     same('Forget me is ONE POST of the page to /hub/forget, the same kind of request as Log out', [r.fetches.length, r.fetches[0].path, r.fetches[0].init], [1, '/hub/forget', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }]);
     r.s().recv({ t: 'del', id: 1 }); r.s().recv({ t: 'del', id: 2 });
     r.answer({ ok: true });
@@ -1095,7 +1103,7 @@ function bring(env) {                                     // the two files arriv
     const two = rig();
     two.live(W({ login: true, you: YOU }));
     one(two.dock.slot, 'gc-out').click();
-    (two.chip && two.chip.click()); one(two.dock.slot, 'gc-forget').click();
+    (two.chip && two.chip.click()); one(two.dock.slot, 'gc-forget').click(); one(two.dock.slot, 'gc-forget').click();
     check('Forget me while Log out is on its way is not a second request (one thing at a time)', two.fetches.length === 1);
 }
 {   // the name is text, whatever it is

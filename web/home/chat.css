@@ -69,7 +69,9 @@
 .gc-an { min-width: 0; overflow-wrap: anywhere; color: var(--cream); }
 .gc-slot { position: fixed; right: 10px; z-index: 60; box-sizing: border-box; width: min(300px, calc(100vw - 20px)); overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px 12px; font-size: 14px; line-height: 1.4; color: #a8cfc0; background: #0b1117; border: 2px solid #1f5a49; border-radius: 6px; box-shadow: 3px 4px 0 var(--shadow); }
 .gc-out { width: 100%; min-height: 46px; margin-top: 8px; }
-.gc-forget { width: 100%; min-height: 46px; margin-top: 8px; }
+.gc-forget { width: 100%; min-height: 46px; margin-top: 8px; padding: 0 8px; font: inherit; font-size: 15px; color: #a8cfc0; background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.gc-forget:disabled { color: #7f9c92; cursor: default; }
+.gc-forget[data-sure="true"] { color: #f2c48c; }
 .gc-pick { min-height: 46px; max-width: 100%; margin: 8px 0 12px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
 .gc-u { margin-left: 6px; font-size: 13px; color: #7f9c92; }
 .gc-u::before { content: "("; }

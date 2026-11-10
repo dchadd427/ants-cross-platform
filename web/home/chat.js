@@ -26,7 +26,7 @@
         title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
-        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
+        login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', sure: 'Are you sure? Press again', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my '
     };
     var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
@@ -102,7 +102,7 @@
         var now = env.now || function () { return Date.now(); }, rnd = env.random || Math.random, Socket = env.WebSocket || win.WebSocket;
         var feed = [], you = null, login = false, people = null, state = 'connecting', welcomed = false, ever = false, lastId = -1, bad = 0, attempt = 0, liveSince = null, lastTry = 0;
         var sock = null, stopped = false, isHome = false, stale = true, notice = '', unanswered = [], stickTimer = 0, stuck = true, timers = { retry: 0, connect: 0, ping: 0, answer: 0, notice: 0, quiet: 0, flood: 0 };       // (unanswered: lines and commands sent and not answered yet, oldest first)
-        var busy = false, menuOn = false;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
+        var busy = false, menuOn = false, forgetSure = false;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
@@ -141,7 +141,7 @@
         var guest = el('p', 'gc-guest', TEXT.guest); guest.hidden = true;
         // the account's dropdown (the chip opens it): who the visitor is (the hub's welcome says), the choice of the name, Log out, and Forget me. It stands next to the chip in the bar, not in the panel (which a phone hides on its Games and Players views)
         var slot = el('div', 'gc-slot'); slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;
-        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'btn gc-out', TEXT.logout), forgetBtn = el('button', 'btn gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
+        var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'btn gc-out', TEXT.logout), forgetBtn = el('button', 'gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
         outBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
         put(slot, [acct, pickNote, pickBtn, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
@@ -216,6 +216,7 @@
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
             if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
             if (!slot.hidden) place();
+            if (slot.hidden && forgetSure) sure(false);
             if (chip) {                                                         // (the bar: Log in where a login is offered, the visitor's name where they are named; nothing while the hub is not there)
                 chip.hidden = !(live && login);
                 chipAv.hidden = !you; chipMark.hidden = !!you;
@@ -389,7 +390,9 @@
         enter.addEventListener('click', guard(startLogin));
         pickBtn.addEventListener('click', guard(function () { if (you && you.other && !out({ t: 'pick', pick: you.pick === 'display' ? 'username' : 'display' })) tell('failed'); }));       // (the hub closes the account's sockets; the page connects again and reads the new name)
         outBtn.addEventListener('click', guard(function () { leave(LOGOUT); }));
-        forgetBtn.addEventListener('click', guard(function () { leave(FORGET); }));
+        function sure(on) { forgetSure = !!on; forgetBtn.textContent = on ? TEXT.sure : TEXT.forget; forgetBtn.setAttribute('data-sure', on ? 'true' : 'false'); }       // (Forget me asks once more: the second press does it; another place, Escape or the dropdown going away puts the question back)
+        forgetBtn.addEventListener('click', guard(function () { if (!forgetSure) { sure(true); return; } sure(false); leave(FORGET); }));
+        forgetBtn.addEventListener('blur', guard(function () { sure(false); }));
         if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn && outBtn.focus) outBtn.focus(); }));       // (the chip opens the dropdown and puts the focus on Log out; a second press closes it)
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
         win.addEventListener('resize', guard(function () { if (menuOn) render(); }));

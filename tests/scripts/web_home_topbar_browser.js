@@ -233,6 +233,8 @@ async function main() {
             await live(p2, 'yes');
             await p2.click('.hbar .hlogin'); await sleep(80);
             await p2.click('#gchat-login-slot .gc-forget');
+            check(n[0] + ': the first press on Forget me only asks (Are you sure? Press again), the account is still named', (await p2.evaluate(() => document.querySelector('#gchat-login-slot .gc-forget').textContent)) === 'Are you sure? Press again' && (await p2.evaluate(() => document.getElementById('gchat').getAttribute('data-you'))) === 'yes');
+            await p2.click('#gchat-login-slot .gc-forget');
             await live(p2, 'no');
             check(n[0] + ': Forget me in the dropdown works on the real hub (a reader afterwards)', await p2.evaluate(() => document.querySelector('.hbar .hlogin').getAttribute('aria-label') === 'Log in with Discord'));
             await p2.close();

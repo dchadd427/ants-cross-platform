@@ -168,6 +168,34 @@
    "old": "function away() { return !quickHost.disabled ? quickHost : !gamesBtn.disabled ? gamesBtn : menuHome; }",
    "new": "function away() { return quickHost; }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_me_needs_no_second_press",
+   "file": "web/home/chat.js",
+   "old": "if (!forgetSure) { sure(true); return; } ",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_question_stays_after_a_blur",
+   "file": "web/home/chat.js",
+   "old": "        forgetBtn.addEventListener('blur', guard(function () { sure(false); }));\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_question_stays_when_the_dropdown_goes",
+   "file": "web/home/chat.js",
+   "old": "            if (slot.hidden && forgetSure) sure(false);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_me_asks_with_no_words",
+   "file": "web/home/chat.js",
+   "old": "forgetBtn.textContent = on ? TEXT.sure : TEXT.forget;",
+   "new": "forgetBtn.textContent = TEXT.forget;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }
