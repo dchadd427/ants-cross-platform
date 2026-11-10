@@ -236,16 +236,23 @@
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
-   "id": "the_picker_is_a_layer_over_the_field",
+   "id": "the_picker_is_in_the_flow_and_pushes_the_field",
    "file": "web/home/talk.css",
-   "old": ".gt-pick { grid-column: 1 / -1;",
-   "new": ".gt-pick { position: absolute; grid-column: 1 / -1;",
+   "old": "position: absolute; left: 0; right: 0; bottom: 100%;",
+   "new": "position: static; left: 0; right: 0; bottom: 100%;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_tools_row_is_not_made_in_the_middle_widths",
+   "file": "web/home/talk.css",
+   "old": "@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) {",
+   "new": "@media (max-width: 420px) {",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
    "id": "the_hot_button_moves_for_everyone",
    "file": "web/home/talk.css",
-   "old": "@media (prefers-reduced-motion: reduce) { .gt-hot { animation: none; } }",
+   "old": "@media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },

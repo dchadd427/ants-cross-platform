@@ -33,7 +33,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_talk_check.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 FILES = ("talk.js", "talk.css")
-TALK_BUDGET, TALK_GZIP_BUDGET = 18000, 6400       # bytes, raw and gzipped, both files together (about 16,400 and 5,900: the picker with its keys, the voice with its states and words); they load after the first paint, after the dock, so they cost the first look nothing
+TALK_BUDGET, TALK_GZIP_BUDGET = 19000, 7000       # bytes, raw and gzipped, both files together (about 17,900 and 6,560, comments included:  the picker with its keys, the voice with its states and words); they load after the first paint, after the dock, so they cost the first look nothing
 
 sys.path.insert(0, REPO)
 from hub import limits, text as hubtext          # noqa: E402  (the hub's own rules: the tests run the real thing)
@@ -224,11 +224,23 @@ class TheStyle(unittest.TestCase):
     def rule(self, selector):
         return next(body for sel, body in self.rules if sel.strip() == selector)
 
-    def test_the_picker_is_in_the_forms_own_flow_over_all_its_columns_and_nothing_is_placed_over_the_field(self):
-        for selector in (".gt-pick", ".gt-say"):
-            self.assertIn("grid-column: 1 / -1;", self.rule(selector))
-        self.assertNotRegex(self.css, r"position: *(absolute|fixed)|z-index")
-        self.assertIn(".gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto auto; }", self.css)
+    def test_the_picker_lies_over_the_log_right_above_the_form_and_the_words_are_the_forms_first_row(self):
+        picker = self.rule(".gt-pick")
+        for part in ("position: absolute;", "bottom: 100%;", "left: 0;", "right: 0;"):
+            self.assertIn(part, picker, part)
+        self.assertIn("position: relative;", self.rule(".gc-form.gt-on"), "the picker is placed against the form")
+        self.assertIn("grid-column: 1 / -1;", self.rule(".gt-say"))
+        self.assertNotRegex(self.css, r"position: *fixed")
+        self.assertEqual(self.css.count("z-index"), 1, "one layer, the picker's, over the log")
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto; }", self.css)
+        self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
+
+    def test_a_narrow_form_puts_the_two_buttons_in_a_row_of_their_own_under_the_field_and_send(self):
+        self.assertIn("@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) {", self.css)
+        narrow = self.css[self.css.index("@media (max-width: 420px)"):]
+        self.assertIn("grid-template-columns: minmax(0, 1fr) auto; }", narrow)
+        self.assertIn(".gt-on .gt-tools { order: 3; grid-column: 1 / -1; }", narrow)
+        self.assertIn(".gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }", narrow, "the field, Send and the login button keep their order when the buttons move to the last row")
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         for selector in (".gt-btn", ".gt-e"):
@@ -241,12 +253,15 @@ class TheStyle(unittest.TestCase):
         for part in (".gt-tools[hidden]", ".gt-pick[hidden]", ".gt-say[hidden]"):
             self.assertIn(part, hidden, part)
 
-    def test_the_picker_is_short_in_a_short_window_and_scrolls(self):
+    def test_the_picker_scrolls_and_the_script_makes_it_short_where_there_is_little_room(self):
         self.assertIn("overflow-y: auto", self.rule(".gt-pick"))
-        self.assertRegex(self.css, r"@media \(max-height: 500px\) \{ \.gt-pick \{ max-height: \d+px; \} \}")
+        self.assertIn("max-height: 150px;", self.rule(".gt-pick"), "without the script's measure (a page that cannot measure) it is 150 px")
+
+    def test_the_dock_is_taller_where_the_buttons_have_a_row_of_their_own(self):
+        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) { .gc:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }", self.css, "the middle widths: the dock is 16 to 60 px taller (its own is 160 to 260 px), so that the log keeps its room")
 
     def test_the_listening_state_moves_only_where_motion_is_allowed(self):
-        self.assertIn("@media (prefers-reduced-motion: reduce) { .gt-hot { animation: none; } }", self.css)
+        self.assertIn("@media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }", self.css)
 
     def test_nothing_is_loaded_from_another_site_and_there_is_no_picture(self):
         self.assertNotRegex(self.css, r"https?://|@import")

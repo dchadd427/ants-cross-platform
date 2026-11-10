@@ -1,20 +1,26 @@
-/* The emoji button, the microphone button and the emoji picker of the chat (web/home/talk.js, docs/HOME_SCREEN.md "Emoji and voice"): they stand between the chat's field and Send, and the picker and its line of words open
-   above the field, in the form's own flow, so nothing covers the field. */
-.gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto auto; }
+/* The emoji button, the microphone button and the emoji picker of the chat (web/home/talk.js, docs/HOME_SCREEN.md "Emoji and voice"): the buttons stand between the chat's field and Send, or in a row of their own under the
+   field where the field's row is narrow; the picker lies over the log, right above the form (its height is set by the script to the room there is), and the line of words is the form's own first row: nothing covers the field or Send. */
+.gc-form.gt-on { position: relative; grid-template-columns: minmax(0, 1fr) auto auto; }
 .gt-tools { display: flex; gap: 6px; }
 .gt-tools[hidden], .gt-pick[hidden], .gt-say[hidden] { display: none; }
 .gt-btn { min-width: 48px; min-height: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; }
 .gt-face::before { content: "\1F642"; }
 .gt-mark::before { content: "\1F3A4"; }
 .gt-face, .gt-mark { font-style: normal; }
-.gt-hot { background: #8a2c2c; animation: gt-beat 1.2s ease-in-out infinite; }
+.btn.gt-hot, .btn.gt-hot:hover, .btn.gt-hot:active { background: #8a2c2c; animation: gt-beat 1.2s ease-in-out infinite; }
 @keyframes gt-beat { 50% { opacity: .65; } }
 .gt-say { grid-column: 1 / -1; margin: 0; font-size: 15px; line-height: 1.35; color: #f2c48c; }
-.gt-pick { grid-column: 1 / -1; max-height: 150px; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; background: #0b1117; border: 2px solid var(--edge); border-radius: 4px; }
+.gt-pick { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 2; box-sizing: border-box; max-height: 150px; overflow-y: auto; overscroll-behavior: contain; margin-bottom: 6px; padding: 6px 8px; background: #0b1117; border: 2px solid var(--edge); border-radius: 4px; box-shadow: 0 0 0 2px #000; }
 .gt-row { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
 .gt-name { flex: 0 0 100%; margin-top: 4px; font-size: 13px; line-height: 1.3; color: #a8cfc0; }
 .gt-e { min-width: 44px; min-height: 44px; padding: 0; font-size: 24px; line-height: 1; color: var(--cream); background: transparent; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
 .gt-e:hover { background: #1b2a34; }
-.gt-e:focus-visible, .gt-btn:focus-visible { outline: 3px solid var(--gold, #f2c48c); outline-offset: 1px; }
-@media (max-height: 500px) { .gt-pick { max-height: 96px; } }
-@media (prefers-reduced-motion: reduce) { .gt-hot { animation: none; } }
+.gt-e:focus-visible, .gt-btn:focus-visible { outline: 3px solid var(--gold, #f6d058); outline-offset: 1px; }
+/* a narrow form (a phone, or the middle widths where the account line takes the rest of the row): the field and Send share the first row, the two buttons have the row under it */
+@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) {
+    .gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto; }
+    .gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }
+    .gt-on .gt-tools { order: 3; grid-column: 1 / -1; }
+}
+@media (min-width: 701px) and (max-width: 1000px) { .gc:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }       /* (the dock is taller by the row of the buttons, so that the log keeps its room) */
+@media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }

@@ -1,7 +1,7 @@
 // The chat's two small helpers (docs/HOME_SCREEN.md, "Emoji and voice"): an emoji button with a small picker, and a microphone button that types what the person says into the chat field. They stand beside Send. ES5, no module
 // system: a page gets AntsHomeTalk, node gets module.exports (tests/scripts/web_home_talk_check.js). web/home/home.js loads this file and talk.css after the chat dock, once, and mounts it into the dock's own form; a page
 // whose dock never comes has neither button, and what goes wrong in here stays here.
-//   * Emoji: about a hundred common ones in groups, own code and no library, each one a single code point (a character that the hub's text rules keep as it is: no joiner, no tag character, no variation selector;
+//   * Emoji: about ninety common ones in groups, own code and no library, each one a single code point (a character that the hub's text rules keep as it is: no joiner, no tag character, no variation selector;
 //     tests/scripts/test_web_home_talk.py runs every one through hub/text.py). A pick goes in at the caret of the field, and only while the line stays within the hub's 200 code points (the field's own maxlength counts
 //     UTF-16 units, 400, and an emoji outside the basic plane is two of them: so the count here is in code points, and 200 of them are never more than 400 units). Nothing is stored.
 //   * Voice: the browser's own speech recognition (SpeechRecognition, or webkitSpeechRecognition), only on a secure page; a browser without it (Firefox) has no microphone button at all. It never sends: the words go into
@@ -88,12 +88,17 @@
         var open = false, run = null, at = 0, said = '';
         function note(text) { said = text; say.textContent = text; say.hidden = !text; }
         function sync() { tools.hidden = !!field.disabled; if (field.disabled || form.hidden) { drop(); close(false); } }
+        function fit() {                                       // the picker lies over the log, above the form: no taller than the room above the form (72 to 180 px): up to the top of the dock's body where the dock clips what is outside it (a phone), else up to the window's top
+            var clips = win.getComputedStyle && dock.root && win.getComputedStyle(dock.root).overflow === 'hidden';
+            var floor = clips && form.parentNode && form.parentNode.getBoundingClientRect ? form.parentNode.getBoundingClientRect().top : 8;
+            pick.style.maxHeight = Math.max(72, Math.min(180, Math.floor(form.getBoundingClientRect().top - floor - 6))) + 'px';
+        }
         function rove(n) { at = Math.max(0, Math.min(keys.length - 1, n)); keys.forEach(function (b, k) { b.tabIndex = k === at ? 0 : -1; }); if (keys[at].focus) keys[at].focus(); }
         function close(back) { if (!open) return; open = false; pick.hidden = true; emojiBtn.setAttribute('aria-expanded', 'false'); if (back && field.focus) field.focus(); }
         function toggle() {
             if (open) { close(true); return; }
             open = true; pick.hidden = false; emojiBtn.setAttribute('aria-expanded', 'true'); if (said === TEXT.full) note('');
-            rove(at);
+            fit(); rove(at);
         }
         function choose(text) {
             var r = insert(field.value, field.selectionStart, field.selectionEnd, text);
@@ -155,6 +160,7 @@
         doc.addEventListener('visibilitychange', function () { if (doc.hidden) { drop(); close(false); } });
         doc.addEventListener('pointerdown', function (e) { if (open && e && e.target && !form.contains(e.target)) close(false); });
         win.addEventListener('pagehide', function () { drop(); });
+        win.addEventListener('resize', function () { if (open) fit(); });
         dock.tap(function () { sync(); });
         sync();
         return { root: tools, pick: pick, say: say, emoji: emojiBtn, mic: micBtn, field: field, drop: drop, close: close };
