@@ -27,7 +27,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **A new Home.** Games are on the left, Players on the right and the chat at the bottom; the Yard is no longer on the front page. On a phone you see one view at a time, with a strip of buttons to move between Games, Players and Chat, and a phone held sideways keeps the account line.
-- **Notices float over the page.** A message such as "Your match is running." is now a small box over the page for 6 seconds, so the page no longer moves when it comes. OK or Escape closes it.
+- **Notices float over the page.** A notice such as "Your room is public now." is a small box over the page, so the page no longer moves when it comes; it goes after 6 seconds, and one that asks something (Rejoin, Make public) stays until you answer. OK closes it, and so does Escape while it has the focus.
 - **Games in progress stay in the Games list.** A match that is running is a row of the list with a Watch button, which opens the live match in a new tab. The switch "Show games in progress" at the top of the list hides these rows; this browser remembers the choice.
 - **The chat keeps the newest 200 lines.** Besides the limit of 7 days, the chat's history keeps the newest 200 lines; older lines are deleted for good (the Legal page says so).
 
