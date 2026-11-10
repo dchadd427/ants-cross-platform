@@ -151,8 +151,8 @@
   {
    "id": "focus_is_lost_when_the_dropdown_goes",
    "file": "web/home/chat.js",
-   "old": "if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) chip.focus();",
-   "new": "",
+   "old": "{ if (live && login) chip.focus(); else refocus = true; }",
+   "new": "{ }",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -172,7 +172,7 @@
   {
    "id": "forget_me_needs_no_second_press",
    "file": "web/home/chat.js",
-   "old": "if (!forgetSure) { sure(true); return; } ",
+   "old": "if (!forgetSure) { forgetAt = now(); sure(true); return; } ",
    "new": "",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -200,8 +200,8 @@
   {
    "id": "quick_host_makes_the_room_without_asking",
    "file": "web/home/games.js",
-   "old": "{ chooseHost(); return; }",
-   "new": "{ startHost(); return; }",
+   "old": "else chooseHost(); return; }",
+   "new": "else startHost(); return; }",
    "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
   },
   {
@@ -221,15 +221,15 @@
   {
    "id": "host_card_focus_on_cancel",
    "file": "web/home/games.js",
-   "old": "cls: 'gstay', back: true }], focus: 0 });",
-   "new": "cls: 'gstay', back: true }], focus: 2 });",
+   "old": "cls: 'gstay', back: true }], focus: 0, opener",
+   "new": "cls: 'gstay', back: true }], focus: 2, opener",
    "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
   },
   {
    "id": "host_card_cancel_loses_the_focus",
    "file": "web/home/games.js",
-   "old": "cls: 'gstay', back: true }], focus: 0 });",
-   "new": "cls: 'gstay' }], focus: 0 });",
+   "old": "cls: 'gstay', back: true }], focus: 0, opener",
+   "new": "cls: 'gstay' }], focus: 0, opener",
    "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
   },
   {
@@ -238,6 +238,41 @@
    "old": "            page.make();\n            track(client());\n            ctl.show('room', 'push');\n        }\n        function chooseHost",
    "new": "            page.make();\n            track(client());\n        }\n        function chooseHost",
    "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
+  },
+  {
+   "id": "name_pick_loses_the_focus",
+   "file": "web/home/chat.js",
+   "old": "            if (!slot.hidden && refocus) { refocus = false; var back = pickBtn.hidden ? outBtn : pickBtn; if (back.focus) back.focus(); }",
+   "new": "            if (!slot.hidden && refocus) { refocus = false; }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "name_pick_focus_goes_to_the_hidden_chip",
+   "file": "web/home/chat.js",
+   "old": "{ if (live && login) chip.focus(); else refocus = true; }",
+   "new": "{ chip.focus(); }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_me_double_press_counts_twice",
+   "file": "web/home/chat.js",
+   "old": " if (now() - forgetAt < 400) return;",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "host_one_asks_public_or_private",
+   "file": "web/home/games.js",
+   "old": "acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: hostOne }",
+   "new": "acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: quickHost }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "host_card_forgets_the_quick_host_button",
+   "file": "web/home/games.js",
+   "old": "focus: 0, opener: parts.quickHost });",
+   "new": "focus: 0 });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   }
  ]
 }

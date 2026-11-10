@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, chooseHost, hostCard, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
 
 // the address of a picture of the library (map_picker.js: the one shape that the page loads for a map of the players): /maps/previews/ and a name of unreserved characters and %XX (never an escaped slash, backslash or NUL), no leading dot
 const LIBRARY = /^\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2F|5C|00)[0-9A-F]{2})(?:[A-Za-z0-9._~-]|%(?!2F|5C|00)[0-9A-F]{2})*\.webp$/;
@@ -452,6 +452,8 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     check('no open games: the empty state ("No open games right now.", Quick host and Quick join) and Join by code are in the docked list', textOf(popOf(env)).indexOf('No open games right now.') !== -1 && !first(popOf(env), 'gempty').hidden && !!first(popOf(env), 'gcode') && textOf(first(popOf(env), 'gpcount')) === 'none waiting');
     const empties = find(first(popOf(env), 'gempty'), 'ghostbtn');
     same('... the two buttons, in the one row, say Quick host and Quick join', empties.map((b) => textOf(b)), ['Quick host', 'Quick join']);
+    tap(empties[0]);
+    check('... Quick host there asks Public or Private (the card), and Escape gives the focus to the Quick host button of the bar (the button of the list is gone)', !!hostCard(env) && (pressEscape(env), hostCard(env) === null && env.sockets.length === 0 && env.focused === env.home('host')));
     tap(empties[0]); chooseHost(env, 'Public room');
     check('... Quick host is Quick host (the Room shows, a room of the page\'s own)', env.screen() === 'room' && env.sockets.length === 1);
     const other = await page({ options: { popover: false } });

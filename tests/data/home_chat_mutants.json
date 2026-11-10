@@ -1985,8 +1985,8 @@
   {
    "id": "forget_menu_opens_by_itself",
    "file": "web/home/chat.js",
-   "old": "var busy = false, menuOn = false, forgetSure = false;",
-   "new": "var busy = false, menuOn = true, forgetSure = false;",
+   "old": "var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;",
+   "new": "var busy = false, menuOn = true, forgetSure = false, refocus = false, forgetAt = 0;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

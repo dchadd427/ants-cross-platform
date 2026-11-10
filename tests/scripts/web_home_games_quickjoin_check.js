@@ -214,8 +214,8 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     tap(act(env, 'gstay'));
     check('Not now takes the card away and changes nothing (the focus is back on Quick join)', card(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('join'));
     await press(env);
-    tap(act(env, 'gyes')); chooseHost(env, 'Public room');
-    check('Host one! is Quick host: a room of the page\'s own is made (My room\'s machinery) and the Room shows, and My room is there: a hosted room is a room', card(env) === null && env.sockets.length === 1 && env.screen() === 'room' && env.home('mine').hidden === false);
+    tap(act(env, 'gyes'));
+    check('Host one! asks nothing more (it promises a public room: no Host a game card) and is Quick host: a room of the page\'s own is made (My room\'s machinery) and the Room shows, and My room is there: a hosted room is a room', card(env) === null && env.sockets.length === 1 && env.screen() === 'room' && env.home('mine').hidden === false);
 }
 {
     const env = await withRooms([]);

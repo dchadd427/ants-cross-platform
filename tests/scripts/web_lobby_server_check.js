@@ -646,7 +646,6 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('nothing is open: the card says so and offers Host one!', () => () => cardTitle(E) === 'No open games right now.' && !!inCard(E, 'gyes') && inCard(E, 'gyes').textContent === 'Host one!', 8000);
         keep = (x) => /^Qj/.test(x.host);
         inCard(E, 'gyes').click();
-        await step('Host one! is Quick host: it asks Public or Private, and Public room is chosen', () => () => !!inCard(E, 'gyes') && cardTitle(E) === 'Host a game' && (inCard(E, 'gyes').click(), true), 3000);
         await step('Host one! is Quick host: a real room, public at the real door', () => () => E.screen() === 'room' && E.root.findAll((n) => n.getAttribute && n.getAttribute('aria-pressed') === 'true' && /Public/.test(n.textContent) && String(n.className).indexOf('vbtn') !== -1).length === 1, 8000);
         await stepLater('... and the real list has it', async () => (await realRows()).some((x) => x.host === 'Qjeee'), 5000);
         E.roomBar('leave').click();

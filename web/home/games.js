@@ -356,12 +356,14 @@
             ctl.show('room', 'push');
         }
         function chooseHost() {                            // Quick host with no room asks first: Public (listed, Visibility(public) when the room is ready) or Private (a link only); Escape or Cancel changes nothing
-            card({ title: TEXT.hostTitle, lines: [TEXT.hostLine], stack: true, acts: [{ text: TEXT.hostPublic, cls: 'gyes', run: startHost }, { text: TEXT.hostPrivate, cls: 'gyes', run: startPrivate }, { text: TEXT.cancel, cls: 'gstay', back: true }], focus: 0 });
+            card({ title: TEXT.hostTitle, lines: [TEXT.hostLine], stack: true, acts: [{ text: TEXT.hostPublic, cls: 'gyes', run: startHost }, { text: TEXT.hostPrivate, cls: 'gyes', run: startPrivate }, { text: TEXT.cancel, cls: 'gstay', back: true }], focus: 0, opener: parts.quickHost });
         }
         function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the toast says why nothing else starts
             openList();
             notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);
         }
+        var straight = false;
+        function hostOne() { straight = true; try { quickHost(); } finally { straight = false; } }       // (Host one!, on the card that Quick join shows when nothing is open: Quick host without the question)
         function quickHost() {
             if (finding) return;
             if (joining) { stillJoining(); return; }
@@ -370,7 +372,7 @@
             if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
             if (matchRunning(c)) { runningNotice(); return; }
-            if (!c || (c.room && !c.room.lobby)) { chooseHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own, public or private as asked)
+            if (!c || (c.room && !c.room.lobby)) { if (straight) startHost(); else chooseHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own, public or private as asked; Host one! of the card of Quick join goes straight to public: that is what its words promise)
             if (!c.room) { startPending(c); ctl.show('room', 'push'); return; }  // (the page's room is on its way: it gets Visibility(public) when it is ready)
             if (!c.isLeader()) {
                 ask({ title: 'Leave ' + hostLabel(c) + ' room and host your own?', line: 'A new room opens for you, with its own map and colors. It goes public.', yes: TEXT.leaveHost }, function () { page.leave(); startHost(); });
@@ -663,7 +665,7 @@
         function nobody(off, opener) {                             // nothing to join, or every room was filled meanwhile: Host one! is Quick host
             var c = client(), mine = c && c.room && c.room.lobby;
             finding = false;
-            card({ mark: 'shadow', stack: true, title: off ? TEXT.off : TEXT.emptyTitle, lines: [TEXT.noneLine], acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: quickHost }, { text: TEXT.notNow, cls: 'gstay', back: true, before: mine ? TEXT.noneYours : TEXT.noneNew }], focus: 0, opener: opener });
+            card({ mark: 'shadow', stack: true, title: off ? TEXT.off : TEXT.emptyTitle, lines: [TEXT.noneLine], acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: hostOne }, { text: TEXT.notNow, cls: 'gstay', back: true, before: mine ? TEXT.noneYours : TEXT.noneNew }], focus: 0, opener: opener });
         }
         function welcomed(row) {                           // the page is in the room: the card says so, and the Room opens by itself or at a press
             finding = false;
