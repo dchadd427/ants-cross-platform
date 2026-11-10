@@ -30,10 +30,10 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HOME = os.path.join(REPO, "web", "home")
 FRONT = os.path.join(REPO, "web", "front")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
-CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js")]
+CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js", "web_home_games_live_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 78 * 1000, 22500      # bytes, raw and gzipped, both files together (about 71,800 and 20,600, with Quick join, its cards, the question before Leave room and the toast; room is left on purpose for the Watch button): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 90 * 1000, 25500      # bytes, raw and gzipped, both files together (about 86,000 and 24,200; raised on purpose from 78,000 and 22,500 for the rows of the matches in progress with Watch, their switch, the parser of GET /live and its looks): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
 LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
@@ -144,8 +144,10 @@ class TheFolder(unittest.TestCase):
         self.assertIn("Net = win.AntsLobbyNet, Picker = win.AntsMapPicker;", self.js, "the picker is read from the page's window, and a page without it has no picture of the players' maps (never a break)")
 
     def test_the_picture_of_a_map_of_the_players_is_the_pickers_rule_and_not_a_second_copy_of_it(self):
-        for word in ("percentEncode", "encodeURIComponent", "escape(", "/maps/previews", ".webp", "decodeURI"):
+        for word in ("percentEncode", "escape(", "/maps/previews", ".webp", "decodeURI"):
             self.assertNotIn(word, self.js, "%s: the address is made by AntsMapPicker.previewPath (web/front/map_picker.js), which checks the file name and the shape of what it makes" % word)
+        self.assertEqual(self.js.count("encodeURIComponent"), 1, "the one use: the id in the address of Watch (a second guard, the id is checked by its shape first)")
+        self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.js)
         picker = read("web", "front", "map_picker.js")
         self.assertIn("function previewPath(map) {", picker)
         self.assertIn("previewPath: previewPath", picker)
@@ -157,12 +159,18 @@ class TheFolder(unittest.TestCase):
         self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
-    def test_nothing_is_kept_in_the_browser_and_the_one_address_has_no_query_and_no_cookies(self):
-        for word in ("localStorage", "sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
+    def test_only_the_switch_of_the_matches_in_progress_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
+        for word in ("sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
             self.assertNotIn(word, self.code, word)
+        self.assertEqual(len(re.findall(r"localStorage", self.code)), 3, "the one choice, in two small functions that each have a try: read, and written or removed")
+        self.assertIn("function readChoice() { try { return win.localStorage.getItem(CHOICE_KEY) !== '0'; } catch (e) { return true; } }", self.js, "a browser that keeps nothing: the default, on")
+        self.assertIn("function keepChoice(on) { try { if (on) win.localStorage.removeItem(CHOICE_KEY); else win.localStorage.setItem(CHOICE_KEY, '0'); } catch (e) {", self.js)
+        self.assertIn("var CHOICE_KEY = 'ants.home.games.live';", self.js)
         self.assertIn("var LIST_URL = '/lobbies';", self.js)
-        self.assertEqual(len(re.findall(r"win\.fetch\(", self.code)), 1)
-        self.assertIn("win.fetch(LIST_URL, { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })", self.js)
+        self.assertIn("var LIVE_URL = '/live';", self.js)
+        self.assertEqual(len(re.findall(r"win\.fetch\(", self.code)), 1, "one fetch, in look(url), for both addresses")
+        self.assertIn("win.fetch(url, { cache: 'no-store', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined })", self.js)
+        self.assertEqual(sorted(set(re.findall(r"look\((\w+)\)", self.code)) - {"url"}), ["LIST_URL", "LIVE_URL"], "the two addresses and no other")
 
     def test_the_numbers_of_the_polling_are_the_ones_of_the_notes(self):
         for line in ("var EVERY_CLOSED = 30000, EVERY_OPEN = 5000;", "var JITTER = 0.2;", "var ROWS_MAX = 50;", "var REFRESH_MS = 600000;", "var FETCH_MS = 8000;", "var CAP_CLOSED = 300000, CAP_OPEN = 60000;"):
@@ -181,6 +189,18 @@ class TheStyle(unittest.TestCase):
     def setUpClass(cls):
         cls.css = read("web", "home", "games.css")
         cls.rules = re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", cls.css, flags=re.S))
+
+    def test_watch_has_the_grid_place_of_join(self):
+        self.assertIn(".gdock .gjoin, .gdock .gwatch { grid-area: j; }", read("web", "home", "home.css"), "without its area Watch is put by the grid's own order, not at the row's right edge")
+
+    def test_a_dot_of_an_unknown_color_is_neutral_and_not_the_color_of_a_seat(self):
+        color = {selector.strip(): body.strip() for selector, body in self.rules if selector.strip().startswith(".gdot.c")}
+        self.assertEqual(color[".gdot.cn"], "--c: #8a8693;", "a color that the door does not know has its own neutral dot")
+        self.assertEqual(len({color[".gdot.c%s" % k] for k in ("0", "1", "2", "3", "n")}), 5, "no seat's color is used for the neutral dot (nor twice)")
+
+    def test_the_names_of_a_match_can_shrink_so_they_stay_out_of_watch(self):
+        who = next(body for selector, body in self.rules if selector.strip() == ".gwho")
+        self.assertIn("flex: 1 1 9em;", who, "a names box that cannot shrink (flex-shrink 0) runs under Watch in a narrow row")
 
     def test_the_toast_is_over_the_page_and_takes_no_room(self):
         toast = next(body for selector, body in self.rules if selector.strip() == ".gtoast")
@@ -207,7 +227,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("toast.matches(':hover, :focus-within')", js, "a toast under the pointer or the focus waits")
         self.assertIn("doc.body.appendChild(toast)", js, "the toast is the body's, not part of Home's flow")
         self.assertIn("placeVis(); placeToast(); }));", js, "placed again when the window changes")
-        self.assertIn("if (!toast.hidden) placeToast(); }))", js, "placed again when a phone's view or the chat's fold changes")
+        self.assertIn("if (!toast.hidden) placeToast(); pollLive(); }))", js, "placed again when a phone's view or the chat's fold changes (and the looks at /live follow whether the list is drawn)")
         self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
         self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 

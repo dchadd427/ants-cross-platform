@@ -29,10 +29,20 @@ function same(label, got, want) {
 // the fake site and the helpers
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const flush = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };      // (the promises of one look settle)
-// A fake GET /lobbies: `body` is the answer (an object, or `text` as it is), `status`; reject / throws / hang make it fail; times says at which moments of the clock it was asked
+// A fake GET /lobbies (and `live`, a fake GET /live): `body` is the answer (an object, or `text` as it is), `status`; reject / throws / hang make it fail; times says at which moments of the clock it was asked
 function fakeSite() {
-    const n = { calls: [], times: [], reads: 0, length: undefined, status: 200, body: { format: 1, lobbies: [], count: 0 }, text: null, reject: false, throws: false, hang: false, clock: () => 0 };
+    const n = { calls: [], times: [], reads: 0, length: undefined, status: 200, body: { format: 1, lobbies: [], count: 0 }, text: null, reject: false, throws: false, hang: false, clock: () => 0,
+                live: { calls: [], times: [], status: 200, body: { live: [], count: 0 }, text: null, reject: true, hang: false, defer: false, waiting: [] } };       // (GET /live, the matches that run now: a site with no such door until a check says otherwise)
     n.fetch = (url, init) => {
+        if (url === '/live') {
+            const l = n.live;
+            l.calls.push({ url, init }); l.times.push(n.clock());
+            if (l.reject) return Promise.reject(new Error('this site has no live door'));
+            if (l.hang) return new Promise(() => {});
+            const answer = () => ({ status: l.status, headers: { get: () => null }, text: () => Promise.resolve(l.text !== null ? l.text : JSON.stringify(l.body)) });
+            if (l.defer) return new Promise((resolve) => l.waiting.push(() => resolve(answer())));       // (an answer that comes when a check says so: `waiting` holds one function for each look that is out)
+            return Promise.resolve(answer());
+        }
         if (url !== '/lobbies') return Promise.reject(new Error('this site has no ' + url + ' here'));
         n.calls.push({ url, init }); n.times.push(n.clock());
         if (n.throws) throw new Error('fetch throws');
