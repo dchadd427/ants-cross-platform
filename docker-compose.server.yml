@@ -13,7 +13,7 @@
 # network trust each other: put only containers you trust on it.
 services:
   ants-server:
-    build: &server-build
+    build:
       context: .
       dockerfile: Dockerfile.server
       args:
@@ -22,10 +22,6 @@ services:
     image: ants-server
     container_name: ants-server
     restart: unless-stopped
-    # waits for the one-shot helper below (it must have exited with 0: it always does)
-    depends_on:
-      ants-results-init:
-        condition: service_completed_successfully
     # A stop gives the server this long before docker kills it: on SIGTERM it makes the restart records of its running rooms durable (one fsync a room, a few milliseconds) and exits;
     # the records stay in /results/restart of the volume below and the server that starts again brings the matches back (docs/NETWORK_PORT.md "Restart records"; only rooms that hold
     # seats keep a record: every room does unless --no-reconnect, below). 15 s is the default 10 s and room for a slow volume (256 rooms at 30 ms for a flush are 7.7 s). Keep the volume: it holds the records.
@@ -64,30 +60,6 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     pids_limit: 64
-
-  # One-shot helper of ants-server: before each start of the server it makes the TOP folder /results of the volume ants-server-results belong to the user ants (the user that the server runs as, made in
-  # Dockerfile.server). A volume that was made before the image gave /results to ants keeps its old owner (root), and the server, which is not root, then cannot write /results/<room>.json. Only /results itself is
-  # changed (chown without -R: no file or folder below it is touched). When the owner is already ants it prints that and does nothing; a failed or slow chown (timeout 20) prints one line and the helper
-  # ALWAYS exits 0, so it never keeps the server from starting. It runs as root with one capability (CHOWN), no network, a read-only root file system and no ports; the server keeps its own user and
-  # its own limits. It uses the image of the server (the same build) so that the user ants exists for it and a NEW volume is filled from the image's /results, which belongs to ants. The entrypoint of the
-  # image is replaced by a shell. In a compose file "$$" is a single "$" for the shell.
-  ants-results-init:
-    build: *server-build
-    container_name: ants-results-init
-    restart: "no"
-    user: "0"
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["if [ \"$$(stat -c %U /results)\" = ants ]; then echo \"ants-results-init: /results already belongs to ants, nothing to do\"; else timeout 20 chown ants: /results && echo \"ants-results-init: /results now belongs to ants\" || echo \"ants-results-init: could not change the owner of /results, left as it is\"; fi; exit 0"]
-    volumes:
-      - ants-server-results:/results
-    network_mode: none
-    healthcheck:
-      disable: true
-    read_only: true
-    cap_drop: [ALL]
-    cap_add: [CHOWN]
-    security_opt: ["no-new-privileges:true"]
-    pids_limit: 16
 
 volumes:
   ants-server-results:
