@@ -5,11 +5,15 @@
 @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
     --muted: #8fb3a6;
-    --sheen: linear-gradient(180deg, rgba(255, 255, 255, .24) 0, rgba(255, 255, 255, 0) 4px, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, .32) 100%);
-    --bevel: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 4px 4px 2px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -3px -4px 2px var(--teal-lo);
-    --bevel-sm: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 3px 3px 1px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -2px -3px 1px var(--teal-lo);
+    --weave: repeating-linear-gradient(45deg, rgba(255, 255, 255, .03) 0 1px, rgba(255, 255, 255, 0) 1px 4px), repeating-linear-gradient(-45deg, rgba(0, 0, 0, .12) 0 1px, rgba(0, 0, 0, 0) 1px 4px);
+    --sheen: var(--weave), linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 26%, rgba(0, 0, 0, .28) 100%);
+    --bevel: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -4px 0 3px rgba(0, 0, 0, .14);
+    --bevel-sm: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -3px 0 3px rgba(0, 0, 0, .14);
+    --bevel-dn: inset 0 0 0 1px rgba(0, 0, 0, .5), inset 0 5px 8px 1px rgba(0, 0, 0, .65), inset 0 -1px 0 rgba(255, 255, 255, .22);
+    --btn-text: 0 1px 0 rgba(0, 0, 0, .6);
     --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9;
 }
+@media (forced-colors: active) { :root { --weave: linear-gradient(#0000, #0000); --sheen: linear-gradient(#0000, #0000); --btn-text: none; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { background: var(--clay); }
 body { background: var(--clay) url("front/clay.png?v=ef1e7ee6"); color: var(--ink); font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif; font-synthesis: none; -webkit-text-size-adjust: 100%; }
@@ -25,11 +29,11 @@ button { font: inherit; color: inherit; }
 .wrap { width: 100%; max-width: 1220px; margin: 0 auto; padding: 16px 30px 0; flex: 1; }
 
 /* ---- buttons: the teal bevel of the game ---- */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 18px; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer; white-space: nowrap;
-    background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 18px; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer; white-space: nowrap; text-shadow: var(--btn-text);
+    background: var(--sheen) var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
 .btn:hover { background-color: var(--teal-hi); }
-.btn:active { transform: translate(2px, 3px); box-shadow: var(--bevel), 1px 1px 0 var(--shadow); }
 .btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
+.btn:active { transform: translate(3px, 4px); box-shadow: var(--bevel-dn), 0 0 0 var(--shadow); }
 .dl { color: var(--cream); font-size: 15px; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; padding: 6px 2px; }
 .dl:hover { color: var(--gold); }
 
@@ -110,7 +114,7 @@ button { font: inherit; color: inherit; }
 .seg { display: inline-flex; border: 2px solid var(--edge); border-radius: 8px; overflow: hidden; box-shadow: 2px 3px 0 var(--shadow); flex: none; }
 .seg button { min-height: 40px; padding: 0 16px; background: #0d171f; border: 0; border-left: 1px solid #1c3a30; color: #b7d0c6; font-size: 15px; cursor: pointer; white-space: nowrap; }
 .seg button:first-child { border-left: 0; }
-.seg button[aria-pressed="true"] { background: var(--teal) var(--sheen); color: var(--cream); box-shadow: var(--bevel-sm); }
+.seg button[aria-pressed="true"] { background: var(--sheen) var(--teal); color: var(--cream); box-shadow: var(--bevel-sm); }
 .seg .short { display: none; }
 .tools .r2 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px 14px; align-items: end; }
 .sel { display: grid; gap: 4px; min-width: 0; }
@@ -193,7 +197,7 @@ button { font: inherit; color: inherit; }
 .pager .pg { min-width: 40px; height: 40px; padding: 0 8px; display: grid; place-items: center; font-size: 15px; background: #0d171f; border: 1px solid #1c3a30; border-radius: 4px; color: var(--cream); text-decoration: none; font-variant-numeric: tabular-nums; }
 .pager .pg.wide { padding: 0 14px; }
 .pager .pg.off { opacity: .4; }
-.pager .pg[aria-current] { background: var(--teal) var(--sheen); box-shadow: var(--bevel-sm); border-color: var(--edge); }
+.pager .pg[aria-current] { background: var(--sheen) var(--teal); box-shadow: var(--bevel-sm); border-color: var(--edge); }
 .pager .gap { color: var(--muted); padding: 0 4px; }
 .pager .of { display: none; color: var(--muted); font-size: 15px; }
 

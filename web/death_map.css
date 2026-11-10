@@ -31,7 +31,7 @@
 .dm-world svg .sq { fill: var(--c); stroke: var(--c); }
 .dm-world svg .ring-first { stroke: var(--dm-gold); } .dm-world svg .ring-last { stroke: var(--dm-cream); }
 .dm-zoom { position: absolute; right: 8px; bottom: 8px; display: grid; gap: 6px; z-index: 5; }
-.dm-zoom button { width: 36px; height: 36px; border-radius: 6px; border: 2px solid var(--dm-edge); background: var(--teal) var(--sheen); color: var(--dm-cream); font-size: 20px; line-height: 1; box-shadow: var(--bevel-sm), 2px 3px 0 var(--dm-shadow); cursor: pointer; }
+.dm-zoom button { width: 36px; height: 36px; border-radius: 6px; border: 2px solid var(--dm-edge); background: var(--sheen) var(--teal); color: var(--dm-cream); font-size: 20px; line-height: 1; box-shadow: var(--bevel-sm), 2px 3px 0 var(--dm-shadow); cursor: pointer; }
 .dm-zoom button.fit { font-size: 11px; letter-spacing: .04em; }
 .dm-zoom .zl { text-align: center; font-size: 11px; color: var(--dm-cream); text-shadow: 0 0 3px #000, 0 0 3px #000; }
 .dm-mini { position: absolute; left: 8px; top: 8px; width: 84px; z-index: 5; border: 2px solid var(--dm-edge); border-radius: 3px; background: #050a08; box-shadow: 0 0 0 1px #1c3a30; overflow: hidden; }
@@ -108,4 +108,4 @@
 .dm .seg { display: inline-flex; border: 2px solid var(--dm-edge); border-radius: 8px; overflow: hidden; box-shadow: 2px 3px 0 var(--dm-shadow); flex: none; }
 .dm .seg button { min-height: 40px; padding: 0 16px; background: #0d171f; border: 0; border-left: 1px solid #1c3a30; border-radius: 0; box-shadow: none; color: #b7d0c6; font: inherit; font-size: 15px; cursor: pointer; white-space: nowrap; }
 .dm .seg button:first-child { border-left: 0; }
-.dm .seg button[aria-pressed="true"] { background: var(--teal) var(--sheen); color: var(--dm-cream); box-shadow: var(--bevel-sm); }
+.dm .seg button[aria-pressed="true"] { background: var(--sheen) var(--teal); color: var(--dm-cream); box-shadow: var(--bevel-sm); }
