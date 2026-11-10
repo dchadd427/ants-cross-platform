@@ -294,7 +294,7 @@ Details, flows and limits: [`NETWORK_PORT.md`](NETWORK_PORT.md#reconnect-protoco
 - A record of **another network protocol is not restored** (a rules change would play the match out differently; the game version does not decide), and neither is one whose last write is more than an hour old. Its room is a `failed` room with the reason in the status and the log, and the record is kept for a day in `restart/refused/`, for the operator who moves it back. A deploy that wants to keep the running matches must not change the network protocol (the changelog says when a release does).
 - A record is at most 48 MiB, and the records of the running rooms together 256 MiB (`--restart-budget-mb`). A disk that refuses a write ends that room's record: the match goes on without one, and its status says why (`record`).
 - The lock that lets only one server use a records folder is described in [`NETWORK_PORT.md`](NETWORK_PORT.md#options-and-the-stack).
-- **Keep the volume** (`ants-server-results` in the stack): a stack that is removed with its volumes loses the records.
+- **Keep the volume** (`ants-server-results` in the stack): a stack that is removed with its volumes loses the records. The one-shot `ants-results-init` fixes an old volume's owner at each start.
 
 The format and the limits: [`NETWORK_PORT.md`](NETWORK_PORT.md#restart-records-a-running-match-survives-a-restart-of-the-server), "Restart records".
 
