@@ -921,6 +921,8 @@ No layout changed: a bot is named `Pip (bot, Hard)`; the Room message's planned 
 
 187's hill is closed (rules number 7), the original's game ends at one side left with no food to score (rules number 8), a fire wall of a map file loads as the original loads it (rules numbers 9 and 10), and the end rule of 187 counts the teams that began and not an egg that cannot hatch (rules number 11): [`GAMEPLAY.md`](GAMEPLAY.md#the-last-side-standing), [`map_loader_fidelity.md`](reverse_engineering/map_loader_fidelity.md) section 8; the rules numbers: [`REPLAYS.md`](REPLAYS.md#the-file).
 
+## Protocol 24: [`PLAYER_NAMES.md`](PLAYER_NAMES.md)
+
 ## Reconnect (protocol 10): a player whose connection is lost can come back
 
 ### The behaviour that is decided
