@@ -1,6 +1,8 @@
 // Tests of the dedicated game server: a match survives a restart of the server (S3.84 and on) and the review of the restart records
 #include "server_fixtures.hpp"
 
+#include "ants_net/person_name.hpp"
+
 
 void run_persist_server_tests() {
     TEST_CASE("S3.84 A Match Survives A Restart Of The Server (SIGTERM): The Record Holds Every Turn That Was Sealed And Has The Keys Of The Seats; After The Restart The Room Is Back With Its Code, Its Turns Replayed (The State Hash Is That Of An Independent Replay And The Stored Checkpoints Are The Machines' Own Hashes), Every Seat Held And The Match Paused; The Three Machines Come Back By Themselves, The Match Goes On And Ends Identical On Them And On The Referee, And The Record Is Gone") {
@@ -1733,6 +1735,56 @@ void run_persist_review_tests() {
         ASSERT_TRUE(WIFEXITED(wait_status) && WEXITSTATUS(wait_status) == 0);
 #endif
     } TEST_END();
+
+    TEST_CASE("S3.277 A Restored Match Knows Its Guests: After A Restart Of A Server That Checks Names, A Guest Of The Match (Its Name Of The Guest Form In The Record) Has 3 Lines At Once In The Restored Match And A Person Whose Name Was Checked 5; On A Server That Does Not Check Names Everybody Has 5") {
+        const std::string secret = "an obviously fake secret for a test, 40 chars!!";
+        for (const bool check_names : {true, false}) {
+            ServerLimits limits;
+            limits.verified_names = check_names;
+            PWorld w(check_names ? "persist-277a" : "persist-277b", limits);
+            w.configure = [&](RoomManager& mgr) {
+                if (!check_names) return;
+                mgr.set_name_secret(secret);
+                mgr.set_unix_clock([]() { return uint64_t{1700000000}; });
+            };
+            w.start_server(500);
+            RoomSpec spec = held_spec("P-77", 3);
+            spec.verified_names = check_names;
+            ASSERT_TRUE(w.mgr->create_room(spec, w.server_now()).ok);
+            std::vector<RClient*> m;
+            for (uint8_t p = 0; p < 3; ++p) {
+                if (check_names && p == 0) {                                                 // a person whose name is checked: a good pass for "P0"
+                    w.next_token = name_pass_for_tests(secret, "P0");
+                } else {
+                    w.next_token.clear();
+                }
+                m.push_back(&w.connect(std::string("P") + std::to_string(p), spec.code));
+            }
+            w.next_token.clear();
+            w.run(30000 + kPre);
+            ASSERT_TRUE(w.status("P-77").state == RoomState::Running);
+            ASSERT_TRUE(!check_names || w.status("P-77").names[m[0]->lobby->my_seat()] == "P0");
+            w.stop_server(true);
+            w.run(3000);
+            w.start_server(500);
+            ASSERT_EQ(w.report.items.size(), size_t{1});
+            ASSERT_TRUE(w.report.items[0].outcome == RestoreItem::Outcome::Restored);
+            ASSERT_TRUE(w.until([&]() { return !w.status("P-77").paused; }, 90000));
+            w.run(2000);
+            for (RClient* p : m) {
+                ASSERT_FALSE(p->lost);
+                p->chats.clear();
+            }
+            for (RClient* p : m) {
+                for (int i = 0; i < 9; ++i) p->end->send(net::encode(net::ChatMsg{0, false, "line " + std::to_string(i)}));
+            }
+            w.run(600);
+            for (size_t k = 0; k < m.size(); ++k) {
+                size_t own = 0;
+                for (const net::ChatMsg& c : m[k]->chats) own += c.sender == m[k]->lobby->my_seat() ? 1u : 0u;
+                const size_t want = check_names && k != 0 ? 3u : 5u;
+                ASSERT_MSG(own == want, std::to_string(own) + " for machine " + std::to_string(k) + ", checked " + std::to_string(check_names));
+            }
+        }
+    } TEST_END();
 }
-
-

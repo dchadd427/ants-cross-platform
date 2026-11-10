@@ -305,6 +305,21 @@ struct Client {
     }
 };
 
+// A name pass as the hub makes it (hub/ticket.py), for account 1, ending 600 s after the fixed test clock 1700000000 (a test's own secret, never a real one)
+inline std::string name_pass_for_tests(const std::string& secret, const std::string& name) {
+    std::string b(20, '\0');
+    b[0] = 1;
+    const uint32_t end = 1700000600u;
+    for (int i = 0; i < 4; ++i) b[static_cast<size_t>(8 + i)] = static_cast<char>(end >> (8 * i));
+    b[12] = 9;
+    std::string signed_bytes("ants-name-ticket-1", 18);
+    signed_bytes.push_back('\0');
+    signed_bytes += b;
+    signed_bytes += name;
+    b += hmac_sha256(secret, signed_bytes).substr(0, 16);
+    return "n1." + base64url_encode(b);
+}
+
 // A manager with a loopback network and some clients
 struct World {
     net::LoopbackNetwork net{5};
@@ -1092,6 +1107,7 @@ struct PWorld : LinkSource {
         server_ends.push_back(ends.first);
         return ends.second;
     }
+    std::string next_token;                                 // the token that the next connect()'s Hello shows (a name pass); it stays until it is set again
     uint16_t announce_port{0};                              // the listen port that the machines made by connect() announce
     std::optional<net::CreateBlock> next_create;            // the block that the next connect() puts in its Hello (connect_creating sets it for one call)
     RClient& connect(const std::string& name, const std::string& room, uint8_t seat = 255, const net::SeatKey& key = net::SeatKey{}) {
@@ -1104,6 +1120,7 @@ struct PWorld : LinkSource {
         c.key = key;
         c.listen_port = announce_port;
         c.create = next_create;
+        c.token = next_token;
         c.start(end, static_cast<uint32_t>(clients.size()) * 7919u);
         return c;
     }

@@ -1058,7 +1058,9 @@ RoomManager::JobEnd RoomManager::advance(Restoring& job, uint32_t slice_ms, cons
             assets::LevelData level;
             const std::string refusal = map_refusal(job.rec->head, entry, level);
             if (!refusal.empty()) return end_job(job, refusal, now_ms);
-            job.room = std::make_unique<Room>(room_spec_of(job.rec->head), std::move(entry), std::move(level), job.rec->head.start.seed, now_ms, &log_budget_);
+            RoomSpec restored_spec = room_spec_of(job.rec->head);
+            restored_spec.verified_names = limits_.verified_names;       // (a record has no such setting: the server that brings the room back decides, so that its guests keep the guest's chat)
+            job.room = std::make_unique<Room>(std::move(restored_spec), std::move(entry), std::move(level), job.rec->head.start.seed, now_ms, &log_budget_);
             job.room->set_restart_store(restart_.get());
             if (job.room->begin_replay(*job.rec, cfg.restart_vote_after_ms, why) != Room::ReplayBegin::Ready) return end_job(job, "ended by a restart of the server: " + why, now_ms);
             return JobEnd::More;

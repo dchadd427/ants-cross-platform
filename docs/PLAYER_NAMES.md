@@ -47,7 +47,13 @@ Everybody plays as a guest, and no room refuses anybody for it:
 
 ## Chat limits
 
-(Written with the chat limits for guests.)
+A guest's lines in a room are limited to three at once and then one every three seconds (20 a minute). A guest who keeps typing faster than that has each extra line dropped, and after ten lines of allowance each further one counts as a violation, like any message a client may not send (eight throw the sender out). A person whose name was checked keeps the usual limit: five at once, then one a second (twenty lines of allowance). The numbers are `kGuestChatBurst`, `kGuestChatPerMinute` and `kGuestChatExcessBurst` in `include/ants_net/flood.hpp`.
+
+Who is a guest for the chat is decided at the door, not by the look of the name: the door marks the seat when the name was not checked, and the seat keeps the mark while it exists (a change of color, a short loss of the link, the rematch of the same people). A second guest with the same name in a server without reconnect is shown as `Guest 123456 (2)`, which is no guest name, and is limited all the same. After a restart of the server a restored match goes by the names of its seats: a name of the guest form is a guest, and no checked name has that form.
+
+The limit applies in the waiting room and in the running match, only in a server run with `--verified-names`. A LAN host, a direct host and a server without the setting give everybody the usual limit. The chat of the home page (the hub's) is not changed.
+
+The page keeps a little under the server's guest limit while its own seat has a guest name: two lines at once, then one every 3.3 seconds (`BUDGETS.guestChat` in `web/front/lobby_net.js`), so an honest page never sends a line that the server drops. A page whose seat has any other name keeps the usual margin (four at once, then one every 1.25 seconds).
 
 ## Settings and logs
 
@@ -62,3 +68,4 @@ Protocol 24 changes no layout. The number changed because the server's handling 
 - `test_lockstep` and `test_lobby` pin the number and read `tests/data/lobby_messages.txt`, the bytes of the lobby page's messages as the C++ encoders write them; `tests/scripts/web_lobby_net_check.js` reads the same file with the page's codec.
 - `test_server` checks the pass and the door (`tests/test_server/test_name_ticket.cpp`) and the refusal of a Hello of another number (S3.73, which lists 23); `test_lobby` checks the unique names and the fixed names (`tests/test_net/test_lobby_names.cpp`) and the refusal of 23 by a room; `test_netgame` refuses it for a host on the local network. `tests/data/name_ticket_mutants.json` lists the changes that these tests must catch.
 - `tests/scripts/web_lobby_client_check.js` checks the Hello that the page sends and that a refusal for the version is final (no new try). The banner is checked in `tests/scripts/web_name_check.js`: the page's own first socket refused for its version shows the strip that says a newer version is out, with its Reload button, opens no second socket and makes no room of its own; the same file and `web_home_games_room_check.js` check the strip after a refused Join.
+- The guest chat limit: `test_lobby` (`tests/test_net/test_lobby_guest_chat.cpp`, G5.1 to G5.6: the arithmetic against a reference model, the waiting room, the seat flag, the excess, fresh random runs, a moved seat and a rematch), `test_lockstep` (N2.93g, the running match), `test_server` (S3.276 through the door, S3.277 after a restart) and `tests/scripts/web_lobby_client_check.js` (the page's own pace against the server's guest bucket). `tests/data/guest_chat_mutants.json` lists the changes that these tests must catch.

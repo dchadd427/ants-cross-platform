@@ -1,0 +1,231 @@
+{
+ "note": "Mutants of a guest's chat limit (include/ants_net/flood.hpp, the seat flag set at the door in src/ants_server/room_manager.cpp and name_ticket.cpp, HostLobby and HostSession in src/ants_net, the restored match in src/ants_server/room.cpp, and the page's own pace in web/front/lobby_net.js; docs/TESTING.md 'Mutation checks') for tools/mutate.py: each breaks one rule on purpose, and a test of tests/test_net/test_lobby_guest_chat.cpp (G5.1 - G5.6), test_lockstep_failures.cpp (N2.93g), tests/test_server/test_name_ticket.cpp (S3.276), test_server_persist.cpp (S3.277) or tests/scripts/web_lobby_client_check.js must notice. Run from the checkout with the build folder in ANTS_BUILD_DIR when it is not ./build: python3 tools/mutate.py tests/data/guest_chat_mutants.json --keep-going --jobs 1 --timeout 1500. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "guest_rate_for_checked_seats",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guest = cfg_.guest_chat && guests_[seat].unverified;",
+   "new": "const bool guest = cfg_.guest_chat;",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_rate_when_the_setting_is_off",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guest = cfg_.guest_chat && guests_[seat].unverified;",
+   "new": "const bool guest = guests_[seat].unverified;",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_by_name_form_not_flag",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "const bool guest = cfg_.guest_chat && guests_[seat].unverified;",
+   "new": "const bool guest = cfg_.guest_chat && is_guest_name(room_.slots[seat].name);",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_rate_is_per_second_not_minute",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kGuestChatPerMinute = 20;",
+   "new": "inline constexpr uint32_t kGuestChatPerMinute = 1200;",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_burst_four",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kGuestChatBurst = 3;",
+   "new": "inline constexpr uint32_t kGuestChatBurst = 4;",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_excess_eleven",
+   "file": "include/ants_net/flood.hpp",
+   "old": "inline constexpr uint32_t kGuestChatExcessBurst = 10;",
+   "new": "inline constexpr uint32_t kGuestChatExcessBurst = 11;",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_excess_shared_between_seats",
+   "file": "include/ants_net/flood.hpp",
+   "old": "return excess_.take_per_minute(now_ms, rate.excess_burst, rate.per_minute) ? Verdict::Drop : Verdict::Offence;",
+   "new": "{ static MessageBudget shared; return shared.take_per_minute(now_ms, rate.excess_burst, rate.per_minute) ? Verdict::Drop : Verdict::Offence; }",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_line_after_3000_needs_3001",
+   "file": "include/ants_net/flood.hpp",
+   "old": "if (thousandths_ < kOne) return false;",
+   "new": "if (thousandths_ <= kOne) return false;",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "guest_excess_refills_per_second",
+   "file": "include/ants_net/flood.hpp",
+   "old": "return excess_.take_per_minute(now_ms, rate.excess_burst, rate.per_minute) ?",
+   "new": "return excess_.take_per_minute(now_ms, rate.excess_burst, rate.per_minute * 60u) ?",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "rematch_forgets_the_flag",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "        g.unverified = p.unverified;\n",
+   "new": "        g.unverified = false;\n",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "rematch_gives_no_flag",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "guests_[s].join_order, platform, guests_[s].unverified});",
+   "new": "guests_[s].join_order, platform, false});",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "seat_flag_not_set_at_the_hello",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "guests_[seat].unverified = p.unverified;",
+   "new": "guests_[seat].unverified = false;",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "hello_handed_over_without_the_flag",
+   "file": "src/ants_net/lobby.cpp",
+   "old": "Pending p{connection, now_ms, address, unverified};",
+   "new": "Pending p{connection, now_ms, address, false};",
+   "build": "test_lobby",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "session_not_given_the_seats",
+   "file": "src/ants_server/room.cpp",
+   "old": "hc.guest_seats = spec_.verified_names ? guest_seats : uint8_t{0};",
+   "new": "hc.guest_seats = uint8_t{0};",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.276 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "session_ignores_the_seats",
+   "file": "src/ants_net/session.cpp",
+   "old": "const bool guest = player < sim::MAX_PLAYERS && ((cfg_.guest_seats >> player) & 1u) != 0;",
+   "new": "const bool guest = false;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=N2.93g $B/tests/test_net/test_lockstep'"
+  },
+  {
+   "id": "session_guest_bit_of_seat_zero",
+   "file": "src/ants_net/session.cpp",
+   "old": "((cfg_.guest_seats >> player) & 1u) != 0;",
+   "new": "((cfg_.guest_seats >> 0) & 1u) != 0;",
+   "build": "test_lockstep",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=N2.93g $B/tests/test_net/test_lockstep'"
+  },
+  {
+   "id": "room_start_marks_nobody",
+   "file": "src/ants_server/room.cpp",
+   "old": "if (lobby_.unverified(seat)) guest_seats",
+   "new": "if (false && lobby_.unverified(seat)) guest_seats",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.276 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "room_does_not_set_guest_chat",
+   "file": "src/ants_server/room.cpp",
+   "old": "cfg.guest_chat = spec.verified_names;",
+   "new": "cfg.guest_chat = false;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.276 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "door_does_not_hand_the_flag_on",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "checked.empty() ? message : checked, now_ms, made_here, unverified)",
+   "new": "checked.empty() ? message : checked, now_ms, made_here, false)",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.276 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "door_flags_a_checked_name",
+   "file": "src/ants_server/name_ticket.cpp",
+   "old": "    if (guest != nullptr) *guest = true;\n",
+   "new": "    if (guest != nullptr) *guest = false;\n",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.276 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "restore_marks_nobody",
+   "file": "src/ants_server/room.cpp",
+   "old": "&& net::is_guest_name(start.names[seat])) guest_seats",
+   "new": "&& false) guest_seats",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.277 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "restore_marks_everybody",
+   "file": "src/ants_server/room.cpp",
+   "old": "&& net::is_guest_name(start.names[seat])) guest_seats",
+   "new": "&& true) guest_seats",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.277 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "restored_room_is_not_a_checking_room",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "restored_spec.verified_names = limits_.verified_names;",
+   "new": "restored_spec.verified_names = false;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.277 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "page_uses_the_logged_in_budget_for_a_guest",
+   "file": "web/front/lobby_net.js",
+   "old": "var pace = kind === 'chat' && this.isGuest() ?",
+   "new": "var pace = kind === 'chat' && false ?",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_guest_burst_three",
+   "file": "web/front/lobby_net.js",
+   "old": "guestChat: [2, 0.3]",
+   "new": "guestChat: [3, 0.3]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_guest_pace_too_fast",
+   "file": "web/front/lobby_net.js",
+   "old": "guestChat: [2, 0.3]",
+   "new": "guestChat: [2, 0.34]",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_guest_name_without_second_suffix",
+   "file": "web/front/lobby_net.js",
+   "old": "( \\([0-9]+\\))?$/",
+   "new": "$/",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_guest_form_allows_leading_zero",
+   "file": "web/front/lobby_net.js",
+   "old": "[1-9][0-9]{5}( ",
+   "new": "[0-9]{6}( ",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_reads_hello_name_not_seat",
+   "file": "web/front/lobby_net.js",
+   "old": "own = r !== null && this.seat >= 0 && this.seat < r.slots.length ? r.slots[this.seat].name : this.name;",
+   "new": "own = this.name;",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  }
+ ]
+}
