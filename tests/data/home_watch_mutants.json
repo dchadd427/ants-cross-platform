@@ -350,6 +350,34 @@
    "old": ".gdot.cn { --c: #8a8693; }",
    "new": ".gdot.cn { --c: #b3afb9; }",
    "test": "python3 tests/scripts/test_web_home_games.py TheStyle"
+  },
+  {
+   "id": "compact_card_never_chosen",
+   "file": "web/home/games.js",
+   "old": "(liveShown() && live.length ? ' gcompact' : '')",
+   "new": "''",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "compact_card_even_with_no_match",
+   "file": "web/home/games.js",
+   "old": "(liveShown() && live.length ? ' gcompact' : '')",
+   "new": "(liveShown() ? ' gcompact' : '')",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "compact_card_keeps_the_picture",
+   "file": "web/home/games.css",
+   "old": ".gpop .gempty.gcompact .ant, .gpop .gempty.gcompact .gemline { display: none; }",
+   "new": ".gpop .gempty.gcompact .gemline { display: none; }",
+   "test": "node tests/scripts/web_home_watch_browser.js"
+  },
+  {
+   "id": "compact_card_keeps_the_full_height",
+   "file": "web/home/games.css",
+   "old": "gap: 4px 14px; min-height: 0; padding: 8px 12px; }",
+   "new": "gap: 4px 14px; padding: 8px 12px; }",
+   "test": "node tests/scripts/web_home_watch_browser.js"
   }
  ]
 }

@@ -48,18 +48,19 @@ function check(label, ok, detail) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // mode: 'busy' (eight matches), 'none' (an empty list), '404' (no live door), 'down' (the connection is cut)
-function startSite(mode) {
+function startSite(mode, opts) {
+    opts = opts || {};
     const stamp = (text) => text.replace(/@@SITE_TITLE@@/g, '').replace(/@@SITE_FOOTER@@/g, '').replace(/@@GAME_VERSION@@/g, '0.13.0').replace(/@@BUILD_ID@@/g, 'watch').replace(/@@BUILD_DATE@@/g, '2026-11-01 00:00').replace(/@@BUILD_TIMESTAMP@@/g, '2026-11-01 00:00:00');
     const state = { mode, live: 0, liveTimes: [] };
     const site = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://x');
-        if (url.pathname === '/lobbies') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(LOBBIES)); return; }
+        if (url.pathname === '/lobbies') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(opts.noOpen ? { format: 1, count: 0, lobbies: [] } : LOBBIES)); return; }
         if (url.pathname === '/live') {
             state.live++; state.liveTimes.push(Date.now());
             if (state.mode === 'down') { req.socket.destroy(); return; }
             if (state.mode === '404') { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"not found"}'); return; }
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-            res.end(JSON.stringify(state.mode === 'none' ? { live: [], count: 0, sim_rules: 9 } : busy()));
+            res.end(JSON.stringify(state.mode === 'none' ? { live: [], count: 0, sim_rules: 9 } : opts.n ? Object.assign(busy(), { live: busy().live.slice(0, opts.n) }) : busy()));
             return;
         }
         if (url.pathname === '/stats' || url.pathname === '/busy') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{}'); return; }
@@ -200,6 +201,36 @@ const GEOM = () => {
                 await context.close();
             }
             site.close();
+        }
+        {   // one list: open rooms first, then the matches; with no open room the empty card is compact and the first match shows without a scroll of the list
+            const SHOW = [SIZES[0], SIZES[4], SIZES[6]];
+            for (const [label, opts] of [['0 open, 1 live', { noOpen: true, n: 1 }], ['0 open, 3 live', { noOpen: true, n: 3 }], ['3 open, 3 live', { n: 3 }], ['0 open, 0 live', { noOpen: true, mode: 'none' }]]) {
+                const { site, origin } = await startSite(opts.mode || 'busy', opts);
+                for (const [name, w, h, touch] of SHOW) {
+                    const { context, page } = await open(origin, w, h, touch).catch(async () => { const c = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: touch }); const pg = await c.newPage(); await pg.goto(origin + '/', { waitUntil: 'load' }); return { context: c, page: pg }; });
+                    if (w <= 700) { await page.click('.htab.t-games').catch(() => {}); }
+                    await sleep(1500);
+                    const g = await page.evaluate(() => {
+                        const q = (e) => e && e.getClientRects().length ? e.getBoundingClientRect() : null;
+                        const body = q(document.querySelector('.gdock .gpbody')), empty = q(document.querySelector('.gdock .gempty')), row = q(document.querySelector('.gdock .glive')), list = q(document.querySelector('.gdock .glist:not(.glivelist)'));
+                        const e = document.querySelector('.gdock .gempty');
+                        return { body: body && [body.top, body.bottom], empty: empty && [empty.top, empty.height], row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], compact: !!e && e.className.indexOf('gcompact') !== -1, ant: !!(e && q(e.querySelector('.ant'))), btns: e ? Array.from(e.querySelectorAll('.btn')).filter((b) => q(b)).length : 0, code: !!q(document.querySelector('.gdock .gcode')), sideways: document.documentElement.scrollWidth > innerWidth };
+                    });
+                    const tag = name + '/' + label;
+                    check(tag + ': no sideways scroll, Join by code is shown', !g.sideways && g.code, JSON.stringify(g));
+                    if (opts.noOpen && !opts.mode) {
+                        check(tag + ': the empty card is the compact one (no picture, both buttons, short)', g.compact && !g.ant && g.btns === 2 && g.empty && g.empty[1] <= 130, JSON.stringify(g));
+                        if (name !== 'side') check(tag + ': the first match in progress shows in the list without a scroll (all of it for one match; 100 px of it, name and Watch, when its names wrap to three lines)', g.row && Math.min(g.row[1], g.body[1]) - g.row[0] >= Math.min(100, g.row[1] - g.row[0]) && (label !== '0 open, 1 live' || g.row[1] <= g.body[1] + 0.5), JSON.stringify(g));
+                    } else if (opts.mode === 'none') {
+                        check(tag + ': nothing at all keeps the full empty card (the picture)', !g.compact && g.ant, JSON.stringify(g));
+                    } else {
+                        check(tag + ': open rooms first, the matches under them, no empty card', !g.empty && g.list && g.row && g.list[0] < g.row[0], JSON.stringify(g));
+                    }
+                    await shot(page, 'compact_' + label.replace(/[^0-9a-z]+/g, '_') + '_' + name);
+                    await context.close();
+                }
+                site.close();
+            }
         }
         check('the page made no error of its own', errors.length === 0, errors.join(' | '));
     } finally {

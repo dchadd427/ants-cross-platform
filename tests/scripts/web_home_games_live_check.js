@@ -112,6 +112,11 @@ const M = 'TREASURE.LVL';
     check('nothing open and nothing in progress: the empty card of the open games, one line "none waiting", and the box says no games in progress', headOf(both) === 'none waiting' && first(popOf(both), 'gempty').hidden === false && first(boxOf(both), 'gnolive').hidden === false);
     const only = await livePage({ lobbies: [] });
     check('nothing open, two in progress: the empty card stays (Host one!) and the rows are under it; the head says "0 open, 2 in progress"', first(popOf(only), 'gempty').hidden === false && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress', headOf(only));
+    check('... and the empty card is the compact one with the rows under it (class gcompact), while with no match at all it is the full card', first(popOf(only), 'gempty').className.indexOf('gcompact') !== -1 && first(popOf(both), 'gempty').className.indexOf('gcompact') === -1 && first(popOf(both), 'gempty').className === 'gempty');
+    const offOnly = await livePage({ lobbies: [], stored: { 'ants.home.games.live': '0' } });
+    check('with the switch off the empty card is the full one (nothing in progress is shown)', first(popOf(offOnly), 'gempty').className === 'gempty');
+    const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
+    check('with an open game there is no empty card, the open rows come first and the matches follow in the same list', first(popOf(openOnes), 'gempty').hidden === true && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
 }
 
 // ---- 3. the looks at /live ----
