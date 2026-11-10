@@ -113,7 +113,7 @@ class Room:
         if self.limits.db_max_bytes < 16 * 1024 * 1024:
             self.store.db.execute("PRAGMA wal_autocheckpoint=4")            # (the log file is folded into the database every 4 pages, as it is every 1000 at the default size: next to a small store it stays as small as the default's is next to 64 MB)
         self.log = io.StringIO()
-        self.hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": SITE, "ANTS_HUB_MODS": ",".join(mods)}), self.store, session.NoLogin(), logmod.Log(self.log), self.limits, clock=self.mono)
+        self.hub = server.Hub(configmod.load({"ANTS_HUB_PUBLIC_URL": SITE}), self.store, session.NoLogin(), logmod.Log(self.log), self.limits, clock=self.mono, roles=hub_rig.FakeRoles({a: "mod" for a in mods}))
         self.chat = self.hub.chat
 
     def close(self):

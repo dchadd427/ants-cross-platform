@@ -65,6 +65,16 @@ class Limits:
     discord_connect_seconds: float = 3.0        # to Discord: the connection ...
     discord_seconds: float = 6.0                # ... a whole call, from the first byte sent to the last byte read ...
     discord_total_seconds: float = 10.0         # ... and the two calls of a login together (nginx waits 15 seconds for the hub's answer)
+    roles_burst: int = 5                # the roles' lookups (hub/roles.py): a burst of 5, then one every half second (two a second), one at a time, however many people are here ...
+    roles_refill_seconds: float = 0.5
+    roles_grace_seconds: float = 60.0   # ... a role is believed for the re-check interval and this long more, then it is `none` until Discord has said it again
+    roles_pause_seconds: float = 600.0  # a token, a server or an access that Discord refuses: no call at all for this long, then one to try again
+    roles_jitter: float = 0.1           # the next check of a person is the interval plus or minus this part of it, so that a crowd that came together does not stay together
+    roles_retry_seconds: float = 15.0   # a check that failed is tried again after this, then double, up to the next number, then at the normal pace
+    roles_retry_max_seconds: float = 60.0
+    roles_hold_max_seconds: float = 60.0        # the longest that one answer of Discord ("wait this long") can stop the lookups
+    roles_log_seconds: float = 600.0    # a line in the log for a Discord that does not answer: this seldom at the most
+    roles_entries_max: int = 2000       # people whose role is kept in memory: those with a socket open and a few that left (at most `sockets_total` are open)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
 
     @property

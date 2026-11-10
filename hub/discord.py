@@ -7,6 +7,9 @@ address, which hub/config.py allows only to a hub that listens on one), the cert
 is followed (a 3xx is a failure), the answer is read up to a size cap and not a byte more (the head, the body, a chunked body: all counted), and what comes back must be JSON of the
 shape that was asked for. The failures are told apart for the log and for the page: a code that Discord refused (the visitor tries again), a refusal of the application's own
 settings (the operator looks), a busy Discord, and everything else (down, slow, garbage, too big).
+
+The rate-limit headers of an answer come back with it, as numbers that are small and plain (`rate_limits`): the roles' lookup (hub/roles.py) paces itself by them. The bot's token is a
+local variable of one call, sent in one header to discord.com, and no error carries it (a DiscordError has a kind and a status, nothing else).
 """
 import asyncio
 import json
@@ -19,6 +22,8 @@ from . import config
 AUTHORIZE = "https://discord.com/oauth2/authorize"
 API = "https://discord.com/api/v10"
 USER_AGENT = "AntsHub/1 (+https://github.com/dchadd427/ants-cross-platform)"       # (Discord's front door turns away a client that names none)
+BOT_USER_AGENT = "DiscordBot (https://github.com/dchadd427/ants-cross-platform, 1)"  # (the form that Discord asks of a client that speaks with a bot's token)
+NUMBER = re.compile(r"[0-9]{1,4}(?:\.[0-9]{1,6})?\Z")           # a rate-limit header or field: a small plain number
 TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{1,512}\Z")           # an access token is a plain word: one that is not is not Discord's, and is never put in a header
 STATUS_LINE = re.compile(r"HTTP/1\.[01] ([0-9]{3})(?: [^\r\n]*)?\Z")
 HEADER = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+):[ \t]*([\t\x20-\x7e]*?)[ \t]*\Z")
@@ -71,7 +76,7 @@ class Discord:
 
     async def token(self, code):
         form = urllib.parse.urlencode({"client_id": self.client_id, "client_secret": self.client_secret, "grant_type": "authorization_code", "code": code, "redirect_uri": self.redirect})
-        status, data = await self.call("POST", "/oauth2/token", {"Content-Type": "application/x-www-form-urlencoded"}, form.encode("ascii"))
+        status, data, _ = await self.call("POST", "/oauth2/token", {"Content-Type": "application/x-www-form-urlencoded"}, form.encode("ascii"))
         if status == 400:
             raise DiscordError("config" if data.get("error") in ("invalid_client", "unauthorized_client") else "rejected", status)
         self.check_status(status)
@@ -82,12 +87,19 @@ class Discord:
         return token
 
     async def me(self, token):
-        status, data = await self.call("GET", "/users/@me", {"Authorization": "Bearer " + token}, b"")
+        status, data, _ = await self.call("GET", "/users/@me", {"Authorization": "Bearer " + token}, b"")
         self.check_status(status)
         account, name = data.get("id"), data.get("username")
         if not isinstance(account, str) or not config.ACCOUNT_ID.match(account) or not isinstance(name, str):
             raise DiscordError("down", status)
         return account, name, data.get("global_name")
+
+    async def member(self, guild, user, token):
+        """(status, data, rate limits) of `GET /guilds/<guild>/members/<user>` with the bot's token: the member's roles, or a status that says why not (404 and code 10007: not in the server). A
+        DiscordError when there was no usable answer. The ids and the token are checked for their shape before they go into a request line or a header."""
+        if not (config.SNOWFLAKE.match(guild) and config.ACCOUNT_ID.match(user) and config.BOT_TOKEN.match(token)):
+            raise DiscordError("down")
+        return await self.call("GET", "/guilds/%s/members/%s" % (guild, user), {"Authorization": "Bot " + token, "User-Agent": BOT_USER_AGENT}, b"")
 
     @staticmethod
     def check_status(status):
@@ -98,7 +110,7 @@ class Discord:
     # ---- one call -------------------------------------------------------------------------------------------------------------------------
 
     async def call(self, method, path, headers, body):
-        """(status, JSON object) of one call; a DiscordError for a call that did not finish in time, was not answered, was answered with a redirect, or with anything but a small JSON object
+        """(status, JSON object, rate limits) of one call; a DiscordError for a call that did not finish in time, was not answered, was answered with a redirect, or with anything but a small JSON object
         (a 4xx or 5xx answer with such a body is returned too: its status is what the caller looks at)."""
         try:
             return await asyncio.wait_for(self.exchange(method, self.api + path, headers, body), self.limits.discord_seconds)
@@ -116,13 +128,13 @@ class Discord:
         reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port, ssl=self.ssl if secure else None, server_hostname=host if secure else None, limit=65536),
                                                 self.limits.discord_connect_seconds)
         try:
-            lines = ["%s %s HTTP/1.1" % (method, parts.path), "Host: " + parts.netloc, "User-Agent: " + USER_AGENT, "Accept: application/json", "Accept-Encoding: identity", "Connection: close"]
-            lines += ["%s: %s" % kv for kv in headers.items()]
+            lines = ["%s %s HTTP/1.1" % (method, parts.path), "Host: " + parts.netloc, "User-Agent: " + headers.get("User-Agent", USER_AGENT), "Accept: application/json", "Accept-Encoding: identity", "Connection: close"]
+            lines += ["%s: %s" % kv for kv in headers.items() if kv[0] != "User-Agent"]
             if method == "POST":
                 lines.append("Content-Length: %d" % len(body))
             writer.write(("\r\n".join(lines) + "\r\n\r\n").encode("ascii") + body)
             await writer.drain()
-            status, answer = await self.read_answer(reader)
+            status, answer, fields = await self.read_answer(reader)
         finally:
             writer.transport.abort()                              # (at once: a polite TLS shutdown of a server that does not answer would wait)
         if 300 <= status < 400:
@@ -135,14 +147,29 @@ class Discord:
             if status == 200:
                 raise DiscordError("down", status)
             data = {}                                             # (an error that is not JSON still has its status)
-        return status, data
+        return status, data, self.rate_limits(fields, data)
+
+    @staticmethod
+    def rate_limits(fields, data):
+        """What the answer says of Discord's rate limits, as bounded numbers (a value that is not a small plain number is left out): `remaining` (calls left in the bucket), `reset_after` and
+        `retry_after` (seconds), and `global` (the limit that was hit is the whole bot's)."""
+        found = {}
+        for key, name in (("x-ratelimit-remaining", "remaining"), ("x-ratelimit-reset-after", "reset_after"), ("retry-after", "retry_after")):
+            value = fields.get(key, "")
+            if NUMBER.match(value):
+                found[name] = float(value)
+        said = data.get("retry_after")
+        if isinstance(said, (int, float)) and not isinstance(said, bool) and 0 <= said <= 3600:
+            found["retry_after"] = float(said)
+        found["global"] = fields.get("x-ratelimit-global") == "true" or fields.get("x-ratelimit-scope") == "global" or data.get("global") is True
+        return found
 
     @staticmethod
     def refuse_constant(name):
         raise ValueError(name)
 
     async def read_answer(self, reader):
-        """(status, body bytes) of the answer on `reader`, reading no more than `discord_body_max` bytes in all."""
+        """(status, body bytes, header fields with lower-case names) of the answer on `reader`, reading no more than `discord_body_max` bytes in all."""
         room = self.limits.discord_body_max
         buffer = bytearray()
 
@@ -186,7 +213,7 @@ class Discord:
                 raise DiscordError("down", status)
             fields[name] = h.group(2)
         if 300 <= status < 400 or status == 204 or 100 <= status < 200:
-            return status, b""
+            return status, b"", fields
         if "transfer-encoding" in fields:
             if fields["transfer-encoding"].lower() != "chunked" or "content-length" in fields:
                 raise DiscordError("down", status)
@@ -197,16 +224,16 @@ class Discord:
                     raise DiscordError("down", status)
                 n = int(size.group(1), 16)
                 if n == 0:
-                    return status, bytes(body)
+                    return status, bytes(body), fields
                 body += await exactly(n)
                 if await exactly(2) != b"\r\n":
                     raise DiscordError("down", status)
         if "content-length" in fields:
             if not re.match(r"[0-9]{1,9}\Z", fields["content-length"]) or int(fields["content-length"]) > room + len(buffer):
                 raise DiscordError("down", status)
-            return status, await exactly(int(fields["content-length"]))
+            return status, await exactly(int(fields["content-length"])), fields
         while True:                                               # (no length: the answer ends when the connection does)
             try:
                 await more()
             except EOFError:
-                return status, bytes(buffer)
+                return status, bytes(buffer), fields

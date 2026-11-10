@@ -434,7 +434,7 @@
   {
    "id": "a_moderator_can_mute_a_moderator",
    "file": "hub/chat.py",
-   "old": "if target is None or target in self.mods:",
+   "old": "if target is None or self.is_mod(target):",
    "new": "if target is None:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -455,8 +455,8 @@
   {
    "id": "welcome_never_says_mod",
    "file": "hub/chat.py",
-   "old": "\"mod\": who.account_id in self.mods,",
-   "new": "\"mod\": False,",
+   "old": "\"mod\": role != \"none\", \"role\": role,",
+   "new": "\"mod\": False, \"role\": role,",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -630,8 +630,8 @@
   {
    "id": "moderators_in_the_summary",
    "file": "hub/config.py",
-   "old": "\"mods\": len(self.mods),",
-   "new": "\"mods\": \",\".join(sorted(self.mods)),",
+   "old": "\"owner\": int(bool(self.owner)),",
+   "new": "\"owner\": self.owner,",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheProcess"
   },
   {
@@ -644,8 +644,8 @@
   {
    "id": "moderators_in_the_text_of_the_settings",
    "file": "hub/config.py",
-   "old": "mods: frozenset = dataclasses.field(default=frozenset(), repr=False)",
-   "new": "mods: frozenset = dataclasses.field(default=frozenset())",
+   "old": "owner: str = dataclasses.field(default=\"\", repr=False)",
+   "new": "owner: str = dataclasses.field(default=\"\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1001,8 +1001,8 @@
   {
    "id": "sessions_login_flag_ignored",
    "file": "hub/server.py",
-   "old": "self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)",
-   "new": "self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, True)",
+   "old": "self.limits, clock, sessions.login)",
+   "new": "self.limits, clock, True)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server"
   },
   {
@@ -1120,8 +1120,8 @@
   {
    "id": "stack_hub_turns_on_the_test_login",
    "file": "docker-compose.stack.yml",
-   "old": "      ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}\n    volumes:\n      - ants-hub-data:/data",
-   "new": "      ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
+   "old": "      ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}\n    volumes:\n      - ants-hub-data:/data",
+   "new": "      ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
   },
   {
@@ -1421,8 +1421,8 @@
   {
    "id": "a_moderator_by_name",
    "file": "hub/chat.py",
-   "old": "mod = who.account_id in self.mods",
-   "new": "mod = who.account_id in self.mods or who.name in self.mods",
+   "old": "mod = self.is_mod(who.account_id)",
+   "new": "mod = self.is_mod(who.account_id) or self.is_mod(who.name)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -2261,14 +2261,14 @@
   {
    "id": "the_username_goes_to_everybody",
    "file": "hub/chat.py",
-   "old": "peer.send_text(moderators if who is not None and who.account_id in self.mods else everybody)",
+   "old": "peer.send_text(moderators if who is not None and self.is_mod(who.account_id) else everybody)",
    "new": "peer.send_text(moderators)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "the_username_goes_to_nobody",
    "file": "hub/chat.py",
-   "old": "peer.send_text(moderators if who is not None and who.account_id in self.mods else everybody)",
+   "old": "peer.send_text(moderators if who is not None and self.is_mod(who.account_id) else everybody)",
    "new": "peer.send_text(everybody)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -2282,14 +2282,14 @@
   {
    "id": "the_history_has_the_usernames_for_everybody",
    "file": "hub/chat.py",
-   "old": "if you is not None and you.account_id in self.mods else None",
+   "old": "if you is not None and self.is_mod(you.account_id) else None",
    "new": "if True else None",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "the_history_has_no_username_for_a_moderator",
    "file": "hub/chat.py",
-   "old": "if you is not None and you.account_id in self.mods else None",
+   "old": "if you is not None and self.is_mod(you.account_id) else None",
    "new": "if False else None",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },

@@ -20,6 +20,8 @@ from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
+import hub_rig  # noqa: E402  (FakeRoles: the roles without Discord)
 from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, session, store as storemod  # noqa: E402
 
 LIMITS = limitmod.Limits()
@@ -77,10 +79,10 @@ class World:
         self.clock = Clock()
         self.wall = Clock(1_800_000_000.0)
         self.limits = limits
-        self.mods = frozenset(mods)
+        self.roles = hub_rig.FakeRoles({a: "mod" for a in mods})
         self.login = login
         self.store = storemod.Store(self.db, clock=self.wall, retention_days=limits.retention_days, max_lines=10 ** 9)
-        self.chat = chatmod.Chat(self.store, self.mods, limits, self.clock, login)
+        self.chat = chatmod.Chat(self.store, self.roles, limits, self.clock, login)
 
     def join(self, identity=None):
         peer = FakePeer(identity)
@@ -109,9 +111,9 @@ class TheWelcome(WorldTest):
     def test_shape_for_a_reader_a_member_and_a_moderator(self):
         reader = self.w.chat.welcome(self.reader)
         self.assertEqual(reader, {"t": "welcome", "v": 1, "you": None, "login": True, "presence": True, "online": 3, "history": []})
-        self.assertEqual(self.w.chat.welcome(self.alice)["you"], {"name": "alice", "mod": False, "k": self.w.chat.key_of("1001")})
+        self.assertEqual(self.w.chat.welcome(self.alice)["you"], {"name": "alice", "mod": False, "role": "none", "k": self.w.chat.key_of("1001")})
         mod = self.w.join(MOD)
-        self.assertEqual(self.w.chat.welcome(mod)["you"], {"name": "moddy", "mod": True, "k": self.w.chat.key_of("9001")})
+        self.assertEqual(self.w.chat.welcome(mod)["you"], {"name": "moddy", "mod": True, "role": "mod", "k": self.w.chat.key_of("9001")})
 
     def test_login_false_when_the_hub_has_no_login(self):
         w = World(login=False)
@@ -160,7 +162,7 @@ class TheWelcome(WorldTest):
             self.w.clock.now += 3
             self.w.say(self.alice, "line %d" % n)
         self.w.store.delete_line(3, "test")
-        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
         self.assertEqual([l.text for l in again.ring], ["line 0", "line 1", "line 3", "line 4"])
 
 
@@ -700,7 +702,7 @@ class TheNamesAreNotKeys(WorldTest):
         self.assertNotIn("1101", key)
         self.assertEqual(key, self.w.chat.key_of("1101"))
         self.assertNotEqual(key, self.w.chat.key_of("1102"))
-        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
         self.assertNotEqual(key, again.key_of("1101"))
 
     def test_a_mute_takes_the_username_and_hits_that_account_whatever_the_names_shown(self):
@@ -780,7 +782,7 @@ class TheNamesAreNotKeys(WorldTest):
         self.w.store.add_line("1402", "Nameless", "from one that no profile knows", False)
         self.w.store.add_line("1403", "dddd.four", "from one that shows its username", False)
         self.w.store.set_profile("1403", "dddd.four", "", 100)
-        again = chatmod.Chat(self.w.store, self.w.mods, LIMITS, self.w.clock, True)
+        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
         mod = FakePeer(MOD)
         again.peers.add(mod)
         history = again.welcome(mod)["history"]
@@ -806,10 +808,10 @@ class TheNamesAreNotKeys(WorldTest):
         self.assertEqual(self.w.chat.usernames(["1103"]), {})                                      # (a socket that is closed is nobody, and this account has no profile)
 
     def test_the_welcome_and_me_carry_the_switch_only_where_there_is_one(self):
-        self.assertEqual(self.w.chat.you_of(MAPLE_A), {"name": "Maple Leaf", "mod": False, "k": self.w.chat.key_of("1101"), "pick": "display", "other": "aaa.one"})
+        self.assertEqual(self.w.chat.you_of(MAPLE_A), {"name": "Maple Leaf", "mod": False, "role": "none", "k": self.w.chat.key_of("1101"), "pick": "display", "other": "aaa.one"})
         shows_username = session.Identity("1101", "aaa.one", False, None, 0, "aaa.one", "username", "Maple Leaf")
-        self.assertEqual(self.w.chat.you_of(shows_username), {"name": "aaa.one", "mod": False, "k": self.w.chat.key_of("1101"), "pick": "username", "other": "Maple Leaf"})
-        self.assertEqual(set(self.w.chat.you_of(ALICE)), {"name", "mod", "k"})                   # (no display name: no switch: no `pick`, no `other`)
+        self.assertEqual(self.w.chat.you_of(shows_username), {"name": "aaa.one", "mod": False, "role": "none", "k": self.w.chat.key_of("1101"), "pick": "username", "other": "Maple Leaf"})
+        self.assertEqual(set(self.w.chat.you_of(ALICE)), {"name", "mod", "role", "k"})                   # (no display name: no switch: no `pick`, no `other`)
         self.assertEqual(self.w.chat.welcome(self.a)["you"], self.w.chat.you_of(MAPLE_A))
 
 
@@ -1304,7 +1306,7 @@ class TheStore(unittest.TestCase):
 class TheSettings(unittest.TestCase):
     def test_defaults_are_a_hub_nobody_can_reach_and_nobody_can_write_to(self):
         cfg = config.load({})
-        self.assertEqual((cfg.origin, cfg.mods, cfg.test_login, cfg.port, cfg.host), ("", frozenset(), False, 4040, "127.0.0.1"))
+        self.assertEqual((cfg.origin, cfg.roles_on, cfg.owner, cfg.test_login, cfg.port, cfg.host), ("", False, "", False, 4040, "127.0.0.1"))
         self.assertIsInstance(session.make(cfg), session.NoLogin)
         self.assertFalse(session.make(cfg).login)
 
@@ -1315,15 +1317,6 @@ class TheSettings(unittest.TestCase):
         for bad in ("beta.example.org", "ftp://x.org", "https://x.org/path", "https://x.org?q=1", "https://user:pw@x.org", "https://", "javascript:alert(1)", "https://x.org#f"):
             with self.assertRaises(config.ConfigError, msg=bad):
                 config.parse_origin(bad)
-
-    def test_moderators(self):
-        self.assertEqual(config.parse_mods("1001, 1002 ,1003"), frozenset(("1001", "1002", "1003")))
-        self.assertEqual(config.parse_mods(""), frozenset())
-        self.assertEqual(config.parse_mods("  "), frozenset())
-        for bad in ("abc", "1001,x", "-1", "1" * 21, "1001;1002", "10 01x"):
-            with self.assertRaises(config.ConfigError, msg=bad) as caught:
-                config.parse_mods(bad)
-            self.assertNotIn(bad.replace(" ", ""), str(caught.exception) if len(bad) > 3 else "never")      # (the message names the place, not the value)
 
     def test_a_wrong_address_of_the_site_is_a_message_and_not_a_traceback(self):
         for bad in ("https://host:abc", "http://[::1", "https://host:99999", "https://host:-1", "https://[::1]:x"):
@@ -1338,7 +1331,7 @@ class TheSettings(unittest.TestCase):
         for bad in ("", "0", "00012", "01", "1" * 21, "12a", " 12", "12\n"):
             self.assertFalse(config.ACCOUNT_ID.match(bad), repr(bad))
         with self.assertRaises(config.ConfigError):
-            config.parse_mods("1001,0123")
+            config.load({"ANTS_HUB_OWNER": "0123"})
 
     def test_the_port(self):
         self.assertEqual(config.load({"ANTS_HUB_PORT": "0"}).port, 0)
@@ -1357,12 +1350,12 @@ class TheSettings(unittest.TestCase):
         self.assertFalse(config.load({"ANTS_HUB_HOST": "0.0.0.0"}).test_login)
 
     def test_a_secret_is_never_in_the_summary_or_the_text_of_the_settings(self):
-        secret, client, mod = "canary-secret-8c1d5e", "4242424242420077", "7777777777"
-        cfg = config.load({"ANTS_HUB_DISCORD_CLIENT_SECRET": secret, "ANTS_HUB_DISCORD_CLIENT_ID": client, "ANTS_HUB_MODS": mod, "ANTS_HUB_PUBLIC_URL": "https://x.example.org"})
+        secret, client, owner = "canary-secret-8c1d5e", "4242424242420077", "7777777777"
+        cfg = config.load({"ANTS_HUB_DISCORD_CLIENT_SECRET": secret, "ANTS_HUB_DISCORD_CLIENT_ID": client, "ANTS_HUB_OWNER": owner, "ANTS_HUB_PUBLIC_URL": "https://x.example.org"})
         for text in (repr(cfg), str(cfg), json.dumps(cfg.summary())):
-            for canary in (secret, client, mod):
+            for canary in (secret, client, owner):
                 self.assertNotIn(canary, text)
-        self.assertEqual(cfg.summary()["mods"], 1)
+        self.assertEqual(cfg.summary()["owner"], 1)
         self.assertEqual(cfg.login_client_secret, secret)             # (it is read: the Discord login needs it)
 
 

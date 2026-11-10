@@ -56,8 +56,12 @@
 #                                                   <this address>/hub/callback, and puts the id and the secret here). BOTH come from this stack's environment and never from a file of
 #                                                   the repository; without them the chat is read-only for everybody and says so. The secret is read by the hub and printed nowhere
 #   ANTS_HUB_MIN_ACCOUNT_DAYS=7                     a Discord account younger than this many days cannot write in the chat (0 lets every account write; optional; this is the default)
-#   ANTS_HUB_MODS=<account id>,<account id>         the accounts that may type /mute name minutes and /del id in the chat (optional; digits only, comma separated; none by default; the account
-#                                                   ids are Discord's). Moderation from a terminal: docker exec ants-hub python -m hub.admin list
+#   ANTS_HUB_DISCORD_BOT_TOKEN, ANTS_HUB_DISCORD_GUILD, ANTS_HUB_ROLE_ADMIN, ANTS_HUB_ROLE_MOD    who may moderate the chat: the hub asks the site's Discord server, with the bot's token, which
+#                                                   roles a logged-in person holds (docs/HUB.md, "Roles"): the server's id and the two roles' ids. ALL come from this stack's environment and never
+#                                                   from a file of the repository; the token is read by the hub and printed nowhere. Without them nobody moderates in the chat (optional)
+#   ANTS_HUB_ROLE_RECHECK_SECONDS=180               how often the role of everybody who is in the chat is asked again, 60 to 3600 (optional; this is the default)
+#   ANTS_HUB_OWNER=<account id>                     one account (Discord's id, digits only) that is always an administrator, even when Discord does not answer (optional; none by default).
+#                                                   Moderation from a terminal: docker exec ants-hub python -m hub.admin list
 #
 # Only the TCP game port is open to other machines. The WebSocket port (the site's nginx passes /ws to it over the network below) and the control
 # interface (the lobby's backend calls it) are published on the host's loopback address only.
@@ -171,7 +175,12 @@ services:
       ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}
       ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}
       ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}
-      ANTS_HUB_MODS: ${ANTS_HUB_MODS:-}
+      ANTS_HUB_DISCORD_BOT_TOKEN: ${ANTS_HUB_DISCORD_BOT_TOKEN:-}
+      ANTS_HUB_DISCORD_GUILD: ${ANTS_HUB_DISCORD_GUILD:-}
+      ANTS_HUB_ROLE_ADMIN: ${ANTS_HUB_ROLE_ADMIN:-}
+      ANTS_HUB_ROLE_MOD: ${ANTS_HUB_ROLE_MOD:-}
+      ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}
+      ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}
     volumes:
       - ants-hub-data:/data
     networks:

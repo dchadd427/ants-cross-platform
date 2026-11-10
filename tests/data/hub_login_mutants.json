@@ -1800,7 +1800,7 @@
    "id": "me_says_no_key",
    "file": "hub/login.py",
    "old": "\"you\": self.hub.chat.you_of(who) if who else None",
-   "new": "\"you\": {\"name\": who.name, \"mod\": who.account_id in self.hub.chat.mods} if who else None",
+   "new": "\"you\": {\"name\": who.name, \"mod\": False} if who else None",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDisplayName tests.scripts.test_hub_login.TheTwoNamesAndTheModerators tests.scripts.test_hub_login.ThePickOnTheWire"
   },
   {

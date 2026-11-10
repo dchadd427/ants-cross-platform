@@ -75,7 +75,7 @@ class TheImage(unittest.TestCase):
         self.assertIn("EXPOSE 4040", self.code)
 
     def test_nothing_secret_or_test_only_is_in_the_image(self):
-        for word in ("SECRET", "TOKEN", "PASSWORD", "ANTS_HUB_TEST_LOGIN", "ANTS_HUB_MODS", "DISCORD"):
+        for word in ("SECRET", "TOKEN", "PASSWORD", "ANTS_HUB_TEST_LOGIN", "ANTS_HUB_MODS", "ANTS_HUB_OWNER", "DISCORD"):
             self.assertNotIn(word, self.code, word)
 
     def test_the_context_keeps_bytecode_out(self):
@@ -129,8 +129,13 @@ class TheServices(unittest.TestCase):
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
-            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_MODS",
-                                                                                     "ANTS_HUB_PUBLIC_URL"], name)
+            self.assertEqual(sorted(re.findall(r"(?m)^      (ANTS_[A-Z_]+):", hub)), ["ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_CLIENT_ID", "ANTS_HUB_DISCORD_CLIENT_SECRET",
+                                                                                     "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_MIN_ACCOUNT_DAYS", "ANTS_HUB_OWNER", "ANTS_HUB_PUBLIC_URL",
+                                                                                     "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_ROLE_RECHECK_SECONDS"], name)
+            for secret in ("ANTS_HUB_DISCORD_BOT_TOKEN", "ANTS_HUB_DISCORD_GUILD", "ANTS_HUB_ROLE_ADMIN", "ANTS_HUB_ROLE_MOD", "ANTS_HUB_OWNER"):
+                self.assertIn("%s: ${%s:-}\n" % (secret, secret), hub + "\n", name)                  # (the bot's token, the server and the roles: from the stack's environment only, no value in the file)
+            self.assertIn("ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}\n", hub + "\n", name)
+            self.assertNotIn("ANTS_HUB_MODS", hub, name)
             self.assertIn("ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}\n", hub + "\n", name)           # (from the stack's environment, and nothing in the file: no default, no value)
             self.assertIn("ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}\n", hub + "\n", name)
             self.assertIn("ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}\n", hub + "\n", name)

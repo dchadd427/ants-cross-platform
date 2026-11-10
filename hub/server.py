@@ -10,7 +10,7 @@ import signal
 import sys
 import time
 
-from . import chat as chatmod, config as configmod, http, limits as limitmod, session as sessionmod, store as storemod, text as textrules, ws
+from . import chat as chatmod, config as configmod, http, limits as limitmod, roles as rolesmod, session as sessionmod, store as storemod, text as textrules, ws
 from .log import Log
 
 WS_PATH = "/hub/ws"
@@ -102,18 +102,19 @@ class Peer:
 
 
 class Hub:
-    def __init__(self, cfg, store, sessions, log, limits=None, clock=time.monotonic):
+    def __init__(self, cfg, store, sessions, log, limits=None, clock=time.monotonic, roles=None):
         self.cfg = cfg
         self.store = store
         self.sessions = sessions
         self.log = log
         self.limits = limits or limitmod.Limits()
         self.clock = clock
-        self.chat = chatmod.Chat(store, cfg.mods, self.limits, clock, sessions.login)
+        self.chat = chatmod.Chat(store, roles or rolesmod.Roles(cfg, self.limits, clock, log), self.limits, clock, sessions.login)
         self.chat.on_store_error = self.store_trouble
         self.chat.end_logins = self.end_logins            # (a switch of the shown name closes the account's sockets with the call that a logout uses)
         self.next_trouble_log = float("-inf")
         self.next_presence_log = float("-inf")
+        self.next_roles_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
         self.pending = 0
         self.server = None
@@ -131,11 +132,13 @@ class Hub:
         self.server = await asyncio.start_server(self.handle, host, port, limit=8192, backlog=128)
         self.port = self.server.sockets[0].getsockname()[1]
         self.ticker = asyncio.ensure_future(self.tick())
+        self.chat.roles.start()
         return self.port
 
     async def stop(self):
         if self.ticker:
             self.ticker.cancel()
+        self.chat.roles.stop()
         if self.server:
             self.server.close()
         for peer in list(self.chat.peers):
@@ -254,6 +257,12 @@ class Hub:
             self.next_presence_log = now + 10.0
             self.log.event("error", kind=type(error).__name__, where="presence")
 
+    def roles_trouble(self, now, error):
+        """The roles' work in the clock failed: one line in the log every ten seconds at the most (the class of the error, never its text)."""
+        if now >= self.next_roles_log:
+            self.next_roles_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="roles")
+
     def end_logins(self, session=None, account=None):
         """The sockets of a login that was ended (its session key), or of every login of an account, are closed: a socket never outlives the login that it was let in with. The page
         connects again, as a reader."""
@@ -304,6 +313,10 @@ class Hub:
             elif now - peer.last_ping >= self.limits.ping_seconds:
                 peer.last_ping = now
                 peer.write(ws.encode_frame(ws.PING))
+        try:                                             # (the roles that ran out are told to the pages, and the people who left are forgotten)
+            self.chat.roles.on_tick(now)
+        except Exception as e:
+            self.roles_trouble(now, e)
         try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)
             count = self.chat.presence.people()
             if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
@@ -380,6 +393,10 @@ def main(env=None):
         log.event("warning", what="a_fake_discord_is_on")
     if (cfg.login_client_id or cfg.login_client_secret) and not cfg.login_on:
         log.event("warning", what="discord_login_off_needs_id_secret_and_site_address")
+    if cfg.roles_partial:
+        log.event("warning", what="discord_roles_off_needs_token_server_and_a_role")
+    if (os.environ if env is None else env).get("ANTS_HUB_MODS", "").strip():
+        log.event("warning", what="ANTS_HUB_MODS_is_no_longer_read_roles_come_from_discord")
     store = storemod.Store(cfg.db, busy_ms=300)                      # (the one thread of the hub waits at most this long for another process's write)
     try:
         store.checkpoint()                  # (what a crash left in the log file)

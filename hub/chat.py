@@ -6,6 +6,7 @@ Messages (JSON, "v":1; docs/HUB.md has the table):
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
   down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick"}
+        {"t":"you","you":{...}}                      the whole `you` again, to every socket of an account whose role changed (hub/roles.py: who is a moderator or an administrator)
 A name is not unique (Discord display names are not), so nothing that a moderator or a page does with a person goes by the name that is shown: a line and `you` carry `k`, a short key of the
 account that is made new with every start, and a moderator's `/mute` takes the username, the one name that is unique. The username of an author is sent only to moderators (`u` in a line,
 and only where it is not the name shown); the frame of everybody else never holds it.
@@ -33,9 +34,11 @@ def dumps(obj):
 
 
 class Chat:
-    def __init__(self, store, mods, limits, clock, login):
+    def __init__(self, store, roles, limits, clock, login):
         self.store = store
-        self.mods = mods
+        self.roles = roles                          # who is a moderator or an administrator (hub/roles.py): role_of(account) is `none`, `mod` or `admin`
+        roles.connected = self.accounts
+        roles.changed = self.role_changed
         self.limits = limits
         self.clock = clock
         self.login = login
@@ -66,18 +69,37 @@ class Chat:
         is not unique. It says nothing of the account to anybody who does not have the id."""
         return hmac.new(self.salt, account.encode("utf-8"), hashlib.sha256).hexdigest()[:12]
 
+    def is_mod(self, account):
+        """Whether the account may moderate: it holds the moderator's or the administrator's role (hub/roles.py)."""
+        return self.roles.role_of(account) != "none"
+
+    def accounts(self):
+        """The accounts that have a socket open (the roles ask only about these)."""
+        return {p.identity.account_id for p in self.peers if p.identity is not None and not getattr(p, "closed", False)}
+
+    def role_changed(self, account):
+        """The role of an account is not what its pages were told: every socket of it gets the whole `you` again."""
+        for peer in list(self.peers):
+            who = peer.identity
+            if who is not None and who.account_id == account and not getattr(peer, "closed", False):
+                peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
+
     def you_of(self, who):
-        """What a page is told of its own account (the welcome's `you`, and /hub/me): the name that is shown, `mod`, the key of its lines `k`; and, only where the account has a display name as
-        well and so can choose, `pick` (the name that is shown: "display" or "username") and `other` (the name that it is not shown by). Nothing else."""
-        you = {"name": who.name, "mod": who.account_id in self.mods, "k": self.key_of(who.account_id)}
+        """What a page is told of its own account (the welcome's `you`, and /hub/me): the name that is shown, `role` (`none`, `mod` or `admin`; from Discord, never from a page), `mod` (true for
+        both roles, for pages that read only that), the key of its lines `k`; and, only where the account has a display name as well and so can choose, `pick` (the name that is shown: "display"
+        or "username") and `other` (the name that it is not shown by). Nothing else."""
+        role = self.roles.role_of(who.account_id)
+        you = {"name": who.name, "mod": role != "none", "role": role, "k": self.key_of(who.account_id)}
         if who.other:
             you["pick"], you["other"] = who.pick, who.other
         return you
 
     def welcome(self, peer):
         you = peer.identity
+        if you is not None:
+            self.roles.want(you.account_id)                       # (its role is asked at the front of the queue; the welcome says the last answer, and a `you` frame follows a new one)
         lines = self.recent()
-        names = self.usernames([l.account for l in lines]) if you is not None and you.account_id in self.mods else None        # (only a moderator's welcome has the usernames)
+        names = self.usernames([l.account for l in lines]) if you is not None and self.is_mod(you.account_id) else None        # (only a moderator's welcome has the usernames)
         welcome = {"t": "welcome", "v": PROTOCOL, "you": self.you_of(you) if you else None, "login": bool(self.login), "presence": True,
                    "online": self.presence.people(), "history": [self.line_of(l, names) for l in lines]}
         if you:
@@ -178,7 +200,7 @@ class Chat:
         line, why = textrules.clean_line(raw)
         if why:
             return self.mistake(peer, why)
-        mod = who.account_id in self.mods
+        mod = self.is_mod(who.account_id)
         if mod and line.startswith("/"):
             try:
                 return self.command(peer, line)
@@ -213,7 +235,7 @@ class Chat:
         moderators = dumps(dict(frame, u=username)) if username and username != entry.name else everybody
         for peer in list(self.peers):
             who = peer.identity
-            peer.send_text(moderators if who is not None and who.account_id in self.mods else everybody)
+            peer.send_text(moderators if who is not None and self.is_mod(who.account_id) else everybody)
 
     def on_pick(self, peer, msg):
         """Which of its two names the account is shown by. Refused (a mistake of the socket) with `login` for a guest and with `pick` for anything but one of the two words, past the account's
@@ -240,7 +262,7 @@ class Chat:
         me = peer.identity
         if words[0] == "/mute" and len(words) == 3 and NUMBER.match(words[2]) and 1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES:
             target = self.account_named(words[1])
-            if target is None or target in self.mods:
+            if target is None or self.is_mod(target):
                 return self.mistake(peer, "bad")
             self.store.mute(target, int(words[2]), me.account_id, words[1])
         elif words[0] == "/del" and len(words) == 2 and NUMBER.match(words[1]):

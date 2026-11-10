@@ -141,7 +141,7 @@ class World:
         self.now = 1000.0
         self.limits = limits
         self.store = storemod.Store(self.db, clock=store_clock, retention_days=limits.retention_days)
-        self.chat = chatmod.Chat(self.store, frozenset(mods), limits, lambda: self.now, True)
+        self.chat = chatmod.Chat(self.store, hub_rig.FakeRoles({a: "mod" for a in mods}), limits, lambda: self.now, True)
         self.presence = self.chat.presence
 
     def join(self, identity=None):
@@ -1437,7 +1437,7 @@ class AFloodOfHereFramesIsClosed(ths.RigTest):
 
 class TheProcessLogHoldsNothingOfTheList(unittest.TestCase):
     def test_no_name_map_or_code_is_in_the_log_of_the_process(self):
-        proc, folder, log_path, env = ths.start_process({"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_MODS": "5551234567"})
+        proc, folder, log_path, env = ths.start_process({"ANTS_HUB_TEST_LOGIN": "1", "ANTS_HUB_OWNER": "5551234567"})
         clients = []
         try:
             port = ths.wait_for_port(proc, log_path)

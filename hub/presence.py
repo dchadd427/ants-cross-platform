@@ -192,7 +192,7 @@ class Presence:
         for account in banned.intersection(best):
             del best[account]
             guests += 1
-        mods = self.chat.mods
+        mods = {account for account in best if self.chat.is_mod(account)}
         order = sorted(best.items(), key=lambda item: (item[0] not in mods, RANK[item[1][2].at if item[1][2] else "look"], item[1][1], item[0]))
         rows = {}
         for account, (_, name, where, young) in order[:self.limits.who_rows_max]:
