@@ -487,7 +487,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     same('... with join: that line without its block (00 04 ffff 03)', hello(Object.assign({}, keyed, { join: true })).hex, golden['page-with-key'].slice(0, golden['page-with-key'].length - '0004ffff03'.length));
     same('... and the same written out by hand', hello(Object.assign({}, keyed, { join: true })).hex, hex(byHand('Sam', 'abc234', { key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux })));
     same('with no name and the code xx, join: the line of the C++ encoder that has no block (page-no-block)', hello({ join: true, name: '', code: 'xx' }).hex, golden['page-no-block']);
-    check('a Hello without a block has no key, no platform: zeros', /^0117000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
+    check('a Hello without a block has no key, no platform: zeros', /^0118000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
 
     {   // the way back of a page that joined: every Hello it sends has the key and no block
         const w = world();
