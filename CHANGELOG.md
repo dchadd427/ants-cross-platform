@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.15.0 - 2026-11-10 - A three-panel Home, notices over the page, and games in progress with Watch
+
+**For players:**
+- **A new Home.** Games are on the left, Players on the right and the chat at the bottom; the Yard is no longer on the front page. On a phone you see one view at a time, with a strip of buttons to move between Games, Players and Chat, and a phone held sideways keeps the account line.
+- **Notices float over the page.** A message such as "Your match is running." is now a small box over the page for 6 seconds, so the page no longer moves when it comes. OK or Escape closes it.
+- **Games in progress stay in the Games list.** A match that is running is a row of the list with a Watch button, which opens the live match in a new tab. The switch "Show games in progress" at the top of the list hides these rows; this browser remembers the choice.
+- **The chat keeps the newest 200 lines.** Besides the limit of 7 days, the chat's history keeps the newest 200 lines; older lines are deleted for good (the Legal page says so).
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.1 page or game still joins. The rest of this release is internal: tests and documents.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...f6969023)
+
 ## v0.14.1 - 2026-11-09 - Discord names in games, the Players list, replay files, and a Hard bot that answers a blow
 
 **For players:**
