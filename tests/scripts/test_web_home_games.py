@@ -228,7 +228,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("doc.body.appendChild(toast)", js, "the toast is the body's, not part of Home's flow")
         self.assertIn("placeVis(); placeToast(); }));", js, "placed again when the window changes")
         self.assertIn("if (!toast.hidden) placeToast(); pollLive(); }))", js, "placed again when a phone's view or the chat's fold changes (and the looks at /live follow whether the list is drawn)")
-        self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden', 'class']", js)
+        self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
         self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
