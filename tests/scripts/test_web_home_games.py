@@ -194,8 +194,9 @@ class TheStyle(unittest.TestCase):
     def test_the_toast_is_placed_above_the_chat_and_its_field_and_goes_by_itself(self):
         js = read("web", "home", "games.js")
         self.assertIn("rectOf('#gchat') || rectOf('.htabs')", js, "above the chat, else above the strip of views")
-        self.assertIn("rectOf('.gc-form') || r", js, "a phone's Chat view: above the field, not over it")
-        self.assertIn("strip.style.bottom = r ?", js)
+        self.assertIn("(rectOf('.gc-form') || { top: r.bottom - 6 }).top", js, "a phone's Chat view: above the field, not over it")
+        self.assertIn("r && !rectOf('#hmain') ?", js, "the chat fills the view (no body above it): over its field, not over the bar")
+        self.assertIn("strip.style.bottom = r ? Math.round(h - y + 10)", js)
         self.assertIn("TOAST_MS = 6000;", js)
         self.assertIn("strip.hidden || toastAsks ? null : later(", js, "a toast with a question stays; the others have a timer")
         self.assertIn("strip.matches(':hover, :focus-within')", js, "a toast under the pointer or the focus waits")

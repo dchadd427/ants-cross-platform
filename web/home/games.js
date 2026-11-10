@@ -3,7 +3,7 @@
 // (tests/scripts/web_home_games_check.js). The client, model and session are the page's own (web/lobby.html), read through `page`.
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
-//     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
+//     row's text makes is its map's picture
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
 //     every call out of this file is guarded, and a failed look is only "the list is off".
 (function (root, factory) {
@@ -143,9 +143,8 @@
         function rectOf(sel) { var n = doc.querySelector && doc.querySelector(sel), r = n && n.getBoundingClientRect && n.getBoundingClientRect(); return r && r.height ? r : null; }
         function placeStrip() {                            // above the chat (a phone's Chat view: its field) or the strip of views, else near the bottom
             if (strip.parentNode !== doc.body) doc.body.appendChild(strip);
-            var h = win.innerHeight || 0, r = rectOf('#gchat') || rectOf('.htabs');
-            if (r && r.top < h * 0.3) r = rectOf('.gc-form') || r;
-            strip.style.bottom = r ? Math.round(h - r.top + 10) + 'px' : '';
+            var h = win.innerHeight || 0, r = rectOf('#gchat') || rectOf('.htabs'), y = r && !rectOf('#hmain') ? (rectOf('.gc-form') || { top: r.bottom - 6 }).top : r && r.top;
+            strip.style.bottom = r ? Math.round(h - y + 10) + 'px' : '';
         }
         placeStrip();
         var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join with no toast, the card that closes by itself: this line tells a screen reader)
@@ -408,7 +407,7 @@
         codeInput.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') joinTyped(); }));
         codeGo.addEventListener('click', guard(function () { joinTyped(); }));
 
-        function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first (Quick join and BEST)
+        function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first
         function listRows() { var own = ownCode(); return rows.filter(function (r) { return r.code === own; }).concat(visibleRows()); }      // the list: the page's own public room first (tagged Yours), then the others
         function paintPill() {
             var n = listRows().length, shown = loaded && !off;

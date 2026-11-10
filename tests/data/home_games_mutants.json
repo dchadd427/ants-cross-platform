@@ -2608,8 +2608,8 @@
   {
    "id": "toast_covers_the_chat_field",
    "file": "web/home/games.js",
-   "old": "rectOf('.gc-form') || r",
-   "new": "r",
+   "old": "(rectOf('.gc-form') || { top: r.bottom - 6 }).top",
+   "new": "r.bottom - 6",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
