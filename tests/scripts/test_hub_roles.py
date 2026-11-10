@@ -529,6 +529,18 @@ class TheScheduler(SetupTest):
         s.run(3)
         self.assertEqual(s.stub.calls[0][1], "1001")
 
+    def test_role_holders_are_asked_before_the_rest_when_they_are_due_together(self):
+        accounts = ["%d" % n for n in range(2000, 2040)]
+        holders = {"2037", "2038", "2039"}                                       # (last in the order of the dictionary: only their role puts them first)
+        s = self.setup(members={a: [MOD] if a in holders else [] for a in accounts})
+        s.connect(*accounts)
+        s.run(400)
+        s.stub.calls.clear()
+        for entry in s.roles.entries.values():
+            entry.due = s.clock.t                                                # (everybody is due at this moment, and nobody is overdue)
+        s.run(2)
+        self.assertEqual({a for _, a in s.stub.calls[:3]}, holders)
+
     def test_a_crowd_that_arrives_together_is_asked_at_two_a_second_and_spread_out(self):
         accounts = ["%d" % n for n in range(3000, 3300)]
         s = self.setup(members={a: [MOD] if n % 10 == 0 else [] for n, a in enumerate(accounts)})
