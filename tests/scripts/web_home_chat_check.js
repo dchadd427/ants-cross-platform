@@ -1026,8 +1026,11 @@ function bring(env) {                                     // the two files arriv
           && one(r.dock.slot, 'gc-mnote').textContent === 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.');
     r.chip.click();
     check('a press on the chip opens the dropdown (it is not a dead button) and puts the focus on Log out; the chip says it is open; the panel is as it was (a phone\'s view is not changed)', r.dock.slot.hidden === false && r.chip.getAttribute('aria-expanded') === 'true' && r.env.focused === one(r.dock.slot, 'gc-out') && r.root.getAttribute('data-open') === 'true' && r.went.length === 0);
-    r.dock.slot.fire('keydown', { key: 'Escape' });
+    const escape = () => (r.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+    escape();
     check('Escape closes it and the focus goes back to the chip, and the panel stays', r.dock.slot.hidden === true && r.chip.getAttribute('aria-expanded') === 'false' && r.env.focused === r.chip && r.root.getAttribute('data-open') === 'true');
+    r.chip.click(); r.chip.focus(); escape();
+    check('Escape closes it with the focus on the chip too (not only inside the dropdown), and the panel is not folded by that Escape', r.dock.slot.hidden === true && r.root.getAttribute('data-open') === 'true' && r.env.focused === r.chip);
     r.chip.click(); r.chip.click();
     check('a second press on the chip closes it', r.dock.slot.hidden === true && r.chip.getAttribute('aria-expanded') === 'false');
     const docClick = (target) => (r.doc.listeners.click || []).forEach((fn) => fn({ target }));
@@ -1043,11 +1046,13 @@ function bring(env) {                                     // the two files arriv
 {   // Log out
     const r = rig({ chip: true });
     const first = r.live(W({ login: true, you: YOU, history: HISTORY }));
+    r.chip.click();
     one(r.dock.slot, 'gc-out').click();
     same('Log out is ONE POST of the page to /hub/logout, same origin, with its cookie, never cached, no redirect followed, and nothing else (no body, no header of its own)', [r.fetches.length, r.fetches[0].path, r.fetches[0].init], [1, '/hub/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }]);
     check('while it is on its way both buttons are off (a second press is nothing)', one(r.dock.slot, 'gc-out').disabled === true && one(r.dock.slot, 'gc-forget').disabled === true && (one(r.dock.slot, 'gc-out').click(), r.fetches.length === 1) && r.sockets.length === 1);
     r.answer({ ok: true, status: 200 });
     check('answered: the socket that was let in with the login is dropped and a new one is made AT ONCE (no wait of a second): the page asks to be told who it is now', first.closes === 1 && r.sockets.length === 2 && r.s() !== first && r.s().url === 'wss://play.test/hub/ws' && r.clock.timers.every((t) => t.fn.toString().length > 0));
+    check('after Log out the dropdown is gone from under the focus and the focus is on the chip (the Log in chip now), not nowhere', r.dock.slot.hidden === true && r.env.focused === r.chip);
     check('... the person is nobody on the screen at once (no field to write in, the Log in button, the chip says Log in), whatever the hub says next', r.field().disabled === true && one(r.root, 'gc-login').hidden === false && r.dock.slot.hidden === true && r.chip.hidden === false && one(r.chip, 'gc-cn').textContent === 'Log in' && r.root.getAttribute('data-you') === 'no');
     check('... and a say() in that moment sends nothing (the new socket is not open): "Chat is offline"', r.dock.say('hello') === 'offline' && first.sent.filter((x) => x.indexOf('say') !== -1).length === 0);
     r.s().open().recv(W({ login: true, you: null, history: HISTORY }));
@@ -1192,7 +1197,9 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     same('a press sends ONE frame, {"t":"pick","pick":"username"} (the other name), on the open socket, and nothing else (no request, no navigation)', [r.s().sent.filter((x) => x.indexOf('pick') !== -1), r.fetches.length, r.went], [['{"t":"pick","pick":"username"}'], 0, []]);
     check('... the page does not change what it shows by itself: the name is the hub\'s to change (it closes the socket and the page connects again)', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && note.textContent === 'Chat shows your display name.');
     const first = r.s();
+    button.focus();
     first.fail();
+    check('the dropdown goes while the hub closes the socket and the focus that was on its button is on the chip, not nowhere', r.dock.slot.hidden === true && r.env.focused === r.chip);
     check('the hub closes the socket: "Chat is offline" for a moment, the account line is away, and the page connects again after its first wait', r.dock.state() === 'offline' && r.dock.slot.hidden === true && (r.clock.advance(1500), r.sockets.length === 2));
     r.s().open().recv(W({ login: true, you: { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: 'Maple Leaf' } }));
     check('the new welcome says the other name: the account line, the sentence and the button follow, and the small menu is as open as it was', one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && note.textContent === 'Chat shows your username.' && button.textContent === 'Show my display name: Maple Leaf' && menu.hidden === false);

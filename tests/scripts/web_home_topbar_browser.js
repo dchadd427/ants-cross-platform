@@ -167,7 +167,7 @@ async function main() {
         const slot = q('#gchat-login-slot'), chip = q('.hbar .hlogin'), out = slot.querySelector('.gc-out'), forget = slot.querySelector('.gc-forget');
         return { shown: slot.getClientRects().length > 0, box: r(slot), chip: r(chip), expanded: chip.getAttribute('aria-expanded'), haspopup: chip.getAttribute('aria-haspopup'), controls: chip.getAttribute('aria-controls'), text: slot.innerText,
             overflowY: getComputedStyle(slot).overflowY, scrolls: slot.scrollHeight > slot.clientHeight + 1, focus: document.activeElement && document.activeElement.className, tab: document.getElementById('home').getAttribute('data-tab'),
-            chatShown: !!document.getElementById('gchat') && document.getElementById('gchat').getClientRects().length > 0, outBox: r(out), forgetBox: r(forget), win: [innerWidth, innerHeight], inPanel: document.getElementById('gchat').contains(slot),
+            chatShown: !!document.getElementById('gchat') && document.getElementById('gchat').getClientRects().length > 0, outBox: r(out), forgetBox: r(forget), win: [innerWidth, innerHeight], inPanel: document.getElementById('gchat').contains(slot), afterChip: slot.previousElementSibling === chip,
             panelText: document.getElementById('gchat').innerText, formH: r(q('#gchat .gc-form')).h };
     };
     for (const n of NAMES.filter((x) => (x[0] === 'typical' || x[0] === 'longest') && (!arg('--only') || x[0] === arg('--only')))) {
@@ -180,7 +180,7 @@ async function main() {
             const L = label(n, s) + 'dropdown: ', disp = n[1].charAt(0).toUpperCase() + n[1].slice(1);
             let d = await page.evaluate(DROP);
             check(L + 'shut at first, and the chip says it has one (aria-haspopup, aria-expanded false, aria-controls)', !d.shown && d.expanded === 'false' && d.haspopup === 'true' && d.controls === 'gchat-login-slot', JSON.stringify([d.shown, d.expanded, d.haspopup, d.controls]));
-            check(L + 'the chat panel has no account line (no Chatting as, no Log out in it)', !d.inPanel && d.panelText.indexOf('Chatting as') === -1 && d.panelText.indexOf('Log out') === -1);
+            check(L + 'the chat panel has no account line (no Chatting as, no Log out in it), and the dropdown stands right after the chip in the bar (Tab order, inert)', d.afterChip && !d.inPanel && d.panelText.indexOf('Chatting as') === -1 && d.panelText.indexOf('Log out') === -1);
             await page.focus('.hbar .hlogin');
             await page.keyboard.press('Enter');
             await sleep(120);
@@ -198,6 +198,8 @@ async function main() {
             check(L + 'Log out and Forget me are targets of 44 px or more', d.outBox.h >= 44 && d.outBox.w >= 44 && d.forgetBox.h >= 44, JSON.stringify([d.outBox, d.forgetBox]));
             if (s[1] <= 720 && s[2] > s[1]) check(L + 'on a phone the view stays what it was (the chip does not show the Chat view)', d.tab === 'games' && !d.chatShown, d.tab);
             if (n[0] === 'typical' && ['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'dropdown_open_' + s[0]);
+            await page.keyboard.press('Tab'); await sleep(40);
+            check(L + 'Tab from Log out moves on inside the dropdown (Forget me), then Shift+Tab comes back', await page.evaluate(() => /gc-forget/.test(document.activeElement.className)) && (await page.keyboard.press('Shift+Tab'), await page.evaluate(() => /gc-out/.test(document.activeElement.className))));
             await page.keyboard.press('Escape');
             await sleep(80);
             d = await page.evaluate(DROP);

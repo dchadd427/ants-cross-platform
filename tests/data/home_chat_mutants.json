@@ -914,15 +914,15 @@
   {
    "id": "escape_does_not_fold",
    "file": "web/home/chat.js",
-   "old": "if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); }",
+   "old": "if (e && e.key === 'Escape' && open && !menuOn) { setOpen(false); if (fold.focus) fold.focus(); }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "escape_loses_the_focus",
    "file": "web/home/chat.js",
-   "old": "if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); }",
-   "new": "if (e && e.key === 'Escape' && open) { setOpen(false); }",
+   "old": "if (e && e.key === 'Escape' && open && !menuOn) { setOpen(false); if (fold.focus) fold.focus(); }",
+   "new": "if (e && e.key === 'Escape' && open && !menuOn) { setOpen(false); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1992,15 +1992,8 @@
   {
    "id": "escape_leaves_the_small_menu_open",
    "file": "web/home/chat.js",
-   "old": "if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); if (e.stopPropagation) e.stopPropagation(); }",
+   "old": "if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); }",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "escape_leaves_the_focus_off_the_chip",
-   "file": "web/home/chat.js",
-   "old": "setMenu(false); if (chip && chip.focus) chip.focus(); if (e.stopPropagation)",
-   "new": "setMenu(false); if (e.stopPropagation)",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {

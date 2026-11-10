@@ -81,7 +81,7 @@
   {
    "id": "focus_after_leave_stays_on_the_hidden_button",
    "file": "web/home/home.js",
-   "old": "mine.hidden ? quickHost : mine;",
+   "old": "mine.hidden ? away() : mine;",
    "new": "mine;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
   },
@@ -109,8 +109,8 @@
   {
    "id": "dropdown_is_in_the_chat_panel",
    "file": "web/home/chat.js",
-   "old": "host.appendChild(box); (doc.body || host).appendChild(slot);",
-   "new": "host.appendChild(box); body.appendChild(slot);",
+   "old": "if (chip && chip.parentNode && chip.parentNode.insertBefore) chip.parentNode.insertBefore(slot, chip.nextSibling); else (doc.body || host).appendChild(slot);",
+   "new": "body.appendChild(slot);",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -130,14 +130,14 @@
   {
    "id": "dropdown_not_under_the_chip",
    "file": "web/home/chat.js",
-   "old": "top = Math.round(r.bottom + 6);",
+   "old": "top = Math.max(6, Math.min(Math.round(r.bottom + 6), high - 130));",
    "new": "top = 0;",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },
   {
    "id": "dropdown_taller_than_the_window",
    "file": "web/home/chat.js",
-   "old": "slot.style.maxHeight = Math.max(160, (win.innerHeight || 0) - top - 10) + 'px';",
+   "old": "slot.style.maxHeight = Math.max(0, high - top - 10) + 'px';",
    "new": "slot.style.maxHeight = '';",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },
@@ -147,6 +147,27 @@
    "old": "if (!on) menuOn = false; ",
    "new": "",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "focus_is_lost_when_the_dropdown_goes",
+   "file": "web/home/chat.js",
+   "old": "if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) chip.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_only_inside_the_dropdown",
+   "file": "web/home/chat.js",
+   "old": "doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn)",
+   "new": "slot.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn)",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "focus_falls_to_nowhere_when_both_are_off",
+   "file": "web/home/home.js",
+   "old": "function away() { return !quickHost.disabled ? quickHost : !gamesBtn.disabled ? gamesBtn : menuHome; }",
+   "new": "function away() { return quickHost; }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
   }
  ]
 }

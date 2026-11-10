@@ -139,7 +139,7 @@
         enter.type = 'button'; enter.setAttribute('aria-label', TEXT.loginWith); enter.hidden = true; put(enter, [el('i', 'gc-dc'), el('span', '', TEXT.login)]);      // (where a login is offered and nobody is named: the field is off and this is in Send's place)
         put(form, [field, send, enter]); form.hidden = true;
         var guest = el('p', 'gc-guest', TEXT.guest); guest.hidden = true;
-        // the account's dropdown (the chip opens it): who the visitor is (the hub's welcome says), the choice of the name, Log out, and Forget me. It stands in the body, not in the panel (which a phone hides on its Games and Players views)
+        // the account's dropdown (the chip opens it): who the visitor is (the hub's welcome says), the choice of the name, Log out, and Forget me. It stands next to the chip in the bar, not in the panel (which a phone hides on its Games and Players views)
         var slot = el('div', 'gc-slot'); slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;
         var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'btn gc-out', TEXT.logout), forgetBtn = el('button', 'btn gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
         outBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
@@ -149,7 +149,7 @@
         if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
         put(body, [log, note, news, form, guest]);
         put(box, [head, body]);
-        host.appendChild(box); (doc.body || host).appendChild(slot);
+        host.appendChild(box); if (chip && chip.parentNode && chip.parentNode.insertBefore) chip.parentNode.insertBefore(slot, chip.nextSibling); else (doc.body || host).appendChild(slot);       // (right after the chip: the Tab order and the bar's inert follow)
 
         // ---- what is seen -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
         function visible() { return !doc.hidden; }
@@ -211,6 +211,7 @@
             guest.hidden = !(live && !you);
             note.textContent = notice || (state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');
             slot.hidden = !(live && you && login && menuOn); acctName.textContent = you ? you.name : '';
+            if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) chip.focus();       // (the dropdown goes under the focus: a Log out, a Forget me, a name that is picked; the focus goes to the chip, not to nowhere)
             outBtn.disabled = forgetBtn.disabled = busy;
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
             if (you && you.other) { var a = you.pick === 'display' ? 0 : 1; pickNote.textContent = TEXT.shows + TEXT.names[a] + '.'; pickBtn.textContent = TEXT.use + TEXT.names[1 - a] + ': ' + you.other; }
@@ -226,8 +227,8 @@
         }
         function place() {                                                       // the dropdown is under the chip, to its right edge, and no taller than what is left of the window (the rest scrolls inside it)
             if (!chip || !chip.getBoundingClientRect) return;
-            var r = chip.getBoundingClientRect(), top = Math.round(r.bottom + 6);
-            slot.style.top = top + 'px'; slot.style.maxHeight = Math.max(160, (win.innerHeight || 0) - top - 10) + 'px';
+            var r = chip.getBoundingClientRect(), high = win.innerHeight || 0, top = Math.max(6, Math.min(Math.round(r.bottom + 6), high - 130));       // (a window that is very low moves it up over the bar rather than past the window's edge)
+            slot.style.top = top + 'px'; slot.style.maxHeight = Math.max(0, high - top - 10) + 'px';
         }
         function render() { if (visible()) paint(); else stale = true; }       // (a hidden tab is not painted; the model goes on, and the tab's return paints it all)
         function tell(code) {                                                    // a word for the note, for a few seconds
@@ -392,7 +393,7 @@
         if (chip) chip.addEventListener('click', guard(function () { if (!you) { startLogin(); return; } setMenu(!menuOn); if (menuOn && outBtn.focus) outBtn.focus(); }));       // (the chip opens the dropdown and puts the focus on Log out; a second press closes it)
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
         win.addEventListener('resize', guard(function () { if (menuOn) render(); }));
-        slot.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); if (e.stopPropagation) e.stopPropagation(); } }));       // (Escape closes it and the focus goes back to the chip)
+        doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); } }));       // (Escape closes it, wherever the focus is, and the focus goes back to the chip)
         form.addEventListener('submit', guard(function (e) {
             if (e && e.preventDefault) e.preventDefault();
             if (sendLine(field.value) === '') field.value = '';
@@ -400,7 +401,7 @@
         fold.addEventListener('click', guard(function () { setOpen(!open); if (fold.focus) fold.focus(); }));
         head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) setOpen(true); }));       // (a folded header opens wherever it is pressed)
         box.addEventListener('keydown', guard(function (e) {
-            if (e && e.key === 'Escape' && open) { setOpen(false); if (fold.focus) fold.focus(); }
+            if (e && e.key === 'Escape' && open && !menuOn) { setOpen(false); if (fold.focus) fold.focus(); }       // (the dropdown first, then the panel)
         }));
         doc.addEventListener('visibilitychange', guard(function () { if (visible()) { stale = true; render(); nudge(); } }));
         win.addEventListener('online', guard(nudge));

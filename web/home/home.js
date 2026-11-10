@@ -217,7 +217,7 @@
             gamesCall('shown', name);
             if (how !== 'first') {
                 try { win.scrollTo(0, 0); } catch (e) { /* no scrolling here */ }
-                var next = name === 'room' ? homeBtn : mine.hidden ? quickHost : mine;
+                var next = name === 'room' ? homeBtn : mine.hidden ? away() : mine;
                 if (next.focus) next.focus();
             }
         }
@@ -225,10 +225,11 @@
             if (!page.info().client) page.make();
             show('room', 'push');
         }
+        function away() { return !quickHost.disabled ? quickHost : !gamesBtn.disabled ? gamesBtn : menuHome; }       // (where the focus goes when My room is not there: the first button that takes a press)
         function sync() {
             var info = page.info(), n = info.client ? countOf(info.model) : null;
             mine.hidden = !info.client;
-            if (mine.hidden && doc.activeElement === mine) (quickHost.disabled ? gamesBtn : quickHost).focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
+            if (mine.hidden && doc.activeElement === mine) away().focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
             minePill.textContent = n ? n.people + '/' + n.size : '';
             minePill.hidden = !n;
             mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);

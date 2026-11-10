@@ -211,7 +211,7 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const first = helloRoom(s.sent[0]);
     env.roomBar('leave').click();
     check('Leave room leaves the room (one Leave message), shows Home, and forgets the seat: the session storage has no room', s.sent.filter((b) => b[0] === NET0.MSG.Leave).length === 1 && env.screen() === 'home' && env.session.data['ants.lobby'] === undefined);
-    same('... My room is gone again (hidden, no count), and the focus is on Quick host (the Home bar comes back with no room: the focus is not left on a button that is not there)', [env.home('mine').hidden, env.home('mine').children[1].hidden, env.focused === env.home('host')], [true, true, true]);
+    same('... My room is gone again (hidden, no count), and the focus is on the first button that takes a press (here Games has not loaded: the Menu button; with Quick host lit it is Quick host), not on a button that is not there', [env.home('mine').hidden, env.home('mine').children[1].hidden, env.focused === env.home('hmenu')], [true, true, true]);
     check('... and the page makes no room by itself: no new socket', env.sockets.length === 1);
     env.home('mine').click();
     check('My room then makes a NEW room (another code, a new socket, a Hello that makes it)', env.sockets.length === 2 && env.screen() === 'room' && helloRoom(env.last().open().sent[0]) !== first && CODE.test(helloRoom(env.last().sent[0])));
