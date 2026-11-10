@@ -226,7 +226,7 @@ async function flows() {
         const maple = await newPage(browser, live, 'Maple', SIZES[2]);
         await lit(maple);
         check('the page opens on Home and loads the Games list after its first paint (Quick host, Quick join and Games are lit)', await screenOf(maple) === 'home' && await maple.evaluate(() => document.querySelector('.quick.join').disabled === false));
-        await maple.click('.quick.host');
+        await maple.click('.quick.host'); await maple.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
         await until('the room is public', async () => (await maple.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
         check('Quick host in a real browser: the Room shows, the switch says Public (the real room said so) and the notice is there', await screenOf(maple) === 'room' && (await textOf(maple, '.gtoast')).indexOf(NOTICES.public) !== -1);
         const code = await maple.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
@@ -289,7 +289,7 @@ async function flows() {
         // ---- 1c. a double click on Join is one Join: the line of a Join that waits is put above the rows, and its Cancel stands where the Join button stood, so that the second click of the double click lands on it (a real double click) ----
         for (const size of [SIZES[2], SIZES[0]]) {
             const host = await newPage(browser, live, 'Maple', size); await lit(host);
-            await host.click('.quick.host');
+            await host.click('.quick.host'); await host.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
             await until('the room is public', async () => (await host.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
             const code = await host.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
             const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
@@ -308,7 +308,7 @@ async function flows() {
         for (const size of [SIZES[2], SIZES[0]]) {
             const label = size[0] + ' ' + size[1] + 'x' + size[2];
             const host = await newPage(browser, live, 'Maple', size); await lit(host);
-            await host.click('.quick.host');
+            await host.click('.quick.host'); await host.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
             await until('the room is public', async () => (await host.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
             const code = await host.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
             const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
@@ -487,7 +487,7 @@ async function flows() {
                 check(label + ': a game that is gone is said in plain words in the list, and the buttons are back', (await textOf(r, '.gpnote')) === 'That game is not open any more.' && await r.evaluate(() => !document.querySelector('.gjoin').disabled));
                 await r.context().close();
                 const host = await newPage(browser, live, 'Maple', size); await lit(host);
-                await host.click('.quick.host');
+                await host.click('.quick.host'); await host.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
                 await host.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
                 const guest = await newPage(browser, live, 'Sage', size); await lit(guest);
                 await guest.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
@@ -506,7 +506,7 @@ async function flows() {
                 check(label + ': the card "Finding a game…" has its four seats, its line, its bar and a Cancel of 44 px, inside the window', (await textOf(qf, '.gctitle')) === 'Finding a game…' && (await qf.evaluate(() => { const r = document.querySelector('.gconfirm').getBoundingClientRect(), b = document.querySelector('.gconfirm .btn').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && b.height >= 44 && document.querySelectorAll('.gconfirm .gdot').length === 4; })));
                 await qf.context().close();
                 const qh = await newPage(browser, live, 'Maple', size); await lit(qh);
-                await qh.click('.quick.host');
+                await qh.click('.quick.host'); await qh.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
                 await qh.waitForSelector('.vbtn[aria-pressed="true"] >> text=Public');
                 const qg = await newPage(browser, live, 'Sage', size); await lit(qg);
                 await qg.waitForFunction(() => { const p = document.querySelector('.hchip.games .pill'); return p && p.textContent === '1'; }, null, { timeout: 12000 });
@@ -549,7 +549,7 @@ async function flows() {
             const rowsOf = (p) => p.evaluate(() => Array.from(document.querySelectorAll('.glist .gitem')).map((li) => ({ name: li.querySelector('.gname').textContent, yours: !!li.querySelector('.gyours') && li.querySelector('.gyours').textContent, best: !!li.querySelector('.gbest'), buttons: li.querySelectorAll('button').length, join: !!li.querySelector('.gjoin') })));
             const hostPublic = async (name) => {
                 const p = await newPage(browser, live, name, size); await lit(p);
-                await p.click('.quick.host');
+                await p.click('.quick.host'); await p.click('.gconfirm .gyes');       // (Quick host with no room asks Public or Private first: Public room)
                 await until(name + ' room is public', async () => (await p.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
                 return p;
             };
