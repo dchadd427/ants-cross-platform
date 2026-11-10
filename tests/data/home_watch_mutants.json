@@ -368,8 +368,8 @@
   {
    "id": "compact_card_keeps_the_picture",
    "file": "web/home/games.css",
-   "old": ".gpop .gempty.gcompact .ant, .gpop .gempty.gcompact .gemline { display: none; }",
-   "new": ".gpop .gempty.gcompact .gemline { display: none; }",
+   "old": ".gpop .gempty.gcompact .ant { display: none; }",
+   "new": ".gpop .gempty.gcompact .ant { display: block; }",
    "test": "node tests/scripts/web_home_watch_browser.js"
   },
   {

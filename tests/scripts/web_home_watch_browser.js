@@ -214,15 +214,15 @@ const GEOM = () => {
                         const q = (e) => e && e.getClientRects().length ? e.getBoundingClientRect() : null;
                         const body = q(document.querySelector('.gdock .gpbody')), empty = q(document.querySelector('.gdock .gempty')), row = q(document.querySelector('.gdock .glive')), list = q(document.querySelector('.gdock .glist:not(.glivelist)'));
                         const e = document.querySelector('.gdock .gempty');
-                        return { body: body && [body.top, body.bottom], empty: empty && [empty.top, empty.height], row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], compact: !!e && e.className.indexOf('gcompact') !== -1, ant: !!(e && q(e.querySelector('.ant'))), btns: e ? Array.from(e.querySelectorAll('.btn')).filter((b) => q(b)).length : 0, code: !!q(document.querySelector('.gdock .gcode')), sideways: document.documentElement.scrollWidth > innerWidth };
+                        return { body: body && [body.top, body.bottom], empty: empty && [empty.top, empty.height], row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], compact: !!e && e.className.indexOf('gcompact') !== -1, ant: !!(e && q(e.querySelector('.ant'))), btns: e ? e.querySelectorAll('button').length : 0, code: !!q(document.querySelector('.gdock .gcode')), sideways: document.documentElement.scrollWidth > innerWidth };
                     });
                     const tag = name + '/' + label;
                     check(tag + ': no sideways scroll, Join by code is shown', !g.sideways && g.code, JSON.stringify(g));
                     if (opts.noOpen && !opts.mode) {
-                        check(tag + ': the empty card is the compact one (no picture, both buttons, short)', g.compact && !g.ant && g.btns === 2 && g.empty && g.empty[1] <= 130, JSON.stringify(g));
+                        check(tag + ': the empty card is the compact one (no picture, no button: the bar has Quick host and Quick join; two lines at most)', g.compact && !g.ant && g.btns === 0 && g.empty && g.empty[1] <= 90, JSON.stringify(g));
                         if (name !== 'side') check(tag + ': the first match in progress shows in the list without a scroll (all of it for one match; 100 px of it, name and Watch, when its names wrap to three lines)', g.row && Math.min(g.row[1], g.body[1]) - g.row[0] >= Math.min(100, g.row[1] - g.row[0]) && (label !== '0 open, 1 live' || g.row[1] <= g.body[1] + 0.5), JSON.stringify(g));
                     } else if (opts.mode === 'none') {
-                        check(tag + ': nothing at all keeps the full empty card (the picture)', !g.compact && g.ant, JSON.stringify(g));
+                        check(tag + ': nothing at all keeps the full empty card (the picture, still no button)', !g.compact && g.ant && g.btns === 0, JSON.stringify(g));
                     } else {
                         check(tag + ': open rooms first, the matches under them, no empty card', !g.empty && g.list && g.row && g.list[0] < g.row[0], JSON.stringify(g));
                     }

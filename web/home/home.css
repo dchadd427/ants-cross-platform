@@ -55,8 +55,6 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 .gdock .gtop { grid-area: t; } .gdock .gline { grid-area: l; } .gdock .gjoin, .gdock .gwatch { grid-area: j; }
 .gdock .gempty { align-content: center; min-height: 100%; background: none; border: 0; }
 .gdock .gemtitle { font-size: 26px; }
-.gerow { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 10px; }
-.gdock .gerow .btn { min-height: 56px; padding: 6px 22px; font-size: 20px; letter-spacing: .1em; text-transform: uppercase; }
 @media (max-height: 700px) { .gdock .glegend, .gdock .gclabel { display: none; } .gdock .gcode { margin-top: 8px; } .gdock .gcode .joinbox input { min-height: 44px; } }
 /* ---- a phone, or a window up to 700 px wide: one of the three at a time, picked by the strip along the bottom ---- */
 @media (max-width: 700px) {

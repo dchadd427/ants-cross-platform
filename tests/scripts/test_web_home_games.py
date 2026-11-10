@@ -284,7 +284,7 @@ class TheStyle(unittest.TestCase):
             made.update(m.group(1).split())
         for m in re.finditer(r"button\('([\w -]+)'", read("web", "home", "games.js")):
             made.update(m.group(1).split())
-        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr", "gerow"}      # (the page's: web/lobby.html, "gerow" the two big buttons of the empty state in Home's body (home.css), "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
+        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr"}      # (the page's: web/lobby.html, "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
         for name in sorted(made - theirs):
             self.assertRegex(self.css, r"\." + re.escape(name) + r"\b", "the class %s has no style" % name)
 
@@ -327,11 +327,13 @@ class TheListIsDockedInHomesBody(unittest.TestCase):
         self.assertIn(".gdock .gitem:has(.gyours) { border-color: var(--gold); }", rules)
         self.assertIn(".gdock .glist { grid-template-columns: minmax(0, 1fr); }", rules, "one column on a phone")
 
-    def test_the_empty_state_has_two_big_buttons_and_both_are_a_press_that_the_script_handles(self):
-        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickHost, guard(function () { quickHost(); })));", self.js)
-        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickJoin, guard(function () { quickJoin(); })));", self.js)
-        rules = re.sub(r"/\*.*?\*/", "", self.homecss, flags=re.S)
-        self.assertRegex(rules, r"\.gdock \.gerow \.btn \{[^}]*min-height: 56px;")
+    def test_the_empty_state_is_text_only_the_bar_has_quick_host_and_join(self):
+        self.assertNotIn("gerow", self.js)
+        self.assertNotIn("gerow", self.homecss)
+        self.assertNotIn("emptyRow", self.js)
+        m = re.search(r"popEmpty[.]appendChild[(]el[(]'span', 'ant ant-green'.*\n.*\n", self.js)
+        self.assertIsNotNone(m)
+        self.assertNotIn("button(", m.group(0), "the card says it in words; the buttons are the bar's")
 
 
 class TheWayIntoTheImage(unittest.TestCase):
