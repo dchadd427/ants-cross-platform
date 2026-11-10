@@ -30,7 +30,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.15.0 page or game still joins. The rest of this release is internal: tests and documents.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5b17384e...78ca606f)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/5b17384e...0a24e791)
 
 ## v0.15.0 - 2026-11-10 - A three-panel Home, notices over the page, and games in progress with Watch
 
