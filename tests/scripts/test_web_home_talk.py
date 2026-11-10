@@ -33,7 +33,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_talk_check.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 FILES = ("talk.js", "talk.css")
-TALK_BUDGET, TALK_GZIP_BUDGET = 19000, 7000       # bytes, raw and gzipped, both files together (about 17,900 and 6,560, comments included:  the picker with its keys, the voice with its states and words); they load after the first paint, after the dock, so they cost the first look nothing
+TALK_BUDGET, TALK_GZIP_BUDGET = 19600, 7300       # bytes, raw and gzipped, both files together (about 19,360 and 7,140, comments included; raised from 19,000 and 7,000 on purpose for the two inline SVG pictures, the usual microphone and a smiley, about 1,300 bytes, in place of two emoji characters:  the picker with its keys, the voice with its states and words); they load after the first paint, after the dock, so they cost the first look nothing
 
 sys.path.insert(0, REPO)
 from hub import limits, text as hubtext          # noqa: E402  (the hub's own rules: the tests run the real thing)
@@ -180,7 +180,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertIn("function chr(cp)", self.js)
 
     def test_the_script_is_plain_es5(self):
-        for token in (r"\bconst\b", r"\blet\b", r"=>", r"`", r"\bimport\b", r"\bclass\b", r"\basync\b", r"\bawait\b", r"fromCodePoint", r"\bcodePointAt\b"):
+        for token in (r"\bconst\b", r"\blet\b", r"=>", r"`", r"\bimport\b", r"\bclass\s+\w+\s*[{(]", r"\basync\b", r"\bawait\b", r"fromCodePoint", r"\bcodePointAt\b"):
             self.assertIsNone(re.search(token, self.code), token)
         self.assertIn("'use strict';", self.js)
 
@@ -188,7 +188,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
         self.assertNotRegex(self.code, r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)) | set(re.findall(r"createElement\('(\w+)'", self.code)))
-        self.assertEqual(made, ["button", "div", "i", "p", "span"] if "el('button'" in self.code else ["div", "i", "p", "span"], "text and boxes: no a, img, script, iframe, style or link")
+        self.assertEqual(made, ["button", "div", "p", "span"], "text and boxes: no a, img, script, iframe, style or link")
 
     def test_it_keeps_nothing_in_the_browser_and_has_no_network_of_its_own(self):
         self.assertNotRegex(self.code, r"localStorage|sessionStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|sendBeacon")
@@ -259,6 +259,16 @@ class TheStyle(unittest.TestCase):
 
     def test_the_dock_is_taller_where_the_buttons_have_a_row_of_their_own(self):
         self.assertIn("@media (min-width: 701px) and (max-width: 1000px) { .gc:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }", self.css, "the middle widths: the dock is about 60 to 80 px taller (its own is 160 to 260 px), so that the log keeps its room")
+
+    def test_the_two_pictures_are_inline_svg_in_the_buttons_own_color_and_the_listening_microphone_is_solid(self):
+        self.assertIn("stroke: currentColor;", self.rule(".gt-ico"))
+        self.assertIn("fill: none;", self.rule(".gt-ico"))
+        self.assertIn("width: 24px; height: 24px;", self.rule(".gt-ico"))
+        self.assertIn("fill: currentColor;", self.rule(".gt-hot .gt-cap"))
+        js = read("web", "home", "talk.js")
+        self.assertIn("M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6", js, "the holder, the stem and the base")
+        self.assertIn("height:11;rx:3", js, "the capsule")
+        self.assertNotRegex(js, r"\b(fill|stroke)\s*:\s*'#|currentcolor")
 
     def test_the_listening_state_moves_only_where_motion_is_allowed(self):
         self.assertIn("@media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }", self.css)

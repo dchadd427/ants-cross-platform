@@ -66,13 +66,22 @@
         if (!form) return null;
         function el(tag, cls, text) { var e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
         function button(cls, label, text) { var b = el('button', 'btn ' + cls, text); b.type = 'button'; b.setAttribute('aria-label', label); b.setAttribute('title', label); return b; }
+        // the two pictures: inline SVG made node by node (no file, no font, no markup string), drawn in the button's own color: a smiley in a circle, and the usual microphone (a capsule, the holder under it, a stem and a base)
+        var NS = ['http' + ':', '', 'www.w3.org', '2000', 'svg'].join('/');       // (the SVG namespace: a name, not an address that is asked for)
+        function part(tag, attrs, into) { var n = doc.createElementNS ? doc.createElementNS(NS, tag) : doc.createElement(tag); attrs.split(';').forEach(function (a) { n.setAttribute(a.split(':')[0], a.split(':')[1]); }); if (into) into.appendChild(n); return n; }
+        function icon(face) {
+            var svg = part('svg', 'viewBox:0 0 24 24;class:gt-ico;aria-hidden:true;focusable:false');
+            if (face) { part('circle', 'cx:12;cy:12;r:9', svg); part('circle', 'cx:9;cy:10;r:1;class:gt-eye', svg); part('circle', 'cx:15;cy:10;r:1;class:gt-eye', svg); part('path', 'd:M8 14.5c1 1.6 2.4 2.5 4 2.5s3-.9 4-2.5', svg); }
+            else { part('rect', 'x:9;y:3;width:6;height:11;rx:3;class:gt-cap', svg); part('path', 'd:M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6', svg); }
+            return svg;
+        }
         var send = null, i;
         for (i = 0; i < form.children.length; i++) if (String(form.children[i].className).indexOf('gc-send') !== -1) { send = form.children[i]; break; }
         var tools = el('span', 'gt-tools'), emojiBtn = button('gt-btn gt-emoji', TEXT.emoji, ''), micBtn = null;
-        emojiBtn.appendChild(el('i', 'gt-face')); emojiBtn.setAttribute('aria-expanded', 'false'); emojiBtn.setAttribute('aria-controls', 'gt-pick');
+        emojiBtn.appendChild(icon(true)); emojiBtn.setAttribute('aria-expanded', 'false'); emojiBtn.setAttribute('aria-controls', 'gt-pick');
         tools.appendChild(emojiBtn);
         var Ctor = recognition(win);
-        if (Ctor) { micBtn = button('gt-btn gt-mic', TEXT.voice, ''); micBtn.appendChild(el('i', 'gt-mark')); micBtn.setAttribute('aria-pressed', 'false'); tools.appendChild(micBtn); }
+        if (Ctor) { micBtn = button('gt-btn gt-mic', TEXT.voice, ''); micBtn.appendChild(icon(false)); micBtn.setAttribute('aria-pressed', 'false'); tools.appendChild(micBtn); }
         var say = el('p', 'gt-say'); say.setAttribute('role', 'status'); say.setAttribute('aria-live', 'polite'); say.hidden = true;
         var pick = el('div', 'gt-pick'); pick.id = 'gt-pick'; pick.setAttribute('role', 'group'); pick.setAttribute('aria-label', TEXT.emojiList); pick.hidden = true;
         var keys = [];

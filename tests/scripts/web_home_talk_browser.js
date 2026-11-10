@@ -8,7 +8,7 @@
 //   4. the keyboard: Tab goes field, emoji, microphone, Send; Enter opens the picker and puts the focus on an emoji;
 //   5. a line with emoji goes out through Send as one say frame with the same text, and the hub's rules would keep it as it is (the check in node does that); the page's own errors are none;
 //   6. a browser with no speech recognition: no microphone button, the emoji button stays; a nameless visitor (read only) has neither.
-//   --shots DIR takes the pictures (talk_<scene>_<size>.png: idle, picker, listening, error, unsupported).
+//   --shots DIR takes the pictures (talk_<scene>_<size>.png: idle, picker, listening, error, unsupported); with TALK_SCALE=3 in the environment the page is drawn at that scale and a close-up of the two buttons is taken too (talk_close_*).
 //
 //   node tests/scripts/web_home_talk_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 //
@@ -74,13 +74,13 @@ async function main() {
     let browser;
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the emoji picker and the voice button were NOT run in a real browser'); await hub.close(); site.server.close(); process.exit(0); }
     const errors = [];
-    const shot = async (page, scene, size) => { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, 'talk_' + scene + '_' + size + '.png') }); } };
+    const shot = async (page, scene, size) => { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: path.join(SHOTS, 'talk_' + scene + '_' + size + '.png') }); if (process.env.TALK_SCALE) { const t = await page.$('.gt-tools'); if (t) await t.screenshot({ path: path.join(SHOTS, 'talk_close_' + scene + '_' + size + '.png') }); } } };
     const rect = (page, selector) => page.evaluate((s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), right: Math.round(r.right), bottom: Math.round(r.bottom) }; }, selector);
     const field = (page) => page.evaluate(() => document.querySelector('.gc-input').value);
     const active = (page) => page.evaluate(() => { const a = document.activeElement; return a ? (a.className || a.tagName) : ''; });
     async function open(w, h, phone, o) {
         o = o || {};
-        const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+        const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: process.env.TALK_SCALE ? Number(process.env.TALK_SCALE) : 1 });
         const page = await context.newPage();
         await page.addInitScript(o.none ? NONE : FAKE);
         page.on('pageerror', (e) => errors.push(String(e && e.message || e)));

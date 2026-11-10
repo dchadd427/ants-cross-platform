@@ -148,6 +148,10 @@ function rig(o) {
     same('the emoji button: a button, a label and a title, closed, controls the picker', [r.emoji.tagName, r.emoji.type, r.emoji.getAttribute('aria-label'), r.emoji.getAttribute('title'), r.emoji.getAttribute('aria-expanded'), r.emoji.getAttribute('aria-controls'), r.pick.id], ['button', 'button', 'Emoji', 'Emoji', 'false', 'gt-pick', 'gt-pick']);
     same('the microphone button: a button, not pressed, and its label and tooltip say that the browser\'s speech service hears you', [r.mic.tagName, r.mic.type, r.mic.getAttribute('aria-pressed'), r.mic.getAttribute('aria-label'), r.mic.getAttribute('title')],
         ['button', 'button', 'false', 'Voice to text: your browser\'s speech service hears you', 'Voice to text: your browser\'s speech service hears you']);
+    const kinds = (b) => b.children.map((c) => c.tagName + ':' + (c.attributes.viewBox || '') + ':' + c.children.map((x) => x.tagName).join('+'));
+    same('the emoji button holds one SVG: a circle, two eyes and a smile', kinds(r.emoji), ['svg:0 0 24 24:circle+circle+circle+path']);
+    same('the microphone button holds one SVG: a capsule and the path of the holder, stem and base', kinds(r.mic), ['svg:0 0 24 24:rect+path']);
+    check('both are hidden from the screen reader (the button has the name), and the drawing is in no fixed color', [r.emoji, r.mic].every((b) => b.children[0].attributes['aria-hidden'] === 'true' && b.children[0].attributes.focusable === 'false' && !b.findAll((e) => e.attributes && (e.attributes.fill || e.attributes.stroke)).length) && r.mic.children[0].children[0].className === 'gt-cap');
     check('the words line is a polite status and empty; the picker is closed', r.say.getAttribute('role') === 'status' && r.say.getAttribute('aria-live') === 'polite' && r.say.hidden === true && r.pick.hidden === true);
     check('the buttons are shown while a writer may type', r.talk.root.hidden === false);
     check('no id of the page was taken twice', r.pick.id === 'gt-pick');

@@ -269,6 +269,34 @@
    "old": "Voice to text: your browser\\'s speech service hears you",
    "new": "Voice to text",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_holder_of_the_microphone_is_gone",
+   "file": "web/home/talk.js",
+   "old": "M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6",
+   "new": "M12 18v3M9 21h6",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_listening_microphone_is_not_solid",
+   "file": "web/home/talk.css",
+   "old": ".gt-hot .gt-cap { fill: currentColor; }",
+   "new": ".gt-hot .gt-cap { fill: none; }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_pictures_have_a_fixed_color",
+   "file": "web/home/talk.css",
+   "old": "stroke: currentColor; stroke-width: 2;",
+   "new": "stroke: #fff; stroke-width: 2;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_smiley_has_no_smile",
+   "file": "web/home/talk.js",
+   "old": "part('path', 'd:M8 14.5c1 1.6 2.4 2.5 4 2.5s3-.9 4-2.5', svg); }",
+   "new": "}",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   }
  ]
 }

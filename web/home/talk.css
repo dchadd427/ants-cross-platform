@@ -4,9 +4,9 @@
 .gt-tools { display: flex; gap: 6px; }
 .gt-tools[hidden], .gt-pick[hidden], .gt-say[hidden] { display: none; }
 .gt-btn { min-width: 48px; min-height: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; }
-.gt-face::before { content: "\1F642"; }
-.gt-mark::before { content: "\1F3A4"; }
-.gt-face, .gt-mark { font-style: normal; }
+.gt-ico { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gt-ico .gt-eye { fill: currentColor; stroke: none; }
+.gt-hot .gt-cap { fill: currentColor; }
 .btn.gt-hot, .btn.gt-hot:hover, .btn.gt-hot:active { background: #8a2c2c; animation: gt-beat 1.2s ease-in-out infinite; }
 @keyframes gt-beat { 50% { opacity: .65; } }
 .gt-say { grid-column: 1 / -1; margin: 0; font-size: 15px; line-height: 1.35; color: #f2c48c; }
