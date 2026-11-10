@@ -33,7 +33,7 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_talk_check.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 FILES = ("talk.js", "talk.css")
-TALK_BUDGET, TALK_GZIP_BUDGET = 19600, 7300       # bytes, raw and gzipped, both files together (about 19,360 and 7,140, comments included; raised from 19,000 and 7,000 on purpose for the two inline SVG pictures, the usual microphone and a smiley, about 1,300 bytes, in place of two emoji characters:  the picker with its keys, the voice with its states and words); they load after the first paint, after the dock, so they cost the first look nothing
+TALK_BUDGET, TALK_GZIP_BUDGET = 21200, 7800       # bytes, raw and gzipped, both files together (about 20,820 and 7,560, comments included; raised again, from 19,600 and 7,300, on purpose for the review's fixes: the voice under an inert dock, a caret between a pair of surrogates, a line that is full, the focus kept in the field on a press, about 1,450 bytes with their comments; raised from 19,000 and 7,000 on purpose for the two inline SVG pictures, the usual microphone and a smiley, about 1,300 bytes, in place of two emoji characters:  the picker with its keys, the voice with its states and words); they load after the first paint, after the dock, so they cost the first look nothing
 
 sys.path.insert(0, REPO)
 from hub import limits, text as hubtext          # noqa: E402  (the hub's own rules: the tests run the real thing)
@@ -80,6 +80,15 @@ class TheHubsRules(unittest.TestCase):
             self.assertLessEqual(len(e.encode("utf-8")), 4)
             self.assertNotEqual(unicodedata.name(e, ""), "", "U+%04X has no name in this Python (no newer than the hub's)" % ord(e))
             self.assertNotIn(e, "<>")
+
+    def test_the_picker_holds_exactly_these_code_points_none_newer_than_unicode_9(self):
+        """The list is pinned here (the Python that runs this test may know a newer Unicode than the hub's image does: the name check cannot see that), so a new emoji is a decision that is read."""
+        pinned = "1F600 1F603 1F604 1F601 1F606 1F605 1F602 1F923 1F60A 1F607 1F642 1F643 1F609 1F60D 1F618 1F60B 1F61C 1F60E 1F913 1F914 1F610 1F611 1F644 1F60F 1F62C 1F634 1F622 1F62D 1F62E 1F631 1F621 1F620 1F629 1F633 1F44D 1F44E 1F44C 1F44F 1F64C 1F64F 1F4AA 1F44B 1F91D 1F440 1F499 1F49A 1F49B 1F49C 1F494 1F495 1F4AF 1F4A5 1F525 2728 2B50 1F389 1F3C6 2705 274C 2753 2757 26A1 1F41C 1F41D 1F41B 1F40C 1F98B 1F33F 1F332 1F335 1F337 1F33B 1F340 1F34E 1F36F 1F36A 1F355 2615 1F4A7 1F30A 1F3AE 1F3B2 1F3AF 1F3C1 1F6A9 1F4A3 1F451 1F680 23F0 231B 1F4A4 1F4A1 1F512 1F514"
+        self.assertEqual(" ".join("%X" % ord(e) for e in self.all), pinned)
+        self.assertEqual(len(pinned.split()), 94)
+        self.assertLessEqual(max(int(h, 16) for h in pinned.split()), 0x1F9C0)
+        for h in pinned.split():
+            self.assertLessEqual(len(h), 5)
 
     def test_all_of_them_together_and_a_full_line_of_them_are_one_line_of_the_right_length(self):
         everything = "".join(self.all)
@@ -236,7 +245,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
     def test_a_narrow_form_puts_the_two_buttons_in_a_row_of_their_own_under_the_field_and_send(self):
-        self.assertIn("@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) {", self.css)
+        self.assertIn("@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {", self.css)
         narrow = self.css[self.css.index("@media (max-width: 420px)"):]
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto; }", narrow)
         self.assertIn(".gt-on .gt-tools { order: 3; grid-column: 1 / -1; }", narrow)
@@ -258,7 +267,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("max-height: 150px;", self.rule(".gt-pick"), "without the script's measure (a page that cannot measure) it is 150 px")
 
     def test_the_dock_is_taller_where_the_buttons_have_a_row_of_their_own(self):
-        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) { .gc:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }", self.css, "the middle widths: the dock is about 60 to 80 px taller (its own is 160 to 260 px), so that the log keeps its room")
+        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) { .gc[data-open=\"true\"]:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }", self.css, "the middle widths: the dock is about 60 to 80 px taller (its own is 160 to 260 px), so that the log keeps its room")
 
     def test_the_two_pictures_are_inline_svg_in_the_buttons_own_color_and_the_listening_microphone_is_solid(self):
         self.assertIn("stroke: currentColor;", self.rule(".gt-ico"))
@@ -282,7 +291,7 @@ class TheStyle(unittest.TestCase):
 class ThePrivacyWords(unittest.TestCase):
     def test_the_legal_page_says_who_hears_the_voice_and_that_the_site_gets_and_keeps_no_audio(self):
         page = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", read("web", "legal.html")).replace("&rsquo;", "'"))
-        self.assertIn("audio goes to the browser vendor's speech service", page)
+        self.assertIn("Your browser may send the audio to its maker's speech service (Chrome, Edge and Safari do)", page)
         self.assertIn("this site receives no audio and keeps nothing of it", page)
         self.assertIn("The voice button", page)
 

@@ -42,7 +42,7 @@
   {
    "id": "said_text_is_not_cut",
    "file": "web/home/talk.js",
-   "old": "t = head(t, Math.max(0, LIMIT - points(before + after) - 2));",
+   "old": "t = head(t, Math.max(0, LIMIT - points(before + after) - 2)).replace(/\\s+$/, '');",
    "new": "t = t;",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -126,7 +126,7 @@
   {
    "id": "late_words_are_heard",
    "file": "web/home/talk.js",
-   "old": "if (run !== me) return;\n                    var t",
+   "old": "if (run !== me || halted(me)) return;\n                    var t",
    "new": "var t",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -196,8 +196,8 @@
   {
    "id": "every_key_is_a_tab_stop",
    "file": "web/home/talk.js",
-   "old": "b.tabIndex = k === at ? 0 : -1;",
-   "new": "b.tabIndex = 0;",
+   "old": "keys.forEach(function (b, k) { b.tabIndex = k === at ? 0 : -1; }); if (keys[at].focus)",
+   "new": "keys.forEach(function (b, k) { b.tabIndex = 0; }); if (keys[at].focus)",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
@@ -245,7 +245,7 @@
   {
    "id": "the_tools_row_is_not_made_in_the_middle_widths",
    "file": "web/home/talk.css",
-   "old": "@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) {",
+   "old": "@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {",
    "new": "@media (max-width: 420px) {",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
@@ -296,6 +296,55 @@
    "file": "web/home/talk.js",
    "old": "part('path', 'd:M8 14.5c1 1.6 2.4 2.5 4 2.5s3-.9 4-2.5', svg); }",
    "new": "}",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_low_window_gets_the_row_and_the_taller_dock",
+   "file": "web/home/talk.css",
+   "old": "(min-width: 701px) and (max-width: 1000px) and (min-height: 501px) { .gc[data-open",
+   "new": "(min-width: 701px) and (max-width: 1000px) { .gc[data-open",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_taller_dock_is_also_the_folded_one",
+   "file": "web/home/talk.css",
+   "old": ".gc[data-open=\"true\"]:has(",
+   "new": ".gc:has(",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "nothing_that_fits_still_adds_spaces",
+   "file": "web/home/talk.js",
+   "old": "        if (!t) return { value: before + after, caret: before.length };       // (nothing of it fits",
+   "new": "        if (false) return { value: before + after, caret: before.length };       // (nothing of it fits",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_voice_writes_under_an_inert_dock",
+   "file": "web/home/talk.js",
+   "old": "if (run !== me || halted(me)) return;",
+   "new": "if (run !== me) return;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_pair_of_surrogates_is_split_by_a_caret",
+   "file": "web/home/talk.js",
+   "old": "/[\\udc00-\\udfff]/.test(value.charAt(a)) && /[\\ud800-\\udbff]/.test(value.charAt(a - 1))) a--;",
+   "new": "false) a--;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_press_moves_the_focus_to_the_key",
+   "file": "web/home/talk.js",
+   "old": "emojiBtn.addEventListener('pointerdown', hold);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_picker_takes_a_new_emoji_code_point_of_unicode_15",
+   "file": "web/home/talk.js",
+   "old": "'1F44D 1F44E ",
+   "new": "'1F44D 1FAE8 1F44E ",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   }
  ]

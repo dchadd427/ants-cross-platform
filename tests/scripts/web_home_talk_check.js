@@ -385,6 +385,30 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     check('(a hub that welcomes with no name: nothing is left listening)', r.rec().aborts === 1);
 }
 
+{   // review round: the line of 200 code points, pairs of surrogates, the dock that is inert, a result that carries resultIndex, the focus
+    const P = Pure;
+    check('speak: nothing that fits adds no spaces and no code point (a line of 199 or 200 stays as it was; 100 + 99 around the words stay 199)', [[199, 0], [200, 0], [100, 99], [0, 200]].every(([a, b]) => { const r = P.speak('x'.repeat(a), 'hello there', 'y'.repeat(b)); return P.points(r.value) === a + b && r.caret === a; }));
+    check('speak: every split of a line near the limit stays within 200 code points', (() => { for (let a = 0; a <= 200; a += 7) for (let b = 0; a + b <= 200; b += 11) if (P.points(P.speak('x'.repeat(a), 'one two three', 'y'.repeat(b)).value) > 200) return false; return true; })());
+    same('insert: a caret between the two halves of a pair goes before the pair; a selection that ends inside one takes it whole', [P.insert('a' + GRIN + 'b', 2, 2, 'Z'), P.insert('a' + GRIN + 'b', 0, 2, 'Z'), P.insert('a' + GRIN + 'b', 2, 3, 'Z')], [{ value: 'aZ' + GRIN + 'b', caret: 2 }, { value: 'Zb', caret: 1 }, { value: 'aZb', caret: 2 }]);
+    const r = rig(); r.field.value = ''; r.caret(0);
+    r.mic.click(); const rec = r.rec(); rec.onstart({});
+    rec.onresult({ resultIndex: 1, results: [[{ transcript: 'one' }], [{ transcript: 'two' }]] });
+    check('a result that carries resultIndex 1 (as a browser that continues does): all the results are used, nothing is dropped', r.field.value === 'one two');
+    r.dock.root.setAttribute('inert', '');
+    rec.onresult({ results: [[{ transcript: 'one two three' }]] });
+    check('a dock that has become inert (the hand-off to the game, a question over the page): the voice stops writing and is off', r.field.value === 'one two' && rec.aborts === 1 && r.mic.getAttribute('aria-pressed') === 'false');
+    const q = rig(); q.dock.root.setAttribute('inert', ''); q.mic.click(); q.rec().onstart({});
+    check('...and a start under an inert dock says nothing of listening and is stopped', q.sayText() !== 'Listening. Press the microphone again to stop. Then press Send.' && q.rec().aborts === 1);
+    const f = rig(); f.field.value = 'hi'; f.caret(2); f.field.focus();
+    let stopped = 0;
+    f.emoji.fire('pointerdown', { preventDefault() { stopped++; } }); f.emoji.click();
+    check('a press on the emoji button (mouse or finger) keeps the focus in the field and opens the picker without moving the focus to a key', stopped === 1 && f.pick.hidden === false && f.env.focused === f.field);
+    f.keys()[0].fire('pointerdown', { preventDefault() { stopped++; } }); f.keys()[0].click();
+    check('a press on an emoji keeps the focus in the field too, and the pick is in', stopped === 2 && f.env.focused === f.field && f.field.value === 'hi' + Pure.emoji()[0].list[0]);
+    f.esc(); f.emoji.click();
+    check('the keyboard (a click with no pointer press) still puts the focus on an emoji', f.env.focused === f.keys()[0]);
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 5. The page
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

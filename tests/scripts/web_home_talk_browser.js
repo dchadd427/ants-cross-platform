@@ -28,7 +28,7 @@ const arg = (name) => { const i = process.argv.indexOf(name); return i === -1 ? 
 const WEB = path.resolve(arg('--web') || path.join(ROOT, 'web'));
 const SHOTS = arg('--shots') ? path.resolve(arg('--shots')) : null;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ttf': 'font/ttf', '.ico': 'image/x-icon', '.json': 'application/json', '.svg': 'image/svg+xml' };
-const SIZES = [['desktop', 1280, 800, false], ['w701', 701, 800, false], ['w900', 900, 800, false], ['w1000', 1000, 800, false], ['w1100', 1100, 800, false], ['phone', 390, 844, true], ['w320', 320, 640, true], ['side', 568, 320, true]];
+const SIZES = [['desktop', 1280, 800, false], ['w701', 701, 800, false], ['w900', 900, 800, false], ['w1000', 1000, 800, false], ['w1100', 1100, 800, false], ['phone', 390, 844, true], ['w320', 320, 640, true], ['side', 568, 320, true], ['land844', 844, 390, false], ['land932', 932, 430, false]];
 const HISTORY = [line(1, 'pebble', 'anyone up for Islands?'), line(2, 'clover', 'I have a room open'), line(3, 'juniper', 'joining!')];
 const GRIN = String.fromCodePoint(0x1F600);
 
@@ -87,6 +87,7 @@ async function main() {
         await page.goto(site.url + '/', { waitUntil: 'load' });
         await page.waitForSelector('#gchat', { timeout: 5000 }).catch(() => {});
         if (phone) { await page.click('.htab.t-chat').catch(() => {}); await sleep(250); }
+        if (!phone && h < 500 && (await page.getAttribute('#gchat', 'data-open')) === 'false') { await page.click('#gchat .gc-head'); await sleep(250); }       // (a low window starts with the dock folded)
         await page.waitForFunction(() => { const f = document.querySelector('#gchat .gc-form'); return !!f && !f.hidden; }, null, { timeout: 8000 }).catch(() => {});
         await page.waitForSelector('.gt-emoji', { state: 'visible', timeout: 6000 }).catch(() => {});
         await sleep(150);
@@ -107,7 +108,7 @@ async function main() {
             : input.right <= emoji.x + 1 && emoji.right <= mic.x + 1 && mic.right <= send.x + 1 && Math.abs((emoji.y + emoji.h / 2) - (input.y + input.h / 2)) <= 12) && emoji.bottom <= dockBox.bottom + 1 && mic.bottom <= dockBox.bottom + 1 && send.bottom <= dockBox.bottom + 1, JSON.stringify([input, emoji, mic, send, dockBox]));
         const logBox = await rect(page, '.gc-log');
         console.log('   ' + size + ': log ' + (logBox && logBox.h) + ' px, dock ' + (dockBox && dockBox.h) + ' px');
-        check(name + 'the log keeps room to be read (at least 60 px high, 40 px in a window under 400 px high)', !!logBox && logBox.h >= (h < 400 ? 40 : 60), JSON.stringify(logBox));
+        check(name + 'the log keeps room to be read (at least 60 px high, 30 px in a window under 500 px high)', !!logBox && logBox.h >= (h < 500 ? 30 : 60), JSON.stringify(logBox));
         console.log('   ' + size + ': ' + (under ? 'row under' : 'beside') + ', field ' + input.w + ' px');
         check(name + 'the field keeps room to type (90 px at least)', input.w >= 90, input.w);
         check(name + 'the page does not scroll sideways', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth));
@@ -125,10 +126,12 @@ async function main() {
             check(name + 'the picker is inside the dock and the window, and above the field (nothing covers the field or Send)', pick.x >= 0 && pick.right <= w && pick.y >= 0 && pick.bottom <= inp.y + 1 && pick.bottom <= snd.y + snd.h && inp.bottom <= h && snd.bottom <= h && pick.right <= dock.right + 1 && pick.x >= dock.x - 1, JSON.stringify({ pick, inp, snd, dock }));
             check(name + 'the picker is not taller than 180 px and has a scroll of its own', pick.h <= 180 && (await page.evaluate(() => { const p = document.querySelector('.gt-pick'); return p.scrollHeight > p.clientHeight && getComputedStyle(p).overflowY === 'auto'; })));
         }
-        check(name + 'the focus is on an emoji in the picker', (await active(page)) === 'gt-e');
+        check(name + 'a press (mouse or finger) on the emoji button keeps the focus in the field (the phone\'s keyboard stays up)', (await active(page)) === 'gc-input');
         await shot(page, 'picker', size);
         await page.click('.gt-e >> nth=0');
         check(name + 'a pick goes in at the end of the field (the caret was there) and the picker stays', (await field(page)) === 'hi ' + GRIN && (await rect(page, '.gt-pick')) !== null);
+        check(name + 'a press on an emoji keeps the focus in the field too', (await active(page)) === 'gc-input');
+        await page.evaluate(() => document.querySelector('.gt-e[tabindex="0"]').focus());
         await page.keyboard.press('ArrowRight');
         check(name + 'the arrow key moves to the next emoji', (await active(page)) === 'gt-e' && (await page.evaluate(() => document.activeElement.textContent !== document.querySelector('.gt-e').textContent)));
         await page.keyboard.press('Escape');
@@ -170,6 +173,17 @@ async function main() {
         await page.keyboard.press('Enter');
         check(name + 'Enter on an emoji adds it (at the caret: after the "a")', (await field(page)).length === 3 && (await field(page)).startsWith('a'), JSON.stringify(await field(page)));
         await page.keyboard.press('Escape');
+
+        if (h < 500 && w > 700) check(name + 'a low window keeps the dock at its own height (no taller than 200 px) and the buttons beside the field', dockBox.h <= 200 && !under, JSON.stringify([dockBox, under]));
+        if (size === 'w900' || size === 'w1000') {
+            await page.click('#gchat .gc-fold');
+            await sleep(250);
+            const folded = await rect(page, '#gchat');
+            check(name + 'the fold works: the folded dock is as low as its header (80 px at most), not the height of the open one', !!folded && folded.h <= 80 && (await page.getAttribute('#gchat', 'data-open')) === 'false', JSON.stringify(folded));
+            await shot(page, 'folded', size);
+            await page.click('#gchat .gc-head');
+            await sleep(250);
+        }
 
         // Send
         await page.fill('.gc-input', 'ants ' + GRIN);

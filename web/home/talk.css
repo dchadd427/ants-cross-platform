@@ -3,7 +3,7 @@
 .gc-form.gt-on { position: relative; grid-template-columns: minmax(0, 1fr) auto auto; }
 .gt-tools { display: flex; gap: 6px; }
 .gt-tools[hidden], .gt-pick[hidden], .gt-say[hidden] { display: none; }
-.gt-btn { min-width: 48px; min-height: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; }
+.gt-btn { min-width: 48px; min-height: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .gt-ico { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .gt-ico .gt-eye { fill: currentColor; stroke: none; }
 .gt-hot .gt-cap { fill: currentColor; }
@@ -16,11 +16,11 @@
 .gt-e { min-width: 44px; min-height: 44px; padding: 0; font-size: 24px; line-height: 1; color: var(--cream); background: transparent; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
 .gt-e:hover { background: #1b2a34; }
 .gt-e:focus-visible, .gt-btn:focus-visible { outline: 3px solid var(--gold, #f6d058); outline-offset: 1px; }
-/* a narrow form (a phone, or the middle widths where the account line takes the rest of the row): the field and Send share the first row, the two buttons have the row under it */
-@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) {
+/* a narrow form (a phone, or the middle widths of a window that is not low, where the account line takes the rest of the row): the field and Send share the first row, the two buttons have the row under it */
+@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {
     .gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto; }
     .gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }
     .gt-on .gt-tools { order: 3; grid-column: 1 / -1; }
 }
-@media (min-width: 701px) and (max-width: 1000px) { .gc:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }       /* (the dock is taller by the row of the buttons, so that the log keeps its room) */
+@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) { .gc[data-open="true"]:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }       /* (the dock is taller by the row of the buttons, so that the log keeps its room) */
 @media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }

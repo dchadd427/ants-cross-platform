@@ -44,6 +44,10 @@
     // `text` into `value` between the caret's two ends: the new value and the caret after it, or null when the line would pass 200 code points
     function insert(value, from, to, text) {
         var a = typeof from === 'number' && from >= 0 && from <= value.length ? from : value.length, b = typeof to === 'number' && to >= a && to <= value.length ? to : a;
+        var held = a === b;
+        if (a > 0 && a < value.length && /[\udc00-\udfff]/.test(value.charAt(a)) && /[\ud800-\udbff]/.test(value.charAt(a - 1))) a--;       // (a caret between the two halves of a pair goes before it)
+        if (held) b = a;
+        else if (b < value.length && /[\udc00-\udfff]/.test(value.charAt(b)) && /[\ud800-\udbff]/.test(value.charAt(b - 1))) b++;
         var next = value.slice(0, a) + text + value.slice(b);
         return points(next) > LIMIT ? null : { value: next, caret: a + text.length };
     }
@@ -51,7 +55,8 @@
     function speak(before, said, after) {
         var t = String(said).replace(/[<>]/g, ' ').replace(/\s+/g, ' ').trim();
         if (!t) return { value: before + after, caret: before.length };
-        t = head(t, Math.max(0, LIMIT - points(before + after) - 2));
+        t = head(t, Math.max(0, LIMIT - points(before + after) - 2)).replace(/\s+$/, '');
+        if (!t) return { value: before + after, caret: before.length };       // (nothing of it fits: no spaces are added either)
         var lead = before && !/\s$/.test(before) ? ' ' : '', tail = after && !/^\s/.test(after) ? ' ' : '';
         return { value: before + lead + t + tail + after, caret: (before + lead + t).length };
     }
@@ -94,7 +99,7 @@
         if (send) form.insertBefore(tools, send); else form.appendChild(tools);
         form.className = String(form.className) + ' gt-on';
 
-        var open = false, run = null, at = 0, said = '';
+        var open = false, byPointer = false, run = null, at = 0, said = '';
         function note(text) { said = text; say.textContent = text; say.hidden = !text; }
         function sync() { tools.hidden = !!field.disabled; if (field.disabled || form.hidden) { drop(); close(false); } }
         function fit() {                                       // the picker lies over the log, above the form: no taller than the room above the form (72 to 180 px): up to the top of the dock's body where the dock clips what is outside it (a phone), else up to the window's top
@@ -107,7 +112,7 @@
         function toggle() {
             if (open) { close(true); return; }
             open = true; pick.hidden = false; emojiBtn.setAttribute('aria-expanded', 'true'); if (said === TEXT.full) note('');
-            fit(); rove(at);
+            fit(); if (byPointer) { at = Math.max(0, Math.min(keys.length - 1, at)); keys.forEach(function (b, k) { b.tabIndex = k === at ? 0 : -1; }); } else rove(at);
         }
         function choose(text) {
             var r = insert(field.value, field.selectionStart, field.selectionEnd, text);
@@ -128,6 +133,7 @@
             run = null; me.over = true;
             paint(me, me.error ? TEXT[ERR[me.error] || 'failed'] : me.full ? TEXT.full : (me.text.trim() ? '' : TEXT.nothing));
         }
+        function halted(me) { var held = dock.root && dock.root.closest && dock.root.closest('[inert]'); if (held && run === me) drop(); return !!held; }       // (the page is on its way to the game, or a question stands over it: nothing is written, and nothing listens)
         function listen() {
             if (run) { run.over = true; paint(run, ''); try { run.rec.stop(); } catch (e) { drop(); } return; }     // (a second press: what was heard so far stays, and the final words may still come)
             var v = field.value, a = typeof field.selectionStart === 'number' ? field.selectionStart : v.length, b = typeof field.selectionEnd === 'number' ? field.selectionEnd : a;
@@ -135,9 +141,9 @@
             try {
                 var rec = new Ctor();
                 rec.lang = (win.navigator && win.navigator.language) || 'en-US'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
-                rec.onstart = function () { if (run === me && !me.over) paint(me, TEXT.listening); };
+                rec.onstart = function () { if (halted(me)) return; if (run === me && !me.over) paint(me, TEXT.listening); };
                 rec.onresult = function (e) {
-                    if (run !== me) return;
+                    if (run !== me || halted(me)) return;
                     var t = '', rs = (e && e.results) || [];
                     for (var k = 0; k < rs.length; k++) if (rs[k] && rs[k][0] && typeof rs[k][0].transcript === 'string') t += rs[k][0].transcript + ' ';
                     me.text = t; draw(me);
@@ -149,9 +155,11 @@
                 rec.start();
             } catch (e) { if (run === me) run = null; me.over = true; paint(me, TEXT.failed); }
         }
-        emojiBtn.addEventListener('click', function () { toggle(); });
+        function hold(e) { byPointer = true; if (e && e.preventDefault) e.preventDefault(); }       // (a press with a mouse or a finger keeps the focus where it is: the phone's keyboard stays up, the field keeps its caret)
+        emojiBtn.addEventListener('pointerdown', hold);
+        emojiBtn.addEventListener('click', function () { toggle(); byPointer = false; });
         if (micBtn) micBtn.addEventListener('click', function () { if (open) close(false); listen(); });
-        keys.forEach(function (b, k) { b.addEventListener('click', function () { at = k; choose(b.textContent); }); });
+        keys.forEach(function (b, k) { b.addEventListener('pointerdown', function (e) { if (e && e.preventDefault) e.preventDefault(); }); b.addEventListener('click', function () { at = k; choose(b.textContent); }); });
         pick.addEventListener('keydown', function (e) {
             if (!e) return;
             var key = e.key, to = key === 'ArrowRight' || key === 'ArrowDown' ? at + 1 : key === 'ArrowLeft' || key === 'ArrowUp' ? at - 1 : key === 'Home' ? 0 : key === 'End' ? keys.length - 1 : -1;
