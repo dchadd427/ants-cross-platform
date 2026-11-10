@@ -2,11 +2,13 @@
 """The one-shot helper ants-results-init of docker-compose.stack.yml and docker-compose.server.yml (run by ./run_tests.sh and the CI; no docker needed).
 
 The game server runs as the user ants with a read-only root file system and no capabilities, so it cannot change the owner of its results volume. A volume that existed before the image gave
-/results to ants keeps its old owner (root) and /results/<room>.json cannot be written. The helper runs before every start of the server, as root with the one capability CHOWN, and gives the top
-folder /results the owner of the folder that the server made inside it. These tests read both files as text (the staging file has no helper and must not get one) and RUN the helper's command
-on scratch folders: the owner follows replays, restart, ants.db in that order; a new (empty) volume is left alone; no recursion; the exit status is 0 in every case.
+/results to ants keeps its old owner (root) and /results/<room>.json cannot be written. The helper runs before every start of the server, from the server's own image, as root with the one
+capability CHOWN, and gives the top folder /results to the user ants (`chown ants: /results`, never -R, under `timeout 20`). These tests read both files as text (the staging file has no helper
+and must not get one), check the raw command (a lone `$` would be filled in by Compose as an empty text: the shell variable of the script is written `$$`) and RUN the script on scratch folders
+(with the user nobody in the place of ants): a root-owned folder is handed over, an owner that is right is left alone, nothing below changes, the exit status is 0 in every case.
 Broken copies: tests/data/results_init_mutants.json (run with tools/mutate.py).
 """
+import json
 import os
 import re
 import shutil
@@ -32,11 +34,14 @@ def service(text, name):
     return "\n".join(l for l in lines[start:end] if not l.lstrip().startswith("#"))
 
 
+def raw_command(text):
+    """The `command: [...]` line of the helper as written in the file."""
+    return re.search(r'(?m)^    command: (\[.*\])\s*$', service(text, HELPER)).group(1)
+
+
 def script(text):
     """The shell script of the helper's command, as the shell gets it ($$ is $)."""
-    import json
-    m = re.search(r'(?m)^    command: (\[.*\])\s*$', service(text, HELPER))
-    return json.loads(m.group(1))[0].replace("$$", "$")
+    return json.loads(raw_command(text))[0].replace("$$", "$")
 
 
 class TheService(unittest.TestCase):
@@ -78,79 +83,97 @@ class TheService(unittest.TestCase):
 
     def test_the_server_waits_for_it_to_complete(self):
         for name in FILES:
-            s = service(read(name), "ants-server")
-            self.assertRegex(s, r"(?m)^    depends_on:\n      %s:\n        condition: service_completed_successfully$" % HELPER, name)
+            s = service(read(name), "ants-server") + "\n"
+            self.assertRegex(s, r"(?m)^    depends_on:\n      %s:\n        condition: service_completed_successfully\n(?!        )" % HELPER, name)         # (and nothing more under it: no `required: false`)
 
-    def test_it_uses_the_build_of_the_server_so_that_a_new_volume_is_filled_from_the_image(self):
+    def test_it_uses_the_build_of_the_server_so_that_the_user_exists_and_a_new_volume_is_filled_from_the_image(self):
         for name in FILES:
             text = read(name)
             self.assertIn("    build: &server-build\n", text, name)
             self.assertRegex(service(text, HELPER), r"(?m)^    build: \*server-build$", name)
             self.assertNotIn("image: debian", service(text, HELPER), name)
 
-    def test_the_script_never_recurses_and_always_exits_zero(self):
+    def test_the_server_image_makes_the_user_ants_and_gives_it_the_results_folder(self):
+        self.assertRegex(read("Dockerfile.server"), r"useradd --system [^\n]* ants && \\\n\s+mkdir -p /maps /results && chown ants /results")
+
+    def test_the_command_has_no_lone_dollar_for_compose_to_fill_in(self):
+        for name in FILES:
+            raw = raw_command(read(name))
+            self.assertEqual(re.findall(r"(?<!\$)\$(?!\$)", raw), [], name)         # (a single $ is replaced by Compose with an empty text: the script would then do nothing and still exit 0)
+            self.assertEqual(raw.count("$$"), 1, name)
+            self.assertEqual(raw.count("$$(stat -c %U /results)"), 1, name)
+
+    def test_the_script_hands_the_top_folder_to_ants_never_recurses_and_always_exits_zero(self):
         for name in FILES:
             sh = script(read(name))
             self.assertNotRegex(sh, r"chown\s+(-\w*R|--recursive)", name)
             self.assertNotIn("-R", sh, name)
+            self.assertNotIn("--reference", sh, name)
             self.assertNotIn("chmod", sh, name)
-            self.assertNotIn("rm ", sh, name)
+            self.assertNotRegex(sh, r"\brm\b", name)
             self.assertEqual(sh.count("chown"), 1, name)
-            self.assertTrue(sh.rstrip().endswith("exit 0"), name)
-            self.assertEqual(sh.count("exit "), 2, name)
-            self.assertEqual(len(re.findall(r"exit (?!0)", sh)), 0, name)
-            self.assertIn("for d in replays restart ants.db;", sh, name)
-            self.assertIn("chown --reference=/results/$d /results", sh, name)
+            self.assertIn("timeout 20 chown ants: /results &&", sh, name)
+            self.assertIn('[ "$(stat -c %U /results)" = ants ]', sh, name)
+            self.assertTrue(sh.rstrip().endswith("; fi; exit 0"), name)
+            self.assertEqual(sh.count("exit "), 1, name)
         self.assertEqual(script(read(FILES[0])), script(read(FILES[1])))
 
 
-@unittest.skipUnless(shutil.which("sh") and shutil.which("chown"), "needs sh and chown")
+ROOT = hasattr(os, "geteuid") and os.geteuid() == 0
+
+
+@unittest.skipUnless(shutil.which("sh") and shutil.which("chown") and shutil.which("timeout") and shutil.which("stat"), "needs sh, chown, timeout and stat")
 class TheScriptRuns(unittest.TestCase):
-    def run_script(self, results):
-        sh = script(read(FILES[0])).replace("/results", results)
-        return subprocess.run(["sh", "-c", sh], capture_output=True, text=True, timeout=30)
+    USER = "nobody"            # (stands in for ants, which only the image has)
 
-    def test_a_new_empty_volume_is_left_alone_and_the_exit_is_zero(self):
-        with tempfile.TemporaryDirectory() as d:
-            before = os.stat(d)
-            r = self.run_script(d)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertIn("nothing to do", r.stdout)
-            self.assertEqual(len(r.stdout.strip().splitlines()), 1)
-            self.assertEqual((os.stat(d).st_uid, os.stat(d).st_gid), (before.st_uid, before.st_gid))
-            self.assertEqual(os.listdir(d), [])
+    def run_script(self, results, user=None):
+        sh = script(read(FILES[0])).replace("/results", results).replace("= ants ]", "= %s ]" % (user or self.USER)).replace("chown ants:", "chown %s:" % (user or self.USER))
+        return subprocess.run(["sh", "-c", sh], capture_output=True, text=True, timeout=60)
 
-    def test_a_missing_folder_does_not_fail(self):
+    def test_a_missing_folder_does_not_fail_and_says_so_in_one_line(self):
         r = self.run_script("/nonexistent-results-folder")
         self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("could not change", r.stdout)
+        self.assertEqual(len(r.stdout.strip().splitlines()), 1)
 
-    @unittest.skipUnless(hasattr(os, "geteuid") and os.geteuid() == 0, "changing an owner needs root")
-    def test_the_top_folder_follows_the_first_folder_that_exists_and_nothing_below_changes(self):
-        for present, order in ((["replays"], "replays"), (["restart"], "restart"), (["ants.db"], "ants.db"), (["restart", "ants.db"], "restart")):
-            with tempfile.TemporaryDirectory() as d:
-                for i, name in enumerate(present):
-                    p = os.path.join(d, name)
-                    os.mkdir(p) if name != "ants.db" else open(p, "w").close()
-                    os.chown(p, 1234 + i, 4321 + i)
-                inner = os.path.join(d, "restart" if "restart" in present else "x")
-                if "restart" in present:
-                    open(os.path.join(inner, "file"), "w").close()
-                    os.chown(os.path.join(inner, "file"), 0, 0)
-                r = self.run_script(d)
-                self.assertEqual(r.returncode, 0, r.stderr)
-                ref = os.stat(os.path.join(d, order))
-                self.assertEqual((os.stat(d).st_uid, os.stat(d).st_gid), (ref.st_uid, ref.st_gid), present)
-                if "restart" in present:
-                    self.assertEqual(os.stat(os.path.join(inner, "file")).st_uid, 0)
-                self.assertEqual(len(r.stdout.strip().splitlines()), 1)
-
-    @unittest.skipUnless(hasattr(os, "geteuid") and os.geteuid() == 0, "changing an owner needs root")
-    def test_a_folder_that_belongs_to_root_keeps_root(self):
+    @unittest.skipUnless(ROOT, "changing an owner needs root")
+    def test_a_root_folder_is_handed_over_and_nothing_below_it_changes(self):
+        import pwd
+        uid = pwd.getpwnam(self.USER).pw_uid
         with tempfile.TemporaryDirectory() as d:
-            os.mkdir(os.path.join(d, "replays"))
-            os.chown(d, 1234, 4321)
+            os.mkdir(os.path.join(d, "restart"))
+            f = os.path.join(d, "restart", "file")
+            open(f, "w").close()
+            os.chown(os.path.join(d, "restart"), 0, 0)
+            os.chown(f, 0, 0)
             r = self.run_script(d)
             self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(os.stat(d).st_uid, uid)
+            self.assertEqual((os.stat(os.path.join(d, "restart")).st_uid, os.stat(f).st_uid), (0, 0))
+            self.assertEqual(r.stdout.strip().splitlines(), ["ants-results-init: %s now belongs to ants" % d])
+            again = self.run_script(d)                                                    # (the next start: nothing to do)
+            self.assertEqual(again.returncode, 0, again.stderr)
+            self.assertIn("already belongs to ants", again.stdout)
+            self.assertEqual(os.stat(d).st_uid, uid)
+
+    @unittest.skipUnless(ROOT, "changing an owner needs root")
+    def test_a_new_empty_volume_that_belongs_to_ants_is_left_alone(self):
+        import pwd
+        pw = pwd.getpwnam(self.USER)
+        with tempfile.TemporaryDirectory() as d:
+            os.chown(d, pw.pw_uid, pw.pw_gid)
+            r = self.run_script(d)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(len(r.stdout.strip().splitlines()), 1)
+            self.assertIn("nothing to do", r.stdout)
+            self.assertEqual(os.listdir(d), [])
+
+    @unittest.skipUnless(ROOT, "changing an owner needs root")
+    def test_a_chown_that_fails_says_so_and_still_exits_zero(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = self.run_script(d, user="no-such-user-here")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("could not change", r.stdout)
             self.assertEqual(os.stat(d).st_uid, 0)
 
 
