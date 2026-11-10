@@ -3,6 +3,7 @@
 #include "ants_ai/bot_names.hpp"
 
 #include "ants_net/clock.hpp"
+#include "ants_net/person_name.hpp"
 #include "ants_server/secret.hpp"
 
 #include <algorithm>
@@ -51,6 +52,7 @@ static net::HostLobby::Config lobby_config(const RoomSpec& spec) {
     cfg.reserve_ms = spec.reserve_ms;
     cfg.unique_names = spec.verified_names;                          // (a server that checks names: the people of a room have names of their own, and a seat keeps the name it was given)
     cfg.fixed_names = spec.verified_names;
+    cfg.guest_chat = spec.verified_names;                            // (and a person whose name was not checked, a guest, has the tighter chat of kGuestChatRate: in the waiting room here, in the match through build_session)
     // A room that holds seats gives every player a key (128 random bits of the operating system's generator: ants_net never reads it itself, the library is built for the web too).
     // A room that does not has none: its Welcomes carry the zero key and a Hello with a key is just a Hello.
     if (spec.reconnect) cfg.make_key = [](net::SeatKey& key) { return random_bytes(key.data(), key.size()); };
@@ -211,12 +213,12 @@ bool Room::rejoin(std::unique_ptr<net::Connection>& connection, const net::Hello
     return true;
 }
 
-bool Room::add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms, bool created) {
+bool Room::add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms, bool created, bool unverified) {
     if (connection == nullptr || state_ != RoomState::Waiting) return false;
     if (connections_.size() >= spec_.max_connections) prune_connections();
     if (connections_.size() >= spec_.max_connections) return false;
     connections_.push_back(std::move(connection));
-    lobby_.add_connection(connections_.back().get(), now_ms, address, hello, created);
+    lobby_.add_connection(connections_.back().get(), now_ms, address, hello, created, unverified);
     if (spec_.lobby) arrived_ = true;                            // (the manager must not take this room's place for another before the room has read the Hello)
     return true;
 }
@@ -292,7 +294,7 @@ bool Room::start_bots(uint32_t seed, std::string& why) {
 }
 
 // The session of the match, as a match that starts and a match that is restored both make it: a host without a seat that holds seats when the room says so
-void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms) {
+void Room::build_session(uint32_t restart_vote_after_ms, uint8_t guest_seats, uint32_t start_delay_ms) {
     net::HostSession::Config hc;
     hc.host_player = net::kNoSeat;
     hc.start_delay_ms = start_delay_ms;                           // protocol 12: the first turn is sealed when the "Get ready to play!" dialog of every machine has had its 5 s (session.hpp); protocol 21: or the countdown of a room with two or more people
@@ -300,6 +302,7 @@ void Room::build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms
     // the lag policy of a host without a seat, session.hpp)
     // A room that holds seats pauses the match for a player whose connection is lost (and whose key it knows) instead of dropping it: the vote, the cap and the log are the room's settings
     hc.hold_seats = spec_.reconnect;
+    hc.guest_seats = spec_.verified_names ? guest_seats : uint8_t{0};      // (the guests' chat rate: only on a server that checks names)
     hc.attendance.vote_after_ms = spec_.vote_after_ms;
     hc.attendance.restart_vote_after_ms = std::max(restart_vote_after_ms, spec_.vote_after_ms);      // (after a restart: never less than a lost link's time)
     hc.attendance.max_pause_ms = spec_.max_pause_ms;
@@ -375,7 +378,11 @@ void Room::begin_match(uint32_t now_ms) {
     sim::apply_start_teams(*sim_, start_teams_);                 // the teams of the Start, before the first tick: what every machine does with the same message (after the names: the News Flash names the players)
     started_ms_ = now_ms;                                        // (run_ms counts from here: the wait before the first turn counts, the 5 s dialog or the countdown of protocol 21; the match's pauses do not)
     last_person_ms_ = now_ms;
-    build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs, begin_delay_ms_);
+    uint8_t guest_seats = 0;                                     // the seats whose person the door did not check: the lobby's own flag of each seat
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if (lobby_.unverified(seat)) guest_seats = static_cast<uint8_t>(guest_seats | (1u << seat));
+    }
+    build_session(restart_store_ != nullptr ? restart_store_->config().restart_vote_after_ms : net::kRestartVoteAfterMs, guest_seats, begin_delay_ms_);
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         if (net::Connection* c = lobby_.connection_of(seat)) session_->add_client(seat, c);
         if (lobby_.room().slots[seat].state == net::SlotState::Bot) session_->add_bot_seat(seat);       // a computer player: no connection, acknowledged by the server itself
@@ -968,7 +975,11 @@ Room::ReplayBegin Room::begin_replay(const RestartLoaded& rec, uint32_t restart_
     }
     start_teams_ = start.teams();
     sim::apply_start_teams(*sim_, start_teams_);                 // the same teams as the match that was played (the record's Start has them): the replay starts from the same state
-    build_session(restart_vote_after_ms);
+    uint8_t guest_seats = 0;                                     // a record has no flag of the door: a restored match knows its guests from their names (a room that keeps seats gives every guest a name of the guest form, and no checked name has it)
+    for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
+        if ((start.roster & (1u << seat)) != 0 && (bot_mask & (1u << seat)) == 0 && net::is_guest_name(start.names[seat])) guest_seats = static_cast<uint8_t>(guest_seats | (1u << seat));
+    }
+    build_session(restart_vote_after_ms, guest_seats);
     std::array<net::SeatKey, sim::MAX_PLAYERS> keys{};
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) keys[seat] = h.keys[seat];
     session_->set_seat_keys(keys);

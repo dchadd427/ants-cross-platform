@@ -326,7 +326,10 @@
     // and about 1.5 s for a name, a removal or a line; a longer hold-up can still lose a request (then the screen follows the room). tests/scripts/web_lobby_client_check.js replays the page's requests of every kind
     // through the server's own bucket (it reads the limits from flood.hpp) with delays of 0 to 150 ms on every request and a hold-up of 333 or 1400 ms on one; tests/scripts/web_lobby_server_check.js sends them
     // through a link that jitters by 150 ms to the real server.
+    // A guest's chat (a server that checks names takes 3 lines at once, then 20 a minute): the same margin under it, while the page's own name (this.name: the seat's, as the room shows it) has the guest form.
     var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], visibility: [2, 0.8], chat: [4, 0.8] };
+    var GUEST_CHAT = [2, 0.3];
+    var GUEST_NAME = /^Guest [1-9][0-9]{5}( \([0-9]+\))?$/;
     function LobbyClient(opts) {
         this.url = opts.url;
         this.code = opts.code;
@@ -550,7 +553,8 @@
     LobbyClient.prototype.guardNow = function () { return this.room === null ? 0 : seatingHash(this.room); };
     // The page's pace (a margin under the server's, see BUDGETS): a request is allowed while the budget of its kind (thousandths of a request, as the server counts) has one; it is spent when the request was written, not before
     LobbyClient.prototype.canSpend = function (kind) {
-        var burst = BUDGETS[kind][0], perSecond = BUDGETS[kind][1];
+        var pace = kind === 'chat' && GUEST_NAME.test(this.name) ? GUEST_CHAT : BUDGETS[kind];
+        var burst = pace[0], perSecond = pace[1];
         var now = this.now();
         var b = this.budgets[kind];
         if (b === undefined) b = this.budgets[kind] = { tokens: burst * 1000, at: now };

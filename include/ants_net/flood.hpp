@@ -78,6 +78,23 @@ inline constexpr uint32_t kChatBurst = 5;
 inline constexpr uint32_t kChatPerSecond = 1;
 inline constexpr uint32_t kChatExcessBurst = 20;
 
+/// The chat of a guest in a room of a server that checks names (HostLobby::Config::guest_chat, the match's HostSession::Config::guest_seats): a person whose name was not checked says a line less at once and
+/// slower. A burst of kGuestChatBurst lines, then kGuestChatPerMinute a minute (one every three seconds), and kGuestChatExcessBurst lines beyond that are tolerated before each one is a violation; the rules are
+/// those of kChatBurst above, only the numbers differ (the excess refills at the same per-minute rate). Everybody else keeps the numbers above, and so does every room that does not check names.
+inline constexpr uint32_t kGuestChatBurst = 3;
+inline constexpr uint32_t kGuestChatPerMinute = 20;
+inline constexpr uint32_t kGuestChatExcessBurst = 10;
+
+/// A rate of chat lines: a burst, a refill in lines a MINUTE, and the excess that is tolerated beyond the budget (ChatBudget::take). kChatRate is the logged-in one (the same numbers as kChatBurst, kChatPerSecond and
+/// kChatExcessBurst), kGuestChatRate the guest's.
+struct ChatRate {
+    uint32_t burst;
+    uint32_t per_minute;
+    uint32_t excess_burst;
+};
+inline constexpr ChatRate kChatRate{kChatBurst, kChatPerSecond * 60u, kChatExcessBurst};
+inline constexpr ChatRate kGuestChatRate{kGuestChatBurst, kGuestChatPerMinute, kGuestChatExcessBurst};
+
 /// A token bucket for the messages of one connection. The clock is the host's millisecond clock, 32 bits wide, which wraps: only differences of it are used. The bucket is
 /// full when the first message comes.
 class MessageBudget {
@@ -97,8 +114,25 @@ public:
         return true;
     }
 
+    /// The same bucket for a rate that is no whole number a second: `per_minute` messages a minute. Tokens are counted in sixty-thousandths here, so that a refill of a millisecond is exact (20 a minute
+    /// is one message in exactly 3000 ms). A bucket is used with ONE of the two calls, never both.
+    bool take_per_minute(uint32_t now_ms, uint32_t burst, uint32_t per_minute) noexcept {
+        constexpr uint64_t kOne = 60000u;
+        const uint64_t capacity = uint64_t{burst} * kOne;
+        if (!primed_) {
+            primed_ = true;
+            thousandths_ = capacity;
+        } else {
+            thousandths_ = std::min<uint64_t>(capacity, thousandths_ + uint64_t{now_ms - last_ms_} * per_minute);
+        }
+        last_ms_ = now_ms;
+        if (thousandths_ < kOne) return false;
+        thousandths_ -= kOne;
+        return true;
+    }
+
 private:
-    uint64_t thousandths_{0};
+    uint64_t thousandths_{0};                // (sixty-thousandths of a message after take_per_minute)
     uint32_t last_ms_{0};
     bool primed_{false};
 };
@@ -111,6 +145,11 @@ public:
     Verdict take(uint32_t now_ms, uint32_t burst = kChatBurst, uint32_t per_second = kChatPerSecond, uint32_t excess_burst = kChatExcessBurst) noexcept {
         if (lines_.take(now_ms, burst, per_second)) return Verdict::Relay;
         return excess_.take(now_ms, excess_burst, per_second) ? Verdict::Drop : Verdict::Offence;
+    }
+    /// The same for a rate in lines a minute (a guest's chat): one bucket for the lines, one for the excess, which refills at the same rate.
+    Verdict take(uint32_t now_ms, const ChatRate& rate) noexcept {
+        if (lines_.take_per_minute(now_ms, rate.burst, rate.per_minute)) return Verdict::Relay;
+        return excess_.take_per_minute(now_ms, rate.excess_burst, rate.per_minute) ? Verdict::Drop : Verdict::Offence;
     }
 
 private:

@@ -585,4 +585,95 @@ void run_name_ticket_tests() {
         ASSERT_TRUE(slowest_ms < 50.0);
         ASSERT_EQ(check.counts().good, honest);
     } TEST_END();
+
+    TEST_CASE("S3.276 Guest Chat Through The Door: A Person Without A Good Pass Has 3 Lines At Once In The Waiting Room And In The Running Match, A Checked Person 5; A Second Equal Guest Name Of A Server Without Reconnect (Guest N (2), No Guest Form) Is Still A Guest; With The Check Off Everybody Has 5") {
+        const std::string secret = throwaway_secret(76);
+        uint64_t unix_now = 1700000000ull;
+        // lines that a client says at once on its link, and how many of them the room relayed back to the sender (each one hears its own lines)
+        const auto burst = [](Client& c, int n) {
+            for (int i = 0; i < n; ++i) c.end->send(net::encode(net::ChatMsg{0, false, "line " + std::to_string(i)}));
+        };
+        const auto heard_own = [](const Client& c) {
+            size_t n = 0;
+            for (const net::ChatLine& l : c.room_chat) n += !l.notice() && l.seat == c.lobby->my_seat() ? 1u : 0u;
+            return n;
+        };
+        const auto heard_own_match = [](const Client& c) {
+            size_t n = 0;
+            for (const net::ChatMsg& l : c.chats) n += l.sender == c.lobby->my_seat() ? 1u : 0u;
+            return n;
+        };
+        {   // the waiting room
+            World w(gate_limits());
+            w.mgr.set_name_secret(secret);
+            w.mgr.set_unix_clock([&unix_now]() { return unix_now; });
+            w.next_token = make_pass(secret, 1, static_cast<uint32_t>(unix_now + 600), 1, "Ann");
+            Client& a = w.connect_page("Ann", "gc000001", lobby_block_of());
+            w.next_token.clear();
+            Client& g = w.connect_page("Guest 424242", "gc000001", lobby_block_of());
+            w.run(300);
+            ASSERT_TRUE(a.lobby->phase() == net::ClientLobby::Phase::InRoom && g.lobby->phase() == net::ClientLobby::Phase::InRoom);
+            ASSERT_TRUE(seat_name(a) == "Ann" && seat_name(g) == "Guest 424242");
+            burst(a, 9);
+            burst(g, 9);
+            w.run(500);
+            ASSERT_EQ(heard_own(a), size_t{5});
+            ASSERT_EQ(heard_own(g), size_t{3});
+        }
+        {   // a server without reconnect: the second equal guest name has no guest form and is a guest all the same
+            World w(gate_limits());
+            w.mgr.set_name_secret(secret);
+            w.mgr.set_unix_clock([&unix_now]() { return unix_now; });
+            RoomSpec spec = spec_of("GC-2", 4);
+            spec.verified_names = true;
+            spec.reconnect = false;                                                          // (a room that holds no seats gives no keys: the lobby cannot draw another guest number)
+            ASSERT_TRUE(w.mgr.create_room(spec, w.now).ok);
+            Client& g1 = w.connect("Guest 424242", "GC-2");
+            Client& g2 = w.connect("Guest 424242", "GC-2");
+            w.run(300);
+            ASSERT_MSG(g1.lobby->phase() == net::ClientLobby::Phase::InRoom && g2.lobby->phase() == net::ClientLobby::Phase::InRoom, std::to_string(static_cast<int>(g1.lobby->phase())) + "," + std::to_string(static_cast<int>(g2.lobby->phase())));
+            ASSERT_EQ(seat_name(g1), std::string("Guest 424242"));
+            ASSERT_EQ(seat_name(g2), std::string("Guest 424242 (2)"));
+            ASSERT_FALSE(is_guest_name(seat_name(g2)));
+            burst(g1, 9);
+            burst(g2, 9);
+            w.run(500);
+            ASSERT_EQ(heard_own(g1), size_t{3});
+            ASSERT_EQ(heard_own(g2), size_t{3});
+        }
+        {   // the check off: nobody is a guest for the chat
+            World w(gate_limits(false));
+            Client& g = w.connect_page("Guest 424242", "gc000003", lobby_block_of());
+            Client& o = w.connect_page("Ann", "gc000003", lobby_block_of());
+            w.run(300);
+            burst(g, 9);
+            burst(o, 9);
+            w.run(500);
+            ASSERT_EQ(heard_own(g), size_t{5});
+            ASSERT_EQ(heard_own(o), size_t{5});
+        }
+        {   // the running match: the room gives the seat's flag to the session
+            World m(gate_limits());
+            m.mgr.set_name_secret(secret);
+            m.mgr.set_unix_clock([&unix_now]() { return unix_now; });
+            m.next_token = make_pass(secret, 1, static_cast<uint32_t>(unix_now + 600), 1, "Ann");
+            Client& a = m.connect_page("Ann", "gc000004", lobby_block_of());
+            m.next_token.clear();
+            Client& g = m.connect_page("Guest 424242", "gc000004", lobby_block_of());
+            m.run(200);
+            const net::SeatKey ka = a.lobby->key();
+            const net::SeatKey kg = g.lobby->key();
+            ASSERT_TRUE(a.lobby->request_start());
+            m.run(300);
+            Client& ga = m.connect_game("Ann", "gc000004", ka);
+            Client& gg = m.connect_game("Guest 424242", "gc000004", kg);
+            m.run(4000);
+            ASSERT_TRUE(m.status("gc000004").state == RoomState::Running);
+            burst(ga, 9);
+            burst(gg, 9);
+            m.run(500);
+            ASSERT_EQ(heard_own_match(ga), size_t{5});
+            ASSERT_EQ(heard_own_match(gg), size_t{3});
+        }
+    } TEST_END();
 }

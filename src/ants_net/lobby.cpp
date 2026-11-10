@@ -200,9 +200,9 @@ void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const st
     if (connection != nullptr) pending_.push_back(Pending{connection, now_ms, address});
 }
 
-void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message, bool created) {
+void HostLobby::add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message, bool created, bool unverified) {
     if (connection == nullptr) return;
-    Pending p{connection, now_ms, address};
+    Pending p{connection, now_ms, address, unverified};
     bool consumed = false;
     handle_hello(p, hello_message, now_ms, consumed, created);
 }
@@ -534,6 +534,7 @@ void HostLobby::handle_hello(Pending& p, const std::vector<uint8_t>& msg, uint32
     guests_[seat].join_order = ++joins_;
     guests_[seat].key = key;
     guests_[seat].kind = hello.client_kind;
+    guests_[seat].unverified = p.unverified;
     guests_[seat].heard_ms = now_ms;
     guests_[seat].forgive_at_ms = now_ms + cfg_.forgive_ms;
     room_.slots[seat].state = SlotState::Client;
@@ -715,7 +716,8 @@ void HostLobby::handle_guest_message(uint8_t seat, const std::vector<uint8_t>& m
             if (!decode(msg, m)) return violation(seat);                  // the match's rules: at most kMaxChatChars printable characters, a flag that is 0 or 1
             if (m.text.empty()) return;                                   // (an empty line says nothing; it cost a message of the budget, like every other)
             // The chat budget (a remake protection, the original has none): a line within it is relayed to everybody; one beyond it is dropped, and a connection that keeps on beyond it is flooding
-            switch (guests_[seat].chat.take(now_ms)) {
+            const bool guest = cfg_.guest_chat && guests_[seat].unverified;      // (the seat's own flag, set at the door: not the form of its name)
+            switch (guest ? guests_[seat].chat.take(now_ms, kGuestChatRate) : guests_[seat].chat.take(now_ms)) {
                 case ChatBudget::Verdict::Relay: relay_chat(seat, m.text); break;
                 case ChatBudget::Verdict::Drop: break;
                 case ChatBudget::Verdict::Offence: violation(seat); break;
@@ -929,7 +931,7 @@ Rematch HostLobby::rematch() const {
         if (room_.slots[s].state != SlotState::Client || key_is_zero(guests_[s].key)) continue;
         const uint8_t platform = room_.slots[s].platform;                                // (what the game that took the seat over said in its Hello: a page's game says kPlatformBrowser)
         if (platform != kPlatformUnknown && (platform & kPlatformBrowser) == 0) continue;   // (a game of the desktop or a phone's app cannot press "Back to the lobby": no seat waits for it)
-        r.people.push_back(Rematch::Person{s, room_.slots[s].name, guests_[s].key, guests_[s].join_order, platform});
+        r.people.push_back(Rematch::Person{s, room_.slots[s].name, guests_[s].key, guests_[s].join_order, platform, guests_[s].unverified});
     }
     return r;
 }
@@ -962,6 +964,7 @@ bool HostLobby::reopen(const Rematch& r, uint32_t now_ms) {
         g.join_order = p.order;
         g.reserved = true;
         g.reserved_since_ms = now_ms;
+        g.unverified = p.unverified;
         g.heard_ms = now_ms;
         g.forgive_at_ms = now_ms + cfg_.forgive_ms;
         room_.slots[p.seat].state = SlotState::Client;

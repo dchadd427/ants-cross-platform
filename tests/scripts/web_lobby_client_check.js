@@ -1313,6 +1313,138 @@ const exactMoments = (kind) => {
     }
 }
 
+// ---- a guest's chat (include/ants_net/flood.hpp kGuestChatBurst / kGuestChatPerMinute: a server that checks names limits a person whose name was not checked to 3 lines at once, then 20 a minute) -----------------------
+// The page that goes by a guest name (the seat's name in the Room message, with or without the " (2)" of a second equal one) keeps a margin under THAT bucket: 2 at once, then one every 3334 ms (0.3 a second against
+// the server's 0.333); any other name has the logged-in pace above.
+const GUEST_FLOOD = (() => {
+    let text = '';
+    try { text = fs.readFileSync(path.resolve(__dirname, '..', '..', 'include', 'ants_net', 'flood.hpp'), 'utf8'); } catch (e) { /* the check below says so */ }
+    const number = (name) => { const m = new RegExp('inline constexpr uint32_t ' + name + ' = ([0-9]+);').exec(text); return m ? +m[1] : NaN; };
+    return { burst: number('kGuestChatBurst'), perMinute: number('kGuestChatPerMinute') };
+})();
+check('the guest limits of the server can be read from include/ants_net/flood.hpp (3 at once, 20 a minute)', GUEST_FLOOD.burst === 3 && GUEST_FLOOD.perMinute === 20, JSON.stringify(GUEST_FLOOD));
+// how many lines the server's guest bucket drops (MessageBudget::take_per_minute: sixty-thousandths of a line, a full bucket at the first line, a line that finds less than a whole one is dropped and still sets the clock)
+const guestDrops = (moments, delays) => {
+    const one = 60000, cap = GUEST_FLOOD.burst * one;
+    let tokens = cap, last = null, dropped = 0, before = -Infinity;
+    for (let i = 0; i < moments.length; i++) {
+        const at = Math.max(before, moments[i] + delays[i]);
+        before = at;
+        if (last !== null) tokens = Math.min(cap, tokens + (at - last) * GUEST_FLOOD.perMinute);
+        last = at;
+        if (tokens < one) dropped++; else tokens -= one;
+    }
+    return dropped;
+};
+const guestMemo = {};
+const guestMoments = (spans, name) => {            // the moments at which a page called `name` asks for a line at every millisecond of the spans
+    const memo = (name || '') + JSON.stringify(spans);
+    if (guestMemo[memo]) return guestMemo[memo];
+    const x = world();
+    const d = client(x, { silenceMs: 0 });
+    online(x, d, [[C, name || 'Guest 123456'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+    const moments = [];
+    for (let ms = 0; ms < spans[spans.length - 1][1]; ms++) {
+        if (spans.some((s) => ms >= s[0] && ms < s[1])) for (let k = 0; k < 20 && d.say('line ' + moments.length); k++) moments.push(ms);
+        if (moments.length >= 400) break;
+        x.advance(1);
+    }
+    guestMemo[memo] = moments;
+    return moments;
+};
+{
+    const guestPage = (name, seat, seats) => { const x = world(); const d = client(x, { name: 'Priya', silenceMs: 0 }); online(x, d, seats || [[C, name], [C, 'Sam'], [E, ''], [E, '']], { you: seat || 0, leader: 0 }); return { x, d }; };
+    {   // the burst and the pace
+        const { x, d } = guestPage('Guest 123456');
+        const sent = () => x.last().sent.length - 1;
+        check('a guest page says 2 lines at once (the server takes 3: one in reserve)', d.say('1') === true && d.say('2') === true && sent() === 2);
+        check('... the third at once is refused and sends nothing', d.say('3') === false && sent() === 2);
+        x.advance(3333);
+        check('3333 ms later there is no line yet (0.3 a second: 3334 ms, where the server asks for 3000)', d.say('4') === false);
+        x.advance(1);
+        check('3334 ms after the burst one line goes, and only one', d.say('5') === true && d.say('6') === false && sent() === 3);
+        x.advance(3332);
+        check('and the next is 3333 ms after that (3333.3 on the average: the clock counts whole milliseconds)', d.say('7') === false && (x.advance(1), d.say('8') === true) && sent() === 4);
+        x.advance(60000);
+        check('a minute later the burst is whole again (2 lines, then the pace)', d.say('a') && d.say('b') && !d.say('c'));
+    }
+    {   // which names are a guest's
+        const burstOf = (name, seat, seats) => { const { d } = guestPage(name, seat, seats); let n = 0; while (n < 10 && d.say('x' + n)) n++; return n; };
+        check('a name of the guest form has the guest pace (2 at once)', burstOf('Guest 123456') === 2 && burstOf('Guest 999999') === 2 && burstOf('Guest 100000') === 2);
+        check('a second equal guest name of a room (" (2)", " (13)") too', burstOf('Guest 123456 (2)') === 2 && burstOf('Guest 123456 (13)') === 2);
+        check('a name that is no guest name has the logged-in pace (4 at once)', burstOf('Priya') === 4 && burstOf('Guest 012345') === 4 && burstOf('Guest 12345') === 4 && burstOf('Guest 1234567') === 4 && burstOf('guest 123456') === 4 && burstOf('Guest 123456 x') === 4);
+        check('it is the name of the page\'s own SEAT that counts (the room may have changed the name it sent)', burstOf('Ann', 1, [[C, 'Guest 123456'], [C, 'Ann'], [E, ''], [E, '']]) === 4 && burstOf('Guest 654321', 1, [[C, 'Ann'], [C, 'Guest 654321'], [E, ''], [E, '']]) === 2);
+        {   // a page whose Hello names a guest and whose seat has another name goes by the seat; the Hello's name is only for before the room (nothing is said then)
+            const x = world();
+            const d = client(x, { name: 'Guest 123456' });
+            online(x, d, [[C, 'Ann'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+            let n = 0;
+            while (n < 10 && d.say('y' + n)) n++;
+            check('a page whose Hello said a guest name but whose seat is "Ann" has the logged-in pace', n === 4);
+        }
+        {   // the room renames the seat while the page talks: the bucket is the same one (a guest who becomes another name keeps what it has used)
+            const x = world();
+            const d = client(x, { name: 'Priya' });
+            online(x, d, [[C, 'Guest 123456'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 });
+            d.say('1'); d.say('2');
+            x.last().receive(room([[C, 'Ann'], [C, 'Sam'], [E, ''], [E, '']], { you: 0, leader: 0 }));
+            check('(a rename of the seat keeps the one bucket: the line after the 2 of the guest pace is still refused at once)', d.say('3') === false);
+        }
+    }
+    {   // other kinds of request are untouched by the guest name
+        const { x, d } = guestPage('Guest 123456');
+        const said = (f) => { let n = 0; while (n < 12 && f(n)) n++; return n; };
+        check('a guest page keeps the logged-in pace for a color move (5 at once, the 6th refused: the guest pace of a line would stop it at 2)', said(() => d.move(1, 2)) === 5);
+        const r = guestPage('Guest 123456');
+        check('... for a name (2 at once, then the same again after 1250 ms and not before: the guest pace of a line asks 3334)', said((n) => r.d.rename('N' + n)) === 2 && (r.x.advance(1249), !r.d.rename('A')) && (r.x.advance(1), r.d.rename('B')) && !r.d.rename('C'));
+        const q = guestPage('Guest 123456');
+        check('... for a removal and the public switch (2 at once, one more after 1250 ms)', said(() => q.d.remove(1)) === 2 && (q.x.advance(1250), q.d.remove(1)) && said(() => q.d.setPublic(true)) === 2 && (q.x.advance(1250), q.d.setPublic(true)));
+    }
+    {   // the margin, replayed through the SERVER's guest bucket, every line late by 0 or the jitter in every combination, and fresh random runs
+        const asking = { 'a guest page that asks every millisecond for 60 s': [[0, 60000]],
+                         'a guest page that pastes in three runs (4 s, 8 s of quiet, 5 s, 30 s of quiet, 6 s)': [[0, 4000], [12000, 17000], [47000, 53000]],
+                         'a guest page that talks after 10 s of quiet': [[10000, 40000]] };
+        for (const name of Object.keys(asking)) {
+            const moments = guestMoments(asking[name]);
+            check(name + ': ' + moments.length + ' lines, the first two at once', moments.length >= 8 && moments[1] === moments[0] && moments[2] !== moments[0]);
+            for (const jitter of [0, 50, 100, 150, 300]) {
+                let max = 0;
+                const n = Math.min(14, moments.length);
+                for (let bits = 0; bits < (jitter === 0 ? 1 : 1 << n); bits++) {
+                    const delays = moments.map((_, i) => (i < n ? ((bits >> i) & 1) * jitter : 0));
+                    max = Math.max(max, guestDrops(moments, delays));
+                }
+                check(name + ', each of the first ' + n + ' lines late by 0 or ' + jitter + ' ms: the server drops none', max === 0, max + ' dropped');
+            }
+        }
+        const steady = guestMoments([[0, 60000]]);
+        check('once the burst is used, a guest page says a line every 3333 or 3334 ms (3333.3 on the average), no sooner (the margin: 333 ms of the server\'s 3000)', steady.slice(2).every((t, i, all) => i === 0 || (t - all[i - 1] >= 3333 && t - all[i - 1] <= 3334)), steady.slice(2, 8).join());
+        // the replay can tell: a page that kept to the server's own guest bucket loses a line to a delay of a few ms
+        const exactGuest = []; { let tokens = 3 * 60000, last = 0; for (let ms = 0; ms < 60000; ms++) { tokens = Math.min(3 * 60000, tokens + (ms - last) * 20); last = ms; if (tokens >= 60000) { tokens -= 60000; exactGuest.push(ms); } } }
+        check('(the replay can tell: lines at exactly the server\'s own guest rate are dropped when one is 15 ms late and the next on time)', (() => { let max = 0; for (let bits = 0; bits < (1 << 12); bits++) max = Math.max(max, guestDrops(exactGuest, exactGuest.map((_, i) => (i < 12 ? ((bits >> i) & 1) * 15 : 0)))); return max > 0; })());
+        for (const name of Object.keys(asking)) {   // one line held up while the ones after it come on time (a slow link): the margin takes 3000 ms, about what the page's 0.3 a second keeps in hand
+            const moments = guestMoments(asking[name]);
+            let worstHold = 0;
+            for (let which = 0; which < Math.min(12, moments.length); which++) worstHold = Math.max(worstHold, guestDrops(moments, moments.map((_, i) => (i === which ? 3000 : 0))));
+            check(name + ', one line held up by 3000 ms (each of the first 12 in turn, the others on time): the server drops none', worstHold === 0, worstHold + ' dropped');
+        }
+        // fresh runs: seeded random spans and random delays of 0 to 300 ms on every line, 40 runs of up to 400 lines
+        let state = 987654321, bad = 0, lines = 0, runs = 0;
+        const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+        for (let k = 0; k < 40; k++) {
+            const spans = []; let at = Math.floor(random() * 8000);
+            for (let j = 0; j < 1 + Math.floor(random() * 4); j++) { const len = 500 + Math.floor(random() * 12000); spans.push([at, at + len]); at += len + Math.floor(random() * 20000); }
+            const moments = guestMoments(spans, k % 2 === 0 ? 'Guest 123456' : 'Guest 123456 (2)');
+            for (let tries = 0; tries < 60; tries++) {
+                const ends = tries % 2 === 0;
+                const delays = moments.map(() => (ends ? (random() < 0.5 ? 0 : 300) : Math.floor(random() * 301)));
+                bad += guestDrops(moments, delays); lines += moments.length; runs++;
+            }
+        }
+        check('fresh random runs (40 span sets, 2400 delay draws, ' + lines + ' lines): the server\'s guest bucket drops none', bad === 0 && runs === 2400, bad + ' dropped');
+    }
+}
+
 {   // EVERY kind of request keeps a margin under the server's bucket of its kind (docs/NETWORK_PORT.md, "Flood control"): a burst one smaller and a pace of 0.8 of the server's rate. The page asks as fast as it may
     // and the requests are replayed through the server's own bucket with every combination of 0 and 50 / 100 / 150 ms of delay: the server may drop none. The chat has its own block above (the same numbers
     // are in this one, so that the six kinds are held to one rule); a request that the page refuses is the page's word (false, nothing sent), a request that the server drops is nobody's.

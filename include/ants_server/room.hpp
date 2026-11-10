@@ -429,7 +429,8 @@ public:
     /// A client of this room: its first message (the Hello, already checked by the caller) goes to the lobby, which answers it. On success the room owns the
     /// connection (the pointer is moved from); on false (the room takes no more connections) the caller still holds it and rejects it.
     /// `created`: this very Hello made the room (the Welcome of its new seat says so, protocol 16)
-    bool add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms, bool created = false);
+    /// `unverified`: the door did not check the person's name (a guest, NameGate::name_for): the new seat is a guest's, which the chat limits of a server that checks names go by
+    bool add_connection(std::unique_ptr<net::Connection>& connection, const std::string& address, const std::vector<uint8_t>& hello, uint32_t now_ms, bool created = false, bool unverified = false);
     /// A Hello with a key reaches a match that runs (the door: RoomManager) when the room holds seats and the match runs: the session decides (HostSession::accept_rejoin). True: the room
     /// owns the connection (the session points at it until it has been replaced). False: the room takes nothing; the session has answered with a Reject and closed the connection, which the
     /// caller keeps until the answer has arrived. A room that keeps max_connections connections that are all in use answers Full (it never keeps more).
@@ -478,7 +479,7 @@ private:
     std::string replay_keep(replay::Recorder& recorder);     // the part of replay_end that makes the file and sets replay_file_ or replay_note_: the file's name, "" when the match is not kept
     void live_end(const std::string& kept_file);             // takes the recording off the live board (the file's name, "" when it was not kept); the board holds a pointer to the recorder
     bool finish_replay(const RestartLoaded& rec, size_t next_check, std::string& why);      // every turn was given: the last checks, and what begin_restored() needs
-    void build_session(uint32_t restart_vote_after_ms, uint32_t start_delay_ms = net::kMatchStartDelayMs);      // the session of the match, as begin_match and restore both make it (the engine is made already); `start_delay_ms`: how long the first turn is held (the 5 s dialog, or the countdown of protocol 21)
+    void build_session(uint32_t restart_vote_after_ms, uint8_t guest_seats, uint32_t start_delay_ms = net::kMatchStartDelayMs);      // the session of the match, as begin_match and restore both make it (the engine is made already); `start_delay_ms`: how long the first turn is held (the 5 s dialog, or the countdown of protocol 21)
     // Bots (docs/SERVER.md, "Bots fill the empty seats, and chat in the waiting room"): the specification's are seated in the lobby when the room is made; the leader's fill seats the rest at START and takes them out again when the start is cancelled
     class BotSink;
     void unseat_fill();
