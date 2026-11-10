@@ -331,7 +331,8 @@ void HostSession::handle_message(uint8_t player, const std::vector<uint8_t>& msg
             if (!decode(msg, m)) return violation(player);
             m.sender = player;                       // the connection speaks, not the payload
             // The chat budget (flood.hpp; a remake protection, the original has no limit on chat): a line beyond it is dropped, and a client that keeps on beyond it is flooding
-            const ChatBudget::Verdict verdict = clients_[player].chat.take(last_ms_);
+            const bool guest = player < sim::MAX_PLAYERS && ((cfg_.guest_seats >> player) & 1u) != 0;
+            const ChatBudget::Verdict verdict = guest ? clients_[player].chat.take(last_ms_, kGuestChatRate) : clients_[player].chat.take(last_ms_);
             if (verdict == ChatBudget::Verdict::Offence) return violation(player);
             if (verdict == ChatBudget::Verdict::Drop) return;
             relay_chat(m);

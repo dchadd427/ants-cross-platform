@@ -326,7 +326,11 @@
     // and about 1.5 s for a name, a removal or a line; a longer hold-up can still lose a request (then the screen follows the room). tests/scripts/web_lobby_client_check.js replays the page's requests of every kind
     // through the server's own bucket (it reads the limits from flood.hpp) with delays of 0 to 150 ms on every request and a hold-up of 333 or 1400 ms on one; tests/scripts/web_lobby_server_check.js sends them
     // through a link that jitters by 150 ms to the real server.
-    var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], visibility: [2, 0.8], chat: [4, 0.8] };
+    // A guest's chat (a server that checks names limits a person whose name was not checked to a burst of 3, then 20 lines a minute: kGuestChatRate) has its own entry, the same margin under it: a burst of 2 (one in
+    // reserve) and a line every 3.33 s (0.3 a second, where the server refills 0.333). It is used while the page's own name has the guest form (the seat's name in the Room message, else the name of the Hello), with or
+    // without the " (2)" that a room adds to a second equal one; a person who is logged in and goes by such a name only says a little less than the server would take.
+    var BUDGETS = { move: [5, 3.2], plan: [5, 3.2], rename: [2, 0.8], remove: [2, 0.8], visibility: [2, 0.8], chat: [4, 0.8], guestChat: [2, 0.3] };
+    var GUEST_NAME = /^Guest [1-9][0-9]{5}( \([0-9]+\))?$/;
     function LobbyClient(opts) {
         this.url = opts.url;
         this.code = opts.code;
@@ -548,9 +552,14 @@
     LobbyClient.prototype.canAct = function () { return this.status === 'online' && this.room !== null && this.room.lobby; };
     // The guard of the room as it is shown now (the Room message last heard), 0 before there is one: what the page keeps while the leader decides, and passes to move and remove
     LobbyClient.prototype.guardNow = function () { return this.room === null ? 0 : seatingHash(this.room); };
+    LobbyClient.prototype.isGuest = function () {
+        var r = this.room, own = r !== null && this.seat >= 0 && this.seat < r.slots.length ? r.slots[this.seat].name : this.name;
+        return GUEST_NAME.test(own);
+    };
     // The page's pace (a margin under the server's, see BUDGETS): a request is allowed while the budget of its kind (thousandths of a request, as the server counts) has one; it is spent when the request was written, not before
     LobbyClient.prototype.canSpend = function (kind) {
-        var burst = BUDGETS[kind][0], perSecond = BUDGETS[kind][1];
+        var pace = kind === 'chat' && this.isGuest() ? BUDGETS.guestChat : BUDGETS[kind];      // (one bucket for the chat: a guest's pace is only another burst and rate for it)
+        var burst = pace[0], perSecond = pace[1];
         var now = this.now();
         var b = this.budgets[kind];
         if (b === undefined) b = this.budgets[kind] = { tokens: burst * 1000, at: now };

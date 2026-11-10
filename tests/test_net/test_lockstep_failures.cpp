@@ -1127,10 +1127,11 @@ struct TeamChatRig {
     uint8_t players;
     bool lan;
 
-    TeamChatRig(bool lan_, uint8_t players_, uint8_t raw_mask) : net(77), players(players_), lan(lan_) {
+    TeamChatRig(bool lan_, uint8_t players_, uint8_t raw_mask, uint8_t guest_seats = 0) : net(77), players(players_), lan(lan_) {
         ids = build_world(host_engine, 1);
         HostSession::Config hc;
         hc.host_player = lan ? uint8_t{0} : kNoSeat;
+        hc.guest_seats = guest_seats;
         host = std::make_unique<HostSession>(host_engine, hc);
         sims.resize(players);
         taps.resize(players);
@@ -1405,6 +1406,67 @@ void run_team_chat_tests() {
             ASSERT_EQ(m.heard[1].size(), size_t{20});
             ASSERT_EQ(m.heard[2].size(), size_t{20});
             ASSERT_EQ(m.host_heard.size(), size_t{20});
+        }
+    } TEST_END();
+
+    TEST_CASE("N2.93g The Match's Chat Of A Guest (HostSession::Config guest_seats, A Server That Checks Names): A Burst Of 3 Lines, Then One Every 3 s, 10 Of Excess; The Other Seats Keep 5 And One A Second; With No Seat Marked Everybody Keeps 5; A Guest Who Types A Line A Second Is Thrown Out At The Line The Model Says (54); A Line Every 3.1 s Is Always Heard") {
+        const auto heard_from = [](const TeamChatRig& m, size_t listener, uint8_t sender) {
+            size_t n = 0;
+            for (const ChatMsg& c : m.heard[listener]) n += c.sender == sender ? 1 : 0;
+            return n;
+        };
+        {   // seat 0 is a guest, seat 1 is not, seat 2 is a guest
+            TeamChatRig m(false, 3, 0, 0x05);
+            for (int i = 0; i < 8; ++i) {
+                ASSERT_TRUE(m.say(0, "g " + std::to_string(i), false));
+                ASSERT_TRUE(m.say(1, "p " + std::to_string(i), false));
+                ASSERT_TRUE(m.say(2, "h " + std::to_string(i), false));
+            }
+            m.step(400);
+            ASSERT_EQ(heard_from(m, 1, 0), size_t{kGuestChatBurst});
+            ASSERT_EQ(heard_from(m, 1, 1), size_t{kChatBurst});
+            ASSERT_EQ(heard_from(m, 1, 2), size_t{kGuestChatBurst});
+            ASSERT_EQ(m.host_heard.size(), size_t{kGuestChatBurst + kChatBurst + kGuestChatBurst});     // (the referee's callback hears what was relayed)
+            ASSERT_TRUE(m.host->violations(0) == 0u && m.host->violations(1) == 0u && m.host->client_present(0));
+            // the fourth line was handled in the step above: another line goes 3 s after it, not 2.9 s
+            m.step(2500);
+            ASSERT_TRUE(m.say(0, "too soon", false) && m.say(1, "p late", false));
+            m.step(400);
+            ASSERT_EQ(heard_from(m, 1, 0), size_t{kGuestChatBurst});                     // 2.9 s after the burst: no
+            ASSERT_EQ(heard_from(m, 1, 1), size_t{kChatBurst + 1});                      // (a person who is not a guest has had a line a second all this time)
+            m.step(300);
+            ASSERT_TRUE(m.say(0, "now", false));
+            m.step(400);
+            ASSERT_EQ(heard_from(m, 1, 0), size_t{kGuestChatBurst + 1});                 // 3.2 s after it
+        }
+        {   // nobody marked: the old budget for everybody
+            TeamChatRig m(false, 3, 0, 0);
+            for (int i = 0; i < 8; ++i) ASSERT_TRUE(m.say(0, "g " + std::to_string(i), false));
+            m.step(400);
+            ASSERT_EQ(heard_from(m, 1, 0), size_t{kChatBurst});
+        }
+        {   // a guest who types a line every second: the line that throws them out is the model's (the excess of 10 is refilled a line every 3 s)
+            TeamChatRig m(false, 3, 0, 0x01);
+            size_t sent = 0;
+            while (m.host->client_present(0) && sent < 400) {
+                ASSERT_TRUE(m.say(0, "a second " + std::to_string(sent), false));
+                ASSERT_TRUE(m.say(1, "p " + std::to_string(sent), false));
+                ++sent;
+                m.step(1000);
+            }
+            ASSERT_EQ(sent, size_t{54});
+            ASSERT_EQ(heard_from(m, 2, 0), size_t{20});                                  // relayed: 3 at once and one line each 3 s while the offences came
+            ASSERT_TRUE(m.host->client_present(1) && m.host->client_present(2));
+            ASSERT_EQ(heard_from(m, 2, 1), size_t{54});                                  // (a line a second is the other seats' own rate: all heard)
+        }
+        {   // an honest guest: a line every 3.1 s, all heard
+            TeamChatRig m(false, 3, 0, 0x02);
+            for (int i = 0; i < 60; ++i) {
+                ASSERT_TRUE(m.say(1, "slow " + std::to_string(i), false));
+                m.step(3100);
+            }
+            ASSERT_EQ(heard_from(m, 0, 1), size_t{60});
+            ASSERT_TRUE(m.host->client_present(1) && m.host->violations(1) == 0u);
         }
     } TEST_END();
 }

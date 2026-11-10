@@ -106,8 +106,10 @@ NameTicketCheck::Result NameTicketCheck::judge(const std::string& token, const s
 NameGate::NameGate(std::string secret, std::function<bool(uint8_t*, size_t)> source)
     : check_(std::move(secret)), source_(source ? std::move(source) : std::function<bool(uint8_t*, size_t)>([](uint8_t* out, size_t n) { return random_bytes(out, n); })) {}
 
-std::string NameGate::name_for(const std::string& token, const std::string& name, uint64_t now_unix) {
+std::string NameGate::name_for(const std::string& token, const std::string& name, uint64_t now_unix, bool* guest) {
+    if (guest != nullptr) *guest = false;
     if (check_.check(token, name, now_unix) == NameTicketCheck::Result::Good) return name;
+    if (guest != nullptr) *guest = true;
     ++guests_named_;
     if (is_guest_name(name)) return name;
     std::string drawn = draw_guest_name(source_);

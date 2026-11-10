@@ -151,6 +151,7 @@ public:
         uint32_t message_burst{kMessageBurst};                  // flood control (flood.hpp): the messages that one client may send, a token bucket; a message beyond it is not
         uint32_t messages_per_second{kMessagesPerSecond};       // handled and is a violation
         // Reconnect (see above). Off: today's rules, exactly (a lost connection is a drop at once).
+        uint8_t guest_seats{0};                                 // a server that checks names: the seats (bit n = seat n) whose person was not checked, a guest: their chat has the rate of kGuestChatRate (flood.hpp); 0 = nobody
         bool hold_seats{false};                                 // a lost connection holds the seat and pauses the match (it needs the seat's key: set_seat_keys) instead of dropping it
         uint32_t silence_ms{kLostSilenceMs};                    // hold_seats: nothing at all from a client for this long = its connection is lost (without hold_seats it is silence_timeout_ms and a drop)
         Attendance::Config attendance{};                        // the vote after 30 s away, the catch-up stall of 20 s, the least an absence counts, the cap on the pause (30 minutes)

@@ -594,13 +594,14 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
     // With verified names a Hello for a NEW seat (no key, or a key that no seat of the room holds) is seated under its checked name, and its token is not passed on: the room gets the Hello
     // as the door re-wrote it. A key that fits a seat is a person who comes back: the seat keeps its name and the token is not looked at.
     std::vector<uint8_t> checked;
+    bool unverified = false;                                       // (the room is told which seats the door did not check: its chat limits go by that flag)
     if (good && name_gate_ != nullptr && !room->takes_over(hello.key)) {
         net::HelloMsg named = hello;
-        named.name = name_gate_->name_for(hello.token, hello.name, unix_clock_());
+        named.name = name_gate_->name_for(hello.token, hello.name, unix_clock_(), &unverified);
         named.token.clear();
         checked = net::encode(named);
     }
-    if (good && room->add_connection(connection, address, checked.empty() ? message : checked, now_ms, made_here)) return;        // the room owns it now
+    if (good && room->add_connection(connection, address, checked.empty() ? message : checked, now_ms, made_here, unverified)) return;        // the room owns it now
     reject(std::move(connection), good ? net::RejectReason::Full : reason, now_ms);
 }
 

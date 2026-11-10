@@ -103,6 +103,7 @@ struct Rematch {
         SeatKey key{};
         uint32_t order{0};
         uint8_t platform{0};
+        bool unverified{false};                  // the person was a guest (the door did not check the name): the seat that waits for them is a guest's too
     };
     std::string map_name;
     std::array<PlanKind, sim::MAX_PLAYERS> plan{};
@@ -195,6 +196,9 @@ public:
         /// as an ignored one (ignored_names(), the free allowance and then a violation each).
         bool unique_names{false};
         bool fixed_names{false};
+        /// A server that checks its names sets this too: the chat of a person whose name was NOT checked (add_connection's `unverified`: a guest) is limited more tightly (kGuestChatRate in flood.hpp: a burst
+        /// of 3, then 20 a minute). Everybody else, and every room that does not set it, has the budget of kChatBurst. The seat's own flag decides, not the form of its name.
+        bool guest_chat{false};
     };
     enum class Phase : uint8_t { Room, Loading, Begun };
     struct Event {
@@ -244,7 +248,8 @@ public:
     void add_connection(Connection* connection, uint32_t now_ms, const std::string& address = std::string());
     /// The same for a connection whose first message (its Hello) was read already: a server reads it to find the room by its code, then hands both over. `created`: this very Hello made the room (the
     /// server's door made it for the Hello): the Welcome of a new seat says so (kWelcomeCreated, protocol 16; it needs a key).
-    void add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message, bool created = false);
+    /// `unverified`: the server's door did not check the name of this Hello (the person plays as a guest): the new seat keeps the flag for as long as the seat exists (it moves with the seat and comes back with a rematch).
+    void add_connection(Connection* connection, uint32_t now_ms, const std::string& address, const std::vector<uint8_t>& hello_message, bool created = false, bool unverified = false);
     void update(uint32_t now_ms);
 
     Phase phase() const noexcept { return phase_; }
@@ -306,6 +311,8 @@ public:
     /// The key that the guest of a seat was given with its Welcome: all zero for a seat without a guest (the host's own, a bot's, an empty one), for a lobby without a key maker, and for a guest
     /// that the maker gave none. Stays what it was after Begun (the session of the match is given the keys of the seats from here).
     SeatKey key_of(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS ? guests_[seat].key : SeatKey{}; }
+    /// True when the door did not check the name of the person in `seat` (add_connection's `unverified`: a guest); false for an empty seat, a bot and the host
+    bool unverified(uint8_t seat) const noexcept { return seat < sim::MAX_PLAYERS && room_.slots[seat].state == SlotState::Client && guests_[seat].unverified; }
     /// How many times a connection took a seat over with its key (the old one was closed)
     uint32_t takeovers() const noexcept { return takeovers_; }
 
@@ -419,6 +426,7 @@ private:
         uint32_t forgive_at_ms{0};               // a lobby room: when one violation and one ignored request of each kind are forgiven next
         bool reserved{false};                    // a lobby room that was opened again after its match: the seat waits for its person of the match (see (7) above), since reserved_since_ms
         uint32_t reserved_since_ms{0};
+        bool unverified{false};                  // the door did not check this person's name (a guest): with Config::guest_chat its chat has the guest's rate
     };
     struct Starting {                            // the leader's START of a lobby room, while it waits for every person's game
         bool active{false};
@@ -429,6 +437,7 @@ private:
         Connection* conn;
         uint32_t since_ms;
         std::string address;
+        bool unverified{false};                  // (add_connection's flag, for the seat that this Hello takes)
     };
     void broadcast_room();
     void broadcast(const std::vector<uint8_t>& msg);

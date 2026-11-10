@@ -87,8 +87,9 @@ class NameGate {
 public:
     explicit NameGate(std::string secret, std::function<bool(uint8_t*, size_t)> source = nullptr);
 
-    /// The name for a new seat (see above); counts what happened
-    std::string name_for(const std::string& token, const std::string& name, uint64_t now_unix);
+    /// The name for a new seat (see above); counts what happened. `guest` (when given) is set to whether the name was NOT checked: the seat is a guest's, whatever its name looks like
+    /// (a second equal guest name of a room without keys is "Guest 123456 (2)": no guest form, still a guest)
+    std::string name_for(const std::string& token, const std::string& name, uint64_t now_unix, bool* guest = nullptr);
 
     NameTicketCheck& check() noexcept { return check_; }
     const NameTicketCheck& check() const noexcept { return check_; }

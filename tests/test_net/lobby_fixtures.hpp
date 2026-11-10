@@ -338,3 +338,4 @@ void run_lobby_rooms_tests();
 void run_lobby_rematch_tests();
 void run_lobby_public_tests();
 void run_lobby_names_tests();
+void run_lobby_guest_chat_tests();
