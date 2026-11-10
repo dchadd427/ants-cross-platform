@@ -1,0 +1,278 @@
+{
+ "note": "Mutants of the one-shot helper ants-results-init (docker-compose.stack.yml and docker-compose.server.yml) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and tests/scripts/test_results_init.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/results_init_mutants.json --keep-going --jobs 1",
+ "defaults": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_results_init"
+ },
+ "mutants": [
+  {
+   "id": "stack_single_dollar",
+   "file": "docker-compose.stack.yml",
+   "old": "$$(stat",
+   "new": "$(stat"
+  },
+  {
+   "id": "stack_chown_recursive",
+   "file": "docker-compose.stack.yml",
+   "old": "timeout 20 chown ants: /results &&",
+   "new": "timeout 20 chown -R ants: /results &&"
+  },
+  {
+   "id": "stack_chown_to_a_wrong_user",
+   "file": "docker-compose.stack.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown nobody: /results &&"
+  },
+  {
+   "id": "stack_chown_to_root",
+   "file": "docker-compose.stack.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown root: /results &&"
+  },
+  {
+   "id": "stack_group_missing",
+   "file": "docker-compose.stack.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown ants /results &&"
+  },
+  {
+   "id": "stack_reference_logic_back",
+   "file": "docker-compose.stack.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown --reference=/results/replays /results &&"
+  },
+  {
+   "id": "stack_no_timeout",
+   "file": "docker-compose.stack.yml",
+   "old": "else timeout 20 chown",
+   "new": "else chown"
+  },
+  {
+   "id": "stack_check_for_the_wrong_user",
+   "file": "docker-compose.stack.yml",
+   "old": "= ants ]",
+   "new": "= root ]"
+  },
+  {
+   "id": "stack_final_exit_is_not_zero",
+   "file": "docker-compose.stack.yml",
+   "old": "; fi; exit 0\"]",
+   "new": "; fi; exit 1\"]"
+  },
+  {
+   "id": "stack_exit_on_failure",
+   "file": "docker-compose.stack.yml",
+   "old": "left as it is\\\"; fi",
+   "new": "left as it is\\\"; exit 1; fi"
+  },
+  {
+   "id": "stack_server_does_not_wait",
+   "file": "docker-compose.stack.yml",
+   "old": "    depends_on:\n      ants-results-init:\n        condition: service_completed_successfully\n",
+   "new": ""
+  },
+  {
+   "id": "stack_server_waits_only_for_start",
+   "file": "docker-compose.stack.yml",
+   "old": "condition: service_completed_successfully",
+   "new": "condition: service_started"
+  },
+  {
+   "id": "stack_server_wait_is_optional",
+   "file": "docker-compose.stack.yml",
+   "old": "        condition: service_completed_successfully\n",
+   "new": "        condition: service_completed_successfully\n        required: false\n"
+  },
+  {
+   "id": "stack_helper_keeps_all_capabilities",
+   "file": "docker-compose.stack.yml",
+   "old": "    cap_drop: [ALL]\n    cap_add: [CHOWN]\n",
+   "new": "    cap_add: [CHOWN]\n"
+  },
+  {
+   "id": "stack_helper_may_add_more_capabilities",
+   "file": "docker-compose.stack.yml",
+   "old": "cap_add: [CHOWN]",
+   "new": "cap_add: [CHOWN, DAC_OVERRIDE]"
+  },
+  {
+   "id": "stack_helper_restarts",
+   "file": "docker-compose.stack.yml",
+   "old": "    restart: \"no\"\n    user: \"0\"",
+   "new": "    restart: unless-stopped\n    user: \"0\""
+  },
+  {
+   "id": "stack_helper_has_network",
+   "file": "docker-compose.stack.yml",
+   "old": "    network_mode: none\n",
+   "new": ""
+  },
+  {
+   "id": "stack_helper_writable_root",
+   "file": "docker-compose.stack.yml",
+   "old": "    read_only: true\n    cap_drop: [ALL]\n    cap_add",
+   "new": "    cap_drop: [ALL]\n    cap_add"
+  },
+  {
+   "id": "stack_helper_can_gain_privileges",
+   "file": "docker-compose.stack.yml",
+   "old": "    security_opt: [\"no-new-privileges:true\"]\n    pids_limit: 16",
+   "new": "    pids_limit: 16"
+  },
+  {
+   "id": "stack_helper_has_a_port",
+   "file": "docker-compose.stack.yml",
+   "old": "    network_mode: none\n",
+   "new": "    network_mode: none\n    ports:\n      - \"4999:4999\"\n"
+  },
+  {
+   "id": "stack_helper_uses_a_base_image",
+   "file": "docker-compose.stack.yml",
+   "old": "    build: *server-build\n",
+   "new": "    image: debian:12-slim\n"
+  },
+  {
+   "id": "stack_server_runs_as_root",
+   "file": "docker-compose.stack.yml",
+   "old": "    depends_on:\n",
+   "new": "    user: \"0\"\n    depends_on:\n"
+  },
+  {
+   "id": "server_single_dollar",
+   "file": "docker-compose.server.yml",
+   "old": "$$(stat",
+   "new": "$(stat"
+  },
+  {
+   "id": "server_chown_recursive",
+   "file": "docker-compose.server.yml",
+   "old": "timeout 20 chown ants: /results &&",
+   "new": "timeout 20 chown -R ants: /results &&"
+  },
+  {
+   "id": "server_chown_to_a_wrong_user",
+   "file": "docker-compose.server.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown nobody: /results &&"
+  },
+  {
+   "id": "server_chown_to_root",
+   "file": "docker-compose.server.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown root: /results &&"
+  },
+  {
+   "id": "server_group_missing",
+   "file": "docker-compose.server.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown ants /results &&"
+  },
+  {
+   "id": "server_reference_logic_back",
+   "file": "docker-compose.server.yml",
+   "old": "chown ants: /results &&",
+   "new": "chown --reference=/results/replays /results &&"
+  },
+  {
+   "id": "server_no_timeout",
+   "file": "docker-compose.server.yml",
+   "old": "else timeout 20 chown",
+   "new": "else chown"
+  },
+  {
+   "id": "server_check_for_the_wrong_user",
+   "file": "docker-compose.server.yml",
+   "old": "= ants ]",
+   "new": "= root ]"
+  },
+  {
+   "id": "server_final_exit_is_not_zero",
+   "file": "docker-compose.server.yml",
+   "old": "; fi; exit 0\"]",
+   "new": "; fi; exit 1\"]"
+  },
+  {
+   "id": "server_exit_on_failure",
+   "file": "docker-compose.server.yml",
+   "old": "left as it is\\\"; fi",
+   "new": "left as it is\\\"; exit 1; fi"
+  },
+  {
+   "id": "server_server_does_not_wait",
+   "file": "docker-compose.server.yml",
+   "old": "    depends_on:\n      ants-results-init:\n        condition: service_completed_successfully\n",
+   "new": ""
+  },
+  {
+   "id": "server_server_waits_only_for_start",
+   "file": "docker-compose.server.yml",
+   "old": "condition: service_completed_successfully",
+   "new": "condition: service_started"
+  },
+  {
+   "id": "server_server_wait_is_optional",
+   "file": "docker-compose.server.yml",
+   "old": "        condition: service_completed_successfully\n",
+   "new": "        condition: service_completed_successfully\n        required: false\n"
+  },
+  {
+   "id": "server_helper_keeps_all_capabilities",
+   "file": "docker-compose.server.yml",
+   "old": "    cap_drop: [ALL]\n    cap_add: [CHOWN]\n",
+   "new": "    cap_add: [CHOWN]\n"
+  },
+  {
+   "id": "server_helper_may_add_more_capabilities",
+   "file": "docker-compose.server.yml",
+   "old": "cap_add: [CHOWN]",
+   "new": "cap_add: [CHOWN, DAC_OVERRIDE]"
+  },
+  {
+   "id": "server_helper_restarts",
+   "file": "docker-compose.server.yml",
+   "old": "    restart: \"no\"\n    user: \"0\"",
+   "new": "    restart: unless-stopped\n    user: \"0\""
+  },
+  {
+   "id": "server_helper_has_network",
+   "file": "docker-compose.server.yml",
+   "old": "    network_mode: none\n",
+   "new": ""
+  },
+  {
+   "id": "server_helper_writable_root",
+   "file": "docker-compose.server.yml",
+   "old": "    read_only: true\n    cap_drop: [ALL]\n    cap_add",
+   "new": "    cap_drop: [ALL]\n    cap_add"
+  },
+  {
+   "id": "server_helper_can_gain_privileges",
+   "file": "docker-compose.server.yml",
+   "old": "    security_opt: [\"no-new-privileges:true\"]\n    pids_limit: 16",
+   "new": "    pids_limit: 16"
+  },
+  {
+   "id": "server_helper_has_a_port",
+   "file": "docker-compose.server.yml",
+   "old": "    network_mode: none\n",
+   "new": "    network_mode: none\n    ports:\n      - \"4999:4999\"\n"
+  },
+  {
+   "id": "server_helper_uses_a_base_image",
+   "file": "docker-compose.server.yml",
+   "old": "    build: *server-build\n",
+   "new": "    image: debian:12-slim\n"
+  },
+  {
+   "id": "server_server_runs_as_root",
+   "file": "docker-compose.server.yml",
+   "old": "    depends_on:\n",
+   "new": "    user: \"0\"\n    depends_on:\n"
+  },
+  {
+   "id": "staging_gets_the_helper",
+   "file": "docker-compose.staging.yml",
+   "old": "  ants-hub:\n",
+   "new": "  ants-results-init:\n    restart: \"no\"\n\n  ants-hub:\n"
+  }
+ ]
+}
