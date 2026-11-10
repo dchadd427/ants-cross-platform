@@ -1141,11 +1141,11 @@ class TheBacklogIsPurgedInChunks(RigTest):
 
     def setUp(self):
         self.rig = hub_rig.Rig(**self.rig_args)
-        old = storemod.Store(self.rig.db, clock=lambda: time.time() - 8 * 86400)        # (the backlog is there before the hub starts: a hub that purged while the lines were still being
+        old = storemod.Store(self.rig.db, clock=lambda: time.time() - 8 * 86400, max_lines=10 ** 9)        # (the backlog is there before the hub starts: a hub that purged while the lines were still being
         for n in range(350):                                                             # written, on a slow disk, would see a short backlog and rest for an hour)
             old.add_line("1", "ann", "old line %d" % n, False)
         old.close()
-        fresh = storemod.Store(self.rig.db)
+        fresh = storemod.Store(self.rig.db, max_lines=10 ** 9)
         fresh.add_line("1", "ann", "fresh line", False)
         fresh.close()
         self.rig.__enter__()

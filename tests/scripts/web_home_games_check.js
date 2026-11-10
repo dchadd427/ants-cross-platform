@@ -85,7 +85,7 @@ const LIBRARY = /^\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2F|5C|00)[0-9A-F]{2})(
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const site = fakeSite();
-    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch, label: 'staging' });
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, fakeClock: true, lazy: true, fetch: site.fetch, popover: true });
     check('before the page has painted, nothing of the list is asked for: no script, no style, no look at /lobbies', env.lazyLoads.filter((f) => /games/.test(f)).length === 0 && site.calls.length === 0);
     check('... Quick host, Quick join and Games are drawn and disabled (nothing on the bar is a button that does nothing)', ['host', 'join', 'games'].every((c) => env.home(c).disabled === true && env.home(c).getAttribute('aria-disabled') === 'true'));
     env.advance(0);
@@ -316,7 +316,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     site.body = listOf([]);
     await wait(env, 5000);
     check('no rows at all: "none waiting", the empty state with Host one!, the count 0', first(popOf(env), 'gpcount').textContent === 'none waiting' && first(popOf(env), 'gempty').hidden === false && first(popOf(env), 'glist').hidden === true && pillOf(env).textContent === '0');
-    check('... the empty state says it and offers Host one!', textOf(first(popOf(env), 'gempty')).indexOf('No open games right now.') !== -1 && textOf(first(popOf(env), 'gempty')).indexOf('Rooms show up here when their host switches them to Public.') !== -1 && first(first(popOf(env), 'gempty'), 'ghostbtn').textContent === 'Host one!');
+    check('... the empty state says it and offers Quick host and Quick join', textOf(first(popOf(env), 'gempty')).indexOf('No open games right now.') !== -1 && textOf(first(popOf(env), 'gempty')).indexOf('Rooms show up here when their host switches them to Public.') !== -1 && find(first(popOf(env), 'gempty'), 'ghostbtn').map((b) => b.textContent).join() === 'Quick host,Quick join');
 }
 {   // the count: 50 rows are "50+"
     const site = fakeSite();
@@ -421,16 +421,16 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 9. A site with no label (production): the list is the page under the bar, docked in the Yard, always there; the test site (the label "staging") keeps the popover (sections 3 to 8 run it)
+// 9. Home docks the list in its body (#hmain), always there, as the games panel; the popover (sections 3 to 8 run it, mounted with no dock) is what the list does where it is given none
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const site = fakeSite();
     site.body = listOf([row('p4n8dz', 'Pebble', { people: 1, free: 3, age: 10 }), row('c1v3rr', 'Clover', { people: 2, bots: 1, free: 1, age: 200 }), row('j7n1pr', 'Juniper', { free: 2, age: 120 })]);
-    const env = await page({ site, options: { label: '' } });
+    const env = await page({ site, options: { popover: false } });
     const pop = popOf(env), yard = env.$('home').children[1];
-    check('with no site label the list is in the Yard, not a popover: #yard holds it, it is shown from the first look on (nobody pressed Games), and it is a region named "Open games", not a dialog', yard.id === 'yard' && pop.parent === yard && classes(pop).indexOf('gdock') !== -1 && pop.hidden === false
-          && pop.getAttribute('role') === 'region' && pop.getAttribute('aria-label') === 'Open games' && classes(yard).indexOf('standin') === -1);
-    check('... the Yard holds nothing else (no stand-in), and Games names no popup and says nothing of being open (it is not a popover)', yard.children.length === 1 && env.home('games').getAttribute('aria-haspopup') === null && env.home('games').getAttribute('aria-expanded') === null);
+    check('the list is in Home\'s body, not a popover: #hmain holds it, it is shown from the first look on (nobody pressed Games), and it is a region named "Open games", not a dialog', yard.id === 'hmain' && pop.parent === yard && classes(pop).indexOf('gdock') !== -1 && pop.hidden === false
+          && pop.getAttribute('role') === 'region' && pop.getAttribute('aria-label') === 'Open games' && classes(yard).join() === 'hmain');
+    check('... the body holds nothing else (no stand-in), and Games names no popup and says nothing of being open (it is not a popover)', yard.children.length === 1 && env.home('games').getAttribute('aria-haspopup') === null && env.home('games').getAttribute('aria-expanded') === null);
     same('... the rows are the Games list\'s own, best first (the fewest open seats, then the oldest), BEST on the first, with a Join button each', [rowsOf(env).map((li) => textOf(first(li, 'gname'))), find(popOf(env), 'gbest').length, rowsOf(env).map((li) => !!joinOf(li))], [['Clover', 'Juniper', 'Pebble'], 1, [true, true, true]]);
     same('... the count beside the heading and on the Games button are the same 3', [textOf(first(popOf(env), 'gpcount')).indexOf('3 waiting') === 0, textOf(first(env.home('games'), 'pill'))], [true, '3']);
     check('... and the "Join by code" box is at the bottom of it', !!first(popOf(env), 'gcode') && popOf(env).children[popOf(env).children.length - 1] === first(popOf(env), 'gcode'));
@@ -448,14 +448,20 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     check('while the Room shows nothing is asked (the list is not on screen)', env.screen() === 'room' && env.looks() === onRoom);
 }
 {
-    const env = await page({ options: { label: '' } });     // no rooms: the empty state is in the Yard too, with Host one!, and Join by code under it
-    check('no open games: the empty state ("No open games right now.", Host one!) and Join by code are in the docked list', textOf(popOf(env)).indexOf('No open games right now.') !== -1 && !first(popOf(env), 'gempty').hidden && !!first(popOf(env), 'gcode') && textOf(first(popOf(env), 'gpcount')) === 'none waiting');
-    tap(first(first(popOf(env), 'gempty'), 'ghostbtn'));
-    check('... Host one! is Quick host (the Room shows, a room of the page\'s own)', env.screen() === 'room' && env.sockets.length === 1);
+    const env = await page({ options: { popover: false } });     // no rooms: the empty state is in the body too, with Quick host and Quick join, and Join by code under it
+    check('no open games: the empty state ("No open games right now.", Quick host and Quick join) and Join by code are in the docked list', textOf(popOf(env)).indexOf('No open games right now.') !== -1 && !first(popOf(env), 'gempty').hidden && !!first(popOf(env), 'gcode') && textOf(first(popOf(env), 'gpcount')) === 'none waiting');
+    const empties = find(first(popOf(env), 'gempty'), 'ghostbtn');
+    same('... the two buttons, in the one row, say Quick host and Quick join', empties.map((b) => textOf(b)), ['Quick host', 'Quick join']);
+    tap(empties[0]);
+    check('... Quick host is Quick host (the Room shows, a room of the page\'s own)', env.screen() === 'room' && env.sockets.length === 1);
+    const other = await page({ options: { popover: false } });
+    tap(find(first(popOf(other), 'gempty'), 'ghostbtn')[1]);
+    await wait(other, 100);
+    check('... and Quick join is Quick join (it looks, and with no room open says so in the card over Home, which offers Host one!; no room is made)', find(other.body, 'gshade').length === 1 && textOf(find(other.body, 'gshade')[0]).indexOf('No open games right now.') !== -1 && other.screen() === 'home' && other.sockets.length === 0);
 }
 {
-    const env = await page({ options: { label: 'staging' } });         // the test site: the popover, closed until Games is pressed, as ever
-    check('with the label "staging" the list is the popover that it was: not in the Yard, hidden until Games is pressed, a dialog', popOf(env).parent !== env.$('home').children[1] && popOf(env).hidden === true && popOf(env).getAttribute('role') === 'dialog' && classes(popOf(env)).indexOf('gdock') === -1
+    const env = await page({ options: { popover: true } });         // the test site: the popover, closed until Games is pressed, as ever
+    check('a list that is given no dock is the popover that it was: not in the body, hidden until Games is pressed, a dialog', popOf(env).parent !== env.$('home').children[1] && popOf(env).hidden === true && popOf(env).getAttribute('role') === 'dialog' && classes(popOf(env)).indexOf('gdock') === -1
           && env.home('games').getAttribute('aria-haspopup') === 'dialog');
 }
 
@@ -472,7 +478,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     const LOOK = 7000;          // (the open list is looked at every 5 s, 6 s at the latest with the jitter: a look is done by then)
     const site = fakeSite();
     site.body = listOf(rowsFor(fixture.map((m) => m.file)));
-    const env = await page({ site, options: { label: '', picker: true } });
+    const env = await page({ site, options: { popover: false, picker: true } });
     const srcOf = (li) => find(li, 'gmap')[0].children.map((i) => i.src);
     same('a map of the players has the library\'s picture, at the address that the server\'s list gives it (spaces, dots, dashes, !, #, $, &, \', ~, capitals and an ending in .LVL: ' + fixture.length + ' maps)', rowsOf(env).map((li) => srcOf(li)), fixture.map((m) => [m.thumb]));
     check('... and the address is of the one shape that the page loads, with a picture to a row and nothing but the picture in its square', rowsOf(env).every((li) => srcOf(li).length === 1 && LIBRARY.test(srcOf(li)[0]) && find(li, 'gmap')[0].tagName === 'span'));
@@ -520,7 +526,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 {   // the test site's popover: nothing is drawn (so nothing is asked for) until Games is pressed, and then the rows have the library's picture as the docked list's do
     const site = fakeSite();
     site.body = listOf([row('aaaaaa', 'Has', { map: 'POPcOrN.lvl', people: 1, free: 3, age: 30 })]);
-    const env = await page({ site, options: { label: 'staging', picker: true } });
+    const env = await page({ site, options: { popover: true, picker: true } });
     check('a popover that is closed has no picture in it (no row is drawn: the page asks for none)', popOf(env).findAll((e) => e.tagName === 'img').length === 0);
     tap(env.home('games'));
     await flush();
@@ -529,7 +535,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 {   // a page that has no map picker (its script did not come): the rows have the originals' pictures and no other, and nothing breaks
     const site = fakeSite();
     site.body = listOf([row('aaaaaa', 'Has', { map: 'POPcOrN.lvl', people: 1, free: 3, age: 30 }), row('cccccc', 'Own', { map: 'TINY.LVL', people: 1, free: 3, age: 10 })]);
-    const env = await page({ site, options: { label: '' } });
+    const env = await page({ site, options: { popover: false } });
     same('without AntsMapPicker an original has its picture and a map of the players has none (the list works)', rowsOf(env).map((li) => find(li, 'gmap')[0].children.map((i) => i.src)), [[], ['front/preview_tiny.png']]);
 }
 

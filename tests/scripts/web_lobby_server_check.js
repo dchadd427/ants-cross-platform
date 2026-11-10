@@ -599,7 +599,7 @@ const online = (c) => () => c.status === 'online' && c.room !== null;
         await step('the page knows the open room (the count on Games)', () => () => B.home('games').children[1].textContent === '1' && !B.home('games').children[1].hidden, 8000);
         B.home('join').click();
         await step('Quick join: the page is in the room of the first host, as a guest (the Room shows, the heading is the host\'s name)', () => () => B.screen() === 'room' && B.$('room-h').textContent === 'Qjone’s room' && B.$('code').textContent.replace(' ', '') === code('j1'), 8000);
-        check('(no card is left, no strip says anything, and the host sees the guest)', cardOf(B) === null && B.$('home').findAll((n) => String(n.className).split(/\s+/).indexOf('gstrip') !== -1).every((n) => n.hidden) && seats(H1) === 2 && H1.seatOf('Qjbee') !== -1);
+        check('(no card is left, no toast says anything, and the host sees the guest)', cardOf(B) === null && (() => { const t = B.body.findAll((n) => String(n.className).split(/\s+/).indexOf('gtoast') !== -1); return t.length === 1 && t.every((n) => n.hidden); })() && seats(H1) === 2 && H1.seatOf('Qjbee') !== -1);
         check('... and the real list says two people', (await realRows()).find((x) => x.code === code('j1')).people === 2);
         B.roomBar('leave').click();
         await step('the guest presses Leave room (a guest is asked: the host is there) and answers: Home shows, and the host is alone again', () => {

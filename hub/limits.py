@@ -30,7 +30,7 @@ class Limits:
     online_seconds: float = 5.0         # the online count is sent when it changed, at most this often
     tick_seconds: float = 1.0
     deletions_seconds: float = 2.0      # how often the lines that the command line deleted are looked for
-    purge_seconds: float = 3600.0       # how often the lines past their 7 days are deleted
+    purge_seconds: float = 3600.0       # how often the lines past their 7 days, or past the newest 200, are deleted
     write_buffer_max: int = 131072      # a socket that has this much unsent is dropped (it cannot keep up); 500 of them stay well inside the container's memory
     close_grace_seconds: float = 5.0    # a socket that was closed with output unsent is cut after this long
     identify_seconds: float = 5.0       # the login layer has this long to say who is at the other end of a handshake

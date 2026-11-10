@@ -73,8 +73,7 @@ const W = (o) => Object.assign({ t: 'welcome', v: 1, you: null, login: false, on
 const HISTORY = [L(1, 'pebble', 'anyone up for Islands?'), L(2, 'clover', 'I have a room open', true), L(3, 'juniper', 'joining!')].map((m) => { const x = Object.assign({}, m); delete x.t; return x; });
 const YOU = { name: 'maple.leaf', mod: false };
 
-// one dock on a fake page: o.width and o.height (the window), o.random, o.noWebSocket, o.throws (a constructor that throws), o.hidden; o.hostHeight, o.barHeight and o.least (the style's --gc-min): Home's div, the bar in it and the
-// least height of the open panel, as a browser measures them; o.observe: the window has a ResizeObserver (r.watch.fn() is its callback)
+// one dock on a fake page: o.width and o.height (the window), o.random, o.noWebSocket, o.throws (a constructor that throws), o.hidden
 function rig(o) {
     o = o || {};
     const env = { elements: {}, innerHTMLWrites: [] };
@@ -93,10 +92,6 @@ function rig(o) {
         fail() { this.readyState = 3; if (this.onerror) this.onerror({}); if (this.onclose) this.onclose({ code: 1006 }); return this; }
     }
     const host = new El(env, 'div', 'home');
-    const watch = { fn: null, target: null };
-    if (o.least !== undefined) win.getComputedStyle = () => ({ getPropertyValue: (p) => (p === '--gc-min' ? o.least + 'px' : '') });
-    if (o.observe) win.ResizeObserver = function (fn) { watch.fn = fn; this.observe = (t) => { watch.target = t; }; };
-    if (o.hostHeight !== undefined) { host.clientHeight = o.hostHeight; const bar = new El(env, 'header'); bar.className = 'hbar'; bar.offsetHeight = o.barHeight; host.appendChild(bar); }
     const errors = [];
     const hidden = (on) => { doc.hidden = on; (doc.listeners.visibilitychange || []).forEach((fn) => fn({})); };
     doc.hidden = !!o.hidden;
@@ -109,7 +104,7 @@ function rig(o) {
     const fetcher = o.noFetch ? undefined : (path, init) => { fetches.push({ path, init }); if (o.fetchThrows) throw new Error('no network'); return { then(ok, bad) { pending = { ok, bad }; } }; };
     const dock = Chat.mount({ doc, win, host, chip, screen: o.screen, fetch: fetcher, now: clock.now, random: o.random || (() => 0), WebSocket: o.noWebSocket ? undefined : HubSocket, error: (e) => errors.push(e) });
     if (o.home !== false) dock.shown(true);                // (the page tells the dock which screen shows, right after it is mounted)
-    const r = { env, clock, Chat, doc, win, host, sockets, dock, errors, hidden, HubSocket, watch, root: dock.root, chip, went, fetches };
+    const r = { env, clock, Chat, doc, win, host, sockets, dock, errors, hidden, HubSocket, root: dock.root, chip, went, fetches };
     r.answer = (response) => { const p = pending; pending = null; p.ok(response); };
     r.refuse = () => { const p = pending; pending = null; p.bad(new Error('the network')); };
     r.pending = () => pending !== null;
@@ -120,7 +115,6 @@ function rig(o) {
     r.note = () => one(dock.root, 'gc-note').textContent;
     r.pill = () => { const p = one(dock.root, 'gc-unread'); return p.hidden ? '' : p.textContent; };
     r.on = () => one(dock.root, 'gc-on').textContent;
-    r.peek = () => one(dock.root, 'gc-peek').textContent;
     r.fold = () => one(dock.root, 'gc-fold');
     r.form = () => one(dock.root, 'gc-form');
     r.field = () => one(dock.root, 'gc-input');
@@ -172,7 +166,7 @@ function rig(o) {
     const box = r.root;
     check('mounting opens ONE socket, to wss://<the page\'s host>/hub/ws, and sends nothing before the hub has spoken', r.sockets.length === 1 && r.s().url === 'wss://play.test/hub/ws' && r.s().sent.length === 0);
     check('the dock is a section "gchat" named by its heading (an h2, "Global chat"), made of text and properties only', box.tagName === 'section' && box.id === 'gchat' && box.getAttribute('aria-labelledby') === 'gchat-title' && one(box, 'gc-title').tagName === 'h2' && one(box, 'gc-title').id === 'gchat-title'
-          && one(box, 'gc-long').textContent === 'Global chat' && one(box, 'gc-short').getAttribute('aria-hidden') === 'true' && r.env.innerHTMLWrites.length === 0);
+          && one(box, 'gc-title').textContent === 'Global chat' && r.env.innerHTMLWrites.length === 0);
     check('the log is made again quietly (aria-live off for 300 ms, so that a screen reader is not read the whole history at once) and is role=log, aria-live=polite after; it is labelled and can be focused to scroll it by key; the note is a polite status; the field and Send are labelled',
         r.log().getAttribute('aria-live') === 'off' && (r.clock.advance(300), true) && r.log().getAttribute('role') === 'log' && r.log().getAttribute('aria-live') === 'polite' && r.log().getAttribute('aria-label') === 'Chat messages' && r.log().getAttribute('tabindex') === '0'
         && one(box, 'gc-note').getAttribute('role') === 'status' && one(box, 'gc-note').getAttribute('aria-live') === 'polite' && r.field().getAttribute('aria-label') === 'Say something to everyone' && one(box, 'gc-send').textContent === 'Send' && one(box, 'gc-send').type === 'submit'
@@ -782,66 +776,6 @@ function rig(o) {
     same('a line with < or > is not sent (the hub refuses it, and a refusal is a mistake against the 20 a minute): "Lines cannot hold < or >"', [lt.dock.say('a < b'), lt.note(), lt.dock.say('x > y'), lt.sockets[0].sent.length, lt.dock.say('fine') === ''], ['markup', 'Lines cannot hold < or >', 'markup', 0, true]);
     check('the field takes at most 400 characters (a paste cannot be a megabyte), and nothing threw', r.field().getAttribute('maxlength') === '400' && r.errors.length === 0);
 }
-{   // the panel stays under Home's bar: notices above Home (and a small phone) take its room, and then the strip shows instead of the panel, or nothing when not even the strip fits (home.css and chat.css have the numbers)
-    const shape = (r) => [r.root.getAttribute('data-open'), r.root.hidden === true, one(r.root, 'gc-body').hidden === true, r.fold().getAttribute('aria-expanded')].join();
-    const at = (r, hostHeight) => { r.host.clientHeight = hostHeight; r.watch.fn(); return shape(r); };       // (Home's height changes: a notice came or went)
-    const r = rig({ width: 390, height: 844, hostHeight: 619, barHeight: 184, least: 200, observe: true });
-    r.live(W({ you: YOU, history: HISTORY }));
-    r.dock.open(true);
-    same('a phone with room under the bar (619 px of Home, a bar of 184: 435 px, the panel needs 200 and 12 below it): the open panel shows', shape(r), 'true,false,false,true');
-    check('(the observer watches Home\'s div)', r.watch.target === r.host);
-    same('a notice above Home takes room (295 px of Home: 111 px under the bar): the strip shows instead, and its button says "Open chat" (the panel is not out) and why it does not open', [at(r, 295), r.fold().getAttribute('aria-label')], ['false,false,true,false', 'Open chat, No room to open it: close a notice']);
-    check('(the strip says nothing of it until somebody presses it: the last line is there)', r.peek() === 'juniper: joining!');
-    r.fold().click();
-    check('a press that wants the panel where there is no room says so on the strip ("No room to open it: close a notice"), and nothing else is lost', r.peek() === 'No room to open it: close a notice' && shape(r) === 'false,false,true,false');
-    r.clock.advance(5999);
-    check('... for 6 s', r.peek() === 'No room to open it: close a notice');
-    r.clock.advance(1);
-    check('... and then the last line is back', r.peek() === 'juniper: joining!');
-    r.root.children[0].fire('click', { target: r.root.children[0] });
-    check('a press on the strip itself says so too', r.peek() === 'No room to open it: close a notice');
-    r.clock.advance(6000);
-    at(r, 619);
-    r.fold().click(); r.fold().click();
-    check('a window that has room is told nothing (the minus button folds and opens)', r.peek() !== 'No room to open it: close a notice' && r.fold().getAttribute('aria-label') === 'Fold chat');
-    at(r, 295);
-    r.clock.advance(6000);
-    r.dock.open(true);
-    same('... 212 px under the bar is the least for the panel, 211 is not (the strip), 74 is the least for the strip, 73 is not (nothing shows)', [at(r, 184 + 212), at(r, 184 + 211), at(r, 184 + 74), at(r, 184 + 73)], ['true,false,false,true', 'false,false,true,false', 'false,false,true,false', 'false,true,true,false']);
-    same('... and when the notice goes the panel is back, as the visitor left it (the wish to have it open is kept)', [at(r, 207), at(r, 619)], ['false,true,true,false', 'true,false,false,true']);
-    r.dock.open(false); at(r, 295); r.dock.open(true);
-    same('a visitor that folds it while the room is small, and opens it again, gets the panel when the room is back', [shape(r), at(r, 619)], ['false,false,true,false', 'true,false,false,true']);
-    r.dock.open(true); at(r, 184 + 100);
-    r.fold().click();
-    same('in a window with no room for the panel the minus-or-open button keeps the wish to have it out (it does not close what is not out), and the panel is there when the room is back', [shape(r), at(r, 619)], ['false,false,true,false', 'true,false,false,true']);
-    at(r, 184 + 100);
-    r.s().recv(L(30, 'a', 'one while the strip shows'));
-    check('a line that comes while the strip stands in for the open panel is unread (the log is not on the screen)', r.pill() === '1', r.pill());
-    r.root.hidden = false; r.host.clientHeight = 619; r.win.listeners.resize.forEach((fn) => fn({}));
-    same('the window\'s own resize measures again (a browser with no ResizeObserver)', shape(r), 'true,false,false,true');
-    check('... and the panel that is out again is read: nothing is unread', r.pill() === '');
-    const quiet = rig({ width: 390, height: 844, hostHeight: 295, barHeight: 184, least: 200, observe: true });
-    quiet.live(W({ you: YOU, history: HISTORY }));
-    check('a strip that nobody asked to open says nothing of the room that it lacks: no hint, and the button says "Open chat" and nothing more', quiet.root.getAttribute('data-open') === 'false' && quiet.fold().getAttribute('aria-label') === 'Open chat' && quiet.peek() === 'juniper: joining!');
-    quiet.root.children[0].fire('click', { target: quiet.root.children[0] });
-    check('a press on the strip wants the panel and there is no room for it: the strip says so, and the button gives the reason from then on', quiet.peek() === 'No room to open it: close a notice' && quiet.fold().getAttribute('aria-label') === 'Open chat, No room to open it: close a notice' && quiet.root.getAttribute('data-open') === 'false');
-    const low = rig({ width: 568, height: 320, hostHeight: 152, barHeight: 62, least: 150, observe: true });
-    low.dock.open(true);
-    same('a phone held sideways with two notices above Home (152 px of Home, a bar of 62): 90 px is the strip\'s, not the panel\'s (150 and 12 below it)', shape(low), 'false,false,true,false');
-    same('... the panel needs 150 and 12 below it there: 162 px under the bar is enough, 161 is not', [at(low, 62 + 162), at(low, 62 + 161)], ['true,false,false,true', 'false,false,true,false']);
-    const desk = rig({ width: 1280, height: 800, hostHeight: 640, barHeight: 78, least: 0, observe: true });
-    check('a desktop (the style gives the panel no least height: it keeps under the bar by its own maximum) is never put away', desk.root.getAttribute('data-open') === 'true' && at(desk, 60) === 'true,false,false,true');
-    const bare = rig({ width: 390, height: 844 });
-    bare.dock.open(true);
-    check('a browser that cannot measure (no style, no sizes) leaves the dock as the visitor wants it, and nothing throws', shape(bare) === 'true,false,false,true' && bare.errors.length === 0);
-    const nobar = rig({ width: 390, height: 844, least: 200 });
-    nobar.dock.open(true);
-    check('a Home that has no bar to measure (or no height of its own) is left alone, too', shape(nobar) === 'true,false,false,true' && nobar.errors.length === 0);
-    const refuses = rig({ width: 390, height: 844, hostHeight: 619, barHeight: 184, least: 200 });
-    refuses.win.getComputedStyle = () => { throw new Error('no style here'); };
-    refuses.dock.shown(true); refuses.dock.open(true);
-    check('a window whose getComputedStyle throws is as one that cannot measure', shape(refuses) === 'true,false,false,true' && refuses.errors.length === 0);
-}
 {   // fold, strip, unread, the Room
     const r = rig();
     r.live(W({ you: YOU, history: HISTORY }));
@@ -850,7 +784,7 @@ function rig(o) {
     r.fold().click();
     check('the minus button folds it to the header: the body is hidden, the button says "Open chat", focus stays on the button', r.root.getAttribute('data-open') === 'false' && one(r.root, 'gc-body').hidden === true && r.fold().getAttribute('aria-label') === 'Open chat' && r.fold().getAttribute('aria-expanded') === 'false' && r.env.focused === r.fold());
     r.s().recv(L(11, 'a', 'two')); r.s().recv(L(12, 'maple.leaf', 'mine')); r.s().recv(L(13, 'b', 'three'));
-    same('lines that come while folded are unread (not the visitor\'s own), counted in the header and in the button\'s name; the strip shows the last line', [r.pill(), r.fold().getAttribute('aria-label'), r.peek()], ['2', 'Open chat, 2 unread', 'b: three']);
+    same('lines that come while folded are unread (not the visitor\'s own), counted in the header and in the button\'s name; ', [r.pill(), r.fold().getAttribute('aria-label')], ['2', 'Open chat, 2 unread']);
     r.fold().click();
     check('opening it again reads them: the count is gone, the log has every line', r.pill() === '' && r.root.getAttribute('data-open') === 'true' && r.rowTexts().pop() === 'b: three' && r.fold().getAttribute('aria-label') === 'Fold chat');
     r.dock.shown(false);
@@ -868,9 +802,9 @@ function rig(o) {
     const c = rig({ width: 390, height: 844 });
     c.live(W({ you: YOU, history: HISTORY }));
     c.dock.shown(true);
-    check('a phone starts with the strip (folded), the last line in it, and no unread count for the history', c.root.getAttribute('data-open') === 'false' && c.pill() === '' && c.peek() === 'juniper: joining!' && one(c.root, 'gc-short').textContent === 'Chat');
+    check('a phone starts with the dock folded to its header, and no unread count for the history', c.root.getAttribute('data-open') === 'false' && c.pill() === '');
     c.s().recv(L(30, 'pebble', 'hi')); c.s().recv(L(31, 'pebble', 'hi again'));
-    check('lines make the strip say so: "2" and the last line', c.pill() === '2' && c.peek() === 'pebble: hi again');
+    check('lines make the header say so: "2"', c.pill() === '2');
     one(c.root, 'gc-head').click();
     check('a press anywhere on the strip opens it (the whole strip is the target) and reads it; the page moves no focus for a press', c.root.getAttribute('data-open') === 'true' && c.pill() === '' && !c.env.focused);
     one(c.root, 'gc-head').click();
@@ -882,7 +816,7 @@ function rig(o) {
     c.root.fire('keydown', { key: 'Escape' });
     check('Escape on a folded dock does nothing', c.root.getAttribute('data-open') === 'false' && c.errors.length === 0);
     const sw = rig({ width: 844, height: 390 });
-    check('a phone held sideways (844 x 390) starts folded too; a window of 721 x 501 is a desktop; 720 wide or 500 high is not', sw.root.getAttribute('data-open') === 'false' && rig({ width: 721, height: 501 }).root.getAttribute('data-open') === 'true' && rig({ width: 720, height: 900 }).root.getAttribute('data-open') === 'false' && rig({ width: 1280, height: 500 }).root.getAttribute('data-open') === 'false');
+    check('a phone held sideways (844 x 390) starts folded too; a window of 701 x 601 is a desktop; 700 wide or 600 high is not (the folded header, which a press opens)', sw.root.getAttribute('data-open') === 'false' && rig({ width: 701, height: 601 }).root.getAttribute('data-open') === 'true' && rig({ width: 700, height: 900 }).root.getAttribute('data-open') === 'false' && rig({ width: 1280, height: 600 }).root.getAttribute('data-open') === 'false');
 }
 {   // the log is read from the bottom: a log that is made again, and a line that comes to a reader at the bottom, scroll to the newest line; a reader who has scrolled up is not moved
     const r = rig();
@@ -938,19 +872,19 @@ function bring(env) {                                     // the two files arriv
 }
 {
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
-    check('a plain visit loads nothing of the chat before the first paint, opens no socket, and Home is as before', fresh(env).length === 0 && env.sockets.length === 0 && env.screen() === 'home' && env.$('home').children.length === 3);
+    check('a plain visit loads nothing of the chat before the first paint, opens no socket, and Home is as before', fresh(env).length === 0 && env.sockets.length === 0 && env.screen() === 'home' && env.$('home').children.length === 4);
     const hub = hubFor(env);
     env.advance(0);
     const parts = fresh(env);
     same('after the first paint the page asks for the style and the script of the dock, once, and nothing else', parts.map((n) => n.tagName + ':' + (n.href || n.src) + ':' + (n.rel || '')), ['link:home/chat.css:stylesheet', 'script:home/chat.js:']);
-    check('... the script is async, so it never holds the page', parts[1].async === true && hub.length === 0 && env.$('home').children.length === 3);
+    check('... the script is async, so it never holds the page', parts[1].async === true && hub.length === 0 && env.$('home').children.length === 4);
     parts[1].onload();
-    check('the dock mounts only when BOTH the style and the script are there (no unstyled dock)', env.$('home').children.length === 3 && hub.length === 0);
+    check('the dock mounts only when BOTH the style and the script are there (no unstyled dock)', env.$('home').children.length === 4 && hub.length === 0);
     env.win.AntsHomeChat = H.loadFile('home/chat.js', env.scope).AntsHomeChat;
     parts[0].onload();
-    check('... then it is the last child of Home\'s div, one socket to the hub is opened, and the game\'s own socket is not touched', env.$('home').children.length === 4 && env.$('home').children[3].id === 'gchat' && hub.length === 1 && hub[0].url === 'wss://play.test/hub/ws' && env.sockets.length === 0);
-    const dock = env.$('home').children[3];
-    check('Home\'s own parts are where they were (the bar, the Yard, the card)', env.$('home').children.slice(0, 3).map((c) => c.tagName).join() === 'header,main,div' && dock.getAttribute('data-open') === 'true');
+    check('... then it is the last child of Home\'s div, one socket to the hub is opened, and the game\'s own socket is not touched', env.$('home').children.length === 5 && env.$('home').children[4].id === 'gchat' && hub.length === 1 && hub[0].url === 'wss://play.test/hub/ws' && env.sockets.length === 0);
+    const dock = env.$('home').children[4];
+    check('Home\'s own parts are where they were (the bar, the body, the card, the strip)', env.$('home').children.slice(0, 4).map((c) => c.tagName).join() === 'header,main,div,nav' && dock.getAttribute('data-open') === 'true');
     env.home('mine').click();
     check('My room still makes the room (the page\'s own socket), and the Room shows: the dock is told (it is not on the screen)', env.sockets.length === 1 && env.screen() === 'room' && hub.length === 1);
     hub[0].readyState = 1; hub[0].onmessage({ data: JSON.stringify(W({ you: YOU, history: HISTORY })) });
@@ -959,12 +893,12 @@ function bring(env) {                                     // the two files arriv
     env.roomBar('rhome').click();
     check('Home again: the dock is read, the link is the same one', one(dock, 'gc-unread').hidden === true && hub.length === 1);
     env.advance(10);
-    check('show(home) again does not load the dock a second time', fresh(env).length === 2 && env.$('home').children.length === 4);
+    check('show(home) again does not load the dock a second time', fresh(env).length === 2 && env.$('home').children.length === 5);
 }
 {   // a dialog over the page, and the hand-off to the game, take the dock's keys and presses too (the focus does not go behind a modal)
     const env = runLobby('', { 'ants.name': 'Maya' }, { picker: true, stayHome: true });
     hubFor(env); env.advance(0); bring(env);
-    const root = env.$('home').children[3];
+    const root = env.$('home').children[4];
     check('(the dock is there and takes presses)', root.id === 'gchat' && !root.hasAttribute('inert'));
     env.home('mine').click();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
@@ -977,7 +911,7 @@ function bring(env) {                                     // the two files arriv
     const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     fresh(late).forEach((n) => n.onload());
-    const lateRoot = late.$('home').children[3];
+    const lateRoot = late.$('home').children[4];
     check('a dock that is mounted while the page is on its way to the game is inert from the start', late.assigned.length === 1 && lateRoot.id === 'gchat' && lateRoot.hasAttribute('inert') && late.home('hbar').hasAttribute('inert'));
     late.advance(15000);
     check('... and 15 s later, when Home is free, so is the dock', !lateRoot.hasAttribute('inert') && !late.home('hbar').hasAttribute('inert'));
@@ -996,7 +930,7 @@ function bring(env) {                                     // the two files arriv
     const down = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(down, { throws: true });
     down.advance(0); bring(down);
-    check('a hub that cannot be opened: the dock says "Chat is offline"; Home is whole', down.$('home').children[3].id === 'gchat' && one(down.$('home').children[3], 'gc-note').textContent === 'Chat is offline' && down.screen() === 'home');
+    check('a hub that cannot be opened: the dock says "Chat is offline"; Home is whole', down.$('home').children[4].id === 'gchat' && one(down.$('home').children[4], 'gc-note').textContent === 'Chat is offline' && down.screen() === 'home');
     down.home('mine').click();
     const s = down.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     down.roomBar('rhome').click();
@@ -1034,7 +968,7 @@ function bring(env) {                                     // the two files arriv
     late.advance(0);
     late.win.AntsHomeChat = H.loadFile('home/chat.js', late.scope).AntsHomeChat;
     fresh(late).slice(0, 1).forEach((n) => n.onload());
-    check('a style that comes without the script (or the script without the style) mounts nothing, and there is no socket', late.$('home').children.length === 3);
+    check('a style that comes without the script (or the script without the style) mounts nothing, and there is no socket', late.$('home').children.length === 4);
     const nolink = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     nolink.env = nolink; nolink.body.appendChild = () => { throw new Error('no place for it'); };
     check('a page that cannot take the dock\'s two files does not throw', (() => { try { nolink.advance(0); return true; } catch (e) { return false; } })());
