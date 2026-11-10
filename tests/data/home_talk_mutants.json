@@ -1,0 +1,267 @@
+{
+ "note": "Mutants of the emoji picker and the voice button of the chat (web/home/talk.js and talk.css, the loader in web/home/home.js, the privacy sentence of web/legal.html; docs/HOME_SCREEN.md 'Emoji and voice') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_talk_check.js (the real dock with a fake speech recognition) and the static checks of tests/scripts/test_web_home_talk.py (the hub's real text rules against the emoji): a limit that moves, a count in UTF-16 units, a selection's caret, a cut that splits a pair of surrogates, markup characters kept, a microphone on a page that is not secure, a second press, Escape, typing, a send, a hidden page and a page that goes that do not stop it, words that are heard late or added instead of replaced, a voice that sends or records, a joiner or a modifier among the emoji, the loader, the style, the Legal sentence and the tooltip; every one must be caught (tools/mutate.py tests/data/home_talk_mutants.json --keep-going --jobs 1).",
+ "baseline": {
+  "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+ },
+ "mutants": [
+  {
+   "id": "the_line_is_201_code_points",
+   "file": "web/home/talk.js",
+   "old": "var LIMIT = 200;",
+   "new": "var LIMIT = 201;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "points_counts_utf16_units",
+   "file": "web/home/talk.js",
+   "old": "if (!(c >= 0xdc00 && c <= 0xdfff)) n++;",
+   "new": "n++;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "insert_ignores_the_limit",
+   "file": "web/home/talk.js",
+   "old": "return points(next) > LIMIT ? null :",
+   "new": "return false ? null :",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "caret_after_the_old_end_of_a_selection",
+   "file": "web/home/talk.js",
+   "old": "caret: a + text.length };\n    }",
+   "new": "caret: b + text.length };\n    }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "head_cuts_a_pair_of_surrogates",
+   "file": "web/home/talk.js",
+   "old": "i += c >= 0xd800 && c <= 0xdbff && i + 1 < s.length ? 2 : 1;",
+   "new": "i += 1;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "said_text_is_not_cut",
+   "file": "web/home/talk.js",
+   "old": "t = head(t, Math.max(0, LIMIT - points(before + after) - 2));",
+   "new": "t = t;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "markup_characters_are_kept",
+   "file": "web/home/talk.js",
+   "old": ".replace(/[<>]/g, ' ')",
+   "new": ".replace(/[]/g, ' ')",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "mic_on_a_page_that_is_not_secure",
+   "file": "web/home/talk.js",
+   "old": "win.isSecureContext !== true",
+   "new": "false",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "anything_is_a_constructor",
+   "file": "web/home/talk.js",
+   "old": "return typeof C === 'function' ? C : null;",
+   "new": "return C || null;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "full_line_is_not_said",
+   "file": "web/home/talk.js",
+   "old": "if (!r) { note(TEXT.full); return; }",
+   "new": "if (!r) { return; }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "second_press_aborts_not_stops",
+   "file": "web/home/talk.js",
+   "old": "try { run.rec.stop(); } catch (e) { drop(); } return; }",
+   "new": "drop(); return; }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_folds_the_dock_too",
+   "file": "web/home/talk.js",
+   "old": "if (e.stopPropagation) e.stopPropagation();",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_does_not_stop_the_voice",
+   "file": "web/home/talk.js",
+   "old": "if (open) close(true); else listen();",
+   "new": "if (open) close(true);",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "typing_does_not_stop_the_voice",
+   "file": "web/home/talk.js",
+   "old": "field.addEventListener('input', function () { if (run) drop();",
+   "new": "field.addEventListener('input', function () { if (false) drop();",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_send_does_not_stop_the_voice",
+   "file": "web/home/talk.js",
+   "old": "form.addEventListener('submit', function () { drop(); close(false); });",
+   "new": "form.addEventListener('submit', function () { close(false); });",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hidden_page_does_not_stop_the_voice",
+   "file": "web/home/talk.js",
+   "old": "if (doc.hidden) { drop(); close(false); }",
+   "new": "if (doc.hidden) { close(false); }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_page_that_goes_does_not_stop_the_voice",
+   "file": "web/home/talk.js",
+   "old": "win.addEventListener('pagehide', function () { drop(); });",
+   "new": "win.addEventListener('pagehide', function () { });",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "late_words_are_heard",
+   "file": "web/home/talk.js",
+   "old": "if (run !== me) return;\n                    var t",
+   "new": "var t",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "interim_words_are_added_not_replaced",
+   "file": "web/home/talk.js",
+   "old": "var r = speak(me.before, me.text, me.after);",
+   "new": "var r = speak(field.value, me.text, '');",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "page_language_is_ignored",
+   "file": "web/home/talk.js",
+   "old": "(win.navigator && win.navigator.language) || 'en-US'",
+   "new": "'en-US'",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "no_interim_words",
+   "file": "web/home/talk.js",
+   "old": "rec.interimResults = true",
+   "new": "rec.interimResults = false",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_blocked_microphone_is_a_general_failure",
+   "file": "web/home/talk.js",
+   "old": "'not-allowed': 'blocked', ",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_button_never_looks_pressed",
+   "file": "web/home/talk.js",
+   "old": "run === me && !me.over ? 'true' : 'false'",
+   "new": "'false'",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_voice_sends_by_itself",
+   "file": "web/home/talk.js",
+   "old": "function finish(me) {\n            if (run !== me) return;",
+   "new": "function finish(me) {\n            dock.say(field.value);\n            if (run !== me) return;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_voice_records",
+   "file": "web/home/talk.js",
+   "old": "rec.maxAlternatives = 1;",
+   "new": "rec.maxAlternatives = 1; if (win.MediaRecorder) { new win.MediaRecorder(null); }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_does_not_return_the_focus",
+   "file": "web/home/talk.js",
+   "old": "if (back && field.focus) field.focus();",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "buttons_stay_with_a_field_that_is_off",
+   "file": "web/home/talk.js",
+   "old": "tools.hidden = !!field.disabled;",
+   "new": "tools.hidden = false;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "every_key_is_a_tab_stop",
+   "file": "web/home/talk.js",
+   "old": "b.tabIndex = k === at ? 0 : -1;",
+   "new": "b.tabIndex = 0;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_joiner_in_the_picker",
+   "file": "web/home/talk.js",
+   "old": "'1F600 1F603 ",
+   "new": "'1F600 200D 1F603 ",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_skin_tone_modifier_in_the_picker",
+   "file": "web/home/talk.js",
+   "old": "'1F44D 1F44E ",
+   "new": "'1F44D 1F3FD 1F44E ",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_buttons_are_asked_for_twice",
+   "file": "web/home/home.js",
+   "old": "wantPlayers(); wantTalk(); } } catch",
+   "new": "wantPlayers(); wantTalk(); wantTalk(); } } catch",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_buttons_are_never_asked_for",
+   "file": "web/home/home.js",
+   "old": "wantPlayers(); wantTalk(); } } catch",
+   "new": "wantPlayers(); } } catch",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_emoji_key_is_small",
+   "file": "web/home/talk.css",
+   "old": ".gt-e { min-width: 44px; min-height: 44px;",
+   "new": ".gt-e { min-width: 44px; min-height: 36px;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_picker_is_a_layer_over_the_field",
+   "file": "web/home/talk.css",
+   "old": ".gt-pick { grid-column: 1 / -1;",
+   "new": ".gt-pick { position: absolute; grid-column: 1 / -1;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_hot_button_moves_for_everyone",
+   "file": "web/home/talk.css",
+   "old": "@media (prefers-reduced-motion: reduce) { .gt-hot { animation: none; } }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_legal_page_says_the_site_may_hear",
+   "file": "web/legal.html",
+   "old": "this site receives no audio and keeps nothing of it",
+   "new": "this site may receive audio",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_tooltip_loses_the_vendor",
+   "file": "web/home/talk.js",
+   "old": "Voice to text: your browser\\'s speech service hears you",
+   "new": "Voice to text",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  }
+ ]
+}

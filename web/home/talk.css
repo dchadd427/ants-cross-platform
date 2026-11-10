@@ -1,0 +1,20 @@
+/* The emoji button, the microphone button and the emoji picker of the chat (web/home/talk.js, docs/HOME_SCREEN.md "Emoji and voice"): they stand between the chat's field and Send, and the picker and its line of words open
+   above the field, in the form's own flow, so nothing covers the field. */
+.gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto auto; }
+.gt-tools { display: flex; gap: 6px; }
+.gt-tools[hidden], .gt-pick[hidden], .gt-say[hidden] { display: none; }
+.gt-btn { min-width: 48px; min-height: 48px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; }
+.gt-face::before { content: "\1F642"; }
+.gt-mark::before { content: "\1F3A4"; }
+.gt-face, .gt-mark { font-style: normal; }
+.gt-hot { background: #8a2c2c; animation: gt-beat 1.2s ease-in-out infinite; }
+@keyframes gt-beat { 50% { opacity: .65; } }
+.gt-say { grid-column: 1 / -1; margin: 0; font-size: 15px; line-height: 1.35; color: #f2c48c; }
+.gt-pick { grid-column: 1 / -1; max-height: 150px; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; background: #0b1117; border: 2px solid var(--edge); border-radius: 4px; }
+.gt-row { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.gt-name { flex: 0 0 100%; margin-top: 4px; font-size: 13px; line-height: 1.3; color: #a8cfc0; }
+.gt-e { min-width: 44px; min-height: 44px; padding: 0; font-size: 24px; line-height: 1; color: var(--cream); background: transparent; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
+.gt-e:hover { background: #1b2a34; }
+.gt-e:focus-visible, .gt-btn:focus-visible { outline: 3px solid var(--gold, #f2c48c); outline-offset: 1px; }
+@media (max-height: 500px) { .gt-pick { max-height: 96px; } }
+@media (prefers-reduced-motion: reduce) { .gt-hot { animation: none; } }
