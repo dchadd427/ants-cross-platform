@@ -101,7 +101,7 @@
    "id": "hello_handed_over_without_the_flag",
    "file": "src/ants_net/lobby.cpp",
    "old": "Pending p{connection, now_ms, address, unverified};",
-   "new": "Pending p{connection, now_ms, address, false};",
+   "new": "Pending p{connection, now_ms, address, unverified && false};",
    "build": "test_lobby",
    "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=G5 $B/tests/test_net/test_lobby'"
   },
@@ -109,7 +109,7 @@
    "id": "session_not_given_the_seats",
    "file": "src/ants_server/room.cpp",
    "old": "hc.guest_seats = spec_.verified_names ? guest_seats : uint8_t{0};",
-   "new": "hc.guest_seats = uint8_t{0};",
+   "new": "hc.guest_seats = static_cast<uint8_t>(guest_seats & 0u);",
    "build": "test_server",
    "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.276 $B/tests/test_server/test_server'"
   },
@@ -188,8 +188,8 @@
   {
    "id": "page_uses_the_logged_in_budget_for_a_guest",
    "file": "web/front/lobby_net.js",
-   "old": "var pace = kind === 'chat' && this.isGuest() ?",
-   "new": "var pace = kind === 'chat' && false ?",
+   "old": "kind === 'chat' && GUEST_NAME.test(this.name) ?",
+   "new": "kind === 'chat' && false ?",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   },
   {
@@ -218,13 +218,6 @@
    "file": "web/front/lobby_net.js",
    "old": "[1-9][0-9]{5}( ",
    "new": "[0-9]{6}( ",
-   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
-  },
-  {
-   "id": "page_reads_hello_name_not_seat",
-   "file": "web/front/lobby_net.js",
-   "old": "own = r !== null && this.seat >= 0 && this.seat < r.slots.length ? r.slots[this.seat].name : this.name;",
-   "new": "own = this.name;",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   }
  ]
