@@ -195,15 +195,15 @@
   {
    "id": "page_guest_burst_three",
    "file": "web/front/lobby_net.js",
-   "old": "guestChat: [2, 0.3]",
-   "new": "guestChat: [3, 0.3]",
+   "old": "GUEST_CHAT = [2, 0.3]",
+   "new": "GUEST_CHAT = [3, 0.3]",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   },
   {
    "id": "page_guest_pace_too_fast",
    "file": "web/front/lobby_net.js",
-   "old": "guestChat: [2, 0.3]",
-   "new": "guestChat: [2, 0.34]",
+   "old": "GUEST_CHAT = [2, 0.3]",
+   "new": "GUEST_CHAT = [2, 0.34]",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   },
   {
