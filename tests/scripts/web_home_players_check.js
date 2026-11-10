@@ -6,7 +6,7 @@
 //   3. what the page tells the hub: `here` (a named visitor) and `who` once for each socket, when the room changes and not oftener than every 3 seconds, again after a lost link, nothing for a guest;
 //   4. what is drawn: the groups in order with their counts, the visitor first and as the page knows it, the moderator mark, the guests, the empty note and its Host button, a Join where a public room waits
 //      (the Games list's own Join does it, a list that is a popover is opened for it, a game that is gone is said), "and N more", every line as text;
-//   5. the sheet: opened by the bar's button or the corner's, closed by its button, the scrim and Escape with the focus back where it was, closed when the Room shows or the window grows wide; the fold;
+//   5. the fold: the minus button and Escape fold the panel, where the button is drawn;
 //   6. what the hub may send: unknown kinds, a wrong frame, an odd name, a flood of rows: nothing breaks, nothing becomes markup;
 //   7. the page (web/lobby.html with web/home/home.js): the list is loaded once, after the dock, a missing or broken one changes nothing, the hand-off makes it inert;
 //   8. the source of the script: no markup, no storage, no link, no address.
@@ -79,7 +79,7 @@ const MAP_OF = { 'TREASURE.LVL': 'Treasure' };
 const ROOM = (o) => Object.assign({ lobby: true, starting: false, isPublic: false, map: 'TREASURE.LVL', slots: [] }, o);
 const CLIENT = (room, code, guest) => ({ room, code: code || 'c1v3rr', isLeader: () => !guest });
 
-// one list on a fake page: o.width and o.height (the window), o.wide (the window is a wide one: the panel is docked), o.client, o.count (Home's count of the room), o.handing, o.noMedia, o.noQuick, o.popover
+// one list on a fake page: o.width and o.height (the window), o.client, o.count (Home's count of the room), o.handing, o.noQuick, o.popover
 function rig(o) {
     o = o || {};
     const env = { elements: {}, innerHTMLWrites: [] };
@@ -87,9 +87,8 @@ function rig(o) {
     const Players = loadPlayers(clock);
     const doc = { hidden: false, listeners: {}, activeElement: null, createElement: (t) => new El(env, t), getElementById: () => null, addEventListener(t, fn) { (doc.listeners[t] = doc.listeners[t] || []).push(fn); } };
     env.doc = doc;
-    const state = { wide: !!o.wide, client: o.client || null, count: o.count || null, handing: !!o.handing };
+    const state = { client: o.client || null, count: o.count || null, handing: !!o.handing };
     const win = { innerWidth: o.width || 1280, innerHeight: o.height || 800, listeners: {}, addEventListener(t, fn) { (win.listeners[t] = win.listeners[t] || []).push(fn); }, AntsHomeChat: Chat, AntsLobbyRules: Rules, AntsHome: Object.assign({}, Home, { countOf: () => state.count }) };
-    if (!o.noMedia) win.matchMedia = (q) => ({ matches: q === Players.WIDE ? state.wide : false });
     const host = new El(env, 'div', 'home'), yard = new El(env, 'main', 'yard'), right = new El(env, 'div'), quick = new El(env, 'button'), gamesButton = new El(env, 'button');
     right.className = 'hright'; right.appendChild(new El(env, 'button')); quick.disabled = !!o.noQuick;
     host.appendChild(yard);
@@ -99,7 +98,7 @@ function rig(o) {
     const sent = [], taps = [], errors = [], link = { open: true };
     const dock = { tap(fn) { taps.push(fn); }, send(obj) { if (!link.open) return false; sent.push(JSON.parse(JSON.stringify(obj))); return true; } };
     const page = { client: () => state.client, info: () => ({ client: !!state.client, model: null }), handing: () => state.handing };
-    const list = Players.mount({ doc, win, host, dock, page, yard, bar: right, quickHost: quick, games: gamesButton, now: clock.now, error: (e) => errors.push(e) });
+    const list = Players.mount({ doc, win, host, dock, page, yard, quickHost: quick, games: gamesButton, now: clock.now, error: (e) => errors.push(e) });
     const r = { env, clock, Players, doc, win, host, yard, right, quick, games: gamesButton, list, dock, sent, taps, errors, state, pressed, found, link };
     r.emit = (kind, m) => taps.forEach((fn) => fn(kind, m));
     r.live = (welcome) => { r.link.open = true; r.emit('live', welcome || W({})); return r; };
@@ -115,9 +114,6 @@ function rig(o) {
     r.names = () => byClass(r.panel(), 'pl-card').map((c) => one(c, 'pl-nm').textContent);
     r.metaOf = (name) => { const c = byClass(r.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === name); const m = c && one(c, 'pl-meta'); return m ? m.textContent : null; };
     r.joins = () => byClass(r.panel(), 'pl-join');
-    r.corner = () => one(r.root, 'pl-btn');
-    r.barButton = () => one(r.right, 'pl-bar');
-    r.sheetOpen = () => r.panel().getAttribute('data-sheet') === 'true';
     r.tick = (ms) => r.clock.advance(ms === undefined ? 1000 : ms);
     r.listed = (code, name) => {                                     // the Games list has a row for that room: its Join button (the list's own) and the map's name that it shows
         const item = new El(env, 'li'), top = new El(env, 'span'), label = new El(env, 'span'), b = new El(env, 'button');
@@ -200,38 +196,36 @@ function rig(o) {
 // 2. The phases: nothing, the list, off, back
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const r = rig({ wide: true });
-    check('mounted: the list taps the dock once and shows nothing (no panel, no button, no class on Home) until the hub has said the list', r.taps.length === 1 && r.list.state() === 'none' && r.root.hidden === true && r.barButton().hidden === true && cls(r.host).indexOf('pl-on') === -1);
-    check('... the box that Home can make inert is in the Yard, the bar\'s button is first in the bar\'s right side', r.root.parent === r.yard && r.right.children[0] === r.barButton() && r.right.children.length === 2);
+    const r = rig();
+    check('mounted: the list taps the dock once and shows nothing (no panel, no class on Home) until the hub has said the list', r.taps.length === 1 && r.list.state() === 'none' && r.root.hidden === true && cls(r.host).indexOf('pl-on') === -1);
+    check('... the box that Home can make inert is in the body (the box that Home hands it)', r.root.parent === r.yard);
     r.live();
     check('the welcome alone shows nothing (the list is not here yet: no flash of "just you")', r.list.state() === 'none' && r.root.hidden === true);
     r.who(FULL([row(1, 'maple'), row(2, 'sage')], { n: 3, g: 1 }));
-    check('the first list shows it: the panel, the buttons, the class on Home', r.list.state() === 'on' && r.root.hidden === false && r.barButton().hidden === false && cls(r.host).indexOf('pl-on') !== -1 && r.panel().getAttribute('data-state') === 'on');
-    same('the title, the count (everybody, the visitor and the guests too: the chat says the same) and the buttons\' names', [r.title(), r.count(), r.corner().getAttribute('aria-label'), r.barButton().getAttribute('aria-label'), one(r.panel(), 'pl-count').getAttribute('aria-label')], ['Players', '3', 'Players (3)', 'Players (3)', '3 here now']);
-    same('both buttons say what they open and that it is closed', [r.corner().getAttribute('aria-haspopup'), r.corner().getAttribute('aria-expanded'), r.barButton().getAttribute('aria-expanded')], ['dialog', 'false', 'false']);
+    check('the first list shows it: the panel and the class on Home', r.list.state() === 'on' && r.root.hidden === false && cls(r.host).indexOf('pl-on') !== -1 && r.panel().getAttribute('data-state') === 'on');
+    same('the title and the count (everybody, the visitor and the guests too: the chat says the same)', [r.title(), r.count(), one(r.panel(), 'pl-count').getAttribute('aria-label')], ['Players', '3', '3 here now']);
     r.who(FULL([row(1, 'maple')], { n: 1, g: 0 }));
-    check('one person alone is no count (no number in the header or on the buttons)', r.count() === '' && one(r.corner(), 'pill').hidden === true && one(r.barButton(), 'pill').hidden === true && r.corner().getAttribute('aria-label') === 'Players');
+    check('one person alone is no count (no number in the header)', r.count() === '');
     r.who(FULL([row(1, 'maple')], { n: 600, g: 599 }));
     r.who(FULL([row(1, 'maple')], { n: 99, g: 98 }));
-    same('up to 99 the header and the buttons say the number', [r.count(), one(r.corner(), 'pill').textContent, one(r.barButton(), 'pill').textContent], ['99', '99', '99']);
+    same('up to 99 the header says the number', r.count(), '99');
     r.who(FULL([row(1, 'maple')], { n: 100, g: 99 }));
-    same('over 99 the buttons say "99+" (they are small: the bar of a phone has no room for more) and their names say the number; the header says it too', [one(r.corner(), 'pill').textContent, one(r.barButton(), 'pill').textContent, r.corner().getAttribute('aria-label'), r.barButton().getAttribute('aria-label'), r.count(), one(r.panel(), 'pl-count').getAttribute('aria-label')],
-        ['99+', '99+', 'Players (100)', 'Players (100)', '100', '100 here now']);
+    same('over 99 the header says it, and its name says it too', [r.count(), one(r.panel(), 'pl-count').getAttribute('aria-label')], ['100', '100 here now']);
     r.who(FULL([row(1, 'maple')], { n: 600, g: 599 }));
-    same('over 500 people the header says "500+" and the buttons "99+"', [r.count(), one(r.corner(), 'pill').textContent, one(r.barButton(), 'pill').textContent], ['500+', '99+', '99+']);
+    same('over 500 people the header says "500+"', r.count(), '500+');
     r.who(FULL([row(1, 'maple')], { n: 99999, g: 99998 }));
-    same('a count that no hub has: the same words', [r.count(), one(r.barButton(), 'pill').textContent], ['500+', '99+']);
+    same('a count that no hub has: the same words', r.count(), '500+');
     r.lost();
     check('the hub is gone: "off" (the panel stays, the count goes, a grey dot and the words come), the rows are not kept', r.list.state() === 'off' && r.panel().getAttribute('data-state') === 'off' && r.count() === '' && one(r.panel(), 'pl-dot').hidden === false && texts(r.panel(), 'pl-note')[0].indexOf('Players list is off right now') === 0
         && r.names().length === 0 && Object.keys(r.list.model().rows).length === 0 && r.root.hidden === false);
-    check('... the note says that the rest works and that the list comes back by itself', /Games, rooms and the Yard work as always; this list comes back by itself\./.test(texts(r.panel(), 'pl-note')[0]));
+    check('... the note says that the rest works and that the list comes back by itself', /Games and rooms work as always; this list comes back by itself\./.test(texts(r.panel(), 'pl-note')[0]));
     r.live(); r.who(FULL([row(1, 'maple'), row(3, 'fern')], { n: 2 }));
     check('the hub is back: the list is on again, with the new rows', r.list.state() === 'on' && r.names().join() === 'maple,fern' && r.count() === '2' && one(r.panel(), 'pl-dot').hidden === true);
     r.live();
     check('a new welcome (a new socket) keeps nothing of the old list: it waits for the new one', r.list.state() === 'on' && Object.keys(r.list.model().rows).length === 0);
 }
 {   // a hub that has no list (an older one): nothing, whatever happens
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(W({ presence: undefined }));
     r.who(FULL([row(1, 'maple')]));
     check('a welcome without presence: nothing is shown, a list that comes all the same is not used, and nothing is sent', r.list.state() === 'none' && r.root.hidden === true && r.sent.length === 0);
@@ -243,10 +237,10 @@ function rig(o) {
     check('presence has to be exactly true', r.list.state() === 'none' && r.sent.length === 0);
 }
 {   // a hub that is gone from the first moment: "off" at once
-    const r = rig({ wide: true });
+    const r = rig();
     r.lost();
     check('a hub that was never there: "off" (the chat says "Chat is offline" beside it)', r.list.state() === 'off' && r.root.hidden === false);
-    const late = rig({ wide: true });
+    const late = rig();
     late.dock.tap = null;
     check('a dock that cannot be tapped (no list)', late.Players.mount({ doc: late.doc, win: late.win, host: late.host, dock: {}, page: {}, yard: late.yard }) === null && late.Players.mount({ doc: late.doc, win: { AntsLobbyRules: Rules }, host: late.host, dock: { tap() {} }, page: {}, yard: late.yard }) === null);
 }
@@ -255,7 +249,7 @@ function rig(o) {
 // 3. What the page tells the hub
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const r = rig({ wide: true });
+    const r = rig();
     const to = (t) => r.clock.advance(t - r.clock.t);
     r.live();
     same('a named visitor tells the hub where it is, and then asks for the list (in that order, so that the list has the visitor in it)', r.sent, [{ t: 'here', at: 'look' }, { t: 'who' }]);
@@ -294,7 +288,7 @@ function rig(o) {
     same('a new socket is told again what the visitor does even when that is what the old socket was told (the hub knows nothing of the old one)', r.sent.slice(m), [{ t: 'here', at: 'look' }, { t: 'who' }]);
 }
 {   // a guest asks for the list and says nothing
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(W({ you: null }));
     same('a guest (the welcome names nobody) only asks', r.sent, [{ t: 'who' }]);
     r.who(FULL([row(2, 'sage')], { n: 3, g: 2 }));
@@ -304,7 +298,7 @@ function rig(o) {
     check('no row of its own is shown (the page does not know who it is), the guests are counted, the count is everybody', one(r.panel(), 'pl-you') === null && r.names().join() === 'sage' && r.count() === '3' && byClass(r.panel(), 'pl-card').length === 1 && texts(r.panel(), 'pl-guests').some((t) => /\+ 2 guests/.test(t)));
 }
 {   // a link that cannot send: the ask is tried again
-    const r = rig({ wide: true });
+    const r = rig();
     r.link.open = false; r.emit('live', W({}));
     check('a dock that cannot send (the socket is not open yet) has said nothing', r.sent.length === 0);
     r.link.open = true; r.tick(1000);
@@ -313,10 +307,10 @@ function rig(o) {
     check('... and not again', r.sent.length === 2);
 }
 {   // a visitor whose name is cleaned away is a guest; a moderator is known by the welcome
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(W({ you: { name: '​', mod: false } }));
     check('a name that is nothing after the cleaning is nobody', r.sent.length === 1 && r.sent[0].t === 'who');
-    const mod = rig({ wide: true });
+    const mod = rig();
     mod.live(W({ you: { name: 'moddy', mod: true } })); mod.who(FULL([row(1, 'moddy', 'look', { mod: true })], { n: 1 }));
     check('a moderator sees the mark on its own row', texts(mod.panel(), 'pl-badge').join() === 'mod' && texts(mod.panel(), 'pl-tag').join() === 'you');
 }
@@ -327,7 +321,7 @@ function rig(o) {
 const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 'sage'), row(4, 'fern'), row(5, 'basil'),
     row(6, 'clover', 'wait', { pub: true, map: 'TREASURE.LVL', n: 2, of: 4, code: 'c1v3rr' }), row(7, 'juniper', 'wait'), row(8, 'pebble', 'play', { pub: true, map: 'ISLANDS.LVL', n: 3 }), row(9, 'hazel', 'play', { pub: true, map: 'GAUNTLET.LVL', n: 2 })];
 {
-    const r = rig({ wide: true });
+    const r = rig();
     r.listed('c1v3rr', 'Treasure');
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
     same('the groups in their order with their counts, each by name; the visitor is not among them', r.groups(), [
@@ -357,7 +351,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     same('a Join is not offered on a room that the page is in', r.joins().map((b) => b.getAttribute('data-code')), ['c1v3rr']);
 }
 {   // the visitor's own row follows the page's room at once, not the hub's word
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(); r.who(FULL([row(1, 'maple'), row(2, 'sage')], { n: 3, g: 1 }));
     check('looking: "Looking" under the visitor', texts(one(r.panel(), 'pl-you'), 'pl-meta').join().indexOf('Looking') !== -1);
     r.state.client = CLIENT(ROOM({ isPublic: false }), 'k7m2xq'); r.tick(1000);
@@ -368,24 +362,24 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     check('on its way to the game: playing', one(r.panel(), 'pl-you').findAll((e) => e.getAttribute && e.getAttribute('data-s') === 'play').length === 1);
 }
 {   // empty: just the visitor
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(); r.who(FULL([row(1, 'maple')], { n: 1 }));
     same('just the visitor: the note and the button, and the visitor first', [texts(r.panel(), 'pl-note').join('|'), r.names(), r.groups().length], ['Just you here. Host a game!People who log in with Discord show up here by name.+ Host a game', ['maple'], 0]);
     const host = one(r.panel(), 'pl-host');
     check('... Host a game is Quick host\'s button pressed', host.textContent === '+ Host a game' && host.disabled === false);
     host.click();
     same('... and a press does what Quick host does', r.pressed, ['quick host']);
-    const off = rig({ wide: true, noQuick: true });
+    const off = rig({ noQuick: true });
     off.live(); off.who(FULL([row(1, 'maple')], { n: 1 }));
     check('Quick host is not lit (the Games list has not come): the button is off, and a press does nothing', one(off.panel(), 'pl-host').disabled === true);
     off.quick.disabled = false; off.tick(1000);
     check('... and it is lit when Quick host is', one(off.panel(), 'pl-host').disabled === false);
-    const guest = rig({ wide: true });
+    const guest = rig();
     guest.live(W({ you: null })); guest.who(FULL([], { n: 1, g: 1 }));
     check('a guest alone: the note too, no row, no guests line', texts(guest.panel(), 'pl-note')[0].indexOf('Just you here') === 0 && byClass(guest.panel(), 'pl-card').length === 0 && byClass(guest.panel(), 'pl-guests').length === 0);
 }
 {   // more people than rows, and a crowd
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(); r.who(FULL([row(1, 'maple')].concat(Array.from({ length: 199 }, (_, i) => row(100 + i, 'p' + String(i).padStart(3, '0')))), { n: 230, g: 20, more: 10 }));
     check('200 rows: all drawn, "and 10 more" at the end of the list, the count is the hub\'s (everybody)', byClass(r.panel(), 'pl-card').length === 200 && texts(r.panel(), 'pl-more').join() === 'and 10 more' && r.count() === '230');
     r.who(FULL([row(1, 'maple'), row(2, 'sage')], { n: 3, g: 1, more: 0 }));
@@ -402,16 +396,14 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 // 4b. Join: the Games list's own button does it
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const r = rig({ wide: false });
+    const r = rig();
     const clicks = [];
     Object.assign(r.listed('c1v3rr', 'Treasure'), { click() { clicks.push('c1v3rr'); } });
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
-    r.corner().click();
-    check('(the sheet is open for the next check)', r.sheetOpen());
     r.joins()[0].click();
-    same('Join presses the Games list\'s own Join of that room, and the sheet is put away', [clicks, r.sheetOpen()], [['c1v3rr'], false]);
+    same('Join presses the Games list\'s own Join of that room', clicks, ['c1v3rr']);
     // a row of the Games list that is gone between the drawing and the press, in a list that is a popover (the test site): Games is pressed to open it, and its Join is there again if the room is
-    const p = rig({ wide: true });
+    const p = rig();
     p.listed('c1v3rr', 'Treasure');
     p.live(); p.who(FULL(CROWD, { n: 13, g: 4 }));
     p.unlisted('c1v3rr');
@@ -420,7 +412,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     p.joins()[0].click();
     same('a Games list that is a popover (the test site) is opened, and then its Join is pressed', clicks.slice(1), ['popover']);
     // a game that is not there any more
-    const q = rig({ wide: true });
+    const q = rig();
     q.listed('c1v3rr', 'Treasure');
     q.live(); q.who(FULL(CROWD, { n: 13, g: 4 }));
     q.unlisted('c1v3rr');
@@ -428,7 +420,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     check('a game that the list has not got any more says so (a few seconds), and presses nothing', texts(q.panel(), 'pl-status').join() === 'That game is not open any more.');
     q.tick(4100);
     check('... and the words go by themselves', texts(q.panel(), 'pl-status').join() === '');
-    const docked = rig({ wide: true });
+    const docked = rig();
     docked.listed('c1v3rr', 'Treasure');
     docked.live(); docked.who(FULL(CROWD, { n: 13, g: 4 }));
     docked.unlisted('c1v3rr');
@@ -436,7 +428,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     docked.joins()[0].click();
     check('a list that is docked has no popup: Games is not pressed for a game that is not in it', clicks.indexOf('wrong') === -1);
     // no row in the Games list, no Join (and a Join comes by itself when the list gets the room)
-    const n = rig({ wide: true });
+    const n = rig();
     n.live(); n.who(FULL(CROWD, { n: 13, g: 4 }));
     check('a room that waits and that the Games list does not have: no Join', n.joins().length === 0);
     n.listed('c1v3rr', 'Treasure'); n.tick(1000);
@@ -446,33 +438,33 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 }
 {   // a map of the players: its name is drawn only where the Games list shows that room under the same name; the hub\'s words are never drawn
     const comm = (name, code) => row(6, 'clover', 'wait', { pub: true, map: name + '.lvl', n: 2, of: 4, code: code || 'c0mm00' });
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(); r.who(FULL([row(1, 'maple'), comm('Bomber Match  by PRo')], { n: 3 }));
     same('a map of the players that the Games list does not have: no name, only the seats', r.metaOf('clover'), '2 of 4');
     r.listed('c0mm00', 'Bomber Match  by PRo'); r.tick(1000);
     same('... the Games list has the room under that name: the name is drawn', r.metaOf('clover'), 'Bomber Match  by PRo · 2 of 4');
     r.unlisted('c0mm00'); r.listed('c0mm00', 'Another Map'); r.tick(1000);
     same('... the Games list has the room under another name: the hub\'s word is not drawn, and the list\'s is not either', [r.metaOf('clover'), r.joins().length], ['2 of 4', 1]);
-    const lie = rig({ wide: true });
+    const lie = rig();
     lie.live(); lie.who(FULL([row(1, 'maple'), row(6, 'mallory', 'wait', { pub: true, map: 'Free nitro at discord.gg-abc.LVL', n: 1, of: 4, code: 'f4k3f4' })], { n: 3 }));
     same('a made-up map and code: no name, no Join', [lie.metaOf('mallory'), lie.joins().length, JSON.stringify(texts(lie.panel(), 'pl-card')).indexOf('nitro')], ['1 of 4', 0, -1]);
     lie.listed('f4k3f4', 'Treasure'); lie.tick(1000);
     same('a code of a room that the Games list has, with a map that is not that room\'s: the name is not drawn (a Join to that room is what the list offers)', [lie.metaOf('mallory'), JSON.stringify(texts(lie.panel(), 'pl-card')).indexOf('nitro')], ['1 of 4', -1]);
-    const play = rig({ wide: true });
+    const play = rig();
     play.live(); play.who(FULL([row(1, 'maple'), row(7, 'pat', 'play', { pub: true, map: 'Bomber Match  by PRo.lvl', n: 3 }), row(8, 'orig', 'play', { pub: true, map: 'ISLANDS.LVL', n: 2 })], { n: 3 }));
     same('a match: an original\'s name, never a map of the players\' (a match has no code to look up)', [play.metaOf('pat'), play.metaOf('orig')], ['3 players', 'Islands · 2 players']);
-    const own = rig({ wide: true });
+    const own = rig();
     own.state.client = CLIENT(ROOM({ isPublic: true, map: 'Bomber Match  by PRo.lvl' }), 'c0mm00'); own.state.count = { people: 1, size: 4 };
     own.live(); own.who(FULL([row(1, 'maple')], { n: 1 }));
     check('the visitor\'s own room: its map\'s name is the page\'s own word, drawn', texts(one(own.panel(), 'pl-you'), 'pl-meta').join().indexOf('Bomber Match  by PRo · 1 of 4') !== -1);
-    const mine = rig({ wide: true });
+    const mine = rig();
     mine.live(); mine.who(FULL([row(1, 'maple'), row(2, 'maple', 'wait', { pub: true, map: 'TREASURE.LVL', n: 1, of: 4, code: 'c1v3rr' }), row(3, 'sage')], { n: 4 }));
     same('a person who has the visitor\'s name is not hidden (only the row that is the visitor\'s number is)', mine.names().sort(), ['maple', 'maple', 'sage'].sort());
 }
 {   // an original's name: the page's own table's (a closed set of six), and for a room that the Games list has, only if the list shows the same name
     const NAMES = { 'TINY.LVL': 'Tiny', 'SMALL.LVL': 'Small', 'MEDIUM.LVL': 'Medium', 'GAUNTLET.LVL': 'Gauntlet', 'TREASURE.LVL': 'Treasure', 'ISLANDS.LVL': 'Islands' };
     const waits = (map, code) => row(6, 'mallory', 'wait', { pub: true, map, n: 4, of: 4, code: code || 'f4k3f4' });
-    const liar = rig({ wide: true });
+    const liar = rig();
     liar.live(); liar.who(FULL([row(1, 'maple'), waits('GAUNTLET.LVL')], { n: 3 }));
     liar.listed('f4k3f4', 'Islands'); liar.tick(1000);
     same('an original\'s name that the Games list does not confirm is not drawn: the list has the room under that code as Islands, the hub says Gauntlet (the line has the seats, and the Join is the list\'s own)', [liar.metaOf('mallory'), liar.joins().length], ['4 of 4', 1]);
@@ -484,7 +476,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     same('... the list has no such room: an original\'s name is the page\'s own table\'s, as the hub says it', liar.metaOf('mallory'), 'Gauntlet · 4 of 4');
     const cases = [];
     Object.keys(NAMES).forEach((file) => [file, file.toLowerCase(), file.slice(0, -4) + '.lvl', file.charAt(0) + file.slice(1, -4).toLowerCase() + '.LVL'].forEach((spelling) => cases.push([spelling, NAMES[file]])));
-    const spelled = rig({ wide: true });
+    const spelled = rig();
     spelled.live(); spelled.who(FULL([row(1, 'maple')].concat(cases.map((c, i) => row(10 + i, 'p' + String(i).padStart(2, '0'), 'wait', { pub: true, map: c[0], n: 1, of: 4 }))), { n: cases.length + 1 }));
     same('the six originals, in every spelling that the page\'s rule takes of the file name, are drawn by the table\'s name and nothing else', cases.map((c, i) => spelled.metaOf('p' + String(i).padStart(2, '0'))), cases.map((c) => c[1] + ' · 1 of 4'));
     // a run of file names of any shape: what is drawn is never a word of the hub's, but the table's six names (the closed set) or, where the list confirms it, the list's own name
@@ -493,7 +485,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-!@#$%^&()+=,;\'[]{}~';
     const maps = [];
     for (let i = 0; i < 160; i++) { let n = 1 + Math.floor(chance() * 40), t = ''; while (n--) t += chars.charAt(Math.floor(chance() * chars.length)); maps.push(t + (chance() < 0.5 ? '.lvl' : '.LVL')); }
-    const wild = rig({ wide: true });
+    const wild = rig();
     const rows = maps.map((map, i) => (i % 2 ? row(10 + i, 'w' + i, 'wait', { pub: true, map, n: 1 + (i % 4), of: 4, code: 'c' + i }) : row(10 + i, 'w' + i, 'play', { pub: true, map, n: 1 + (i % 4) })));
     wild.live(); wild.who(FULL([row(1, 'maple')].concat(rows), { n: rows.length + 1 }));
     const SHAPES = /^(?:(?:Tiny|Small|Medium|Gauntlet|Treasure|Islands) · )?(?:\d of \d|\d players?)$/;
@@ -501,27 +493,27 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     rows.forEach((r, i) => { if (i % 2) wild.listed('c' + i, i % 6 === 1 ? 'Treasure' : 'Another map'); });
     wild.tick(1000);
     check('... and in rooms that it has, under a name that is not what the hub\'s file is called: the seats only (no word of the hub\'s and none of the list\'s)', rows.every((r, i) => !(i % 2) || /^\d of \d$/.test(wild.metaOf(r.name))), rows.map((r, i) => (i % 2 ? wild.metaOf(r.name) : '')).filter((t) => t && !/^\d of \d$/.test(t)).join(' | '));
-    check('... a page that says a room of the players is the one that the list shows under the same name has that name drawn (by a map of that name, in a room of its own)', (() => { const q = rig({ wide: true }); q.live(); q.who(FULL([row(1, 'maple'), waits('Same Name.lvl', 'c0mm00')], { n: 3 })); q.listed('c0mm00', 'Same Name'); q.tick(1000); return q.metaOf('mallory') === 'Same Name · 4 of 4'; })());
+    check('... a page that says a room of the players is the one that the list shows under the same name has that name drawn (by a map of that name, in a room of its own)', (() => { const q = rig(); q.live(); q.who(FULL([row(1, 'maple'), waits('Same Name.lvl', 'c0mm00')], { n: 3 })); q.listed('c0mm00', 'Same Name'); q.tick(1000); return q.metaOf('mallory') === 'Same Name · 4 of 4'; })());
 }
 {   // a room that the hub says nothing of is not called private: the hub keeps no details of a private room nor of the room of an account that may not chat
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(); r.who(FULL([row(1, 'maple'), row(2, 'pat', 'wait'), row(3, 'quinn', 'play'), row(4, 'rae', 'wait', { pub: true, code: 'c0mm00' })], { n: 4 }));
     same('in the lines under the names of others: "In a room" and "In a game", and no word "Private"', [r.metaOf('pat'), r.metaOf('quinn'), r.metaOf('rae'), JSON.stringify(texts(r.panel(), 'pl-card')).indexOf('Private')], ['In a room', 'In a game', 'Public room', -1]);
 }
 {   // the visitor's own row is the one that the hub's welcome names, not a row with the visitor's name
     const youAnd = (r) => r.names().filter((n) => n === 'maple').length;
     const twins = [row(1, 'maple'), row(2, 'maple', 'wait'), row(3, 'sage')];
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(W({ me: 2 })); r.who(FULL(twins, { n: 4 }));
     same('the welcome names the row (2): that one is left out of the groups, the other person called maple is not', [youAnd(r), r.groups().map((g) => g.g + ':' + g.names.join())], [2, ['look:maple,sage']]);
     r.live(W({ me: 1 })); r.who(FULL(twins, { n: 4 }));
     same('a new welcome (a new socket) names its own row: now it is the first that is left out', [youAnd(r), r.groups().map((g) => g.g + ':' + g.names.join())], [2, ['look:sage', 'wait:maple']]);
     ['2', -1, 1.5, 1e12, null, undefined, {}, [1], true].forEach((me) => {
-        const q = rig({ wide: true });
+        const q = rig();
         q.live(W({ me })); q.who(FULL([row(1, 'maple'), row(3, 'sage')], { n: 3 }));
         check('a welcome whose `me` is ' + JSON.stringify(me) + ' hides no row (nothing is guessed from a name)', youAnd(q) === 2);
     });
-    const none = rig({ wide: true });
+    const none = rig();
     none.live(W({ me: undefined })); none.who(FULL([row(1, 'maple')], { n: 2 }));
     check('a welcome with no `me` (a reader\'s, or a hub that does not say) hides no row', youAnd(none) === 2);
     r.lost(); r.live(W({ me: 7 })); r.who(FULL([row(1, 'maple'), row(7, 'maple', 'wait')], { n: 3 }));
@@ -529,49 +521,21 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 5. The sheet and the fold
+// 5. The fold
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const r = rig({ wide: false });
+    const r = rig();
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
-    check('closed: the panel is not open as a sheet, no dialog, no scrim', r.sheetOpen() === false && one(r.root, 'pl-scrim').hidden === true && r.panel().getAttribute('role') === null);
-    r.corner().focus(); r.corner().click();
-    check('the corner button opens it: a modal dialog over a scrim, the button says it is open, the focus is on Close', r.sheetOpen() && one(r.root, 'pl-scrim').hidden === false && r.panel().getAttribute('role') === 'dialog' && r.panel().getAttribute('aria-modal') === 'true'
-        && r.corner().getAttribute('aria-expanded') === 'true' && r.env.focused === one(r.panel(), 'pl-close'));
-    r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
-    check('Escape closes it and the focus goes back to the button that opened it', !r.sheetOpen() && one(r.root, 'pl-scrim').hidden === true && r.panel().getAttribute('role') === null && r.env.focused === r.corner() && r.corner().getAttribute('aria-expanded') === 'false');
-    r.barButton().focus(); r.barButton().click();
-    check('the bar\'s button opens the same panel', r.sheetOpen() && r.env.focused === one(r.panel(), 'pl-close'));
-    one(r.panel(), 'pl-close').click();
-    check('Close closes it, and the focus goes back to the bar\'s button', !r.sheetOpen() && r.env.focused === r.barButton());
-    r.corner().click(); one(r.root, 'pl-scrim').click();
-    check('a press on the scrim closes it too', !r.sheetOpen());
-    r.corner().click(); r.doc.listeners.keydown.forEach((fn) => fn({ key: 'Escape' }));
-    check('Escape anywhere in the page closes it', !r.sheetOpen());
-    r.corner().click(); r.list.open(false);
-    check('(and the page can close it)', !r.sheetOpen());
-    r.corner().click(); r.emit('shown', false);
-    check('when the Room shows, a sheet that was open is closed', !r.sheetOpen());
-    r.emit('shown', true);
-    r.corner().click(); r.state.wide = true; (r.win.listeners.resize || []).forEach((fn) => fn({}));
-    check('a window that grows wide has the panel docked: the sheet is closed', !r.sheetOpen());
-    r.corner().click();
-    check('... and a wide window\'s panel is never a sheet (no scrim, no dialog)', !r.sheetOpen() && one(r.root, 'pl-scrim').hidden === true);
-    r.state.wide = false;
-    r.corner().click(); r.lost();
-    check('a hub that goes while the sheet is open: the sheet stays, and says "off"', r.sheetOpen() && r.list.state() === 'off');
-    r.live(W({ presence: undefined }));
-    check('... and a hub that comes back with no list takes the sheet away with the rest', !r.sheetOpen() && r.list.state() === 'none' && r.root.hidden === true);
-}
-{
-    const r = rig({ wide: true });
-    r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
-    const fold = byClass(r.panel(), 'pl-fold').find((b) => cls(b).indexOf('pl-close') === -1);
+    const fold = byClass(r.panel(), 'pl-fold')[0];
     check('the fold: open, labelled for what it does', r.panel().getAttribute('data-folded') === 'false' && fold.getAttribute('aria-label') === 'Fold the list' && fold.getAttribute('aria-expanded') === 'true');
     fold.click();
     check('pressed: folded to its header, the button says it opens', r.panel().getAttribute('data-folded') === 'true' && fold.getAttribute('aria-label') === 'Open the list' && fold.getAttribute('aria-expanded') === 'false');
     fold.click();
     check('pressed again: open', r.panel().getAttribute('data-folded') === 'false');
+    fold.getClientRects = () => [];                           // (a phone's Players view: the fold is not drawn)
+    r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
+    check('Escape does not fold a panel whose fold button is not drawn (a phone\'s Players view: it would stay folded in the wide layout later)', r.panel().getAttribute('data-folded') === 'false');
+    delete fold.getClientRects;
     r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
     check('Escape in a docked panel folds it and the focus is on the fold button', r.panel().getAttribute('data-folded') === 'true' && r.env.focused === fold);
     r.who(FULL(CROWD.concat([row(20, 'newcomer')]), { n: 14, g: 4 }));
@@ -582,7 +546,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 // 6. What the hub may send
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const r = rig({ wide: true });
+    const r = rig();
     r.live(); r.who(FULL([row(1, 'maple'), row(2, 'sage')], { n: 3, g: 1 }));
     const bad = [null, 'who', 7, [], {}, { t: 'who' }, { t: 'who', full: true, n: 'x', g: 0, more: 0, rows: [] }, { t: 'who', full: true, n: 3, g: -1, more: 0, rows: [] }, { t: 'who', full: true, n: 3, g: 0, more: 0, rows: { 0: row(1, 'zz') } },
         { t: 'who', full: true, n: 3, g: 0, more: 0, rows: Array.from({ length: 300 }, (_, i) => row(i, 'p' + i)) }, { t: 'who', full: false, n: 3, g: 0, more: 0, rows: [], gone: { 0: 1 } }];
@@ -598,10 +562,10 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     for (let i = 0; i < 1000; i++) r.who({ t: 'who', full: false, n: 3, g: 0, more: 0, rows: [row(i % 150, 'q' + (i % 150), i % 3 ? 'look' : 'wait')], gone: [(i + 75) % 150] });
     check('a thousand changes: the rows stay under 200, nothing throws', Object.keys(r.list.model().rows).length <= 200 && r.errors.length === 0);
     // a dock that throws in its tap, or a page that throws when asked
-    const t = rig({ wide: true });
+    const t = rig();
     t.state.client = { get room() { throw new Error('a page that breaks'); } };
     t.live();
-    check('a page that throws when asked about its room: the list reports it and its other parts go on (the sheet and the fold still work)', t.errors.length >= 1 && (t.corner().click(), true));
+    check('a page that throws when asked about its room: the list reports it and its other parts go on (the fold still works)', t.errors.length >= 1);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -634,13 +598,13 @@ function bringPlayers(env) {
     check('it mounts only when BOTH files are there (no unstyled list)', home.children.length === kids);
     env.win.AntsHomePlayers = H.loadFile('home/players.js', env.scope).AntsHomePlayers;
     filesOf(env, 'players')[0].onload();
-    const yard = home.children.find((c) => c.id === 'yard');
-    check('... then its box is in the Yard, and Home\'s own parts are where they were', yard.children.some((c) => cls(c).indexOf('pl-root') !== -1) && home.children.slice(0, 3).map((c) => c.tagName).join() === 'header,main,div' && home.children[3].id === 'gchat');
+    const yard = home.children.find((c) => c.id === 'hmain');
+    check('... then its box is in Home\'s body, and Home\'s own parts are where they were', yard.children.some((c) => cls(c).indexOf('pl-root') !== -1) && home.children.slice(0, 4).map((c) => c.tagName).join() === 'header,main,div,nav' && home.children[4].id === 'gchat');
     hub[0].readyState = 1; hub[0].onmessage({ data: JSON.stringify(W({ you: { name: 'maya', mod: false }, online: 2 })) });
     check('the dock\'s socket carries the list\'s words: the visitor says where it is and asks for the list, on the same socket (no second socket)', hub.length === 1 && hub[0].sent.map((x) => JSON.parse(x)).filter((m) => m.t === 'here' || m.t === 'who').map((m) => m.t).join() === 'here,who');
     hub[0].onmessage({ data: JSON.stringify(FULL([row(1, 'maya'), row(2, 'sage')], { n: 2 })) });
     const box = yard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
-    check('a list from the hub shows (the chat dock\'s count says the same number, 2 here now)', box.hidden === false && one(box, 'pl-count').textContent === '2' && one(home.children[3], 'gc-on').textContent === '2 here now');
+    check('a list from the hub shows (the chat dock\'s count says the same number, 2 here now)', box.hidden === false && one(box, 'pl-count').textContent === '2' && one(home.children[4], 'gc-on').textContent === '2 here now');
     env.advance(10);
     check('the page does not ask for the list again (the same two files)', filesOf(env, 'players').length === 2);
     env.home('mine').click();
@@ -656,19 +620,19 @@ function bringPlayers(env) {
     hubFor(broken); broken.advance(0); bringChat(broken);
     broken.win.AntsHomePlayers = { mount() { throw new Error('a list that breaks'); } };
     filesOf(broken, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[3].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
+    check('a list that throws when it mounts: Home goes on (My room still makes the room, the dock is there)', broken.$('home').children[4].id === 'gchat' && (broken.home('mine').click(), broken.sockets.length === 1) && broken.screen() === 'room');
     const none = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(none); none.advance(0); bringChat(none);
     filesOf(none, 'players').forEach((n) => { if (n.onload) n.onload(); });
-    check('a script that did not define the list (no AntsHomePlayers) mounts nothing', none.win.AntsHomePlayers === undefined && none.$('home').children.length === 4);
+    check('a script that did not define the list (no AntsHomePlayers) mounts nothing', none.win.AntsHomePlayers === undefined && none.$('home').children.length === 5);
     const gone = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
     hubFor(gone); gone.advance(0); bringChat(gone);
-    check('(a style that never comes: nothing is mounted, as for the others)', filesOf(gone, 'players').length === 2 && gone.$('home').children.length === 4);
+    check('(a style that never comes: nothing is mounted, as for the others)', filesOf(gone, 'players').length === 2 && gone.$('home').children.length === 5);
 }
 {   // the hand-off to the game: the list is inert with the bars and the dock; a list mounted late is inert from the start
     const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true, picker: true });
     hubFor(env); env.advance(0); bringChat(env); bringPlayers(env);
-    const yard = env.$('home').children.find((c) => c.id === 'yard');
+    const yard = env.$('home').children.find((c) => c.id === 'hmain');
     const box = yard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
     check('(the list is there and takes presses)', !!box && !box.hasAttribute('inert'));
     env.home('mine').click();
@@ -681,7 +645,7 @@ function bringPlayers(env) {
     const sock = late.arrive({ key: KEY, seats: [[C, 'Sam'], [E, ''], [E, ''], [E, '']] });
     sock.receive(roomMessage([[C, 'Sam'], [C, 'Maya'], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
     bringPlayers(late);
-    const lateYard = late.$('home').children.find((c) => c.id === 'yard');
+    const lateYard = late.$('home').children.find((c) => c.id === 'hmain');
     const lateBox = lateYard.children.find((c) => cls(c).indexOf('pl-root') !== -1);
     check('a list that is mounted while the page is on its way to the game is inert from the start', late.assigned.length === 1 && !!lateBox && lateBox.hasAttribute('inert'));
     late.advance(15000);

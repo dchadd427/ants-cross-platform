@@ -23,6 +23,18 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.15.0 - 2026-11-10 - A three-panel Home, notices over the page, and games in progress with Watch
+
+**For players:**
+- **A new Home.** Games are on the left, Players on the right and the chat at the bottom; the Yard is no longer on the front page. On a phone you see one view at a time, with a strip of buttons to move between Games, Players and Chat, and a phone held sideways keeps the account line.
+- **Notices float over the page.** A notice such as "Your room is public now." is a small box over the page, so the page no longer moves when it comes; it goes after 6 seconds, and one that asks something (Rejoin, Make public) stays until you answer. OK closes it, and so does Escape while it has the focus.
+- **Games in progress stay in the Games list.** A match that is running is a row of the list with a Watch button, which opens the live match in a new tab. The switch "Show games in progress" at the top of the list hides these rows; this browser remembers the choice.
+- **The chat keeps the newest 200 lines.** Besides the limit of 7 days, the chat's history keeps the newest 200 lines; older lines are deleted for good (the Legal page says so).
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.1 page or game still joins. The rest of this release is internal: tests and documents.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...5aee057e)
+
 ## v0.14.1 - 2026-11-09 - Discord names in games, the Players list, replay files, and a Hard bot that answers a blow
 
 **For players:**
@@ -493,17 +505,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56e02b48...81bd4d9d)
 
-## v0.12.115 - 2026-10-23 - Path finder: a wide search for very big maps (switched off for now)
+## Older versions (v0.12.115 and before)
 
-**For players:**
-- **Nothing changes in play yet.** The game now contains the groundwork for very long orders on very big maps (today an order of about 400 tiles or more, 286 on a diagonal, is refused with "Can't go there", and a group of ants sent far gets its paths slowly). It is the original's own search, with the same routes and tie-breaks, only without the width limits, and it is switched off: no map can ask for it yet, and every map of the library plays exactly as before (all 540 maps hash byte for byte the same, also when the new search is forced on for all of them).
-- Whatever the original can play, the new search plays the same, at the same speed: it keeps the original's 1,000 search steps every 50 ms until an order is past the original's limit, and only then goes faster on a big map.
-- The next release lets a new big map ask for it.
-
-**Rules / network:** none. Network protocol 21 and the replay rules numbers are unchanged. A new map rules word 2 exists inside the simulation only; the map readers and writers still refuse it, and the simulation itself plays a word of 2 as 1 outside the tests, so no map and no recording can use it.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/86afa1dc...1a1f55e3)
-
-## Older versions (v0.12.114 and before)
-
-Every release before v0.12.115, and the long notes of v0.12.114 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.116, and the long notes of v0.12.115 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

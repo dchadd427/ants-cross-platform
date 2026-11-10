@@ -1,7 +1,7 @@
 // Runs QUICK JOIN and the question before LEAVE ROOM (web/home/games.js with web/lobby.html's own script, docs/HOME_SCREEN.md) in the fake browser of tests/scripts/web_page_harness.js, with a scripted game server and a fake
 // GET /lobbies (the rig is tests/scripts/web_home_games_rig.js):
 //   1. the order of the rooms (the fullest that still has a free seat, then the oldest, then the list's own order), the BEST tag, "updates live";
-//   2. the way that works: the card "Finding a game...", the second client for the best room, the card "Joined Pebble's room", the Room that opens by itself or at the press of its button, no strip, nothing left of the old room
+//   2. the way that works: the card "Finding a game...", the second client for the best room, the card "Joined Pebble's room", the Room that opens by itself or at the press of its button, no toast, nothing left of the old room
 //      before the new one welcomes the page;
 //   3. the rooms that cannot be had (full, started, gone) and the next ones, at most three, the words when nothing is left, and what stops the tries (another version, no answer);
 //   4. nothing to join (an empty list, a list that is off), Host one!, Not now;
@@ -11,7 +11,7 @@
 // tests/scripts/test_web_home_games.py runs this with node (the quick tier). usage: node web_home_games_quickjoin_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloRoom, grouped, RULES0, done, broke } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
@@ -80,11 +80,11 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
           title(env) === 'Joined Pebble’s room' && lineOf(env) === 'Opening the room…' && textOf(first(first(card(env), 'gitem'), 'gcount')) === '4/4' && textOf(act(env, 'gyes')) === 'Go to the room' && !!first(card(env), 'gbar') && env.screen() === 'home'
           && !!first(card(env), 'gmark') && first(card(env), 'gmark').className.indexOf('check') !== -1);
     same('the card is drawn in the order of the picture: the mark, the title, the room, the line, the bar, the button', card(env).children.map((c) => classes(c)[0]), ['gmark', 'gctitle', 'gitem', 'gcline', 'gbar', 'gcbtns']);
-    check('(the page is in that room now: its code, its session; nothing is said on a strip)', env.$('code').textContent === 'p4n 8dz' && JSON.parse(env.session.data['ants.lobby']).c === 'p4n8dz' && stripOf(env).hidden === true);
+    check('(the page is in that room now: its code, its session; nothing is said on a toast)', env.$('code').textContent === 'p4n 8dz' && JSON.parse(env.session.data['ants.lobby']).c === 'p4n8dz' && toastOf(env).hidden === true);
     await wait(env, 1400);
     check('the Room is not opened before 1.5 s are gone', card(env) !== null && env.screen() === 'home');
     await wait(env, 200);
-    check('... then the card goes and the Room opens as a guest of that room ("Pebble’s room", "Public room" is for the room\'s own flags: private here), with no strip', card(env) === null && env.screen() === 'room' && env.$('room-h').textContent === 'Pebble’s room' && stripOf(env).hidden === true);
+    check('... then the card goes and the Room opens as a guest of that room ("Pebble’s room", "Public room" is for the room\'s own flags: private here), with no toast', card(env) === null && env.screen() === 'room' && env.$('room-h').textContent === 'Pebble’s room' && toastOf(env).hidden === true);
     check('the page is not inert any more', !env.home('hbar').hasAttribute('inert') && !env.$('lobby').hasAttribute('inert'));
 }
 {
@@ -103,7 +103,7 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     pressEscape(again);
     check('Escape on that card is "Go to the room" too (the page is in that room: the card is only the way there)', card(again) === null && again.screen() === 'room');
 }
-{   // what a screen reader is told: the card is described by its line, and the join that has no strip is told by a line that nobody sees
+{   // what a screen reader is told: the card is described by its line, and the join that has no toast is told by a line that nobody sees
     const readOf = (env) => { const id = card(env).getAttribute('aria-describedby'); const hit = find(card(env), 'gcline').filter((p) => p.id === id); return hit.length === 1 ? textOf(hit[0]) : null; };
     const toldOf = (env) => { const n = find(env.body, 'sr'); return n.length === 1 && n[0].getAttribute('role') === 'status' ? textOf(n[0]) : null; };
     const env = await withRooms(ROWS);
@@ -113,7 +113,7 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     welcomeOf(env.last(), 1, ['Pebble', 'Maya'], PRIVATE);
     check('the card "Joined Pebble’s room" is described by "Opening the room…", and the page tells it: "Joined Pebble’s room."', title(env) === 'Joined Pebble’s room' && readOf(env) === 'Opening the room…' && toldOf(env) === 'Joined Pebble’s room.');
     await wait(env, 1600);
-    check('... the card closes by itself with no strip, and what was told stays (a screen reader has read it; nothing visible is added)', card(env) === null && env.screen() === 'room' && stripOf(env).hidden === true && toldOf(env) === 'Joined Pebble’s room.');
+    check('... the card closes by itself with no toast, and what was told stays (a screen reader has read it; nothing visible is added)', card(env) === null && env.screen() === 'room' && toastOf(env).hidden === true && toldOf(env) === 'Joined Pebble’s room.');
     env.roomBar('rhome').click();
     await press(env);
     check('the next press empties the line (the same words told again are heard again), and the question is described by its line', toldOf(env) === '' && title(env) === 'Leave Pebble’s room?' && /^You are in Pebble’s room\./.test(readOf(env)));
@@ -191,12 +191,12 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     env.last().open().receive(reject(2));
     await flush();
     await wait(env, 800);
-    check('a server of another version: the page\'s own banner asks for a reload, the card goes, no other room is tried (all of them would say it), and no strip of the list says anything more', !env.$('banner').hidden && env.$('banner-x').textContent === 'Reload' && /newer version of Ants/.test(env.$('banner-text').textContent) && card(env) === null && env.sockets.length === 1 && stripOf(env).hidden === true);
+    check('a server of another version: the page\'s own banner asks for a reload, the card goes, no other room is tried (all of them would say it), and no toast of the list says anything more', !env.$('banner').hidden && env.$('banner-x').textContent === 'Reload' && /newer version of Ants/.test(env.$('banner-text').textContent) && card(env) === null && env.sockets.length === 1 && toastOf(env).hidden === true);
     const silent = await withRooms(ROWS);
     await press(silent);
     silent.last().open();
     await wait(silent, 15500);
-    check('a room that says nothing for 15 s: the card goes, the strip says "The server did not answer. Try again in a moment." and no other room is tried', card(silent) === null && stripText(silent) === 'The server did not answer. Try again in a moment.' && silent.sockets.length === 1);
+    check('a room that says nothing for 15 s: the card goes, the toast says "The server did not answer. Try again in a moment." and no other room is tried', card(silent) === null && toastTextOf(silent) === 'The server did not answer. Try again in a moment.' && silent.sockets.length === 1);
     check('... and the page is as it was (Home, no room left, Quick join takes a press again)', silent.screen() === 'home' && silent.home('join').disabled === false);
 }
 
@@ -270,7 +270,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     check('(a Join of the list waits for its room)', wait2.sockets.length === 1 && first(popOf(wait2), 'gjoining').hidden === false);
     wait2.home('join').click();
     await flush();
-    check('Quick join pressed while a Join of the list waits starts nothing (no card, no second client more) and says why on the strip', card(wait2) === null && wait2.sockets.length === 1 && /^Joining .+… Wait for it, or cancel it in the list\.$/.test(stripText(wait2)));
+    check('Quick join pressed while a Join of the list waits starts nothing (no card, no second client more) and says why on the toast', card(wait2) === null && wait2.sockets.length === 1 && /^Joining .+… Wait for it, or cancel it in the list\.$/.test(toastTextOf(wait2)));
     const fresh = await withRooms([row('zz1111', 'Old', { free: 2, age: 5 })]);
     fresh.site.body = listOf([row('zz1111', 'Old', { free: 2, age: 5 }), row('yy2222', 'New', { people: 3, free: 1, age: 9 })]);
     await wait(fresh, 1500);
@@ -413,7 +413,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     check('Cancel: the card goes, the second client is let go of (a Leave, closed), the own room is as it was (no Leave, open), the focus is back on Quick join', card(env) === null && leaves(probe) === 1 && probe.closed && leaves(own) === 0 && !own.closed && env.focused === env.home('join'));
     probe.receive(welcome(1, KEY2, 0));
     await wait(env, 20000);
-    check('a Welcome (or the 15 s of silence) that comes after Cancel changes nothing: no room, no notice, no ghost seat (the own room stays the page\'s)', env.screen() === 'home' && card(env) === null && stripOf(env).hidden === true && !own.closed && leaves(own) === 0 && env.sockets.length === 2);
+    check('a Welcome (or the 15 s of silence) that comes after Cancel changes nothing: no room, no notice, no ghost seat (the own room stays the page\'s)', env.screen() === 'home' && card(env) === null && toastOf(env).hidden === true && !own.closed && leaves(own) === 0 && env.sockets.length === 2);
     await press(env);
     check('(and Quick join can be pressed again)', card(env) !== null && title(env) === 'Finding a game…' && env.sockets.length === 3);
     pressEscape(env);
@@ -464,7 +464,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const before = env.sockets.length;
     tap(env.home('join'));
     await flush();
-    check('Quick join on a page that is on its way to a game (a match for one) opens nothing and says why, with a Reload', card(env) === null && env.sockets.length === before && stripText(env) === 'The game is opening. If it does not, reload this page.' && textOf(stripButtons(env)[0]) === 'Reload');
+    check('Quick join on a page that is on its way to a game (a match for one) opens nothing and says why, with a Reload', card(env) === null && env.sockets.length === before && toastTextOf(env) === 'The game is opening. If it does not, reload this page.' && textOf(toastButtons(env)[0]) === 'Reload');
 }
 {   // a match that runs
     const env = await withRooms(ROWS);
@@ -472,16 +472,16 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     env.roomBar('rhome').click();
     await wait(env, 1500);
     await press(env);
-    check('START that waits (the match is on its way): Quick join says "Your match is running." and opens nothing', card(env) === null && stripText(env) === 'Your match is running.' && env.sockets.length === 1);
+    check('START that waits (the match is on its way): Quick join says "Your match is running." and opens nothing', card(env) === null && toastTextOf(env) === 'Your match is running.' && env.sockets.length === 1);
 }
 {   // a match of this browser that is still running (the Rejoin strip is up), as Quick host answers it
     const env = await withRooms(ROWS, { stored: { 'ants.name': 'Maya', 'ants.rejoin.k7m2xq.1': JSON.stringify({ k: hex(KEY), s: 'wss://play.test/ws', t: Date.now() }) } });
     await wait(env, 1200);
     const looks = env.looks();
     await press(env);
-    check('Quick join while a match of yours is still running (the Rejoin strip is up): "Your match is running." with a Rejoin button, no card, no look at the list and no socket', card(env) === null && stripText(env) === 'Your match is running.' && textOf(stripButtons(env)[0]) === 'Rejoin' && textOf(stripButtons(env)[1]) === 'OK'
+    check('Quick join while a match of yours is still running (the Rejoin strip is up): "Your match is running." with a Rejoin button, no card, no look at the list and no socket', card(env) === null && toastTextOf(env) === 'Your match is running.' && textOf(toastButtons(env)[0]) === 'Rejoin' && textOf(toastButtons(env)[1]) === 'OK'
           && env.sockets.length === 0 && env.looks() === looks && env.screen() === 'home');
-    tap(stripButtons(env)[0]);
+    tap(toastButtons(env)[0]);
     check('... and Rejoin is the strip\'s own: the tab goes to the match', env.assigned.length === 1 && /[?&]room=k7m2xq&seat=1/.test(env.assigned[0]));
 }
 {   // a Join of the list waits: a press on Quick join (or Quick host) is answered on the strip
@@ -492,18 +492,19 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     const probe = env.last();
     check('(a Join of the list is on its way: its line shows in the list)', env.sockets.length === 1 && askedFor(probe) === 'c1v3rr' && textOf(first(popOf(env), 'gjoining')) !== '' && popOf(env).hidden === false);
     await press(env);
-    check('Quick join while it waits opens no card and no second client, and the strip says why: "Joining Clover’s room… Wait for it, or cancel it in the list." (a warning)', card(env) === null && env.sockets.length === 1 && stripText(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && stripOf(env).className.indexOf('warn') !== -1 && stripOf(env).hidden === false);
+    check('Quick join while it waits opens no card and no second client, and the toast says why: "Joining Clover’s room… Wait for it, or cancel it in the list." (a warning)', card(env) === null && env.sockets.length === 1 && toastTextOf(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && toastOf(env).className.indexOf('warn') !== -1 && toastOf(env).hidden === false);
     tap(env.home('games'));
     check('(the list is put away, and the Join still waits)', popOf(env).hidden === true && env.sockets.length === 1);
     await press(env);
-    check('... a press on Quick join shows the list again, with the line and the Cancel of that Join, and the strip says it too', popOf(env).hidden === false && textOf(first(popOf(env), 'gjoining')) !== '' && stripText(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && card(env) === null && env.sockets.length === 1);
-    tap(stripButtons(env)[0]);
-    check('(OK puts the strip away)', stripOf(env).hidden === true);
+    check('... a press on Quick join shows the list again, with the line and the Cancel of that Join, and the toast says it too', popOf(env).hidden === false && textOf(first(popOf(env), 'gjoining')) !== '' && toastTextOf(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && card(env) === null && env.sockets.length === 1);
+    tap(toastButtons(env)[0]);
+    check('(OK puts the toast away)', toastOf(env).hidden === true);
+    check('no markup was written for the toasts of this page (the name in "Joining ..." comes from the list)', env.innerHTMLWrites.length === 0);
     tap(env.home('host'));
-    check('Quick host says the same and sends nothing', stripText(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && stripOf(env).hidden === false && env.sockets.length === 1 && env.screen() === 'home');
+    check('Quick host says the same and sends nothing', toastTextOf(env) === 'Joining Clover’s room… Wait for it, or cancel it in the list.' && toastOf(env).hidden === false && env.sockets.length === 1 && env.screen() === 'home');
     probe.open().receive(reject(1));
     await flush();
-    check('the Join ends (the room is full): the strip about it goes, and the list says what happened', stripOf(env).hidden === true && textOf(first(popOf(env), 'gpnote')) === 'That room is full.');
+    check('the Join ends (the room is full): the toast about it goes, and the list says what happened', toastOf(env).hidden === true && textOf(first(popOf(env), 'gpnote')) === 'That room is full.');
     tap(env.home('join'));
     await flush();
     check('(and Quick join works again)', card(env) !== null && title(env) === 'Finding a game…');

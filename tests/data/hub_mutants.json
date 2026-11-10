@@ -504,8 +504,8 @@
   {
    "id": "retention_8_days_in_store",
    "file": "hub/store/sqlite.py",
-   "old": "retention_days=7, busy_ms=5000):",
-   "new": "retention_days=8, busy_ms=5000):",
+   "old": "retention_days=7, busy_ms=5000",
+   "new": "retention_days=8, busy_ms=5000",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -532,8 +532,8 @@
   {
    "id": "deleted_lines_in_the_history",
    "file": "hub/store/sqlite.py",
-   "old": "WHERE deleted = 0 AND at >= ? ORDER BY id DESC LIMIT ?",
-   "new": "WHERE at >= ? ORDER BY id DESC LIMIT ?",
+   "old": "WHERE deleted = 0 AND at >= ? AND id > COALESCE",
+   "new": "WHERE at >= ? AND id > COALESCE",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1967,8 +1967,8 @@
   {
    "id": "store_a_line_counts_as_a_restriction",
    "file": "hub/store/sqlite.py",
-   "old": "        at = int(self.clock())\n        cur = self.db.execute(\"INSERT INTO lines",
-   "new": "        self.count_restriction()\n        at = int(self.clock())\n        cur = self.db.execute(\"INSERT INTO lines",
+   "old": "        at = int(self.clock())\n        with self.transaction():\n            cur = self.db.execute(\"INSERT INTO lines",
+   "new": "        at = int(self.clock())\n        with self.transaction():\n            self.count_restriction()\n            cur = self.db.execute(\"INSERT INTO lines",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {

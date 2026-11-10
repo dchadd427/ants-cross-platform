@@ -1303,7 +1303,7 @@ class TheForgetOfAHugeBacklog(LoginTest):
     def test_the_lines_that_were_deleted_and_announced_long_ago_do_not_use_up_the_frames_of_a_forget(self):
         self.rig.__exit__(None, None, None)
         self.rig = hub_rig.Rig(discord=self.fake, sockets_per_address=100)
-        before = storemod.Store(self.rig.db)                                         # (the database as a hub that was restarted finds it: 220 lines of the account, the newest 119 of them deleted from the command line)
+        before = storemod.Store(self.rig.db, max_lines=10 ** 9)                                         # (the database as a hub that was restarted finds it: 220 lines of the account, the newest 119 of them deleted from the command line)
         for n in range(220):
             before.add_line(OLD, "maple.leaf", "old line %d" % n, False)
         ids = [row[0] for row in before.db.execute("SELECT id FROM lines ORDER BY id")]

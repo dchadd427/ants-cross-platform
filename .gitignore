@@ -96,3 +96,6 @@ control-secret.*
 *.pem
 *.jks
 *.keystore
+
+# Output of tools/mutate.py (a run report of the mutation checks)
+tests/data/*_mutants.report.json
