@@ -2,11 +2,13 @@
 // /live, no hub: the chat says it is offline). docs/HOME_SCREEN.md, "Games in progress". For every width (1280, 1180, 701, 700, 390, 320 and a phone held sideways, 568 x 320) it checks:
 //   1. a busy list (open rooms and eight matches in progress, with long names, a name that is markup and a map of the players): the page does not scroll sideways, no row is wider than the list, every Watch is at least
 //      44 x 44 px, inside its row and not over the row's own text, and the Games button counts the open rooms only;
+//      (and Watch stands at the row's right edge, four names of 32 characters are cut at three lines inside their box, and a phone held sideways keeps the switch in the head's own line);
 //   2. Watch is a link to /play.html?live=<id> with target _blank: a press opens a NEW page on that address and the lobby page stays where it was, with its list;
 //   3. a name that is markup is shown as text (no element and no script run: nothing in the page was made from it);
 //   4. the switch "Show games in progress" is a checkbox that the keyboard reaches (Tab) and flips (Space), its label is a target of 44 px, off puts the rows away and stops the looks at /live (the stand-in counts them), the choice
 //      is kept in this browser and holds after a reload (no look at /live at all), on brings them back;
-//   5. no games in progress, a server with no live door (404) and a server that is down: no row, no error, the open rooms stay, and with no door the switch is not there; and the page's own errors are none.
+//   5. a phone: while its Chat view covers the list nothing looks at /live, and the Games view brings the look back;
+//   6. no games in progress, a server with no live door (404) and a server that is down: no row, no error, the open rooms stay, and with no door the switch is not there; and the page's own errors are none.
 //   --shots DIR takes the pictures (watch_*.png).
 //
 //   node tests/scripts/web_home_watch_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -30,10 +32,11 @@ const LOBBIES = { format: 1, count: 3, lobbies: [
     { code: 'c1v3rr', host: 'Clover', map: 'TREASURE.LVL', mode: 'highest-score', people: 2, bots: 1, free: 1, size: 4, age: 200 },
     { code: 'p4n8dz', host: 'Pebble', map: 'ISLANDS.LVL', mode: 'highest-score', people: 3, bots: 0, free: 1, size: 4, age: 312 },
     { code: 'f3rn22', host: 'Fern', map: 'MEDIUM.LVL', mode: 'highest-score', people: 1, bots: 0, free: 3, size: 4, age: 30 }] };
-const MAPS = ['TREASURE', 'ISLANDS', 'MEDIUM', 'Pop_Corn', 'TINY', 'LARGE', 'ISLANDS', 'TREASURE'];
+const MAPS = ['TREASURE.LVL', 'ISLANDS.LVL', 'MEDIUM.LVL', 'DRY LAND.lvl', 'TINY.LVL', 'LARGE.LVL', 'ISLANDS.LVL', 'TREASURE.LVL'];       // (the door sends a map as its whole file name: originals, and a map of the players with a blank in it)
+const STEM = (file) => file.replace(/\.lvl$/i, '').replace(/[^A-Za-z0-9_]/g, '_');       // (the stem of an id, as the door makes it)
 const NAMES = [['Green (Ann)', 'Red (Bot (Medium))'], ['Blue (Cy)', 'Black'], ['Green (<img src=x onerror=window.__hit=1>)', 'Red (' + 'W'.repeat(32) + ')', 'Blue (Maple-Long-Name-Of-A-Player)', 'Black (Bot (Hard))'], ['Green', 'Red (Dee)'],
-               ['Green (Eve)', 'Blue (Fay)', 'Red (Gus)'], ['Black (Hal)', 'Green (Ida)'], ['Red (Jo)', 'Blue (Kim)'], ['Green (Lee)', 'Red (Mo)']];
-const busy = () => ({ live: MAPS.map((m, i) => ({ id: m + '-20261109-1' + String(20000 + i * 37).slice(0, 5) + 'Z', map: m, started: 1790000000 + i, turns: (65 + i * 140) * 20, seconds: 65 + i * 140, players: NAMES[i] })), count: 8, sim_rules: 9 });
+               ['Green (Eve)', 'Blue (Fay)', 'Red (Gus)'], ['Black (Hal)', 'Green (Ida)'], ['Green (' + 'A'.repeat(32) + ')', 'Red (' + 'B'.repeat(32) + ')', 'Blue (' + 'C'.repeat(32) + ')', 'Black (' + 'D'.repeat(32) + ')'], ['Green (Lee)', 'Red (Mo)']];
+const busy = () => ({ live: MAPS.map((m, i) => ({ id: STEM(m) + '-20261109-1' + String(20000 + i * 37).slice(0, 5) + 'Z', map: m, started: 1790000000 + i, turns: (65 + i * 140) * 20, seconds: 65 + i * 140, players: NAMES[i] })), count: 8, sim_rules: 9 });
 const SIZES = [['desktop', 1280, 800, false], ['w1180', 1180, 800, false], ['w701', 701, 800, false], ['w700', 700, 800, true], ['phone', 390, 844, true], ['w320', 320, 640, true], ['side', 568, 320, true]];
 
 let checks = 0;
@@ -75,12 +78,14 @@ const GEOM = () => {
     const q = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
     const dock = document.querySelector('.gdock');
     const rows = Array.from(document.querySelectorAll('.gdock .glive')).filter((e) => e.getClientRects().length);
+    const frow = document.querySelector('.gdock .gfrow'), title = document.querySelector('.gdock .gptitle'), phead = document.querySelector('.gdock .gphead');
     return {
+        head: frow && frow.getClientRects().length ? { h: q(phead).h, sw: q(frow).t, title: q(title).b, count: q(document.querySelector('.gdock .gpcount')).b } : null,
         page: [document.documentElement.scrollWidth, innerWidth], dock: dock && dock.getClientRects().length ? [dock.scrollWidth, dock.clientWidth] : null,
         rows: rows.map((li) => {
             const go = li.querySelector('.gwatch'), top = li.querySelector('.gtop'), line = li.querySelector('.gline'), box = q(li), g = q(go), tp = q(top), ln = q(line);
             const hit = (a, b) => a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
-            return { h: box.h, w: li.scrollWidth - li.clientWidth, go: [g.w, g.h], inside: g.l >= box.l - 0.5 && g.r <= box.r + 0.5 && g.t >= box.t - 0.5 && g.b <= box.b + 0.5, clash: hit(g, tp) || hit(g, ln), text: li.querySelector('.gwho').scrollWidth - li.querySelector('.gwho').clientWidth };
+            return { h: box.h, w: li.scrollWidth - li.clientWidth, go: [g.w, g.h], inside: g.l >= box.l - 0.5 && g.r <= box.r + 0.5 && g.t >= box.t - 0.5 && g.b <= box.b + 0.5, clash: hit(g, tp) || hit(g, ln), text: li.querySelector('.gwho').scrollWidth - li.querySelector('.gwho').clientWidth, leak: (() => { const w = li.querySelector('.gwho'), rg = document.createRange(); rg.selectNodeContents(w); return rg.getBoundingClientRect().height > w.getBoundingClientRect().height + 1 && getComputedStyle(w).overflow !== 'hidden'; })(), flush: box.r - g.r };
         })
     };
 };
@@ -119,6 +124,9 @@ const GEOM = () => {
                 check(name + ': the Games button counts the 3 open rooms only, and the head says "3 open, 8 in progress"', info.pill === '3' && info.head === '3 open, 8 in progress', JSON.stringify([info.pill, info.head]));
                 check(name + ': a name that is markup ran nothing and made no element', info.hits && info.imgs === 0);
                 check(name + ': every Watch is /play.html?live=<id> in a new tab with no opener', info.links.length === 8 && info.links.every((l) => /^\/play\.html\?live=[A-Za-z0-9_]+-[0-9]{8}-[0-9]{6}Z$/.test(l[0]) && l[1] === '_blank' && /noopener/.test(l[2])), JSON.stringify(info.links[0]));
+                check(name + ': Watch stands in the last column of its row, at its right edge (its grid area)', g.rows.every((r) => r.flush <= 20), JSON.stringify(g.rows.map((r) => Math.round(r.flush))));
+                check(name + ': four names of 32 characters are cut at three lines and leave nothing outside their box', g.rows.every((r) => !r.leak) && g.rows[6].h <= 200, JSON.stringify(g.rows.map((r) => [r.leak, Math.round(r.h)])));
+                if (name === 'side') check(name + ': a phone held sideways keeps the switch in the head\'s own line (the head stays one line tall, so the list keeps its room)', !!g.head && g.head.sw < g.head.title - 1 && g.head.h <= 60, JSON.stringify(g.head));
                 await shot(page, name + '_busy');
                 await page.evaluate(() => { const b = document.querySelector('.gdock .gpbody'); b.scrollTop = b.scrollHeight; });
                 await sleep(500);
@@ -161,6 +169,16 @@ const GEOM = () => {
                     await shot(page, name + '_filter_on');
                     const t = state.liveTimes;
                     check('the looks at /live were never closer than 10 s (apart from the one that a switch makes at once)', t.every((x, i) => i === 0 || x - t[i - 1] >= 10000 || i >= t.length - 2), JSON.stringify(t.map((x) => x - t[0])));
+                }
+                if (name === 'phone') {      // the Chat view covers the docked list: nothing shows the matches, so /live is not asked; the Games view brings the look back at once
+                    await page.click('.htab.t-chat');
+                    await sleep(300);
+                    const seen = state.live;
+                    await sleep(12500);
+                    check('phone: while the Chat view covers the list nothing looks at /live', state.live === seen, state.live + ' vs ' + seen);
+                    await page.click('.htab.t-games');
+                    await sleep(800);
+                    check('phone: the Games view is drawn again and it looks at once (the 10 s have gone)', state.live === seen + 1, state.live + ' vs ' + seen);
                 }
                 await context.close();
             }

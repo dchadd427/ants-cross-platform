@@ -29,7 +29,7 @@
 .gbots { color: #a8cfc0; }
 .gdots { display: inline-flex; gap: 5px; }
 .gdot { display: inline-block; flex: none; box-sizing: border-box; width: 16px; height: 16px; border-radius: 50%; --c: #79bf93; }
-.gdot.c0 { --c: #79bf93; } .gdot.c1 { --c: #d4707f; } .gdot.c2 { --c: #8f8fd6; } .gdot.c3 { --c: #b3afb9; }
+.gdot.c0 { --c: #79bf93; } .gdot.c1 { --c: #d4707f; } .gdot.c2 { --c: #8f8fd6; } .gdot.c3 { --c: #b3afb9; } .gdot.cn { --c: #8a8693; }
 .gdot.player { background: var(--c); box-shadow: 0 0 0 1px #000; }
 .gdot.bot { border: 2px solid var(--c); background: transparent; }
 .gdot.open { border: 2px dashed #2f7a5e; background: transparent; }

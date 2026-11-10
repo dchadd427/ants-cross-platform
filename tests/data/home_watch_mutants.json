@@ -18,8 +18,8 @@
   {
    "id": "watch_goes_to_a_made_up_address",
    "file": "web/home/games.js",
-   "old": "go.setAttribute('href', '/play.html?live=' + e.id);",
-   "new": "go.setAttribute('href', '/play.html?live=' + e.id.toLowerCase());",
+   "old": "go.setAttribute('href', '/play.html?live=' + encodeURIComponent(e.id));",
+   "new": "go.setAttribute('href', '/play.html?live=' + encodeURIComponent(e.id.toLowerCase()));",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -39,29 +39,29 @@
   {
    "id": "live_looks_while_the_tab_is_hidden",
    "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen; }",
-   "new": "function liveWanted() { return showLive && !gone && onHome() && isOpen; }",
+   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
+   "new": "function liveWanted() { return showLive && !gone && onHome() && isOpen && drawn(); }",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_looks_while_the_room_shows",
    "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen; }",
+   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
    "new": "function liveWanted() { return showLive && !gone && visible() && isOpen; }",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_looks_while_the_switch_is_off",
    "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen; }",
-   "new": "function liveWanted() { return !gone && visible() && onHome() && isOpen; }",
+   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
+   "new": "function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_looks_while_a_popover_is_closed",
    "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen; }",
-   "new": "function liveWanted() { return showLive && !gone && visible() && onHome(); }",
+   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
+   "new": "function liveWanted() { return showLive && !gone && visible() && onHome() && drawn(); }",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -154,6 +154,118 @@
    "old": "li.appendChild(go);\n            liveLens.push",
    "new": "li.appendChild(go); li.appendChild(el('button', 'gjoin', 'Join'));\n            liveLens.push",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_map_is_taken_for_a_bare_name",
+   "file": "web/home/games.js",
+   "old": "var file = typeof raw.map === 'string' ? raw.map : raw.id.replace(",
+   "new": "var file = typeof raw.map === 'string' ? raw.map + '.LVL' : raw.id.replace(",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_map_must_be_a_bare_name",
+   "file": "web/home/games.js",
+   "old": "if (!rules.validMapFile(file)) return null;",
+   "new": "if (!rules.validMapFile(file) || !/^[A-Za-z0-9_]{1,24}\\.LVL$/.test(file)) return null;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_id_has_no_end",
+   "file": "web/home/games.js",
+   "old": "[0-9]{6}Z(-[0-9]{1,4})?$/;",
+   "new": "[0-9]{6}Z(-[0-9]{1,4})?/;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_id_has_no_start",
+   "file": "web/home/games.js",
+   "old": "var LIVE_ID = /^[A-Za-z0-9_]{1,24}",
+   "new": "var LIVE_ID = /[A-Za-z0-9_]{1,24}",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_id_takes_any_suffix",
+   "file": "web/home/games.js",
+   "old": "[0-9]{6}Z(-[0-9]{1,4})?$/;",
+   "new": "[0-9]{6}Z(-.{1,40})?$/;",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_floor_is_5_s",
+   "file": "web/home/games.js",
+   "old": ": LIVE_EVERY) - (now() - lastLive)",
+   "new": ": 5000) - (now() - lastLive)",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_looks_may_overlap",
+   "file": "web/home/games.js",
+   "old": "if (!liveWanted() || liveBusy) return;\n            var wait",
+   "new": "if (!liveWanted()) return;\n            var wait",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_backoff_is_not_held_when_the_list_shows_again",
+   "file": "web/home/games.js",
+   "old": "(liveFails ? liveDelay(liveFails, 0) : LIVE_EVERY)",
+   "new": "LIVE_EVERY",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_focus_is_not_put_back_on_watch",
+   "file": "web/home/games.js",
+   "old": "if (focusId) { var again",
+   "new": "if (false) { var again",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_a_bot_is_a_filled_dot",
+   "file": "web/home/games.js",
+   "old": "(/^Bot \\(/.test(w.name) ? 'bot' : 'player')",
+   "new": "'player'",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_a_color_that_is_none_is_black",
+   "file": "web/home/games.js",
+   "old": "w.seat < 0 ? ' cn' : ' c' + w.seat",
+   "new": "' c' + (w.seat < 0 ? 3 : w.seat)",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "live_looks_while_the_chat_view_covers_the_list",
+   "file": "web/home/games.js",
+   "old": "return !docked || !pop.getClientRects ||",
+   "new": "return true || !pop.getClientRects ||",
+   "test": "node tests/scripts/web_home_watch_browser.js"
+  },
+  {
+   "id": "live_does_not_look_when_the_list_is_drawn_again",
+   "file": "web/home/games.js",
+   "old": "placeToast(); pollLive(); }))",
+   "new": "placeToast(); }))",
+   "test": "node tests/scripts/web_home_watch_browser.js"
+  },
+  {
+   "id": "watch_loses_its_grid_area",
+   "file": "web/home/home.css",
+   "old": ".gdock .gjoin, .gdock .gwatch { grid-area: j; }",
+   "new": ".gdock .gjoin { grid-area: j; }",
+   "test": "python3 tests/scripts/test_web_home_games.py TheStyle"
+  },
+  {
+   "id": "names_are_not_clipped",
+   "file": "web/home/games.css",
+   "old": "flex: 1 0 9em; min-width: 0; overflow: hidden; overflow-wrap",
+   "new": "flex: 1 0 9em; min-width: 0; overflow-wrap",
+   "test": "node tests/scripts/web_home_watch_browser.js"
+  },
+  {
+   "id": "a_phone_on_its_side_gives_the_switch_a_row",
+   "file": "web/home/games.css",
+   "old": ".gfrow { flex: 0 0 auto; margin: -6px 0 -6px auto; }",
+   "new": ".gfrow { flex: 1 0 100%; margin: -6px 0 -6px auto; }",
+   "test": "node tests/scripts/web_home_watch_browser.js"
   }
  ]
 }

@@ -144,8 +144,10 @@ class TheFolder(unittest.TestCase):
         self.assertIn("Net = win.AntsLobbyNet, Picker = win.AntsMapPicker;", self.js, "the picker is read from the page's window, and a page without it has no picture of the players' maps (never a break)")
 
     def test_the_picture_of_a_map_of_the_players_is_the_pickers_rule_and_not_a_second_copy_of_it(self):
-        for word in ("percentEncode", "encodeURIComponent", "escape(", "/maps/previews", ".webp", "decodeURI"):
+        for word in ("percentEncode", "escape(", "/maps/previews", ".webp", "decodeURI"):
             self.assertNotIn(word, self.js, "%s: the address is made by AntsMapPicker.previewPath (web/front/map_picker.js), which checks the file name and the shape of what it makes" % word)
+        self.assertEqual(self.js.count("encodeURIComponent"), 1, "the one use: the id in the address of Watch (a second guard, the id is checked by its shape first)")
+        self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.js)
         picker = read("web", "front", "map_picker.js")
         self.assertIn("function previewPath(map) {", picker)
         self.assertIn("previewPath: previewPath", picker)
@@ -188,6 +190,9 @@ class TheStyle(unittest.TestCase):
         cls.css = read("web", "home", "games.css")
         cls.rules = re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", cls.css, flags=re.S))
 
+    def test_watch_has_the_grid_place_of_join(self):
+        self.assertIn(".gdock .gjoin, .gdock .gwatch { grid-area: j; }", read("web", "home", "home.css"), "without its area Watch is put by the grid's own order, not at the row's right edge")
+
     def test_the_toast_is_over_the_page_and_takes_no_room(self):
         toast = next(body for selector, body in self.rules if selector.strip() == ".gtoast")
         self.assertIn("position: fixed;", toast, "a notice is out of the flow: nothing under it moves")
@@ -213,8 +218,8 @@ class TheStyle(unittest.TestCase):
         self.assertIn("toast.matches(':hover, :focus-within')", js, "a toast under the pointer or the focus waits")
         self.assertIn("doc.body.appendChild(toast)", js, "the toast is the body's, not part of Home's flow")
         self.assertIn("placeVis(); placeToast(); }));", js, "placed again when the window changes")
-        self.assertIn("if (!toast.hidden) placeToast(); }))", js, "placed again when a phone's view or the chat's fold changes")
-        self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
+        self.assertIn("if (!toast.hidden) placeToast(); pollLive(); }))", js, "placed again when a phone's view or the chat's fold changes (and the looks at /live follow whether the list is drawn)")
+        self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden', 'class']", js)
         self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):

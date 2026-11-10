@@ -39,7 +39,7 @@
     var LIVE_MAX = 50;                                   // matches that are shown (the door lists 50 at the most)
     var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
     var SEATS = ['Green', 'Red', 'Blue', 'Black'];       // the colors of seats 0 - 3, in the words of the door's players strings
-    var CHOICE_KEY = 'ants.home.games.live';             // the one thing that this browser keeps: '0' when the matches in progress are turned off
+    var CHOICE_KEY = 'ants.home.games.live';             // the one thing that the Games list keeps in this browser: '0' when the matches in progress are turned off
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
     var SEAT_PERSON = 1, SEAT_CLIENT = 2;                // the Room message's states of a color that a person holds (lobby_net.js SLOT)
     var TEXT = {
@@ -71,12 +71,12 @@
         var known = rules.mapOfFile(raw.map);
         return { code: raw.code, host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size, age: raw.age };
     }
-    // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map's file stem (else the one in the id), the seconds it has run (or its turns / 20), and at most four
+    // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map as the door sends it (the whole file name, like a room's: 'TREASURE.LVL', 'DRY LAND.lvl'; else the one in the id), the seconds it has run (or its turns / 20), and at most four
     // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only. Everything is text, and the only address that is made is /play.html?live=<id> from the checked id.
     function liveOf(raw, rules) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw) || typeof raw.id !== 'string' || !LIVE_ID.test(raw.id)) return null;
-        var stem = typeof raw.map === 'string' ? raw.map : raw.id.replace(/-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/, ''), file = stem + '.LVL';
-        if (!/^[A-Za-z0-9_]{1,24}$/.test(stem) || !rules.validMapFile(file)) return null;
+        var file = typeof raw.map === 'string' ? raw.map : raw.id.replace(/-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/, '') + '.LVL';
+        if (!rules.validMapFile(file)) return null;
         var secs = typeof raw.seconds === 'number' ? raw.seconds : typeof raw.turns === 'number' ? raw.turns / 20 : 0, who = [], known = rules.mapOfFile(file), list = Array.isArray(raw.players) ? raw.players : [];
         for (var i = 0; i < list.length && who.length < 4; i++) {
             if (typeof list[i] !== 'string' || !/^[\x20-\x7e]{1,80}$/.test(list[i])) continue;
@@ -498,12 +498,12 @@
             var li = el('li', 'gitem glive'), text = el('span', 'gtxt'), top = el('span', 'gtop'), line = el('span', 'gline'), dots = el('span', 'gdots'), who = el('span', 'gwho'), len = el('span', 'glen', clockText(e.seconds) + TEXT.soFar);
             var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch);
             dots.setAttribute('aria-hidden', 'true');
-            e.who.forEach(function (w) { var d = el('i', 'gdot player'); d.className += ' c' + (w.seat < 0 ? 3 : w.seat); dots.appendChild(d); });
+            e.who.forEach(function (w) { var d = el('i', 'gdot ' + (/^Bot \(/.test(w.name) ? 'bot' : 'player')); d.className += w.seat < 0 ? ' cn' : ' c' + w.seat; dots.appendChild(d); });          // (a computer player is a ring, as in the open rooms; a color that the door does not know is a neutral dot)
             who.textContent = names; who.setAttribute('title', names);
             top.appendChild(el('span', 'gname', e.mapName)); top.appendChild(el('span', 'glive-mark', TEXT.liveMark));
             line.appendChild(dots); line.appendChild(who); line.appendChild(len);
             text.appendChild(top); text.appendChild(line); li.appendChild(picOf(e)); li.appendChild(text);
-            go.setAttribute('href', '/play.html?live=' + e.id); go.setAttribute('target', '_blank'); go.setAttribute('rel', 'noopener'); go.setAttribute('data-live', e.id);
+            go.setAttribute('href', '/play.html?live=' + encodeURIComponent(e.id)); go.setAttribute('target', '_blank'); go.setAttribute('rel', 'noopener'); go.setAttribute('data-live', e.id);
             go.setAttribute('aria-label', 'Watch the match on ' + e.mapName + ', ' + names + ', ' + clockText(e.seconds) + TEXT.soFar);
             li.appendChild(go);
             liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName });
@@ -761,18 +761,18 @@
         }
 
         // ---- the looks at GET /live: the matches that run now, only while the switch is on and the list shows (Home, a visible tab), 10 s apart at the least ----
-        function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen; }
+        function drawn() { try { return !docked || !pop.getClientRects || pop.getClientRects().length > 0; } catch (e) { return true; } }          // (a phone's Chat or Players view covers the docked list: nothing shows the matches, so nothing asks)
+        function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }
         function scheduleLive(ms) {
             if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
             if (!liveWanted() || liveBusy) return;
             liveTimer = later(guard(function () { liveTimer = null; pollLive(); }), ms === undefined ? liveDelay(liveFails, random()) : ms);
         }
-        function pollLive() {                              // a look at once when 10 s have gone since the last one, else when they have
+        function pollLive() {                              // a look at once when 10 s have gone since the last one ended (after failures: when their wait has gone), else when they have
             if (!liveWanted() || liveBusy) return;
-            var wait = lastLive ? LIVE_EVERY - (now() - lastLive) : 0;
+            var wait = lastLive ? (liveFails ? liveDelay(liveFails, 0) : LIVE_EVERY) - (now() - lastLive) : 0;
             if (wait > 0) { if (liveTimer === null) scheduleLive(wait); return; }
             if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
-            lastLive = now();
             if (typeof win.fetch !== 'function') { settleLive(null); return; }
             liveBusy = true;
             var mine = ++liveRound;
@@ -781,6 +781,7 @@
         function settleLive(data) {
             var list = null;
             try { list = parseLive(data, rules); } catch (e) { list = null; }
+            lastLive = now();                              // (the wait before the next look is counted from the end of this one: while one is out, only liveBusy holds the next back)
             liveLoaded = true;
             if (list === null) { liveOff = true; liveFails++; live = []; } else { liveOff = false; liveFails = 0; live = list; }
             if (isOpen) paintList();
@@ -821,8 +822,8 @@
             poll(); schedule(); armRefresh(); pollLive();
         }));
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeToast(); }));
-        var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); })) : null, lastFocus = null;
-        if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
+        var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); pollLive(); })) : null, lastFocus = null;
+        if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden', 'class'] });       // (the list is drawn or covered again: the looks at /live follow; a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
         doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (isOpen) { paintList(); place(); } }
