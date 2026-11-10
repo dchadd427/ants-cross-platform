@@ -1649,8 +1649,8 @@
   {
    "id": "docs_forget_the_login_place",
    "file": "docs/HOME_SCREEN.md",
-   "old": "In `#gchat-login-slot`: \"Chatting as",
-   "new": "In the dock: \"Chatting as",
+   "old": "In `#gchat-login-slot` (on the field's row",
+   "new": "In the dock (on the field's row",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
