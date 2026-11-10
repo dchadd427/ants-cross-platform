@@ -228,7 +228,7 @@ async function flows() {
         check('the page opens on Home and loads the Games list after its first paint (Quick host, Quick join and Games are lit)', await screenOf(maple) === 'home' && await maple.evaluate(() => document.querySelector('.quick.join').disabled === false));
         await maple.click('.quick.host');
         await until('the room is public', async () => (await maple.evaluate(() => { const b = document.querySelector('.vbtn[aria-pressed="true"] b'); return b && b.textContent; })) === 'Public', 10000);
-        check('Quick host in a real browser: the Room shows, the switch says Public (the real room said so) and the notice is there', await screenOf(maple) === 'room' && (await textOf(maple, '.gstrip')).indexOf(NOTICES.public) !== -1);
+        check('Quick host in a real browser: the Room shows, the switch says Public (the real room said so) and the notice is there', await screenOf(maple) === 'room' && (await textOf(maple, '.gtoast')).indexOf(NOTICES.public) !== -1);
         const code = await maple.evaluate(() => new URL(document.getElementById('link').value).searchParams.get('room'));
         const sage = await newPage(browser, live, 'Sage', SIZES[2]);
         await lit(sage);
@@ -240,7 +240,7 @@ async function flows() {
         check('a second browser sees the room in its Games list (the count on the button too) and joins from it', (await textOf(sage, '.hchip.games .pill')) === '1' && (await textOf(sage, '.glist .gcount')) === '1/4');
         await sage.click('.gjoin');
         await until('the guest is in the Room', async () => (await screenOf(sage)) === 'room' && (await textOf(sage, '#room-h')) === 'Maple’s room', 12000);
-        check('Join in a real browser: the guest shows the Room of the host, the chip says "Public room" and there is no switch, and the notice says it', (await textOf(sage, '.vistag')) === 'Public room' && (await sage.evaluate(() => document.querySelector('.vis').hidden)) === true && (await textOf(sage, '.gstrip')).indexOf('Joined') === 0);
+        check('Join in a real browser: the guest shows the Room of the host, the chip says "Public room" and there is no switch, and the notice says it', (await textOf(sage, '.vistag')) === 'Public room' && (await sage.evaluate(() => document.querySelector('.vis').hidden)) === true && (await textOf(sage, '.gtoast')).indexOf('Joined') === 0);
         await until('the host sees the guest', async () => (await maple.evaluate(() => document.getElementById('slots').textContent.indexOf('Sage') !== -1)), 10000);
         check('... and the host sees the guest in the room (the real server\'s Room message)', true);
         await maple.click('.vbtn[aria-pressed="false"]');
@@ -315,7 +315,7 @@ async function flows() {
             await until('the real list holds the room', async () => (await (await guest.request.get(live.url + '/lobbies')).json()).lobbies.some((x) => x.code === code), 10000);
             await guest.dblclick('.quick.join');
             await until('the guest is in the Room of the host', async () => (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room', 15000).catch(() => null);
-            check(label + ': Quick join (a real double click on it) takes the page to the best open room, once: the host\'s Room, as a guest, with no strip and no card left', (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room' && (await guest.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && (await guest.evaluate(() => document.querySelector('.gstrip').hidden)));
+            check(label + ': Quick join (a real double click on it) takes the page to the best open room, once: the host\'s Room, as a guest, with no toast and no card left', (await screenOf(guest)) === 'room' && (await textOf(guest, '#room-h')) === 'Maple’s room' && (await guest.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && (await guest.evaluate(() => document.querySelector('.gtoast').hidden)));
             check('... and the host sees the guest, once', (await host.evaluate(() => document.getElementById('slots').textContent.split('Sage').length - 1)) === 1);
             // Leave room asks when there are other people in the room: a real click on Stay here, and then on Leave room
             await guest.click('.rbar .leave');
@@ -362,14 +362,14 @@ async function flows() {
             await page.goto(fake.url + '/');
             await lit(page);
             check('(a match of this browser is still running: the page offers to rejoin it)', await page.evaluate(() => !document.getElementById('rejoin').hidden));
-            const said = () => page.evaluate(() => { const s = document.querySelector('.gstrip'); return s.hidden ? null : s.textContent; });
+            const said = () => page.evaluate(() => { const s = document.querySelector('.gtoast'); return s.hidden ? null : s.textContent; });
             await page.click('.quick.join');
             check('Quick join with the Rejoin offer up (a real click): "Your match is running." with Rejoin, no card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.querySelectorAll('.gconfirm').length)) === 0 && sockets.length === 0);
-            await page.click('.gstrip .btn:last-child');
+            await page.click('.gtoast .btn:last-child');
             await page.click('.hchip.games'); await page.waitForSelector('.glist .gitem');
             await page.click('.gjoin');
             check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list stays where it is (docked in the body), no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => { const p = document.querySelector('.gpop'); return p.classList.contains('gdock') ? !p.hidden : p.hidden; })) && sockets.length === 0);
-            await page.click('.gstrip .btn:last-child');
+            await page.click('.gtoast .btn:last-child');
             await page.click('.hchip.games'); await page.waitForSelector('.gcode input');
             await page.fill('.gcode input', 'abc234');
             await page.click('.gcgo');
@@ -495,7 +495,7 @@ async function flows() {
                 await guest.click('.gjoin');
                 await guest.waitForSelector('.vistag');
                 await shot(guest, 'joined', size);
-                check(label + ': a Join from the real list brings the guest to the host\'s Room, with the notice', (await textOf(guest, '.gstrip')).indexOf('Joined') === 0 && (await textOf(guest, '.vistag')) === 'Public room');
+                check(label + ': a Join from the real list brings the guest to the host\'s Room, with the notice', (await textOf(guest, '.gtoast')).indexOf('Joined') === 0 && (await textOf(guest, '.vistag')) === 'Public room');
                 await host.context().close(); await guest.context().close();
                 // Quick join: the cards of the approved pictures (finding: a game server that says nothing; joined: the real one; none: an empty list; confirm: another person in the own room), and the question before Leave room
                 const qf = await newPage(browser, fake, 'Maple', size, undefined, true); await lit(qf);

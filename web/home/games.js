@@ -28,6 +28,7 @@
     var TRIES_MAX = 3, TRY_GAP_MS = 300;                 // Quick join tries this many rooms, one after the other, with a wait of 0 to this many ms (random) between two
     var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows (a press on its button is quicker)
     var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long (it stands where Join stood: a double press is not a Cancel)
+    var TOAST_MS = 6000;                                 // a toast with no question goes after this long
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
@@ -136,27 +137,38 @@
             return leader && leader.name ? possessive(leader.name) : 'the host’s';
         }
 
-        // ---- the notices: one strip with the page's own look, above both screens ----
-        var strip = el('div', 'banner gstrip'), stripText = el('span'), stripBtns = el('div', 'gbtns');
-        strip.setAttribute('role', 'status'); strip.hidden = true; strip.appendChild(stripText); strip.appendChild(stripBtns);
-        function placeStrip() {                            // Home: with the page's own strips above the bar; the Room: under its slim bar, as drawn
-            var banner = doc.getElementById('banner'), lobby = doc.getElementById('lobby');
-            if (ctl.screen() === 'room' && lobby && lobby.parentNode) lobby.parentNode.insertBefore(strip, lobby);
-            else banner.parentNode.insertBefore(strip, banner.nextSibling || null);
+        // ---- the notices: one toast, over the page (it takes no room), a later one replaces it ----
+        var toast = el('div', 'gtoast'), toastText = el('span'), toastBtns = el('div', 'gbtns'), toastTimer = null, toastAsks = false;
+        toast.setAttribute('role', 'status'); toast.setAttribute('aria-live', 'polite'); toast.hidden = true; toast.appendChild(toastText); toast.appendChild(toastBtns);
+        function rectOf(sel) { var n = doc.querySelector && doc.querySelector(sel), r = n && n.getBoundingClientRect && n.getBoundingClientRect(); return r && r.height ? r : null; }
+        function placeToast() {                            // above what is at the bottom: the chat (a phone's Chat view: its field), the strip of views, the Room's START bar; never into the bar at the top
+            if (toast.parentNode !== doc.body) doc.body.appendChild(toast);
+            var h = win.innerHeight || 0, bar = rectOf('.hbar'), r = rectOf('#gchat') || rectOf('.htabs'), y = null, up;
+            if (r) y = rectOf('#hmain') ? r.top : (rectOf('.gc-form') || { top: r.bottom - 6 }).top;
+            else if (win.innerWidth <= 700 && (r = rectOf('.go'))) y = r.top;
+            if (y === null || toast.hidden) { toast.style.bottom = ''; return; }
+            up = h - y + 10;
+            if (bar && toast.offsetHeight && h - up - toast.offsetHeight < bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;
+            toast.style.bottom = Math.round(up) + 'px';
         }
-        placeStrip();
-        var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join that has no strip, the card that closes by itself: a screen reader is told by this line, which nobody sees)
-        function clearNotice(kind) { if (!kind || kind === noticeKind) { strip.hidden = true; noticeKind = ''; } }
-        // kind: what the notice is (a later one replaces it), tone: '' or 'warn', actions: [{ text, run }]: run says false when it could not do it (the notice stays); OK is always the last button
+        placeToast();
+        var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join with no toast, the card that closes by itself: this line tells a screen reader)
+        function armToast(ms) {                            // a toast with a question stays; the others go after 6 s (not under the pointer or the focus)
+            if (toastTimer !== null) cancel(toastTimer);
+            toastTimer = toast.hidden || toastAsks ? null : later(guard(function () { if (toast.matches && toast.matches(':hover, :focus-within')) armToast(1500); else clearNotice(); }), ms || TOAST_MS);
+        }
+        function clearNotice(kind) { if (!kind || kind === noticeKind) { toast.hidden = true; noticeKind = ''; armToast(); } }
+        // kind: what the notice is (a later one replaces it), tone: '' or 'warn', actions: [{ text, run }]: run says false when it could not do it (the toast stays); OK is always the last button
         function notice(kind, text, tone, actions) {
-            noticeKind = kind;
-            stripText.textContent = text;
-            strip.className = 'banner gstrip' + (tone ? ' ' + tone : '');
-            while (stripBtns.firstChild) stripBtns.removeChild(stripBtns.firstChild);
+            noticeKind = kind; toastAsks = !!(actions && actions.length);
+            toastText.textContent = text;
+            toast.className = 'gtoast' + (tone ? ' ' + tone : '');
+            while (toastBtns.firstChild) toastBtns.removeChild(toastBtns.firstChild);
             (actions || []).concat([{ text: TEXT.ok, run: null }]).forEach(function (a) {
-                stripBtns.appendChild(button('sm', a.text, guard(function () { if (!a.run || a.run() !== false) clearNotice(); })));
+                toastBtns.appendChild(button('sm', a.text, guard(function () { if (!a.run || a.run() !== false) clearNotice(); })));
             });
-            strip.hidden = false;
+            toast.hidden = false;
+            placeToast(); armToast();
         }
         function rejoinOffered() { var s = doc.getElementById('rejoin'); return !!s && !s.hidden; }
         function matchRunning(c) { return !!(c && c.room && c.room.starting) || rejoinOffered(); }    // (a START that waits, or a match of this browser that is still running: the Rejoin strip is up)
@@ -291,7 +303,7 @@
             track(client());
             ctl.show('room', 'push');
         }
-        function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the strip says why nothing else starts
+        function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the toast says why nothing else starts
             openList();
             notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);
         }
@@ -668,23 +680,27 @@
         ['pointerdown', 'keydown', 'touchstart'].forEach(function (t) { doc.addEventListener(t, guard(touched), true); });
         doc.addEventListener('keydown', guard(function (e) {
             if (!e || e.key !== 'Escape') return;
+            if (!dialog && toast.contains(doc.activeElement)) { clearNotice(); if (lastFocus && lastFocus.focus) lastFocus.focus(); }       // (Escape puts a toast away that has the focus, and the focus goes back)
             if (dialog) closeAsk(true); else if (isOpen) closeList(true);
         }));
         doc.addEventListener('visibilitychange', guard(function () {
             if (!visible() && pollTimer !== null) { cancel(pollTimer); pollTimer = null; }
             poll(); schedule(); armRefresh();
         }));
-        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); }));
+        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeToast(); }));
+        var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); })) : null, lastFocus = null;
+        if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
+        doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (isOpen) { paintList(); place(); } }
         function shown(name) {
-            placeStrip();
             if (name === 'room') { closeAll(); placeVis(); } else poll();
             sync();
             schedule();
         }
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more
             gone = true; closeAll(); clearNotice();
+            if (toastWatch) toastWatch.disconnect();
             [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = null;
         }
@@ -692,7 +708,7 @@
             [parts.quickHost, parts.quickJoin, parts.games].forEach(function (b) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.setAttribute('title', words); });
             hint = words; paintVis();
         }
-        function inert(on) { [strip, pop].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a dialog of the page, or the hand-off, is over this part: it takes no key or tap)
+        function inert(on) { [toast, pop].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); }); }      // (a dialog of the page, or the hand-off, is over this part: it takes no key or tap)
         sync();
         poll();
         return {
