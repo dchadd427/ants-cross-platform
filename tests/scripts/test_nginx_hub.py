@@ -222,7 +222,7 @@ class TheBlockRuns(unittest.TestCase):
         a = self.connect(headers={"Cookie": COOKIE})
         self.assertEqual(a.status, "HTTP/1.1 101 Switching Protocols")
         welcome = a.recv_json()
-        self.assertEqual({k: v for k, v in welcome["you"].items() if k != "k"}, {"name": "alice", "mod": False})
+        self.assertEqual({k: v for k, v in welcome["you"].items() if k != "k"}, {"name": "alice", "mod": False, "role": "none"})
         self.assertRegex(welcome["you"]["k"], r"^[0-9a-f]{12}$")                       # (the key of the account: the hub's, through nginx as it is)
         b = self.connect()
         self.assertEqual(b.recv_json()["you"], None)
