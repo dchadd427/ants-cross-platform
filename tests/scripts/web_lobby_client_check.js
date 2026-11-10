@@ -1,4 +1,4 @@
-// Runs the lobby page's client of network protocol 23 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
+// Runs the lobby page's client of network protocol 24 (web/front/lobby_net.js, LobbyClient) without a browser, against a scripted server: the Hello it sends, the Welcome and Room messages it
 // takes in, the answers to the server's pings, what changed between two Room messages (joined, left, renamed, moved, swapped, a new host), the requests that only the leader may make and the
 // bytes they put on the wire (the guard of a color move is the room's seating hash), the way back with the key after a lost link (the waits grow, the link that says nothing is given up, a page
 // that comes back to the front tries at once), what each refusal means (the room is gone: made again without the key; removed; another window; full), and the entry that the game page reads.
@@ -442,7 +442,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
 // ---- a page that joins and never makes: join: true (a code that somebody typed) -----------------------------------------------------------------------------------------------------------------------
 // The Hello of a page that makes a lobby room carries the create block (the map, four seats, no team, the leader starts, a lobby); a page that was only given a code to join sends none, so that a code
 // with no room is answered NoSuchRoom instead of making one. The bytes are held to the lines that the C++ encoder wrote (tests/data/lobby_messages.txt, which web_lobby_net_check.js holds the codec
-// to) and to a Hello written out by hand here: type 1, protocol 23, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
+// to) and to a Hello written out by hand here: type 1, protocol 24, the name, 0 and 255, the code, an empty second string, the key (zeros without one), 0, the platform, the client kind 1 (a page).
 
 {
     const golden = {};
@@ -454,7 +454,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     const block = (map) => [map.length].concat(Array.from(map, (ch) => ch.charCodeAt(0)), [4, 255, 255, 3]);        // the create block: the map, four seats, no team, leader starts + lobby
     const byHand = (name, code, o) => {
         o = o || {};
-        const w = [1, 23, 0];
+        const w = [1, 24, 0];
         str8(w, name);
         w.push(0, 0, 255);
         str8(w, code);
@@ -487,7 +487,7 @@ for (const [name, reason] of [['Full', N.REJECT.Full], ['MatchRunning', N.REJECT
     same('... with join: that line without its block (00 04 ffff 03)', hello(Object.assign({}, keyed, { join: true })).hex, golden['page-with-key'].slice(0, golden['page-with-key'].length - '0004ffff03'.length));
     same('... and the same written out by hand', hello(Object.assign({}, keyed, { join: true })).hex, hex(byHand('Sam', 'abc234', { key: seq(1), platform: N.PLATFORM_BROWSER | N.OS.Linux })));
     same('with no name and the code xx, join: the line of the C++ encoder that has no block (page-no-block)', hello({ join: true, name: '', code: 'xx' }).hex, golden['page-no-block']);
-    check('a Hello without a block has no key, no platform: zeros', /^0117000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
+    check('a Hello without a block has no key, no platform: zeros', /^0118000[0-9a-f]*$/.test(join.hex) && join.w.last().sent[0].slice(1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1, 1 + 2 + 1 + 5 + 2 + 1 + 1 + 6 + 1 + 16).every((b) => b === 0));
 
     {   // the way back of a page that joined: every Hello it sends has the key and no block
         const w = world();
@@ -1112,8 +1112,8 @@ const online = (w, c, seats, o) => {            // a client that is in its room:
         w.advance(10 * 60 * 1000);
         check('... and after ten minutes of rest the budget is full again, to its burst and no further', [0, 1, 2, 3, 4].filter(() => c.setPublic(true)).length === 2);
     }
-    {   // the codec knows the type: 35 is the last message, the flag is 8, the protocol is 23
-        check('PROTOCOL, MSG.Last and the Visibility encoder', N.PROTOCOL === 23 && N.MSG.Visibility === 35 && N.MSG.Last === 35 && hex(N.encodeVisibility(true)) === '2301' && hex(N.encodeVisibility(false)) === '2300' && hex(N.encodeVisibility(7)) === '2301');
+    {   // the codec knows the type: 35 is the last message, the flag is 8, the protocol is 24
+        check('PROTOCOL, MSG.Last and the Visibility encoder', N.PROTOCOL === 24 && N.MSG.Visibility === 35 && N.MSG.Last === 35 && hex(N.encodeVisibility(true)) === '2301' && hex(N.encodeVisibility(false)) === '2300' && hex(N.encodeVisibility(7)) === '2301');
     }
 }
 
