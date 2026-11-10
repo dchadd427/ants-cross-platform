@@ -234,6 +234,18 @@ class TheStyle(unittest.TestCase):
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)", "nothing scrolls sideways")
 
 
+    def test_a_phone_upright_shows_the_visitor_s_name_beside_the_badge_and_the_guest_chip_stays_the_mark(self):
+        """docs/HOME_SCREEN.md, "The top bar": the first row is the logo, then what is left of it is the chip's and the Menu's. Where the layout is in the real browser: tests/scripts/web_home_topbar_browser.js"""
+        phone = self.css[self.css.index("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {"):]
+        phone = phone[:phone.index("\n}\n")]
+        self.assertIn(".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: block;", phone, "the name only where the badge is drawn: a guest's chip says Log in with the mark alone")
+        self.assertIn(".hbar .hright { grid-area: 1 / 1 / 2 / 3; min-width: 0; margin-left: 102px;", phone, "the chip and the Menu use the row's free place, to the right of the logo (92 px and the gap)")
+        self.assertRegex(phone, r"\.hbar button\.hlogin \{ flex: 0 1 auto;", "the chip shrinks, so the name is cut and the Menu stays in the row")
+        side = self.css[self.css.index("@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {"):]
+        side = side[:side.index("\n}\n")]
+        self.assertIn(".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; }", side, "held sideways there is no free place: the badge alone")
+
+
 class TheBodyOfHome(unittest.TestCase):
     """Home under its bar is the games (left), the players (right) and the chat (along the bottom); a phone (up to 700 px wide) has one of the three at a time and a strip to pick it. There is no Yard on Home yet:
     no stand-in, no site label read, nothing that prints a size. The strip is the page's own small piece in home.js; the three parts keep their own files."""

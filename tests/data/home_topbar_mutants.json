@@ -1,0 +1,61 @@
+{
+ "note": "Mutants of the login chip's name in Home's top bar (web/home/home.css, docs/HOME_SCREEN.md, \"The top bar\") that only the opt-in real-Chromium check can see (Playwright, Chromium, nginx and python3, no game server): run with `python3 tools/mutate.py tests/data/home_topbar_mutants.json --keep-going --jobs 1 --timeout 300`; tools/mutate.py --check only proves that every old text is still in the code.",
+ "mutants": [
+  {
+   "id": "topbar_name_never_shown",
+   "file": "web/home/home.css",
+   "old": "{ display: block; flex: 0 1 auto; min-width: 0; font-size: 15px; }",
+   "new": "{ display: none; flex: 0 1 auto; min-width: 0; font-size: 15px; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_name_shown_to_a_guest",
+   "file": "web/home/home.css",
+   "old": ".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: block;",
+   "new": ".hbar .hlogin .gc-cn { display: block;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_does_not_shrink",
+   "file": "web/home/home.css",
+   "old": ".hbar button.hlogin { flex: 0 1 auto; gap: 6px;",
+   "new": ".hbar button.hlogin { flex: none; gap: 6px;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_over_the_logo",
+   "file": "web/home/home.css",
+   "old": "min-width: 0; margin-left: 102px;",
+   "new": "min-width: 0; margin-left: 0;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_not_to_the_right",
+   "file": "web/home/home.css",
+   "old": "margin-left: 102px; justify-content: flex-end; }",
+   "new": "margin-left: 102px; justify-content: flex-start; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_padding_wide",
+   "file": "web/home/home.css",
+   "old": "flex: 0 1 auto; gap: 6px; padding: 0 9px; }",
+   "new": "flex: 0 1 auto; gap: 6px; padding: 0 30px; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_sideways_shows_the_name",
+   "file": "web/home/home.css",
+   "old": ".hbar button.hlogin { gap: 8px; padding: 0; } .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; }",
+   "new": ".hbar button.hlogin { gap: 8px; padding: 0; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_row_one_in_one_column",
+   "file": "web/home/home.css",
+   "old": ".hbar .hright { grid-area: 1 / 1 / 2 / 3;",
+   "new": ".hbar .hright { grid-area: 1 / 2;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  }
+ ]
+}
