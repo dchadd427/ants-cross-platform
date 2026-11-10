@@ -77,7 +77,7 @@ const popOf = (env) => home(env, 'gpop');
 const rowsOf = (env) => find(popOf(env), 'gitem').filter((e) => e.tagName === 'li');
 const joinOf = (li) => li.findAll((e) => e.tagName === 'button')[0];
 const textOf = (e) => e.textContent;
-const stripOf = (env) => first(env.root, 'gstrip');
+const stripOf = (env) => first(env.body, 'gtoast');
 const stripText = (env) => (stripOf(env).hidden ? '' : stripOf(env).children[0].textContent);
 const stripButtons = (env) => stripOf(env).children[1].children;
 const pillOf = (env) => env.home('games').children[1];

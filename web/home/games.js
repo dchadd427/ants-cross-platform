@@ -28,6 +28,7 @@
     var TRIES_MAX = 3, TRY_GAP_MS = 300;                 // Quick join tries this many rooms, one after the other, with a wait of 0 to this many ms (random) between two
     var JOINED_MS = 1500;                                // the card "Joined Pebble's room" stands this long, then the Room shows (a press on its button is quicker)
     var CANCEL_AFTER_MS = 700;                           // the Cancel of a Join that waits takes no press for this long (it stands where Join stood: a double press is not a Cancel)
+    var TOAST_MS = 6000;                                 // a toast with no question goes after this long
     var RETRY_MS = 1300;                                 // a request that the page's pace held back is made again after this long (the pace is one every 1.25 s)
     var PENDING_MS = 20000;                              // Quick host waits this long for a room that is not ready (then it is forgotten: a room must not turn public much later)
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
@@ -136,27 +137,34 @@
             return leader && leader.name ? possessive(leader.name) : 'the host’s';
         }
 
-        // ---- the notices: one strip with the page's own look, above both screens ----
-        var strip = el('div', 'banner gstrip'), stripText = el('span'), stripBtns = el('div', 'gbtns');
-        strip.setAttribute('role', 'status'); strip.hidden = true; strip.appendChild(stripText); strip.appendChild(stripBtns);
-        function placeStrip() {                            // Home: with the page's own strips above the bar; the Room: under its slim bar, as drawn
-            var banner = doc.getElementById('banner'), lobby = doc.getElementById('lobby');
-            if (ctl.screen() === 'room' && lobby && lobby.parentNode) lobby.parentNode.insertBefore(strip, lobby);
-            else banner.parentNode.insertBefore(strip, banner.nextSibling || null);
+        // ---- the notices: one toast, over the page (it takes no room), a later one replaces it ----
+        var strip = el('div', 'gtoast'), stripText = el('span'), stripBtns = el('div', 'gbtns'), toastTimer = null, toastAsks = false;
+        strip.setAttribute('role', 'status'); strip.setAttribute('aria-live', 'polite'); strip.hidden = true; strip.appendChild(stripText); strip.appendChild(stripBtns);
+        function rectOf(sel) { var n = doc.querySelector && doc.querySelector(sel), r = n && n.getBoundingClientRect && n.getBoundingClientRect(); return r && r.height ? r : null; }
+        function placeStrip() {                            // above the chat (a phone's Chat view: its field) or the strip of views, else near the bottom
+            if (strip.parentNode !== doc.body) doc.body.appendChild(strip);
+            var h = win.innerHeight || 0, r = rectOf('#gchat') || rectOf('.htabs');
+            if (r && r.top < h * 0.3) r = rectOf('.gc-form') || r;
+            strip.style.bottom = r ? Math.round(h - r.top + 10) + 'px' : '';
         }
         placeStrip();
-        var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join that has no strip, the card that closes by itself: a screen reader is told by this line, which nobody sees)
-        function clearNotice(kind) { if (!kind || kind === noticeKind) { strip.hidden = true; noticeKind = ''; } }
-        // kind: what the notice is (a later one replaces it), tone: '' or 'warn', actions: [{ text, run }]: run says false when it could not do it (the notice stays); OK is always the last button
+        var told = el('p', 'sr'); told.setAttribute('role', 'status'); doc.body.appendChild(told);       // (a join with no toast, the card that closes by itself: this line tells a screen reader)
+        function armToast(ms) {                            // a toast with a question stays; the others go after 6 s (not under the pointer or the focus)
+            if (toastTimer !== null) cancel(toastTimer);
+            toastTimer = strip.hidden || toastAsks ? null : later(guard(function () { if (strip.matches && strip.matches(':hover, :focus-within')) armToast(1500); else clearNotice(); }), ms || TOAST_MS);
+        }
+        function clearNotice(kind) { if (!kind || kind === noticeKind) { strip.hidden = true; noticeKind = ''; armToast(); } }
+        // kind: what it is, tone: '' or 'warn', actions: [{ text, run }] (run says false: the toast stays); OK is always last
         function notice(kind, text, tone, actions) {
-            noticeKind = kind;
+            noticeKind = kind; toastAsks = !!(actions && actions.length);
             stripText.textContent = text;
-            strip.className = 'banner gstrip' + (tone ? ' ' + tone : '');
+            strip.className = 'gtoast' + (tone ? ' ' + tone : '');
             while (stripBtns.firstChild) stripBtns.removeChild(stripBtns.firstChild);
             (actions || []).concat([{ text: TEXT.ok, run: null }]).forEach(function (a) {
                 stripBtns.appendChild(button('sm', a.text, guard(function () { if (!a.run || a.run() !== false) clearNotice(); })));
             });
             strip.hidden = false;
+            placeStrip(); armToast();
         }
         function rejoinOffered() { var s = doc.getElementById('rejoin'); return !!s && !s.hidden; }
         function matchRunning(c) { return !!(c && c.room && c.room.starting) || rejoinOffered(); }    // (a START that waits, or a match of this browser that is still running: the Rejoin strip is up)
@@ -291,7 +299,7 @@
             track(client());
             ctl.show('room', 'push');
         }
-        function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the strip says why nothing else starts
+        function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the toast says why nothing else starts
             openList();
             notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);
         }
@@ -668,13 +676,13 @@
         ['pointerdown', 'keydown', 'touchstart'].forEach(function (t) { doc.addEventListener(t, guard(touched), true); });
         doc.addEventListener('keydown', guard(function (e) {
             if (!e || e.key !== 'Escape') return;
-            if (dialog) closeAsk(true); else if (isOpen) closeList(true);
+            if (dialog) closeAsk(true); else { if (isOpen) closeList(true); clearNotice(); }       // (Escape puts the toast away too)
         }));
         doc.addEventListener('visibilitychange', guard(function () {
             if (!visible() && pollTimer !== null) { cancel(pollTimer); pollTimer = null; }
             poll(); schedule(); armRefresh();
         }));
-        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); }));
+        win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeStrip(); }));
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (isOpen) { paintList(); place(); } }
         function shown(name) {

@@ -262,11 +262,11 @@ const OTHERS = ['Maya', 'Sage'];
     same('a second press after the request was sent sends nothing more (the room has not said "public" yet)', visibilities(sock), [1]);
     sock.receive(roomAs(['Maya'], 0, PUBLIC));
     same('the room says public: the switch follows, and the strip says it ("Your room is public now. It shows in Open games.")', [pressed(env), stripText(env)], [['false', 'true'], 'Your room is public now. It shows in Open games.']);
-    check('... one button (OK), and the strip is the page\'s own look', stripButtons(env).length === 1 && textOf(stripButtons(env)[0]) === 'OK' && stripOf(env).className.indexOf('banner') !== -1);
-    const order = env.root.children;
-    check('... the strip stands under the Room\'s slim bar and before its card, as the approved picture draws it (on Home it stands with the page\'s own strips, under the first of them)', order.indexOf(stripOf(env)) === order.indexOf(env.root.children.find((c) => classes(c).indexOf('rbar') !== -1)) + 1 && order.indexOf(env.$('lobby')) === order.indexOf(stripOf(env)) + 1);
+    check('... one button (OK), and it is a toast: over the page, in the body, with a status role that is polite', stripButtons(env).length === 1 && textOf(stripButtons(env)[0]) === 'OK' && classes(stripOf(env)).indexOf('gtoast') !== -1 && stripOf(env).getAttribute('role') === 'status' && stripOf(env).getAttribute('aria-live') === 'polite' && stripOf(env).parentNode === env.body);
+
+    check('... the toast is in the body after everything else, not between the Room\'s bar and its card (it takes no room: nothing moves when it comes)', env.body.children.indexOf(stripOf(env)) !== -1 && env.root.children.indexOf(stripOf(env)) === -1);
     env.roomBar('rhome').click();
-    check('... and on Home it is with the page\'s own strips (right after the first)', env.root.children.indexOf(stripOf(env)) === env.root.children.indexOf(env.$('banner')) + 1);
+    check('... and on Home it is the same one toast, in the body', stripOf(env).parentNode === env.body && env.body.findAll((e) => classes(e).indexOf('gtoast') !== -1).length === 1);
     env.home('mine').click();
     sock.receive(roomAs(['Maya', 'Sage'], 0, PUBLIC));
     same('(nothing more is sent)', visibilities(sock), [1]);
@@ -992,5 +992,48 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     check('... and a START that comes reaches the hand-off', (sock.receive(roomMessage(seatsOf(OTHERS), { you: 0, leader: 0, flags: STARTING })), env.assigned.length === 1));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. The toast: a notice is over the page, one at a time, and goes by itself unless it asks for an answer
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const env = await page();
+    const sock = myRoom(env, OTHERS, PUBLIC);
+    const toasts = () => env.body.findAll((e) => classes(e).indexOf('gtoast') !== -1);
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    check('a notice with no question (already public) is the one toast, shown', toasts().length === 1 && stripOf(env).hidden === false && stripText(env) === 'Your room is already public.');
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    check('the same words again make no second toast', toasts().length === 1 && stripText(env) === 'Your room is already public.');
+    await wait(env, 5000);
+    check('... and the toast is still there before 6 s have gone', stripOf(env).hidden === false);
+    stripOf(env).fire('mouseenter');
+    await wait(env, 8000);
+    check('a pointer on the toast keeps it', stripOf(env).hidden === false);
+    stripOf(env).fire('mouseleave');
+    await wait(env, 5500);
+    check('... and it is there 5.5 s after the pointer left', stripOf(env).hidden === false);
+    await wait(env, 1000);
+    check('a toast that asks nothing goes by itself about 6 s after it came (or after the pointer left)', stripOf(env).hidden === true);
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    stripOf(env).fire('focusin');
+    await wait(env, 9000);
+    check('the focus on the toast keeps it too', stripOf(env).hidden === false);
+    stripOf(env).fire('focusout');
+    await wait(env, 6500);
+    check('... until the focus is gone and 6 s have passed', stripOf(env).hidden === true);
+    env.roomBar('rhome').click();
+    tap(env.home('host'));
+    (env.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+    check('Escape puts the toast away', stripOf(env).hidden === true);
+    check('the text is set as text (a tag in it is no element)', (() => { const e = env.body.findAll((n) => classes(n).indexOf('gtoast') !== -1)[0]; return e.findAll((n) => n.tagName === 'b' || n.tagName === 'img').length === 0; })());
+    sock.receive(roomAs(OTHERS, 0, PRIVATE));
+    check('a toast that asks for an answer ("Make it public") stays', stripOf(env).hidden === false && stripButtons(env).length === 2);
+    await wait(env, 20000);
+    check('... for as long as it is not answered', stripOf(env).hidden === false && toasts().length === 1);
+    tap(stripButtons(env)[1]);
+    check('OK ends it, and the one that came after it is the only one', stripOf(env).hidden === true && toasts().length === 1);
+}
 done('public room, Quick host and Join');
 })().catch(broke);
