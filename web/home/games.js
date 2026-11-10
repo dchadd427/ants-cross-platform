@@ -443,7 +443,7 @@
         var codeBox = el('div', 'gcode'), codeLabel = el('label', 'gclabel', TEXT.code), codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
         pop.hidden = !docked; pop.setAttribute('role', docked ? 'region' : 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
         popHead.appendChild(popTitle); popHead.appendChild(popCount);
-        filterBox.type = 'checkbox'; filterBox.checked = showLive; filterLabel.appendChild(filterBox); filterLabel.appendChild(el('span', '', TEXT.filter)); popFilter.appendChild(filterLabel);
+        filterBox.type = 'checkbox'; filterBox.checked = showLive; filterLabel.appendChild(filterBox); filterLabel.appendChild(el('span', '', TEXT.filter)); popFilter.appendChild(filterLabel); popHead.appendChild(popFilter);
         liveBox.hidden = true; popFilter.hidden = false; liveBox.appendChild(liveHead); liveBox.appendChild(liveList); liveBox.appendChild(liveNone);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
@@ -454,7 +454,7 @@
         codeInput.setAttribute('spellcheck', 'false'); codeInput.setAttribute('aria-describedby', 'gc-hint'); codeHint.id = 'gc-hint';
         codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeBox.appendChild(codeLabel); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
         [popList, popLoad, popEmpty, popOff, liveBox].forEach(function (n) { popBody.appendChild(n); });
-        [popHead, popFilter, popJoin, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
+        [popHead, popJoin, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
         if (docked) pop.className += ' gdock';
         (env.dock || host).appendChild(pop);
         codeInput.addEventListener('input', guard(function () { codeHint.textContent = ''; }));
@@ -499,7 +499,7 @@
             var names = e.who.map(function (w) { return w.name; }).join(', ') || TEXT.nobodyNamed, go = el('a', 'btn gwatch', TEXT.watch);
             dots.setAttribute('aria-hidden', 'true');
             e.who.forEach(function (w) { var d = el('i', 'gdot player'); d.className += ' c' + (w.seat < 0 ? 3 : w.seat); dots.appendChild(d); });
-            who.textContent = names;
+            who.textContent = names; who.setAttribute('title', names);
             top.appendChild(el('span', 'gname', e.mapName)); top.appendChild(el('span', 'glive-mark', TEXT.liveMark));
             line.appendChild(dots); line.appendChild(who); line.appendChild(len);
             text.appendChild(top); text.appendChild(line); li.appendChild(picOf(e)); li.appendChild(text);
@@ -515,7 +515,7 @@
             liveBox.hidden = !on;
             popFilter.hidden = showLive && liveLoaded && liveOff;                 // (a server with no live door: nothing to switch)
             filterBox.checked = showLive;
-            if (!on) { liveSig = null; return; }
+            if (!on) { liveSig = null; liveLens = []; while (liveList.firstChild) liveList.removeChild(liveList.firstChild); return; }          // (nothing of a match stays in the page while the section is away)
             liveNone.hidden = live.length > 0; liveList.hidden = live.length === 0;
             var sig = JSON.stringify(live.map(function (e) { return [e.id, e.map, e.who]; }));
             if (sig !== liveSig) {                                              // (made again only when a match, its map or its players came or went: a focus stays, and the clocks tick in place)
