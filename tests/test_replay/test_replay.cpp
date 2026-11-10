@@ -2138,6 +2138,10 @@ int main(int argc, char* argv[]) {
             ASSERT_TRUE(plays_here(r.head));
             o = play(r, tiny.level);
             ASSERT_TRUE(o.ok && o.hash == p.hash);
+            r.head.engine_rules = 23;                                                            // (a recording of protocol 23, the last number before the names were checked: it plays by its rules number, the same state hashes)
+            ASSERT_TRUE(plays_here(r.head));
+            o = play(r, tiny.level);
+            ASSERT_TRUE(o.ok && o.hash == p.hash);
         }
         // the table of the numbers: what plays here, mode by mode
         ASSERT_TRUE(sim_rules_for_mode(0) == 9 && sim_rules_for_mode(1) == 11 && sim_rules_for_mode(2) == 0 && sim_rules_for_mode(255) == 0);

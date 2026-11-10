@@ -1090,7 +1090,7 @@ void run_protocol15_tests() {
         return key;
     };
     const auto hello_prefix = [&](const std::string& room) {
-        std::vector<uint8_t> bytes = {1, 23, 0, 3, 'A', 'n', 'n', 0x34, 0x12, 2, static_cast<uint8_t>(room.size())};
+        std::vector<uint8_t> bytes = {1, 24, 0, 3, 'A', 'n', 'n', 0x34, 0x12, 2, static_cast<uint8_t>(room.size())};
         bytes.insert(bytes.end(), room.begin(), room.end());
         const std::vector<uint8_t> token = {3, 't', 'o', 'k'};
         bytes.insert(bytes.end(), token.begin(), token.end());
@@ -1516,7 +1516,7 @@ void run_protocol16_tests() {
         block.map_name = "TREASURE.LVL";
         block.flags = static_cast<uint8_t>(kCreateLeaderStarts | kCreateLobby);
         h.create = block;
-        std::vector<uint8_t> want = {1, 23, 0, 3, 'A', 'n', 'n', 0, 0, 255, 6, 'k', '7', 'm', '2', 'x', 'q', 0};
+        std::vector<uint8_t> want = {1, 24, 0, 3, 'A', 'n', 'n', 0, 0, 255, 6, 'k', '7', 'm', '2', 'x', 'q', 0};
         want.insert(want.end(), size_t{16 + 4}, uint8_t{0});                                           // the key and the turns: a new player has neither
         want.push_back(static_cast<uint8_t>(kOsMacos | kPlatformBrowser));
         want.push_back(1);                                                                              // the client kind: a lobby page
@@ -2204,7 +2204,7 @@ void run_protocol16_tests() {
     } TEST_END();
 
     TEST_CASE("N2.113 Protocol 22, The Visibility: VisibilityMsg Is The Type 35 And One Byte, 0 (Private) Or 1 (Public), Two Bytes And Nothing Else; Every Other Value, Every Truncation, Every Extra Byte And Every Other Type Byte Is Refused; MsgType::Last Is 35; The Room's Flag kRoomPublic (8) Is A Lobby Room's: The Decoder Refuses It In Any Other Room And Every Flag Byte Outside The Four Rule Bits; The Protocol Number Is 22") {
-        ASSERT_EQ(kProtocolVersion, uint16_t{23});
+        ASSERT_EQ(kProtocolVersion, uint16_t{24});
         ASSERT_TRUE(static_cast<int>(MsgType::Visibility) == 35 && static_cast<int>(MsgType::Last) == 35 && static_cast<int>(MsgType::Remove) == 34 && kRoomPublic == 8);
         // the layout, byte by byte: the type and the choice
         ASSERT_TRUE(encode(VisibilityMsg{true}) == (std::vector<uint8_t>{35, 1}));
