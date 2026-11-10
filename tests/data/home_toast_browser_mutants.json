@@ -25,8 +25,8 @@
   {
    "id": "escape_elsewhere_closes_the_toast_browser",
    "file": "web/home/games.js",
-   "old": "if (!dialog && toast.contains(doc.activeElement)) clearNotice();",
-   "new": "if (!dialog) clearNotice();",
+   "old": "if (!dialog && toast.contains(doc.activeElement)) { clearNotice();",
+   "new": "if (!dialog) { clearNotice();",
    "test": "node tests/scripts/web_home_toast_browser.js"
   },
   {
@@ -55,6 +55,13 @@
    "file": "web/home/games.js",
    "old": "if (bar && toast.offsetHeight && h - up - toast.offsetHeight < bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;",
    "new": "",
+   "test": "node tests/scripts/web_home_toast_browser.js"
+  },
+  {
+   "id": "toast_not_placed_again_when_a_strip_comes",
+   "file": "web/home/games.js",
+   "old": "'data-screen', 'hidden']",
+   "new": "'data-screen']",
    "test": "node tests/scripts/web_home_toast_browser.js"
   }
  ]

@@ -225,6 +225,21 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
                 await sleep(200);
                 await clear(page);
             }
+            // one of the page's strips comes while the toast is up (the connection drops: a banner above the bar): the toast is placed again, not into the bar
+            {
+                if (phone) { await page.click('.htab.t-chat'); await sleep(200); }
+                await raise(page);
+                await page.evaluate(() => { document.getElementById('banner').hidden = false; document.getElementById('banner-text').textContent = 'Cannot reach the game server. Check your connection.'; });
+                await sleep(300);
+                const tb = await toastBox(page);
+                check(name + ': a banner that comes while a toast is up: one toast', !!tb);
+                if (tb) await clearOf(page, name + ': a banner comes while the toast is up', tb, ['.hbar .btn']);
+                await shot(page, name + '_banner');
+                await page.evaluate(() => { document.getElementById('banner').hidden = true; });
+                await sleep(200);
+                await clear(page);
+                if (phone) { await page.click('.htab.t-games'); await sleep(200); }
+            }
             // the Room: the toast is placed again, and the START bar and the Room's bottom row stay free
             await raise(page);
             await page.click('.hbar .mine'); await sleep(500);
@@ -235,6 +250,19 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
             if (t5) {
                 check(name + ': on the Room the toast is inside the window', t5.l >= -0.5 && t5.t >= -0.5 && t5.r <= w + 0.5 && t5.b <= h + 0.5, JSON.stringify(t5));
                 if (phone) await clearOf(page, name + ': the Room', t5, ['.go']);
+                // Copy link: free where there is room; in a window under about 400 px high there is none, and the toast (which OK closes) can sit over it (docs/HOME_SCREEN.md, "Notices")
+                if (h > 400) await clearOf(page, name + ': the Room', t5, ['#copy']);
+                else {
+                    await page.evaluate(() => Array.from(document.querySelectorAll('.gtoast button')).pop().click());
+                    await sleep(150);
+                    check(name + ': a short window: OK clears the toast, and Copy link is free', (await toastBox(page)) === null);
+                    await raise(page).catch(() => {});
+                }
+                // a banner comes on the Room too: the Room's bar is not covered
+                await page.evaluate(() => { document.getElementById('banner').hidden = false; document.getElementById('banner-text').textContent = 'Cannot reach the game server. Check your connection.'; });
+                await sleep(300);
+                const t6 = await toastBox(page);
+                if (t6 && h > 400) await clearOf(page, name + ': a banner on the Room', t6, ['.rbar .btn']);       // (under about 400 px high START! comes first: the Room's slim bar can be covered until OK)
                 await shot(page, name + '_room');
             }
             await context.close();

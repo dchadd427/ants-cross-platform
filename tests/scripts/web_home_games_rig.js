@@ -77,9 +77,9 @@ const popOf = (env) => home(env, 'gpop');
 const rowsOf = (env) => find(popOf(env), 'gitem').filter((e) => e.tagName === 'li');
 const joinOf = (li) => li.findAll((e) => e.tagName === 'button')[0];
 const textOf = (e) => e.textContent;
-const stripOf = (env) => first(env.body, 'gtoast');
-const stripText = (env) => (stripOf(env).hidden ? '' : stripOf(env).children[0].textContent);
-const stripButtons = (env) => stripOf(env).children[1].children;
+const toastOf = (env) => first(env.body, 'gtoast');
+const toastTextOf = (env) => (toastOf(env).hidden ? '' : toastOf(env).children[0].textContent);
+const toastButtons = (env) => toastOf(env).children[1].children;
 const pillOf = (env) => env.home('games').children[1];
 const dialogOf = (env) => first(env.body, 'gconfirm');       // (the card is the body's: it is over both screens)
 const visibilities = (sock) => sock.sent.filter((b) => b[0] === 35).map((b) => b[1]);
@@ -103,6 +103,6 @@ const roomAs = (names, me, flags, o) => roomMessage(seatsOf(names), Object.assig
 
 const done = (title) => { console.log(title + ': ' + checks + ' checks, ' + failures + ' failed'); process.exit(failures === 0 ? 0 : 1); };
 const broke = (e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); };
-return { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, stripOf, stripText, stripButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
+return { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
          PUBLIC, PRIVATE, STARTING, myRoom, guestRoom, roomAs, Games, PopoverGames, H, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0, lobbyDir, done, broke };
 };

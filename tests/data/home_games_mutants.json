@@ -2615,8 +2615,8 @@
   {
    "id": "escape_leaves_the_toast",
    "file": "web/home/games.js",
-   "old": "if (!dialog && toast.contains(doc.activeElement)) clearNotice();",
-   "new": "if (!dialog && toast.contains(doc.activeElement)) noticeKind = noticeKind;",
+   "old": "if (!dialog && toast.contains(doc.activeElement)) { clearNotice();",
+   "new": "if (!dialog && toast.contains(doc.activeElement)) { noticeKind = noticeKind;",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -2643,15 +2643,15 @@
   {
    "id": "escape_elsewhere_closes_the_toast",
    "file": "web/home/games.js",
-   "old": "if (!dialog && toast.contains(doc.activeElement)) clearNotice();",
-   "new": "if (!dialog) clearNotice();",
+   "old": "if (!dialog && toast.contains(doc.activeElement)) { clearNotice();",
+   "new": "if (!dialog) { clearNotice();",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "escape_under_a_card_closes_the_toast",
    "file": "web/home/games.js",
-   "old": "if (!dialog && toast.contains(doc.activeElement)) clearNotice();",
-   "new": "if (toast.contains(doc.activeElement)) clearNotice();",
+   "old": "if (!dialog && toast.contains(doc.activeElement)) { clearNotice();",
+   "new": "if (toast.contains(doc.activeElement)) { clearNotice();",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -2679,6 +2679,20 @@
    "id": "toast_into_the_bar",
    "file": "web/home/games.js",
    "old": "if (bar && toast.offsetHeight && h - up - toast.offsetHeight < bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "toast_not_placed_again_when_a_strip_comes",
+   "file": "web/home/games.js",
+   "old": "'data-screen', 'hidden']",
+   "new": "'data-screen']",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "escape_loses_the_focus",
+   "file": "web/home/games.js",
+   "old": "if (lastFocus && lastFocus.focus) lastFocus.focus();",
    "new": "",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   }

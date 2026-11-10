@@ -198,6 +198,9 @@ class TheStyle(unittest.TestCase):
         self.assertIn("rectOf('#hmain') ? r.top :", js, "the chat fills the view (no body above it): over its field, not over the bar")
         self.assertIn("(r = rectOf('.go'))) y = r.top;", js, "the Room on a phone: above the sticky START bar")
         self.assertIn("< bar.bottom + 2) up = h - bar.bottom - 2 - toast.offsetHeight;", js, "never into the bar at the top")
+        self.assertIn("bar = rectOf('.hbar'), r = rectOf('#gchat')", js, "Home's bar is never covered; on the Room START! comes first")
+        self.assertIn("if (lastFocus && lastFocus.focus) lastFocus.focus();", js, "the focus goes back when Escape closes the toast")
+        self.assertIn("toastWatch.disconnect();", js, "no look at the page after the hand-off")
         self.assertIn("toast.style.bottom = Math.round(up) + 'px';", js)
         self.assertIn("TOAST_MS = 6000;", js)
         self.assertIn("toast.hidden || toastAsks ? null : later(", js, "a toast with a question stays; the others have a timer")
@@ -205,8 +208,8 @@ class TheStyle(unittest.TestCase):
         self.assertIn("doc.body.appendChild(toast)", js, "the toast is the body's, not part of Home's flow")
         self.assertIn("placeVis(); placeToast(); }));", js, "placed again when the window changes")
         self.assertIn("if (!toast.hidden) placeToast(); }))", js, "placed again when a phone's view or the chat's fold changes")
-        self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen']", js)
-        self.assertIn("if (!dialog && toast.contains(doc.activeElement)) clearNotice();", js, "Escape closes a toast that has the focus, and only then")
+        self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
+        self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}

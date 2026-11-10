@@ -680,7 +680,7 @@
         ['pointerdown', 'keydown', 'touchstart'].forEach(function (t) { doc.addEventListener(t, guard(touched), true); });
         doc.addEventListener('keydown', guard(function (e) {
             if (!e || e.key !== 'Escape') return;
-            if (!dialog && toast.contains(doc.activeElement)) clearNotice();       // (Escape puts a toast away that has the focus)
+            if (!dialog && toast.contains(doc.activeElement)) { clearNotice(); if (lastFocus && lastFocus.focus) lastFocus.focus(); }       // (Escape puts a toast away that has the focus, and the focus goes back)
             if (dialog) closeAsk(true); else if (isOpen) closeList(true);
         }));
         doc.addEventListener('visibilitychange', guard(function () {
@@ -688,7 +688,9 @@
             poll(); schedule(); armRefresh();
         }));
         win.addEventListener('resize', guard(function () { if (isOpen) place(); placeVis(); placeToast(); }));
-        if (win.MutationObserver) new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); })).observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen'] });       // (a phone's view or the chat's fold changes: the toast is placed again)
+        var toastWatch = win.MutationObserver ? new win.MutationObserver(guard(function () { if (!toast.hidden) placeToast(); })) : null, lastFocus = null;
+        if (toastWatch) toastWatch.observe(doc.body, { attributes: true, subtree: true, attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden'] });       // (a phone's view, the chat's fold or one of the page's strips changes: the toast is placed again)
+        doc.addEventListener('focusin', guard(function (e) { if (e && e.target && !toast.contains(e.target)) lastFocus = e.target; }));       // (where the focus was before it went to the toast)
 
         function sync() { track(client()); paintVis(); armRefresh(); paintPill(); if (isOpen) { paintList(); place(); } }
         function shown(name) {
@@ -698,6 +700,7 @@
         }
         function opening() {                               // START reached the page: nothing here takes a press or a timer or looks at the list any more
             gone = true; closeAll(); clearNotice();
+            if (toastWatch) toastWatch.disconnect();
             [pollTimer, refreshTimer, pendingTimer, lockTimer, floorTimer, cancelTimer].forEach(function (t) { if (t !== null) cancel(t); });
             pollTimer = refreshTimer = pendingTimer = lockTimer = floorTimer = cancelTimer = null;
         }
