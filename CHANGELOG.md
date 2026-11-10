@@ -33,7 +33,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.14.1 page or game still joins. The rest of this release is internal: tests and documents.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...f6969023)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f6969023...5aee057e)
 
 ## v0.14.1 - 2026-11-09 - Discord names in games, the Players list, replay files, and a Hard bot that answers a blow
 
