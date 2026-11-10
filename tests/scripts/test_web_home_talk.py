@@ -258,7 +258,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("max-height: 150px;", self.rule(".gt-pick"), "without the script's measure (a page that cannot measure) it is 150 px")
 
     def test_the_dock_is_taller_where_the_buttons_have_a_row_of_their_own(self):
-        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) { .gc:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }", self.css, "the middle widths: the dock is 16 to 60 px taller (its own is 160 to 260 px), so that the log keeps its room")
+        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) { .gc:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }", self.css, "the middle widths: the dock is about 60 to 80 px taller (its own is 160 to 260 px), so that the log keeps its room")
 
     def test_the_listening_state_moves_only_where_motion_is_allowed(self):
         self.assertIn("@media (prefers-reduced-motion: reduce) { .btn.gt-hot { animation: none; } }", self.css)
