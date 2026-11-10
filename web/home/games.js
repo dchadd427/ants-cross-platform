@@ -49,7 +49,7 @@
         legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
         noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
-        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
+        ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games. A private room is for the people you send its link to.', hostPublic: 'Public room', hostPrivate: 'Private room', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
@@ -350,6 +350,14 @@
             track(client());
             ctl.show('room', 'push');
         }
+        function startPrivate() {                          // a private room of the page's own (the first press of My room, as it was): the page makes it and the Room shows
+            page.make();
+            track(client());
+            ctl.show('room', 'push');
+        }
+        function chooseHost() {                            // Quick host with no room asks first: Public (listed, Visibility(public) when the room is ready) or Private (a link only); Escape or Cancel changes nothing
+            card({ title: TEXT.hostTitle, lines: [TEXT.hostLine], stack: true, acts: [{ text: TEXT.hostPublic, cls: 'gyes', run: startHost }, { text: TEXT.hostPrivate, cls: 'gyes', run: startPrivate }, { text: TEXT.cancel, cls: 'gstay', back: true }], focus: 0 });
+        }
         function stillJoining() {                          // a press while a Join of the list waits: the list shows it again (with its Cancel), and the toast says why nothing else starts
             openList();
             notice('joining', popJoinText.textContent + TEXT.joinFirst, 'warn', []);
@@ -362,7 +370,7 @@
             if (pending) { ctl.show('room', 'push'); return; }          // (a second press: the first one is on its way)
             var c = client();
             if (matchRunning(c)) { runningNotice(); return; }
-            if (!c || (c.room && !c.room.lobby)) { startHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own)
+            if (!c || (c.room && !c.room.lobby)) { chooseHost(); return; }       // (no room, a refused one, or a room that a game made: a room of our own, public or private as asked)
             if (!c.room) { startPending(c); ctl.show('room', 'push'); return; }  // (the page's room is on its way: it gets Visibility(public) when it is ready)
             if (!c.isLeader()) {
                 ask({ title: 'Leave ' + hostLabel(c) + ' room and host your own?', line: 'A new room opens for you, with its own map and colors. It goes public.', yes: TEXT.leaveHost }, function () { page.leave(); startHost(); });

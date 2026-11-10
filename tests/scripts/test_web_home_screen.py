@@ -118,8 +118,8 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("ready when the page opens", read("docs", "PLAY_IN_BROWSER.md"))
 
     def test_how_it_works_says_where_the_room_comes_from_because_the_room_shows_it_too(self):
-        self.assertIn("<h3>The room</h3><p>From Home, press Quick host and your room is ready, with the first color yours.", self.page)
-        self.assertIn("A room that Quick host opens is listed under Games, where players join it from the list or by its code.</p>", self.page, "How it works says where the public rooms are and how to be in one")
+        self.assertIn("<h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready, with the first color yours.", self.page)
+        self.assertIn("A public room is listed under Games, where players join it from the list or by its code; a private one is for the people who have its link.</p>", self.page, "How it works says where the public rooms are and how to be in one")
         self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no Quick host to press")
         check = read("tests", "scripts", "web_home_check.py")
         self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: My room does")

@@ -116,6 +116,20 @@ async function main() {
             check(s[0] + ' no room: Games does not run under the login chip or the Menu', !none.chip || none.games[0] + none.games[2] <= none.chip[0] + 1 || none.games[1] + none.games[3] <= none.chip[1] + 1 || none.chip[1] + none.chip[3] <= none.games[1] + 1, JSON.stringify(none));
             if (s[0] === 'side568') check(s[0] + ' no room: held sideways Games takes the place of My room (the second row starts at the left edge, no hole)', none.games[0] <= none.host[0] && none.games[1] > none.host[1], JSON.stringify(none));
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'noroom_' + s[0]);
+            // Quick host asks Public or Private first (a card over Home)
+            await page.waitForFunction(() => { const b = document.querySelector('.hbar .quick.host'); return b && !b.disabled; }, null, { timeout: 10000 });
+            await page.focus('.hbar .quick.host');
+            await page.keyboard.press('Enter');
+            await sleep(150);
+            const card = await page.evaluate(() => { const c = document.querySelector('.gconfirm'); if (!c) return null; const bs = [...c.querySelectorAll('button')].map((b) => { const r = b.getBoundingClientRect(); return { t: b.textContent, x: r.left, r: r.right, y: r.top, b: r.bottom, h: r.height, w: r.width }; }), r = c.getBoundingClientRect(); return { title: c.querySelector('h2').textContent, bs, box: { x: r.left, r: r.right, y: r.top, b: r.bottom }, focus: document.activeElement.textContent, role: c.getAttribute('role'), inert: document.querySelector('.hbar').hasAttribute('inert') }; });
+            check(s[0] + ' Quick host: the keyboard opens the card "Host a game" with Public room, Private room and Cancel, the focus on Public room', !!card && card.title === 'Host a game' && card.bs.map((x) => x.t).join('|') === 'Public room|Private room|Cancel' && card.focus === 'Public room' && card.role === 'dialog', JSON.stringify(card));
+            check(s[0] + ' Quick host: the card and its three buttons are inside the window, every button 44 px or more high and wide, the page behind is inert', !!card && card.inert && card.box.x >= 0 && card.box.r <= s[1] + 0.5 && card.box.y >= 0 && card.box.b <= s[2] + 0.5 && card.bs.every((x) => x.h >= 44 && x.w >= 44 && x.x >= 0 && x.r <= s[1] + 0.5 && x.y >= 0 && x.b <= s[2] + 0.5), JSON.stringify(card));
+            if (['w390', 'w1280'].indexOf(s[0]) !== -1) await shot(page, 'hostcard_' + s[0]);
+            await page.keyboard.press('Tab');
+            check(s[0] + ' Quick host: Tab goes to Private room', (await page.evaluate(() => document.activeElement.textContent)) === 'Private room');
+            await page.keyboard.press('Escape');
+            await sleep(100);
+            check(s[0] + ' Quick host: Escape cancels (no card, nothing made, the focus back on Quick host)', await page.evaluate(() => !document.querySelector('.gconfirm') && document.body.getAttribute('data-screen') === 'home' && /quick host|host/.test(document.activeElement.className)));
             await page.evaluate(SHOW_ROOM);
             const room = await page.evaluate(ROW);
             check(s[0] + ' a room: My room is drawn (44 px or more) and the logo, Quick host and Quick join, the Menu do not move', !!room.mine && room.mine[3] >= 44 && JSON.stringify([room.logo, room.host, room.join, room.menu]) === JSON.stringify([none.logo, none.host, none.join, none.menu]), JSON.stringify([none, room]));

@@ -11,7 +11,7 @@
 // tests/scripts/test_web_home_games.py runs this with node (the quick tier). usage: node web_home_games_quickjoin_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, chooseHost, pressEscape, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, leaves, seatsOf, myRoom, guestRoom, roomAs, Games,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloRoom, grouped, RULES0, done, broke } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
@@ -214,7 +214,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     tap(act(env, 'gstay'));
     check('Not now takes the card away and changes nothing (the focus is back on Quick join)', card(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('join'));
     await press(env);
-    tap(act(env, 'gyes'));
+    tap(act(env, 'gyes')); chooseHost(env, 'Public room');
     check('Host one! is Quick host: a room of the page\'s own is made (My room\'s machinery) and the Room shows, and My room is there: a hosted room is a room', card(env) === null && env.sockets.length === 1 && env.screen() === 'room' && env.home('mine').hidden === false);
 }
 {
