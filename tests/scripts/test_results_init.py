@@ -61,6 +61,9 @@ class TheService(unittest.TestCase):
             self.assertNotIn("privileged", s, name)
             self.assertEqual(re.findall(r"(?m)^      - (.*)$", s), ["ants-server-results:/results"], name)
             self.assertEqual(len(re.findall(r'(?m)^    user: ', s)), 1, name)
+            code = "\n".join(l for l in read(name).splitlines() if not l.lstrip().startswith("#"))
+            self.assertEqual(code.count("entrypoint:"), 1, name)          # (the server keeps the image's own entrypoint)
+            self.assertIn('    entrypoint: ["/bin/sh", "-c"]\n', s + "\n", name)
 
     def test_only_this_service_runs_as_root_and_the_server_is_not_widened(self):
         for name in FILES:
