@@ -1393,7 +1393,12 @@ const guestMoments = (spans, name) => {            // the moments at which a pag
     }
     {   // other kinds of request are untouched by the guest name
         const { x, d } = guestPage('Guest 123456');
-        check('a guest page keeps the logged-in pace for a plan, a move and a name (5 and 2 at once)', [1, 2, 3, 4].every(() => d.move(1, 2) || true) && (() => { let n = 0; while (n < 10 && d.rename('N' + n)) n++; return n; })() === 2);
+        const said = (f) => { let n = 0; while (n < 12 && f(n)) n++; return n; };
+        check('a guest page keeps the logged-in pace for a color move (5 at once, the 6th refused: the guest pace of a line would stop it at 2)', said(() => d.move(1, 2)) === 5);
+        const r = guestPage('Guest 123456');
+        check('... for a name (2 at once, then the same again after 1250 ms and not before: the guest pace of a line asks 3334)', said((n) => r.d.rename('N' + n)) === 2 && (r.x.advance(1249), !r.d.rename('A')) && (r.x.advance(1), r.d.rename('B')) && !r.d.rename('C'));
+        const q = guestPage('Guest 123456');
+        check('... for a removal and the public switch (2 at once, one more after 1250 ms)', said(() => q.d.remove(1)) === 2 && (q.x.advance(1250), q.d.remove(1)) && said(() => q.d.setPublic(true)) === 2 && (q.x.advance(1250), q.d.setPublic(true)));
     }
     {   // the margin, replayed through the SERVER's guest bucket, every line late by 0 or the jitter in every combination, and fresh random runs
         const asking = { 'a guest page that asks every millisecond for 60 s': [[0, 60000]],
@@ -1417,6 +1422,12 @@ const guestMoments = (spans, name) => {            // the moments at which a pag
         // the replay can tell: a page that kept to the server's own guest bucket loses a line to a delay of a few ms
         const exactGuest = []; { let tokens = 3 * 60000, last = 0; for (let ms = 0; ms < 60000; ms++) { tokens = Math.min(3 * 60000, tokens + (ms - last) * 20); last = ms; if (tokens >= 60000) { tokens -= 60000; exactGuest.push(ms); } } }
         check('(the replay can tell: lines at exactly the server\'s own guest rate are dropped when one is 15 ms late and the next on time)', (() => { let max = 0; for (let bits = 0; bits < (1 << 12); bits++) max = Math.max(max, guestDrops(exactGuest, exactGuest.map((_, i) => (i < 12 ? ((bits >> i) & 1) * 15 : 0)))); return max > 0; })());
+        for (const name of Object.keys(asking)) {   // one line held up while the ones after it come on time (a slow link): the margin takes 3000 ms, about what the page's 0.3 a second keeps in hand
+            const moments = guestMoments(asking[name]);
+            let worstHold = 0;
+            for (let which = 0; which < Math.min(12, moments.length); which++) worstHold = Math.max(worstHold, guestDrops(moments, moments.map((_, i) => (i === which ? 3000 : 0))));
+            check(name + ', one line held up by 3000 ms (each of the first 12 in turn, the others on time): the server drops none', worstHold === 0, worstHold + ' dropped');
+        }
         // fresh runs: seeded random spans and random delays of 0 to 300 ms on every line, 40 runs of up to 400 lines
         let state = 987654321, bad = 0, lines = 0, runs = 0;
         const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };

@@ -144,6 +144,16 @@ void run_lobby_guest_chat_tests() {
             ASSERT_TRUE(b.take(1000, kGuestChatRate) == ChatBudget::Verdict::Drop);          // the fourth at once
             ASSERT_TRUE(b.take(1000 + after, kGuestChatRate) == (after == 3000u ? ChatBudget::Verdict::Relay : ChatBudget::Verdict::Drop));
         }
+        {   // the unit of the per-minute count over a long run: 25 lines at exactly 3000 ms apart are all relayed, and one 2999 ms after the last is dropped (a unit one too small would let it through)
+            ChatBudget b;
+            for (int i = 0; i < 3; ++i) ASSERT_TRUE(b.take(0, kGuestChatRate) == ChatBudget::Verdict::Relay);
+            uint32_t at = 0;
+            for (int i = 0; i < 25; ++i) {
+                at += 3000;
+                ASSERT_TRUE(b.take(at, kGuestChatRate) == ChatBudget::Verdict::Relay);
+            }
+            ASSERT_TRUE(b.take(at + 2999, kGuestChatRate) == ChatBudget::Verdict::Drop);
+        }
         {   // a quiet minute fills the burst again, and no more than the burst
             ChatBudget b;
             for (int i = 0; i < 30; ++i) b.take(0, kGuestChatRate);

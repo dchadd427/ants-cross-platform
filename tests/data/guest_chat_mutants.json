@@ -186,6 +186,14 @@
    "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.277 $B/tests/test_server/test_server'"
   },
   {
+   "id": "restored_room_always_checks_names",
+   "file": "src/ants_server/room_manager.cpp",
+   "old": "restored_spec.verified_names = limits_.verified_names;",
+   "new": "restored_spec.verified_names = true;",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.277 $B/tests/test_server/test_server'"
+  },
+  {
    "id": "page_uses_the_logged_in_budget_for_a_guest",
    "file": "web/front/lobby_net.js",
    "old": "kind === 'chat' && GUEST_NAME.test(this.name) ?",
@@ -218,6 +226,13 @@
    "file": "web/front/lobby_net.js",
    "old": "[1-9][0-9]{5}( ",
    "new": "[0-9]{6}( ",
+   "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
+  },
+  {
+   "id": "page_guest_pace_for_every_kind",
+   "file": "web/front/lobby_net.js",
+   "old": "kind === 'chat' && GUEST_NAME.test(this.name) ?",
+   "new": "GUEST_NAME.test(this.name) ?",
    "test": "node tests/scripts/web_lobby_client_check.js web/front/lobby_net.js"
   }
  ]

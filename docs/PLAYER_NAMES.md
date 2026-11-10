@@ -53,7 +53,9 @@ Who is a guest for the chat is decided at the door, not by the look of the name:
 
 The limit applies in the waiting room and in the running match, only in a server run with `--verified-names`. A LAN host, a direct host and a server without the setting give everybody the usual limit. The chat of the home page (the hub's) is not changed.
 
-The page keeps a little under the server's guest limit while its own seat has a guest name: two lines at once, then one every 3.3 seconds (`GUEST_CHAT` in `web/front/lobby_net.js`), so an honest page never sends a line that the server drops. A page whose seat has any other name keeps the usual margin (four at once, then one every 1.25 seconds).
+The game itself does not pace its lines: the match's own chat and its quick chat keys send every line, and the sender still sees a line that the server dropped. In a match a violation is never forgiven, so a guest who sends about 21 lines at once is taken out of the match (a logged-in person about 33), and so is a guest who sends a line every 1.25 seconds, after about 100 lines.
+
+The page keeps a little under the server's guest limit while its own seat has a guest name: two lines at once, then one every 3.3 seconds (`GUEST_CHAT` in `web/front/lobby_net.js`), so a page loses no line to the server's limit unless the network holds one up for more than about three seconds. A page whose seat has any other name keeps the usual margin (four at once, then one every 1.25 seconds). The page cannot tell which server it talks to, so a page with a guest name keeps the slower pace on a server without the setting too.
 
 ## Settings and logs
 

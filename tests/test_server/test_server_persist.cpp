@@ -1758,7 +1758,8 @@ void run_persist_review_tests() {
                 } else {
                     w.next_token.clear();
                 }
-                m.push_back(&w.connect(std::string("P") + std::to_string(p), spec.code));
+                // (a server that does not check names: the three come in with names of the guest form, as every page that is not logged in does, and still have 5)
+                m.push_back(&w.connect(std::string(check_names ? "P" : "Guest 10000") + std::to_string(p), spec.code));
             }
             w.next_token.clear();
             w.run(30000 + kPre);
