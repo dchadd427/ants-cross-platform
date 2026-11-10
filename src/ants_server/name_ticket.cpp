@@ -135,7 +135,7 @@ std::vector<std::string> NameGate::report(uint64_t now_unix) {
         if (bad >= 5 && good == 0 && (!secret_line_said_ || now_unix >= last_secret_line_unix_ + 3600)) {
             secret_line_said_ = true;
             last_secret_line_unix_ = now_unix;
-            lines.push_back("every name ticket failed its check: are the two secrets the same?");
+            lines.push_back("every name ticket failed its check: are the two secrets the same, or are the clocks apart?");
         }
         window_start_unix_ = now_unix;
         window_base_ = c;

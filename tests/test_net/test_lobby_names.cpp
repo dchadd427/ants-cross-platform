@@ -2,6 +2,7 @@
 // and a seat keeps the name it was given. A room without them (a LAN or direct host) is what it was.
 #include "lobby_fixtures.hpp"
 
+#include "ants_ai/bot_names.hpp"
 #include "ants_net/person_name.hpp"
 
 namespace {
@@ -59,6 +60,15 @@ void run_lobby_names_tests() {
             const size_t c = room.join_seat("Ann");
             ASSERT_EQ(name_of(room, c), std::string("Ann (2)"));
         }
+        {   // a second person called Bot is not "Bot (2)", which is a computer player's name: the other form
+            Room room(checked_room_config(205));
+            room.join_seat("Bot");
+            const size_t b = room.join_seat("Bot");
+            const size_t c = room.join_seat("bot");
+            ASSERT_EQ(name_of(room, b), std::string("Bot 2"));
+            ASSERT_EQ(name_of(room, c), std::string("bot 3"));
+            ASSERT_FALSE(ai::is_reserved_bot_name(name_of(room, b)) || ai::is_reserved_bot_name(name_of(room, c)));
+        }
         {   // a name of no characters (a Hello that gave none) is a name too: the second one is "(2)", with no blank before the bracket
             Room room(checked_room_config(204));
             const size_t a = room.join_seat("");
@@ -86,6 +96,20 @@ void run_lobby_names_tests() {
             ASSERT_TRUE(guest_form(name_of(room, b)) && name_of(room, b) != "Guest 123456");
             ASSERT_EQ(name_of(room, c), std::string("guest 123456 (2)"));
         }
+        {   // the first draw is a number that a person of the room has: it is thrown back and the next one is used
+            HostLobby::Config hc = checked_room_config(212);
+            auto calls = std::make_shared<int>(0);
+            hc.make_key = [calls](SeatKey& key) {
+                const int n = ++*calls;                                           // (1 and 2: the keys of the two seats; 3 and 4: the draws)
+                const uint32_t word = n == 3 ? 23456u : n == 4 ? 5000u : 0u;       // 23456 is "Guest 123456", 5000 is "Guest 105000"
+                for (size_t i = 0; i < key.size(); ++i) key[i] = n <= 2 ? static_cast<uint8_t>(static_cast<size_t>(n) * 16 + i) : static_cast<uint8_t>(word >> (8 * (i % 4)));
+                return true;
+            };
+            Room room(hc);
+            room.join_seat("Guest 123456");
+            const size_t b = room.join_seat("Guest 123456");
+            ASSERT_EQ(name_of(room, b), std::string("Guest 105000"));
+        }
         {
             HostLobby::Config hc = checked_room_config(211);
             hc.make_key = nullptr;                                            // (no generator: the other way)
@@ -95,7 +119,7 @@ void run_lobby_names_tests() {
             ASSERT_EQ(name_of(room, b), std::string("Guest 654321 (2)"));
         }
         ASSERT_TRUE(is_guest_name("Guest 123456") && is_guest_name("Guest 999999") && is_guest_name("Guest 100000"));
-        for (const char* bad : {"guest 123456", "Guest 012345", "Guest 1234567", "Guest 12345", "Guest  23456", "Guest 12345a", "Guest123456", "Guest 123456 ", " Guest 123456", "", "Guest 1234\xd9" "6"}) {
+        for (const char* bad : {"guest 123456", "Guest 012345", "Guest 1234567", "Guest 12345", "Guest  23456", "Guest 12345a", "Guest 1x3456", "Guest123456", "Guest 123456 ", " Guest 123456", "", "Guest 1234\xd9" "6"}) {
             ASSERT_MSG(!is_guest_name(bad), bad);
         }
         {   // the draw: the first four bytes as a little endian word; a word below 4,294,800,000 (4,772 times 900,000) gives its number 100000 .. 999999 (every number the same count of words), the rest at the top is thrown away

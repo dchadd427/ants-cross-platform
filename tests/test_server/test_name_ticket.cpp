@@ -230,7 +230,7 @@ void run_name_ticket_tests() {
 
     TEST_CASE("S3.268 Guest Names: The Form Is Exactly Guest And Six Digits With No Leading Zero; A Drawn Name Has The Form, Comes From The Source's Bytes (Little Endian), Throws Away The Uneven Rest, And Is Empty When The Source Fails") {
         ASSERT_TRUE(is_guest_name("Guest 100000") && is_guest_name("Guest 999999") && is_guest_name("Guest 123456"));
-        for (const char* bad : {"guest 123456", "GUEST 123456", "Guest 012345", "Guest 1234567", "Guest 12345", "Guest 123456 ", "Guest  123456", "Guest-123456", "Guest 123 56", "Guest 12345x", ""}) ASSERT_MSG(!is_guest_name(bad), bad);
+        for (const char* bad : {"guest 123456", "GUEST 123456", "Guest 012345", "Guest 1234567", "Guest 12345", "Guest 123456 ", "Guest  123456", "Guest-123456", "Guest 123 56", "Guest 12345x", "Guest 1x3456", ""}) ASSERT_MSG(!is_guest_name(bad), bad);
         const auto from_word = [](uint32_t w) {
             return draw_guest_name([w](uint8_t* out, size_t n) {
                 for (size_t i = 0; i < n; ++i) out[i] = static_cast<uint8_t>(w >> (8 * i));
@@ -506,7 +506,7 @@ void run_name_ticket_tests() {
         ASSERT_FALSE(said);
         std::vector<std::string> at_600 = wrong.report(t + 600);
         said = false;
-        for (const std::string& l : at_600) said = said || l == "every name ticket failed its check: are the two secrets the same?";
+        for (const std::string& l : at_600) said = said || l == "every name ticket failed its check: are the two secrets the same, or are the clocks apart?";
         ASSERT_TRUE(said);
         for (int i = 0; i < 5; ++i) wrong.name_for(make_pass("y" + secret, 1, static_cast<uint32_t>(t + 5000), 100 + static_cast<uint64_t>(i), "Ann"), "Ann", t + 700);
         said = false;

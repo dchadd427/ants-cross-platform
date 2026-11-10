@@ -288,6 +288,38 @@
    "new": "    cfg.fixed_names = false;",
    "build": "test_server",
    "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "guest_form_skips_the_second_digit",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "for (size_t i = 7; i < 12; ++i) {",
+   "new": "for (size_t i = 8; i < 12; ++i) {",
+   "build": "test_server",
+   "test": "timeout 900 sh -c 'B=${ANTS_BUILD_DIR:-build}; for f in S3.264 S3.265 S3.266 S3.267 S3.268 S3.269 S3.270 S3.271 S3.272 S3.273 S3.274; do ANTS_TEST_FILTER=$f $B/tests/test_server/test_server || exit 1; done'"
+  },
+  {
+   "id": "guest_redraw_may_be_taken",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "if (guest_name_from_bytes(key.data() + at, drawn) && !is_taken(drawn, taken)) return drawn;",
+   "new": "if (guest_name_from_bytes(key.data() + at, drawn)) return drawn;",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
+  },
+  {
+   "id": "empty_secret_is_a_secret",
+   "file": "src/ants_server/main.cpp",
+   "old": "        if (text[0] != '\\0') {",
+   "new": "        if (true) {",
+   "build": "ants_server test_server",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=S3.275 $B/tests/test_server/test_server'"
+  },
+  {
+   "id": "suffix_may_look_like_a_bot",
+   "file": "src/ants_net/person_name.cpp",
+   "old": "if (ai::is_reserved_bot_name(candidate)) candidate",
+   "new": "if (false) candidate",
+   "build": "test_lobby",
+   "test": "timeout 300 sh -c 'B=${ANTS_BUILD_DIR:-build}; ANTS_TEST_FILTER=\"Names Of A Room\" $B/tests/test_net/test_lobby'"
   }
  ]
 }

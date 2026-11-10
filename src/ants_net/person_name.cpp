@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "ants_ai/bot_names.hpp"
+
 namespace ants::net {
 
 namespace {
@@ -64,9 +66,9 @@ std::string unique_person_name(const std::string& name, const std::vector<std::s
         }
     }
     for (size_t n = 2; n < 100; ++n) {
-        const std::string suffix = " (" + std::to_string(n) + ")";
-        const std::string base = trim_blanks(name.substr(0, kMaxNameChars - suffix.size()));
-        const std::string candidate = trim_blanks(base + suffix);
+        const auto made = [&](const std::string& suffix) { return trim_blanks(trim_blanks(name.substr(0, kMaxNameChars - suffix.size())) + suffix); };
+        std::string candidate = made(" (" + std::to_string(n) + ")");
+        if (ai::is_reserved_bot_name(candidate)) candidate = made(" " + std::to_string(n));       // ("Bot (2)" is a computer player's name: "Bot 2" is not)
         if (!is_taken(candidate, taken)) return candidate;
     }
     return name;

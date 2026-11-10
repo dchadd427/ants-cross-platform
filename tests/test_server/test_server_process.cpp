@@ -872,11 +872,11 @@ void run_name_process_tests() {
             const std::string log = text_of_file(log_file);
             ASSERT_TRUE(log.find("ANTS_NAME_TICKET_SECRET") != std::string::npos && log.find("shortvalue12345") == std::string::npos);
         }
-        const auto start_line = [&](const char* tag, const std::vector<std::string>& extra, bool with_secret, const std::string& expect) {
+        const auto start_line = [&](const char* tag, const std::vector<std::string>& extra, bool with_secret, const std::string& expect, bool empty_secret = false) {
             const uint16_t port = free_tcp_port();
             const std::string log_file = (root / (std::string(tag) + ".log")).string();
             ServerProcess server;
-            if (with_secret) server.env = {{"ANTS_NAME_TICKET_SECRET", name_secret}};
+            if (with_secret) server.env = {{"ANTS_NAME_TICKET_SECRET", empty_secret ? std::string() : name_secret}};       // (an empty value is what a stack file passes for a setting that is not made: it is no secret)
             std::vector<std::string> args = {"--maps", maps_dir(), "--port", std::to_string(port)};
             for (const std::string& a : extra) args.push_back(a);
             if (!server.start(args, secret, log_file) || !port_accepts(port, 15000)) return false;
@@ -885,6 +885,7 @@ void run_name_process_tests() {
         };
         ASSERT_TRUE(start_line("on-secret", {"--verified-names"}, true, "verified names are on: a name signed by the hub is kept, any other person plays as a guest"));
         ASSERT_TRUE(start_line("on-none", {"--verified-names"}, false, "verified names are on and ANTS_NAME_TICKET_SECRET is not set: every person plays as a guest"));
+        ASSERT_TRUE(start_line("on-empty", {"--verified-names"}, true, "verified names are on and ANTS_NAME_TICKET_SECRET is not set: every person plays as a guest", true));
         ASSERT_TRUE(start_line("off-secret", {}, true, "ANTS_NAME_TICKET_SECRET is set but --verified-names is not: names are not checked"));
         {   // a bad and a good pass against the real program (the wall clock)
             const uint16_t port = free_tcp_port();

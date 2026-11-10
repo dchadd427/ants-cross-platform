@@ -590,6 +590,7 @@ void RoomManager::route_hello(std::unique_ptr<net::Connection> connection, const
         }
         return;
     }
+    // A pass is spent by any Hello that carried it, even if the room then refuses the Hello (Full, MatchRunning): a page sends a pass once.
     // With verified names a Hello for a NEW seat (no key, or a key that no seat of the room holds) is seated under its checked name, and its token is not passed on: the room gets the Hello
     // as the door re-wrote it. A key that fits a seat is a person who comes back: the seat keeps its name and the token is not looked at.
     std::vector<uint8_t> checked;
