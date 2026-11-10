@@ -1131,8 +1131,8 @@
   {
    "id": "strip_leaves_a_dock_that_comes_late_as_it_is",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
-   "new": "inert(held); dockShown(); wantPlayers();",
+   "old": "inert(held); dockShown(); pick(tab); login.addEventListener",
+   "new": "inert(held); dockShown(); login.addEventListener",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
@@ -1196,6 +1196,41 @@
    "file": "web/home/home.css",
    "old": ".pl-on .hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }",
    "new": ".hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "login_chip_leaves_the_chat_view_away",
+   "file": "web/home/home.js",
+   "old": "login.addEventListener('click', function () { if (phone()) pick('chat'); }, true);",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_count_not_capped",
+   "file": "web/home/home.js",
+   "old": "to.textContent = /^\\d{3}/.test(t) ? '99+' : t;",
+   "new": "to.textContent = t;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "strip_count_capped_too_early",
+   "file": "web/home/home.js",
+   "old": "/^\\d{3}/.test(t)",
+   "new": "/^\\d{2}/.test(t)",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "phone_has_two_columns",
+   "file": "web/home/home.css",
+   "old": "    .pl-on .hmain { grid-template-columns: minmax(0, 1fr); }\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "narrow_strip_not_tightened",
+   "file": "web/home/home.css",
+   "old": "@media (max-width: 380px) { .htabs { gap: 6px;",
+   "new": "@media (max-width: 280px) { .htabs { gap: 6px;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   }
  ]

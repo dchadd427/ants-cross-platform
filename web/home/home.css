@@ -69,6 +69,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     #home[data-tab="chat"] .hmain, #home:not([data-tab="chat"]) .gc, #home[data-tab="games"] .pl, #home[data-tab="players"] .gdock { display: none; }
     #home:not(.pl-on)[data-tab="players"] .gdock { display: flex; }
 }
+@media (max-width: 380px) { .htabs { gap: 6px; padding-left: 8px; padding-right: 8px; } .htab { gap: 0; font-size: 15px; padding: 6px 2px; } .htab .pill { margin-left: 4px; padding: 0 5px; font-size: 13px; } }       /* (320 px: Players with "99+" fits its third of the strip) */
 @media (max-width: 700px) and (max-height: 500px) { .htabs { padding: 4px 12px 6px; } .htab { min-height: 44px; } }       /* (a phone held sideways: the strip is 54 px, so the views keep the room) */
 
 /* ---- the Room: the slim bar ---- */

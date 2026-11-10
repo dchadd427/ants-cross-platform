@@ -267,6 +267,8 @@ class TheBodyOfHome(unittest.TestCase):
         self.assertIn("[bar, rbar, tabs, dock && dock.root, players && players.root]", code, "the strip takes no press while the page is on its way to the game")
         self.assertIn("mirror(gamesPill, tabBtns.games.pill);", code)
         self.assertIn("mirror(c, tabBtns.players.pill);", code)
+        self.assertIn("to.textContent = /^\\d{3}/.test(t) ? '99+' : t;", code, "a count of three digits or more (500+ too) is 99+ in the strip, as on the old bar's badge")
+        self.assertIn("login.addEventListener('click', function () { if (phone()) pick('chat'); }, true);", code, "the login chip shows the Chat view on a phone before the dock opens it")
 
     def test_the_layout_is_a_grid_for_a_wide_window_and_one_view_for_a_phone(self):
         css = self.css
@@ -278,6 +280,8 @@ class TheBodyOfHome(unittest.TestCase):
         self.assertIn(".htabs { order: 9; flex: none; display: flex;", phone)
         self.assertIn('#home[data-tab="chat"] .hmain, #home:not([data-tab="chat"]) .gc, #home[data-tab="games"] .pl, #home[data-tab="players"] .gdock { display: none; }', phone)
         self.assertIn("#home:not(.pl-on) .htab.t-players { display: none; }", phone, "a page with no players list has no Players view")
+        self.assertIn(".pl-on .hmain { grid-template-columns: minmax(0, 1fr); }", phone, "a phone has one column, with the list there or not")
+        self.assertIn("@media (max-width: 380px) { .htabs { gap: 6px; padding-left: 8px; padding-right: 8px; } .htab { gap: 0; font-size: 15px; padding: 6px 2px; } .htab .pill { margin-left: 4px; padding: 0 5px; font-size: 13px; } }", css, "a third of a 320 px strip holds Players and \"99+\"")
         self.assertIn("min-height: 48px", phone)
 
 

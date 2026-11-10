@@ -138,6 +138,13 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     same('... but a wide window that is only 500 px high leaves it shut (a press on its header opens it)', opens.slice(7), [false]);
     resize();
     same('... and a resize that changes nothing does nothing', opens.length, 8);
+    phone.on = true; env.win.innerHeight = 800; resize(); strip.children[0].click(); const before = opens.length;
+    env.home('hlogin').click();
+    check('on a phone the login chip shows the Chat view (the dock is opened for it: its own handler opens it, and a dock that opens while its view is away would count its lines as read)', env.$('home').getAttribute('data-tab') === 'chat' && strip.children[2].getAttribute('aria-pressed') === 'true' && opens.length === before + 1 && opens[opens.length - 1] === true);
+    strip.children[0].click(); phone.on = false; env.home('hlogin').click();
+    check('... and in a wide window it leaves the views alone', env.$('home').getAttribute('data-tab') === 'games');
+    const count = env.home('games').children[1];
+    for (const [text, want] of [['7', '7'], ['99', '99'], ['50+', '50+'], ['100', '99+'], ['226', '99+'], ['500+', '99+']]) { count.textContent = text; count.hidden = false; watchers[0].fn(); same('the strip shows ' + text + ' as ' + want + ' (three digits or more: 99+, like the old bar badge; the strip is a third of 320 px)', pill(0).textContent, want); }
 }
 {   // without the script of Home the page cannot do anything, and says so (as for any of its scripts)
     const env = runLobby('', {}, { noHome: true });

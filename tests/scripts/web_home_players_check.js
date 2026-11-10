@@ -224,7 +224,7 @@ function rig(o) {
     r.lost();
     check('the hub is gone: "off" (the panel stays, the count goes, a grey dot and the words come), the rows are not kept', r.list.state() === 'off' && r.panel().getAttribute('data-state') === 'off' && r.count() === '' && one(r.panel(), 'pl-dot').hidden === false && texts(r.panel(), 'pl-note')[0].indexOf('Players list is off right now') === 0
         && r.names().length === 0 && Object.keys(r.list.model().rows).length === 0 && r.root.hidden === false);
-    check('... the note says that the rest works and that the list comes back by itself', /Games, rooms and the Yard work as always; this list comes back by itself\./.test(texts(r.panel(), 'pl-note')[0]));
+    check('... the note says that the rest works and that the list comes back by itself', /Games and rooms work as always; this list comes back by itself\./.test(texts(r.panel(), 'pl-note')[0]));
     r.live(); r.who(FULL([row(1, 'maple'), row(3, 'fern')], { n: 2 }));
     check('the hub is back: the list is on again, with the new rows', r.list.state() === 'on' && r.names().join() === 'maple,fern' && r.count() === '2' && one(r.panel(), 'pl-dot').hidden === true);
     r.live();
@@ -572,6 +572,10 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     check('pressed: folded to its header, the button says it opens', r.panel().getAttribute('data-folded') === 'true' && fold.getAttribute('aria-label') === 'Open the list' && fold.getAttribute('aria-expanded') === 'false');
     fold.click();
     check('pressed again: open', r.panel().getAttribute('data-folded') === 'false');
+    fold.getClientRects = () => [];                           // (a phone's Players view: the fold is not drawn)
+    r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
+    check('Escape does not fold a panel whose fold button is not drawn (a phone\'s Players view: it would stay folded in the wide layout later)', r.panel().getAttribute('data-folded') === 'false');
+    delete fold.getClientRects;
     r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
     check('Escape in a docked panel folds it and the focus is on the fold button', r.panel().getAttribute('data-folded') === 'true' && r.env.focused === fold);
     r.who(FULL(CROWD.concat([row(20, 'newcomer')]), { n: 14, g: 4 }));

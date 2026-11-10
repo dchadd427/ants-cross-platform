@@ -285,7 +285,24 @@ async function main() {
                 check(size[0] + ': the Chat view shows the open chat alone (no fold)', c.games === 'none' && c.players === 'none' && c.chat === 'shown' && c.open === 'true' && c.fold === 'none', JSON.stringify(c));
                 await shot(page, 'phone_chat_' + size[1] + 'x' + size[2]);
                 await page.click('.htab.t-games'); await sleep(200);
+                await page.click('.hlogin'); await sleep(300);
+                check(size[0] + ': the login chip (logged in) shows the Chat view with the chat open and the focus on Log out', await page.evaluate(() => document.getElementById('home').getAttribute('data-tab') === 'chat' && document.getElementById('gchat').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'true' && (innerHeight <= 500 || document.activeElement.classList.contains('gc-link'))));
+                await page.click('.htab.t-games'); await sleep(200);
                 check(size[0] + ': Games brings the list back and the chat is folded again', await page.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'false'));
+                await page.context().close();
+            }
+        }
+
+        // ---- 2b. a crowd of three digits in the strip at 320, 360 and 390 px: the counts say 99+ and nothing of a tab is cut off ---------------------------------------------------------------------------------------
+        if (want(2)) {
+            await crowd(r, many(205), 20);
+            for (const size of [['320 wide', 320, 640, true], ['360 wide', 360, 740, true], ['390 wide', 390, 844, true]]) {
+                const page = await openPage(r, size, '1000_maple');
+                await phoneChat(page, size[1], size[2]);
+                await until('the strip has the count', () => page.evaluate(() => { const b = document.querySelector('.htab.t-players .pill'); return !!b && !b.hidden && b.textContent === '99+'; }), 15000);
+                const cut = await page.evaluate(() => [...document.querySelectorAll('.htab')].filter((b) => b.scrollWidth > b.clientWidth + 0.5 || [...b.querySelectorAll('.name, .pill')].some((e) => { const q = e.getBoundingClientRect(), t = b.getBoundingClientRect(); return e.getClientRects().length && (q.left < t.left - 0.5 || q.right > t.right + 0.5); })).map((b) => b.className));
+                check(size[0] + ': with 226 people the Players tab says 99+ and no tab is cut off', cut.length === 0, JSON.stringify([cut, await page.evaluate(() => [...document.querySelectorAll('.htab')].map((b) => [b.clientWidth, b.scrollWidth, Math.round(b.querySelector('.name').getBoundingClientRect().width), Math.round(b.querySelector('.pill').getBoundingClientRect().width)]))]));
+                await shot(page, 'strip_226_' + size[1]);
                 await page.context().close();
             }
         }

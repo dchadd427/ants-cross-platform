@@ -25,7 +25,7 @@
         title: 'Players', here: ' here now', you: 'you', mod: 'mod', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', badges: '99+', player: ' player', players: ' players', of: ' of ',
         empty: 'Just you here. Host a game!', emptyNote: 'People who log in with Discord show up here by name.', host: '+ Host a game',
-        off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games, rooms and the Yard work as always; this list comes back by itself.',
+        off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.',
         fold: 'Fold the list', unfold: 'Open the list', close: 'Close the list', button: 'Players'
     };
 
@@ -299,7 +299,7 @@
         scrim.addEventListener('click', guard(function () { hide(true); }));
         panel.addEventListener('keydown', guard(function (e) {
             if (!e) return;
-            if (e.key === 'Escape') { if (open) hide(true); else if (docked()) { setFold(true); if (fold.focus) fold.focus(); } return; }
+            if (e.key === 'Escape') { if (open) hide(true); else if (docked() && (!fold.getClientRects || fold.getClientRects().length)) { setFold(true); if (fold.focus) fold.focus(); } return; }
             if (e.key !== 'Tab' || !open) return;                        // (a sheet is a dialog: the focus stays in it)
             var items = tabbable(), first = items[0], last = items[items.length - 1], active = doc.activeElement;
             if (e.shiftKey && active === first && last) { if (e.preventDefault) e.preventDefault(); last.focus(); }

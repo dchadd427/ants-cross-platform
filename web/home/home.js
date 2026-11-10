@@ -195,7 +195,7 @@
             if (dock && phone()) dock.open(name === 'chat');
         }
         function mirror(from, to) {                         // a count that games.js or players.js keeps: the strip shows the same
-            var copy = function () { to.hidden = from.hidden; to.textContent = from.textContent; };
+            var copy = function () { var t = from.textContent; to.hidden = from.hidden; to.textContent = /^\d{3}/.test(t) ? '99+' : t; };
             copy();
             try { if (win.MutationObserver) new win.MutationObserver(copy).observe(from, { childList: true, characterData: true, attributes: true, subtree: true }); } catch (e) { /* the strip has no count */ }
         }
@@ -291,7 +291,7 @@
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
