@@ -1,0 +1,40 @@
+{
+ "note": "Mutants of the toast of Home's notices (web/home/games.js, games.css, docs/HOME_SCREEN.md, \"Notices\") that only the opt-in real-Chromium check can see (Playwright and a Chromium, no server): run with `python3 tools/mutate.py tests/data/home_toast_browser_mutants.json --keep-going --jobs 1`; tools/mutate.py --check only proves that every old text is still in the code.",
+ "mutants": [
+  {
+   "id": "toast_in_flow_browser",
+   "file": "web/home/games.css",
+   "old": ".gtoast { position: fixed;",
+   "new": ".gtoast { position: relative;",
+   "test": "node tests/scripts/web_home_toast_browser.js"
+  },
+  {
+   "id": "toast_over_the_bar_on_the_chat_view",
+   "file": "web/home/games.js",
+   "old": "y = r && !rectOf('#hmain') ?",
+   "new": "y = r && false ?",
+   "test": "node tests/scripts/web_home_toast_browser.js"
+  },
+  {
+   "id": "toast_never_leaves_browser",
+   "file": "web/home/games.js",
+   "old": "toastAsks ? null : later(",
+   "new": "true ? null : later(",
+   "test": "node tests/scripts/web_home_toast_browser.js"
+  },
+  {
+   "id": "toast_motion_always",
+   "file": "web/home/games.css",
+   "old": ".gtoast { animation: none; }",
+   "new": ".gtoast { animation: gtoastin .2s; }",
+   "test": "node tests/scripts/web_home_toast_browser.js"
+  },
+  {
+   "id": "toast_without_a_status_role",
+   "file": "web/home/games.js",
+   "old": "strip.setAttribute('role', 'status'); strip.setAttribute('aria-live', 'polite');",
+   "new": "strip.setAttribute('aria-live', 'polite');",
+   "test": "node tests/scripts/web_home_toast_browser.js"
+  }
+ ]
+}

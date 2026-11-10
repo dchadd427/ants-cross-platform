@@ -6,7 +6,7 @@
 //      before the toast comes, while it shows (a short one, one with a long line and two buttons, a warning) and after it has gone;
 //   3. OK and Escape close it, a notice that asks something (Rejoin) stays after 8 s, a later one replaces it (one toast only), and one that asks nothing goes by itself after about 6 s;
 //   4. with reduced motion the toast has no animation.
-//   --shots DIR takes the pictures (toast_*.png: no toast, toast shown, and the before/after of the bar).
+//   --shots DIR takes the pictures (toast_*.png: no toast, the page just before the notice, the toast shown, a long one).
 //
 //   node tests/scripts/web_home_toast_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 //
@@ -118,6 +118,7 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
                 await page.evaluate(() => { const s = document.getElementById('rejoin'); s.hidden = false; document.getElementById('rejoin-note').textContent = 'A match of yours is still running.'; });
                 await sleep(150);
                 const before = await page.evaluate(BOXES);
+                await shot(page, name + (view ? '_' + view : '') + '_before');
                 await page.evaluate(() => document.querySelector('.hbar .quick.host').click());
                 await sleep(500);
                 const t1 = await toastBox(page);
