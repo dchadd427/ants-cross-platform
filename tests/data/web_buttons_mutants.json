@@ -1,0 +1,96 @@
+{
+ "note": "Mutants of the teal buttons' texture (docs: tests/scripts/test_web_buttons.py): the weave, the forced-colors guard, the chosen state, the press, the hover color, the order of a face (an old order makes the declaration invalid), the focus outline, the disabled filter. Run with `python3 tools/mutate.py tests/data/web_buttons_mutants.json --keep-going --jobs 1`; every one must be caught.",
+ "mutants": [
+  {
+   "id": "weave_dropped",
+   "file": "web/lobby.html",
+   "old": "--sheen: var(--weave), linear-gradient(180deg,",
+   "new": "--sheen: linear-gradient(180deg,",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "forced_colors_guard_dropped",
+   "file": "web/lobby.html",
+   "old": "@media (forced-colors: active) { :root { --weave: linear-gradient(#0000, #0000); --sheen: linear-gradient(#0000, #0000); --btn-text: none; } }",
+   "new": "@media (forced-colors: none) { :root { --weave: linear-gradient(#0000, #0000); --sheen: linear-gradient(#0000, #0000); --btn-text: none; } }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "forced_colors_keeps_the_words_shadow",
+   "file": "web/shell.html",
+   "old": "--sheen: linear-gradient(#0000, #0000); --btn-text: none; } }",
+   "new": "--sheen: linear-gradient(#0000, #0000); } }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "chosen_state_keeps_the_texture",
+   "file": "web/lobby.html",
+   "old": ".btn.on { background-image: none; }",
+   "new": ".btn.on { background-image: var(--sheen); }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "press_moves_the_old_way",
+   "file": "web/lobby.html",
+   "old": ".btn:active { transform: translate(3px, 4px);",
+   "new": ".btn:active { transform: translate(2px, 3px);",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "press_keeps_the_red_shadow",
+   "file": "web/matches.css",
+   "old": "box-shadow: var(--bevel-dn), 0 0 0 var(--shadow); }",
+   "new": "box-shadow: var(--bevel-dn), 1px 1px 0 var(--shadow); }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "hover_color_not_darkened",
+   "file": "web/front/classic.css",
+   "old": "--teal-hi: #2f6f5a;",
+   "new": "--teal-hi: #31765f;",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "one_file_keeps_the_old_order",
+   "file": "web/game_menu.css",
+   "old": ".gm-back { background: var(--sheen) var(--teal, #1f4f40);",
+   "new": ".gm-back { background: var(--teal, #1f4f40) var(--sheen);",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "one_face_keeps_the_old_order",
+   "file": "web/front/mapmaker.css",
+   "old": ".open-chip { min-height: 36px; padding: 4px 10px; font-size: 13.5px; cursor: pointer; color: var(--cream); background: var(--sheen) var(--teal);",
+   "new": ".open-chip { min-height: 36px; padding: 4px 10px; font-size: 13.5px; cursor: pointer; color: var(--cream); background: var(--teal) var(--sheen);",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "focus_outline_removed",
+   "file": "web/lobby.html",
+   "old": ":focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }",
+   "new": ":focus-visible { outline: none; outline-offset: 3px; }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "a_copy_of_the_frame_differs",
+   "file": "web/matches.css",
+   "old": "--bevel: inset 0 0 0 1px rgba(255, 255, 255, .38),",
+   "new": "--bevel: inset 0 0 0 1px rgba(255, 255, 255, .5),",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "a_transition_on_the_button",
+   "file": "web/shell.html",
+   "old": "color: var(--cream); text-shadow: var(--btn-text);",
+   "new": "color: var(--cream); text-shadow: var(--btn-text); transition: background .15s;",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  },
+  {
+   "id": "disabled_filter_dropped",
+   "file": "web/lobby.html",
+   "old": ".btn[disabled] { cursor: default; filter: saturate(.45) brightness(.78); transform: none; }",
+   "new": ".btn[disabled] { cursor: default; transform: none; }",
+   "test": "python3 -m unittest tests.scripts.test_web_buttons"
+  }
+ ]
+}
