@@ -851,7 +851,7 @@
   {
    "id": "stale_how_it_works",
    "file": "web/lobby.html",
-   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
+   "old": "<h3>The room</h3><p>From Home, press Quick host and your room is ready",
    "new": "<h3>The room</h3><p>Open the page and your room is ready",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -872,8 +872,8 @@
   {
    "id": "how_it_works_press_my_room_from_the_room",
    "file": "web/lobby.html",
-   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
-   "new": "<h3>The room</h3><p>Press My room and your room is ready",
+   "old": "<h3>The room</h3><p>From Home, press Quick host and your room is ready",
+   "new": "<h3>The room</h3><p>Press Quick host and your room is ready",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

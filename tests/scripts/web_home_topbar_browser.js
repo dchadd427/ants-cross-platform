@@ -49,6 +49,13 @@ class Site {                                              // login_site.py: the 
 }
 
 // the boxes of the bar's parts, in CSS pixels (null: not drawn)
+// the bar's buttons with no room, and the same bar when My room is shown (forced here: a room needs a game server, which this run does not have; the page's own rule is in web_home_screen_check.js)
+const ROW = () => {
+    const box = (s) => { const e = document.querySelector(s); if (!e || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; };
+    return { logo: box('.hbar .hlogo'), host: box('.hbar .quick.host'), join: box('.hbar .quick.join'), games: box('.hbar .games'), mine: box('.hbar .mine'), menu: box('.hbar .hmenu'), bar: box('.hbar'), chip: box('.hbar .hlogin'),
+        mineDisplay: getComputedStyle(document.querySelector('.hbar .mine')).display, mineLabel: document.querySelector('.hbar .mine').getAttribute('aria-label') };
+};
+const SHOW_ROOM = () => { const m = document.querySelector('.hbar .mine'); m.hidden = false; const p = m.querySelector('.pill'); p.hidden = false; p.textContent = '1/4'; m.setAttribute('aria-label', 'My room, 1 of 4'); };
 const BOXES = () => {
     const box = (s) => { const e = document.querySelector(s); if (!e || e.hidden || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
     const cn = document.querySelector('.hbar .hlogin .gc-cn');
@@ -102,6 +109,18 @@ async function main() {
             check(s[0] + ' guest: the chip is there, a target of 44 px, and ' + (s[1] >= 1280 ? 'says Log in' : 'is the mark alone'), !!b.chip && b.chip.h >= 44 && b.chip.w >= 44 && (s[1] >= 1280 ? b.chip.w > 80 : b.chip.w <= 50), JSON.stringify(b.chip));
             if (phoneRow) check(s[0] + ' guest: one row (logo, chip, Menu), the menu at the right edge', !!b.logo && !!b.menu && b.logo.r <= b.chip.x + 0.5 && b.chip.r <= b.menu.x + 0.5 && b.menu.r <= s[1] && Math.abs(b.chip.y - b.logo.y) < 50 && Math.abs(b.menu.y - b.chip.y) < 4);
             check(s[0] + ' guest: no sideways scroll', !b.wide);
+            const none = await page.evaluate(ROW);
+            check(s[0] + ' no room: My room is not drawn (display none: no place in the row, not in the tab order)', none.mine === null && none.mineDisplay === 'none', JSON.stringify(none));
+            check(s[0] + ' no room: Quick host, Quick join and Games are drawn, each a target of 44 px or more, inside the window', [none.host, none.join, none.games].every((x) => x && x[3] >= 44 && x[2] >= 44 && x[0] >= 0 && x[0] + x[2] <= s[1]), JSON.stringify(none));
+            if (phoneRow) check(s[0] + ' no room: Games takes the whole row (as wide as Quick host and Quick join together)', Math.abs(none.games[2] - (none.join[0] + none.join[2] - none.host[0])) <= 2 && none.games[1] > none.host[1], JSON.stringify(none));
+            check(s[0] + ' no room: Games does not run under the login chip or the Menu', !none.chip || none.games[0] + none.games[2] <= none.chip[0] + 1 || none.games[1] + none.games[3] <= none.chip[1] + 1 || none.chip[1] + none.chip[3] <= none.games[1] + 1, JSON.stringify(none));
+            if (s[0] === 'side568') check(s[0] + ' no room: held sideways Games takes the place of My room (the second row starts at the left edge, no hole)', none.games[0] <= none.host[0] && none.games[1] > none.host[1], JSON.stringify(none));
+            if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'noroom_' + s[0]);
+            await page.evaluate(SHOW_ROOM);
+            const room = await page.evaluate(ROW);
+            check(s[0] + ' a room: My room is drawn (44 px or more) and the logo, Quick host and Quick join, the Menu do not move', !!room.mine && room.mine[3] >= 44 && JSON.stringify([room.logo, room.host, room.join, room.menu]) === JSON.stringify([none.logo, none.host, none.join, none.menu]), JSON.stringify([none, room]));
+            check(s[0] + ' a room: My room and Games are inside the window and do not overlap', !!room.games && room.mine[0] >= 0 && room.games[0] + room.games[2] <= s[1] && (room.mine[0] + room.mine[2] <= room.games[0] + 1 || room.mine[1] + room.mine[3] <= room.games[1] + 1 || room.games[0] + room.games[2] <= room.mine[0] + 1), JSON.stringify(room));
+            if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'room_forced_' + s[0]);
             if (['w390', 'w1280', 'side667'].indexOf(s[0]) !== -1) await shot(page, 'guest_' + s[0]);
             await page.close();
         }

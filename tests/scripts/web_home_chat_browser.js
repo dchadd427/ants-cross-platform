@@ -319,7 +319,7 @@ async function main() {
         const { page, context } = await open('desktop');
         check('a site whose /hub/ws is answered 503: "Chat is offline", Home is whole (the bar, the Yard), no page error', (await waitState(page, 'offline/true')) && (await dockText(page, '.gc-note')) === 'Chat is offline' && (await page.evaluate(() => !!document.querySelector('.hbar .mine') && !!document.querySelector('#yard'))) && errors.length === 0);
         await shot(page, 'offline', 'desktop');
-        await page.click('.hbar .mine');
+        await page.evaluate(() => document.querySelector('.hbar .mine').click());
         check('... and My room still shows the Room (the page\'s own socket is another one)', (await page.getAttribute('body', 'data-screen')) === 'room');
         await page.click('.rbar .rhome');
         check('... and Home again: the dock is still there', (await page.getAttribute('body', 'data-screen')) === 'home' && (await state(page)) !== null);

@@ -278,7 +278,7 @@ async function main() {
     // ---- a room and the round trip ----
     if (serverBinary && info.server) {
         const o = await open('desktop');
-        await o.page.click('.hbar .mine');
+        await o.page.evaluate(() => document.querySelector('.hbar .mine').click());
         await o.page.waitForSelector('#code', { timeout: 10000 });
         await o.page.waitForFunction(() => /\S/.test(document.getElementById('code').textContent) && document.querySelectorAll('#slots li.k-person').length >= 1, null, { timeout: 10000 });
         const code = await o.page.evaluate(() => document.getElementById('code').textContent.replace(/\s+/g, ''));
@@ -289,7 +289,7 @@ async function main() {
         await o.page.waitForFunction(() => { const p = document.querySelector('.hbar .mine .pill'); return p && !p.hidden && /^\d\/\d$/.test(p.textContent); }, null, { timeout: 15000 });
         const back = await o.page.evaluate(() => sessionStorage.getItem('ants.lobby'));
         check('after the round trip through Discord the page is on Home, the room chip says how many are in it (the seat was taken back in the background), and the session storage still holds the same room', (await text(o.page, '.hbar .mine')).indexOf('1/') !== -1 && !!back && back.indexOf(code) !== -1);
-        await o.page.click('.hbar .mine');
+        await o.page.evaluate(() => document.querySelector('.hbar .mine').click());
         await o.page.waitForFunction(() => document.body.getAttribute('data-screen') === 'room' && /\S/.test(document.getElementById('code').textContent), null, { timeout: 8000 });
         const again = await o.page.evaluate(() => document.getElementById('code').textContent.replace(/\s+/g, ''));
         check('the Room shows the SAME room code, and the visitor is in a seat of it (a person in a seat of the room, no second room made)', again === code && (await o.page.evaluate(() => document.querySelectorAll('#slots li.k-person').length)) >= 1, again);

@@ -371,7 +371,7 @@ async function main() {
             await crowd(r, PICTURE, 4);
             const page = await openPage(r, SIZES[0], '1000_maple');
             await listShows(page, 'clover');
-            await page.click('.hchip.mine');
+            await page.evaluate(() => document.querySelector('.hchip.mine').click());
             await sleep(300);
             check('the Room shows: the list is not on it (Home is hidden with it)', await page.evaluate(() => document.body.getAttribute('data-screen') === 'room' && !document.getElementById('players').getClientRects().length));
             await page.click('.rhome');

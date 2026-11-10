@@ -103,6 +103,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar .quick { grid-row: 2; min-height: 50px; padding: 6px 8px; font-size: 17px; letter-spacing: .06em; }
     .hbar .quick.host { grid-column: 1; } .hbar .quick.join { grid-column: 2; }
     .hbar .mine { grid-row: 3; grid-column: 1; } .hbar .games { grid-row: 3; grid-column: 2; }
+    .hbar .mine[hidden] ~ .games { grid-column: 1 / -1; }                                                          /* (no room: Games takes the whole row) */
     .rbar { gap: 8px; } .rbar .hlogo { width: 76px; } .rbar .btn { padding: 6px 12px; } .rbar .rhome { padding-left: 9px; }
     .hmenubox { width: calc(100vw - 20px); }
 }
@@ -114,6 +115,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar button.hlogin { gap: 8px; padding: 0; } .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; }                  /* (no free space in the two compact rows: the badge alone, as before) */
     .hbar .quick { letter-spacing: .02em; } .hbar .quick.host { grid-area: 1 / 2; } .hbar .quick.join { grid-area: 1 / 3; } .hbar .hmenu { grid-area: 1 / 4; }
     .hbar .mine { grid-area: 2 / 1 / 3 / 3; } .hbar .games { grid-area: 2 / 3; } .hbar .hlogin { grid-area: 2 / 4; }
+    .hbar .mine[hidden] ~ .games { grid-area: 2 / 1 / 3 / 4; }
     @media (max-width: 479px) { .hbar { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr) auto; } }
 }
 /* ---- a window that is not wide: the bar trims in steps (docs/HOME_SCREEN.md, "The top bar") ---- */

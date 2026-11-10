@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the login chip's name in Home's top bar (web/home/home.css, docs/HOME_SCREEN.md, \"The top bar\") that only the opt-in real-Chromium check can see (Playwright, Chromium, nginx and python3, no game server): run with `python3 tools/mutate.py tests/data/home_topbar_mutants.json --keep-going --jobs 1 --timeout 300`; tools/mutate.py --check only proves that every old text is still in the code.",
+ "note": "Mutants of the login chip's name and of My room's rule (only while the page holds a room) in Home's top bar (web/home/home.js, home.css, docs/HOME_SCREEN.md, \"The top bar\") that only the opt-in real-Chromium check can see (Playwright, Chromium, nginx and python3, no game server): run with `python3 tools/mutate.py tests/data/home_topbar_mutants.json --keep-going --jobs 1 --timeout 300`; tools/mutate.py --check only proves that every old text is still in the code.",
  "mutants": [
   {
    "id": "topbar_name_never_shown",
@@ -55,6 +55,48 @@
    "file": "web/home/home.css",
    "old": ".hbar .hright { grid-area: 1 / 1 / 2 / 3;",
    "new": ".hbar .hright { grid-area: 1 / 2;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "mine_shown_without_a_room",
+   "file": "web/home/home.js",
+   "old": "mine.hidden = !info.client;",
+   "new": "mine.hidden = false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_hidden_with_a_room",
+   "file": "web/home/home.js",
+   "old": "mine.hidden = !info.client;",
+   "new": "mine.hidden = true;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_waits_for_the_count",
+   "file": "web/home/home.js",
+   "old": "mine.hidden = !info.client;",
+   "new": "mine.hidden = !n;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "focus_after_leave_stays_on_the_hidden_button",
+   "file": "web/home/home.js",
+   "old": "mine.hidden ? quickHost : mine;",
+   "new": "mine;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_games_not_a_whole_row",
+   "file": "web/home/home.css",
+   "old": "    .hbar .mine[hidden] ~ .games { grid-column: 1 / -1; }",
+   "new": "",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "mine_games_sideways_leaves_a_hole",
+   "file": "web/home/home.css",
+   "old": "    .hbar .mine[hidden] ~ .games { grid-area: 2 / 1 / 3 / 4; }\n",
+   "new": "",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   }
  ]

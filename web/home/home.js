@@ -2,7 +2,7 @@
 // session storage are never touched here, so Home <-> Room is a class on <body> (data-screen, home.css) and one render(): no request, the seat is never dropped. Text and properties only, never markup. ES5:
 // a page gets AntsHome, node gets module.exports (tests/scripts/web_home_screen_check.js).
 //   * Home is "/", the Room "/#room" (pushState: Back goes to Home); a link ("?room=CODE") opens the Room; the page writes no history until a button is pressed.
-//   * A plain visit makes no room: My room makes a private one. Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
+//   * A plain visit makes no room (Quick host makes one; My room is there only while the page holds a room). Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -86,7 +86,7 @@
         var quickHost = stub('quick host', TEXT.quickHost), quickJoin = stub('quick join', TEXT.quickJoin);
         var mine = button('hchip mine', '', function () { openRoom(); });
         var mineName = el('span', 'name', TEXT.mine), minePill = el('span', 'pill'); minePill.hidden = true;
-        mine.appendChild(mineName); mine.appendChild(minePill);
+        mine.appendChild(mineName); mine.appendChild(minePill); mine.hidden = true;       // (My room is there only while the page holds a room: sync() shows it)
         var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');
         gamesPill.hidden = true; gamesBtn.appendChild(el('span', 'name', TEXT.games)); gamesBtn.appendChild(gamesPill);
         var right = el('div', 'hright'), login = button('hlogin', TEXT.login); login.hidden = true;       // (the login chip: the chat dock fills it and shows it where the hub offers a login)
@@ -217,7 +217,7 @@
             gamesCall('shown', name);
             if (how !== 'first') {
                 try { win.scrollTo(0, 0); } catch (e) { /* no scrolling here */ }
-                var next = name === 'room' ? homeBtn : mine;
+                var next = name === 'room' ? homeBtn : mine.hidden ? quickHost : mine;
                 if (next.focus) next.focus();
             }
         }
@@ -227,6 +227,8 @@
         }
         function sync() {
             var info = page.info(), n = info.client ? countOf(info.model) : null;
+            mine.hidden = !info.client;
+            if (mine.hidden && doc.activeElement === mine) (quickHost.disabled ? gamesBtn : quickHost).focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
             minePill.textContent = n ? n.people + '/' + n.size : '';
             minePill.hidden = !n;
             mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);

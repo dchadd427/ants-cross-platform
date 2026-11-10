@@ -36,7 +36,8 @@ FILES = ("home.js", "home.css")
 LATER = ("games.js", "games.css")                    # the files that load after the first paint (tests/scripts/test_web_home_games.py has their budgets)
 CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
 PLAYERS_FILES = ("players.js", "players.css")         # the players list, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_players.py
-HOME_BUDGET, HOME_GZIP_BUDGET = 39 * 1000, 11600     # bytes, raw and gzipped, both files together (about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+# (raised on purpose from 39,000 and 11,600 to 40,000 and 12,000 for the top bar's three rules: the account's name beside the badge, My room only while the page holds a room, and their comments; no comment was trimmed)
+HOME_BUDGET, HOME_GZIP_BUDGET = 40 * 1000, 12000     # bytes, raw and gzipped, both files together (about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -116,10 +117,10 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("ready when the page opens", read("docker", "nginx.conf"))
         self.assertNotIn("ready when the page opens", read("docs", "PLAY_IN_BROWSER.md"))
 
-    def test_how_it_works_says_where_my_room_is_because_the_room_shows_it_too(self):
-        self.assertIn("<h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours.", self.page)
-        self.assertIn("To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>", self.page, "How it works says where the public rooms are and how to be in one")
-        self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no My room to press")
+    def test_how_it_works_says_where_the_room_comes_from_because_the_room_shows_it_too(self):
+        self.assertIn("<h3>The room</h3><p>From Home, press Quick host and your room is ready, with the first color yours.", self.page)
+        self.assertIn("A room that Quick host opens is listed under Games, where players join it from the list or by its code.</p>", self.page, "How it works says where the public rooms are and how to be in one")
+        self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no Quick host to press")
         check = read("tests", "scripts", "web_home_check.py")
         self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: My room does")
         self.assertIn("the front page (Home), after My room, makes a room again", check)

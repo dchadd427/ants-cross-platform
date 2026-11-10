@@ -75,7 +75,9 @@ const press = async (env) => { tap(env.home('join')); await flush(); };
     check('the page behind the card takes no key or tap (Home\'s bar, the Room, the strips)', env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert') && env.$('banner').hasAttribute('inert'));
     check('the card is the body\'s (over both screens), full over the window', card(env).parent.parent.parent === env.body || card(env).parent.parent === env.body);
     const probe = env.last();
+    check('while the page only looks for a game it holds no room: My room is not there', env.home('mine').hidden === true);
     welcomeOf(probe, 1, ['Pebble', 'Maya'], PRIVATE);
+    check('the room that the page joined is its room: My room is there, with its count (a joined room is a room)', env.home('mine').hidden === false);
     check('the room welcomes the page: the card says "Joined Pebble’s room" with the room as it is now (4 of 4, one more person), "Opening the room…", a bar and the button "Go to the room"; the Home screen shows still',
           title(env) === 'Joined Pebble’s room' && lineOf(env) === 'Opening the room…' && textOf(first(first(card(env), 'gitem'), 'gcount')) === '4/4' && textOf(act(env, 'gyes')) === 'Go to the room' && !!first(card(env), 'gbar') && env.screen() === 'home'
           && !!first(card(env), 'gmark') && first(card(env), 'gmark').className.indexOf('check') !== -1);
@@ -213,7 +215,7 @@ for (const [what, reason] of [['full', 1], ['started', 3], ['gone (the game was 
     check('Not now takes the card away and changes nothing (the focus is back on Quick join)', card(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('join'));
     await press(env);
     tap(act(env, 'gyes'));
-    check('Host one! is Quick host: a room of the page\'s own is made (My room\'s machinery) and the Room shows', card(env) === null && env.sockets.length === 1 && env.screen() === 'room');
+    check('Host one! is Quick host: a room of the page\'s own is made (My room\'s machinery) and the Room shows, and My room is there: a hosted room is a room', card(env) === null && env.sockets.length === 1 && env.screen() === 'room' && env.home('mine').hidden === false);
 }
 {
     const env = await withRooms([]);
