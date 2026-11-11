@@ -204,10 +204,10 @@ class TheTagAndTheFullscreenBar(unittest.TestCase):
         self.assertIn("if (dragging && bar.parentNode !== home) return;", self.glue)                          # (the bar is not moved between a press and its release)
 
     def test_the_bar_is_called_from_the_bottom_edge_and_hidden_by_a_swipe_or_the_tab(self):
-        for line in ("$('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));",    # (the strip: only for a finger, only while the bar is away)
+        for line in ("$('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle') && !gone);",    # (the strip: only for a finger, only while the bar is away, and not while the viewer has hidden it: it has the handle)
                      "edgeFrom.y - ev.clientY >= EDGE_SWIPE", "$('redge').addEventListener('click', wake);",           # (a TAP calls the bar in its click: a bar called earlier takes the click)
                      "ev.pointerType === 'touch' && $('rbar').classList.contains('over') && !$('tl').contains(ev.target)",
-                     "down >= BAR_SWIPE", "$('b-tab').addEventListener('click', hideBar);"):
+                     "down >= BAR_SWIPE", "$('b-tab').addEventListener('click', function () { zone.hide(); });"):
             self.assertIn(line, self.glue, line)
         self.assertIn('<div class="redge rep-only" id="redge" hidden></div>', self.page)
         self.assertRegex(self.page, r'<button class="rtab" type="button" id="b-tab" aria-label="Hide the bar"')

@@ -981,7 +981,7 @@
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
         body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
-        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rnote[hidden] { display: none !important; }
+        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rhandle[hidden], .rnote[hidden] { display: none !important; }
 
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
@@ -1063,8 +1063,13 @@
         footer.bar a[aria-current] { color: var(--gold); text-decoration: underline; text-underline-offset: 4px; }
 
         /* fullscreen: the bar lies over the bottom of the picture (the page moves it into the picture's box) and goes away by itself while the pointer rests */
-        .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease; }
+        .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease, transform .2s ease; }
         .rbar.over.idle { opacity: 0; pointer-events: none; }
+        /* hidden by the viewer (the chevron or the B key): the bar is not there at all (no hit, no focus) until the handle, the key or the mouse resting at the bottom edge calls it (docs/REPLAYS.md "Hiding the bar") */
+        .rbar.over.gone { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(14px); transition: opacity .2s ease, transform .2s ease, visibility 0s .2s; }
+        .rhandle { position: absolute; left: 50%; bottom: env(safe-area-inset-bottom, 0px); transform: translateX(-50%); z-index: 61; display: flex; align-items: flex-start; justify-content: center; width: 44px; height: 14px; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 2px solid var(--frame); border-bottom: 0; border-radius: 8px 8px 0 0; cursor: pointer; touch-action: manipulation; }
+        .rhandle::before { content: ""; position: absolute; left: -12px; right: -12px; top: -30px; bottom: 0; } .rhandle svg { width: 18px; height: 9px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; } .rhandle:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) { .rbar.over, .rbar.over.gone { transition: none; } } @media (forced-colors: active) { .rhandle { color: ButtonText; background: ButtonFace; border-color: ButtonText; } .rhandle:focus-visible { outline-color: Highlight; } }
         .rbar.over { touch-action: none; }                                      /* (a swipe down on the bar is the page's: the browser does not take it for a scroll) */
         .rbar.over .rtag { left: 14px; transform: none; font-size: 14px; }
         .rbar.over .rtab { display: flex; position: absolute; left: 50%; bottom: calc(100% + 3px); transform: translateX(-50%); width: 60px; height: 20px; align-items: center; justify-content: center; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-bottom: 0; border-radius: 9px 9px 0 0; cursor: pointer; touch-action: manipulation; }
@@ -1207,6 +1212,7 @@
         </div>
         <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
         <div class="redge rep-only" id="redge" hidden></div>
+        <button class="rhandle rep-only" type="button" id="b-handle" aria-label="Show the bar" aria-controls="rbar" aria-expanded="false" title="Show the bar (B key; or rest the mouse at the bottom edge)" hidden><svg viewBox="0 0 18 9" aria-hidden="true"><path d="M2 7l7-5 7 5"/></svg></button>
         <div class="rnote rep-only" id="rnote" role="status" hidden>Swipe up from the bottom edge to bring the bar back</div>
         <div class="rnote rep-only camnote" id="camnote" role="status" hidden>You have the camera. Press&#8197;<b>Auto camera</b>&#8197;to follow the action again.</div>
     </div>
@@ -1255,7 +1261,7 @@
         <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
         <div class="picwrap" id="picwrap"><button class="btn sm" type="button" id="picbtn" aria-haspopup="true" aria-expanded="false" aria-controls="picpop" title="The shape of the picture">Picture &#9652;</button><div class="picpop" id="picpop" role="group" aria-labelledby="picpop-h" hidden><h3 id="picpop-h">Picture</h3><span class="pick" id="pic-pick"><span class="fit-note" id="pic-note" hidden></span></span></div></div>
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
-        <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" title="Hide the bar (swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
+        <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" aria-expanded="true" title="Hide the bar (B key, or swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
     </div>
     <section class="mstats flow rep-only" id="mstats-flow" aria-label="Match stats" hidden></section>
 
@@ -2683,7 +2689,7 @@
             if (!isLocked()) { if (lockStartAt) lockStartAt = { x: e.clientX - rect.left, y: e.clientY - rect.top }; return; }
             e.stopPropagation();                                            // the game gets the page's cursor, not the lock's relative motion
             if (!lockCursor) startLockedCursor();
-            lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;      // (the cursor is on the bar: the bar's, not the game's)
+            lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && window.antsReplayZone) window.antsReplayZone(rect.left + lockCursor.x, rect.top + lockCursor.y, e.buttons); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;      // (the cursor is on the bar: the bar's, not the game's)
             handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, e.buttons);
         }, true);
         canvas.addEventListener('mousedown', function (e) {                // a click on the game takes the lock in a match or takes it back where the browser let it go; not while the countdown card is up (ants_probe 60 is its seconds, -1 none): a locked pointer cannot click the card's Fullscreen button
@@ -3169,6 +3175,7 @@
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
             var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout }), rew = R.rewindControl({ doc: document, turn: function () { return get(VALUE.state) === STATE.jumping ? get(VALUE.target) : get(VALUE.turn); }, seek: function (seconds) { seek(seconds); } });   // (the Auto / Manual button and Back 30 seconds, made by web/replay_page.js)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
+            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var r = $('canvas').getBoundingClientRect(); return r.width ? r : null; }, bar: function () { return $('rbar').getBoundingClientRect(); }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
             var ICON = {
                 play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',
                 pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5h5v17h-5zM13.5 3.5h5v17h-5z"/></svg>',
@@ -3456,25 +3463,37 @@
                 cam.fullscreen(over);
                 if (dragging && bar.parentNode !== home) return;                  // (a press on the timeline is going on: moving the bar now would cancel it; pointerup/pointercancel come back here)
                 if (over && bar.parentNode !== home) { home.appendChild(bar); bar.classList.add('over'); wake(); }
-                else if (!over && (bar.parentNode === stageElement || bar.parentNode === boxElement)) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
+                else if (!over && (bar.parentNode === stageElement || bar.parentNode === boxElement)) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); zone.settle(); wake(); }
             };
             function syncEdge() {
                 var bar = $('rbar');
-                $('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));
+                var gone = bar.classList.contains('over') && zone.mode() === 'hidden';
+                $('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle') && !gone);       // (a hidden bar has the handle, not the strip)
+                $('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() !== 'open');       // (the handle stays while the bar only peeks: a press keeps it open)
             }
+            // the bar's three states (R.barZone): open (as ever), hidden (the viewer's choice: only the handle shows) and peek (called by the mouse at the bottom edge, goes back by itself)
+            function applyZone(m) {
+                var bar = $('rbar');
+                bar.classList.toggle('gone', m === 'hidden');
+                $('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-label', m === 'peek' ? 'Keep the bar open' : 'Show the bar');
+                syncEdge(); if (m === 'hidden') { clearTimeout(idleTimer); barLock.hideMark(); if (bar.contains(document.activeElement)) $('b-handle').focus(); } else wake();
+            }
+            function showBar(focus) { var from = document.activeElement === $('b-handle'); zone.open(); if (focus || from) $('b-tab').focus(); }
+            function toggleBar() { if (zone.mode() === 'hidden') showBar(false); else zone.hide(); }
             function wake() {
                 var bar = $('rbar');
+                if (bar.classList.contains('over') && zone.mode() === 'hidden') { syncEdge(); return; }        // (hidden by the viewer: no move of the mouse, key or click calls it)
                 bar.classList.remove('idle');
                 clearTimeout(idleTimer);
                 clearTimeout(noteTimer);
                 $('rnote').hidden = true;
                 swiped = -1;
-                if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(hideBar, 3000);
+                if (bar.classList.contains('over') && zone.mode() === 'open' && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(hideBar, 3000);
                 syncEdge();
             }
             function hideBar() {                                                  // (only in fullscreen: the bar of the page is always there)
                 var bar = $('rbar');
-                if (!bar.classList.contains('over')) return;
+                if (!bar.classList.contains('over') || zone.mode() !== 'open') return;
                 clearTimeout(idleTimer);
                 if (dragging || !$('picpop').hidden) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline, or the Picture window open, is a touch of the bar: it looks again)
                 bar.classList.add('idle'); barLock.hideMark();                     // (the arrow of a locked mouse goes with the bar: it is not there to be hit)
@@ -3574,6 +3593,9 @@
                 seek(to);
             });
             window.addEventListener('keydown', function (ev) {
+                if ((ev.key === 'b' || ev.key === 'B') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '')) {
+                    ev.preventDefault(); ev.stopImmediatePropagation(); if (!ev.repeat) toggleBar(); return;       // (B hides the bar of a fullscreen page and brings it back; the game does not get it)
+                }
                 wake();
                 if (ev.key === ' ' && !shown && isReadyToPlay && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test((ev.target && ev.target.tagName) || '')) {
                     ev.preventDefault();
@@ -3612,10 +3634,15 @@
             $('rbar').addEventListener('pointermove', function (ev) {
                 if (!barFrom || ev.pointerId !== barFrom.id) return;
                 var down = ev.clientY - barFrom.y;
-                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; hideBar(); swiped = ev.pointerId; }
+                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; zone.hide(); swiped = ev.pointerId; }
             });
             ['pointerup', 'pointercancel'].forEach(function (name) { $('rbar').addEventListener(name, function () { barFrom = null; }); });
-            $('b-tab').addEventListener('click', hideBar);
+            $('b-tab').addEventListener('click', function () { zone.hide(); });
+            $('b-handle').addEventListener('click', function () { showBar(false); });
+            // the mouse at the picture's bottom edge calls a hidden bar (R.barZone): a mouse or a pen only, never a finger; the locked mouse comes from the page's own cursor (antsReplayZone)
+            document.addEventListener('pointermove', function (ev) { if (ev.pointerType !== 'touch' && !isLocked() && $('rbar').classList.contains('over')) zone.pointer(ev.clientX, ev.clientY, ev.buttons); }, { passive: true });
+            document.documentElement.addEventListener('mouseleave', function () { if (!isLocked()) zone.gone(); });
+            window.antsReplayZone = function (x, y, buttons) { if ($('rbar').classList.contains('over')) zone.pointer(x, y, buttons); };
 
             // ---- a match that is being played: the feed ----
             var feedTimer = 0, notLiveLooks = 0;

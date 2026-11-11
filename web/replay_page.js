@@ -302,7 +302,7 @@
     // fullscreen replay (page elements over the picture) could not be reached. The game's cursor (the one that scrolls the map at the picture's edge) is the pointer here: while it is over the visible
     // bar the motion is NOT handed to the game (the game is told that its pointer left), a small arrow is drawn over the bar, and the page makes the pointer events of a mouse at that place for what is
     // under it (the timeline's drag, the wake of the bar); a press and a release on the same button are its click, and the wheel over the bar does not zoom the map. The outermost pixels of the picture
-    // are the game's even where the bar lies (the edge scrolls with the bar up), and a bar that has gone away (idle) is not there to be hit. The page gives `env`: doc, win, stage (the arrow's
+    // are the game's even where the bar lies (the edge scrolls with the bar up), and a bar that has gone away (idle, or hidden by the viewer: gone) is not there to be hit. The page gives `env`: doc, win, stage (the arrow's
     // parent), canvas, PointerEvent, MouseEvent, replayMode(), handing() (the page is handing the game an event of its own), cursorAt() ({ x, y, edge } of the locked cursor on the page, or null) and
     // leave() (tell the game that its pointer left). tests/scripts/web_replay_check.js runs it with a page of fakes.
     function barPointer(env) {
@@ -331,7 +331,7 @@
         function under(cx, cy) {
             if (!env.replayMode()) return null;
             var bar = env.doc.getElementById('rbar');
-            if (!bar || !bar.classList.contains('over') || bar.classList.contains('idle')) return null;
+            if (!bar || !bar.classList.contains('over') || bar.classList.contains('idle') || bar.classList.contains('gone')) return null;
             var el = env.doc.elementFromPoint(cx, cy);
             return el && bar.contains(el) ? el : null;
         }
@@ -803,7 +803,53 @@
         return ownPage({ doc: win.document, win: win, store: ownStoreOf(win), FileReader: win.FileReader, search: win.location.search, say: extra.say, go: function (url) { win.location.replace(url); }, infoOf: extra.infoOf });
     }
 
-    var api = { barPointer: barPointer, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
+    // THE BAR'S HIDING (docs/REPLAYS.md, "Watching a replay": fullscreen). The bar that lies over the picture has three states. `open` is the one the page starts in (the bar is up and, while the match
+    // plays, goes away by itself after a rest of the pointer, as ever). `hidden` is the viewer's choice (the chevron on the bar, or the B key): nothing brings the bar back by chance, neither a move
+    // of the mouse, a click on the map or the minimap, nor a key; a thin handle stays at the bottom edge. `peek` is the bar called by the mouse: the pointer RESTS for ZONE_DWELL_MS in the band of ZONE_PX along the picture's
+    // bottom (a drag with a button down, or a pass that is shorter than that, calls nothing), and it goes back to `hidden` when the pointer has been away from the band and the bar for ZONE_LEAVE_MS (a button
+    // down, or the page's `busy()`, is a touch of the bar). A finger never calls it by hover: the page feeds this only with the moves of a mouse or a pen. The page gives `env`: setTimeout, clearTimeout,
+    // zone() (the picture's rectangle: left, right, bottom), bar() (the bar's rectangle, or null while it is not there), busy() and change(mode). tests/scripts/web_replay_check.js runs it.
+    var ZONE_PX = 48, ZONE_DWELL_MS = 150, ZONE_LEAVE_MS = 700;
+    function barZone(env) {
+        var mode = 'open', dwell = 0, leave = 0, at = null;                  // at: where the pointer last was, { x, y, buttons }, or null when it is out of the page
+        function set(next) {
+            env.clearTimeout(dwell); env.clearTimeout(leave); dwell = 0; leave = 0;
+            if (next === mode) return;
+            mode = next;
+            env.change(mode);
+        }
+        function inZone() {
+            var z = env.zone();
+            return !!(at && z && at.x >= z.left && at.x <= z.right && at.y >= z.bottom - ZONE_PX);
+        }
+        function inBar() {
+            var b = env.bar();
+            return !!(at && b && at.x >= b.left && at.x <= b.right && at.y >= b.top && at.y <= b.bottom);
+        }
+        function away() { return !at || !(inZone() || inBar() || at.buttons || env.busy()); }
+        function look() {
+            if (mode === 'hidden') {
+                if (at && !at.buttons && inZone()) { if (!dwell) dwell = env.setTimeout(function () { dwell = 0; if (mode === 'hidden' && at && !at.buttons && inZone()) set('peek'); }, ZONE_DWELL_MS); }
+                else { env.clearTimeout(dwell); dwell = 0; }
+            } else if (mode === 'peek') {
+                if (inZone() || inBar()) { env.clearTimeout(leave); leave = 0; }
+                else if (!leave) arm();
+            }
+        }
+        function arm() {                                                     // (the pointer is away: in 700 ms the bar goes, unless a button or a busy bar holds it, which is looked at again)
+            leave = env.setTimeout(function () { leave = 0; if (mode !== 'peek') return; if (away()) set('hidden'); else if (!inZone() && !inBar()) arm(); }, ZONE_LEAVE_MS);
+        }
+        return {
+            mode: function () { return mode; },
+            hide: function () { set('hidden'); },                                // the viewer's choice
+            open: function () { set('open'); },                                  // the handle, the key, a tap
+            settle: function () { if (mode === 'peek') set('hidden'); },         // (fullscreen ended: a bar that was only called goes back)
+            pointer: function (x, y, buttons) { at = { x: x, y: y, buttons: buttons || 0 }; look(); },
+            gone: function () { at = null; look(); }                             // the pointer left the page
+        };
+    }
+
+    var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
                 LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
                 OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,
