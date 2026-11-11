@@ -382,14 +382,14 @@
   {
    "id": "escape_does_not_close_the_list",
    "file": "web/home/games.js",
-   "old": "if (dialog) closeAsk(true); else if (isOpen) closeList(true);",
+   "old": "if (dialog) closeAsk(true); else if (codeOpen && pop.contains(doc.activeElement)) setCode(false, true); else if (isOpen) closeList(true);",
    "new": "if (dialog) closeAsk(true);",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "escape_does_not_close_the_question",
    "file": "web/home/games.js",
-   "old": "if (dialog) closeAsk(true); else if (isOpen) closeList(true);",
+   "old": "if (dialog) closeAsk(true); else if (codeOpen && pop.contains(doc.activeElement)) setCode(false, true); else if (isOpen) closeList(true);",
    "new": "if (isOpen) closeList(true);",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -1355,7 +1355,7 @@
   {
    "id": "cancel_does_not_take_the_focus_to_the_field",
    "file": "web/home/games.js",
-   "old": "            if (isOpen && codeInput.focus) codeInput.focus();\n",
+   "old": "var f = codeOpen ? codeInput : codeLink; if (isOpen && f.focus) f.focus();",
    "new": "",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -2688,6 +2688,69 @@
    "old": "popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine));",
    "new": "popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine)); popEmpty.appendChild(button('ghostbtn', TEXT.quickHost, guard(function () { quickHost(); })));",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage TheListIsDockedInHomesBody"
+  },
+  {
+   "id": "have_a_code_link_does_not_say_it_is_open",
+   "file": "web/home/games.js",
+   "old": "codeLink.setAttribute('aria-expanded', on ? 'true' : 'false');",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "have_a_code_does_not_take_the_focus_to_the_field",
+   "file": "web/home/games.js",
+   "old": "if (on) { if (codeInput.focus) codeInput.focus(); }",
+   "new": "if (on) { /* none */ }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "closing_the_code_box_does_not_return_the_focus",
+   "file": "web/home/games.js",
+   "old": "if (back && codeLink.focus) codeLink.focus();",
+   "new": "",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "close_button_does_not_close_the_code_box",
+   "file": "web/home/games.js",
+   "old": "setCode(false, true); }));\n",
+   "new": "/* none */ }));\n",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "code_box_is_open_from_the_start",
+   "file": "web/home/games.js",
+   "old": "codeBox.id = 'gc-box'; codeBox.hidden = true;",
+   "new": "codeBox.id = 'gc-box'; codeBox.hidden = false;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "code_close_button_too_small",
+   "file": "web/home/games.css",
+   "old": ".gcode .gcx { min-width: 44px; min-height: 44px;",
+   "new": ".gcode .gcx { min-width: 44px; min-height: 30px;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "code_link_too_small",
+   "file": "web/home/games.css",
+   "old": "flex: none; min-width: 44px; min-height: 44px; margin: -12px 0;",
+   "new": "flex: none; min-width: 44px; min-height: 30px; margin: -12px 0;",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
+  },
+  {
+   "id": "pasted_room_link_is_not_read",
+   "file": "web/front/lobby_rules.js",
+   "old": "var link = typeof text === 'string' ? /room=([^&#\\s]*)/i.exec(text) : null,",
+   "new": "var link = null,",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "pasted_room_link_keeps_the_first_value_only_after_join",
+   "file": "web/front/lobby_rules.js",
+   "old": "/room=([^&#\\s]*)/i",
+   "new": "/^room=([^&#\\s]*)/i",
+   "test": "node tests/scripts/web_lobby_rules_check.js web/front/lobby_rules.js web/lobby.html web/shell.html"
   },
   {
    "id": "empty_host_button_does_nothing",

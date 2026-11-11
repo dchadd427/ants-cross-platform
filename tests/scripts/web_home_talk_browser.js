@@ -157,7 +157,7 @@ async function main() {
         await page.evaluate(() => { const r = window.__recs[1]; r.onstart({}); r.onerror({ error: 'not-allowed' }); r.onend({}); });
         await sleep(100);
         const err = await page.evaluate(() => ({ say: document.querySelector('.gt-say').textContent, shown: document.querySelector('.gt-say').getClientRects().length > 0, pressed: document.querySelector('.gt-mic').getAttribute('aria-pressed') }));
-        check(name + 'a refused microphone is a plain line, and the button is idle', err.shown && err.say === 'The microphone is blocked for this page.' && err.pressed === 'false', JSON.stringify(err));
+        check(name + 'a refused microphone is a plain line, and the button is idle', err.shown && err.say === 'The microphone is blocked for this site. Allow it in your browser\'s site settings, then try again.' && err.pressed === 'false', JSON.stringify(err));
         await shot(page, 'error', size);
 
         // the keyboard

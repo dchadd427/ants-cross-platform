@@ -190,7 +190,7 @@ const LAYOUT = () => {
         if (chat && (dock || pl)) out.push('the chat shows with another view');
     }
     if (pl && main && (pl.t < main.t - 0.5 || pl.b > main.b + 0.5)) out.push('the panel is not inside the body');
-    const covered = [...document.querySelectorAll('.gjoin, .pl-join, .gcode input')].filter((e) => {
+    const covered = [...document.querySelectorAll('.gjoin, .pl-join, .gcodelink')].filter((e) => {
         if (!e.getClientRects().length) return false;
         const q = e.getBoundingClientRect(), box = e.closest('.gpbody, .pl-list, .pl-body'), bq = box && box.getBoundingClientRect();
         if (bq && (q.top < bq.top - 0.5 || q.bottom > bq.bottom + 0.5)) return false;                  // (scrolled out of its own box: not on the screen)
