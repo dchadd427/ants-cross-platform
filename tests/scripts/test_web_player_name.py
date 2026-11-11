@@ -18,6 +18,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -29,7 +30,8 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK = os.path.join(SCRIPTS, "web_player_name_check.js")
 SPEC = os.path.join(REPO, "tests", "data", "player_name_mutants.json")
 NODE = shutil.which("node")
-SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 12500, 4300        # bytes, raw and gzipped (about 12,000 and 4,000): one script that all of the name needs, and nothing else belongs in it
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(path):

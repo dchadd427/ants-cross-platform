@@ -37,7 +37,8 @@ HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
 LOGIN_LINK = 'href="/hub/login?next=home"'      # (the one thing that a page may say of the hub in its markup: the plain link of the name card that logs a guest in; tests/scripts/test_web_name.py)
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 52500, 16400           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with its queue of lines that wait for an answer; raised from 51,000 and 15,900 on purpose for the two names (docs/HUB.md, "Names"): the switch in the account menu, the key that tells a line's author, the username that a moderator sees, about 1,550 bytes and 460 gzipped, when 204 and 37 were left, with the one cleaner of a name that replaced two): they load after the first paint, so they cost the first look nothing
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import CHAT_BUDGET, CHAT_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(*parts):

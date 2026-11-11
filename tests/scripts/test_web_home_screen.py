@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -37,8 +38,8 @@ LATER = ("games.js", "games.css")                    # the files that load after
 CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
 PLAYERS_FILES = ("players.js", "players.css")         # the players list, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_players.py
 TALK_FILES = ("talk.js", "talk.css")                  # the emoji and microphone buttons of the chat, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_talk.py
-# (raised on purpose from 39,000 and 11,600 to 40,000 and 12,000 for the top bar's three rules: the account's name beside the badge, My room only while the page holds a room, and their comments; no comment was trimmed)
-HOME_BUDGET, HOME_GZIP_BUDGET = 40 * 1000, 12000     # bytes, raw and gzipped, both files together (about 38,464 and 11,691 now, 37,247 and 11,349 before the top bar's rules; it was about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import HOME_BUDGET, HOME_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(*parts):
