@@ -3,7 +3,7 @@
 web/lobby.html is at the line limit of tools/check_hygiene.py, so the page only loads the script, on the line of its first script; the script adds the link before the Matches button.
 
   - the page: the script is loaded once, first of the page's scripts (on the line of the first), and the page did not grow;
-  - the script: the link goes to /mapmaker.html, looks like the Matches button (class "btn sm"), sits right before it, is made once (a second run adds nothing), has a visible keyboard focus,
+  - the script: the link goes to /mapmaker, looks like the Matches button (class "btn sm"), sits right before it, is made once (a second run adds nothing), has a visible keyboard focus,
     reaches 44 px for a finger, and the phone rule gives it its own column on the logo's row;
   - a small fake of the DOM runs the script with node (skipped without node): one link in front of Matches; none without a Matches button; never twice;
   - tests/data/map_maker_link_mutants.json changes one thing at a time in a COPY of the script and of the page (the address, the place, the class, the guard against a second link, the focus rule, the
@@ -54,8 +54,8 @@ def problems(page, js):
         bad.append("the script is loaded first of the page's scripts (not before them in the markup: the tests read the markup up to the first script)")
     if len(page.split("\n")) > 1500:
         bad.append("the page is over its line limit")
-    if "link.href = '/mapmaker.html';" not in js:
-        bad.append("the link goes to /mapmaker.html")
+    if "link.href = '/mapmaker';" not in js:
+        bad.append("the link goes to /mapmaker")
     if "link.className = 'btn sm';" not in js:
         bad.append("the link has the look of the Matches button")
     if "head.insertBefore(link, matches);" not in js:
@@ -108,7 +108,7 @@ class MapMakerLink(unittest.TestCase):
     def test_the_header_keeps_its_other_button(self):
         self.assertEqual(self.page.count('id="watch-top"'), 1)
         self.assertEqual(self.page.count("mapmaker-top"), 0, "the link is not written in the page (its line limit): the script adds it")
-        self.assertEqual(self.page.count("/mapmaker.html"), 0)
+        self.assertEqual(self.page.count("/mapmaker"), 0)
 
     def test_the_script_is_plain_es5_and_names_no_other_site(self):
         self.assertNotRegex(self.js, r"https?://")
@@ -118,7 +118,7 @@ class MapMakerLink(unittest.TestCase):
     @unittest.skipUnless(NODE, "node is not installed")
     def test_it_adds_one_link_before_matches_and_never_two(self):
         out = self.run_fake(self.js)
-        self.assertEqual(out, '1 [["mapmaker-top","a","/mapmaker.html","btn sm","Map maker"],["watch-top",null,null,null,null]]')
+        self.assertEqual(out, '1 [["mapmaker-top","a","/mapmaker","btn sm","Map maker"],["watch-top",null,null,null,null]]')
 
     @unittest.skipUnless(NODE, "node is not installed")
     def test_without_matches_it_adds_nothing(self):

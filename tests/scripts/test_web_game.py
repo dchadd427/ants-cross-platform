@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The page layout had not been updated. The game page (web/shell.html, served as /play.html and, as "/", for
+"""The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The page layout had not been updated. The game page (web/shell.html, served as /play and, as "/", for
 a link that somebody shared) has the look of web/lobby.html, which is the look of the 1998 game's own menus: the clay, the thin green frame,
 the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and the small "ants!" logo (web/front/). What needs no browser is read from the two files:
 
@@ -337,7 +337,7 @@ class TheLookIsTheFrontPages(PageCase):
 
 
 class TheHeader(PageCase):
-    CONTROLS = (("menu-btn", "/", "Menu"), ("watch-btn", "/matches.html", "Matches"), (None, "/asset_catalog/", "Sprites and sounds"), (None, "/changelog.html", "Changelog"), ("reset-btn", None, "Reset"),
+    CONTROLS = (("menu-btn", "/", "Menu"), ("watch-btn", "/matches", "Matches"), (None, "/asset_catalog/", "Sprites and sounds"), (None, "/changelog", "Changelog"), ("reset-btn", None, "Reset"),
                 ("fullscreen-btn", None, "Fullscreen"), (None, GITHUB, "GitHub"), (None, GITHUB + "/issues", "Feedback"))
 
     def header(self):
@@ -473,7 +473,7 @@ class TheFooter(PageCase):
     def test_the_links_are_the_front_pages_and_the_menu_comes_first(self):
         nav = re.search(r'<nav aria-label="Footer links">(.*?)</nav>', self.page, re.S).group(1)
         found = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', nav)
-        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/matches.html", "Matches"), ("/live.html", "Live now"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog.html", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal.html", "Legal")])
+        self.assertEqual([(href, text) for href, _, text in found], [("/", "Menu"), ("/matches", "Matches"), ("/live-now", "Live now"), ("/asset_catalog/", "Sprites and sounds"), ("/changelog", "Changelog"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal", "Legal")])
         self.assertIn('id="menu-link"', found[0][1])
         self.assertNotIn("target=", found[0][1])
         self.assertIn('id="watch-link"', found[1][1])                                                           # (a new tab: a match that is being played here goes on; test_web_replay.py)

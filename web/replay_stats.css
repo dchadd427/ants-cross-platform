@@ -55,7 +55,7 @@
 @media (max-width: 700px) { .mstats.pop { display: none !important; } }
 @media (min-width: 701px) { .mstats.flow { display: none !important; } }
 
-/* ================= EMBED MODE: play.html?replay=<file>&embed=1, the page inside the frame of a match page (web/match.html). Only the picture and the bar are left: no header, no tip, no footer, no frame of
+/* ================= EMBED MODE: play?replay=<file>&embed=1, the page inside the frame of a match page (web/match.html). Only the picture and the bar are left: no header, no tip, no footer, no frame of
    the page's own (the match page has its own), and no Stats (the match page has the stats). ================= */
 body.embed header, body.embed footer, body.embed #mobile-tip-banner, body.embed .mstats, body.embed #stats-btn { display: none !important; }
 body.embed::after { content: none; }

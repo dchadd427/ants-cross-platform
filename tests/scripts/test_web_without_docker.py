@@ -627,6 +627,7 @@ class TheSiteConfiguration(Scratch):
         html = os.path.join(work, "fs", "usr", "share", "nginx", "html")
         write(os.path.join(html, "lobby.html"), "<title>the lobby</title>")
         write(os.path.join(html, "index.html"), "<title>the game</title>")
+        write(os.path.join(html, "play.html"), "<title>the game</title>")
         write(os.path.join(html, "index.wasm"), "\0asm")
         write(wd.built_marker(work), "built\n")
         return work
@@ -643,7 +644,7 @@ class TheSiteConfiguration(Scratch):
         self.addCleanup(server.stop)
         url = server.start()
         self.assertTrue(server.running(), "the master process is found by its command line")
-        for path, expected in (("", "the lobby"), ("?join=ABC", "the game"), ("?embed=1", "the lobby"), ("index.html", "the game"), ("lobby.html", "the lobby")):
+        for path, expected in (("", "the lobby"), ("?join=ABC", "the game"), ("?embed=1", "the lobby"), ("play", "the game"), ("play.html?join=ABC", "the game"), ("index.html", "the lobby"), ("lobby.html", "the lobby")):    # (the old addresses are redirects that urllib follows)
             with urllib.request.urlopen(url + path, timeout=5) as answer:
                 self.assertIn(expected, answer.read().decode("utf-8"), path)
         with urllib.request.urlopen(url + "index.wasm", timeout=5) as answer:

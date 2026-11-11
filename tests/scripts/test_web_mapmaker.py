@@ -1623,7 +1623,7 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertIn('<footer class="bar edfoot" id="edfoot">', page)
         self.assertIn('Map Maker <span id="mapmaker-version">v%s</span>' % ver, page)
         self.assertIn('<span id="mapmaker-build">local</span>', page)
-        for href in ('href="/"', 'href="matches.html"', 'href="changelog.html"', 'href="legal.html"'):
+        for href in ('href="/"', 'href="/matches"', 'href="/changelog"', 'href="/legal"'):
             self.assertIn(href, page)
 
     def test_the_objects_palette_of_seven_rows_has_its_short_window_rule(self):

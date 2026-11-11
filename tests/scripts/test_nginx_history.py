@@ -85,7 +85,7 @@ class TheLocations(unittest.TestCase):
         self.assertEqual(len(re.findall(r"location\s+= /history\s*\{", CONF)), 1)
         self.assertEqual(len(re.findall(r"location\s+\^~ /history/\s*\{", CONF)), 1)
         self.assertEqual([l for l in locations if "replays" in l], ["= /replays", "^~ /replays/", "@replays_off"])     # (the recorded matches are as they were)
-        self.assertEqual([l for l in locations if "live" in l], ["= /live", "^~ /live/"])                 # (and the live ones)
+        self.assertEqual([l for l in locations if "live" in l], ["= /live-now", "= /live", "^~ /live/"])                 # (and the live ones)
 
     def test_only_a_get_goes_through_and_the_checks_come_before_the_allowance_the_cache_and_the_server(self):
         for what, block in BOTH:

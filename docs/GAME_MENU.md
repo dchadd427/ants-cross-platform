@@ -9,7 +9,7 @@
 - **The Settings button** is for what has no Esc: in the page's header next to Menu (from 1140 px wide), under the picture (a window narrower than that, and every phone), and in the bar of a recording. **Nothing is laid over the game's picture, fullscreen or not** (the maintainer's word): in fullscreen, real or the page's own, there is no Settings button on any device. A computer opens the menu with Esc; in Safari and Firefox, where Esc belongs to the browser in fullscreen, Esc leaves fullscreen first. **A phone in fullscreen has no way to open the menu** (no Esc, no button) until it leaves fullscreen; if that is wanted back, the button over the picture at the top is the one to restore (`git log -S"settings-btn-fs"`), or a button in the game's own bar. It is off (and says "Not now") while a dialog needs its answer.
 - **Resume**, **Esc** and the cross (a phone has no Esc) close it. A click on the dimmed area does not: a stray touch cannot close it.
 - **A dialog that needs an answer closes it** and it does not open over one: a team-up offer, a vote (F2 / F3), a lost link or the catch-up screen, the results, the quick help and the options window that the panel itself opens. The answer is more urgent than a setting, and a dialog drawn on the canvas would sit hidden under the panel.
-- Where it is not: the frame of a match page (`play.html?replay=...&embed=1`, "Show replay") has no panel, no button and loads no script; Esc is what it was. The loading, the room and the results have none.
+- Where it is not: the frame of a match page (`play?replay=...&embed=1`, "Show replay") has no panel, no button and loads no script; Esc is what it was. The loading, the room and the results have none.
 
 ## What the game does while it is open
 

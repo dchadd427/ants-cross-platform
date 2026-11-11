@@ -326,8 +326,8 @@
     {
       "id": "play_address_without_id",
       "file": "web/front/mapmaker_play.js",
-      "old": "'/play.html?testmap=' + rec.id + '&seats='",
-      "new": "'/play.html?testmap=' + rec.id.slice(1) + '&seats='",
+      "old": "'/play?testmap=' + rec.id + '&seats='",
+      "new": "'/play?testmap=' + rec.id.slice(1) + '&seats='",
       "test": "node tests/scripts/web_mapmaker_play_check.js"
     },
     {

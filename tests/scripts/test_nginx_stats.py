@@ -318,7 +318,7 @@ class Rig:
         for _ in range(100):
             up = subprocess.run(["docker", "exec", cls.stub, "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4002/ready"], capture_output=True)
             try:
-                if up.returncode == 0 and cls.ask("GET", "/lobby.html")[0] == 200:
+                if up.returncode == 0 and cls.ask("GET", "/")[0] == 200:
                     return
             except OSError:
                 pass
@@ -401,7 +401,7 @@ class Rig:
 
     def nginx_answers(self):
         try:
-            return self.ask("GET", "/lobby.html")[0] == 200
+            return self.ask("GET", "/")[0] == 200
         except OSError:
             return False
 
@@ -842,7 +842,7 @@ class TheRealServerBehindTheFile(unittest.TestCase):
             raise RuntimeError("the container of the page did not start: " + ran.stderr.strip()[:300])
         for _ in range(100):
             try:
-                if cls.through("GET", "/lobby.html")[0] == 200:
+                if cls.through("GET", "/")[0] == 200:
                     return
             except OSError:
                 pass

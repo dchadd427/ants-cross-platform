@@ -518,12 +518,12 @@ jobs:
           node tests/scripts/web_mapmaker_play_check.js --module lvl_core_from_image --require
           node tests/scripts/web_mapmaker_pickup_check.js --module lvl_core_from_image --require
 
-      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
+      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play is the game page, every page is asked for without .html (the old address is a 301 that keeps the query; /live-now is the matches page because /live is the server's list), and every html answer has
       # the revalidation headers (tests/scripts/web_routes_check.py). The game server is not needed: nginx starts without it.
       - name: Check the routes of the site (the front page, the game page's addresses, the redirect of the old Play online address, the six original maps)
         run: |
           docker run -d --name ants-routes -p 127.0.0.1:18080:80 ants-beta
-          for i in $(seq 1 50); do curl -fs -o /dev/null http://127.0.0.1:18080/lobby.html && break; sleep 0.2; done
+          for i in $(seq 1 50); do curl -fs -o /dev/null http://127.0.0.1:18080/ && break; sleep 0.2; done
           python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || { docker logs ants-routes; docker rm -f ants-routes; exit 1; }
           # the six original maps are served like every map file (the Map Maker opens one as a starting point): byte for byte the files of Original-Ants/Maps
           for n in TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS; do
