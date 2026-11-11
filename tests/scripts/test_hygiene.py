@@ -416,11 +416,11 @@ class Cli(Tree):
     def test_warnings_go_to_stderr_and_do_not_fail_by_themselves(self):
         self.put("README.md", "[a](docs/A.md)\n")
         self.put("docs/A.md", size=ch.levels(sl.DOC_BASE_BYTES)["split"])
-        plain = self.run_tool("--root", self.root)
+        env = {k: v for k, v in os.environ.items() if k != "GITHUB_ACTIONS"}                    # (CI sets it: the plain form is for a person at a terminal)
+        plain = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", self.root], capture_output=True, text=True, env=env)
         self.assertIn("warning: docs/A.md: 92,160 B, 90% of 102,400: split it by topic (target 76,800)", plain.stderr.splitlines())
         self.assertFalse(any("docs/A.md" in l for l in plain.stdout.splitlines()))
-        env = dict(os.environ, GITHUB_ACTIONS="true")
-        gh = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", self.root], capture_output=True, text=True, env=env)
+        gh = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", self.root], capture_output=True, text=True, env=dict(env, GITHUB_ACTIONS="true"))
         self.assertIn("::warning file=docs/A.md::92,160 B, 90% of 102,400: split it by topic (target 76,800)", gh.stderr.splitlines())
 
 
