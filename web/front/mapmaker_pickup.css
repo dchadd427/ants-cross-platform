@@ -16,7 +16,7 @@
 .pk-row.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .pk-row.four > .pk-b { grid-column: auto; }
 .pk-row.one > .pk-b { grid-column: 1 / -1; }
-.pk-b { min-height: 44px; padding: 4px 8px; font-size: 15px; line-height: 1.15; text-align: center; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; touch-action: manipulation; }
+.pk-b { min-height: 44px; padding: 4px 8px; font-size: 15px; line-height: 1.15; text-align: center; cursor: pointer; background: var(--sheen) var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; touch-action: manipulation; }
 .pk-b[disabled] { opacity: .45; cursor: default; }
 .pk-b:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .pk-padwrap { display: flex; align-items: flex-start; gap: 14px; }
