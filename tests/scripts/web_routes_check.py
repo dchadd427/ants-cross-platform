@@ -46,8 +46,8 @@ def main():
         if not ok:
             failures.append(what)
 
-    def get(path, headers=None, method="GET"):
-        conn = http.client.HTTPConnection(host, port, timeout=20)
+    def get(path, headers=None, method="GET", wait=20):
+        conn = http.client.HTTPConnection(host, port, timeout=wait)
         try:
             conn.request(method, path, headers=headers or {})
             r = conn.getresponse()
@@ -182,7 +182,10 @@ def main():
     check(bool(LOBBY.search(get("/?room=k7m2xq")[3])), "a room link (/?room=...) still opens the front page")
     print("[web routes] /live is the game server's list, not a page: the matches page is /live-now; the other paths of the server are not caught by a page's name")
     for path in ("/live", "/live/", "/replays", "/replays/", "/history", "/history/", "/lobbies", "/maps", "/maps/", "/submissions", "/stats", "/busy", "/admin/api/me", "/hub/me", "/ws"):
-        status, headers, names, body = get(path)
+        try:
+            status, headers, names, body = get(path, wait=2)
+        except OSError:                 # (the path goes to the game server, which this check does not start: nginx waits for it, and that is not a page either)
+            continue
         check(not (status == 200 and "text/html" in headers.get("content-type", "") and "stand-in" in body and "live-h" in body), "%s is not the matches-now page (%s)" % (path, status))
     for path in ("/playx", "/matchesx", "/legal/x", "/mapmaker/x", "/changelogs", "/match/x"):
         status, headers, names, body = get(path)
