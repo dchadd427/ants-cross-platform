@@ -1,0 +1,47 @@
+{
+ "note": "Mutants of the header row of the match pages (tests/scripts/test_web_matches.py, tests/scripts/web_matches_check.py): the wrap, the logo that does not shrink, the 44 px buttons, the top margin. Run with `python3 tools/mutate.py tests/data/matches_header_mutants.json --keep-going --jobs 1`; every one must be caught.",
+ "mutants": [
+  {
+   "id": "row_does_not_wrap",
+   "file": "web/matches.css",
+   "old": ".mast { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;",
+   "new": ".mast { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px 22px;",
+   "test": "python3 -m unittest tests.scripts.test_web_matches"
+  },
+  {
+   "id": "logo_may_shrink",
+   "file": "web/matches.css",
+   "old": ".mast .logo { flex: none; }",
+   "new": ".mast .logo { flex: 0 1 auto; }",
+   "test": "python3 -m unittest tests.scripts.test_web_matches"
+  },
+  {
+   "id": "buttons_do_not_wrap",
+   "file": "web/matches.css",
+   "old": "flex-wrap: wrap; justify-content: flex-end; flex: 0 1 auto; min-width: 0; margin-left: auto; }",
+   "new": "flex-wrap: nowrap; justify-content: flex-end; flex: 0 1 auto; min-width: 0; margin-left: auto; }",
+   "test": "python3 -m unittest tests.scripts.test_web_matches"
+  },
+  {
+   "id": "phone_buttons_38px",
+   "file": "web/matches.css",
+   "old": ".mast .acts .btn.sm { min-height: 44px; }",
+   "new": ".mast .acts .btn.sm { min-height: 38px; }",
+   "test": "python3 -m unittest tests.scripts.test_web_matches"
+  },
+  {
+   "id": "phone_top_at_the_frame",
+   "file": "web/matches.css",
+   "old": ".wrap { padding: 20px 16px 0; }",
+   "new": ".wrap { padding: 14px 16px 0; }",
+   "test": "python3 -m unittest tests.scripts.test_web_matches"
+  },
+  {
+   "id": "phone_line_beside_logo",
+   "file": "web/matches.css",
+   "old": ".mast p { flex: 0 0 100%; order: 2; }",
+   "new": ".mast p { flex: 0 1 auto; order: 2; }",
+   "test": "python3 -m unittest tests.scripts.test_web_matches"
+  }
+ ]
+}

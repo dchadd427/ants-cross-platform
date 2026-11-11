@@ -38,11 +38,11 @@ button { font: inherit; color: inherit; }
 .dl:hover { color: var(--gold); }
 
 /* ---- the mast: the logo and a line ---- */
-.mast { display: flex; align-items: center; gap: 22px; min-height: 68px; margin-bottom: 14px; }
-.mast .logo img { width: 168px; height: auto; display: block; }
-.mast p { display: grid; gap: 2px; line-height: 1.2; }
+.mast { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; min-height: 68px; margin-bottom: 14px; }       /* (a row that is too full wraps: the buttons go under the logo, they never cover it) */
+.mast .logo { flex: none; } .mast .logo img { width: 168px; height: auto; display: block; }
+.mast p { display: grid; gap: 2px; line-height: 1.2; flex: 1 1 240px; min-width: 0; }
 .mast .tag { font-size: 20px; } .mast .sub { font-size: 15px; max-width: 64ch; }
-.mast .grow { flex: 1 1 20px; }
+.mast .grow { display: none; }
 .sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 /* ---- the black boxes ---- */
@@ -75,9 +75,9 @@ button { font: inherit; color: inherit; }
 
 /* ---- narrower windows ---- */
 @media (max-width: 720px) {
-    .wrap { padding: 14px 16px 0; }
-    .mast { min-height: 50px; margin-bottom: 12px; gap: 8px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "logo btn" "text text"; align-items: center; }
-    .mast .logo { grid-area: logo; } .mast .logo img { width: 120px; } .mast p { grid-area: text; } .mast .btn { grid-area: btn; justify-self: end; } .mast .grow { display: none; }
+    .wrap { padding: 20px 16px 0; }                                         /* (the top clears the green frame, whose inner edge is 10 px in) */
+    .mast { min-height: 50px; margin-bottom: 12px; gap: 10px; }
+    .mast .logo img { width: 120px; } .mast p { flex: 0 0 100%; order: 2; }
     .mast .tag { font-size: 18px; } .mast .sub { font-size: 14px; }
     .panel { padding: 14px 14px 12px; }
     .head { margin-bottom: 10px; flex-wrap: wrap; }
@@ -88,7 +88,7 @@ button { font: inherit; color: inherit; }
 /* ---- the three pages' own parts ---- */
 :root { --won: #f6d058; --won-bg: #2a2408; --won-edge: #7c6a1d; --track: #16222a; }
 [data-c="Green"] { --c: var(--c-green); } [data-c="Red"] { --c: var(--c-red); } [data-c="Blue"] { --c: var(--c-blue); } [data-c="Black"] { --c: var(--c-black); }
-.mast .acts { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; flex: none; }
+.mast .acts { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; flex: 0 1 auto; min-width: 0; margin-left: auto; }
 .discord { display: inline-flex; align-items: center; gap: 7px; position: relative; }                /* the Discord link of the header (the front page's own copy of these rules: web/front/map_maker_link.js): the mark and the word */
 .discord::before { content: ""; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }       /* (the 44 px target: a hidden layer around the 38 px button, as the front page's buttons have) */
 .btn.live { gap: 9px; background-color: #5a1015; border-color: #2a0509; box-shadow: var(--bevel-sm), 2px 3px 0 #3a070b; }
@@ -259,7 +259,8 @@ button { font: inherit; color: inherit; }
     .opener .txt { gap: 2px; }
     .opener h2 { font-size: 16px; line-height: 20px; }
     .opener .btn { width: 100%; margin-bottom: 0; }
-    .mast .acts { grid-area: btn; justify-self: end; }
+    .mast .acts { gap: 10px; order: 1; }                                    /* (the buttons come right after the logo, then the line under both) */
+    .mast .acts .btn.sm { min-height: 44px; }                               /* (a touch target) */
     .mast .acts .btn.hide-s { display: none; }
     .discord { min-width: 44px; justify-content: center; padding: 6px 11px; }                 /* a phone: the mark alone (the word stays for a screen reader) */
     .discord .dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -319,10 +320,7 @@ button { font: inherit; color: inherit; }
     .rhead .r .btn { flex: 1 1 auto; }
     .player iframe { aspect-ratio: auto; height: 560px; min-height: 0; max-height: none; }
 }
-@media (max-width: 389px) {                       /* the narrowest phones: the logo and the header's buttons shrink so that the Discord mark fits beside them (the front page's header does the same) */
-    .mast .logo img { width: 88px; }
-    .mast { column-gap: 8px; }
-    .mast .acts { gap: 6px; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }                /* (with a match running there are three buttons: they wrap under the logo's row, they never cover the logo) */
+@media (max-width: 389px) {                       /* the narrowest phones: the header's buttons are a little tighter so that the three of a running match share one row under the logo */
     .mast .acts .btn.sm { padding-left: 9px; padding-right: 9px; font-size: 14px; }
     .mast .acts .discord { padding-left: 9px; padding-right: 9px; }
 }

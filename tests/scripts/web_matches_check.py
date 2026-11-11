@@ -504,6 +504,25 @@ def main():
             check(tab.ev("getComputedStyle(document.getElementById('s-format').parentNode).display") != "none" and tab.ev("document.documentElement.scrollWidth <= window.innerWidth") is True, "'Filters' opens them, still inside the window")
             shot(tab, "list-phone")
             tab.close()
+            # the header row at phone and tablet widths: the logo and the buttons never cover each other (a running match adds a third button), nothing is wider than the window
+            probe = """JSON.stringify((function () {
+                var l = document.getElementById('live-btn'); l.textContent = '1 live now'; l.hidden = false;
+                var R = function (e) { return e.getBoundingClientRect(); }, logo = R(document.querySelector('.mast .logo img')), box = [logo];
+                var btns = [].slice.call(document.querySelectorAll('.mast .acts .btn')).filter(function (e) { return R(e).width > 0; }).map(R);
+                var hit = function (a, b) { return a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5; };
+                var bad = btns.some(function (b) { return hit(logo, b); }) || btns.some(function (a, i) { return btns.some(function (b, j) { return j > i && hit(a, b); }); });
+                var phone = window.innerWidth <= 720;
+                return {bad: bad, n: btns.length, tall: btns.every(function (b) { return b.height >= (phone ? 43.5 : 37.5); }), logo: Math.round(logo.width), top: Math.round(logo.top), wide: document.documentElement.scrollWidth > window.innerWidth, inside: btns.every(function (b) { return b.left >= 0 && b.right <= window.innerWidth; })};
+            })())"""
+            for width, height in ((320, 640), (360, 740), (390, 844), (412, 860), (430, 900), (450, 900), (600, 900), (768, 900), (1280, 800), (667, 375)):
+                fresh()
+                tab = new_tab(width, height, 2, width < 800)
+                open_page(tab, "/matches.html")
+                until(tab, cards + " === 25")
+                got = json.loads(tab.ev(probe))
+                check(got["n"] == 3 and not got["bad"] and not got["wide"] and got["inside"] and got["tall"], "header at %d px: the logo and the three buttons never overlap, 44 px targets, no sideways scroll (%s)" % (width, got))
+                check(got["logo"] >= (168 if width > 720 else 120) - 1 and got["top"] >= 14, "header at %d px: the logo is whole and clear of the top (%s)" % (width, got))
+                tab.close()
 
         if args.only in ("", "match"):
             print("[web matches] part match: one match, with its stats")

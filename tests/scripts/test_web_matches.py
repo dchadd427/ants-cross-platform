@@ -118,7 +118,22 @@ class TheCommonFiles(unittest.TestCase):
         self.assertRegex(phone, r"\.discord \.dt \{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect\(0 0 0 0\); \}")     # (a phone: the mark alone, the word stays for a screen reader)
         self.assertIn(".discord { min-width: 44px;", phone)
         self.assertIn("@media (max-width: 389px)", css)
-        self.assertRegex(css[css.index("@media (max-width: 389px)"):], r"\.mast \.acts \{[^}]*flex-wrap: wrap;")       # (with a match running there are three buttons: they never cover the logo)
+        self.assertRegex(css[css.index("@media (max-width: 389px)"):], r"\.mast \.acts \.btn\.sm \{ padding-left: 9px;")       # (the narrowest phones: the three buttons of a running match are a little tighter)
+
+    def test_the_header_row_wraps_instead_of_covering_the_logo(self):
+        """Tests/scripts/web_matches_check.py measures it in a browser (the logo against the buttons at 10 widths); these are the rules it rests on."""
+        css = read("web", "matches.css")
+        self.assertRegex(css, r"\.mast \{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;")           # (a full row wraps; row and column gap are the same 10 px on a phone)
+        self.assertIn(".mast .logo { flex: none; }", css)                                                      # (the logo never shrinks under the buttons)
+        self.assertRegex(css, r"\.mast \.acts \{ display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; flex: 0 1 auto; min-width: 0; margin-left: auto; \}")
+        phone = css[css.index("@media (max-width: 720px)"):css.index("/* ---- the three pages' own parts")]
+        self.assertIn(".wrap { padding: 20px 16px 0; }", phone)                                                # (the top clears the 10 px green frame)
+        self.assertIn(".mast { min-height: 50px; margin-bottom: 12px; gap: 10px; }", phone)
+        self.assertIn(".mast p { flex: 0 0 100%; order: 2; }", phone)                                          # (the line goes under the logo and the buttons)
+        self.assertNotIn("grid-template-areas: \"logo btn\"", phone)
+        later = css[css.index(".mast .acts .btn.hide-s { display: none; }") - 400:]
+        self.assertIn(".mast .acts { gap: 10px; order: 1; }", later)
+        self.assertIn(".mast .acts .btn.sm { min-height: 44px; }", later)                                    # (a touch target)
 
     def test_the_one_stylesheet_is_the_pages_and_the_colors_are_the_front_pages(self):
         css = read("web", "matches.css")
