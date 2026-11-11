@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.15.1 page or game still joins. The stack no longer has the one-shot helper of the results folder; the operator may delete the exited container ants-results-init in Portainer. The rest of this release is internal: tests and documents.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/629baa19...a7b3bc02)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/629baa19...4396bf2d)
 
 ## v0.15.1 - 2026-11-10 - The game server can always write each finished match's result file
 
