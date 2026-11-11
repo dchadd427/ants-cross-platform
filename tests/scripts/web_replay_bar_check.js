@@ -30,11 +30,11 @@ function rig(opts) {
     return t;
 }
 
-check('the numbers: a 48 px band, 150 ms to rest, 700 ms to leave', R.ZONE_PX === 48 && R.ZONE_DWELL_MS === 150 && R.ZONE_LEAVE_MS === 700);
+check('the numbers: a 48 px band without its last 12 px, 150 ms to rest (4 px), 700 ms to leave', R.ZONE_PX === 48 && R.ZONE_GAP === 12 && R.ZONE_REST_PX === 4 && R.ZONE_DWELL_MS === 150 && R.ZONE_LEAVE_MS === 700);
 {
     const t = rig();
     check('it starts open', t.z.mode() === 'open');
-    t.z.pointer(640, 790, 0); t.wait(1000);
+    t.z.pointer(640, 770, 0); t.wait(1000);
     check('an open bar is not changed by a pointer at the bottom', t.z.mode() === 'open' && t.changes.length === 0);
     t.z.hide();
     check('hide: hidden, and told once', t.z.mode() === 'hidden' && t.changes.join() === 'hidden');
@@ -43,7 +43,7 @@ check('the numbers: a 48 px band, 150 ms to rest, 700 ms to leave', R.ZONE_PX ==
 }
 {
     const t = rig(); t.z.hide();
-    for (const [x, y] of [[640, 400], [10, 300], [1279, 300], [640, 1], [640, 751], [5000, 790], [-5, 790]]) { t.z.pointer(x, y, 0); t.wait(2000); }
+    for (const [x, y] of [[640, 400], [10, 300], [1279, 300], [640, 1], [640, 751], [5000, 770], [-5, 770]]) { t.z.pointer(x, y, 0); t.wait(2000); }
     check('moves on the map, at the other edges, above the band (y 751) and outside the picture do not open it', t.z.mode() === 'hidden');
     t.z.pointer(640, 752, 0); t.wait(149);
     check('inside the band for 149 ms: not yet', t.z.mode() === 'hidden');
@@ -52,32 +52,42 @@ check('the numbers: a 48 px band, 150 ms to rest, 700 ms to leave', R.ZONE_PX ==
 }
 {
     const t = rig(); t.z.hide();
-    t.z.pointer(640, 790, 0); t.wait(100); t.z.pointer(640, 300, 0); t.wait(1000);
+    t.z.pointer(640, 770, 0); t.wait(100); t.z.pointer(640, 300, 0); t.wait(1000);
     check('a pass shorter than 150 ms opens nothing', t.z.mode() === 'hidden');
-    t.z.pointer(640, 790, 0); t.wait(100); t.z.pointer(700, 795, 0); t.wait(100); t.z.pointer(760, 790, 0); t.wait(100);
-    check('moving inside the band keeps the 150 ms running (it does not start again)', t.z.mode() === 'peek');
+    t.z.pointer(640, 770, 0); t.wait(100); t.z.pointer(642, 772, 0); t.wait(60);
+    check('a tremor of a few pixels is still a rest: the delay runs on', t.z.mode() === 'peek');
+    const m = rig(); m.z.hide();
+    m.z.pointer(640, 770, 0); m.wait(100); m.z.pointer(700, 772, 0); m.wait(100); m.z.pointer(760, 770, 0); m.wait(100);
+    check('a sweep along the band is no rest: the delay starts again at each move of more than a few pixels', m.z.mode() === 'hidden');
+    m.wait(100);
+    check('and the pointer that then rests opens it', m.z.mode() === 'peek');
+    const g = rig(); g.z.hide();
+    for (const y of [788, 790, 799]) { g.z.pointer(640, y, 0); g.wait(700); }
+    check('the last 12 px of the picture (the game\'s edge scroll) never open it, however long the pointer rests there', g.z.mode() === 'hidden');
+    g.z.pointer(640, 787, 0); g.wait(160);
+    check('the row above them opens it', g.z.mode() === 'peek');
 }
 {
     const t = rig(); t.z.hide();
-    t.z.pointer(400, 500, 1); t.z.pointer(400, 795, 1); t.wait(2000); t.z.pointer(900, 795, 1); t.wait(2000);
+    t.z.pointer(400, 500, 1); t.z.pointer(400, 772, 1); t.wait(2000); t.z.pointer(900, 772, 1); t.wait(2000);
     check('a drag along the bottom edge (a button down) opens nothing', t.z.mode() === 'hidden');
-    t.z.pointer(900, 795, 0); t.wait(160);
+    t.z.pointer(900, 772, 0); t.wait(160);
     check('the button let go and the pointer at rest in the band: it opens', t.z.mode() === 'peek');
-    const u = rig(); u.z.hide(); u.z.pointer(400, 795, 0); u.wait(100); u.z.pointer(400, 795, 1); u.wait(200);
+    const u = rig(); u.z.hide(); u.z.pointer(400, 772, 0); u.wait(100); u.z.pointer(400, 772, 1); u.wait(200);
     check('a button pressed during the 150 ms cancels it', u.z.mode() === 'hidden');
 }
 {
-    const t = rig(); t.z.hide(); t.z.pointer(640, 790, 0); t.wait(200);
+    const t = rig(); t.z.hide(); t.z.pointer(640, 770, 0); t.wait(200);
     t.z.pointer(640, 300, 0); t.wait(699);
     check('peek: the pointer away for 699 ms: still there', t.z.mode() === 'peek');
     t.wait(2);
     check('peek: 700 ms away: hidden again', t.z.mode() === 'hidden' && t.changes.join() === 'hidden,peek,hidden');
 }
 {
-    const t = rig(); t.z.hide(); t.z.pointer(640, 790, 0); t.wait(200);
+    const t = rig(); t.z.hide(); t.z.pointer(640, 770, 0); t.wait(200);
     t.z.pointer(640, 300, 0); t.wait(500); t.z.pointer(640, 700, 0); t.wait(2000);
     check('peek: back on the bar within 700 ms (the bar is above the band): it stays', t.z.mode() === 'peek');
-    t.z.pointer(640, 400, 0); t.wait(600); t.z.pointer(300, 790, 0); t.wait(2000);
+    t.z.pointer(640, 400, 0); t.wait(600); t.z.pointer(300, 770, 0); t.wait(2000);
     check('peek: back in the band within 700 ms: it stays', t.z.mode() === 'peek');
     t.z.pointer(640, 400, 1); t.wait(2000);
     check('peek: a button down (a drag of the timeline that left the bar) keeps it', t.z.mode() === 'peek');
@@ -85,21 +95,21 @@ check('the numbers: a 48 px band, 150 ms to rest, 700 ms to leave', R.ZONE_PX ==
     check('peek: the button let go away from the bar: it goes after 700 ms', t.z.mode() === 'hidden');
 }
 {
-    const t = rig(); t.z.hide(); t.z.pointer(640, 790, 0); t.wait(200); t.busy = true;
+    const t = rig(); t.z.hide(); t.z.pointer(640, 770, 0); t.wait(200); t.busy = true;
     t.z.pointer(640, 300, 0); t.wait(3000);
     check('peek: a busy bar (a drag, the Picture window) stays', t.z.mode() === 'peek');
     t.busy = false; t.wait(701);
     check('peek: and goes 700 ms after it is not busy (the check on the timer)', t.z.mode() === 'hidden');
 }
 {
-    const t = rig(); t.z.hide(); t.z.pointer(640, 790, 0); t.wait(200);
+    const t = rig(); t.z.hide(); t.z.pointer(640, 770, 0); t.wait(200);
     t.z.gone(); t.wait(701);
     check('peek: the pointer leaving the page counts as away', t.z.mode() === 'hidden');
-    const u = rig(); u.z.hide(); u.z.pointer(640, 790, 0); u.wait(100); u.z.gone(); u.wait(1000);
+    const u = rig(); u.z.hide(); u.z.pointer(640, 770, 0); u.wait(100); u.z.gone(); u.wait(1000);
     check('hidden: the pointer leaving the page cancels the 150 ms', u.z.mode() === 'hidden');
 }
 {
-    const t = rig(); t.z.hide(); t.z.pointer(640, 790, 0); t.wait(200);
+    const t = rig(); t.z.hide(); t.z.pointer(640, 770, 0); t.wait(200);
     t.z.open();
     check('open from a peek: pinned open', t.z.mode() === 'open');
     t.z.pointer(640, 300, 0); t.wait(5000);
@@ -108,7 +118,7 @@ check('the numbers: a 48 px band, 150 ms to rest, 700 ms to leave', R.ZONE_PX ==
     check('open from hidden', t.z.mode() === 'open' && t.changes.slice(-2).join() === 'hidden,open');
 }
 {
-    const t = rig(); t.z.hide(); t.z.pointer(640, 790, 0); t.wait(200); t.z.settle();
+    const t = rig(); t.z.hide(); t.z.pointer(640, 770, 0); t.wait(200); t.z.settle();
     check('settle: a peek goes back to hidden (fullscreen ended)', t.z.mode() === 'hidden');
     t.wait(5000);
     check('settle: and no timer is left to open it', t.z.mode() === 'hidden');
@@ -116,13 +126,13 @@ check('the numbers: a 48 px band, 150 ms to rest, 700 ms to leave', R.ZONE_PX ==
     const v = rig(); v.z.hide(); v.z.settle(); check('settle: a hidden bar stays hidden', v.z.mode() === 'hidden');
 }
 {
-    const t = rig(); t.z.hide(); t.z.pointer(640, 790, 0); t.wait(100); t.z.open(); t.wait(2000);
+    const t = rig(); t.z.hide(); t.z.pointer(640, 770, 0); t.wait(100); t.z.open(); t.wait(2000);
     check('a press of the handle during the 150 ms: open stays open (the timer is cancelled)', t.z.mode() === 'open');
-    t.z.hide(); t.z.pointer(640, 790, 0); t.wait(100); t.z.hide(); t.wait(2000);
+    t.z.hide(); t.z.pointer(640, 770, 0); t.wait(100); t.z.hide(); t.wait(2000);
     check('hide during the 150 ms: hidden stays hidden', t.z.mode() === 'hidden');
     const u = rig(); u.z.hide(); u.zone = u.zone; u.zone.bottom = 400; u.z.pointer(640, 360, 0); u.wait(200);
     check('the band follows the picture\'s bottom (a picture that ends at 400)', u.z.mode() === 'peek');
-    const w = rig(); w.z.hide(); w.zone.left = 100; w.zone.right = 900; w.z.pointer(50, 790, 0); w.wait(500);
+    const w = rig(); w.z.hide(); w.zone.left = 100; w.zone.right = 900; w.z.pointer(50, 770, 0); w.wait(500);
     check('beside the picture: nothing', w.z.mode() === 'hidden');
 }
 console.log(checks + ' checks, ' + failures + ' failures');

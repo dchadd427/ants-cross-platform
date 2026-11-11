@@ -1067,7 +1067,7 @@
         .rbar.over.idle { opacity: 0; pointer-events: none; }
         /* hidden by the viewer (the chevron or the B key): the bar is not there at all (no hit, no focus) until the handle, the key or the mouse resting at the bottom edge calls it (docs/REPLAYS.md "Hiding the bar") */
         .rbar.over.gone { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(14px); transition: opacity .2s ease, transform .2s ease, visibility 0s .2s; }
-        .rhandle { position: absolute; left: 50%; bottom: env(safe-area-inset-bottom, 0px); transform: translateX(-50%); z-index: 61; display: flex; align-items: flex-start; justify-content: center; width: 44px; height: 14px; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 2px solid var(--frame); border-bottom: 0; border-radius: 8px 8px 0 0; cursor: pointer; touch-action: manipulation; }
+        .rhandle { position: absolute; left: 50%; bottom: env(safe-area-inset-bottom, 0px); transform: translateX(-50%); z-index: 61; display: flex; align-items: flex-start; justify-content: center; width: 44px; height: 14px; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 2px solid var(--frame); border-bottom: 0; border-radius: 8px 8px 0 0; cursor: pointer; touch-action: none; }
         .rhandle::before { content: ""; position: absolute; left: -12px; right: -12px; top: -30px; bottom: 0; } .rhandle svg { width: 18px; height: 9px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; } .rhandle:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         @media (prefers-reduced-motion: reduce) { .rbar.over, .rbar.over.gone { transition: none; } } @media (forced-colors: active) { .rhandle { color: ButtonText; background: ButtonFace; border-color: ButtonText; } .rhandle:focus-visible { outline-color: Highlight; } }
         .rbar.over { touch-action: none; }                                      /* (a swipe down on the bar is the page's: the browser does not take it for a scroll) */
@@ -3175,7 +3175,7 @@
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
             var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout }), rew = R.rewindControl({ doc: document, turn: function () { return get(VALUE.state) === STATE.jumping ? get(VALUE.target) : get(VALUE.turn); }, seek: function (seconds) { seek(seconds); } });   // (the Auto / Manual button and Back 30 seconds, made by web/replay_page.js)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
-            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var r = $('canvas').getBoundingClientRect(); return r.width ? r : null; }, bar: function () { return $('rbar').getBoundingClientRect(); }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
+            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var r = $('canvas').getBoundingClientRect(); return r.width ? r : null; }, bar: function () { var a = $('rbar').getBoundingClientRect(), t = $('b-tab').getBoundingClientRect(), h = $('b-handle').hidden ? null : $('b-handle').getBoundingClientRect(); return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) }; }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
             var ICON = {
                 play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',
                 pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5h5v17h-5zM13.5 3.5h5v17h-5z"/></svg>',
@@ -3476,7 +3476,10 @@
                 var bar = $('rbar');
                 bar.classList.toggle('gone', m === 'hidden');
                 $('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-label', m === 'peek' ? 'Keep the bar open' : 'Show the bar');
-                syncEdge(); if (m === 'hidden') { clearTimeout(idleTimer); barLock.hideMark(); if (bar.contains(document.activeElement)) $('b-handle').focus(); } else wake();
+                syncEdge(); if (m === 'hidden') {
+                    clearTimeout(idleTimer); barLock.hideMark(); if (bar.contains(document.activeElement)) $('b-handle').focus();
+                    if (touchSeen && !noteShown) { noteShown = true; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)
+                } else wake();
             }
             function showBar(focus) { var from = document.activeElement === $('b-handle'); zone.open(); if (focus || from) $('b-tab').focus(); }
             function toggleBar() { if (zone.mode() === 'hidden') showBar(false); else zone.hide(); }
@@ -3593,7 +3596,7 @@
                 seek(to);
             });
             window.addEventListener('keydown', function (ev) {
-                if ((ev.key === 'b' || ev.key === 'B') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '')) {
+                if ((ev.key === 'b' || ev.key === 'B') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '') && !document.querySelector('[role="dialog"]:not([hidden]), [role="alertdialog"]:not([hidden])') && $('picpop').hidden) {
                     ev.preventDefault(); ev.stopImmediatePropagation(); if (!ev.repeat) toggleBar(); return;       // (B hides the bar of a fullscreen page and brings it back; the game does not get it)
                 }
                 wake();
@@ -3639,6 +3642,10 @@
             ['pointerup', 'pointercancel'].forEach(function (name) { $('rbar').addEventListener(name, function () { barFrom = null; }); });
             $('b-tab').addEventListener('click', function () { zone.hide(); });
             $('b-handle').addEventListener('click', function () { showBar(false); });
+            var handleFrom = null;                                                  // a finger on the handle: a swipe up brings the bar back as a tap does
+            $('b-handle').addEventListener('pointerdown', function (ev) { handleFrom = ev.pointerType === 'touch' ? { id: ev.pointerId, y: ev.clientY } : null; });
+            $('b-handle').addEventListener('pointermove', function (ev) { if (handleFrom && ev.pointerId === handleFrom.id && handleFrom.y - ev.clientY >= EDGE_SWIPE) { handleFrom = null; showBar(false); } });
+            ['pointerup', 'pointercancel'].forEach(function (name) { $('b-handle').addEventListener(name, function () { handleFrom = null; }); });
             // the mouse at the picture's bottom edge calls a hidden bar (R.barZone): a mouse or a pen only, never a finger; the locked mouse comes from the page's own cursor (antsReplayZone)
             document.addEventListener('pointermove', function (ev) { if (ev.pointerType !== 'touch' && !isLocked() && $('rbar').classList.contains('over')) zone.pointer(ev.clientX, ev.clientY, ev.buttons); }, { passive: true });
             document.documentElement.addEventListener('mouseleave', function () { if (!isLocked()) zone.gone(); });

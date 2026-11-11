@@ -866,11 +866,32 @@ def main():
             tab.ev("__stub.state = 3")                                             # (paused: the bar does not fade by itself, so the hiding below is the viewer's)
             tab.click(*centre(tab, "fullscreen-btn-r"))
             check(until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True, "fullscreen: the bar lies over the picture")
-            gone = "document.getElementById('rbar').classList.contains('gone')"
-            shown = "(function () { var b = document.getElementById('rbar'); return getComputedStyle(b).visibility === 'visible' && getComputedStyle(b).opacity === '1'; })()"
+            gone = "(function () { var b = document.getElementById('rbar'); return !!b && b.classList.contains('gone'); })()"          # (null-safe: a page that is still being made says no, it does not raise)
+            shown = "(function () { var b = document.getElementById('rbar'); return !!b && getComputedStyle(b).visibility === 'visible' && getComputedStyle(b).opacity === '1'; })()"
+            calm = "document.querySelectorAll('.toast').forEach(function (t) { t.hidden = true; })"      # (the stand-in cannot load the settings menu: its note would lie over the chevron in a picture)
+
+            def moves(points, gap=0.03, tries=6):
+                """Mouse moves with no button, one after the other, each less than 0.1 s after the one before (a rest of 150 ms must not come from a slow machine); False when the machine was too slow in every try."""
+                for _ in range(tries):
+                    ok = True
+                    last_at = time.time()
+                    for i, (x, y) in enumerate(points):
+                        tab.mouse("mouseMoved", x, y, button="none")
+                        now = time.time()
+                        if i and now - last_at > 0.1:
+                            ok = False
+                        last_at = now
+                        time.sleep(gap)
+                    if ok:
+                        return True
+                    tab.mouse("mouseMoved", 640, 300, button="none")
+                    time.sleep(0.8)
+                return False
+
             handle = "(function () { var h = document.getElementById('b-handle'), r = h.getBoundingClientRect(); return [h.hidden, r.width, r.height, r.bottom, r.left + r.width / 2, getComputedStyle(h).display, h.getAttribute('aria-expanded')]; })()"
             W, H = 1280, 800
             check(tab.ev(shown) is True and tab.ev("document.getElementById('b-handle').hidden") is True and tab.ev("document.getElementById('b-tab').getAttribute('aria-expanded')") == "true", "open: the bar is up, no handle, the chevron says expanded")
+            tab.ev(calm)
             shot(tab, "bar-open-1280")
             tab.click(*centre(tab, "b-tab"))
             check(until(tab, gone, 3) is True and until(tab, "getComputedStyle(document.getElementById('rbar')).visibility === 'hidden'", 3) is True, "the chevron hides the bar completely")
@@ -886,11 +907,15 @@ def main():
             tab.call("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": 640, "y": 400, "deltaX": 0, "deltaY": -120})
             time.sleep(1.0)
             check(tab.ev(gone) is True and tab.ev(shown) is False, "a move, a click and the wheel on the map, and at the other edges, do not bring it back")
-            tab.mouse("mouseMoved", 400, H - 20, button="none")                    # a pass through the zone, shorter than the intent delay
-            time.sleep(0.06)
-            tab.mouse("mouseMoved", 400, 300, button="none")
-            time.sleep(0.5)
-            check(tab.ev(gone) is True, "a quick pass through the bottom zone does not open it")
+            check(moves([(400, H - 20), (400, 300)], gap=0.0) and until(tab, "!" + gone, 0.6) is not True, "a quick pass through the bottom zone does not open it")
+            swept = moves([(400 + 25 * i, H - 30) for i in range(16)] + [(775, 300)], gap=0.02)      # (the last move takes the pointer away at once: it never rested)
+            check(swept and until(tab, "!" + gone, 0.6) is not True, "a sweep along the band (it never rests) does not open it")
+            for rows in (1, 3, 6, 10):                                             # the last rows are the game's edge scroll: a pointer that rests there never opens the bar
+                tab.mouse("mouseMoved", 640, H - rows, button="none")
+                time.sleep(0.6)
+                check(tab.ev(gone) is True, "the pointer resting %d px from the bottom (the game's scroll strip) does not open it" % rows)
+            tab.mouse("mouseMoved", 640, 300, button="none")
+            time.sleep(0.2)
             tab.mouse("mouseMoved", 400, 500, button="none")                       # a drag along the edge with a button down
             tab.mouse("mousePressed", 400, 500)
             tab.mouse("mouseMoved", 400, H - 10, button="left", buttons=1)
@@ -903,9 +928,9 @@ def main():
             tab.mouse("mouseMoved", 400, H - 30, button="none")                    # rests in the zone
             check(until(tab, "!" + gone, 2) is True and until(tab, shown, 2) is True, "the pointer resting in the bottom zone opens it (peek)")
             check(tab.ev("document.getElementById('b-handle').hidden") is False and tab.ev("document.getElementById('b-handle').getAttribute('aria-label')") == "Keep the bar open", "the handle stays while the bar only peeks (a press keeps the bar open)")
+            tab.ev(calm)
             shot(tab, "bar-peek-1280")
             tab.mouse("mouseMoved", 400, 300, button="none")
-            time.sleep(0.35)
             check(tab.ev(gone) is False, "a peek stays a moment after the pointer leaves (about 700 ms)")
             check(until(tab, gone, 3) is True, "and then goes back by itself")
             tab.mouse("mouseMoved", 400, H - 30, button="none")
@@ -914,6 +939,10 @@ def main():
             tab.mouse("mouseMoved", bx, by, button="none")                         # onto the bar itself: it stays
             time.sleep(1.6)
             check(tab.ev(gone) is False, "the pointer on the bar keeps the peek open")
+            tx, ty = centre(tab, "b-tab")
+            tab.mouse("mouseMoved", tx, ty, button="none")                         # onto the chevron, which lies above the bar's box: it is part of the bar
+            time.sleep(1.2)
+            check(tab.ev(gone) is False, "the pointer resting on the chevron keeps the peek open")
             tab.click(*centre(tab, "b-tab"))
             check(until(tab, gone, 2) is True, "the chevron on a peeking bar hides it for good")
             tab.mouse("mouseMoved", 500, 300, button="none")
@@ -955,7 +984,8 @@ def main():
             time.sleep(1.0)
             tab.ev("Element.prototype.requestFullscreen = undefined; Element.prototype.webkitRequestFullscreen = undefined; __stub.state = 3")
             tab.tap(*centre(tab, "fullscreen-btn-r"))
-            check(until(tab, "document.getElementById('rbar').classList.contains('over')", 10) is True, "phone: the bar lies over the picture in fullscreen")
+            check(until(tab, "!!document.getElementById('rbar') && document.getElementById('rbar').classList.contains('over')", 10) is True, "phone: the bar lies over the picture in fullscreen")
+            tab.ev(calm)
             shot(tab, "bar-open-390")
             tab.tap(*centre(tab, "b-tab"))
             check(until(tab, gone, 3) is True, "phone: a tap on the chevron hides the bar")
@@ -969,6 +999,13 @@ def main():
             check(tab.ev("(function () { var e = document.elementFromPoint(%f, %f - 22); return !!e && e.id === 'b-handle'; })()" % (hx, hy)) is True, "phone: the handle's hit area reaches above its picture (44 px tall)")
             tab.tap(hx, hy - 20)
             check(until(tab, "!" + gone, 3) is True, "phone: a tap on the handle opens the bar")
+            until(tab, shown, 3)
+            time.sleep(0.5)                                                        # (the bar has slid in: its chevron is where it is drawn)
+            tab.tap(*centre(tab, "b-tab"))
+            check(until(tab, gone, 3) is True, "phone: hidden again")
+            hx, hy = centre(tab, "b-handle")
+            touch(tab, [(hx, hy), (hx, hy - 15), (hx, hy - 40)])
+            check(until(tab, "!" + gone, 3) is True, "phone: a swipe up on the handle opens the bar")
             tab.close()
 
         if args.only in ("", "scrub"):

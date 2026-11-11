@@ -335,14 +335,23 @@
             var el = env.doc.elementFromPoint(cx, cy);
             return el && bar.contains(el) ? el : null;
         }
+        // the handle of a bar that is hidden or only peeks (a button of its own, beside the bar): a locked mouse presses it too
+        function handleUnder(cx, cy) {
+            if (!env.replayMode()) return null;
+            var bar = env.doc.getElementById('rbar'), h = env.doc.getElementById('b-handle');
+            if (!bar || !h || h.hidden || !bar.classList.contains('over')) return null;
+            var el = env.doc.elementFromPoint(cx, cy);
+            return el && (el === h || h.contains(el)) ? el : null;
+        }
+        function reach(cx, cy) { return under(cx, cy) || handleUnder(cx, cy); }
         function interactive(el) { return el && el.closest ? el.closest('button, a[href], summary, input, select') : null; }
         function fire(target, type, at, buttons) {
             target.dispatchEvent(new env.PointerEvent(type, { bubbles: true, cancelable: true, view: env.win, clientX: at.x, clientY: at.y, pointerId: 1000, pointerType: 'mouse', isPrimary: true, button: type === 'pointermove' ? -1 : 0, buttons: buttons }));
         }
-        function hit(at) { return at.edge ? null : under(at.x, at.y); }
+        function hit(at) { return at.edge ? null : reach(at.x, at.y); }
         var api = {
             mode: function () { return inBar; },
-            under: under,
+            under: reach,
             // the lock was let go (or fullscreen ended): a drag in progress is cancelled, the arrow goes
             reset: function () {
                 if (down) { var at = env.cursorAt() || { x: 0, y: 0 }; fire(down, 'pointercancel', at, 0); }
@@ -805,13 +814,13 @@
 
     // THE BAR'S HIDING (docs/REPLAYS.md, "Watching a replay": fullscreen). The bar that lies over the picture has three states. `open` is the one the page starts in (the bar is up and, while the match
     // plays, goes away by itself after a rest of the pointer, as ever). `hidden` is the viewer's choice (the chevron on the bar, or the B key): nothing brings the bar back by chance, neither a move
-    // of the mouse, a click on the map or the minimap, nor a key; a thin handle stays at the bottom edge. `peek` is the bar called by the mouse: the pointer RESTS for ZONE_DWELL_MS in the band of ZONE_PX along the picture's
-    // bottom (a drag with a button down, or a pass that is shorter than that, calls nothing), and it goes back to `hidden` when the pointer has been away from the band and the bar for ZONE_LEAVE_MS (a button
+    // of the mouse, a click on the map or the minimap, nor a key; a thin handle stays at the bottom edge. `peek` is the bar called by the mouse: the pointer RESTS for ZONE_DWELL_MS (it moves less than ZONE_REST_PX) in the band of ZONE_PX along the picture's
+    // bottom, but not in its last ZONE_GAP pixels (the game's edge scroll rests there) (a drag with a button down, or a pass that is shorter than that, calls nothing), and it goes back to `hidden` when the pointer has been away from the band and the bar for ZONE_LEAVE_MS (a button
     // down, or the page's `busy()`, is a touch of the bar). A finger never calls it by hover: the page feeds this only with the moves of a mouse or a pen. The page gives `env`: setTimeout, clearTimeout,
     // zone() (the picture's rectangle: left, right, bottom), bar() (the bar's rectangle, or null while it is not there), busy() and change(mode). tests/scripts/web_replay_check.js runs it.
-    var ZONE_PX = 48, ZONE_DWELL_MS = 150, ZONE_LEAVE_MS = 700;
+    var ZONE_PX = 48, ZONE_GAP = 12, ZONE_REST_PX = 4, ZONE_DWELL_MS = 150, ZONE_LEAVE_MS = 700;      // (ZONE_GAP: the last pixels of the picture are the game's edge scroll, which rests there: they never call the bar)
     function barZone(env) {
-        var mode = 'open', dwell = 0, leave = 0, at = null;                  // at: where the pointer last was, { x, y, buttons }, or null when it is out of the page
+        var mode = 'open', dwell = 0, leave = 0, at = null, anchor = null;                  // at: where the pointer last was, { x, y, buttons }, or null when it is out of the page
         function set(next) {
             env.clearTimeout(dwell); env.clearTimeout(leave); dwell = 0; leave = 0;
             if (next === mode) return;
@@ -820,7 +829,7 @@
         }
         function inZone() {
             var z = env.zone();
-            return !!(at && z && at.x >= z.left && at.x <= z.right && at.y >= z.bottom - ZONE_PX);
+            return !!(at && z && at.x >= z.left && at.x <= z.right && at.y >= z.bottom - ZONE_PX && at.y < z.bottom - ZONE_GAP);
         }
         function inBar() {
             var b = env.bar();
@@ -829,7 +838,10 @@
         function away() { return !at || !(inZone() || inBar() || at.buttons || env.busy()); }
         function look() {
             if (mode === 'hidden') {
-                if (at && !at.buttons && inZone()) { if (!dwell) dwell = env.setTimeout(function () { dwell = 0; if (mode === 'hidden' && at && !at.buttons && inZone()) set('peek'); }, ZONE_DWELL_MS); }
+                if (at && !at.buttons && inZone()) {
+                    if (dwell && anchor && (Math.abs(at.x - anchor.x) > ZONE_REST_PX || Math.abs(at.y - anchor.y) > ZONE_REST_PX)) { env.clearTimeout(dwell); dwell = 0; }       // (a rest: a pointer that goes on moving starts the delay again)
+                    if (!dwell) { anchor = { x: at.x, y: at.y }; dwell = env.setTimeout(function () { dwell = 0; if (mode === 'hidden' && at && !at.buttons && inZone()) set('peek'); }, ZONE_DWELL_MS); }
+                }
                 else { env.clearTimeout(dwell); dwell = 0; }
             } else if (mode === 'peek') {
                 if (inZone() || inBar()) { env.clearTimeout(leave); leave = 0; }
@@ -849,7 +861,7 @@
         };
     }
 
-    var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
+    var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_GAP: ZONE_GAP, ZONE_REST_PX: ZONE_REST_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
                 LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
                 OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,
