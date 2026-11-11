@@ -56,8 +56,8 @@ class TheLink(unittest.TestCase):
             at = texts.index("Matches")
             self.assertEqual(at, texts.index(before) + 1 if before in texts else 0, name)                    # (after the Menu link, or after "How it works" on the front page; the first on the pages of the history)
             self.assertEqual(texts[at + 1], "Live now", name)
-            self.assertEqual({f[2]: f[0] for f in found}["Matches"], "/matches.html", name)
-            self.assertEqual({f[2]: f[0] for f in found}["Live now"], "/live.html", name)
+            self.assertEqual({f[2]: f[0] for f in found}["Matches"], "/matches", name)
+            self.assertEqual({f[2]: f[0] for f in found}["Live now"], "/live-now", name)
             if file in ("shell.html", "lobby.html"):
                 self.assertIn('id="watch-link"', [f for f in found if f[2] == "Matches"][0][1], name)
             self.assertFalse({"Watch matches", "Watch live", "Watch replays"} & set(texts), name)               # (the old names are gone)
@@ -85,7 +85,7 @@ class TheLink(unittest.TestCase):
     def test_the_header_of_the_front_page_has_the_button_at_the_right(self):
         lobby = read("web", "lobby.html")
         header = re.search(r'<header class="mast">(.*?)</header>', lobby, re.S).group(1)
-        self.assertEqual(re.findall(r'<a class="btn sm" href="/matches.html" id="watch-top"[^>]*>Matches</a>', header).__len__(), 1)
+        self.assertEqual(re.findall(r'<a class="btn sm" href="/matches" id="watch-top"[^>]*>Matches</a>', header).__len__(), 1)
         self.assertIn('Matches</a><a class="btn sm discord" href="https://discord.gg/WaWrXQnKPj" id="discord-top"', header)       # (the Discord link comes right after it: tests/scripts/test_web_lobby.py)
         self.assertTrue(header.rstrip().endswith("Discord</span></a>"))                                     # (after the logo and the tagline: the right of the row)
         self.assertIn(".mast #watch-top { margin-left: auto;", lobby)
@@ -101,14 +101,14 @@ class TheLink(unittest.TestCase):
         links = re.findall(r'<a href="([^"]+)"([^>]*)>([^<]+)</a>', actions)
         self.assertEqual([t for _, _, t in links][:3], ["Menu", "Matches", "Sprites and sounds"])
         wide = links[1]
-        self.assertEqual(wide[0], "/matches.html")
+        self.assertEqual(wide[0], "/matches")
         self.assertIn('id="watch-btn"', wide[1])
         self.assertIn('wide-only', wide[1])                                                                 # (a narrow window has Menu, Full and More only)
         self.assertIn('target="_blank"', wide[1])
         more = re.search(r'<div class="more-list">(.*?)</div>', actions, re.S).group(1)
         first = re.findall(r'<(?:a|button)\b([^>]*)>([^<]+)</(?:a|button)>', more)[0]
         self.assertEqual(first[1], "Matches")
-        self.assertIn('href="/matches.html"', first[0])
+        self.assertIn('href="/matches"', first[0])
         self.assertIn('target="_blank"', first[0])
         self.assertNotIn("wide-only", first[0])
         replay = re.search(r'<div class="header-actions rep-only">(.*?)</header>', game, re.S).group(1)
@@ -132,7 +132,7 @@ class ThePlayerPage(unittest.TestCase):
                       "tl-fill", "tl-ticks", "tl-thumb", "t-now", "t-all", "speed", "b-fsx", "toast", "b-tab", "redge", "rnote", "b-cam", "cam-lbl", "camnote"):
             self.assertEqual(len(re.findall(r'\bid="%s"' % ident, self.page)), 1, ident)
         self.assertEqual(len(re.findall(r'data-s="(?:0\.5|1|2|4|8)"', self.page)), 5)
-        self.assertIn('href="/matches.html"', self.page[self.page.index('id="all-btn"') - 120:self.page.index('id="all-btn"') + 20])
+        self.assertIn('href="/matches"', self.page[self.page.index('id="all-btn"') - 120:self.page.index('id="all-btn"') + 20])
 
     def test_everything_of_the_replay_is_hidden_unless_the_address_asks_for_a_replay(self):
         self.assertIn("body:not(.replay) .rep-only { display: none !important; }", self.page)
@@ -257,7 +257,7 @@ class TheLiveGlue(unittest.TestCase):
 
     def test_a_match_that_became_a_replay_has_the_address_of_the_replay(self):
         self.assertIn("window.history.replaceState(null, '', window.location.pathname + '?replay=' + encodeURIComponent(file))", self.glue)
-        self.assertIn("'/play.html?replay=' + encodeURIComponent(why)", self.glue)                           # (the card's button)
+        self.assertIn("'/play?replay=' + encodeURIComponent(why)", self.glue)                           # (the card's button)
         self.assertIn("R.liveVerdict(", self.glue)
 
     def test_what_the_door_says_is_text_never_markup(self):

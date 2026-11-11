@@ -2,7 +2,7 @@
 """The changelog page's pages in a REAL browser (opt-in; see tests/scripts/test_web_changelog.sh).
 
 Needs a running web page (the web image of this tree, or tools/web_without_docker.py, or any folder that holds the generated changelog.html with /front/ beside it), a Chromium-based browser and
-Python 3. The check opens /changelog.html in a throwaway headless browser, as a desktop (1280 wide) and as a phone (390 wide, touch, mobile metrics), and reads what the page does:
+Python 3. The check opens /changelog in a throwaway headless browser, as a desktop (1280 wide) and as a phone (390 wide, touch, mobile metrics), and reads what the page does:
 
   * the first page shows ten releases (five on the phone) and no others, the tabs name the pages by their versions, and the list of versions is folded;
   * the address of a release (with dots, as the owner writes it, or the id with dashes) opens the page that holds it and scrolls the release into view, when the page is loaded fresh;
@@ -60,7 +60,7 @@ def main():
     if args.profile != "all" and args.profile not in PROFILES:
         print("unknown profile %r (desktop, tablet, phone or all)" % args.profile)
         return 2
-    url = args.web.rstrip("/") + "/changelog.html"
+    url = args.web.rstrip("/") + "/changelog"
     failures = []
     count = [0]
 

@@ -1,5 +1,5 @@
-/* The small helpers that the pages of the replays share (docs/REPLAYS.md "Watching a replay"): the pages of the match history (live.html, matches.html, match.html) and the game page in replay mode (play.html?replay=<file>, web/shell.html),
-   which also watches a match that is still being played (play.html?live=<id>). Plain functions with no page in them, so that tests/scripts/web_replay_check.js runs them on a table.
+/* The small helpers that the pages of the replays share (docs/REPLAYS.md "Watching a replay"): the pages of the match history (live.html, matches.html, match.html) and the game page in replay mode (play?replay=<file>, web/shell.html),
+   which also watches a match that is still being played (play?live=<id>). Plain functions with no page in them, so that tests/scripts/web_replay_check.js runs them on a table.
    Everything that comes from a recording or from the server's list of live matches (a name that a player typed, a map, an id) is TEXT: the pages put it in with textContent and never as markup. */
 (function (root) {
     'use strict';
@@ -471,7 +471,7 @@
 
     // ---- the hand-off from the page that took the file to the player ----
     // The Matches page cannot give a file to another page by an address (2 MB), and sends it nowhere, so it leaves it in the browser's own storage (IndexedDB) under a new random id and goes to
-    // play.html?local=<id>; the player reads it from there. ONE record at most: a second file takes the place of the first. The record stays after it was read (a reload of the player must still
+    // play?local=<id>; the player reads it from there. ONE record at most: a second file takes the place of the first. The record stays after it was read (a reload of the player must still
     // work) and is thrown away when it is older than a day (every page that opens it looks first: purge). A record that is not there (an old link, another tab took the place, the browser's data was
     // cleared) is a card with a way to choose the file again, never a game that starts on something else. Every call can fail (a browser that keeps no site data has no IndexedDB, or refuses it,
     // or the file does not fit): a failed call rejects and the page says so.
@@ -638,7 +638,7 @@
             busy = true;
             hideNote();
             ownOpen(env, file).then(function (r) {
-                if (r.ok) { env.go('/play.html?local=' + r.id); return; }                  // (the page is leaving: busy stays until it is shown again from the browser's memory, pageshow)
+                if (r.ok) { env.go('/play?local=' + r.id); return; }                  // (the page is leaving: busy stays until it is shown again from the browser's memory, pageshow)
                 busy = false;
                 showNote(r);
             });
@@ -674,7 +674,7 @@
         };
     }
 
-    // ---- the player's own mode (web/shell.html at play.html?local=<id>) ----
+    // ---- the player's own mode (web/shell.html at play?local=<id>) ----
     // The page of a file of the visitor's own is the replay page with these differences: the file is read from the browser's storage (where the Matches page left it) and not fetched; the header says "Your
     // file" and its name, and has no Copy link, Stats or Download (the link and the stats are those of the server's own recordings, and the file is on this device already); every card that could offer the
     // file for download offers to open another one; and a card for a record that is not there (choose the file again). env: doc, win, store (ownStore), FileReader, search (the address's query), say(text) (a
@@ -714,7 +714,7 @@
                     if (!file || busy) return;
                     busy = true;
                     ownOpen(env, file).then(function (r) {
-                        if (r.ok) { env.go('/play.html?local=' + r.id); return; }
+                        if (r.ok) { env.go('/play?local=' + r.id); return; }
                         busy = false;
                         env.say(refusalWords(r).title + '.');
                     });
@@ -776,7 +776,7 @@
                     body.push(node);
                 }
                 function open(label) { buttons.push(press(mk(doc, 'button', 'btn', label), pick)); }
-                function all() { var a = mk(doc, 'a', 'btn', '‹ All matches'); a.href = '/matches.html'; buttons.push(a); }
+                function all() { var a = mk(doc, 'a', 'btn', '‹ All matches'); a.href = '/matches'; buttons.push(a); }
                 var onMap = ctx.map || ctx.map === 0 ? ['This match was played on the map ', { b: ctx.map }, ', and a replay needs the same map file. '] : ['This match was played on a map, and a replay needs the same map file. '];
                 if (kind === 'older') {
                     title = 'Recorded by an older version';

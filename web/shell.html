@@ -976,7 +976,7 @@
             }
         }
 
-        /* ================= REPLAY MODE (docs/REPLAYS.md "Watching"): the page opened as play.html?replay=<file>. Everything above is the game page as it is; this block and the markup marked "rep-only"
+        /* ================= REPLAY MODE (docs/REPLAYS.md "Watching"): the page opened as play?replay=<file>. Everything above is the game page as it is; this block and the markup marked "rep-only"
            are the new part. The page puts `replay` on <body> (the first line of the body) and the pieces that belong to the other mode are hidden here. ================= */
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
@@ -1107,7 +1107,7 @@
             .rbar.over .tl .thumb { height: 30px; }
         }
 
-        /* ================= LIVE (docs/REPLAYS.md "Watching a live match"): the page opened as play.html?live=<id>, a match that is still being played. The bar and the header are the replay's; the red LIVE marks, the
+        /* ================= LIVE (docs/REPLAYS.md "Watching a live match"): the page opened as play?live=<id>, a match that is still being played. The bar and the header are the replay's; the red LIVE marks, the
            notch at the present and the button that jumps to it are the new part. `live` is on <body> and `islive` on the bar while the page follows the match; `nodl` is on <body> when there is no file to download ================= */
         .pill.lv { color: #ffc3bd; background: #3a0d11; border: 1px solid #9d0d17; letter-spacing: .1em; }
         .pill.lv::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
@@ -1157,9 +1157,9 @@
         <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
         <div class="header-actions">
             <a href="/" id="menu-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Menu</a>
-            <a href="/matches.html" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
+            <a href="/matches" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
-            <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="What changed in each version">Changelog</a>
+            <a href="/changelog" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="What changed in each version">Changelog</a>
             <button id="reset-btn" type="button" class="btn sm wide-only" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
             <button id="fullscreen-btn" type="button" class="btn sm" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
             <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View Source Code on GitHub">GitHub</a>
@@ -1167,9 +1167,9 @@
             <details class="more">
                 <summary><span class="btn sm">More</span></summary>
                 <div class="more-list">
-                    <a href="/matches.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
+                    <a href="/matches" target="_blank" rel="noopener noreferrer" class="btn sm" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
                     <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
-                    <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="What changed in each version">Changelog</a>
+                    <a href="/changelog" target="_blank" rel="noopener noreferrer" class="btn sm" title="What changed in each version">Changelog</a>
                     <button type="button" class="btn sm" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
                     <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm" title="View Source Code on GitHub">GitHub</a>
                     <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" class="btn sm" title="Give Feedback or Report Issues">Feedback</a>
@@ -1177,7 +1177,7 @@
             </details>
         </div>
         <div class="header-actions rep-only">
-            <a href="/matches.html" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
+            <a href="/matches" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
             <button id="copy-btn" type="button" class="btn sm wide-only" title="Copy the link to this match">Copy link</button>
             <button id="stats-btn" type="button" class="btn sm wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
             <a href="#" data-dl="" class="btn sm wide-only" title="Download the recording (.antsrep)">Download</a>
@@ -1367,12 +1367,12 @@
             <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
             <nav aria-label="Footer links">
                 <a href="/" id="menu-link">Menu</a>
-                <a href="/matches.html" target="_blank" rel="noopener noreferrer" id="watch-link">Matches</a>
-                <a href="/live.html" target="_blank" rel="noopener noreferrer">Live now</a>
+                <a href="/matches" target="_blank" rel="noopener noreferrer" id="watch-link">Matches</a>
+                <a href="/live-now" target="_blank" rel="noopener noreferrer">Live now</a>
                 <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
-                <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+                <a href="/changelog" target="_blank" rel="noopener noreferrer">Changelog</a>
                 <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
-                <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a> <a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a>
+                <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a> <a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a>
             </nav>
         </div>
     </footer>
@@ -1680,7 +1680,7 @@
                 return out;
             }
 
-            // A game on THIS computer (the front page's Play: play.html?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): its arguments come only from this whitelist, never from the address text. map: one of the six
+            // A game on THIS computer (the front page's Play: play?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): its arguments come only from this whitelist, never from the address text. map: one of the six
             // by key, or mapfile (when no map): the file of a map of the players (AntsMapFiles.communityFile; the data block fetches it before the game starts); bots: one level word (all of seats 1-3) or three words for seats 1, 2, 3 (none|easy|medium|hard), any case, all or nothing; teams: ffa or 0+N (the + may come as a blank) with a bot at seat N; name: printable ASCII, 32 characters.
             // `--play` starts the map as the setup screen's START does (Get ready dialog, start sound, music) once the loading screen and quick help are done. No map, bots or name: no arguments (the setup screen).
             var LOCAL_MAPS = { tiny: 'TINY.LVL', small: 'SMALL.LVL', medium: 'MEDIUM.LVL', gauntlet: 'GAUNTLET.LVL', treasure: 'TREASURE.LVL', islands: 'ISLANDS.LVL' };
@@ -1841,7 +1841,7 @@
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
         var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null, ANTS_OWN_NAME = false;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
-        // Watching a replay: play.html?replay=<file>, a match that is still being played: play.html?live=<id>, or a file of your own: play.html?local=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
+        // Watching a replay: play?replay=<file>, a match that is still being played: play?live=<id>, or a file of your own: play?local=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live", one with local= and no record is "choose the file again"; replay= wins over local=, which wins over live=). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else the shape nearest to the screen) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
         var ANTS_REPLAY_MODE = /(^|[?&])(replay|live|local)=/.test(window.location.search), ANTS_OWN_MODE = ANTS_REPLAY_MODE && /(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search);      // (a file of your own: local=<id>)
@@ -1853,7 +1853,7 @@
             if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
             joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
-            if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
+            if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play?map=...&bots=...): its local parameters, through a whitelist
                 var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test; ANTS_OWN_NAME = local.nameless;
             }
         })();
@@ -3137,7 +3137,7 @@
     </script>
     <!-- BEGIN replay glue (tests/scripts/test_web_replay.py reads it) -->
     <script>
-        // ---- Watching a replay (docs/REPLAYS.md "Watching"; only when the address is play.html?replay=<file> or play.html?live=<id>) ----
+        // ---- Watching a replay (docs/REPLAYS.md "Watching"; only when the address is play?replay=<file> or play?live=<id>) ----
         // The page fetches the recording from the server's public door (GET /replays/<file>, the shape of the name is checked first: web/replay_page.js), puts it in the game's file system as /replay.antsrep and starts
         // the game with --replay: the game plays the match from the file on its own engine, without the Fog of War and with every order of the HUD discarded (Application::replay_*). The game is the player; this
         // block is its remote control: the header (what is playing), the bar (play and pause, the timeline, the clock, the speed, fullscreen), the end of the match, and the cards for a file that cannot be shown.
@@ -3205,7 +3205,7 @@
                 var text = ($('game-version') || {}).textContent || '';
                 return text.indexOf('@') === -1 && text ? text : (info && info.version ? 'v' + info.version : 'this version');
             }
-            function replayUrl() { return window.location.origin + (FILE ? '/play.html?replay=' + encodeURIComponent(FILE) : '/play.html?live=' + encodeURIComponent(LIVE_ID || '')); }
+            function replayUrl() { return window.location.origin + (FILE ? '/play?replay=' + encodeURIComponent(FILE) : '/play?live=' + encodeURIComponent(LIVE_ID || '')); }
 
             // ---- the header: what is playing ----
             function lengthSeconds() { return info && info.turns ? Math.floor(info.turns / TPS) : 0; }
@@ -3269,7 +3269,7 @@
                 };
                 var all = function () {
                     var a = el('a', 'btn', '‹ All matches');
-                    a.href = '/matches.html';
+                    a.href = '/matches';
                     buttons.appendChild(a);
                 };
                 var made = info && info.game ? info.game : 'a version of the game', plan = OWN ? OWN.card(kind, { made: made, version: pageVersion(), map: info && info.map ? info.map : OWN.map(), why: why }) : null;
@@ -3294,7 +3294,7 @@
                     title = 'This match is over';
                     paragraph(['The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.']);
                     var watch = el('a', 'btn', 'Watch the replay');
-                    watch.href = '/play.html?replay=' + encodeURIComponent(why);
+                    watch.href = '/play?replay=' + encodeURIComponent(why);
                     buttons.appendChild(watch);
                     all();
                 } else if (kind === 'notlive') {              // the link of a match that is not being played and was not kept (or is not a match)
@@ -3519,7 +3519,7 @@
             };
             window.antsReplayLeave = function () {
                 if (ANTS_EMBED && window.parent !== window) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }      // (the frame of a match page: it hides the replay; opened on its own it goes to the list)
-                window.location.assign('/matches.html');
+                window.location.assign('/matches');
             };
 
             // ---- the wiring ----

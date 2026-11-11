@@ -233,6 +233,28 @@ class TheStyle(unittest.TestCase):
             self.assertTrue(target.startswith("data:image/svg+xml,") or target.startswith("front/"), target)
         self.assertNotRegex(self.css, r"url\(\s*[\"']?front/(?!clay)")
 
+    def test_every_style_sheet_and_inline_style_closes_every_brace_it_opens(self):
+        # a rule that lost its closing brace makes the browser swallow the rules after it (the sideways phone's rules of the Games list once went that way)
+        def open_and_close(text):
+            text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+            return text.count("{"), text.count("}")
+        web = os.path.join(REPO, "web")
+        seen = 0
+        for folder, _, names in os.walk(web):
+            for name in sorted(names):
+                path = os.path.join(folder, name)
+                if name.endswith(".css"):
+                    blocks = [read(os.path.relpath(path, REPO))]
+                elif name.endswith(".html"):
+                    blocks = re.findall(r"<style[^>]*>(.*?)</style>", read(os.path.relpath(path, REPO)), flags=re.S)
+                else:
+                    continue
+                for block in blocks:
+                    seen += 1
+                    opened, closed = open_and_close(block)
+                    self.assertEqual(opened, closed, "%s: %d '{' and %d '}'" % (os.path.relpath(path, REPO), opened, closed))
+        self.assertGreaterEqual(seen, 3)                # (the copy that the mutant runs holds only a few of them)
+
     def test_the_bars_have_a_layout_for_a_phone_upright_and_for_a_short_window(self):
         self.assertIn("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {", self.css)
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) {", self.css)
