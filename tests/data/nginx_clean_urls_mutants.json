@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the page of the matches that run now not taking the name of the game server's list, the one map of old addresses and its redirect that keeps the query (permanent, exact paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
+ "note": "Mutants of the clean addresses of the pages and of the web server that names no version (docker/nginx.conf and the pages' own links), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout with the program nginx installed: python3 tools/mutate.py tests/data/nginx_clean_urls_mutants.json --keep-going --jobs 1. Every mutant must be caught by tests/scripts/test_nginx_clean_urls.py: each breaks one rule - a page's exact location and the file it serves, the page of the matches that run now not taking the name of the game server's list, the one map of old addresses and its redirect that keeps the query (temporary, so no browser keeps it; the three files that an earlier redirect led to stay out of the map; paths only, the slash form only for the pages' names), /index.html and /lobby.html going to the front page, no header of a page's own, server_tokens off in the http part and in the server block, and no page of the site building an address with .html.",
  "mutants": [
   {
    "id": "play_serves_the_wrong_file",
@@ -46,22 +46,22 @@
   {
    "id": "redirect_loses_the_query",
    "file": "docker/nginx.conf",
-   "old": "return 301 $ants_clean_address$is_args$args;",
-   "new": "return 301 $ants_clean_address;",
+   "old": "return 302 $ants_clean_address$is_args$args;",
+   "new": "return 302 $ants_clean_address;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "redirect_is_temporary",
+   "id": "redirect_is_a_307",
    "file": "docker/nginx.conf",
-   "old": "return 301 $ants_clean_address$is_args$args;",
-   "new": "return 302 $ants_clean_address$is_args$args;",
+   "old": "return 302 $ants_clean_address$is_args$args;",
+   "new": "return 307 $ants_clean_address$is_args$args;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
    "id": "redirect_if_is_gone",
    "file": "docker/nginx.conf",
-   "old": "    if ($ants_clean_address) {\n        return 301 $ants_clean_address$is_args$args;\n    }\n",
-   "new": "    if ($ants_clean_address = \"x\") {\n        return 301 $ants_clean_address$is_args$args;\n    }\n",
+   "old": "    if ($ants_clean_address) {\n        return 302 $ants_clean_address$is_args$args;\n    }\n",
+   "new": "    if ($ants_clean_address = \"x\") {\n        return 302 $ants_clean_address$is_args$args;\n    }\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -123,8 +123,8 @@
   {
    "id": "watch_redirect_loses_the_query",
    "file": "docker/nginx.conf",
-   "old": "return 301 /matches$is_args$args;",
-   "new": "return 301 /matches;",
+   "old": "return 302 /matches$is_args$args;",
+   "new": "return 302 /matches;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
@@ -195,6 +195,48 @@
    "file": "web/shell.html",
    "old": "window.location.origin + (FILE ? '/play?replay='",
    "new": "window.location.origin + (FILE ? '/play.html?replay='",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_addresses_are_permanent_again",
+   "file": "docker/nginx.conf",
+   "old": "return 302 $ants_clean_address$is_args$args;",
+   "new": "return 301 $ants_clean_address$is_args$args;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "old_list_of_recordings_is_permanent",
+   "file": "docker/nginx.conf",
+   "old": "return 302 /matches$is_args$args;",
+   "new": "return 301 /matches$is_args$args;",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "changelog_file_redirects_again",
+   "file": "docker/nginx.conf",
+   "old": "    /mapmaker.html /mapmaker;\n",
+   "new": "    /mapmaker.html /mapmaker;\n    /changelog.html /changelog;\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "legal_file_redirects_again",
+   "file": "docker/nginx.conf",
+   "old": "    /mapmaker.html /mapmaker;\n",
+   "new": "    /mapmaker.html /mapmaker;\n    /legal.html /legal;\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "matches_file_redirects_again",
+   "file": "docker/nginx.conf",
+   "old": "    /mapmaker.html /mapmaker;\n",
+   "new": "    /mapmaker.html /mapmaker;\n    /matches.html /matches;\n",
+   "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
+  },
+  {
+   "id": "redirect_is_cached_for_a_day",
+   "file": "docker/nginx.conf",
+   "old": "        return 302 $ants_clean_address$is_args$args;",
+   "new": "        add_header Cache-Control \"max-age=86400\" always;\n        return 302 $ants_clean_address$is_args$args;",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]

@@ -69,12 +69,12 @@ class TheFile(unittest.TestCase):
     def test_the_old_play_online_address_redirects_for_good_with_its_query(self):
         self.assertRegex(self.conf, r"location = /four\.html \{\s*return 301 /\$is_args\$args;\s*\}")
 
-    def test_the_list_of_matches_is_a_clean_address_and_the_old_watch_page_redirects_to_it_for_good(self):
-        """/matches serves matches.html (an exact location and an internal rewrite: tests/scripts/test_nginx_clean_urls.py has the rest); the old /watch.html is a 301 to /matches that keeps the query, with no header of its own (a location with an add_header of its own drops the server's)."""
+    def test_the_list_of_matches_is_a_clean_address_and_the_old_watch_page_redirects_to_it(self):
+        """/matches serves matches.html (an exact location and an internal rewrite: tests/scripts/test_nginx_clean_urls.py has the rest); the old /watch.html is a 302 to /matches that keeps the query, with no header of its own (a location with an add_header of its own drops the server's)."""
         blocks = re.findall(r"location = /matches \{([^{}]*)\}", self.conf)
         self.assertEqual([b.split() for b in blocks], [["rewrite", "^", "/matches.html", "last;"]])
         blocks = re.findall(r"location = /watch\.html \{([^{}]*)\}", self.conf)
-        self.assertEqual([b.split() for b in blocks], [["return", "301", "/matches$is_args$args;"]])
+        self.assertEqual([b.split() for b in blocks], [["return", "302", "/matches$is_args$args;"]])
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
         self.assertEqual([l for l in locations if "matches" in l or "watch" in l], ["= /matches", "= /watch.html"])      # (no other location could catch them: the pages themselves are files of the html location)
         for page in ("live", "matches", "match"):
