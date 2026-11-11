@@ -132,7 +132,7 @@ class TheReplayIsLockedLikeTheGame(PageCase):
     def test_the_bar_is_reached_through_the_locked_cursor(self):
         """The logic is web/replay_page.js (barPointer, run on fakes by tests/scripts/web_replay_check.js); here the page's glue cannot silently disappear."""
         self.assertIn("var barLock = window.AntsReplay.barPointer({", self.page)
-        self.assertIn("lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;", self.page)
+        self.assertIn("lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && window.antsReplayZone) window.antsReplayZone(rect.left + lockCursor.x, rect.top + lockCursor.y, e.buttons); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;", self.page)
         self.assertIn("if (!barLock.mode()) handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, 0);", self.page)       # (a resize does not hand the game a cursor that is on the bar)
         self.assertIn("lockCursor = null; lockSize = null; barLock.reset();", self.page)                                                          # the lock let go clears it (and cancels a drag)
         self.assertIn("barLock.hideMark();", self.page)                                                                                        # the bar going away takes the arrow with it
