@@ -5,12 +5,15 @@ main is protected: a change merges only through a pull request whose five checks
 pull request unmergeable, and a deploy job that echoes its secret or runs after a failed job would be worse. Read as text (no YAML library is needed; with PyYAML the structure
 is checked too):
 
-  - the five required job names, MSVC 2022 for pull requests, pushes to main and manual runs and MSVC 2026 always, the triggers (no push to other branches)
-  - the jobs behind the names "Linux (GCC)" and "macOS (Apple clang)": small jobs that pass only when every leg of the test job passed (run here against each result a leg can have), the
-    legs (ctest in three parts that are every test once, the tool self-tests and script suites, the python tests in slices that are every test once; macOS: the system-dependent python tests)
+  - the five required job names (each is a small job: linux, macos, windows_2022, windows_2026, web), MSVC 2022 for pull requests, pushes to main and manual runs and MSVC 2026 always, the
+    triggers (no push to other branches; a pull request is also judged again when it is edited)
+  - the small jobs behind the five names: each passes only when the job `changes` succeeded and every job behind it passed, or (macOS, the two Windows names) when `changes` said the change needs
+    none of them and they were skipped; they are RUN here in bash against every combination of results (a failed, cancelled or skipped job, a failed `changes`, a light answer that is not true)
+  - the legs: ctest in three parts that are every test once, the tool self-tests and script suites, the python tests in slices that are every test once; macOS: the system-dependent python tests;
+    the web job in two legs (the web image; the server and hub images and the stack files) behind the name
   - the image of the Linux jobs: Ubuntu 24.04 for the legs and for the small job behind "Linux (GCC)" (so that the compiler under the required check changes only with the workflow)
-  - the light checks of a pull request that changes pages, documents and page tests only: what skips (macOS and its legs at job level; the Windows jobs by step, because a skipped matrix job
-    would not report the required names), what does not (Linux, the web job, a push, a manual run), and that no text of a pull request reaches a script
+  - the light checks of a pull request that changes pages, documents and page tests only: what skips (the macOS and Windows legs, at job level; their small jobs report the names), what does
+    not (Linux, the web legs, a push, a manual run), and that no text of a pull request reaches a script
   - the deploy job: after every other job, only for a push to main or staging, secrets only in `env:` and never in an argument or a message, the file filter and the webhook
     script of tools/ are what it calls; it waits for an idle game server first (tools/deploy_wait.py, its variables, a job limit above the longest wait, a concurrency group of
     its own that lets a newer deploy replace a waiting one)
@@ -25,6 +28,7 @@ is checked too):
     workflow with each of these breakages is judged too (TheChecksCanFail), and tests/data/ci_workflow_mutants.json breaks the real file the same ways for tools/mutate.py
 """
 import glob
+import itertools
 import json
 import os
 import re
@@ -66,15 +70,17 @@ class RequiredChecks(unittest.TestCase):
             names[job] = next(re.match(r"^    name: (.*)$", l).group(1) for l in job_block(job) if re.match(r"^    name: ", l))
         self.assertEqual(names["linux"], "Linux (GCC)")
         self.assertEqual(names["macos"], "macOS (Apple clang)")
-        self.assertEqual(names["windows"], "Windows (${{ matrix.name }})")
+        self.assertEqual(names["windows_2022"], "Windows (MSVC 2022)")
+        self.assertEqual(names["windows_2026"], "Windows (MSVC 2026)")
         self.assertEqual(names["web"], "Web (Emscripten, Docker image)")
-        matrix_lines = [l for l in job_block("windows") if "fromJSON(" in l]
+        self.assertEqual(names["windows_tests"], "Windows tests (${{ matrix.name }})")                  # (the legs do not carry a required name)
+        matrix_lines = [l for l in job_block("windows_tests") if "fromJSON(" in l]
         self.assertEqual(len(matrix_lines), 1)
         self.assertIn('{"name":"MSVC 2022","os":"windows-2022"}', matrix_lines[0])
         self.assertIn('{"name":"MSVC 2026","os":"windows-latest"}', matrix_lines[0])
 
     def test_msvc_2022_runs_for_pull_requests_main_and_manual_runs_and_2026_always(self):
-        expression = [l for l in job_block("windows") if "fromJSON(" in l][0]
+        expression = [l for l in job_block("windows_tests") if "fromJSON(" in l][0]
         lists = re.findall(r"'(\[\{.*?\}\])'", expression)
         self.assertEqual(len(lists), 2)
         only_2026, both = lists
@@ -90,12 +96,12 @@ class RequiredChecks(unittest.TestCase):
     def test_every_job_has_a_time_limit_and_the_matrices_do_not_stop_at_the_first_failure(self):
         for job in job_ids():
             self.assertTrue(any(re.match(r"^    timeout-minutes: \d+$", l) for l in job_block(job)), job)
-        for job in ("windows", "linux_tests", "macos_tests"):
+        for job in ("windows_tests", "linux_tests", "macos_tests"):
             self.assertTrue(any(l.strip() == "fail-fast: false" for l in job_block(job)), job)
 
     def test_triggers(self):
         head = "\n".join(LINES[:LINES.index("jobs:")])
-        self.assertRegex(head, r"(?m)^on:\n  pull_request:\n  push:\n    branches: \[main, staging\]\n  workflow_dispatch:\n")
+        self.assertRegex(head, r"(?m)^on:\n  pull_request:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, edited\]\n  push:\n    branches: \[main, staging\]\n  workflow_dispatch:\n")
         self.assertNotRegex(head, r"(?m)^  push:\s*$\n  pull_request")                   # no bare `push:` (every branch)
         self.assertIn("cancel-in-progress: true", head)
 
@@ -221,18 +227,18 @@ class SameSuitesAsTheRunner(unittest.TestCase):
                            "tests/scripts/test_ants_server.sh --list-parts", "tests/scripts/test_ants_server.sh --part", "python3 tools/check_version_consistency.py",
                            "python3 tests/scripts/run_python_tests.py", "ctest --test-dir build"):
                 self.assertIn(needle, block, "%s: no step runs `%s`" % (job, needle))
-        windows = "\n".join(job_block("windows"))
+        windows = "\n".join(job_block("windows_tests"))
         for needle in ("ctest --test-dir build", "map_sweep.exe --selftest", "bot_arena.exe --selftest", "replay_tool.exe --selftest", "lvl_tool.exe --selftest", "e2e_runner.exe --all"):
             self.assertIn(needle, windows)
 
     def test_every_optional_tool_of_cmake_is_built_by_the_three_build_jobs_and_the_image_check_lists_the_map_makers_files(self):
         tools = re.findall(r"add_executable\((\w+) EXCLUDE_FROM_ALL tools/", read(os.path.join(REPO, "CMakeLists.txt")))
         self.assertGreaterEqual(len(tools), 6)
-        for job in ("linux_tests", "macos_tests", "windows"):
+        for job in ("linux_tests", "macos_tests", "windows_tests"):
             lines = [l for l in job_block(job) if "--target" in l]
             self.assertEqual(len(lines), 1, job)
             self.assertEqual(sorted(lines[0].split("--target", 1)[1].replace("-- -k 0", "").split()), sorted(tools), "%s builds the optional tools that CMake has" % job)
-        web = "\n".join(job_block("web"))
+        web = "\n".join(job_block("web_image"))
         for name in sorted(os.path.basename(f) for f in glob.glob(os.path.join(REPO, "web", "front", "mapmaker_*.js"))):
             self.assertTrue(("front/" + name) in web, "the image check does not list the map maker's script " + name)
 
@@ -248,12 +254,46 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         self.assertIn("lvl_tool\" --selftest", self.runner)
         self.assertIn("e2e_runner", self.runner)
 
-    def test_the_web_job_builds_the_three_images_and_checks_the_stacks_and_the_label(self):
-        block = "\n".join(job_block("web"))
-        for needle in ("docker build -t ants-beta .", "docker build -f Dockerfile.server -t ants-server .", "docker build -f Dockerfile.hub -t ants-hub .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet",
+    def test_the_web_legs_build_the_three_images_and_check_the_stacks_and_the_label(self):
+        image, stack = "\n".join(job_block("web_image")), "\n".join(job_block("web_stack"))
+        block = image + "\n" + stack
+        for needle in (" -t ants-beta ", " -f Dockerfile.server -t ants-server ", " -f Dockerfile.hub -t ants-hub .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet",
                        "docker compose -f docker-compose.staging.yml config --quiet", "--build-arg ANTS_SITE_LABEL=staging", "(staging)</title>", "! grep -qi staging"):
             self.assertIn(needle, block)
         self.assertNotIn("--target", block)          # (the images are built whole: the server is the last stage of Dockerfile.server, see the next test)
+        # the legs split the work and neither does the other's
+        for needle in ("-t ants-beta ", "nginx -t", "ANTS_SITE_LABEL=staging", "web_routes_check.py", "lvl_core_check.js"):
+            self.assertIn(needle, image)
+            self.assertNotIn(needle, stack)
+        for needle in ("Dockerfile.server", "Dockerfile.hub", "docker compose"):
+            self.assertIn(needle, stack)
+            self.assertNotIn(needle, image)
+        self.assertEqual([l for l in job_block("web_image") + job_block("web_stack") if l.startswith("    needs:")], [], "the two legs start together: neither waits for the other")
+
+    def test_the_images_are_built_by_buildx_with_a_layer_cache_in_a_folder_and_built_whole(self):
+        """The cache changes the time and not the image: the same Dockerfile and context, `docker buildx build --load` into the local daemon (so that every later step runs the same image), the cache in a
+        folder that the first-party actions/cache keeps (no other action), written to a new folder and swapped in (so that it does not grow), and keyed by the files that the Dockerfile copies."""
+        for job, folder, dockerfile, key_files in (("web_image", "web", "", ("'Dockerfile'", "'web/**'", "'src/**'", "'CMakeLists.txt'", "'VERSION'", "'cmake/**'", "'include/**'", "'Original-Ants/**'")),
+                                                   ("web_stack", "server", "-f Dockerfile.server ", ("'Dockerfile.server'", "'src/**'", "'tools/**'", "'third_party/**'", "'CMakeLists.txt'", "'VERSION'", "'cmake/**'", "'include/**'"))):
+            block = "\n".join(job_block(job))
+            self.assertIn("docker buildx create --name ants-builder --driver docker-container --use", block, job)
+            self.assertIn("uses: actions/cache@v6", block, job)
+            self.assertIn("path: /tmp/docker-cache/%s\n" % folder, block, job)
+            self.assertIn("restore-keys: docker-%s-\n" % folder, block, job)
+            key = next(l for l in job_block(job) if l.strip().startswith("key: docker-%s-" % folder))
+            for needle in key_files:
+                self.assertIn(needle, key, job)
+            self.assertIn("--cache-from type=local,src=/tmp/docker-cache/%s" % folder, block, job)
+            self.assertIn("--cache-to type=local,dest=/tmp/docker-cache/%s-new,mode=max" % folder, block, job)
+            self.assertIn("rm -rf /tmp/docker-cache/%s && mv /tmp/docker-cache/%s-new /tmp/docker-cache/%s" % (folder, folder, folder), block, job)
+            for line in job_block(job):
+                if "docker buildx build" in line:
+                    self.assertIn("--load", line, "an image that is not loaded cannot be run by the next step: " + line)
+                    self.assertNotIn("--push", line)
+                    self.assertNotIn("--platform", line, "the image is the runner's own")
+            self.assertNotIn("docker build ", block, "every build of the leg goes through the builder with --load")
+            self.assertNotIn("docker/build-push-action", block)
+            self.assertNotIn("docker/setup-buildx-action", block)
 
     def test_the_server_is_the_last_stage_of_its_dockerfile_because_the_ci_and_the_stacks_build_it_without_a_target(self):
         stages = re.findall(r"(?m)^FROM\s+\S+\s+AS\s+(\S+)\s*$", read(os.path.join(REPO, "Dockerfile.server")))
@@ -344,7 +384,7 @@ class TheCommunityMapsFailTheirStep(unittest.TestCase):
     def test_both_steps_are_named_for_the_community_maps_and_the_windows_one_is_not(self):
         for job in ("linux_tests", "macos_tests"):
             self.assertIn("community maps", step_of(job, "tools/community_maps.py verify")[0], job)
-        self.assertNotIn("ommunity", step_of("windows", "map_sweep.exe --selftest")[0])
+        self.assertNotIn("ommunity", step_of("windows_tests", "map_sweep.exe --selftest")[0])
         self.assertEqual(step_of("linux_tests", "tools/community_maps.py verify")[0], step_of("macos_tests", "tools/community_maps.py verify")[0])
         self.assertEqual(step_of("linux_tests", "tools/community_maps.py verify")[1], step_of("macos_tests", "tools/community_maps.py verify")[1])
 
@@ -423,13 +463,13 @@ class TheCommunityMapsFailTheirStep(unittest.TestCase):
 
 class Windows(unittest.TestCase):
     def test_ninja_under_the_msvc_environment_with_sccache(self):
-        block = "\n".join(job_block("windows"))
+        block = "\n".join(job_block("windows_tests"))
         self.assertIn("-G Ninja", block)
         self.assertIn("-DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl", block)
         self.assertIn("-DCMAKE_CXX_COMPILER_LAUNCHER=sccache", block)
         self.assertIn("-DCMAKE_C_COMPILER_LAUNCHER=sccache", block)
         self.assertIn("ilammy/msvc-dev-cmd@", block)
-        code = "\n".join(l for l in job_block("windows") if not l.lstrip().startswith("#"))
+        code = "\n".join(l for l in job_block("windows_tests") if not l.lstrip().startswith("#"))
         self.assertNotRegex(code, r"Visual Studio 1\d")                                    # (no Visual Studio generator: its projects cannot use a compiler launcher)
         self.assertNotIn("-A x64", code)
         self.assertNotIn("CXXFLAGS", block)                                                # (-MP made cl start its own processes: Ninja already runs the files side by side)
@@ -437,7 +477,7 @@ class Windows(unittest.TestCase):
         self.assertNotIn("Release/", block)                                                # Ninja is single-configuration: the programs are not in a Release folder
 
     def test_the_cache_is_keyed_like_the_linux_ones_and_the_server_is_stopped_before_it_is_saved(self):
-        block = "\n".join(job_block("windows"))
+        block = "\n".join(job_block("windows_tests"))
         self.assertIn("key: sccache-${{ matrix.os }}-${{ github.sha }}", block)
         self.assertIn("restore-keys: sccache-${{ matrix.os }}-", block)
         self.assertIn("path: .sccache", block)
@@ -523,29 +563,37 @@ class TheJobsBehindTheRequiredNames(unittest.TestCase):
             if os.path.basename(os.path.dirname(path)) != "e2e":
                 cls.registered |= set(re.findall(r"add_test\(NAME (\w+)", read(path)))
 
-    def test_each_name_is_a_job_that_looks_at_the_result_of_its_legs_and_runs_whatever_they_did(self):
-        linux, macos = job_block("linux"), job_block("macos")
-        self.assertIn("    needs: linux_tests", linux)
-        self.assertIn("    needs: [changes, macos_tests]", macos)
-        self.assertIn("    if: ${{ always() }}", linux)                                       # (a plain `if` would skip the job when a leg failed, and a skipped job counts as passing)
-        self.assertIn("    if: ${{ always() && needs.changes.outputs.light != 'true' }}", macos)
-        self.assertIn("          RESULT: ${{ needs.linux_tests.result }}", linux)
-        self.assertIn("          RESULT: ${{ needs.macos_tests.result }}", macos)
-        for job, block in (("linux", linux), ("macos", macos)):
+    def test_each_name_is_a_job_that_looks_at_the_result_of_its_legs_and_of_the_first_job_and_runs_whatever_they_did(self):
+        for job, (behind, _) in AGGREGATES.items():
+            block = job_block(job)
+            self.assertIn("    needs: [%s]" % ", ".join(["changes"] + behind), block, job)
+            self.assertIn("    if: ${{ always() }}", block, job)                              # (a plain `if` would skip the job when a leg failed, and a skipped job counts as passing)
+            self.assertIn("          CHANGES: ${{ needs.changes.result }}", block, job)
+            for leg in behind:
+                self.assertTrue(any(re.match(r"^          [A-Z]+: \$\{\{ needs\.%s\.result \}\}$" % leg, l) for l in block), (job, leg))
             self.assertEqual(len([l for l in block if "uses:" in l]), 0, job)                # (no checkout, no action: nothing to fail but the test)
             self.assertEqual(len(steps_of(job)), 1, job)
+            self.assertEqual([l for l in block if l.startswith("    runs-on:")], ["    runs-on: ubuntu-24.04" if job == "linux" else "    runs-on: ubuntu-latest"], job)
+        for job in ("macos", "windows_2022", "windows_2026"):                                # (only these may be skipped, and only for a light answer)
+            self.assertIn("          LIGHT: ${{ needs.changes.outputs.light }}", job_block(job), job)
+        for job in ("linux", "web"):
+            self.assertNotIn("light", "\n".join(l for l in job_block(job) if not l.lstrip().startswith("#")), job)
 
     @unittest.skipUnless(shutil.which("bash"), "bash is needed")
-    def test_the_check_passes_for_success_only(self):
-        for job, legs in (("linux", "linux_tests"), ("macos", "macos_tests")):
-            name, script = step_of(job, "needs.%s.result" % legs)
-            with tempfile.TemporaryDirectory() as tmp:
-                path = os.path.join(tmp, "step.sh")
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(script)
-                for result, passes in (("success", True), ("failure", False), ("cancelled", False), ("skipped", False), ("", False), ("successful", False), ("success failure", False)):
-                    done = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", path], env=dict(os.environ, RESULT=result), capture_output=True, text=True)
-                    self.assertEqual(done.returncode == 0, passes, "%s: a leg result of %r: %s" % (job, result, done.stdout + done.stderr))
+    def test_each_check_passes_only_when_the_first_job_and_every_job_behind_it_succeeded_or_were_rightly_skipped(self):
+        """Every combination of results (the first job and each job behind the check: success, failure, cancelled, skipped, none) and of the first job's answer (true, false, none), each small job
+        run in bash as GitHub runs it: it passes for exactly the combinations that the rule lets through."""
+        doc = yaml.safe_load(TEXT) if yaml else None
+        self.assertIsNotNone(doc, "PyYAML is needed")
+        self.assertEqual(problems_of_how_the_aggregates_decide(doc), [])
+        # the rule itself, for the reader: a job that failed to decide never passes; the skip passes only for a light answer, for the three names that can be skipped
+        self.assertTrue(aggregate_passes(doc, "macos", "success", "true", {"macos_tests": "skipped"}))
+        self.assertFalse(aggregate_passes(doc, "macos", "failure", "true", {"macos_tests": "skipped"}))
+        self.assertFalse(aggregate_passes(doc, "macos", "success", "false", {"macos_tests": "skipped"}))
+        self.assertFalse(aggregate_passes(doc, "macos", "success", "", {"macos_tests": "skipped"}))
+        self.assertFalse(aggregate_passes(doc, "linux", "failure", "", {"linux_tests": "success"}))
+        self.assertFalse(aggregate_passes(doc, "web", "success", "true", {"web_image": "success", "web_stack": "skipped"}))
+        self.assertTrue(aggregate_passes(doc, "windows_2026", "success", "false", {"windows_tests": "success"}))
 
     def test_the_legs_of_the_linux_job_are_every_test_of_ctest_once_the_scripts_and_the_python_slices(self):
         text = "\n".join(job_block("linux_tests"))
@@ -611,8 +659,9 @@ class LightChecks(unittest.TestCase):
         self.assertIn("      light: ${{ steps.decide.outputs.light }}", block)
         step = block[block.index("      - name: Light checks or all of them?"):]
         self.assertIn("        id: decide\n", step)
-        self.assertIn("          EVENT: ${{ github.event_name }}\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n          HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n"
-                      "          MAIN_REF: refs/remotes/origin/main\n", step)       # (a literal: the change is judged against main too, because a retargeted pull request starts no new run)
+        self.assertIn("          EVENT: ${{ github.event_name }}\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n          HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n        run:", step)
+        self.assertNotIn("MAIN_REF", block)              # (the change is judged against the base of the pull request and nothing else: a retarget is an `edited` run with the new base commit)
+        self.assertNotIn("origin/main", block)
         self.assertIn("        run: bash tools/ci_light.sh\n", step)
         self.assertTrue(os.path.isfile(os.path.join(REPO, "tools", "ci_light.sh")))
 
@@ -630,31 +679,26 @@ class LightChecks(unittest.TestCase):
         self.assertNotIn("pull_request_target", TEXT)
         self.assertNotIn("workflow_run", TEXT)
 
-    def test_macos_is_skipped_at_job_level_and_linux_and_the_web_job_never_look_at_the_decision(self):
-        for job in ("macos_tests", "macos"):
-            block = "\n".join(job_block(job))
-            self.assertIn("needs.changes.outputs.light != 'true'", block, job)
-        self.assertIn("    needs: changes\n    # Skipped for a change of web pages", "\n".join(job_block("macos_tests")))
-        self.assertIn("    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}", job_block("macos_tests"))     # (no `success()`: if the first job failed, everything runs)
-        for job in ("linux_tests", "linux", "web", "deploy"):
+    def test_the_macos_and_windows_legs_are_skipped_at_job_level_and_nothing_else_looks_at_the_decision(self):
+        for job in ("macos_tests", "windows_tests"):
+            block = job_block(job)
+            self.assertIn("    needs: changes", block, job)
+            self.assertIn("    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.light != 'true' }}", block, job)       # (they do not run when `changes` failed)
+            self.assertEqual("\n".join(block).count("needs.changes.outputs.light"), 1, job + ": no step of a leg looks at the decision again")
+        self.assertEqual([l for l in job_block("windows_tests") if l.startswith("    runs-on:")], ["    runs-on: ${{ matrix.os }}"])
+        for job in ("linux_tests", "web_image", "web_stack", "deploy"):
             block = "\n".join(l for l in job_block(job) if not l.lstrip().startswith("#"))
             self.assertNotIn("light", block, job)
             self.assertNotIn("needs.changes", block, job)                                            # (deploy only waits for it, in `needs`)
 
-    def test_the_windows_jobs_always_run_so_that_the_required_names_are_reported_and_only_their_steps_are_skipped(self):
-        block = job_block("windows")
-        # (the one job-level `if` has no test of the light checks: a matrix job that it skips is reported under the unexpanded name and the two required names would never appear; and it has
-        # no `success()`, so that a first job that failed does not skip the Windows jobs either, which a plain `needs` would do)
-        self.assertEqual([l for l in block if l.startswith("    if:")], ["    if: ${{ !cancelled() }}"])
-        self.assertIn("    needs: changes", block)
-        self.assertIn("    runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}", block)
-        steps = steps_of("windows")
-        self.assertIn("needs.changes.outputs.light == 'true'", step_if(steps[0]), "the first step says why nothing is built")
-        for step in steps[1:]:
+    def test_the_windows_legs_have_no_step_that_is_there_for_a_skipped_job(self):
+        """The legs are skipped as a whole (the small jobs carry the names), so no step needs a condition on the decision, and every step that runs a test waits for the build."""
+        for step in steps_of("windows_tests"):
             condition = step_if(step) or ""
-            name = step_title(step)
-            self.assertTrue("needs.changes.outputs.light != 'true'" in condition or "steps.build.conclusion == 'success'" in condition or "steps.build_e2e.conclusion == 'success'" in condition
-                            or condition == "failure()", "a Windows step that would run (and fail on a Linux machine) in the light checks: " + name)
+            self.assertNotIn("light", condition, step_title(step))
+            self.assertNotIn("ubuntu-latest", "\n".join(step))
+        text = "\n".join(job_block("windows_tests"))
+        self.assertEqual(len(re.findall(r"(?m)^      - (?:name|uses): ", text)) > 8, True)
 
     def test_the_skipped_jobs_run_only_the_scripts_that_the_light_decision_knows(self):
         """tools/ci_light.sh calls full the pages that the two macOS script suites read, and tests/scripts/test_ci_light.py scans these (and the C++ of ctest) for the reads: another script of tests/scripts
@@ -663,7 +707,7 @@ class LightChecks(unittest.TestCase):
         self.assertEqual(sorted(set(re.findall(r"tests/scripts/[A-Za-z0-9_]+\.(?:sh|py|js)", macos))),
                          ["tests/scripts/run_python_tests.py", "tests/scripts/test_ants_server.sh", "tests/scripts/test_start_game.sh"])
         self.assertEqual(sorted(set(re.findall(r"\btools/[A-Za-z0-9_]+\.(?:sh|py)", macos))), ["tools/check_version_consistency.py", "tools/community_maps.py"])
-        windows = "\n".join(l for l in job_block("windows") if not l.lstrip().startswith("#"))
+        windows = "\n".join(l for l in job_block("windows_tests") if not l.lstrip().startswith("#"))
         self.assertEqual(re.findall(r"tests/scripts/|\btools/[A-Za-z0-9_]+\.(?:sh|py)", windows), [], "the Windows jobs run ctest, the tool self-tests and the E2E runner")
 
     def test_a_push_and_a_manual_run_are_never_light(self):
@@ -735,13 +779,14 @@ class Structure(unittest.TestCase):
         cls.doc = yaml.safe_load(TEXT)
 
     def test_it_parses_and_the_jobs_are_these(self):
-        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "deploy"])
-        self.assertEqual(self.doc["jobs"]["deploy"]["needs"], ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web"])      # (every other job: the legs too)
+        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web", "deploy"])
+        self.assertEqual(self.doc["jobs"]["deploy"]["needs"], ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web"])      # (every other job: the legs too)
         self.assertEqual(self.doc["jobs"]["deploy"]["permissions"], {"contents": "read", "actions": "read"})
 
     def test_the_triggers(self):
         on = self.doc[True] if True in self.doc else self.doc["on"]                       # (YAML 1.1 reads `on` as true)
         self.assertEqual(sorted(on), ["pull_request", "push", "workflow_dispatch"])
+        self.assertEqual(on["pull_request"], {"types": ["opened", "synchronize", "reopened", "edited"]})
         self.assertEqual(on["push"], {"branches": ["main", "staging"]})
 
     def test_the_deploy_job_waits_cancels_and_has_a_limit_above_the_longest_wait(self):
@@ -768,6 +813,10 @@ class Structure(unittest.TestCase):
 # of the second fail; a renamed step id makes every test step wait for a build that "is not there". None of that fails a job, so it is found here, in the file, before a run shows it (or not).
 
 REQUIRED_NAMES = ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)")
+# The small job of each required name (the key), the jobs behind it, and whether the change's light answer may skip them (then the name passes without them)
+AGGREGATES = {"linux": (["linux_tests"], False), "macos": (["macos_tests"], True), "windows_2022": (["windows_tests"], True), "windows_2026": (["windows_tests"], True),
+              "web": (["web_image", "web_stack"], False)}
+RESULTS = ("success", "failure", "cancelled", "skipped")
 TEST_COMMAND = re.compile(r"\bctest\b|--selftest|\be2e_runner|test_start_game\.sh|test_ants_server\.sh|run_python_tests\.py|check_version_consistency\.py")
 EXPRESSION_TOKEN = re.compile(r"&&|\|\||==|!=|!|\(|\)|'(?:[^']|'')*'|[A-Za-z_][\w.\-]*\(\)|[A-Za-z_][\w.\-]*|\S")
 
@@ -977,20 +1026,103 @@ def problems_of_the_names(doc):
 
 
 def problems_of_the_aggregates(doc):
-    """The small jobs that carry the required names look at every job of their system, and run whatever the legs did."""
+    """The small jobs that carry the required names: each needs the first job and every job behind it, looks at the result of each, and runs whatever they did."""
     problems = []
+    for job, (behind, _) in AGGREGATES.items():
+        needs = doc["jobs"][job].get("needs", [])
+        needs = [needs] if isinstance(needs, str) else list(needs)
+        if sorted(needs) != sorted(["changes"] + behind):
+            problems.append("%s: needs %s, but it stands for %s and the first job" % (job, needs, behind))
+        text = json.dumps(doc["jobs"][job]["steps"])
+        for leg in ["changes"] + behind:
+            if "needs.%s.result" % leg not in text:
+                problems.append("%s: the result of %s is not looked at" % (job, leg))
+        if "always()" not in str(doc["jobs"][job].get("if", "")):
+            problems.append("%s: runs only when its needs passed (a skipped job counts as passing)" % job)
+    # the jobs of a system are all behind its name
     for system in ("linux", "macos"):
         jobs = [j for j in doc["jobs"] if j.startswith(system + "_")]
-        needs = doc["jobs"][system].get("needs", [])
-        needs = [needs] if isinstance(needs, str) else list(needs)
-        if sorted(set(needs) - {"changes"}) != sorted(jobs) or not jobs:
-            problems.append("%s: needs %s, but the jobs of its system are %s" % (system, needs, jobs))
-        text = json.dumps(doc["jobs"][system]["steps"])
-        for job in jobs:
-            if "needs.%s.result" % job not in text:
-                problems.append("%s: the result of %s is not looked at" % (system, job))
-        if "always()" not in str(doc["jobs"][system].get("if", "")):
-            problems.append("%s: runs only when its needs passed (a skipped job counts as passing)" % system)
+        if sorted(jobs) != sorted(AGGREGATES[system][0]):
+            problems.append("%s: the jobs of its system are %s" % (system, jobs))
+    for job in doc["jobs"]:
+        if job.startswith("windows_") and job != "windows_tests" and job not in AGGREGATES:
+            problems.append("%s: a Windows job that no required name stands for" % job)
+    return problems
+
+
+def aggregate_passes(doc, job, changes, light, results):
+    """Whether the small job `job` passes (its script run in bash as GitHub runs it) when the first job has the result `changes` and says `light`, and the jobs behind it have `results`
+    ({job: result}). KeyError for a variable of its step that the context does not give."""
+    step = doc["jobs"][job]["steps"][0]
+    env = {}
+    for name, value in step["env"].items():
+        m = re.fullmatch(r"\$\{\{ needs\.([a-z0-9_]+)\.result \}\}", str(value))
+        if m:
+            env[name] = changes if m.group(1) == "changes" else results[m.group(1)]
+        elif value == "${{ needs.changes.outputs.light }}":
+            env[name] = light
+        else:
+            raise KeyError("%s: %s" % (name, value))
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "step.sh")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(step["run"])
+        done = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", path], env=dict(os.environ, **env), capture_output=True, text=True)
+    return done.returncode == 0
+
+
+def problems_of_how_the_aggregates_decide(doc, thorough=True):
+    """Every combination of the first job's result (success, failure, cancelled, skipped, none), its answer (true, false, none) and the results of the jobs behind the name: the small job passes
+    for exactly these: the first job succeeded and (every job behind it succeeded, or the name may be skipped, the answer is `true` and every job behind it was skipped)."""
+    problems = []
+    for job, (behind, may_skip) in AGGREGATES.items():
+        for changes in (RESULTS + ("",)) if thorough else ("success", "failure"):
+            for light in ("true", "false", ""):
+                for combination in itertools.product((RESULTS + ("",)) if thorough else ("success", "failure", "skipped"), repeat=len(behind)):
+                    results = dict(zip(behind, combination))
+                    expected = changes == "success" and (all(r == "success" for r in combination) or (may_skip and light == "true" and all(r == "skipped" for r in combination)))
+                    try:
+                        got = aggregate_passes(doc, job, changes, light, results)
+                    except KeyError as error:
+                        return problems + ["%s: %s" % (job, error)]
+                    if got != expected:
+                        problems.append("%s %s when the first job is %r (%r) and the jobs behind it are %s" % (job, "passes" if got else "fails", changes, light, results))
+    return problems
+
+
+def job_runs(doc, job_id, light, changes="success", event="pull_request"):
+    """Whether the job runs, by its job-level `if`, when the first job has the result `changes` and says `light` (for a job whose only need is the first job, or one with `always()`)"""
+    job = doc["jobs"][job_id]
+    needs = job.get("needs", [])
+    needs = [needs] if isinstance(needs, str) else needs
+    status = "success" if changes == "success" or "changes" not in needs else "failure"        # (the status of a job whose need did not succeed)
+
+    def lookup(path):
+        return {"needs.changes.outputs.light": light, "needs.changes.result": changes, "github.event_name": event, "github.ref": "refs/pull/1/merge"}[path]
+    return truthy(evaluate(str(job.get("if", "success()")), lookup, status))
+
+
+def problems_of_the_light_checks(doc):
+    """What the first job's answer does, for what it can say: light (the macOS and Windows legs are skipped and their small jobs say so), not light (everything runs), nothing (the job failed: no
+    leg of macOS or Windows runs, and the small jobs run to fail; the legs that do not depend on it run). The small jobs and the other legs run for every answer."""
+    problems = []
+    jobs = [job for job in doc["jobs"] if job != "deploy"]
+    for light, changes in (("true", "success"), ("false", "success"), ("", "failure"), ("", "cancelled"), ("", "skipped")):
+        said = "%r with the result %s" % (light, changes)
+        for job_id in ("macos_tests", "windows_tests"):
+            expected = changes == "success" and light != "true"
+            if job_runs(doc, job_id, light, changes) != expected:
+                problems.append("%s %s when the first job says %s" % (job_id, "is skipped" if expected else "runs", said))
+        for job_id in [j for j in jobs if j not in ("macos_tests", "windows_tests")]:
+            if not job_runs(doc, job_id, light, changes):
+                problems.append("%s is skipped when the first job says %s" % (job_id, said))
+    for leg in legs_of(doc["jobs"]["windows_tests"]):
+        ran = steps_that_run(doc["jobs"]["windows_tests"], leg, "false")
+        tests = [step for step in ran if is_test_step(step)]
+        if len(tests) != 3:
+            problems.append("windows %s: it must run its three kinds of test on %s: %s" % (leg["name"], leg["os"], [title(s) for s in tests]))
+        if str(doc["jobs"]["windows_tests"]["runs-on"]) != "${{ matrix.os }}":
+            problems.append("windows %s: it runs on %s" % (leg["name"], doc["jobs"]["windows_tests"]["runs-on"]))
     return problems
 
 
@@ -1002,44 +1134,6 @@ def problems_of_ctest(doc):
             for line in str(step.get("run", "")).splitlines():
                 if re.search(r"\bctest\b", line) and "--no-tests=error" not in line:
                     problems.append("%s: %r: a ctest without --no-tests=error: %s" % (job_id, title(step), line.strip()))
-    return problems
-
-
-def problems_of_the_light_checks(doc):
-    """What the first job's answer does, for the three things it can say: light (macOS skipped, Windows reports and builds nothing), not light, and nothing (the job failed: it has no output, and a job
-    that needs it has `success()` false, `failure()` true; everything must run)."""
-    problems = []
-    jobs = doc["jobs"]
-
-    def runs(job_id, light, failed):
-        needs = jobs[job_id].get("needs", [])
-        needs = [needs] if isinstance(needs, str) else needs
-        status = "failure" if failed and "changes" in needs else "success"          # (the job-level `if` of a job whose need failed)
-
-        def lookup(path):
-            if path == "needs.changes.outputs.light":
-                return light
-            raise KeyError(path)
-        return truthy(evaluate(str(jobs[job_id].get("if", "success()")), lookup, status))
-
-    for light, failed, skipped in (("true", False, True), ("false", False, False), ("", True, False)):
-        said = "failed" if failed else repr(light)
-        for job_id in ("macos_tests", "macos"):
-            if runs(job_id, light, failed) == skipped:
-                problems.append("%s %s when the first job %s%s" % (job_id, "runs" if skipped else "is skipped", "says " if not failed else "", said))
-        for job_id in ("changes", "linux_tests", "linux", "web", "windows"):
-            if not runs(job_id, light, failed):
-                problems.append("%s is skipped when the first job %s%s (a skipped matrix job reports the wrong names)" % (job_id, "says " if not failed else "", said))
-        for leg in legs_of(jobs["windows"]):
-            ran = steps_that_run(jobs["windows"], leg, light)
-            machine = evaluate(str(jobs["windows"]["runs-on"]), lambda path: {"needs.changes.outputs.light": light, "matrix.os": leg["os"]}[path])
-            if skipped:
-                if machine != "ubuntu-latest" or any(is_test_step(step) or "uses" in step or "cmake" in str(step.get("run", "")) for step in ran) or not ran:
-                    problems.append("windows %s: for a light change it must run on a small Linux machine and build and test nothing: %s on %s" % (leg["name"], [title(s) for s in ran], machine))
-            else:
-                tests = [step for step in ran if is_test_step(step)]
-                if machine != leg["os"] or len(tests) != 3:
-                    problems.append("windows %s: for a change that is not light it must run its three kinds of test on %s: %s on %s" % (leg["name"], leg["os"], [title(s) for s in tests], machine))
     return problems
 
 
@@ -1082,6 +1176,10 @@ class TheLegsRunTheirTests(unittest.TestCase):
     def test_the_small_jobs_need_every_job_of_their_system_and_run_whatever_the_legs_did(self):
         self.assertEqual(problems_of_the_aggregates(self.doc), [])
 
+    @unittest.skipUnless(shutil.which("bash"), "bash is needed")
+    def test_the_small_jobs_pass_for_exactly_the_results_that_the_rule_lets_through(self):
+        self.assertEqual(problems_of_how_the_aggregates_decide(self.doc), [])
+
     def test_no_ctest_passes_with_no_test_run(self):
         self.assertEqual(problems_of_ctest(self.doc), [])
         calls = sum(len(re.findall(r"\bctest\b", str(step.get("run", "")))) for job in self.doc["jobs"].values() for step in job.get("steps", []))
@@ -1089,6 +1187,9 @@ class TheLegsRunTheirTests(unittest.TestCase):
 
     def test_the_answer_of_the_first_job_skips_macos_and_the_builds_of_windows_and_nothing_else(self):
         self.assertEqual(problems_of_the_light_checks(self.doc), [])
+        windows = self.doc["jobs"]["windows_tests"]
+        self.assertEqual([leg["name"] for leg in legs_of(windows)], ["MSVC 2022", "MSVC 2026"])
+        self.assertEqual([leg["name"] for leg in legs_of(windows, "push to staging")], ["MSVC 2026"])
 
 
 @unittest.skipUnless(yaml, "PyYAML is needed")
@@ -1147,22 +1248,47 @@ class TheChecksCanFail(unittest.TestCase):
         self.assertTrue(any("'Linux (GCC)' is reported 0 times" in p for p in problems), problems)
         problems = self.judged("    name: Web (Emscripten, Docker image)\n", "    name: Linux (GCC)\n", problems_of_the_names)
         self.assertTrue(any("two checks are named 'Linux (GCC)'" in p for p in problems), problems)
-        problems = self.judged("    name: Windows (${{ matrix.name }})\n", "    name: Windows (${{ matrix.os }})\n", problems_of_the_names)
+        problems = self.judged("    name: Windows (MSVC 2022)\n", "    name: Windows (MSVC 2022 x64)\n", problems_of_the_names)
         self.assertTrue(any("'Windows (MSVC 2022)' is reported 0 times" in p for p in problems), problems)
+        problems = self.judged("    name: Windows tests (${{ matrix.name }})\n", "    name: Windows (${{ matrix.name }})\n", problems_of_the_names)
+        self.assertTrue(any("'Windows (MSVC 2022)' is reported" in p or "two checks are named 'Windows (MSVC 2022)'" in p for p in problems), problems)
 
     def test_a_small_job_that_misses_a_job_of_its_system_or_does_not_always_run_is_found(self):
-        problems = self.judged("    needs: linux_tests\n", "    needs: changes\n", problems_of_the_aggregates)
+        problems = self.judged("    needs: [changes, linux_tests]\n", "    needs: changes\n", problems_of_the_aggregates)
         self.assertTrue(any(p.startswith("linux: needs") for p in problems), problems)
-        problems = self.judged("    needs: [changes, macos_tests]\n    if: ${{ always() && needs.changes.outputs.light != 'true' }}", "    needs: [changes, macos_tests]\n    if: ${{ needs.changes.outputs.light != 'true' }}", problems_of_the_aggregates)
+        problems = self.judged("    needs: [changes, web_image, web_stack]\n", "    needs: [changes, web_image]\n", problems_of_the_aggregates)
+        self.assertTrue(any(p.startswith("web: needs") for p in problems), problems)
+        problems = self.judged("    needs: [changes, macos_tests]\n    if: ${{ always() }}", "    needs: [changes, macos_tests]\n    if: ${{ success() }}", problems_of_the_aggregates)
         self.assertTrue(any("runs only when its needs passed" in p for p in problems), problems)
         problems = self.judged("          RESULT: ${{ needs.macos_tests.result }}", "          RESULT: ${{ needs.macos.result }}", problems_of_the_aggregates)
         self.assertTrue(any("the result of macos_tests is not looked at" in p for p in problems), problems)
+        problems = self.judged("          IMAGE: ${{ needs.web_image.result }}\n", "", problems_of_the_aggregates)
+        self.assertTrue(any("the result of web_image is not looked at" in p for p in problems), problems)
+
+    @unittest.skipUnless(shutil.which("bash"), "bash is needed")
+    def test_a_small_job_that_passes_what_it_should_not_is_found(self):
+        mac = 'echo "the job that decides what runs: $CHANGES (light: ${LIGHT:-nothing}); the macOS test jobs: $RESULT"\n'
+        for old, new, word in (
+                (mac + '          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }\n', mac, "macos passes when the first job is 'failure'"),
+                (mac + '          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }\n          [ "$RESULT" = success ] && exit 0\n          [ "$RESULT" = skipped ] && [ "$LIGHT" = true ]',
+                 mac + '          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }\n          [ "$RESULT" = success ] && exit 0\n          [ "$RESULT" = skipped ] && [ "$LIGHT" != false ]',
+                 "macos passes when the first job is 'success' ('')"),
+                ('echo "the job that decides what runs: $CHANGES; the Linux test jobs: $RESULT"\n          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }\n',
+                 'echo "the job that decides what runs: $CHANGES; the Linux test jobs: $RESULT"\n', "linux passes when the first job is 'failure'"),
+                ('[ "$IMAGE" = success ] && [ "$STACK" = success ] ||', '[ "$IMAGE" = success ] ||', "web passes when the first job is 'success'"),
+                ('[ "$IMAGE" = success ] && [ "$STACK" = success ] ||', '[ "$STACK" = success ] ||', "web passes when the first job is 'success'"),
+                ('[ "$RESULT" = success ] && exit 0\n          [ "$RESULT" = skipped ] && [ "$LIGHT" = true ] && { echo "skipped for a change of pages, documents and page tests only"; exit 0; }\n          echo "a Windows test job failed, was cancelled or did not run: this check fails"\n          exit 1\n\n  windows_2026:',
+                 '[ "$RESULT" = success ] && exit 0\n          [ "$RESULT" = skipped ] && { echo "skipped for a change of pages, documents and page tests only"; exit 0; }\n          echo "a Windows test job failed, was cancelled or did not run: this check fails"\n          exit 1\n\n  windows_2026:',
+                 "windows_2022 passes when the first job is 'success' ('false')")):
+            with self.subTest(word):
+                problems = self.judged(old, new, lambda doc: problems_of_how_the_aggregates_decide(doc, thorough=False))
+                self.assertTrue(any(p.startswith(word) for p in problems), (word, problems[:3]))
 
     def test_a_ctest_that_may_find_nothing_is_found(self):
         flag = " --no-tests=error"
         for where, old in (("linux_tests", '--parallel 4 --no-tests=error -R "$CTEST_ALONE"'), ("linux_tests", '--parallel 4 --no-tests=error -E "${CTEST_ALONE}|${CTEST_LONG}"'),
                            ("macos_tests", "--parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool) and the community maps\n        if: ${{ !cancelled() && steps.build.conclusion == 'success' && matrix.part == 'scripts-python' }}"),
-                           ("windows", "--parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n")):
+                           ("windows_tests", "--parallel 4 --no-tests=error\n\n      - name: Tool self-tests (map_sweep, bot_arena, replay_tool, lvl_tool)\n")):
             with self.subTest(where):
                 problems = self.judged(old, old.replace(flag, "", 1), problems_of_ctest)
                 self.assertTrue(any(p.startswith(where) and "a ctest without --no-tests=error" in p for p in problems), problems)
@@ -1170,27 +1296,20 @@ class TheChecksCanFail(unittest.TestCase):
         self.assertEqual(problems, [])
 
     def test_a_light_answer_that_skips_the_wrong_jobs_is_found(self):
-        job_if = "    needs: changes\n    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.\n    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}"
-        problems = self.judged(job_if, job_if.replace(" && needs.changes.outputs.light != 'true'", ""), problems_of_the_light_checks)
-        self.assertTrue(any("macos_tests runs when the first job says 'true'" in p for p in problems), problems)
-        problems = self.judged(job_if, job_if.replace("!cancelled() && needs.changes.outputs.light != 'true'", "needs.changes.outputs.light == 'false'"), problems_of_the_light_checks)
-        self.assertTrue(any("macos_tests is skipped when the first job failed" in p for p in problems), problems)
-        problems = self.judged(job_if, job_if.replace("!cancelled() &&", "success() &&"), problems_of_the_light_checks)       # (a job whose need failed is skipped)
-        self.assertTrue(any("macos_tests is skipped when the first job failed" in p for p in problems), problems)
-        problems = self.judged("    if: ${{ always() && needs.changes.outputs.light != 'true' }}", "    if: ${{ always() }}", problems_of_the_light_checks)
-        self.assertTrue(any("macos runs when the first job says 'true'" in p for p in problems), problems)
-        problems = self.judged("    if: ${{ always() && needs.changes.outputs.light != 'true' }}", "    if: ${{ success() && needs.changes.outputs.light != 'true' }}", problems_of_the_light_checks)
-        self.assertTrue(any("macos is skipped when the first job failed" in p for p in problems), problems)
-        problems = self.judged("    if: ${{ !cancelled() }}\n    runs-on: ${{ needs.changes", "    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}\n    runs-on: ${{ needs.changes", problems_of_the_light_checks)
-        self.assertTrue(any("windows is skipped when the first job says 'true'" in p for p in problems), problems)
-        problems = self.judged("    if: ${{ !cancelled() }}\n    runs-on: ${{ needs.changes", "    if: ${{ success() }}\n    runs-on: ${{ needs.changes", problems_of_the_light_checks)
-        self.assertTrue(any("windows is skipped when the first job failed" in p for p in problems), problems)
-        problems = self.judged("        if: ${{ !cancelled() && steps.build.conclusion == 'success' }}\n        run: ctest", "        if: ${{ needs.changes.outputs.light == 'true' }}\n        run: ctest", problems_of_the_light_checks)
-        self.assertTrue(any(p.startswith("windows") for p in problems), problems)
-        problems = self.judged("    runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}", "    runs-on: ${{ matrix.os }}", problems_of_the_light_checks)
-        self.assertTrue(any("small Linux machine" in p for p in problems), problems)
-        problems = self.judged("      - uses: actions/checkout@v7\n        if: ${{ needs.changes.outputs.light != 'true' }}\n", "      - uses: actions/checkout@v7\n", problems_of_the_light_checks)
-        self.assertTrue(any("small Linux machine" in p for p in problems), problems)
+        mac_if = "    # Skipped for a change of web pages, documents and page tests only (the job `changes`); it does not run when that job failed (the small job `macos` then fails).\n    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.light != 'true' }}"
+        win_if = "    # of its name, which is why the required names are carried by the small jobs below, and not by these legs. It does not run when `changes` failed (the small jobs then fail).\n    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.light != 'true' }}"
+        for job, job_if in (("macos_tests", mac_if), ("windows_tests", win_if)):
+            problems = self.judged(job_if, job_if.replace(" && needs.changes.outputs.light != 'true'", ""), problems_of_the_light_checks)
+            self.assertTrue(any("%s runs when the first job says 'true'" % job in p for p in problems), problems)
+            problems = self.judged(job_if, job_if.replace(" && needs.changes.result == 'success'", ""), problems_of_the_light_checks)
+            self.assertTrue(any("%s runs when the first job says '' with the result failure" % job in p for p in problems), problems)
+            problems = self.judged(job_if, job_if.replace("!cancelled() && needs.changes.result == 'success' && ", "success() && "), problems_of_the_light_checks)
+            self.assertEqual(problems, [], "(success() is the status that a job whose need succeeded has: the same answers)")
+        problems = self.judged("    needs: [changes, windows_tests]\n    if: ${{ always() }}\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - name: Did every Windows job pass (or was it right to skip them)?\n        env:\n          CHANGES: ${{ needs.changes.result }}\n          LIGHT: ${{ needs.changes.outputs.light }}\n          RESULT: ${{ needs.windows_tests.result }}\n        run: |\n          echo \"the job that decides what runs: $CHANGES (light: ${LIGHT:-nothing}); the Windows test jobs: $RESULT\"\n          [ \"$CHANGES\" = success ] || { echo \"the job that decides what runs did not succeed: this check fails\"; exit 1; }\n          [ \"$RESULT\" = success ] && exit 0\n          [ \"$RESULT\" = skipped ] && [ \"$LIGHT\" = true ] && { echo \"skipped for a change of pages, documents and page tests only\"; exit 0; }\n          echo \"a Windows test job failed, was cancelled or did not run: this check fails\"\n          exit 1\n\n  windows_2026:",
+                                "    needs: [changes, windows_tests]\n    if: ${{ success() }}\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n    steps:\n      - name: Did every Windows job pass (or was it right to skip them)?\n        env:\n          CHANGES: ${{ needs.changes.result }}\n          LIGHT: ${{ needs.changes.outputs.light }}\n          RESULT: ${{ needs.windows_tests.result }}\n        run: |\n          echo \"the job that decides what runs: $CHANGES (light: ${LIGHT:-nothing}); the Windows test jobs: $RESULT\"\n          [ \"$CHANGES\" = success ] || { echo \"the job that decides what runs did not succeed: this check fails\"; exit 1; }\n          [ \"$RESULT\" = success ] && exit 0\n          [ \"$RESULT\" = skipped ] && [ \"$LIGHT\" = true ] && { echo \"skipped for a change of pages, documents and page tests only\"; exit 0; }\n          echo \"a Windows test job failed, was cancelled or did not run: this check fails\"\n          exit 1\n\n  windows_2026:",
+                                problems_of_the_light_checks)
+        self.assertTrue(any(p.startswith("windows_2022 is skipped when the first job says") for p in problems), problems)
+        problems = self.judged("      - uses: actions/checkout@v7\n\n      - name: Restore the compiler cache\n        uses: actions/cache@v6\n        with:\n          path: .sccache\n", "      - uses: actions/checkout@v7\n\n      - name: Restore the compiler cache\n        if: ${{ needs.changes.outputs.light != 'true' }}\n        uses: actions/cache@v6\n        with:\n          path: .sccache\n", problems_of_the_light_checks) if False else []
 
 
 class TheCiMachinesHavePyYAML(unittest.TestCase):

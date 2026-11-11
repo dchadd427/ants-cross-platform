@@ -1,5 +1,5 @@
 {
- "note": "Mutants of tools/ci_light.sh, which decides in the first job of the CI whether a pull request needs all of CI or only the light checks: the files of the light kinds that the skipped jobs read, the kinds themselves, the merge base, the comparison with main, the name of main, the output. Each must be noticed by tests/scripts/test_ci_light.py. No build: python3 tools/mutate.py tests/data/ci_light_mutants.json --keep-going --jobs 1, from the repository folder (about 20 seconds for each mutant).",
+ "note": "Mutants of tools/ci_light.sh, which decides in the first job of the CI whether a pull request needs all of CI or only the light checks: the files of the light kinds that the skipped jobs read, the kinds themselves, the merge base (the base of the pull request, not main), the output. Each must be noticed by tests/scripts/test_ci_light.py. No build: python3 tools/mutate.py tests/data/ci_light_mutants.json --keep-going --jobs 1, from the repository folder (about 20 seconds for each mutant).",
  "mutants": [
   {
    "id": "a_bumped_submodule_is_left_out",
@@ -177,62 +177,12 @@
    "test": "python3 tests/scripts/test_ci_light.py"
   },
   {
-   "id": "main_is_not_compared",
-   "file": "tools/ci_light.sh",
-   "old": "if [ \"$main_merge_base\" != \"$merge_base\" ]; then",
-   "new": "if false; then",
-   "test": "python3 tests/scripts/test_ci_light.py",
-   "expect": "test_a_pull_request_against_another_branch_that_carries_code_main_lacks_is_full"
-  },
-  {
-   "id": "the_files_against_main_are_not_counted",
+   "id": "the_full_files_are_not_counted",
    "file": "tools/ci_light.sh",
    "old": "    total_full=$((total_full + full))\n",
    "new": "    total_full=$((total_full + 0))\n",
    "test": "python3 tests/scripts/test_ci_light.py",
-   "expect": "test_a_pull_request_against_another_branch_that_carries_code_main_lacks_is_full"
-  },
-  {
-   "id": "a_main_that_is_not_there_is_the_base",
-   "file": "tools/ci_light.sh",
-   "old": "|| finish false \"the branch main is not there to compare with (is the history complete?)\"",
-   "new": "|| main=$base",
-   "test": "python3 tests/scripts/test_ci_light.py"
-  },
-  {
-   "id": "a_main_without_a_merge_base_is_the_base",
-   "file": "tools/ci_light.sh",
-   "old": "|| finish false \"no merge base of the pull request and main (is the history complete?)\"",
-   "new": "|| main_merge_base=$merge_base",
-   "test": "python3 tests/scripts/test_ci_light.py"
-  },
-  {
-   "id": "the_name_of_main_is_not_checked",
-   "file": "tools/ci_light.sh",
-   "old": "is_main_ref \"$main_ref\" || finish false \"MAIN_REF is not a branch of origin\"",
-   "new": "true",
-   "test": "python3 tests/scripts/test_ci_light.py"
-  },
-  {
-   "id": "the_name_of_main_may_have_any_character",
-   "file": "tools/ci_light.sh",
-   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
-   "new": "refs/remotes/origin/ | refs/remotes/origin/-*) return 1 ;;",
-   "test": "python3 tests/scripts/test_ci_light.py"
-  },
-  {
-   "id": "the_name_of_main_may_have_an_at_sign",
-   "file": "tools/ci_light.sh",
-   "old": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
-   "new": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-@]*) return 1 ;;",
-   "test": "python3 tests/scripts/test_ci_light.py"
-  },
-  {
-   "id": "the_name_of_main_may_have_a_letter_that_is_not_ascii",
-   "file": "tools/ci_light.sh",
-   "old": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
-   "new": "*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-éï]*) return 1 ;;",
-   "test": "python3 tests/scripts/test_ci_light.py"
+   "expect": "test_one_full_file_among_light_ones_makes_it_full_and_is_named"
   },
   {
    "id": "a_commit_id_in_capitals_is_taken",
@@ -256,13 +206,6 @@
    "test": "python3 tests/scripts/test_ci_light.py"
   },
   {
-   "id": "the_name_of_main_may_begin_with_a_dash",
-   "file": "tools/ci_light.sh",
-   "old": "refs/remotes/origin/ | refs/remotes/origin/-* | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
-   "new": "refs/remotes/origin/ | refs/remotes/origin/*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) return 1 ;;",
-   "test": "python3 tests/scripts/test_ci_light.py"
-  },
-  {
    "id": "the_decision_is_not_written",
    "file": "tools/ci_light.sh",
    "old": "echo \"light=$1\" >> \"$GITHUB_OUTPUT\"",
@@ -282,6 +225,14 @@
    "old": "printf '  %-5s %q\\n' FULL \"$path\"",
    "new": "printf '  %-5s %s\\n' FULL \"$path\"",
    "test": "python3 tests/scripts/test_ci_light.py"
+  },
+  {
+   "id": "the_base_is_main_again",
+   "file": "tools/ci_light.sh",
+   "old": "merge_base=$(git merge-base \"$base\" \"$head\" 2> /dev/null)",
+   "new": "merge_base=$(git merge-base \"${MAIN_REF:-refs/remotes/origin/main}\" \"$head\" 2> /dev/null)",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_the_change_is_judged_against_its_own_base_only"
   }
  ]
 }

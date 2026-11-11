@@ -247,11 +247,11 @@ class TheWiring(unittest.TestCase):
     def test_the_web_job_builds_and_starts_the_image_and_there_is_no_job_for_it(self):
         workflow = read(os.path.join(REPO, ".github", "workflows", "ci.yml"))
         jobs = re.findall(r"(?m)^  ([a-z0-9_-]+):\s*$", workflow[workflow.index("\njobs:"):])
-        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "deploy"])
-        web = workflow[workflow.index("\n  web:"):workflow.index("\n  deploy:")]
+        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web", "deploy"])
+        web = workflow[workflow.index("\n  web_stack:"):workflow.index("\n  deploy:")]
         step = web[web.index("- name: Build the chat hub image"):]
         step = step[:step.index("\n      # The two stacks")]
-        for needle in ("docker build -f Dockerfile.hub -t ants-hub .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 32", "--memory 192m", "--tmpfs /tmp",
+        for needle in ("docker buildx build --load -f Dockerfile.hub -t ants-hub .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 32", "--memory 192m", "--tmpfs /tmp",
                        "-v ants-hub-check-data:/data", "State.Health.Status", "= healthy", "python -m hub.admin list", "evil.example", "docker rm -f ants-hub-check"):
             self.assertIn(needle, step, needle)
 
