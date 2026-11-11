@@ -122,7 +122,7 @@ class TheReleasePlates(unittest.TestCase):
         button = re.search(r"\.btn, \.banner \{([^}]*)\}", classic).group(1)
         radius = re.search(r"border-radius: (\d+px);", button).group(1)
         face = re.search(r"background: ([^;]+);", button).group(1)
-        self.assertEqual(face, "var(--teal) var(--sheen)")
+        self.assertEqual(face, "var(--sheen) var(--teal)")       # (the color goes last: the sheen is several layers, and a color may only be in the last)
         found = 0
         for name, page in sorted(pages().items()):
             if "generated" not in name:

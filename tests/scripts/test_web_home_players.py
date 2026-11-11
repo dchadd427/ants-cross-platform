@@ -80,7 +80,7 @@ class TheLoaderInHome(unittest.TestCase):
     def test_it_asks_for_the_two_files_by_their_base_name_through_the_part_loader_and_only_after_the_dock(self):
         self.assertIn("lazy('home/players', function () {", self.js)
         self.assertEqual(self.js.count("wantPlayers();"), 1, "one call, where the dock has been mounted")
-        self.assertIn("inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("if (askedPlayers || !dock) return;\n            askedPlayers = true;", self.js, "once, and not before there is a dock to speak through")
         self.assertEqual(sorted(set(re.findall(r"home/players\w*", code_of(self.js)))), ["home/players"])
 
@@ -166,10 +166,11 @@ class TheStyle(unittest.TestCase):
             self.assertNotIn(name, body, "the panel is a box of Home's grid (home.css, .pl-on .hmain: 220 to 280 px), not a placed layer: " + name)
         self.assertIn(".pl-on .hmain { grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 280px); }", read("web", "home", "home.css"))
 
-    def test_a_phone_has_no_fold_to_leave_the_view_shrunk(self):
+    def test_the_panel_has_no_fold_at_any_width(self):
         for name in (".pl-btn", ".pl-bar", ".pl-scrim", ".pl-close", ".pl-x", ".pl-ppl"):
             self.assertNotIn(name, self.css, name)
-        self.assertIn('@media (max-width: 700px) { .pl-fold { display: none; } .pl[data-folded="true"] .pl-body { display: flex; } }', self.css)
+        self.assertNotIn("fold", self.css, "the panel is always open: no fold button, no folded state")
+        self.assertNotIn("pl-mark", self.css)
         self.assertNotIn("z-index", self.css, "nothing here is a layer over the page")
 
     def test_nothing_of_homes_own_changes_until_the_list_is_there(self):
@@ -186,14 +187,13 @@ class TheStyle(unittest.TestCase):
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".pl-fold", ".pl-join", ".pl-host"):
+        for selector in (".pl-join", ".pl-host"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             if selector.startswith((".pl-card", ".pl-head", ".pl-you", ".pl-guests")):
                 continue                                             # (a row is not a target; its Join is)
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
-        self.assertGreaterEqual(int(re.search(r"min-width: (\d+)px", self.rule(".pl-fold")).group(1)), 44)
         self.assertGreaterEqual(int(re.search(r"min-width: (\d+)px", self.rule(".pl-join")).group(1)), 44)
 
     def test_nothing_is_loaded_from_another_site_and_the_one_picture_is_data(self):

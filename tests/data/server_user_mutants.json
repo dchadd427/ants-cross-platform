@@ -1,0 +1,43 @@
+{
+ "note": "Mutants of the server image's user and of the compose files' privileges for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_server_user.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/server_user_mutants.json --keep-going --jobs 1.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_server_user"
+ },
+ "mutants": [
+  {
+   "id": "image_does_not_make_the_user",
+   "file": "Dockerfile.server",
+   "old": "RUN useradd --system --no-create-home --shell /usr/sbin/nologin ants && \\",
+   "new": "RUN useradd --system --no-create-home --shell /usr/sbin/nologin ant && \\",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_server_user"
+  },
+  {
+   "id": "results_folder_is_not_given_to_ants",
+   "file": "Dockerfile.server",
+   "old": "mkdir -p /maps /results && chown ants /results",
+   "new": "mkdir -p /maps /results",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_server_user"
+  },
+  {
+   "id": "image_runs_as_root",
+   "file": "Dockerfile.server",
+   "old": "USER ants",
+   "new": "USER root",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_server_user"
+  },
+  {
+   "id": "stack_adds_a_capability",
+   "file": "docker-compose.stack.yml",
+   "old": "    pids_limit: 64\n",
+   "new": "    pids_limit: 64\n    cap_add: [CHOWN]\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_server_user"
+  },
+  {
+   "id": "server_stack_runs_as_root",
+   "file": "docker-compose.server.yml",
+   "old": "    pids_limit: 64\n",
+   "new": "    pids_limit: 64\n    user: \"0\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_server_user"
+  }
+ ]
+}

@@ -46,8 +46,8 @@
   {
    "id": "own_room_alone_is_no_row",
    "file": "web/home/games.js",
-   "old": "popEmpty.hidden = !(loaded && !off && !shown.length);",
-   "new": "popEmpty.hidden = !(loaded && !off && !visibleRows().length);",
+   "old": "popEmpty.hidden = !(loaded && !off && !shown.length &&",
+   "new": "popEmpty.hidden = !(loaded && !off && !visibleRows().length &&",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   },
   {

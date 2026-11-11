@@ -277,7 +277,7 @@
   {
    "id": "start_never_called",
    "file": "web/lobby.html",
-   "old": "            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: My room does)\n",
+   "old": "            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: Quick host does)\n",
    "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -851,7 +851,7 @@
   {
    "id": "stale_how_it_works",
    "file": "web/lobby.html",
-   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
+   "old": "<h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready",
    "new": "<h3>The room</h3><p>Open the page and your room is ready",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -872,8 +872,8 @@
   {
    "id": "how_it_works_press_my_room_from_the_room",
    "file": "web/lobby.html",
-   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
-   "new": "<h3>The room</h3><p>Press My room and your room is ready",
+   "old": "<h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready",
+   "new": "<h3>The room</h3><p>Press Quick host and your room is ready",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1131,8 +1131,8 @@
   {
    "id": "strip_leaves_a_dock_that_comes_late_as_it_is",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); pick(tab); login.addEventListener",
-   "new": "inert(held); dockShown(); login.addEventListener",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
+   "new": "inert(held); dockShown(); wantPlayers();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
@@ -1199,10 +1199,10 @@
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
-   "id": "login_chip_leaves_the_chat_view_away",
+   "id": "login_chip_shows_the_chat_view_again",
    "file": "web/home/home.js",
-   "old": "login.addEventListener('click', function () { if (phone()) pick('chat'); }, true);",
-   "new": "",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
+   "new": "inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
@@ -1231,6 +1231,27 @@
    "file": "web/home/home.css",
    "old": "@media (max-width: 380px) { .htabs { gap: 6px;",
    "new": "@media (max-width: 280px) { .htabs { gap: 6px;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_face_not_red",
+   "file": "web/home/home.css",
+   "old": "background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10;",
+   "new": "background: #1b0f0d; border-color: var(--edge); box-shadow: inset 0 0 0 1px #6a4a42, 3px 4px 0 var(--shadow);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_hover_not_lighter",
+   "file": "web/home/home.css",
+   "old": ".leave:hover { background-color: #b5222c; }",
+   "new": ".leave:hover { background-color: #2a1713; }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "games_sideways_rule_loses_its_closing_brace",
+   "file": "web/home/games.css",
+   "old": ".gcline { margin-bottom: 10px; } }\n@media (max-height: 350px)",
+   "new": ".gcline { margin-bottom: 10px; }\n@media (max-height: 350px)",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   }
  ]

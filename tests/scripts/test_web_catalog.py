@@ -146,7 +146,7 @@ class ThePairs(unittest.TestCase):
 
     def color(self, value):
         value = value.strip().replace("!important", "").strip()
-        value = re.sub(r"\s+var\(--sheen(?:, none)?\)$", "", value)                  # (a button's face is its color with the sheen over it: the light of the sheen stays above the words, test_web_game checks that)
+        value = re.sub(r"^var\(--sheen(?:, none)?\)\s+", "", value)                  # (a button's face is its color with the sheen over it: the light of the sheen stays above the words, test_web_game checks that)
         var = re.fullmatch(r"var\(--([a-z-]+)\)", value)
         if var:
             return self.color(self.tokens[var.group(1)])

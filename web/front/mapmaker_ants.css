@@ -5,7 +5,7 @@
 .am-h { margin-top: 2px; font-size: 13px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .am-row { display: grid; gap: 4px; min-width: 0; }
 .am-two { grid-template-columns: 1fr 1fr; } .am-four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; } .am-teams { grid-template-columns: 1fr; gap: 4px; }
-.am-b { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 36px; padding: 3px 6px; font-size: 14.5px; line-height: 1.15; text-align: center; cursor: pointer; background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 6px; }
+.am-b { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 36px; padding: 3px 6px; font-size: 14.5px; line-height: 1.15; text-align: center; cursor: pointer; background: var(--sheen) var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 6px; }
 .am-b[aria-pressed="true"] { background: #0d1b16; color: var(--gold); border-color: var(--gold); }
 .am-b[disabled] { opacity: .45; cursor: default; }
 .am-b.ghost { background: #0d1b16; }
