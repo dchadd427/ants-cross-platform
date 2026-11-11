@@ -1,9 +1,9 @@
 // Runs the matches IN PROGRESS of the Games list (web/home/games.js, docs/HOME_SCREEN.md "The Games list", docs/REPLAYS.md "Live") in the fake browser of tests/scripts/web_page_harness.js, against a fake GET /lobbies and a fake GET /live:
 //   1. the pure parts: a match of the door's answer on a table (the id's shape, the map, the players' words, markup and look-alike characters in a name), the list (50 at the most, an id once, not a list), the waits (10 s at the least);
 //   2. the rows: a red Live mark, the map, who plays, how long it has run, Watch = /play?live=<id> in a NEW tab, the head "N open, M in progress", the Games button that counts the open rooms only, the empty line;
-//   3. the looks at /live: never faster than 10 s apart, none while the list is not shown (a closed popover, a hidden tab, the Room, the switch off, after the hand-off), a server with no live door (404) or a failed look hides the
+//   3. the looks at /live: never faster than 10 s apart, none while the list is not shown (a closed popover, a hidden tab, the Room, after the hand-off), a server with no live door (404) or a failed look hides the
 //      section with no error and the list goes on;
-//   4. the switch in the list's head: on by default, a real checkbox with a label, off puts the rows away and stops the looks, the choice is the one thing that the browser keeps (a blocked storage means the default).
+//   4. no switch and nothing kept: the rows always show, an old stored word is ignored and left as it was, a blocked storage changes nothing.
 // usage: node web_home_games_live_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
@@ -15,8 +15,6 @@ const answer = (rows) => ({ live: rows, count: rows.length, sim_rules: 9 });
 const liveRows = (env) => find(popOf(env), 'glive');
 const watchOf = (li) => first(li, 'gwatch');
 const boxOf = (env) => first(popOf(env), 'glivebox');
-const filterOf = (env) => first(popOf(env), 'gfilter');
-const checkboxOf = (env) => filterOf(env).findAll((e) => e.tagName === 'input')[0];
 const headOf = (env) => first(popOf(env), 'gpcount').textContent;
 // a page with the list shown (docked: Home's own mode) and the door of the matches that run now answering
 async function livePage(o) {
@@ -111,7 +109,9 @@ const M = 'TREASURE.LVL';
     const both = await livePage({ rows: [] });
     check('nothing open and nothing in progress: the empty card of the open games, one line "none waiting", and the box says no games in progress', headOf(both) === 'none waiting' && first(popOf(both), 'gempty').hidden === false && first(boxOf(both), 'gnolive').hidden === false);
     const only = await livePage({ lobbies: [] });
-    check('nothing open, two in progress: the empty card stays (Host one!) and the rows are under it; the head says "0 open, 2 in progress"', first(popOf(only), 'gempty').hidden === false && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress', headOf(only));
+    check('nothing open, two in progress: no "No open games right now." card at all, the rows are the first thing under the heading; the head says "0 open, 2 in progress"', first(popOf(only), 'gempty').hidden === true && liveRows(only).length === 2 && headOf(only) === '0 open, 2 in progress', headOf(only));
+    const openOnes = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
+    check('with an open game there is no empty card, the open rows come first and the matches follow in the same list', first(popOf(openOnes), 'gempty').hidden === true && first(popOf(openOnes), 'gpbody').children.indexOf(first(popOf(openOnes), 'glist')) < first(popOf(openOnes), 'gpbody').children.indexOf(boxOf(openOnes)));
 }
 
 // ---- 3. the looks at /live ----
@@ -157,7 +157,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     const env = await page({ site, options: { popover: false } });
     await wait(env, 9000);
     const text = env.dumpAll();
-    check('a server with ' + what + ' at /live: the section is hidden, the switch is hidden, and the open rooms go on as they were', boxOf(env).hidden === true && first(popOf(env), 'gfrow').hidden === true && openRows(env).length === 1 && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
+    check('a server with ' + what + ' at /live: the section is hidden and the open rooms go on as they were', boxOf(env).hidden === true && openRows(env).length === 1 && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
     check('... with no error, no notice and no toast', R.toastTextOf(env) === '' && first(popOf(env), 'gpnote').hidden === true);
     const times = site.live.times.slice();
     await wait(env, 100000);
@@ -170,7 +170,7 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     check('(no live door at first: hidden)', boxOf(env).hidden === true);
     site.live.reject = false; site.live.body = answer(SAMPLE);
     await wait(env, 25000);
-    check('a door that answers later brings the rows (the switch with them)', liveRows(env).length === 2 && boxOf(env).hidden === false && first(popOf(env), 'gfrow').hidden === false);
+    check('a door that answers later brings the rows', liveRows(env).length === 2 && boxOf(env).hidden === false);
     await wait(env, 13000);
     const t = site.live.times;
     check('a good answer ends the slow pace: the next look is 10 to 12 s after it, not 20 s or more', t.length === 3 && t[2] - t[1] >= 10000 && t[2] - t[1] <= 12500, JSON.stringify(t));
@@ -259,20 +259,6 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     await wait(env, 8500);
     check('... the next look comes 10 to 12 s after the end', looksAtLive(env) === 2, looksAtLive(env));
 }
-{   // an answer that comes after the switch was turned off is not taken
-    const site = R.fakeSite(); site.live.reject = false; site.live.defer = true; site.live.body = answer([LIVE('STALE-20261109-120000Z')]);
-    const env = await page({ site, options: { popover: false } });
-    await wait(env, 2000);
-    check('(a look is out)', looksAtLive(env) === 1 && site.live.waiting.length === 1);
-    const box = checkboxOf(env);
-    box.checked = false; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
-    await flush();
-    site.live.waiting[0]();
-    await flush();
-    box.checked = true; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
-    await flush();
-    check('the answer of a look that was out when the switch went off is thrown away: no row of it when the switch is on again, and a new look is asked at once', liveRows(env).length === 0 && looksAtLive(env) === 2, [liveRows(env).length, looksAtLive(env)].join());
-}
 {   // the focus on a Watch stays when the rows are made again
     const env = await livePage();
     const first0 = watchOf(liveRows(env)[0]), id0 = first0.getAttribute('data-live');
@@ -293,39 +279,20 @@ for (const [what, tweak] of [['404', (s) => { s.live.reject = false; s.live.stat
     same('a server names its computer players "Pip (bot, Hard)" or "Kit (bot, idle)" (a ring), and a person whose name only has bot in it (Abbott, Robot) or a bracket (O\'Neil (x)) stays a filled dot', liveRows(modern).map((li) => find(li, 'gdot').map((d) => d.className.replace('gdot ', ''))), [['player c0', 'bot c1', 'bot c2', 'player c3'], ['player c0', 'bot c1', 'player c2', 'bot c3']]);
 }
 
-// ---- 4. the switch ----
+// ---- 4. no switch, nothing kept ----
 {
     const env = await livePage({ lobbies: [row('k7m2xq', 'Pebble')] });
-    const box = checkboxOf(env);
-    same('the switch is a checkbox with its label, "Show games in progress", on', [box.type, box.checked, filterOf(env).tagName, textOf(filterOf(env))], ['checkbox', true, 'label', 'Show games in progress']);
-    check('... it is a native control (the keyboard and a screen reader reach it) and in the list\'s head, above the rows', box.tagName === 'input' && find(popOf(env), 'gfrow').length === 1 && !box.getAttribute('tabindex'));
-    check('the browser holds nothing yet (the default is not kept)', env.storage.getItem('ants.home.games.live') === null);
-    box.checked = false; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
-    await flush();
-    check('off: the rows and their box are gone, the head is as it was without them, the "no games in progress" line is not shown', boxOf(env).hidden === true && liveRows(env).every((li) => li.hidden === true || boxOf(env).hidden) && headOf(env) === '1 waiting \u00b7 updates live', headOf(env));
-    check('... the choice is kept in the browser (that word only), and the Games button has not changed', env.storage.getItem('ants.home.games.live') === '0' && R.pillOf(env).textContent === '1');
-    const n = looksAtLive(env);
-    await wait(env, 90000);
-    check('... no look at /live while it is off', looksAtLive(env) === n);
-    box.checked = true; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
-    await flush();
-    check('on again: it looks at once (the 10 s have gone) and the rows come back, and the choice is forgotten (the default)', looksAtLive(env) === n + 1 && liveRows(env).length === 2 && env.storage.getItem('ants.home.games.live') === null && headOf(env) === '1 open, 2 in progress', headOf(env));
+    check('the rows are there with no switch in the list (nothing to turn off, no checkbox) and the browser holds nothing', liveRows(env).length === 2 && find(popOf(env), 'gfilter').length === 0 && find(popOf(env), 'gfrow').length === 0 && popOf(env).findAll((e) => e.tagName === 'input' && e.type === 'checkbox').length === 0 && headOf(env) === '1 open, 2 in progress' && env.storage.getItem('ants.home.games.live') === null, headOf(env));
 }
-{   // a choice kept by an earlier visit: off, and /live is never asked
-    const env = await livePage({ stored: { 'ants.name': 'Maya', 'ants.home.games.live': '0' } });
-    check('a browser that kept "off": the box is not there, the switch is off, and /live is not asked at all', checkboxOf(env).checked === false && boxOf(env).hidden === true && looksAtLive(env) === 0);
-    await wait(env, 60000);
-    check('... for as long as the page is open', looksAtLive(env) === 0);
-    const other = await livePage({ stored: { 'ants.name': 'Maya', 'ants.home.games.live': 'yes' } });
-    check('any other word than "0" is the default: on', checkboxOf(other).checked === true && liveRows(other).length === 2);
+{   // a word kept by an earlier version: ignored, and neither read nor changed
+    for (const word of ['0', 'yes']) {
+        const env = await livePage({ stored: { 'ants.name': 'Maya', 'ants.home.games.live': word } });
+        check('an old stored "' + word + '": the rows show all the same and the word is left as it was', liveRows(env).length === 2 && looksAtLive(env) === 1 && env.storage.getItem('ants.home.games.live') === word);
+    }
 }
-{   // a browser that keeps nothing: the default, and a press does not throw
+{   // a browser that keeps nothing: no difference
     const env = await livePage({ stored: R.H.THROWS });
-    check('a browser that refuses its storage: the switch is on and the rows are there', checkboxOf(env).checked === true && liveRows(env).length === 2);
-    const box = checkboxOf(env);
-    box.checked = false; (box.listeners.change || []).forEach((fn) => fn({ target: box }));
-    await flush();
-    check('... a press on it still works for as long as the page is open (and nothing threw)', boxOf(env).hidden === true && looksAtLive(env) === 1);
+    check('a browser that refuses its storage: the rows are there (nothing threw)', liveRows(env).length === 2);
 }
 
 done('matches in progress');

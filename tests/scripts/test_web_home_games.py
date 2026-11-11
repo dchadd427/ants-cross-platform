@@ -159,13 +159,12 @@ class TheFolder(unittest.TestCase):
         self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
-    def test_only_the_switch_of_the_matches_in_progress_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
+    def test_nothing_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
         for word in ("sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
             self.assertNotIn(word, self.code, word)
-        self.assertEqual(len(re.findall(r"localStorage", self.code)), 3, "the one choice, in two small functions that each have a try: read, and written or removed")
-        self.assertIn("function readChoice() { try { return win.localStorage.getItem(CHOICE_KEY) !== '0'; } catch (e) { return true; } }", self.js, "a browser that keeps nothing: the default, on")
-        self.assertIn("function keepChoice(on) { try { if (on) win.localStorage.removeItem(CHOICE_KEY); else win.localStorage.setItem(CHOICE_KEY, '0'); } catch (e) {", self.js)
-        self.assertIn("var CHOICE_KEY = 'ants.home.games.live';", self.js)
+        self.assertNotIn("localStorage", self.code, "nothing is kept in the browser: the matches in progress always show")
+        self.assertNotIn("ants.home.games", self.code, "no stored word (an old one from an earlier version is never read)")
+        self.assertNotRegex(read("web", "home", "games.css"), r"\.gfilter|\.gfrow", "no switch in the list's head")
         self.assertIn("var LIST_URL = '/lobbies';", self.js)
         self.assertIn("var LIVE_URL = '/live';", self.js)
         self.assertEqual(len(re.findall(r"win\.fetch\(", self.code)), 1, "one fetch, in look(url), for both addresses")
@@ -284,7 +283,7 @@ class TheStyle(unittest.TestCase):
             made.update(m.group(1).split())
         for m in re.finditer(r"button\('([\w -]+)'", read("web", "home", "games.js")):
             made.update(m.group(1).split())
-        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr", "gerow"}      # (the page's: web/lobby.html, "gerow" the two big buttons of the empty state in Home's body (home.css), "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
+        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr"}      # (the page's: web/lobby.html, "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
         for name in sorted(made - theirs):
             self.assertRegex(self.css, r"\." + re.escape(name) + r"\b", "the class %s has no style" % name)
 
@@ -327,11 +326,13 @@ class TheListIsDockedInHomesBody(unittest.TestCase):
         self.assertIn(".gdock .gitem:has(.gyours) { border-color: var(--gold); }", rules)
         self.assertIn(".gdock .glist { grid-template-columns: minmax(0, 1fr); }", rules, "one column on a phone")
 
-    def test_the_empty_state_has_two_big_buttons_and_both_are_a_press_that_the_script_handles(self):
-        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickHost, guard(function () { quickHost(); })));", self.js)
-        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickJoin, guard(function () { quickJoin(); })));", self.js)
-        rules = re.sub(r"/\*.*?\*/", "", self.homecss, flags=re.S)
-        self.assertRegex(rules, r"\.gdock \.gerow \.btn \{[^}]*min-height: 56px;")
+    def test_the_empty_state_is_text_only_the_bar_has_quick_host_and_join(self):
+        self.assertNotIn("gerow", self.js)
+        self.assertNotIn("gerow", self.homecss)
+        self.assertNotIn("emptyRow", self.js)
+        m = re.search(r"popEmpty[.]appendChild[(]el[(]'span', 'ant ant-green'.*\n.*\n", self.js)
+        self.assertIsNotNone(m)
+        self.assertNotIn("button(", m.group(0), "the card says it in words; the buttons are the bar's")
 
 
 class TheWayIntoTheImage(unittest.TestCase):

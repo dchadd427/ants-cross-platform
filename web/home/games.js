@@ -4,8 +4,8 @@
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
 //     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
-//   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (a new tab on /play?live=<id>); a switch in the list's head (kept in this browser
-//     only) turns them off. The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 10 s at the most, only while the list shows, and a
+//   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (a new tab on /play?live=<id>); they are always shown (the open rooms first; nothing is kept in
+//     this browser). The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 10 s at the most, only while the list shows, and a
 //     server without that door (404) or a failed look only hides the section.
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
 //     every call out of this file is guarded, and a failed look is only "the list is off".
@@ -40,7 +40,6 @@
     var LIVE_ID = /^[A-Za-z0-9_]{1,24}-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/;           // the shape of a match's id (docs/SERVER.md "Live matches"): nothing else is ever put into an address
     var BOT_NAME = /^Bot \(|\(bot(, [^()]+)?\)$/;           // a computer player's name as a server writes it ("Pip (bot, Hard)", "Kit (bot, idle)"; the older "Bot (Medium)"): the rule of the lobby's name check, which keeps these names from people
     var SEATS = ['Green', 'Red', 'Blue', 'Black'];       // the colors of seats 0 - 3, in the words of the door's players strings
-    var CHOICE_KEY = 'ants.home.games.live';             // the one thing that the Games list keeps in this browser: '0' when the matches in progress are turned off
     var NARROW = 720;                                    // px: the page's phone layout (web/lobby.html)
     var SEAT_PERSON = 1, SEAT_CLIENT = 2;                // the Room message's states of a color that a person holds (lobby_net.js SLOT)
     var TEXT = {
@@ -53,7 +52,7 @@
         noneLine: 'Nobody is waiting for a player. Host one, and others can join you.', noneYours: 'Your room goes public with its map and your friends in it.', noneNew: 'A new room opens for you, and it goes public.', joiningCode: 'Joining the room…', joinFirst: ' Wait for it, or cancel it in the list.', opening: 'The game is opening. If it does not, reload this page.',
         already: 'Your room is already public.', running: 'Your match is running.', idle: 'Your room went private after 30 minutes. Make it public again?',
         hostChanged: 'This room is private again because the host changed.', stillPrivate: 'Your room is still private. Use the Public switch in the room.',
-        watch: 'Watch', liveMark: 'Live', inProgress: 'In progress', filter: 'Show games in progress', noLive: 'No games in progress.', soFar: ' so far', nobodyNamed: 'Players not named',
+        watch: 'Watch', liveMark: 'Live', inProgress: 'In progress', noLive: 'No games in progress.', soFar: ' so far', nobodyNamed: 'Players not named',
         full: 'That room is full.', started: 'The match in that room has already started.', gone: 'That game is not open any more.', silent: 'The server did not answer. Try again in a moment.'
     };
 
@@ -148,9 +147,7 @@
         var docked = !!env.dock, rows = [], loaded = false, off = false, failures = 0, isOpen = docked, polling = false, round = 0, pollTimer = null, gone = !!env.handoff, joining = false, joinButtons = [];
         var tracked = null, lastRoom = null, lastSent = 0, refreshTimer = null, refreshFor = null, pending = null, pendingTimer = null, askedAt = 0, locked = false, lockTimer = null, hint = '', lastInput = now(), lastLook = 0, floorTimer = null, joinSeq = 0, cancelTimer = null, paintedSig = null;
         var dialog = null, noticeKind = '', quiet = [], finding = false;
-        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [], showLive = readChoice();
-        function readChoice() { try { return win.localStorage.getItem(CHOICE_KEY) !== '0'; } catch (e) { return true; } }          // (a browser that keeps nothing: the default, on)
-        function keepChoice(on) { try { if (on) win.localStorage.removeItem(CHOICE_KEY); else win.localStorage.setItem(CHOICE_KEY, '0'); } catch (e) { /* not kept: the choice lasts until the page is left */ } }
+        var live = [], liveLoaded = false, liveOff = false, liveFails = 0, liveTimer = null, liveBusy = false, liveRound = 0, lastLive = 0, liveSig = null, liveLens = [];
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -449,16 +446,15 @@
         // ---- the list's popover ----
         var pop = el('section', 'gpop'), popHead = el('div', 'gphead'), popTitle = el('h2', 'gptitle', TEXT.title), popCount = el('span', 'gpcount'), popNote = el('p', 'gpnote');
         var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popEmpty = el('div', 'gempty'), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
-        var popFilter = el('div', 'gfrow'), filterLabel = el('label', 'gfilter'), filterBox = el('input'), liveBox = el('div', 'glivebox'), liveHead = el('h3', 'gsub', TEXT.inProgress), liveList = el('ul', 'glist glivelist'), liveNone = el('p', 'gemline gnolive', TEXT.noLive);
+        var liveBox = el('div', 'glivebox'), liveHead = el('h3', 'gsub', TEXT.inProgress), liveList = el('ul', 'glist glivelist'), liveNone = el('p', 'gemline gnolive', TEXT.noLive);
         var popJoin = el('div', 'gjoining'), popJoinText = el('span'), popJoinStop = button('sm', TEXT.cancel, guard(function () { cancelJoin(); }));
         var codeBox = el('div', 'gcode'), codeLabel = el('label', 'gclabel', TEXT.code), codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
         pop.hidden = !docked; pop.setAttribute('role', docked ? 'region' : 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
         popHead.appendChild(popTitle); popHead.appendChild(popCount);
-        filterBox.type = 'checkbox'; filterBox.checked = showLive; filterLabel.appendChild(filterBox); filterLabel.appendChild(el('span', '', TEXT.filter)); popFilter.appendChild(filterLabel); popHead.appendChild(popFilter);
-        liveBox.hidden = true; popFilter.hidden = false; liveBox.appendChild(liveHead); liveBox.appendChild(liveList); liveBox.appendChild(liveNone);
+        liveBox.hidden = true; liveBox.appendChild(liveHead); liveBox.appendChild(liveList); liveBox.appendChild(liveNone);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
-        popEmpty.appendChild(el('p', 'gemtitle', TEXT.emptyTitle)); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine)); var emptyRow = el('div', 'gerow'); emptyRow.appendChild(button('ghostbtn', TEXT.quickHost, guard(function () { quickHost(); }))); emptyRow.appendChild(button('ghostbtn', TEXT.quickJoin, guard(function () { quickJoin(); }))); popEmpty.appendChild(emptyRow);
+        popEmpty.appendChild(el('p', 'gemtitle', TEXT.emptyTitle)); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine));
         popOff.appendChild(el('p', 'gemtitle', TEXT.off)); popOff.appendChild(el('p', 'gemline', TEXT.offHint));
         [['player', TEXT.legendPlayer], ['bot', TEXT.legendBot], ['open', TEXT.legendOpen]].forEach(function (k) { var s = el('span', 'gleg'); s.appendChild(el('i', 'gdot ' + k[0])); s.appendChild(doc.createTextNode(k[1])); popLegend.appendChild(s); });
         codeInput.type = 'text'; codeInput.setAttribute('placeholder', TEXT.codePlaceholder); codeInput.setAttribute('aria-label', TEXT.code); codeInput.setAttribute('autocomplete', 'off'); codeInput.setAttribute('autocapitalize', 'off');
@@ -520,12 +516,10 @@
             liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName });
             return li;
         }
-        function liveShown() { return showLive && liveLoaded && !liveOff && loaded; }          // (the section stands only with the switch on, an answer of /live that was good, and the list's own first look done)
+        function liveShown() { return liveLoaded && !liveOff && loaded; }          // (the section stands only with an answer of /live that was good and the list's own first look done)
         function paintLive() {
             var on = liveShown(), active = doc.activeElement, focusId = active && active.getAttribute ? active.getAttribute('data-live') : null;
             liveBox.hidden = !on;
-            popFilter.hidden = showLive && liveLoaded && liveOff;                 // (a server with no live door: nothing to switch)
-            filterBox.checked = showLive;
             if (!on) { liveSig = null; liveLens = []; while (liveList.firstChild) liveList.removeChild(liveList.firstChild); return; }          // (nothing of a match stays in the page while the section is away)
             liveNone.hidden = live.length > 0; liveList.hidden = live.length === 0;
             var sig = JSON.stringify(live.map(function (e) { return [e.id, e.map, e.who]; }));
@@ -549,7 +543,7 @@
             var shown = listRows(), lead = shown.length - visibleRows().length, active = doc.activeElement, focusCode = active && active.getAttribute ? active.getAttribute('data-code') : null;
             popCount.textContent = countLine(shown.length);
             paintLive();
-            popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
+            popLoad.hidden = loaded; popOff.hidden = !(loaded && off); popEmpty.hidden = !(loaded && !off && !shown.length && !(liveShown() && live.length)); popList.hidden = !(loaded && !off && shown.length); popLegend.hidden = popList.hidden;
             popNote.hidden = !popNote.textContent;
             var sig = JSON.stringify(shown.map(function (r) { return [r.code, r.host, r.map, r.people, r.bots, r.free, r.size]; }).concat(lead));       // (the rows are made again only when what they show changed: a press that straddles a repaint is not lost, and a focus stays)
             if (sig === paintedSig) return;
@@ -771,9 +765,9 @@
             schedule();
         }
 
-        // ---- the looks at GET /live: the matches that run now, only while the switch is on and the list shows (Home, a visible tab), 10 s apart at the least ----
+        // ---- the looks at GET /live: the matches that run now, only while the list shows (Home, a visible tab), 10 s apart at the least ----
         function drawn() { try { return !docked || !pop.getClientRects || pop.getClientRects().length > 0; } catch (e) { return true; } }          // (a phone's Chat or Players view covers the docked list: nothing shows the matches, so nothing asks)
-        function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }
+        function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }
         function scheduleLive(ms) {
             if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; }
             if (!liveWanted() || liveBusy) return;
@@ -798,14 +792,6 @@
             if (isOpen) paintList();
             scheduleLive();
         }
-        function chooseLive(on) {                          // the switch: the choice is kept in this browser; off stops the looks at /live and puts the section away, on looks again
-            if (on === showLive) return;
-            showLive = on; keepChoice(on);
-            if (!on) { liveRound++; liveBusy = false; live = []; liveLoaded = false; liveOff = false; liveFails = 0; if (liveTimer !== null) { cancel(liveTimer); liveTimer = null; } }
-            if (isOpen) paintList();
-            if (on) pollLive();
-        }
-        filterBox.addEventListener('change', guard(function () { chooseLive(!!filterBox.checked); }));
 
         // ---- the page's own events ----
         function enable(b) { b.disabled = false; b.removeAttribute('aria-disabled'); }
