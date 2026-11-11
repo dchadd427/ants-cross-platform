@@ -623,6 +623,9 @@ class TheFreshCheck(FreshBase):
         self.w.say(self.mod, "/kick bob")
         await self.settle()
         self.assertEqual(self.mod.codes(), ["role"])
+        self.mode = None
+        self.grant("9001", "mod")                                                                  # (the moderator holds the role again, with an old answer, and the roles are still paused)
+        self.roles.entries["9001"].ok_at -= 100
         started = time.monotonic()
         self.w.say(self.mod, "/kick bob")
         await self.settle()
@@ -661,6 +664,26 @@ class TheFreshCheck(FreshBase):
         self.w.store.mute("9001", 5, "x", "x")
         await self.settle()
         self.assertEqual((self.mod.codes(), self.bob.closed), (["muted"], None))
+
+    async def test_a_moderator_who_was_banned_while_the_command_waited_is_refused(self):
+        self.age()
+        self.delay = 0.2
+        self.w.say(self.mod, "/kick bob")
+        self.w.store.ban("9001", "x", "x")
+        await self.settle()
+        self.assertEqual((self.mod.codes(), self.bob.closed), (["banned"], None))
+
+    async def test_a_refusal_that_comes_while_actions_wait_ends_their_wait_at_once(self):
+        self.age()
+        self.delay = 0.1
+        self.mode = lambda account: (401, {"code": 0}, {})
+        started = time.monotonic()
+        self.w.say(self.mod, "/kick bob")
+        self.w.say(self.admin, "/kick alice")
+        await self.settle()
+        self.assertLess(time.monotonic() - started, 0.45)                                           # (the wait of an action is 0.6 s: it did not run out)
+        self.assertEqual(self.mod.codes(), ["role"])
+        self.assertEqual(self.admin.codes(), ["role"])
 
     async def test_a_target_that_left_while_the_command_waited_is_who(self):
         self.age()
@@ -1296,6 +1319,20 @@ class TheLiveHub(LiveTest):
         victim.say("hi")
         self.assertIn({"t": "err", "code": "muted"}, victim.drain(0.5))
 
+
+    def test_a_command_that_waits_is_stopped_with_the_hub(self):
+        mod = self.moderator()
+        victim, _ = self.connect("1003:victim")
+        time.sleep(0.9)
+        self.fake.member_mode = "slow:1.5"
+        mod.say("/kick victim")
+        time.sleep(0.3)
+        tasks = self.rig.call(lambda: list(self.rig.hub.chat.busy.values()))
+        self.assertEqual(len(tasks), 1)
+        import asyncio as aio
+        aio.run_coroutine_threadsafe(self.rig.hub.stop(), self.rig.loop).result(10)
+        time.sleep(0.2)
+        self.assertTrue(self.rig.call(lambda: all(t.done() for t in tasks)))
 
     def test_a_bug_in_a_command_that_waits_is_one_line_in_the_log_with_its_class_and_no_text(self):
         mod = self.moderator()

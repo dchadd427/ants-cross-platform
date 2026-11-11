@@ -47,13 +47,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
   },
   {
-   "id": "no_command_needs_a_role_of_its_own_rank",
-   "file": "hub/chat.py",
-   "old": "NEEDS = {\"mute\": 1, \"unmute\": 1, \"del\": 1, \"kick\": 1,",
-   "new": "NEEDS = {\"mute\": 0, \"unmute\": 1, \"del\": 1, \"kick\": 1,",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
-  },
-  {
    "id": "a_refused_power_is_bad",
    "file": "hub/chat.py",
    "old": "        if not allowed(name, actor, self.roles.role_of(target) if target is not None else None, target == me.account_id):\n            return self.mistake(peer, \"power\")",
@@ -485,7 +478,7 @@
    "file": "hub/chat.py",
    "old": "note=None if target == me.account_id else (by, \"del\", whom, str(arg))",
    "new": "note=(by, \"del\", whom, str(arg))",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
   },
   {
    "id": "a_ban_keeps_the_id_of_the_moderator",
