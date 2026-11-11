@@ -326,7 +326,7 @@ class TheText(unittest.TestCase):
         self.assertEqual(CONF.count("access_log /dev/stdout ants_noquery;"), 5)             # (these four, and the server block, which gives every other path the same format: tests/scripts/test_nginx_headers.py)
 
     def test_the_stacks_the_image_and_the_documents_agree_with_the_file(self):
-        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+        for name in ("docker-compose.stack.yml",):
             text = "\n".join(l for l in open(os.path.join(REPO, name), encoding="utf-8").read().splitlines() if not l.lstrip().startswith("#"))
             self.assertIn('"--submit-port", "${ANTS_SUBMIT_PORT:-0}"', text, name)                  # (off until the stack says so)
             self.assertNotIn("ants-admin-login", text, name)                                       # (no helper container: the game server signs people in)

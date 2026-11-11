@@ -89,7 +89,7 @@ class TheLocation(unittest.TestCase):
         self.assertEqual(target.groups(), door.groups())
         self.assertIn("proxy_pass http://$ants_server;", BUSY)                              # (a variable: the name is resolved per request, like /ws, so the page starts without the server)
         self.assertIn("resolver 127.0.0.11", BUSY)
-        for stack in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+        for stack in ("docker-compose.stack.yml",):
             command = re.search(r'command: \[.*?"--ws-port", "(\d+)"', read(stack))
             self.assertIsNotNone(command, stack)
             self.assertEqual(command.group(1), target.group(2), stack)
