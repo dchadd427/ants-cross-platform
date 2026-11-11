@@ -98,7 +98,8 @@ function makeSite(o) {
             if (p === '/index.js') return send(200, fs.readFileSync(path.join(__dirname, 'web_live_stub.js')), 'text/javascript');
             if (p === '/index.data') return send(200, Buffer.alloc(2000), 'application/octet-stream');
             if (p === '/index.wasm') return send(200, Buffer.from([0, 0x61, 0x73, 0x6d]), 'application/wasm');
-            const rel = p === '/play.html' ? 'shell.html' : p.replace(/^\/+/, '');
+            const CLEAN = { '/play': 'shell.html', '/matches': 'matches.html', '/match': 'match.html', '/live-now': 'live.html', '/legal': 'legal.html', '/changelog': 'changelog.html', '/mapmaker': 'mapmaker.html' };       // (the clean addresses of docker/nginx.conf)
+            const rel = CLEAN[p] || p.replace(/^\/+/, '');
             const file = path.resolve(WEB, rel);
             if (file.startsWith(WEB + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
                 let body = fs.readFileSync(file);
@@ -142,7 +143,7 @@ const drag = (page, type, names, selector) => page.evaluate(({ type, names, sele
 
 async function partStrip(browser, shot) {
     const site = await makeSite();
-    const open = async (context, s) => { const page = await context.newPage(); await page.goto((s || site).url('/matches.html')); await page.waitForSelector('#body .note, #body .list'); await sleep(250); return page; };
+    const open = async (context, s) => { const page = await context.newPage(); await page.goto((s || site).url('/matches')); await page.waitForSelector('#body .note, #body .list'); await sleep(250); return page; };
     for (const [kind, context] of [['desktop', DESKTOP], ['phone', PHONE]]) {
         const ctx = await browser.newContext(context);
         const page = await open(ctx);
@@ -200,7 +201,7 @@ async function chooseFile(page, trigger, file) {
     await chooser.setFiles(file);
 }
 const text = (page, selector) => page.evaluate((sel) => { const e = document.querySelector(sel); return e ? e.textContent : null; }, selector);
-const LOCAL_URL = /\/play\.html\?local=[0-9a-f]{32}$/;
+const LOCAL_URL = /\/play\?local=[0-9a-f]{32}$/;
 const bodiless = (hits) => hits.every((h) => h.method === 'GET' && h.bodyLength === 0 && h.contentLength === '');
 const askedFor = (hits, re) => hits.filter((h) => re.test(h.path));
 // a page of the site in a fresh context, with what the stand-in game says (window.__stubReport) set before the page's own scripts run
@@ -211,7 +212,7 @@ async function newPage(browser, context, report, extra) {
     return { ctx, page: await ctx.newPage() };
 }
 async function openMatches(site, page) {
-    await page.goto(site.url('/matches.html'));
+    await page.goto(site.url('/matches'));
     await page.waitForSelector('#opener:not([hidden])');
 }
 // the card of the player: its title, its buttons (the words), and whether it offers the file for download
@@ -254,7 +255,7 @@ async function partHand(browser, shot) {
         check('no request of the whole visit carries a body, none is a POST, none asks the site for a recording or its stats', bodiless(all) && askedFor(all, /^\/(replays|history\/|stats)/).length === 0, JSON.stringify(askedFor(all, /^\/(replays|history\/|stats)/)));
         check('no request names the file or its bytes', all.every((h) => (h.path + h.query).indexOf(NAME) === -1));
         // 1b. a drop of the file anywhere on the Matches page (a computer): the same bytes arrive
-        await page.goto(site.url('/matches.html'));
+        await page.goto(site.url('/matches'));
         await page.waitForSelector('#opener:not([hidden])');
         const dropped = await page.evaluate(({ name, bytes }) => {
             const first = new File([new Uint8Array(bytes)], name), second = new File([new Uint8Array(bytes.slice(0, 500))], 'second.antsrep');
@@ -274,7 +275,7 @@ async function partHand(browser, shot) {
         await stubStarted(page);
         check('a reload of the player plays the same file again (the record stays)', page.url() === url && (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
         // 3. a second file takes the place of the first: the address of the first finds nothing, and does not start the game
-        await page.goto(site.url('/matches.html'));
+        await page.goto(site.url('/matches'));
         await page.waitForSelector('#opener:not([hidden])');
         await chooseFile(page, '#open-btn', asFile('second.antsrep', FIXTURE));
         await page.waitForURL(LOCAL_URL);
@@ -282,7 +283,7 @@ async function partHand(browser, shot) {
         await page.goto(url);
         const gone = await cardOf(page);
         check('the address of the first file, after a second was opened, is the card "Choose the replay file again" and no game', gone.title === 'Choose the replay file again' && (await page.evaluate(() => typeof window.__stub)) === 'undefined', gone.title);
-        check('... which has a button for a file and a link to all matches, and nothing to download', gone.buttons.length === 2 && gone.buttons[0].text === 'Open a replay file' && gone.buttons[1].text === '‹ All matches' && gone.buttons[1].href === '/matches.html' && gone.downloads === 0, JSON.stringify(gone.buttons));
+        check('... which has a button for a file and a link to all matches, and nothing to download', gone.buttons.length === 2 && gone.buttons[0].text === 'Open a replay file' && gone.buttons[1].text === '‹ All matches' && gone.buttons[1].href === '/matches' && gone.downloads === 0, JSON.stringify(gone.buttons));
         await shot(page, 'built_e_desktop_again');
         await chooseFile(page, '#rm-body .rm-btns button', asFile(NAME, FIXTURE));
         await page.waitForURL(LOCAL_URL);
@@ -294,7 +295,7 @@ async function partHand(browser, shot) {
     {
         const { ctx, page } = await newPage(browser, DESKTOP, report);
         const before = site.hits.length;
-        for (const bad of ['/play.html?local=', '/play.html?local=xyz', '/play.html?local=' + '0'.repeat(32), '/play.html?local=' + 'A'.repeat(32), '/play.html?local=../../etc/passwd']) {
+        for (const bad of ['/play?local=', '/play?local=xyz', '/play?local=' + '0'.repeat(32), '/play?local=' + 'A'.repeat(32), '/play?local=../../etc/passwd']) {
             await page.goto(site.url(bad));
             const c = await cardOf(page);
             check('no record behind ' + bad + ': the card, and no game', c.title === 'Choose the replay file again' && (await page.evaluate(() => typeof window.__stub)) === 'undefined', c.title);
@@ -326,12 +327,12 @@ async function partHand(browser, shot) {
         await age(1);
         await page.goto(url);
         check('a record of a day and a second is gone when the player opens: the card', (await cardOf(page)).title === 'Choose the replay file again' && (await slot()) === null);
-        await page.goto(site.url('/matches.html')); await page.waitForSelector('#opener:not([hidden])');
+        await page.goto(site.url('/matches')); await page.waitForSelector('#opener:not([hidden])');
         await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
         await page.waitForURL(LOCAL_URL); await stubStarted(page);
         await age(2);
         check('before the Matches page opens the old record is there', (await slot()) !== null);
-        await page.goto(site.url('/matches.html')); await page.waitForSelector('#opener:not([hidden])');
+        await page.goto(site.url('/matches')); await page.waitForSelector('#opener:not([hidden])');
         await until('the Matches page throws the old record away', async () => (await slot()) === null, 5000);
         check('and the Matches page threw it away', (await slot()) === null);
         await ctx.close();
@@ -343,10 +344,10 @@ async function partHand(browser, shot) {
         await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
         await page.waitForURL(LOCAL_URL); await stubStarted(page);
         const url = page.url();
-        await page.goto(site.url('/matches.html')); await page.waitForSelector('#opener:not([hidden])');
+        await page.goto(site.url('/matches')); await page.waitForSelector('#opener:not([hidden])');
         await chooseFile(page, '#open-btn', asFile('notes.txt', Buffer.from('this is a text file and no replay at all, long enough to hold a head if it were one')));
         await page.waitForSelector('#open-note .card');
-        check('a file that is no replay is refused with its card', /not a readable replay/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches.html') !== -1);
+        check('a file that is no replay is refused with its card', /not a readable replay/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches') !== -1);
         await page.goto(url); await stubStarted(page);
         check('and the record that was there still plays', (await stubSha(page, '/replay.antsrep')) === sha256(FIXTURE));
         await ctx.close();
@@ -373,7 +374,7 @@ async function partHand(browser, shot) {
     {
         const down = await makeSite({ down: true });
         const { ctx, page } = await newPage(browser, DESKTOP, report);
-        await page.goto(down.url('/matches.html'));
+        await page.goto(down.url('/matches'));
         await page.waitForSelector('#opener:not([hidden])');
         await page.waitForSelector('#body .note');
         check('with the server down the list says so and the strip is there', await page.isVisible('#open-btn') && /Try again|could not|Could not|not answer|isn/.test(await text(page, '#body .note') || ''), await text(page, '#body .note'));
@@ -389,7 +390,7 @@ async function partHand(browser, shot) {
         await openMatches(site, page);
         await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
         await page.waitForSelector('#open-note .card');
-        check('no IndexedDB (' + kindName + '): the card says that the browser will not keep the file, the page stays', /will not keep the file/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches.html') !== -1);
+        check('no IndexedDB (' + kindName + '): the card says that the browser will not keep the file, the page stays', /will not keep the file/.test(await text(page, '#open-note h3')) && page.url().indexOf('/matches') !== -1);
         await sleep(200);
         await shot(page, 'built_c_' + kindName + '_nostorage');
         await ctx.close();
@@ -400,7 +401,7 @@ async function partHand(browser, shot) {
         await chooseFile(page, '#open-btn', asFile(NAME, FIXTURE));
         await page.waitForURL(LOCAL_URL);
         const first = page.url();
-        await page.goto(site.url('/matches.html'));
+        await page.goto(site.url('/matches'));
         await page.waitForSelector('#opener:not([hidden])');
         await chooseFile(page, '#open-btn', asFile('second.antsrep', FIXTURE));
         await page.waitForURL(LOCAL_URL);
@@ -687,7 +688,7 @@ async function partReal(browser, shot) {
     // the game is up and holds a match: playing (2), paused (3), jumping (4), ended (5) or cut short (6) with its turns; a game that failed to read the file (7) is a card and not this
     const up = async (page) => { await page.waitForFunction(() => { try { return typeof isReadyToPlay !== 'undefined' && isReadyToPlay && !!Module._ants_replay_get && Module._ants_replay_get(0) >= 2 && Module._ants_replay_get(0) <= 6 && Module._ants_replay_get(2) > 0; } catch (e) { return false; } }, null, { timeout: 120000, polling: 250 }); return state(page); };
     const openOn = async (page, file) => {
-        await page.goto(base + '/matches.html');
+        await page.goto(base + '/matches');
         await page.waitForSelector('#opener:not([hidden])');
         await chooseFile(page, '#open-btn', file);
         await page.waitForURL(LOCAL_URL);

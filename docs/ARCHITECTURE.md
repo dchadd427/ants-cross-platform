@@ -175,7 +175,7 @@ ants-cross-platform/
 │   │                                   # --target bot_arena)
 │   ├── bench_aggressor.hpp             # Scripted aggressor bots to measure the standard bot against (arena and tests
 │   │                                   # only)
-│   ├── changelog_to_html.py            # Turns CHANGELOG.md into the site's /changelog.html
+│   ├── changelog_to_html.py            # Turns CHANGELOG.md into the site's /changelog page
 │   ├── check_version_consistency.py    # Checks that VERSION, CHANGELOG.md and README.md name the same
 │   │                                   # release
 │   ├── release.py                      # A release in one command: VERSION, the changelog's "## Next" heading, the
@@ -216,7 +216,7 @@ ants-cross-platform/
 │                                       # original program, per-user files)
 ├── README.md                           # The short front page; the details are in docs/
 ├── CHANGELOG.md                        # What changed in each release, a few lines each (also served at
-│                                       # /changelog.html)
+│                                       # /changelog)
 ├── CMakeLists.txt                      # Root CMake build configuration
 ├── docker-compose.yml                  # The web game alone (service ants-beta); the whole site is
 │                                       # docker-compose.stack.yml

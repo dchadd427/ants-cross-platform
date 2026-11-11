@@ -288,7 +288,7 @@ function gameChecks() {
         w.document.querySelector('[role=dialog]').querySelectorAll('button')[1].click();
         equal([w.closes, opener2.back, w.timers.length, w.timers[0] && w.timers[0][1]], [1, [ID], 1, 300], 'Back to editor tells the map maker\'s tab, closes this tab, and waits for it');
         w.timers[0][0]();
-        equal(w.assigned, ['/mapmaker.html'], 'a tab that the browser did not close goes to the map maker');
+        equal(w.assigned, ['/mapmaker'], 'a tab that the browser did not close goes to the map maker');
         const w2 = windowOf(tabOf({ [ID]: { name: 'x', bytes } })), m2 = { preRun: [], FS: {} };
         Game.begin(test, w2, () => m2);
         w2.document.getElementById('test-strip').querySelector('button').click();
@@ -305,7 +305,7 @@ function gameChecks() {
         const box = w.document.getElementById('load-failure');
         check(box && /This test game cannot start/.test(box.textContent) && /Open the map maker/.test(box.textContent) && /press Play this map again/.test(box.textContent), 'a card says so, in plain words');
         box.querySelector('button').click();
-        equal(w.assigned, ['/mapmaker.html'], 'with a way to the map maker');
+        equal(w.assigned, ['/mapmaker'], 'with a way to the map maker');
         check(w.document.getElementById('test-strip') === null, 'no strip');
         check(w.document.getElementById('splash-overlay').className.indexOf('failed') >= 0 && w.document.getElementById('progress-container').style.display === 'none', 'the loading screen gives way to the card');
     }
@@ -374,7 +374,7 @@ function dialogChecks() {
     go.click();
     go.fire('click', {});
     equal(p.opened.length, 1, 'Start opens one tab (a second call of it opens no second)');
-    const m = /^\/play\.html\?testmap=([a-z0-9]{12})&seats=(ymmn)$/.exec(p.opened[0][0]);
+    const m = /^\/play\?testmap=([a-z0-9]{12})&seats=(ymmn)$/.exec(p.opened[0][0]);
     check(!!m && p.opened[0][1] === '_blank', 'at the game page with the id of a hand-over and the four letters, in a new tab: ' + p.opened[0][0]);
     check(!p.dialogs.isOpen() && p.host.querySelector('.dlg') === null, 'the dialog closes');
     check(typeof p.win.antsTestGameHandoff === 'function' && typeof p.win.antsTestGameBack === 'function', 'the tab can be asked for the hand-over and told of the way back');
@@ -468,7 +468,7 @@ function dialogChecks() {
     p = pageOf();
     Play.open(env(p, { core: { checkMap: () => ({ status: 0, json: r.check }), readReport: () => ({ status: 0, json: r.read }) } }));
     check(!q(p, '.play-why').all().some((n) => n.tagName === 'b' || n.tagName === 'script') && q(p, '.play-why li').textContent === '<b>bold</b><script>x</script>', 'a sentence of the check is put in as text');
-    // the "With other players" tab: opens /lobby.html?testroom=<id> and hands over a copy of the bytes
+    // the "With other players" tab: opens /?testroom=<id> and hands over a copy of the bytes
     p = pageOf();
     Play.open(env(p));
     const tabs = all(p, '.play-tab');
@@ -479,8 +479,8 @@ function dialogChecks() {
     equal(all(p, '.pfseat').map((row) => row.querySelector('.pfn').textContent), ['Black', 'Blue', 'Green', 'Red'], 'four seat summary cards in alphabetical order');
     check(!startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), 'the action button becomes Open a room with this map');
     startButton(p).click();
-    const mr = /^\/lobby\.html\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
-    check(!!mr && p.opened[0][1] === '_blank', 'With other players opens /lobby.html?testroom=<id> in a new tab');
+    const mr = /^\/\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
+    check(!!mr && p.opened[0][1] === '_blank', 'With other players opens /?testroom=<id> in a new tab');
     const rrec = mr && p.win.antsTestGameHandoff(mr[1]);
     check(rrec && rrec.name === 'Mosh Pit' && digest(rrec.bytes) === before && rrec.bytes !== bytes, 'the lobby tab receives a copy of the open map bytes');
     const warnings = (p, panel) => all(p, panel + ' .play-status').filter((n) => n.textContent.indexOf('may run slowly') >= 0);
@@ -511,7 +511,7 @@ function dialogChecks() {
         if (online) {
             check(!startButton(p).disabled && /Open a room with this map/.test(startButton(p).textContent), ants + ' ants: the room button is on');
             startButton(p).click();
-            const room = /^\/lobby\.html\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
+            const room = /^\/\?testroom=([a-z0-9]{12})$/.exec((p.opened[0] || [])[0] || '');
             check(p.opened.length === 1 && !!room, ants + ' ants: and it opens the room (nothing is refused)');
             equal(all(p, '.play-panel-friends .play-status').map((n) => n.textContent), [], ants + ' ants: with other players there is no word about ants');
         } else {
@@ -526,7 +526,7 @@ function dialogChecks() {
         }
         open();
         startButton(p).click();
-        check(p.opened.length === 1 && /^\/play\.html\?testmap=/.test(p.opened[0][0]), ants + ' ants: the game against bots opens the game page (it is never refused for its ants)');
+        check(p.opened.length === 1 && /^\/play\?testmap=/.test(p.opened[0][0]), ants + ' ants: the game against bots opens the game page (it is never refused for its ants)');
     }
     check(Play.MAX_ONLINE_ANTS === 1000 && Play.onlineText(1001).indexOf('1,001 ants') > 0 && Play.onlineText(1001).indexOf('at most 1,000,') > 0, 'the cap is 1,000 and the words write the number with thousands separators');
     check(Play.HEAVY_START_ANTS === 2400 && Play.heavyText(1234567) === 'This map starts with 1,234,567 ants, so a game may run slowly, especially on phones and older computers.', 'the threshold is 2,400 and the words write the number with thousands separators');

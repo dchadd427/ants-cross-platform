@@ -141,7 +141,7 @@ COPY Original-Ants/Maps/*.LVL /srv/community-maps/files/
 
 # The match history and the replays (docs/REPLAYS.md "The match pages", "Watching a replay"): the list of every match (matches.html), one match (match.html) and the matches that run now (live.html), linked from
 # the header of the front page and the footers (with the site label, the version and the build put in), their stylesheet (matches.css), the stats sections of the match page (match_stats.js and match_stats.css), the map of deaths (death_map.js and death_map.css, also on the game page in replay mode) and the helpers
-# that they share with the game page (replay_page.js, history_page.js, and replay_stats.css for the stats and the frame mode of the game page). The game page plays a recording as play.html?replay=<file> (and in the frame of match.html as play.html?replay=<file>&embed=1).
+# that they share with the game page (replay_page.js, history_page.js, and replay_stats.css for the stats and the frame mode of the game page). The game page plays a recording as play?replay=<file> (and in the frame of match.html as play?replay=<file>&embed=1).
 COPY --from=builder /src/matches.html /usr/share/nginx/html/matches.html
 COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
 COPY --from=builder /src/live.html /usr/share/nginx/html/live.html
