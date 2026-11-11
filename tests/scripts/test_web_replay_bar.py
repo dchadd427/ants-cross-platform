@@ -55,7 +55,7 @@ class TheGlue(unittest.TestCase):
 
     def test_the_states_are_the_state_machines_and_the_zone_reads_the_picture_not_an_element(self):
         self.assertIn("var zone = R.barZone({", self.glue)
-        self.assertIn("zone: function () { var r = $('canvas').getBoundingClientRect(); return r.width ? r : null; }", self.glue)
+        self.assertIn("zone: function () { var c = $('canvas'), r = c.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, bottom: r.bottom, height: r.height, rows: c.height } : null; }", self.glue)
         self.assertIn("busy: function () { return dragging || !$('picpop').hidden; }", self.glue)
 
     def test_a_hidden_bar_is_not_woken_by_the_mouse_a_key_or_a_click(self):
@@ -68,14 +68,14 @@ class TheGlue(unittest.TestCase):
                      "$('b-handle').addEventListener('click', function () { showBar(false); });",
                      "{ barFrom = null; zone.hide(); swiped = ev.pointerId; }",
                      "function toggleBar() { if (zone.mode() === 'hidden') showBar(false); else zone.hide(); }",
-                     "if ((ev.key === 'b' || ev.key === 'B') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '') && !document.querySelector('[role=\"dialog\"]:not([hidden]), [role=\"alertdialog\"]:not([hidden])') && $('picpop').hidden) {",
+                     "if ((ev.key === 'b' || ev.key === 'B' || ev.code === 'KeyB') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '') && !document.querySelector('[role=\"dialog\"]:not([hidden]), [role=\"alertdialog\"]:not([hidden])') && $('picpop').hidden) {",
                      "ev.preventDefault(); ev.stopImmediatePropagation(); if (!ev.repeat) toggleBar(); return;"):
             self.assertIn(line, self.glue, line)
 
     def test_the_chevron_and_the_handle_are_part_of_the_bar_and_a_finger_swipes_up_on_the_handle(self):
         for line in ("bar: function () { var a = $('rbar').getBoundingClientRect(), t = $('b-tab').getBoundingClientRect(), h = $('b-handle').hidden ? null : $('b-handle').getBoundingClientRect(); return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) }; },",
                      "if (handleFrom && ev.pointerId === handleFrom.id && handleFrom.y - ev.clientY >= EDGE_SWIPE) { handleFrom = null; showBar(false); }",
-                     "if (touchSeen && !noteShown) { noteShown = true; $('rnote').hidden = false;"):
+                     "if (touchSeen && !noteShown) { noteShown = true; $('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back'; $('rnote').hidden = false;"):
             self.assertIn(line, self.glue, line)
 
     def test_focus_follows_the_state(self):

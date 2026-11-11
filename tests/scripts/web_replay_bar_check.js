@@ -30,6 +30,7 @@ function rig(opts) {
     return t;
 }
 
+check('the gap follows the scale: 12 px up to a scale of 2.4, then the 5 px strip (ceil) + 2', R.gapOf && R.gapOf({ height: 480, rows: 480 }) === 12 && R.gapOf({ height: 1440, rows: 480 }) === 17 && R.gapOf({ height: 2160, rows: 480 }) === 25 && R.gapOf({ height: 100 }) === 12 && R.gapOf({}) === 12);
 check('the numbers: a 48 px band without its last 12 px, 150 ms to rest (4 px), 700 ms to leave', R.ZONE_PX === 48 && R.ZONE_GAP === 12 && R.ZONE_REST_PX === 4 && R.ZONE_DWELL_MS === 150 && R.ZONE_LEAVE_MS === 700);
 {
     const t = rig();
@@ -66,6 +67,18 @@ check('the numbers: a 48 px band without its last 12 px, 150 ms to rest (4 px), 
     check('the last 12 px of the picture (the game\'s edge scroll) never open it, however long the pointer rests there', g.z.mode() === 'hidden');
     g.z.pointer(640, 787, 0); g.wait(160);
     check('the row above them opens it', g.z.mode() === 'peek');
+}
+{
+    const t = rig(); t.zone = { left: 0, right: 3840, bottom: 2160, height: 2160, rows: 480 }; t.z = R.barZone({ setTimeout: (fn, ms) => { const id = t.timers.length + 1; t.timers.push({ id, at: t.now + ms, fn, live: true }); return id; }, clearTimeout: (id) => { const x = t.timers.find((q) => q.id === id); if (x) x.live = false; }, zone: () => t.zone, bar: () => t.bar, busy: () => false, change: (m) => t.changes.push(m) }); t.z.hide();
+    for (const y of [2140, 2136]) { t.z.pointer(1900, y, 0); t.wait(700); }
+    check('a 4K picture (scale 4.5): the 5 px strip is 23 px on the screen, and a rest in its 25 px never opens the bar', t.z.mode() === 'hidden');
+    t.z.pointer(1900, 2134, 0); t.wait(160);
+    check('a 4K picture: the row above the 25 px gap opens it', t.z.mode() === 'peek');
+    const q = rig(); q.zone = { left: 0, right: 2560, bottom: 1440, height: 1440, rows: 480 }; q.z.hide();
+    q.z.pointer(1280, 1424, 0); q.wait(700);
+    check('a 1440p picture (scale 3): a rest 16 px from the bottom (inside the 17 px gap) opens nothing', q.z.mode() === 'hidden');
+    q.z.pointer(1280, 1422, 0); q.wait(160);
+    check('a 1440p picture: 18 px from the bottom opens it', q.z.mode() === 'peek');
 }
 {
     const t = rig(); t.z.hide();

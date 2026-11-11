@@ -3175,7 +3175,7 @@
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
             var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout }), rew = R.rewindControl({ doc: document, turn: function () { return get(VALUE.state) === STATE.jumping ? get(VALUE.target) : get(VALUE.turn); }, seek: function (seconds) { seek(seconds); } });   // (the Auto / Manual button and Back 30 seconds, made by web/replay_page.js)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
-            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var r = $('canvas').getBoundingClientRect(); return r.width ? r : null; }, bar: function () { var a = $('rbar').getBoundingClientRect(), t = $('b-tab').getBoundingClientRect(), h = $('b-handle').hidden ? null : $('b-handle').getBoundingClientRect(); return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) }; }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
+            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var c = $('canvas'), r = c.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, bottom: r.bottom, height: r.height, rows: c.height } : null; }, bar: function () { var a = $('rbar').getBoundingClientRect(), t = $('b-tab').getBoundingClientRect(), h = $('b-handle').hidden ? null : $('b-handle').getBoundingClientRect(); return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) }; }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
             var ICON = {
                 play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',
                 pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5h5v17h-5zM13.5 3.5h5v17h-5z"/></svg>',
@@ -3478,7 +3478,7 @@
                 $('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-label', m === 'peek' ? 'Keep the bar open' : 'Show the bar');
                 syncEdge(); if (m === 'hidden') {
                     clearTimeout(idleTimer); barLock.hideMark(); if (bar.contains(document.activeElement)) $('b-handle').focus();
-                    if (touchSeen && !noteShown) { noteShown = true; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)
+                    if (touchSeen && !noteShown) { noteShown = true; $('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back'; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)
                 } else wake();
             }
             function showBar(focus) { var from = document.activeElement === $('b-handle'); zone.open(); if (focus || from) $('b-tab').focus(); }
@@ -3502,8 +3502,7 @@
                 bar.classList.add('idle'); barLock.hideMark();                     // (the arrow of a locked mouse goes with the bar: it is not there to be hit)
                 syncEdge();
                 if (touchSeen && !noteShown) {                                    // (the first time that it goes in a visit, a finger is told for 3 seconds how to bring it back)
-                    noteShown = true;
-                    $('rnote').hidden = false;
+                    noteShown = true; $('rnote').textContent = 'Swipe up from the bottom edge to bring the bar back'; $('rnote').hidden = false;
                     clearTimeout(noteTimer);
                     noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000);
                 }
@@ -3596,7 +3595,7 @@
                 seek(to);
             });
             window.addEventListener('keydown', function (ev) {
-                if ((ev.key === 'b' || ev.key === 'B') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '') && !document.querySelector('[role="dialog"]:not([hidden]), [role="alertdialog"]:not([hidden])') && $('picpop').hidden) {
+                if ((ev.key === 'b' || ev.key === 'B' || ev.code === 'KeyB') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '') && !document.querySelector('[role="dialog"]:not([hidden]), [role="alertdialog"]:not([hidden])') && $('picpop').hidden) {
                     ev.preventDefault(); ev.stopImmediatePropagation(); if (!ev.repeat) toggleBar(); return;       // (B hides the bar of a fullscreen page and brings it back; the game does not get it)
                 }
                 wake();

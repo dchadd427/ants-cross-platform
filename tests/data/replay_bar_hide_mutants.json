@@ -140,8 +140,8 @@
   {
    "id": "b_key_is_x",
    "file": "web/shell.html",
-   "old": "if ((ev.key === 'b' || ev.key === 'B') &&",
-   "new": "if ((ev.key === 'x' || ev.key === 'X') &&",
+   "old": "if ((ev.key === 'b' || ev.key === 'B' || ev.code === 'KeyB') &&",
+   "new": "if ((ev.key === 'x' || ev.key === 'X' || ev.code === 'KeyX') &&",
    "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
    "why": "there would be no key"
   },
@@ -244,7 +244,7 @@
   {
    "id": "zone_reaches_the_scroll_strip",
    "file": "web/replay_page.js",
-   "old": "at.y < z.bottom - ZONE_GAP",
+   "old": "at.y < z.bottom - gapOf(z)",
    "new": "at.y < z.bottom + 1",
    "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
    "why": "a pointer resting in the game's edge scroll strip would bring the bar up over the picture while the map scrolls"
@@ -255,7 +255,15 @@
    "old": "ZONE_GAP = 12",
    "new": "ZONE_GAP = 2",
    "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
-   "why": "the scroll strip of a scaled picture would still open the bar"
+   "why": "the least gap would shrink: a picture at its own size would call the bar from the game's scroll strip"
+  },
+  {
+   "id": "zone_gap_ignores_the_scale",
+   "file": "web/replay_page.js",
+   "old": "Math.ceil(5 * z.height / z.rows) + 2",
+   "new": "0",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "on a 1440p or 4K screen the game's scroll strip is wider than 12 px and a pointer resting in it would bring the bar up"
   },
   {
    "id": "a_sweep_is_a_rest",
@@ -316,10 +324,18 @@
   {
    "id": "no_hint_after_a_swipe_hides",
    "file": "web/shell.html",
-   "old": "if (touchSeen && !noteShown) { noteShown = true; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)",
+   "old": "if (touchSeen && !noteShown) { noteShown = true; $('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back'; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)",
    "new": "",
    "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
    "why": "a finger would not be told how to bring a hidden bar back"
+  },
+  {
+   "id": "hidden_hint_names_the_edge",
+   "file": "web/shell.html",
+   "old": "$('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back';",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs tests.scripts.test_web_replay",
+   "why": "a finger that hid the bar would be told to swipe up from an edge strip that is not there while the bar is hidden"
   }
  ]
 }

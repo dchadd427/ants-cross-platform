@@ -817,8 +817,9 @@
     // of the mouse, a click on the map or the minimap, nor a key; a thin handle stays at the bottom edge. `peek` is the bar called by the mouse: the pointer RESTS for ZONE_DWELL_MS (it moves less than ZONE_REST_PX) in the band of ZONE_PX along the picture's
     // bottom, but not in its last ZONE_GAP pixels (the game's edge scroll rests there) (a drag with a button down, or a pass that is shorter than that, calls nothing), and it goes back to `hidden` when the pointer has been away from the band and the bar for ZONE_LEAVE_MS (a button
     // down, or the page's `busy()`, is a touch of the bar). A finger never calls it by hover: the page feeds this only with the moves of a mouse or a pen. The page gives `env`: setTimeout, clearTimeout,
-    // zone() (the picture's rectangle: left, right, bottom), bar() (the bar's rectangle, or null while it is not there), busy() and change(mode). tests/scripts/web_replay_check.js runs it.
-    var ZONE_PX = 48, ZONE_GAP = 12, ZONE_REST_PX = 4, ZONE_DWELL_MS = 150, ZONE_LEAVE_MS = 700;      // (ZONE_GAP: the last pixels of the picture are the game's edge scroll, which rests there: they never call the bar)
+    // zone() (the picture's rectangle: left, right, bottom, height, and rows, the picture's height in game pixels), bar() (the bar's rectangle, or null while it is not there), busy() and change(mode). tests/scripts/web_replay_check.js runs it.
+    var ZONE_PX = 48, ZONE_GAP = 12, ZONE_REST_PX = 4, ZONE_DWELL_MS = 150, ZONE_LEAVE_MS = 700;      // (ZONE_GAP: the least gap; the last pixels of the picture are the game's edge scroll, which rests there: they never call the bar)
+    function gapOf(z) { return z.rows > 0 && z.height > 0 ? Math.max(ZONE_GAP, Math.ceil(5 * z.height / z.rows) + 2) : ZONE_GAP; }       // (the game's 5 px scroll strip, as it lies on the screen at this scale, plus 2 px; never less than ZONE_GAP)
     function barZone(env) {
         var mode = 'open', dwell = 0, leave = 0, at = null, anchor = null;                  // at: where the pointer last was, { x, y, buttons }, or null when it is out of the page
         function set(next) {
@@ -829,7 +830,7 @@
         }
         function inZone() {
             var z = env.zone();
-            return !!(at && z && at.x >= z.left && at.x <= z.right && at.y >= z.bottom - ZONE_PX && at.y < z.bottom - ZONE_GAP);
+            return !!(at && z && at.x >= z.left && at.x <= z.right && at.y >= z.bottom - ZONE_PX && at.y < z.bottom - gapOf(z));
         }
         function inBar() {
             var b = env.bar();
@@ -861,7 +862,7 @@
         };
     }
 
-    var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_GAP: ZONE_GAP, ZONE_REST_PX: ZONE_REST_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
+    var api = { barPointer: barPointer, barZone: barZone, ZONE_PX: ZONE_PX, ZONE_GAP: ZONE_GAP, gapOf: gapOf, ZONE_REST_PX: ZONE_REST_PX, ZONE_DWELL_MS: ZONE_DWELL_MS, ZONE_LEAVE_MS: ZONE_LEAVE_MS, REWIND_SECONDS: REWIND_SECONDS, rewindTurn: rewindTurn, rewindControl: rewindControl, CAM_KEY: CAM_KEY, CAM_NOTE_MS: CAM_NOTE_MS, camLoad: camLoad, camSave: camSave, camLabel: camLabel, camTitle: camTitle, camNoteDue: camNoteDue, cameraControl: cameraControl, FILE_RE: FILE_RE, LIVE_RE: LIVE_RE, SEATS: SEATS, LIVE_LAG: LIVE_LAG, AT_LIVE: AT_LIVE, FOLLOW_SLACK: FOLLOW_SLACK, fileOf: fileOf, liveIdOf: liveIdOf, liveMap: liveMap, startedOf: startedOf, endedOf: endedOf, whenText: whenText, startedText: startedText,
                 lengthText: lengthText, mapKey: mapKey, mapTitle: mapTitle, speedText: speedText, liveVerdict: liveVerdict, atLive: atLive, liveTag: liveTag, liveEntriesOf: liveEntriesOf, parsePlayer: parsePlayer, playersOf: playersOf, chipsOf: chipsOf,
                 LOCAL_MAX_BYTES: LOCAL_MAX_BYTES, HEAD_MAX_BYTES: HEAD_MAX_BYTES, crc32: crc32, localSizeOk: localSizeOk, localCheck: localCheck, ownName: ownName, sizeText: sizeText,
                 OWN_KEEP_MS: OWN_KEEP_MS, ownIdOf: ownIdOf, ownRandomId: ownRandomId, ownStore: ownStore, ownStoreOf: ownStoreOf, ownOpen: ownOpen,

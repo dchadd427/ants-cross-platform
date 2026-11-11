@@ -991,6 +991,7 @@ def main():
             check(until(tab, gone, 3) is True, "phone: a tap on the chevron hides the bar")
             hh = tab.ev(handle)
             check(hh[0] is False and hh[1] >= 44, "phone: the handle is there and at least 44 wide (%r)" % hh)
+            check(until(tab, "getComputedStyle(document.getElementById('rbar')).visibility === 'hidden'", 3) is True, "phone: the hidden bar has faded out")
             shot(tab, "bar-hidden-handle-390")
             touch(tab, [(100, 840), (200, 835), (300, 840)])
             time.sleep(0.6)
