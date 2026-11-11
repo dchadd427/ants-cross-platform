@@ -449,6 +449,20 @@ class TheNamedLine(Powers):
         self.say(self.mod, "/kick bob")
         self.assertEqual([l.text for l in self.w.store.recent_lines(10)], ["line 1", "line 2", "bob was kicked."])
 
+    def test_a_moderator_who_kicks_and_bans_over_and_over_has_a_few_lines_and_the_rest_are_refused_privately(self):
+        self.w.chat.named_limits = limitmod.RateByAccount(5, 10.0)
+        for n in range(30):
+            peer = self.w.join(BOB)
+            self.say(self.admin, "/ban bob")
+            self.say(self.admin, "/unban bob")
+        self.assertEqual(len(system(self.reader)), 5)
+        self.assertEqual(self.admin.codes().count("rate"), 25)
+        self.assertEqual(len(self.w.store.recent_lines(200)), 5)
+        self.assertEqual(len(self.rows()), 10)                                                       # (the five bans and their unbans: a refused ban leaves no row)
+        self.assertEqual((self.admin.strikes, self.admin.charges), (self.admin.codes().count("bad"), 25))      # (a refusal of the budget is not the client's doing: it costs a frame, not a mistake; the unbans of a ban that was refused are `bad`)
+        self.say(self.mod, "/kick alice")                                                            # (another moderator has its own)
+        self.assertEqual(len(system(self.reader)), 6)
+
     def test_a_refused_command_makes_no_line_at_all(self):
         for text in ("/kick nobody", "/ban boss.two", "/kick boss.one", "/ban bob extra", "/kick boss.two"):
             self.say(self.admin, text)
@@ -476,7 +490,7 @@ class TheNamedLine(Powers):
 class FreshBase(unittest.IsolatedAsyncioTestCase):
     """The real Roles against a stub of Discord that the test controls, on a clock that the test moves, with real tasks: the worker, the urgent lookups, the commands that wait."""
 
-    OPTIONS = dict(roles_refill_seconds=0.001, roles_jitter=0.0, roles_urgent_seconds=0.6, discord_seconds=1.0)
+    OPTIONS = dict(roles_refill_seconds=0.001, roles_jitter=0.0, roles_urgent_seconds=0.6, discord_seconds=1.0, roles_urgent_actor_burst=10 ** 6, named_lines_burst=10 ** 6)       # (the budgets of one moderator are out of the way, but in the tests of them)
 
     async def asyncSetUp(self):
         self.skew = 0.0
@@ -725,6 +739,39 @@ class TheFreshCheck(FreshBase):
         self.roles.entries["1001"].new = True
         self.roles.wake.set()
         await self.until(lambda: any(a == "1001" for _, a in self.stub.calls))
+
+    async def test_one_moderator_on_many_sockets_has_a_share_of_their_own_and_the_others_keep_theirs(self):
+        self.w.chat.wait_limits = limitmod.RateByAccount(3, 5.0)                                     # (the real numbers: a burst of 3, one more every 5 seconds)
+        for n in range(12):
+            self.w.store.set_profile("20%02d" % n, "user.%d" % n, "", 100)
+            self.members["20%02d" % n] = []
+        sockets = [self.w.join(MODERATOR) for _ in range(9)]
+        self.age()
+        for n, peer in enumerate(sockets[:10]):
+            self.w.say(peer, "/mute user.%d 5" % n)
+            await self.settle()
+        codes = [c for p in sockets for c in p.codes()]
+        self.assertEqual(codes.count("role"), len(sockets) - 3)
+        self.assertEqual(len(self.w.store.mutes()), 3)                                           # (three commands waited for lookups; the others were refused at the door)
+        self.assertGreater(sum(p.strikes for p in sockets), 0)                                       # (and a refusal of the share is a mistake of the socket)
+        asked_before = len(self.stub.calls)
+        self.w.say(self.admin, "/mute user.11 5")                                                    # (another moderator: its own share is whole, and so is the hub's)
+        await self.settle()
+        self.assertEqual((self.admin.codes(), len(self.stub.calls) > asked_before), ([], True))
+        self.assertGreater(self.w.store.muted_until("2011"), 0)
+
+    async def test_a_command_that_the_share_refuses_makes_no_entry_and_evicts_nobody(self):
+        self.members["1010"] = []
+        self.w.store.set_profile("1010", "dora.d", "", 100)
+        self.roles.urgent_bucket.tokens = 0.0
+        self.roles.urgent_bucket.at = self.clock()
+        before = dict(self.roles.entries)
+        self.age(0.0)
+        for account in ("9101", "1002"):
+            self.roles.entries[account].ok_at = self.clock() - 100.0
+        self.w.say(self.admin, "/mute dora.d 5")
+        await self.settle()
+        self.assertEqual((self.admin.codes(), "1010" in self.roles.entries, set(self.roles.entries) == set(before)), (["role"], False, True))
 
     async def test_the_share_of_the_actions_comes_back_with_time(self):
         def stale():
@@ -1088,7 +1135,7 @@ class TheIdIsLikeAPassword(unittest.IsolatedAsyncioTestCase):
         self.real = RealLog(self.logs)
         self.w = World(mods=())
         self.addCleanup(self.w.close)
-        self.limits = dataclasses.replace(limitmod.Limits(), roles_refill_seconds=0.001, roles_jitter=0.0, roles_urgent_seconds=0.4, discord_seconds=1.0)
+        self.limits = dataclasses.replace(limitmod.Limits(), roles_refill_seconds=0.001, roles_jitter=0.0, roles_urgent_seconds=0.4, discord_seconds=1.0, roles_urgent_actor_burst=10 ** 6, named_lines_burst=10 ** 6)
         self.clock = lambda: time.monotonic() + self.skew
         self.stub = Slow(self)
         cfg = config.load(dict(ENV))
@@ -1179,7 +1226,7 @@ class TheIdIsLikeAPassword(unittest.IsolatedAsyncioTestCase):
 class TheLiveHub(LiveTest):
     """Real sockets, the real hub with its real Roles against the fake Discord, the intervals short."""
 
-    options = dict(LiveTest.options, roles_action_fresh_seconds=0.8, roles_urgent_seconds=2.0)
+    options = dict(LiveTest.options, roles_action_fresh_seconds=0.8, roles_urgent_seconds=2.0, roles_urgent_actor_burst=10 ** 6, named_lines_burst=10 ** 6)
     recheck = 60                                                                                   # (only the lookups at the handshake and the urgent ones of the actions: no check on a timer)
 
     def setUp(self):
@@ -1375,7 +1422,7 @@ class TheRealProcess(unittest.TestCase):
     person acted on planted: in the log, the frames, the answers, the rows and the command line's output there is none."""
 
     RUN = ("import sys\nsys.path.insert(0, %r)\nfrom hub import limits, server\ninit = limits.Limits.__init__\n"
-           "def patched(self, *a, **k):\n    k.setdefault('roles_action_fresh_seconds', 0.5)\n    k.setdefault('roles_urgent_seconds', 1.5)\n    k.setdefault('roles_refill_seconds', 0.01)\n    init(self, *a, **k)\n"
+           "def patched(self, *a, **k):\n    k.setdefault('roles_action_fresh_seconds', 0.5)\n    k.setdefault('roles_urgent_seconds', 1.5)\n    k.setdefault('roles_refill_seconds', 0.01)\n    k.setdefault('roles_urgent_actor_burst', 10 ** 6)\n    k.setdefault('named_lines_burst', 10 ** 6)\n    init(self, *a, **k)\n"
            "limits.Limits.__init__ = patched\nraise SystemExit(server.main())\n") % REPO
 
     def test_no_id_anywhere_after_kick_ban_mute_and_a_failing_discord(self):

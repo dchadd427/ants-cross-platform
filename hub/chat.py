@@ -70,6 +70,8 @@ class Chat:
         self.login = login
         self.account_limits = AccountLimits(limits)
         self.global_limit = TokenBucket(limits.global_burst, limits.global_refill_seconds, clock())      # all accounts together: what the database is asked to keep
+        self.wait_limits = RateByAccount(limits.roles_urgent_actor_burst, limits.roles_urgent_actor_refill_seconds)      # the commands of a moderator that wait for lookups, across all its sockets
+        self.named_limits = RateByAccount(limits.named_lines_burst, limits.named_lines_refill_seconds)               # the kicks and the bans of a moderator: each one is a line for everybody
         self.pick_limits = RateByAccount(limits.pick_burst, limits.pick_refill_seconds)               # an account's switches between its two names, across all its tabs
         self.salt = os.urandom(16)                  # the key of an account (key_of) is made with this: it changes with every start, so it names nobody for longer than the hub runs
         self.peers = presencemod.Peers()
@@ -323,6 +325,8 @@ class Chat:
             return self.mistake(peer, refusal)
         if self.roles.fresh(accounts):
             return self.carry_out(peer, job)
+        if not self.wait_limits.take(peer.identity.account_id, self.clock()):
+            return self.mistake(peer, "role")                       # (a moderator who asks for too many lookups at once: refused here, before the hub's share is touched, and counted as a mistake)
         task = asyncio.ensure_future(self.wait_and_carry_out(peer, job, accounts))
         self.busy[peer] = task
         task.add_done_callback(lambda done, peer=peer: self.finished(peer, done))
@@ -381,6 +385,8 @@ class Chat:
             return self.mistake(peer, "role", count=False)         # (no longer a moderator: the answer is fresh, and it says none)
         if not allowed(name, actor, self.roles.role_of(target) if target is not None else None, target == me.account_id):
             return self.mistake(peer, "power")
+        if name in ("kick", "ban") and not self.named_limits.take(me.account_id, self.clock()):
+            return self.mistake(peer, "rate", count=False)         # (a line for everybody at every one: a moderator has a few at once, and the refused ones stay private)
         by, whom = self.ref(me.account_id), self.ref(target) if target is not None else ""
         if name == "mute":
             self.store.mute(target, minutes, by, arg, note=(by, "mute", whom, str(minutes)))

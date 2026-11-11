@@ -133,13 +133,13 @@ class Roles:
             return False                                                   # (no worker, or Discord refuses what the roles ask with: there is no answer to wait for)
         loop = asyncio.get_running_loop()
         stale = [a for a in accounts if not (self.owner and a == self.owner)]      # (one answer that is old is a reason to ask about all of them: the action rests on answers of one moment)
+        if not self.afford(len(stale)):
+            return False                                                   # (the actions have asked for more than their share of the lookups: this one is refused, and nothing is made or evicted for it)
         for account in stale:
             if account not in self.entries:
                 if len(self.entries) >= self.limits.roles_entries_max and not self.evict():
                     return False                                           # (nowhere to keep an answer: the action is refused, which is the safe side)
                 self.entries[account] = Entry(self.clock())
-        if not self.afford(len(stale)):
-            return False                                                   # (the actions have asked for more than their share of the lookups: this one is refused)
         waiting = []
         for account in stale:
             future = loop.create_future()

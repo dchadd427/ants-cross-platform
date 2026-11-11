@@ -1520,7 +1520,7 @@ class TheCommandLine(unittest.TestCase):
     def test_unknown_names_and_bad_arguments(self):
         status, _, err = self.run_admin("mute", "nobody", "5")
         self.assertEqual(status, 1)
-        self.assertIn("account id", err)
+        self.assertIn("reference", err)
         self.assertEqual(self.run_admin("mute", "Bad Name!", "5")[0], 1)
         self.assertEqual(self.run_admin("mute", "alice", "-1")[0], 2)
         self.assertEqual(self.run_admin("mute", "alice", "525601")[0], 2)
@@ -1640,7 +1640,7 @@ class TheCommandLine(unittest.TestCase):
         store.add_line("5005", "ghost", "from before profiles were kept", False)
         status, _, err = self.run_admin("mute", "ghost", "5")
         self.assertEqual(status, 1)
-        self.assertIn("account id", err)
+        self.assertIn("reference", err)
         self.assertEqual(self.run_admin("mute", "5005", "5")[0], 0)
         self.assertEqual([tuple(m)[:2] for m in store.mutes()], [("5005", "ghost")])
 

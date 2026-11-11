@@ -69,7 +69,7 @@ def resolve(store, who):
         if not text.valid_name(name):
             return None, "not an account id or a username"
         account = store.account_of_username(name)
-        return (account, name) if account else (None, "no account has that username, or more than one does (use the account id)")
+        return (account, name) if account else (None, "no account has that username, or more than one does (use the reference that `list` or `log` prints)")
     profile = store.profile(who)
     return who, profile.username if profile else store.last_name(who)
 

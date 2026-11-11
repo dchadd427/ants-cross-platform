@@ -78,6 +78,10 @@ class Limits:
     roles_urgent_seconds: float = 3.0           # ... and waited for this long at the most (an action whose lookups did not answer in time is refused)
     roles_urgent_burst: int = 10                # the lookups that actions may ask for at once, and then one every `roles_urgent_refill_seconds` for the whole hub: an action that cannot have its lookups is refused (`role`), so that a moderator who asks for many ...
     roles_urgent_refill_seconds: float = 1.0    # ... cannot use the whole of the two lookups a second, which everybody's role holds on to (half of them are the people's own)
+    roles_urgent_actor_burst: int = 3           # the commands of one moderator (across all its sockets) that may wait for lookups at once, and then one every `roles_urgent_actor_refill_seconds`: what a moderator may ask of the hub's share ...
+    roles_urgent_actor_refill_seconds: float = 5.0      # ... so that one moderator cannot spend the share that every moderator's actions use
+    named_lines_burst: int = 5          # kicks and bans that one moderator may do at once (each is a line for everybody), and then one every `named_lines_refill_seconds`; a kick or a ban over it is refused, privately (`rate`)
+    named_lines_refill_seconds: float = 10.0
     roles_entries_max: int = 2000       # people whose role is kept in memory: those with a socket open and a few that left (at most `sockets_total` are open)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
 

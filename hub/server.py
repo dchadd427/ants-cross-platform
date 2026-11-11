@@ -343,6 +343,8 @@ class Hub:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
             self.chat.pick_limits.forget_idle(now)
+            self.chat.wait_limits.forget_idle(now)
+            self.chat.named_limits.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):
                 self.sessions.forget_idle(now, wall)
         if now >= self.next_purge:

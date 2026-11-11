@@ -703,6 +703,55 @@
    "old": "        for task in list(self.chat.busy.values()):\n            task.cancel()\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLiveHub"
+  },
+  {
+   "id": "a_moderator_has_no_share_of_their_own",
+   "file": "hub/chat.py",
+   "old": "        if not self.wait_limits.take(peer.identity.account_id, self.clock()):\n            return self.mistake(peer, \"role\")",
+   "new": "        if False:\n            return self.mistake(peer, \"role\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_share_of_a_moderator_is_the_share_of_the_hub",
+   "file": "hub/chat.py",
+   "old": "        if not self.wait_limits.take(peer.identity.account_id, self.clock()):",
+   "new": "        if not self.wait_limits.take(\"x\", self.clock()):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_refused_share_is_not_a_mistake",
+   "file": "hub/chat.py",
+   "old": "            return self.mistake(peer, \"role\")                       # (a moderator who asks",
+   "new": "            return self.mistake(peer, \"role\", count=False)                       # (a moderator who asks",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "an_entry_is_made_before_the_share_is_asked",
+   "file": "hub/roles.py",
+   "old": "        if not self.afford(len(stale)):\n            return False                                                   # (the actions have asked for more than their share of the lookups: this one is refused, and nothing is made or evicted for it)\n        for account in stale:",
+   "new": "        for account in stale:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "kicks_and_bans_have_no_budget",
+   "file": "hub/chat.py",
+   "old": "        if name in (\"kick\", \"ban\") and not self.named_limits.take(me.account_id, self.clock()):",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_budget_of_lines_is_the_hubs",
+   "file": "hub/chat.py",
+   "old": "not self.named_limits.take(me.account_id, self.clock())",
+   "new": "not self.named_limits.take(\"x\", self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_refused_line_is_a_mistake",
+   "file": "hub/chat.py",
+   "old": "            return self.mistake(peer, \"rate\", count=False)         # (a line for everybody",
+   "new": "            return self.mistake(peer, \"rate\")         # (a line for everybody",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
   }
  ]
 }
