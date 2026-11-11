@@ -136,6 +136,9 @@ class TheServices(unittest.TestCase):
                 self.assertIn("%s: ${%s:-}\n" % (secret, secret), hub + "\n", name)                  # (the bot's token, the server and the roles: from the stack's environment only, no value in the file)
             self.assertIn("ANTS_HUB_ROLE_RECHECK_SECONDS: ${ANTS_HUB_ROLE_RECHECK_SECONDS:-180}\n", hub + "\n", name)
             self.assertNotIn("ANTS_HUB_MODS", hub, name)
+            for other in ("ants-server", "ants-beta"):                                              # (the roles' settings are the hub's alone)
+                if re.search(r"(?m)^  %s:" % other, text):
+                    self.assertNotRegex(service(text, other), r"ANTS_HUB_(?:DISCORD|ROLE|OWNER)", "%s: %s" % (name, other))
             self.assertIn("ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}\n", hub + "\n", name)           # (from the stack's environment, and nothing in the file: no default, no value)
             self.assertIn("ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}\n", hub + "\n", name)
             self.assertIn("ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}\n", hub + "\n", name)
