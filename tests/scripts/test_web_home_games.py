@@ -159,13 +159,12 @@ class TheFolder(unittest.TestCase):
         self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
-    def test_only_the_switch_of_the_matches_in_progress_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
+    def test_nothing_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
         for word in ("sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
             self.assertNotIn(word, self.code, word)
-        self.assertEqual(len(re.findall(r"localStorage", self.code)), 3, "the one choice, in two small functions that each have a try: read, and written or removed")
-        self.assertIn("function readChoice() { try { return win.localStorage.getItem(CHOICE_KEY) !== '0'; } catch (e) { return true; } }", self.js, "a browser that keeps nothing: the default, on")
-        self.assertIn("function keepChoice(on) { try { if (on) win.localStorage.removeItem(CHOICE_KEY); else win.localStorage.setItem(CHOICE_KEY, '0'); } catch (e) {", self.js)
-        self.assertIn("var CHOICE_KEY = 'ants.home.games.live';", self.js)
+        self.assertNotIn("localStorage", self.code, "nothing is kept in the browser: the matches in progress always show")
+        self.assertNotIn("ants.home.games", self.code, "no stored word (an old one from an earlier version is never read)")
+        self.assertNotRegex(read("web", "home", "games.css"), r"\.gfilter|\.gfrow", "no switch in the list's head")
         self.assertIn("var LIST_URL = '/lobbies';", self.js)
         self.assertIn("var LIVE_URL = '/live';", self.js)
         self.assertEqual(len(re.findall(r"win\.fetch\(", self.code)), 1, "one fetch, in look(url), for both addresses")

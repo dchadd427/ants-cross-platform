@@ -2,13 +2,12 @@
 // /live, no hub: the chat says it is offline). docs/HOME_SCREEN.md, "Games in progress". For every width (1280, 1180, 701, 700, 390, 320 and a phone held sideways, 568 x 320) it checks:
 //   1. a busy list (open rooms and eight matches in progress, with long names, a name that is markup and a map of the players): the page does not scroll sideways, no row is wider than the list, every Watch is at least
 //      44 x 44 px, inside its row and not over the row's own text (nor over the box of the names), and the Games button counts the open rooms only;
-//      (and Watch stands at the row's right edge, four names of 32 characters are cut at three lines inside their box, and a phone held sideways keeps the switch in the head's own line);
+//      (and Watch stands at the row's right edge and four names of 32 characters are cut at three lines inside their box);
 //   2. Watch is a link to /play.html?live=<id> with target _blank: a press opens a NEW page on that address and the lobby page stays where it was, with its list;
 //   3. a name that is markup is shown as text (no element and no script run: nothing in the page was made from it);
-//   4. the switch "Show games in progress" is a checkbox that the keyboard reaches (Tab) and flips (Space), its label is a target of 44 px, off puts the rows away and stops the looks at /live (the stand-in counts them), the choice
-//      is kept in this browser and holds after a reload (no look at /live at all), on brings them back;
+//   4. there is no switch: the rows always show, and a word that an earlier version kept in this browser ("0") is ignored and left alone, also after a reload;
 //   5. a phone: while its Chat view covers the list nothing looks at /live, and the Games view brings the look back;
-//   6. no games in progress, a server with no live door (404) and a server that is down: no row, no error, the open rooms stay, and with no door the switch is not there; and the page's own errors are none.
+//   6. no games in progress, a server with no live door (404) and a server that is down: no row, no error, the open rooms stay, and the page's own errors are none.
 //   --shots DIR takes the pictures (watch_*.png).
 //
 //   node tests/scripts/web_home_watch_browser.js [--web DIR] [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
@@ -79,9 +78,7 @@ const GEOM = () => {
     const q = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
     const dock = document.querySelector('.gdock');
     const rows = Array.from(document.querySelectorAll('.gdock .glive')).filter((e) => e.getClientRects().length);
-    const frow = document.querySelector('.gdock .gfrow'), title = document.querySelector('.gdock .gptitle'), phead = document.querySelector('.gdock .gphead');
-    return {
-        head: frow && frow.getClientRects().length ? { h: q(phead).h, sw: q(frow).t, title: q(title).b, count: q(document.querySelector('.gdock .gpcount')).b } : null,
+        return {
         page: [document.documentElement.scrollWidth, innerWidth], dock: dock && dock.getClientRects().length ? [dock.scrollWidth, dock.clientWidth] : null,
         rows: rows.map((li) => {
             const go = li.querySelector('.gwatch'), top = li.querySelector('.gtop'), line = li.querySelector('.gline'), box = q(li), g = q(go), tp = q(top), ln = q(line);
@@ -128,7 +125,6 @@ const GEOM = () => {
                 check(name + ': every Watch is /play.html?live=<id> in a new tab with no opener', info.links.length === 8 && info.links.every((l) => /^\/play\.html\?live=[A-Za-z0-9_]+-[0-9]{8}-[0-9]{6}Z$/.test(l[0]) && l[1] === '_blank' && /noopener/.test(l[2])), JSON.stringify(info.links[0]));
                 check(name + ': Watch stands in the last column of its row, at its right edge (its grid area)', g.rows.every((r) => r.flush <= 20), JSON.stringify(g.rows.map((r) => Math.round(r.flush))));
                 check(name + ': four names of 32 characters are cut at three lines and leave nothing outside their box', g.rows.every((r) => !r.leak) && g.rows[6].h <= 200, JSON.stringify(g.rows.map((r) => [r.leak, Math.round(r.h)])));
-                if (name === 'side') check(name + ': a phone held sideways keeps the switch in the head\'s own line (the head stays one line tall, so the list keeps its room)', !!g.head && g.head.sw < g.head.title - 1 && g.head.h <= 60, JSON.stringify(g.head));
                 await shot(page, name + '_busy');
                 await page.evaluate(() => { const b = document.querySelector('.gdock .gpbody'); b.scrollTop = b.scrollHeight; });
                 await sleep(500);
@@ -141,36 +137,16 @@ const GEOM = () => {
                     check('a press on Watch opens a NEW page on that match', !!popup && /\/play\.html\?live=ISLANDS-/.test(popup.url()), popup ? popup.url() : 'no page');
                     check('... and the lobby page is still on its list with its rows', /\/$/.test(page.url()) && (await page.evaluate(() => document.querySelectorAll('.gdock .glive').length)) === 8);
                     if (popup) await popup.close();
-                    // the switch
-                    const sw = await page.evaluate(() => { const l = document.querySelector('.gfilter'), i = l.querySelector('input'), r = l.getBoundingClientRect(); return { type: i.type, on: i.checked, text: l.textContent, h: r.height, label: i.labels && i.labels[0] === l }; });
-                    check('the switch is a checkbox in its label, on, 44 px high', sw.type === 'checkbox' && sw.on && sw.label && sw.text === 'Show games in progress' && sw.h >= 44, JSON.stringify(sw));
-                    await page.focus('.gdock .gcode input');
-                    let reached = false;
-                    await page.focus('.gfilter input');
-                    reached = await page.evaluate(() => document.activeElement === document.querySelector('.gfilter input'));
-                    check('the keyboard reaches the switch', reached);
-                    await page.keyboard.press('Space');
-                    await sleep(300);
-                    const off = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, shown: Array.from(document.querySelectorAll('.glivebox')).some((b) => b.getClientRects().length), head: document.querySelector('.gdock .gpcount').textContent, kept: localStorage.getItem('ants.home.games.live'), pill: document.querySelector('.hchip.games .pill').textContent }));
-                    check('Space turns it off: the rows and their box are gone, the head is as before them, the choice is kept, the count has not moved', off.rows === 0 && !off.shown && /^3 waiting/.test(off.head) && off.kept === '0' && off.pill === '3', JSON.stringify(off));
-                    await shot(page, name + '_filter_off');
-                    const seen = state.live;
-                    await sleep(12500);
-                    check('... and nothing looks at /live while it is off', state.live === seen, state.live + ' vs ' + seen);
+                    // no switch, and an old stored word is ignored
+                    check('there is no switch in the list', (await page.evaluate(() => document.querySelectorAll('.gdock .gfilter, .gdock .gfrow, .gdock input[type=checkbox]').length)) === 0);
+                    await page.evaluate(() => localStorage.setItem('ants.home.games.live', '0'));
                     await page.reload({ waitUntil: 'load' });
-                    await page.waitForSelector('.gdock .gitem', { timeout: 15000 });
-                    await sleep(800);
-                    const after = state.live;
-                    const again = await page.evaluate(() => ({ on: document.querySelector('.gfilter input').checked, rows: document.querySelectorAll('.gdock .glive').length }));
-                    check('after a reload it is still off, and /live was not asked at all', !again.on && again.rows === 0 && state.live === seen, JSON.stringify([again, after, seen]));
-                    await page.focus('.gfilter input');
-                    await page.keyboard.press('Space');
-                    await page.waitForSelector('.gdock .glive', { timeout: 5000 });
-                    const on = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, kept: localStorage.getItem('ants.home.games.live'), head: document.querySelector('.gdock .gpcount').textContent }));
-                    check('Space turns it on: the rows are back at once, the choice is the default again, the head says both', on.rows === 8 && on.kept === null && on.head === '3 open, 8 in progress', JSON.stringify(on));
-                    await shot(page, name + '_filter_on');
+                    await page.waitForSelector('.gdock .glive', { timeout: 15000 });
+                    const old = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, kept: localStorage.getItem('ants.home.games.live'), head: document.querySelector('.gdock .gpcount').textContent }));
+                    check('an old stored "0" is ignored: the 8 rows show after a reload, the head says both, and the word is left as it was', old.rows === 8 && old.kept === '0' && old.head === '3 open, 8 in progress', JSON.stringify(old));
+                    await page.evaluate(() => localStorage.removeItem('ants.home.games.live'));
                     const t = state.liveTimes;
-                    check('the looks at /live were never closer than 10 s (apart from the one that a switch makes at once)', t.every((x, i) => i === 0 || x - t[i - 1] >= 10000 || i >= t.length - 2), JSON.stringify(t.map((x) => x - t[0])));
+                    check('the looks at /live were never closer than 10 s (apart from the first one after a reload)', t.every((x, i) => i === 0 || x - t[i - 1] >= 10000 || i >= t.length - 2), JSON.stringify(t.map((x) => x - t[0])));
                 }
                 if (name === 'phone') {      // the Chat view covers the docked list: nothing shows the matches, so /live is not asked; the Games view brings the look back at once
                     await page.click('.htab.t-chat');
@@ -192,11 +168,11 @@ const GEOM = () => {
                 const { context, page } = await open(origin, w, h, touch);
                 if (w <= 700) { await page.click('.htab.t-games').catch(() => {}); }
                 await sleep(1500);
-                const g = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, box: Array.from(document.querySelectorAll('.glivebox')).some((b) => b.getClientRects().length), none: (document.querySelector('.gnolive') || {}).textContent, sw: !!document.querySelector('.gfrow') && document.querySelector('.gfrow').getClientRects().length > 0,
+                const g = await page.evaluate(() => ({ rows: document.querySelectorAll('.gdock .glive').length, box: Array.from(document.querySelectorAll('.glivebox')).some((b) => b.getClientRects().length), none: (document.querySelector('.gnolive') || {}).textContent,
                     cards: document.querySelectorAll('.gdock .glist:not(.glivelist) .gitem').length, note: !!document.querySelector('.gpnote') && !document.querySelector('.gpnote').hidden, toast: !!document.querySelector('.gtoast') && !document.querySelector('.gtoast').hidden, head: document.querySelector('.gdock .gpcount').textContent }));
                 check(name + '/' + mode + ': no row, and the open rooms stay', g.rows === 0 && g.cards === 3, JSON.stringify(g));
-                if (mode === 'none') check(name + '/none: the box says "No games in progress." and the switch is there', g.box && g.none === 'No games in progress.' && g.sw && g.head === '3 open, 0 in progress', JSON.stringify(g));
-                else check(name + '/' + mode + ': the section and the switch are not there, with no notice, no toast and the head as before', !g.box && !g.sw && !g.note && !g.toast && /^3 waiting/.test(g.head), JSON.stringify(g));
+                if (mode === 'none') check(name + '/none: the box says "No games in progress."', g.box && g.none === 'No games in progress.' && g.head === '3 open, 0 in progress', JSON.stringify(g));
+                else check(name + '/' + mode + ': the section is not there, with no notice, no toast and the head as before', !g.box && !g.note && !g.toast && /^3 waiting/.test(g.head), JSON.stringify(g));
                 await shot(page, name + '_' + mode);
                 await context.close();
             }
@@ -204,11 +180,10 @@ const GEOM = () => {
         }
         {   // one list: open rooms first, then the matches; with no open room and a match in progress there is no empty card and the first match shows without a scroll of the list
             const SHOW = [SIZES[0], SIZES[4], SIZES[6]];
-            for (const [label, opts] of [['0 open, 1 live', { noOpen: true, n: 1 }], ['0 open, 3 live', { noOpen: true, n: 3 }], ['3 open, 3 live', { n: 3 }], ['0 open, 0 live', { noOpen: true, mode: 'none' }], ['0 open, 3 live, switch off', { noOpen: true, n: 3, off: true }]]) {
+            for (const [label, opts] of [['0 open, 1 live', { noOpen: true, n: 1 }], ['0 open, 3 live', { noOpen: true, n: 3 }], ['3 open, 3 live', { n: 3 }], ['0 open, 0 live', { noOpen: true, mode: 'none' }]]) {
                 const { site, origin } = await startSite(opts.mode || 'busy', opts);
                 for (const [name, w, h, touch] of SHOW) {
                     const { context, page } = await open(origin, w, h, touch).catch(async () => { const c = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: touch }); const pg = await c.newPage(); await pg.goto(origin + '/', { waitUntil: 'load' }); return { context: c, page: pg }; });
-                    if (opts.off) { await page.evaluate(() => localStorage.setItem('ants.home.games.live', '0')); await page.reload({ waitUntil: 'load' }); }
                     if (w <= 700) { await page.click('.htab.t-games').catch(() => {}); }
                     await sleep(1500);
                     const g = await page.evaluate(() => {
@@ -219,9 +194,7 @@ const GEOM = () => {
                     });
                     const tag = name + '/' + label;
                     check(tag + ': no sideways scroll, Join by code is shown', !g.sideways && g.code, JSON.stringify(g));
-                    if (opts.off) {
-                        check(tag + ': the switch off and nothing open: the full empty card (picture, no button) and no match row', g.shown && g.ant && g.btns === 0 && !g.row, JSON.stringify(g));
-                    } else if (opts.noOpen && !opts.mode) {
+                    if (opts.noOpen && !opts.mode) {
                         check(tag + ': no "No open games right now." card at all while a match is in progress (the matches are the first thing in the list)', !g.shown && !g.ant, JSON.stringify(g));
                         if (name !== 'side') check(tag + ': the first match in progress shows in the list without a scroll (all of it for one match; 100 px of it, name and Watch, when its names wrap to three lines)', g.row && Math.min(g.row[1], g.body[1]) - g.row[0] >= Math.min(100, g.row[1] - g.row[0]) && (label !== '0 open, 1 live' || g.row[1] <= g.body[1] + 0.5), JSON.stringify(g));
                     } else if (opts.mode === 'none') {
