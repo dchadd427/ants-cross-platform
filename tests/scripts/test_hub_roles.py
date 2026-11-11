@@ -815,7 +815,7 @@ class TheLiveRoles(LiveTest):
         frame = json.loads(raw)
         self.assertEqual(set(frame), {"t", "you"})
         self.assertEqual((frame["you"]["name"], frame["you"]["role"], frame["you"]["mod"], len(frame["you"]["k"])), ("alice", "admin", True, 12))
-        for secret in SECRETS + ("1001",):
+        for secret in SECRETS:                                                     # (the account's own digits are not looked for: its key is random hex, which can hold four digits by chance)
             self.assertNotIn(secret.encode(), raw)
 
     def test_the_commands_follow_the_role_while_it_lasts(self):
