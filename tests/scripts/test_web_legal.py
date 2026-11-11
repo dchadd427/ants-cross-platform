@@ -235,14 +235,14 @@ class TheRouteAndTheImage(unittest.TestCase):
     def test_the_dockerfile_copies_the_page_to_the_site(self):
         self.assertIn("\nCOPY web/legal.html /usr/share/nginx/html/legal.html\n", read("Dockerfile"))
 
-    def test_nginx_serves_legal_and_changelog_at_their_clean_addresses_and_sends_the_old_ones_there_for_good(self):
+    def test_nginx_serves_legal_and_changelog_at_their_clean_addresses_and_the_old_files_answer_200_not_a_redirect(self):
         conf = read("docker", "nginx.conf")
         for name in ("legal", "changelog"):
             block = re.search(r"\n    location = /%s \{([^}]*)\}" % name, conf)
             self.assertIsNotNone(block, "location = /" + name)
             self.assertEqual(block.group(1).split(), ["rewrite", "^", "/%s.html" % name, "last;"])      # (no add_header: a header here would hide the server's own; the file's address sends the page's headers)
-        self.assertIn("    /legal.html /legal;\n", conf)                                            # (the map of old addresses: a 301 with the query, tests/scripts/test_nginx_clean_urls.py)
-        self.assertIn("    /changelog.html /changelog;\n", conf)
+        self.assertNotIn("    /legal.html /legal;\n", conf)                                         # (not in the map of old addresses: /legal used to redirect to the file, so the file answers 200, tests/scripts/test_nginx_clean_urls.py)
+        self.assertNotIn("    /changelog.html /changelog;\n", conf)
 
 
 if __name__ == "__main__":
