@@ -183,7 +183,7 @@ async function flows() {
                 for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
                     const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
                     await empty.waitForSelector('.gpop .gempty:not([hidden])'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
-                    check('' + size[0] + ': no open games shows the empty state (the two big buttons, Quick host and Quick join) and Join by code in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), b = [...p.querySelectorAll('.gempty .gerow .btn')]; return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcode input') && /none waiting/.test(p.textContent) && b.map((x) => x.textContent).join() === 'Quick host,Quick join' && b.every((x) => x.getBoundingClientRect().height >= 55); }));
+                    check('' + size[0] + ': no open games shows the empty state (words only, no Quick host or Quick join: the bar has them) and Join by code in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), b = [...p.querySelectorAll('.gempty button')]; return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcode input') && /none waiting/.test(p.textContent) && b.length === 0; }));
                     const m = await long.evaluate(async () => {
                         const p = document.querySelector('.gpop'), body = p.querySelector('.gpbody'), q = p.getBoundingClientRect(), y = document.getElementById('hmain').getBoundingClientRect(); const scrolls = body.scrollHeight > body.clientHeight + 4;
                         body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcode input'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
@@ -440,7 +440,7 @@ async function flows() {
                 p = await newPage(browser, emptySite, 'Maple', size); await lit(p);
                 await p.click('.hchip.games'); await p.waitForSelector('.gempty:not([hidden])');
                 await shot(p, 'games_empty', size);
-                check(label + ': the empty list says it and offers Host one! (44 px)', (await p.evaluate(() => document.querySelector('.gempty .btn').getBoundingClientRect().height)) >= 44);
+                check(label + ': the empty list says it, with no button of its own', (await p.evaluate(() => !!document.querySelector('.gempty') && document.querySelectorAll('.gempty button').length === 0)));
                 await p.context().close();
                 p = await newPage(browser, offSite, 'Maple', size); await lit(p);
                 await p.click('.hchip.games'); await p.waitForSelector('.goff:not([hidden])');
