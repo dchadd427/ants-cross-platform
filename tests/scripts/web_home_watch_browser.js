@@ -202,27 +202,30 @@ const GEOM = () => {
             }
             site.close();
         }
-        {   // one list: open rooms first, then the matches; with no open room the empty card is compact and the first match shows without a scroll of the list
+        {   // one list: open rooms first, then the matches; with no open room and a match in progress there is no empty card and the first match shows without a scroll of the list
             const SHOW = [SIZES[0], SIZES[4], SIZES[6]];
-            for (const [label, opts] of [['0 open, 1 live', { noOpen: true, n: 1 }], ['0 open, 3 live', { noOpen: true, n: 3 }], ['3 open, 3 live', { n: 3 }], ['0 open, 0 live', { noOpen: true, mode: 'none' }]]) {
+            for (const [label, opts] of [['0 open, 1 live', { noOpen: true, n: 1 }], ['0 open, 3 live', { noOpen: true, n: 3 }], ['3 open, 3 live', { n: 3 }], ['0 open, 0 live', { noOpen: true, mode: 'none' }], ['0 open, 3 live, switch off', { noOpen: true, n: 3, off: true }]]) {
                 const { site, origin } = await startSite(opts.mode || 'busy', opts);
                 for (const [name, w, h, touch] of SHOW) {
                     const { context, page } = await open(origin, w, h, touch).catch(async () => { const c = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: touch }); const pg = await c.newPage(); await pg.goto(origin + '/', { waitUntil: 'load' }); return { context: c, page: pg }; });
+                    if (opts.off) { await page.evaluate(() => localStorage.setItem('ants.home.games.live', '0')); await page.reload({ waitUntil: 'load' }); }
                     if (w <= 700) { await page.click('.htab.t-games').catch(() => {}); }
                     await sleep(1500);
                     const g = await page.evaluate(() => {
                         const q = (e) => e && e.getClientRects().length ? e.getBoundingClientRect() : null;
                         const body = q(document.querySelector('.gdock .gpbody')), empty = q(document.querySelector('.gdock .gempty')), row = q(document.querySelector('.gdock .glive')), list = q(document.querySelector('.gdock .glist:not(.glivelist)'));
                         const e = document.querySelector('.gdock .gempty');
-                        return { body: body && [body.top, body.bottom], empty: empty && [empty.top, empty.height], row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], compact: !!e && e.className.indexOf('gcompact') !== -1, ant: !!(e && q(e.querySelector('.ant'))), btns: e ? e.querySelectorAll('button').length : 0, code: !!q(document.querySelector('.gdock .gcode')), sideways: document.documentElement.scrollWidth > innerWidth };
+                        return { body: body && [body.top, body.bottom], empty: empty && [empty.top, empty.height], row: row && [row.top, row.bottom], list: list && [list.top, list.bottom], shown: !!empty, ant: !!(e && q(e.querySelector('.ant'))), btns: e ? e.querySelectorAll('button').length : 0, code: !!q(document.querySelector('.gdock .gcode')), sideways: document.documentElement.scrollWidth > innerWidth };
                     });
                     const tag = name + '/' + label;
                     check(tag + ': no sideways scroll, Join by code is shown', !g.sideways && g.code, JSON.stringify(g));
-                    if (opts.noOpen && !opts.mode) {
-                        check(tag + ': the empty card is the compact one (no picture, no button: the bar has Quick host and Quick join; two lines at most)', g.compact && !g.ant && g.btns === 0 && g.empty && g.empty[1] <= 90, JSON.stringify(g));
+                    if (opts.off) {
+                        check(tag + ': the switch off and nothing open: the full empty card (picture, no button) and no match row', g.shown && g.ant && g.btns === 0 && !g.row, JSON.stringify(g));
+                    } else if (opts.noOpen && !opts.mode) {
+                        check(tag + ': no "No open games right now." card at all while a match is in progress (the matches are the first thing in the list)', !g.shown && !g.ant, JSON.stringify(g));
                         if (name !== 'side') check(tag + ': the first match in progress shows in the list without a scroll (all of it for one match; 100 px of it, name and Watch, when its names wrap to three lines)', g.row && Math.min(g.row[1], g.body[1]) - g.row[0] >= Math.min(100, g.row[1] - g.row[0]) && (label !== '0 open, 1 live' || g.row[1] <= g.body[1] + 0.5), JSON.stringify(g));
                     } else if (opts.mode === 'none') {
-                        check(tag + ': nothing at all keeps the full empty card (the picture, still no button)', !g.compact && g.ant && g.btns === 0, JSON.stringify(g));
+                        check(tag + ': nothing at all keeps the full empty card (the picture, still no button)', g.shown && g.ant && g.btns === 0, JSON.stringify(g));
                     } else {
                         check(tag + ': open rooms first, the matches under them, no empty card', !g.empty && g.list && g.row && g.list[0] < g.row[0], JSON.stringify(g));
                     }
