@@ -1838,7 +1838,7 @@
   {
    "id": "qj_host_one_does_nothing",
    "file": "web/home/games.js",
-   "old": "{ text: TEXT.hostOne, cls: 'gyes big', run: quickHost },",
+   "old": "{ text: TEXT.hostOne, cls: 'gyes big', run: hostOne },",
    "new": "{ text: TEXT.hostOne, cls: 'gyes big' },",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -2258,8 +2258,8 @@
   {
    "id": "qj_host_one_is_a_small_button",
    "file": "web/home/games.js",
-   "old": "cls: 'gyes big', run: quickHost",
-   "new": "cls: 'gyes', run: quickHost",
+   "old": "cls: 'gyes big', run: hostOne",
+   "new": "cls: 'gyes', run: hostOne",
    "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_room_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html && python3 tests/scripts/test_web_home_games.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

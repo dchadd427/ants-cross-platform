@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, chooseHost, hostCard, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, pillOf, myRoom, Games, RULES0, done, broke, helloRoom, runLobby, hex, helloBytes } = R;
 
 // the address of a picture of the library (map_picker.js: the one shape that the page loads for a map of the players): /maps/previews/ and a name of unreserved characters and %XX (never an escaped slash, backslash or NUL), no leading dot
 const LIBRARY = /^\/maps\/previews\/(?:[A-Za-z0-9_~-]|%(?!2F|5C|00)[0-9A-F]{2})(?:[A-Za-z0-9._~-]|%(?!2F|5C|00)[0-9A-F]{2})*\.webp$/;

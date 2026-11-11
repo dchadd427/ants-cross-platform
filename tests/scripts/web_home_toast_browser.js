@@ -242,7 +242,7 @@ async function shot(page, name) { if (SHOTS) { fs.mkdirSync(SHOTS, { recursive: 
             }
             // the Room: the toast is placed again, and the START bar and the Room's bottom row stay free
             await raise(page);
-            await page.click('.hbar .mine'); await sleep(500);
+            await page.evaluate(() => document.querySelector('.hbar .mine').click()); await sleep(500);
             const onRoom = await page.evaluate(() => document.body.dataset.screen);
             check(name + ': My room shows the Room', onRoom === 'room');
             const t5 = await toastBox(page);

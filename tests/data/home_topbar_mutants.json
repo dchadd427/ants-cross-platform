@@ -1,0 +1,278 @@
+{
+ "note": "Mutants of the login chip's name and of My room's rule (only while the page holds a room) in Home's top bar (web/home/home.js, home.css, docs/HOME_SCREEN.md, \"The top bar\") that only the opt-in real-Chromium check can see (Playwright, Chromium, nginx and python3, no game server): run with `python3 tools/mutate.py tests/data/home_topbar_mutants.json --keep-going --jobs 1 --timeout 300`; tools/mutate.py --check only proves that every old text is still in the code.",
+ "mutants": [
+  {
+   "id": "topbar_name_never_shown",
+   "file": "web/home/home.css",
+   "old": "{ display: block; flex: 0 1 auto; min-width: 0; font-size: 15px; }",
+   "new": "{ display: none; flex: 0 1 auto; min-width: 0; font-size: 15px; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_name_shown_to_a_guest",
+   "file": "web/home/home.css",
+   "old": ".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: block;",
+   "new": ".hbar .hlogin .gc-cn { display: block;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_does_not_shrink",
+   "file": "web/home/home.css",
+   "old": ".hbar button.hlogin { flex: 0 1 auto; gap: 6px;",
+   "new": ".hbar button.hlogin { flex: none; gap: 6px;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_over_the_logo",
+   "file": "web/home/home.css",
+   "old": "min-width: 0; margin-left: 102px;",
+   "new": "min-width: 0; margin-left: 0;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_not_to_the_right",
+   "file": "web/home/home.css",
+   "old": "margin-left: 102px; justify-content: flex-end; }",
+   "new": "margin-left: 102px; justify-content: flex-start; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_chip_padding_wide",
+   "file": "web/home/home.css",
+   "old": "flex: 0 1 auto; gap: 6px; padding: 0 9px; }",
+   "new": "flex: 0 1 auto; gap: 6px; padding: 0 30px; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_sideways_shows_the_name",
+   "file": "web/home/home.css",
+   "old": ".hbar button.hlogin { gap: 8px; padding: 0; } .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; }",
+   "new": ".hbar button.hlogin { gap: 8px; padding: 0; }",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "topbar_row_one_in_one_column",
+   "file": "web/home/home.css",
+   "old": ".hbar .hright { grid-area: 1 / 1 / 2 / 3;",
+   "new": ".hbar .hright { grid-area: 1 / 2;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "mine_shown_without_a_room",
+   "file": "web/home/home.js",
+   "old": "mine.hidden = !info.client;",
+   "new": "mine.hidden = false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_hidden_with_a_room",
+   "file": "web/home/home.js",
+   "old": "mine.hidden = !info.client;",
+   "new": "mine.hidden = true;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_waits_for_the_count",
+   "file": "web/home/home.js",
+   "old": "mine.hidden = !info.client;",
+   "new": "mine.hidden = !n;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "focus_after_leave_stays_on_the_hidden_button",
+   "file": "web/home/home.js",
+   "old": "mine.hidden ? away() : mine;",
+   "new": "mine;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "mine_games_not_a_whole_row",
+   "file": "web/home/home.css",
+   "old": "    .hbar .mine[hidden] ~ .games { grid-column: 1 / -1; }",
+   "new": "",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "mine_games_sideways_leaves_a_hole",
+   "file": "web/home/home.css",
+   "old": "    .hbar .mine[hidden] ~ .games { grid-area: 2 / 1 / 3 / 4; }\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "dropdown_does_not_scroll",
+   "file": "web/home/chat.css",
+   "old": "overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px 12px;",
+   "new": "overflow-y: visible; overscroll-behavior: contain; padding: 10px 12px 12px;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "dropdown_is_in_the_chat_panel",
+   "file": "web/home/chat.js",
+   "old": "if (chip && chip.parentNode && chip.parentNode.insertBefore) chip.parentNode.insertBefore(slot, chip.nextSibling); else (doc.body || host).appendChild(slot);",
+   "new": "body.appendChild(slot);",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "chip_does_not_say_it_has_a_dropdown",
+   "file": "web/home/chat.js",
+   "old": "chip.setAttribute('aria-haspopup', 'true'); ",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dropdown_stays_after_a_press_elsewhere",
+   "file": "web/home/chat.js",
+   "old": "if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false);",
+   "new": "if (false) setMenu(false);",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "dropdown_not_under_the_chip",
+   "file": "web/home/chat.js",
+   "old": "top = Math.max(6, Math.min(Math.round(r.bottom + 6), high - 130));",
+   "new": "top = 0;",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "dropdown_taller_than_the_window",
+   "file": "web/home/chat.js",
+   "old": "slot.style.maxHeight = Math.max(0, high - top - 10) + 'px';",
+   "new": "slot.style.maxHeight = '';",
+   "test": "node tests/scripts/web_home_topbar_browser.js"
+  },
+  {
+   "id": "dropdown_stays_on_the_room_screen",
+   "file": "web/home/chat.js",
+   "old": "if (!on) menuOn = false; ",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "focus_is_lost_when_the_dropdown_goes",
+   "file": "web/home/chat.js",
+   "old": "{ if (live && login) chip.focus(); else refocus = true; }",
+   "new": "{ }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "escape_only_inside_the_dropdown",
+   "file": "web/home/chat.js",
+   "old": "doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn)",
+   "new": "slot.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn)",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "focus_falls_to_nowhere_when_both_are_off",
+   "file": "web/home/home.js",
+   "old": "function away() { return !quickHost.disabled ? quickHost : !gamesBtn.disabled ? gamesBtn : menuHome; }",
+   "new": "function away() { return quickHost; }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_me_needs_no_second_press",
+   "file": "web/home/chat.js",
+   "old": "if (!forgetSure) { forgetAt = now(); sure(true); return; } ",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_question_stays_after_a_blur",
+   "file": "web/home/chat.js",
+   "old": "        forgetBtn.addEventListener('blur', guard(function () { sure(false); }));\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_question_stays_when_the_dropdown_goes",
+   "file": "web/home/chat.js",
+   "old": "            if (slot.hidden && forgetSure) sure(false);\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_me_asks_with_no_words",
+   "file": "web/home/chat.js",
+   "old": "forgetBtn.textContent = on ? TEXT.sure : TEXT.forget;",
+   "new": "forgetBtn.textContent = TEXT.forget;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "quick_host_makes_the_room_without_asking",
+   "file": "web/home/games.js",
+   "old": "else chooseHost(); return; }",
+   "new": "else startHost(); return; }",
+   "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
+  },
+  {
+   "id": "private_room_is_made_public",
+   "file": "web/home/games.js",
+   "old": "run: startPrivate }",
+   "new": "run: startHost }",
+   "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
+  },
+  {
+   "id": "public_room_is_made_private",
+   "file": "web/home/games.js",
+   "old": "cls: 'gyes', run: startHost }",
+   "new": "cls: 'gyes', run: startPrivate }",
+   "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
+  },
+  {
+   "id": "host_card_focus_on_cancel",
+   "file": "web/home/games.js",
+   "old": "cls: 'gstay', back: true }], focus: 0, opener",
+   "new": "cls: 'gstay', back: true }], focus: 2, opener",
+   "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
+  },
+  {
+   "id": "host_card_cancel_loses_the_focus",
+   "file": "web/home/games.js",
+   "old": "cls: 'gstay', back: true }], focus: 0, opener",
+   "new": "cls: 'gstay' }], focus: 0, opener",
+   "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
+  },
+  {
+   "id": "private_room_does_not_show_the_room",
+   "file": "web/home/games.js",
+   "old": "            page.make();\n            track(client());\n            ctl.show('room', 'push');\n        }\n        function chooseHost",
+   "new": "            page.make();\n            track(client());\n        }\n        function chooseHost",
+   "test": "node tests/scripts/web_home_games_room_check.js web/lobby.html"
+  },
+  {
+   "id": "name_pick_loses_the_focus",
+   "file": "web/home/chat.js",
+   "old": "            if (!slot.hidden && refocus) { refocus = false; var back = pickBtn.hidden ? outBtn : pickBtn; if (back.focus) back.focus(); }",
+   "new": "            if (!slot.hidden && refocus) { refocus = false; }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "name_pick_focus_goes_to_the_hidden_chip",
+   "file": "web/home/chat.js",
+   "old": "{ if (live && login) chip.focus(); else refocus = true; }",
+   "new": "{ chip.focus(); }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "forget_me_double_press_counts_twice",
+   "file": "web/home/chat.js",
+   "old": " if (now() - forgetAt < 400) return;",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "host_one_asks_public_or_private",
+   "file": "web/home/games.js",
+   "old": "acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: hostOne }",
+   "new": "acts: [{ text: TEXT.hostOne, cls: 'gyes big', run: quickHost }",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  },
+  {
+   "id": "host_card_forgets_the_quick_host_button",
+   "file": "web/home/games.js",
+   "old": "focus: 0, opener: parts.quickHost });",
+   "new": "focus: 0 });",
+   "test": "node tests/scripts/web_home_games_check.js web/lobby.html && node tests/scripts/web_home_games_quickjoin_check.js web/lobby.html"
+  }
+ ]
+}

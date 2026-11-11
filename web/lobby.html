@@ -341,11 +341,11 @@
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
-    <h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color. To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>
+    <h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color. A public room is listed under Games, where players join it from the list or by its code; a private one is for the people who have its link.</p>
     <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
-    <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where My room makes a new room.</p>
+    <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where Quick host makes a new room.</p>
     <h3>When the host leaves</h3><p>A room lasts while anybody is in it. If the host leaves, the player who has been in the room longest becomes the host, and everybody is told. When the last player leaves, the room closes about a minute later, and a link to a room that is gone says that there is no room with that code, and offers to start a room of your own.</p>
     <div class="sheets"><img src="front/qh_quickhelp.png" alt="The original's quick help: how to win, how to move your ants, game play" width="257" height="453" loading="lazy" decoding="async"><img src="front/qh_power.png" alt="The original's game instructions: power-ups and the five special ants" width="362" height="455" loading="lazy" decoding="async"></div>
 </div></div>
@@ -576,7 +576,7 @@
         // ================================================================================================================================================================================================
         // THE LOBBY: the front page is a room on the game server (docs/NETWORK_PORT.md "Protocol 16"). front/lobby_net.js keeps this page's seat in it; front/lobby_rules.js decides what the four colors and the map side
         // say and what the leader asks of the room (tests/scripts/web_lobby_rules_check.js); this part is the screen: it builds the cards, takes the pointer, the keys and the buttons, and does what the rules say.
-        //   * A plain visit is Home and makes no room (My room does: a new code, you in it); ?room=<code> is the link of somebody's room (a name card first). The room's code and your key are kept in this tab's session storage
+        //   * A plain visit is Home and makes no room (Quick host does: a new code, you in it); ?room=<code> is the link of somebody's room (a name card first). The room's code and your key are kept in this tab's session storage
         //     (LOBBY_KEY), so that a reload takes the seat back. A name is only ever set as text, never into markup.
         //   * START sends every page to the game page at once with the key of its seat (ants.rejoin.<room>.<seat>, the way the game takes a seat back); a match for one player is the game page's own single player.
         // ================================================================================================================================================================================================
@@ -1059,7 +1059,7 @@
             if (Rules.startsAlone(model)) { startAlone(); return; }
             client.start();
         });
-        // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds Home, and My room makes a room again.
+        // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds Home, and Quick host makes a room again.
         function startAlone() {
             var address = soloAddress(model, client.name, pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
             handing = true; client.leave(); forgetSession();
@@ -1310,7 +1310,7 @@
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
             var stored = loadSession(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); });
-            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: My room does)
+            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: Quick host does)
             if (test) return;
             if (wantedCode && !(stored && stored.code === wantedCode)) {
                 askLink(wantedCode, '');

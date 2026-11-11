@@ -277,7 +277,7 @@
   {
    "id": "start_never_called",
    "file": "web/lobby.html",
-   "old": "            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: My room does)\n",
+   "old": "            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: Quick host does)\n",
    "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -851,7 +851,7 @@
   {
    "id": "stale_how_it_works",
    "file": "web/lobby.html",
-   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
+   "old": "<h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready",
    "new": "<h3>The room</h3><p>Open the page and your room is ready",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
@@ -872,8 +872,8 @@
   {
    "id": "how_it_works_press_my_room_from_the_room",
    "file": "web/lobby.html",
-   "old": "<h3>The room</h3><p>From Home, press My room and your room is ready",
-   "new": "<h3>The room</h3><p>Press My room and your room is ready",
+   "old": "<h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready",
+   "new": "<h3>The room</h3><p>Press Quick host and your room is ready",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -1131,8 +1131,8 @@
   {
    "id": "strip_leaves_a_dock_that_comes_late_as_it_is",
    "file": "web/home/home.js",
-   "old": "inert(held); dockShown(); pick(tab); login.addEventListener",
-   "new": "inert(held); dockShown(); login.addEventListener",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
+   "new": "inert(held); dockShown(); wantPlayers();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
@@ -1199,10 +1199,10 @@
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {
-   "id": "login_chip_leaves_the_chat_view_away",
+   "id": "login_chip_shows_the_chat_view_again",
    "file": "web/home/home.js",
-   "old": "login.addEventListener('click', function () { if (phone()) pick('chat'); }, true);",
-   "new": "",
+   "old": "inert(held); dockShown(); pick(tab); wantPlayers();",
+   "new": "inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers();",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   },
   {

@@ -102,7 +102,7 @@ class TheLoaderInHome(unittest.TestCase):
 
     def test_the_dock_is_mounted_when_both_files_are_there_and_whatever_goes_wrong_stays_in_it(self):
         self.assertIn("var parts = 2;", self.js)
-        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }", self.js)
+        self.assertIn("function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }", self.js)
         self.assertIn("[bar, rbar, tabs, dock && dock.root, players && players.root].forEach(function (n) { if (n) {", self.js, "a dialog over the page, or a hand-off, takes the dock's keys and presses too: the focus does not go behind the modal")
         self.assertIn("css.onload = mountDock;", self.js)
         self.assertIn("js.src = CHAT.script; js.async = true; js.onload = mountDock;", self.js, "async: the script never holds the page")
@@ -204,7 +204,7 @@ class TheFolderAndTheScript(unittest.TestCase):
 
     def test_the_login_place_is_made_hidden_and_shown_only_for_a_named_visitor_where_the_hub_has_a_login(self):
         self.assertIn("slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;", self.js)
-        self.assertIn("slot.hidden = !(live && you && login);", self.js, "the account line: the welcome names the visitor and the hub has a login; nothing else shows it")
+        self.assertIn("slot.hidden = !(live && you && login && menuOn);", self.js, "the account's dropdown: the welcome names the visitor, the hub has a login, and the chip has opened it; nothing else shows it")
         self.assertIn("chip.hidden = !(live && login);", self.js, "the bar's chip: only where the hub offers a login, and not while the hub is not there")
         self.assertIn("var ask = live && !you && login;", self.js, "the field is off and asks for the login only where one is offered")
         self.assertIn("send.hidden = !you; enter.hidden = !!you;", self.js, "Send for a named visitor, Log in for the others, never both")
@@ -238,10 +238,11 @@ class TheStyle(unittest.TestCase):
         self.assertIn("min-height: 50px;", self.rule(".gc-head"))
         self.assertIn("#home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;", self.home_css, "the column that the dock is a part of")
 
-    def test_the_field_and_the_account_line_share_a_row_in_a_wide_window(self):
+    def test_the_field_has_the_row_under_the_log_in_a_wide_window(self):
         wide = re.search(r"@media \(min-width: 701px\), \(max-width: 700px\) and \(max-height: 500px\) \{(.*?)\n\}", self.css, re.S).group(1)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", wide)
-        self.assertIn(".gc-form { grid-area: 3 / 1; } .gc-slot { grid-area: 3 / 2; align-self: center; }", wide)
+        self.assertIn(".gc-form { grid-area: 3 / 1 / 4 / -1; }", wide)
+        self.assertNotIn(".gc-slot", wide, "the account line is not in the panel any more (the chip's dropdown has it)")
         self.assertIn(".gc-log, .gc-note, .gc-guest { grid-column: 1 / -1; }", wide)
 
     def test_a_phone_has_the_chat_as_its_own_view_open_and_without_a_fold_and_a_short_window_opens_it_folded(self):
@@ -251,7 +252,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".gc-fold { display: none; }", phone, "home.js opens it with its view and shuts it with the others: no fold to leave it shrunk")
         self.assertNotIn("--gc-min", self.css, "the panel is never put away for want of room: it is a part of the column, and the games take what is left")
         self.assertIn("@media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }", self.css)
-        self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head, .gc-as, .gc-slot .gc-dc { display: none; } .gc-menu { width: 260px; max-width: calc(100vw - 24px); } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the heading gives its place to the log (the account line stays, on the field's row) and nothing of the panel reaches over the strip")
+        self.assertIn("@media (max-width: 700px) and (max-height: 500px) { .gc-head { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }", self.css, "a phone held sideways: the Chat view has about 150 px, the heading gives its place to the log (the account line stays, on the field's row) and nothing of the panel reaches over the strip")
 
     def test_the_header_stays_when_the_panel_is_folded_and_the_title_is_one_word_group(self):
         self.assertNotIn(".gc-short", self.css)
@@ -308,16 +309,19 @@ class TheStyle(unittest.TestCase):
         cut = self.rule(".gc-cn")
         for declaration in ("overflow: hidden;", "text-overflow: ellipsis;", "white-space: nowrap;", "max-width: 11em;"):
             self.assertIn(declaration, cut, "a long name is cut in the bar and does not push the Menu button off the bar")
-        for selector in (".gc-link", ".gc-forget"):
+        for selector in (".gc-out", ".gc-forget"):
             self.assertRegex(self.rule(selector), r"min-height: (4[4-9]|[5-9]\d)px;", selector)
-        self.assertIn("min-width: 44px;", self.rule(".gc-link"))
+        slot = self.rule(".gc-slot")
+        for declaration in ("position: fixed;", "z-index: 60;", "overflow-y: auto;", "width: min(300px, calc(100vw - 20px));"):
+            self.assertIn(declaration, slot, "the account's dropdown stands over the page under the chip, and scrolls inside itself where the window is short (a phone held sideways)")
+        for gone in (".gc-link", ".gc-more", ".gc-menu"):
+            self.assertNotIn(gone + " {", self.css, "the account line of the panel and its More button are gone: " + gone)
         self.assertIn("-webkit-mask: var(--dc) no-repeat center / contain; mask: var(--dc) no-repeat center / contain;", self.css, "the mark takes the color of the text around it")
 
-    def test_the_switch_is_a_target_and_the_username_of_a_line_is_drawn_in_brackets_by_the_style_so_that_the_text_stays_the_name(self):
+    def test_the_switch_is_a_target_and_the_username_of_a_line_is_not_drawn(self):
         self.assertRegex(self.rule(".gc-pick"), r"min-height: (4[4-9]|[5-9]\d)px;")
-        self.assertIn('content: "(";', self.rule(".gc-u::before"))
-        self.assertIn('content: ")";', self.rule(".gc-u::after"))
-        self.assertIn("font-size: 13px;", self.rule(".gc-u"))
+        self.assertNotRegex(self.css, r"\.gc-u\b", "the username of a moderator's copy is not drawn: no style for it")
+        self.assertNotIn("'gc-u'", read("web", "home", "chat.js"), "... and no element for it")
 
     def test_the_hidden_parts_are_hidden_even_where_the_style_gives_them_a_display(self):
         self.assertIn(".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }", self.css)

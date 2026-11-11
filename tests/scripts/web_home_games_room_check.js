@@ -11,7 +11,7 @@
 // tests/scripts/test_web_home_games.py runs this with node (the quick tier). usage: node web_home_games_room_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, RULES0, done, broke, pressEscape, pressElsewhere } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
@@ -246,6 +246,36 @@ const OTHERS = ['Maya', 'Sage'];
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 3. Quick host
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{   // no room: Quick host asks first, Public or Private (a card over Home; Escape and Cancel change nothing)
+    const env = await page();
+    env.home('host').focus();
+    env.home('host').click();
+    const card = hostCard(env), words = card ? find(card, 'btn').map((b) => textOf(b)) : [];
+    same('Quick host with no room asks first: the card "Host a game" with Public room, Private room and Cancel, nothing made yet (no socket, still Home)', [!!card, words, env.sockets.length, env.screen()], [true, ['Public room', 'Private room', 'Cancel'], 0, 'home']);
+    check('... Public room has the focus (one press makes the room), the card is a dialog, and every button is a target of 48 px (the style of the other cards)', !!card && env.focused === find(card, 'btn')[0] && card.getAttribute('role') === 'dialog' && card.getAttribute('aria-modal') === 'true' && find(card, 'gcbtns').length >= 1);
+    pressEscape(env);
+    check('Escape cancels: the card is gone, nothing was made, the focus is back on Quick host', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
+    env.home('host').click();
+    find(hostCard(env), 'btn')[2].click();
+    check('Cancel does the same', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
+    env.home('host').click();
+    chooseHost(env, 'Private room');
+    check('Private room makes the private room (one socket, the Room shows, My room is there) and never asks for Visibility(public), also after the Welcome', env.sockets.length === 1 && env.screen() === 'room' && hostCard(env) === null && env.home('mine').hidden === false);
+    const sock = env.last();
+    env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
+    same('... no Visibility message is sent, the room stays private', [visibilities(sock), pressed(env)], [[], ['true', 'false']]);
+    const pub = await page();
+    pub.home('host').click();
+    chooseHost(pub, 'Public room');
+    const ps = pub.last();
+    pub.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
+    same('Public room is Quick host as it was: a room and Visibility(public), once', [pub.sockets.length, visibilities(ps)], [1, [1]]);
+    const two = await page();
+    two.home('host').click(); chooseHost(two, 'Private room');
+    two.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
+    two.home('host').click();
+    check('with a room of the page\'s own (private) Quick host does not ask Public or Private again: it asks the old question about making it public, or flips it when alone', hostCard(two) === null);
+}
 {   // no room: it makes one, then sends Visibility(public) after the Welcome
     const env = await page();
     tap(env.home('host'));

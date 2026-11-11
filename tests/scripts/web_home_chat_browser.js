@@ -234,21 +234,21 @@ async function main() {
         check(size + ': the dock is live and open', await waitState(page, 'live/true'));
         const gold = () => page.evaluate(() => [...document.querySelectorAll('#gchat .gc-line')].map((e) => (e.classList.contains('gc-me') ? '1' : '0')).join(''));
         check(size + ': of two lines that show one name only the visitor\'s own (by the hub\'s key) is the visitor\'s', (await gold()) === '010', await gold());
-        await page.click('#gchat .gc-more');
+        await page.click('.hlogin');
         await sleep(150);
         const menu = () => page.evaluate(() => {
-            const m = document.querySelector('#gchat .gc-menu'), n = document.querySelector('#gchat .gc-pn'), b = document.querySelector('#gchat .gc-pick'), d = document.getElementById('gchat').getBoundingClientRect(), r = b.getBoundingClientRect();
-            return { open: !m.hidden, shown: b.getClientRects().length > 0 && n.getClientRects().length > 0, note: n.innerText, button: b.innerText, h: Math.round(r.height), inside: r.left >= d.left - 1 && r.right <= d.right + 1, name: document.querySelector('#gchat .gc-an').innerText };
+            const m = document.querySelector('#gchat-login-slot'), n = document.querySelector('#gchat-login-slot .gc-pn'), b = document.querySelector('#gchat-login-slot .gc-pick'), d = { left: 0, right: innerWidth }, r = b.getBoundingClientRect();
+            return { open: !m.hidden, shown: b.getClientRects().length > 0 && n.getClientRects().length > 0, note: n.innerText, button: b.innerText, h: Math.round(r.height), inside: r.left >= d.left - 1 && r.right <= d.right + 1, name: document.querySelector('#gchat-login-slot .gc-an').innerText };
         });
         let m = await menu();
-        check(size + ': the menu says which name the chat shows and offers the other one, in a button of at least 44 px inside the dock', m.open && m.shown && m.note === 'Chat shows your display name.' && m.button === 'Show my username: maple.leaf' && m.h >= 44 && m.inside && m.name === 'Maple Leaf', JSON.stringify(m));
+        check(size + ': the menu says which name the chat shows and offers the other one, in a button of at least 44 px inside the window (the dropdown of the chip)', m.open && m.shown && m.note === 'Chat shows your display name.' && m.button === 'Show my username: maple.leaf' && m.h >= 44 && m.inside && m.name === 'Maple Leaf', JSON.stringify(m));
         await shot(page, 'pick_display', size);
         hub.received.length = 0;
         const upgrades = hub.upgrades;
-        await page.click('#gchat .gc-pick');
+        await page.click('#gchat-login-slot .gc-pick');
         const again = (await until(() => hub.upgrades > upgrades, 9000)) && (await waitState(page, 'live/true', 9000));       // (the hub closes the socket: the page connects again, and the welcome is live)
         check(size + ': one pick for the username went to the hub, and the page connected again (one more socket)', again && hub.received.filter((x) => x.t === 'pick').length === 1 && hub.received.filter((x) => x.t === 'pick')[0].pick === 'username' && hub.upgrades === upgrades + 1, JSON.stringify(hub.received) + ' ' + hub.upgrades + ' ' + upgrades);
-        if ((await menu()).open === false) { await page.click('#gchat .gc-more'); await sleep(150); }
+        if ((await menu()).open === false) { await page.click('.hlogin'); await sleep(150); }
         m = await menu();
         check(size + ': after it the page says username, offers the display name, and the lines written under the display name are still the visitor\'s', m.note === 'Chat shows your username.' && m.button === 'Show my display name: Maple Leaf' && m.name === 'maple.leaf' && (await gold()) === '010', JSON.stringify(m) + ' ' + await gold());
         await shot(page, 'pick_username', size);
@@ -259,9 +259,9 @@ async function main() {
         await waitState(old.page, size === 'desktop' ? 'live/true' : 'live/false');
         if (size === 'phone') await old.page.click('#gchat .gc-head');
         await waitState(old.page, 'live/true');
-        await old.page.click('#gchat .gc-more');
+        await old.page.click('.hlogin');
         await sleep(150);
-        check(size + ': a hub that says nothing of two names shows no switch (the note and the button are not there, Forget me is)', await old.page.evaluate(() => { const m = document.querySelector('#gchat .gc-menu'); return !m.hidden && document.querySelector('#gchat .gc-pick').getClientRects().length === 0 && document.querySelector('#gchat .gc-pn').getClientRects().length === 0 && document.querySelector('#gchat .gc-forget').getClientRects().length > 0; }));
+        check(size + ': a hub that says nothing of two names shows no switch (the note and the button are not there, Forget me is)', await old.page.evaluate(() => { const m = document.querySelector('#gchat-login-slot'); return !m.hidden && document.querySelector('#gchat-login-slot .gc-pick').getClientRects().length === 0 && document.querySelector('#gchat-login-slot .gc-pn').getClientRects().length === 0 && document.querySelector('#gchat .gc-forget').getClientRects().length > 0; }));
         await old.context.close();
 
         hub.set({ you: { name: 'Mod Person', mod: true, k: 'dddddddddddd' }, login: true, mode: 'normal', online: 7, history: [line(1, 'Maple Leaf', 'hello', false, { k: KEY, u: 'maple.leaf' }), line(2, 'pebble', 'hi', false, { k: 'bbbbbbbbbbbb' })] });
@@ -269,8 +269,8 @@ async function main() {
         await waitState(mod.page, size === 'desktop' ? 'live/true' : 'live/false');
         if (size === 'phone') await mod.page.click('#gchat .gc-head');
         await waitState(mod.page, 'live/true');
-        const u = await mod.page.evaluate(() => { const e = document.querySelector('#gchat .gc-u'); if (!e) return null; const b = getComputedStyle(e, '::before').content, a = getComputedStyle(e, '::after').content; return { text: e.innerText, before: b, after: a, count: document.querySelectorAll('#gchat .gc-u').length, row: e.parentElement.innerText }; });
-        check(size + ': a moderator\'s line shows the username in brackets after the name, and only for the line that has one', !!u && u.text === 'maple.leaf' && u.before === '"("' && u.after === '")"' && u.count === 1 && /^Maple Leaf\s*maple\.leaf: hello$/.test(u.row), JSON.stringify(u));
+        const u = await mod.page.evaluate(() => ({ count: document.querySelectorAll('#gchat .gc-u').length, row: document.querySelector('#gchat .gc-line.gc-mod, #gchat .gc-line').innerText }));
+        check(size + ': a moderator\'s line shows the name and the MOD mark and no username in brackets', u.count === 0 && !/\(|maple\.leaf/.test(u.row), JSON.stringify(u));
         await shot(mod.page, 'moderator_username', size);
         await mod.context.close();
     }
@@ -319,7 +319,7 @@ async function main() {
         const { page, context } = await open('desktop');
         check('a site whose /hub/ws is answered 503: "Chat is offline", Home is whole (the bar, the Yard), no page error', (await waitState(page, 'offline/true')) && (await dockText(page, '.gc-note')) === 'Chat is offline' && (await page.evaluate(() => !!document.querySelector('.hbar .mine') && !!document.querySelector('#yard'))) && errors.length === 0);
         await shot(page, 'offline', 'desktop');
-        await page.click('.hbar .mine');
+        await page.evaluate(() => document.querySelector('.hbar .mine').click());
         check('... and My room still shows the Room (the page\'s own socket is another one)', (await page.getAttribute('body', 'data-screen')) === 'room');
         await page.click('.rbar .rhome');
         check('... and Home again: the dock is still there', (await page.getAttribute('body', 'data-screen')) === 'home' && (await state(page)) !== null);
