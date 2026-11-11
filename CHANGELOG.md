@@ -2,7 +2,42 @@
 
 What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page.
 
-An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## v0.15.1 - 2026-11-10 - The game server can always write each finished match's result file
+An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next`, above the newest release) in its own pull request, and `tools/release.py` turns it into the entry when `VERSION` moves (each such change bumps the version, by default the patch number).
+
+<!--
+Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
+
+## vX.Y.Z - YYYY-MM-DD - title
+
+**For players:**
+- one bullet: what a player or a server owner sees or can do now
+
+**Rules / network:** only when the rules or the protocol changed: what, and "network protocol N: a vA.B.C game cannot join"
+
+**Fixes:**
+- one line each (optional)
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...b2150865)
+
+Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
+`tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
+-->
+
+## v0.16.0 - 2026-11-10 - A top bar, Quick host asks Public or Private, chat emoji and voice buttons, and a new look for the buttons
+
+**For players:**
+- **A top bar on phones.** The front page has a bar at the top with your name; the login chip is the name chip, and tapping it opens the account menu (the Forget me control is in that menu and asks once more).
+- **My room is there only when you have a room.** Quick host now asks Public or Private before it makes a room, and Host one! goes straight to a public room.
+- **The chat has an emoji picker and a voice-to-text button.** The voice button uses the browser's own speech service: Chrome, Edge and Safari send the audio to their maker; the site records nothing.
+- **The green buttons have a stamped look,** with a double frame, a weave and a deeper press. The Leave room button is red like Leave game.
+- **The Games list shows running games without a switch,** under the open games, so nothing needs scrolling when no game is open; the "Show games in progress" switch is gone.
+- **The Players list has no fold button,** and the chat no longer shows a second username next to a name to moderators.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.15.1 page or game still joins. The stack no longer has the one-shot helper of the results folder; the operator may delete the exited container ants-results-init in Portainer. The rest of this release is internal: tests and documents.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/629baa19...a7b3bc02)
+
+## v0.15.1 - 2026-11-10 - The game server can always write each finished match's result file
 
 **For players:**
 - **The game server can always save a finished match's result.** A change to the server stack makes sure the folder where each finished match's result file is written belongs to the game server, also on a server whose storage was made by an older image. Nothing changes on the web pages or in the game.
