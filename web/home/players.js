@@ -23,8 +23,7 @@
         title: 'Players', here: ' here now', you: 'you', mod: 'mod', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
         empty: 'Just you here. Host a game!', emptyNote: 'People who log in with Discord show up here by name.', host: '+ Host a game',
-        off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.',
-        fold: 'Fold the list', unfold: 'Open the list'
+        off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.'
     };
 
     // ---- the pure parts ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -132,12 +131,11 @@
 
         // The markup: one box, `root`, that Home can make inert, with the panel in it
         var panel = el('section', 'pl'); panel.id = 'players'; panel.setAttribute('aria-labelledby', 'players-title');
-        panel.setAttribute('data-state', 'off'); panel.setAttribute('data-folded', 'false');
+        panel.setAttribute('data-state', 'off');
         var head = el('div', 'pl-head'), title = el('h2', 'pl-title', TEXT.title); title.id = 'players-title';
-        var total = el('span', 'pill pl-count'), dot = el('i', 'pl-dot'), fold = button('pl-fold');
+        var total = el('span', 'pill pl-count'), dot = el('i', 'pl-dot');
         dot.setAttribute('aria-hidden', 'true'); total.hidden = true; dot.hidden = true;
-        fold.appendChild(el('i', 'pl-mark')); fold.setAttribute('aria-controls', 'players-body');
-        put(head, [title, total, dot, fold]);
+        put(head, [title, total, dot]);
         var body = el('div', 'pl-body'), youBox = el('div', 'pl-you'), youList = el('ul', 'pl-cards'), rule = el('hr', 'pl-div'), status = el('p', 'pl-status'), list = el('div', 'pl-list'), offBox = el('div', 'pl-note');
         body.id = 'players-body'; youBox.appendChild(youList);
         status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
@@ -248,12 +246,6 @@
             }
             if (b) b.click(); else say(TEXT.gone);
         }
-        function setFold(on) { panel.setAttribute('data-folded', on ? 'true' : 'false'); fold.setAttribute('aria-expanded', on ? 'false' : 'true'); fold.setAttribute('aria-label', on ? TEXT.unfold : TEXT.fold); }
-        setFold(false);
-        fold.addEventListener('click', guard(function () { setFold(panel.getAttribute('data-folded') !== 'true'); }));
-        panel.addEventListener('keydown', guard(function (e) {         // Escape folds the panel, where its fold button is drawn (a phone's Players view has none)
-            if (e && e.key === 'Escape' && (!fold.getClientRects || fold.getClientRects().length)) { setFold(true); if (fold.focus) fold.focus(); }
-        }));
 
         // ---- what the page says, and what the hub says ----------------------------------------------------------------------------------------------------------------------------------------------
         function look() {

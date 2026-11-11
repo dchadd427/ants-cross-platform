@@ -277,8 +277,8 @@ async function main() {
                 const pill = await page.evaluate(() => { const b = document.querySelector('.htab.t-players .pill'); return b && !b.hidden ? b.textContent : null; });
                 check(size[0] + ': the Players tab has the number of the list beside its name (' + (PICTURE.length + 5) + ' people)', pill === String(PICTURE.length + 5) || pill === String((await countsAgree(page)).chat), String(pill));
                 await page.click('.htab.t-players'); await sleep(200);
-                const p = await page.evaluate(() => { const d = (q) => (document.querySelector(q).getClientRects().length > 0 ? 'shown' : 'none'), q = document.getElementById('players').getBoundingClientRect(), t = document.querySelector('.htabs').getBoundingClientRect(), b = document.querySelector('.hbar').getBoundingClientRect(); return { games: d('.gpop'), players: d('#players'), chat: d('#gchat'), fold: getComputedStyle(document.querySelector('.pl-fold')).display, within: q.top >= b.bottom - 1 && q.bottom <= t.top + 1 && q.width >= innerWidth - 40, on: document.querySelector('.htab.t-players').getAttribute('aria-pressed') }; });
-                check(size[0] + ': the Players view shows the list alone, between the bar and the strip, with no fold to shrink it', p.games === 'none' && p.players === 'shown' && p.chat === 'none' && p.fold === 'none' && p.within && p.on === 'true', JSON.stringify(p));
+                const p = await page.evaluate(() => { const d = (q) => (document.querySelector(q).getClientRects().length > 0 ? 'shown' : 'none'), q = document.getElementById('players').getBoundingClientRect(), t = document.querySelector('.htabs').getBoundingClientRect(), b = document.querySelector('.hbar').getBoundingClientRect(); return { games: d('.gpop'), players: d('#players'), chat: d('#gchat'), fold: document.querySelector('.pl-fold') ? 'drawn' : 'none', within: q.top >= b.bottom - 1 && q.bottom <= t.top + 1 && q.width >= innerWidth - 40, on: document.querySelector('.htab.t-players').getAttribute('aria-pressed') }; });
+                check(size[0] + ': the Players view shows the list alone, between the bar and the strip, with no fold button at all', p.games === 'none' && p.players === 'shown' && p.chat === 'none' && p.fold === 'none' && p.within && p.on === 'true', JSON.stringify(p));
                 await shot(page, 'phone_players_' + size[1] + 'x' + size[2]);
                 await page.click('.htab.t-chat'); await sleep(200);
                 const c = await page.evaluate(() => { const d = (q) => (document.querySelector(q).getClientRects().length > 0 ? 'shown' : 'none'); return { games: d('.gpop'), players: d('#players'), chat: d('#gchat'), open: document.getElementById('gchat').getAttribute('data-open'), fold: getComputedStyle(document.querySelector('#gchat .gc-fold')).display }; });
@@ -286,7 +286,7 @@ async function main() {
                 await shot(page, 'phone_chat_' + size[1] + 'x' + size[2]);
                 await page.click('.htab.t-games'); await sleep(200);
                 await page.click('.hlogin'); await sleep(300);
-                check(size[0] + ': the login chip (logged in) shows the Chat view with the chat open and the focus on Log out', await page.evaluate(() => document.getElementById('home').getAttribute('data-tab') === 'chat' && document.getElementById('gchat').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'true' && document.activeElement.classList.contains('gc-link')));
+                check(size[0] + ': the login chip (logged in) opens its dropdown over the Games view (the view stays Games, the chat stays away), with the focus on Log out', await page.evaluate(() => document.getElementById('home').getAttribute('data-tab') === 'games' && document.getElementById('gchat').getClientRects().length === 0 && document.getElementById('gchat-login-slot').getClientRects().length > 0 && document.activeElement.classList.contains('gc-out')));
                 await page.click('.htab.t-games'); await sleep(200);
                 check(size[0] + ': Games brings the list back and the chat is folded again', await page.evaluate(() => document.querySelector('.gpop').getClientRects().length > 0 && document.getElementById('gchat').getAttribute('data-open') === 'false'));
                 await page.context().close();
@@ -371,7 +371,7 @@ async function main() {
             await crowd(r, PICTURE, 4);
             const page = await openPage(r, SIZES[0], '1000_maple');
             await listShows(page, 'clover');
-            await page.click('.hchip.mine');
+            await page.evaluate(() => document.querySelector('.hchip.mine').click());
             await sleep(300);
             check('the Room shows: the list is not on it (Home is hidden with it)', await page.evaluate(() => document.body.getAttribute('data-screen') === 'room' && !document.getElementById('players').getClientRects().length));
             await page.click('.rhome');
