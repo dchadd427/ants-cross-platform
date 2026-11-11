@@ -318,11 +318,10 @@ class TheStyle(unittest.TestCase):
             self.assertNotIn(gone + " {", self.css, "the account line of the panel and its More button are gone: " + gone)
         self.assertIn("-webkit-mask: var(--dc) no-repeat center / contain; mask: var(--dc) no-repeat center / contain;", self.css, "the mark takes the color of the text around it")
 
-    def test_the_switch_is_a_target_and_the_username_of_a_line_is_drawn_in_brackets_by_the_style_so_that_the_text_stays_the_name(self):
+    def test_the_switch_is_a_target_and_the_username_of_a_line_is_not_drawn(self):
         self.assertRegex(self.rule(".gc-pick"), r"min-height: (4[4-9]|[5-9]\d)px;")
-        self.assertIn('content: "(";', self.rule(".gc-u::before"))
-        self.assertIn('content: ")";', self.rule(".gc-u::after"))
-        self.assertIn("font-size: 13px;", self.rule(".gc-u"))
+        self.assertNotRegex(self.css, r"\.gc-u\b", "the username of a moderator's copy is not drawn: no style for it")
+        self.assertNotIn("'gc-u'", read("web", "home", "chat.js"), "... and no element for it")
 
     def test_the_hidden_parts_are_hidden_even_where_the_style_gives_them_a_display(self):
         self.assertIn(".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }", self.css)

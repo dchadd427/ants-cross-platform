@@ -2445,20 +2445,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_username_is_in_a_span",
-   "file": "web/home/chat.js",
-   "old": "el('bdi', 'gc-u', e.u)",
-   "new": "el('span', 'gc-u', e.u)",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "the_username_comes_after_the_text",
-   "file": "web/home/chat.js",
-   "old": "            if (e.u) r.appendChild(el('bdi', 'gc-u', e.u));\n            put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);",
-   "new": "            put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);\n            if (e.u) r.appendChild(el('bdi', 'gc-u', e.u));",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "the_switch_is_offered_for_any_pick",
    "file": "web/home/chat.js",
    "old": "other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : ''",
@@ -2578,13 +2564,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_username_has_no_parentheses",
-   "file": "web/home/chat.css",
-   "old": ".gc-u::before { content: \"(\"; }\n",
-   "new": "",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "the_switch_is_a_tiny_target",
    "file": "web/home/chat.css",
    "old": ".gc-pick { min-height: 46px;",
@@ -2632,6 +2611,20 @@
    "old": ".gc-form { grid-area: 3 / 1 / 4 / -1; }",
    "new": ".gc-form { grid-area: 4 / 1 / 5 / -1; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_username_is_drawn_again",
+   "file": "web/home/chat.js",
+   "old": "            put(r, [el('bdi', 'gc-who', e.who)]);\n",
+   "new": "            put(r, [el('bdi', 'gc-who', e.who)]);\n            if (e.u) r.appendChild(el('bdi', 'gc-u', e.u));\n",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_username_is_not_kept",
+   "file": "web/home/chat.js",
+   "old": "k: nameOf(m.k), u: nameOf(m.u) }",
+   "new": "k: nameOf(m.k), u: '' }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }

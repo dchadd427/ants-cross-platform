@@ -74,7 +74,7 @@
     }
     function count(n) { return typeof n === 'number' && n >= 0 && n <= LIMIT.count && n === Math.floor(n) ? n : null; }
     function nameOf(s) { return typeof s === 'string' ? clip(plain(s.slice(0, LIMIT.name * 4), true), LIMIT.name) : ''; }       // (a name of the hub, or its key of an account)
-    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, k (its author's key), u (its author's username: moderators only) }, or null when it is not a line
+    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, k (its author's key), u (its author's username: moderators only; kept in the model, not drawn) }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line);
         return shows(text) ? { id: m.id, who: nameOf(m.who) || '?', text: text, mod: m.mod === true, k: nameOf(m.k), u: nameOf(m.u) } : null;
@@ -159,7 +159,6 @@
             var r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (e.own ? ' gc-me' : ''));
             if (e.mod) r.appendChild(el('span', 'gc-badge', TEXT.mod + ' '));
             put(r, [el('bdi', 'gc-who', e.who)]);
-            if (e.u) r.appendChild(el('bdi', 'gc-u', e.u));
             put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
             return r;
         }

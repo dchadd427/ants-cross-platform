@@ -1312,18 +1312,18 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     r.live(W({ login: true, you: Object.assign({}, TWO, { mod: true }), history }));
     r.s().recv(Object.assign(L(3, 'Maple Leaf', 'live'), { k: OTHERS, u: 'bbb.two' }));
     const rows = r.rows();
-    check('the username is a <bdi> after the name, as text, in the history and in a live line, and a line that has none has none', rows.length === 3 && one(rows[0], 'gc-u').tagName === 'bdi' && one(rows[0], 'gc-u').textContent === 'aaa.one' && one(rows[2], 'gc-u').textContent === 'bbb.two' && one(rows[1], 'gc-u') === null
-          && rows[0].textContent === 'Maple Leafaaa.one: hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[0].children.indexOf(one(rows[0], 'gc-who')) < rows[0].children.indexOf(one(rows[0], 'gc-u')) && rows[0].children.indexOf(one(rows[0], 'gc-u')) < rows[0].children.indexOf(one(rows[0], 'gc-sep')));
+    check('a line is drawn with the name only: no username, not even in a moderator\'s copy (the hub still sends it; the page keeps it in its model and does not draw it)', rows.length === 3 && rows.every((x) => one(x, 'gc-u') === null)
+          && rows[0].textContent === 'Maple Leaf: hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[2].textContent === 'Maple Leaf: live' && Pure.lineOf({ id: 1, who: 'a', text: 'x', u: 'aaa.one' }).u === 'aaa.one');
     const odd = rig({});
     odd.live(W({ login: true, you: TWO, history: [{ id: 1, at: 1, who: 'a', text: 'x', mod: false, u: '<i>x</i> \u202eevil\u202c \u200b' }, { id: 2, at: 2, who: 'a', text: 'y', mod: false, u: 'u'.repeat(80) }, { id: 3, at: 3, who: 'a', text: 'z', mod: false, u: { x: 1 } }] }));
-    check('a username from the hub is text, cleaned and cut like a name, and what is not text is none', one(odd.rows()[0], 'gc-u').textContent === '<i>x</i> evil' && one(odd.rows()[1], 'gc-u').textContent === 'u'.repeat(32) + '\u2026' && one(odd.rows()[2], 'gc-u') === null
+    check('a username from the hub in any shape is not drawn and breaks nothing (markup, invisible characters, a long one, an object)', odd.rows().every((x) => one(x, 'gc-u') === null) && odd.rows()[0].textContent === 'a: x'
           && odd.env.innerHTMLWrites.length === 0 && odd.log().all().every((e) => ['div', 'p', 'span', 'bdi'].indexOf(e.tagName) !== -1));
 }
 {   // other scripts: whole, in the line, the account line, the chip and the button
     NAMED.forEach((name) => {
         const r = menuOf(rig({ chip: true }));
         r.live(W({ login: true, you: { name, mod: false, k: MINE, pick: 'display', other: name + '.x' }, history: [{ id: 1, at: 1, who: name, text: 'hello', mod: false, k: MINE, u: name + '.x' }] }));
-        check('a name in another script comes through whole (' + name + '): the line, its username, the account line, the chip, the button', r.rows()[0].textContent === name + name + '.x' + ': hello' && one(r.dock.slot, 'gc-an').textContent === name && one(r.chip, 'gc-cn').textContent === name
+        check('a name in another script comes through whole (' + name + '): the line (no username drawn), the account line, the chip, the button', r.rows()[0].textContent === name + ': hello' && one(r.dock.slot, 'gc-an').textContent === name && one(r.chip, 'gc-cn').textContent === name
               && one(r.dock.slot, 'gc-pick').textContent === 'Show my username: ' + name + '.x' && cls(r.rows()[0]).indexOf('gc-me') !== -1 && r.errors.length === 0);
     });
 }

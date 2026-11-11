@@ -73,9 +73,6 @@
 .gc-forget:disabled { color: #7f9c92; cursor: default; }
 .gc-forget[data-sure="true"] { color: #f2c48c; }
 .gc-pick { min-height: 46px; max-width: 100%; margin: 8px 0 12px; white-space: normal; overflow-wrap: anywhere; text-align: center; }
-.gc-u { margin-left: 6px; font-size: 13px; color: #7f9c92; }
-.gc-u::before { content: "("; }
-.gc-u::after { content: ")"; }
 .hbar .hlogin { gap: 8px; padding: 0 14px; }
 .hlogin .gc-dc { width: 22px; height: 22px; }
 .gc-av { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 16px; line-height: 1; color: var(--gold); background: #0b1a17; border: 2px solid #1c4a3b; border-radius: 50%; }

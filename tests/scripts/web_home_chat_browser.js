@@ -269,8 +269,8 @@ async function main() {
         await waitState(mod.page, size === 'desktop' ? 'live/true' : 'live/false');
         if (size === 'phone') await mod.page.click('#gchat .gc-head');
         await waitState(mod.page, 'live/true');
-        const u = await mod.page.evaluate(() => { const e = document.querySelector('#gchat .gc-u'); if (!e) return null; const b = getComputedStyle(e, '::before').content, a = getComputedStyle(e, '::after').content; return { text: e.innerText, before: b, after: a, count: document.querySelectorAll('#gchat .gc-u').length, row: e.parentElement.innerText }; });
-        check(size + ': a moderator\'s line shows the username in brackets after the name, and only for the line that has one', !!u && u.text === 'maple.leaf' && u.before === '"("' && u.after === '")"' && u.count === 1 && /^Maple Leaf\s*maple\.leaf: hello$/.test(u.row), JSON.stringify(u));
+        const u = await mod.page.evaluate(() => ({ count: document.querySelectorAll('#gchat .gc-u').length, row: document.querySelector('#gchat .gc-line.gc-mod, #gchat .gc-line').innerText }));
+        check(size + ': a moderator\'s line shows the name and the MOD mark and no username in brackets', u.count === 0 && !/\(|maple\.leaf/.test(u.row), JSON.stringify(u));
         await shot(mod.page, 'moderator_username', size);
         await mod.context.close();
     }
