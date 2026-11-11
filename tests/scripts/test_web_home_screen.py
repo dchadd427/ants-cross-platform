@@ -186,6 +186,11 @@ class TheStyle(unittest.TestCase):
         self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')
         self.assertRegex(css, r'body\[data-screen="home"\] \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
 
+    def test_leave_room_is_red_like_leave_game_with_the_stamped_look(self):
+        self.assertIn(".leave { color: var(--cream); background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10; }", self.css, "the red face, the weave, the double frame and a darker red shadow")
+        self.assertIn(".leave:hover { background-color: #b5222c; }", self.css, "a lighter red under the cream words (5.6 to 1)")
+        self.assertNotRegex(self.css, r"\.leave[^{]*\{[^}]*(transform|text-shadow|#1b0f0d)", "the press, the words' shadow and forced colors are .btn's")
+
     def test_the_rooms_bar_gives_the_logo_what_is_left_on_a_narrow_phone(self):
         match = re.search(r"@media \(max-width: 389px\) \{(.*?)\n\}", self.css, re.S)
         self.assertIsNotNone(match, "a rule for 360 and 320 px (the bar does not fit at its size for a wider phone)")

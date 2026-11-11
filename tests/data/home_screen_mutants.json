@@ -1232,6 +1232,20 @@
    "old": "@media (max-width: 380px) { .htabs { gap: 6px;",
    "new": "@media (max-width: 280px) { .htabs { gap: 6px;",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_face_not_red",
+   "file": "web/home/home.css",
+   "old": "background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10;",
+   "new": "background: #1b0f0d; border-color: var(--edge); box-shadow: inset 0 0 0 1px #6a4a42, 3px 4px 0 var(--shadow);",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
+  },
+  {
+   "id": "leave_room_hover_not_lighter",
+   "file": "web/home/home.css",
+   "old": ".leave:hover { background-color: #b5222c; }",
+   "new": ".leave:hover { background-color: #2a1713; }",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheBodyOfHome TheWayIntoTheImage"
   }
  ]
 }
