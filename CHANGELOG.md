@@ -2,28 +2,7 @@
 
 What changed in each release of the Ants remake, newest first, a few lines each: what a player sees and, only when it changed, the rules or the network protocol. The version is the one line of the file `VERSION` (how it moves: [`docs/WORKFLOW.md`](docs/WORKFLOW.md)); every build also has a build id, the short git commit, shown by `ants --version`, `ants_server --version` and the footer of the web page.
 
-An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## Next`, above the newest release) in its own pull request, and `tools/release.py` turns it into the entry when `VERSION` moves (each such change bumps the version, by default the patch number).
-
-<!--
-Template of an entry (copy it, keep the labels and the order, leave out a paragraph that has nothing to say):
-
-## vX.Y.Z - YYYY-MM-DD - title
-
-**For players:**
-- one bullet: what a player or a server owner sees or can do now
-
-**Rules / network:** only when the rules or the protocol changed: what, and "network protocol N: a vA.B.C game cannot join"
-
-**Fixes:**
-- one line each (optional)
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ed3f1214...b2150865)
-
-Work that is not released yet is written in the same template under a heading that says only "## Next" (no version, no date), above the newest release;
-`tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
--->
-
-## v0.15.1 - 2026-11-10 - The game server can always write each finished match's result file
+An entry is 5 - 15 lines in a fixed template: the heading `## vX.Y.Z - YYYY-MM-DD - title`, then **For players:** (1 - 6 bullets), **Rules / network:** (only if the rules or the network protocol changed: what, and the protocol number), **Fixes:** (optional, one line each) and **Details:** (a link to the commit range). No test counts and no mutation or review lists: those belong in commit messages and documents. A change that goes live writes its entry under **Next** (a section headed `## v0.15.1 - 2026-11-10 - The game server can always write each finished match's result file
 
 **For players:**
 - **The game server can always save a finished match's result.** A change to the server stack makes sure the folder where each finished match's result file is written belongs to the game server, also on a server whose storage was made by an older image. Nothing changes on the web pages or in the game.
@@ -491,29 +470,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c93ee3f5...26f6d531)
 
-## v0.12.117 - 2026-10-23 - Test rooms work on every server
+## Older versions (v0.12.117 and before)
 
-**For players:**
-- **Play this map > With other players now works on every server.** The Map Maker's test room used to need the map submissions to be switched on; where they were off (the beta) it showed a dimmed, empty lobby. It now sends your draft map to a small door of its own that is always on, so a room on your draft opens whether or not submissions are open.
-- **A test map is as private as before:** it is checked by the same checker as a submitted map, it is on no list, no match on it is recorded, and it is deleted after 6 hours or when the server restarts. A map too big for a room (over 65,536 cells) is still turned away with the same words.
-- **The page says why a test room cannot open** in plain words: test rooms switched off on the server, or a map too big to send.
-- **For server owners:** the door is port 4031 (`ANTS_TEST_MAP_PORT`, 0 turns test rooms off), on by default; it has no database and no accounts and takes nothing but test maps. The old `/submissions?test=1` form is gone.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/9aa3e544...02eabd8e)
-
-## v0.12.116 - 2026-10-23 - Map Maker: red drops go back, things may stand on water, flowers have stems
-
-**For players:**
-- **Map Maker (v1.5.5), Pick up: let go on a red place and the thing goes back.** Drag a hill, an ant, a pile or a plant, let go of the mouse, your finger or the pen where the copy is red, and it jumps back to where you picked it up. Nothing is written and nothing is left to Undo, and the bar says why, and the line stays until your next move ("Put back: the mushroom is in the way"). A lift on a free place still puts it down in one step, a plain click still only places the copy, and Done on a red place keeps the thing in your hand with the reason.
-- **Map Maker: hills, starting ants and food piles may be put on water.** Pick up used to refuse them, although many maps of the library have them there. The copy stays green and the bar adds one line about what to expect: an ant that cannot swim moves to land beside its marker, or drowns when there is none; ants that cannot swim reach a pile in the water only from the shore, while Swimmers swim to it or build a bridge; a hill whose way out is water may keep its ants in. The other tools never refused water.
-- **Map Maker: flowers are drawn whole, as in the game.** The flower with sunglasses and the other flowers showed only their heads; now the stems, the leaves and the shadow are there too (the same pixels as the game's).
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the Map Maker page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/56e02b48...81bd4d9d)
-
-## Older versions (v0.12.115 and before)
-
-Every release before v0.12.116, and the long notes of v0.12.115 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.118, and the long notes of v0.12.117 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
