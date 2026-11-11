@@ -39,29 +39,22 @@
   {
    "id": "live_looks_while_the_tab_is_hidden",
    "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
-   "new": "function liveWanted() { return showLive && !gone && onHome() && isOpen && drawn(); }",
+   "old": "function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }",
+   "new": "function liveWanted() { return !gone && onHome() && isOpen && drawn(); }",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_looks_while_the_room_shows",
    "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
-   "new": "function liveWanted() { return showLive && !gone && visible() && isOpen; }",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
-   "id": "live_looks_while_the_switch_is_off",
-   "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
-   "new": "function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }",
+   "old": "function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }",
+   "new": "function liveWanted() { return !gone && visible() && isOpen; }",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
    "id": "live_looks_while_a_popover_is_closed",
    "file": "web/home/games.js",
-   "old": "function liveWanted() { return showLive && !gone && visible() && onHome() && isOpen && drawn(); }",
-   "new": "function liveWanted() { return showLive && !gone && visible() && onHome() && drawn(); }",
+   "old": "function liveWanted() { return !gone && visible() && onHome() && isOpen && drawn(); }",
+   "new": "function liveWanted() { return !gone && visible() && onHome() && drawn(); }",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
@@ -86,20 +79,6 @@
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
-   "id": "the_choice_is_never_kept",
-   "file": "web/home/games.js",
-   "old": "else win.localStorage.setItem(CHOICE_KEY, '0'); } catch",
-   "new": "else win.localStorage.setItem(CHOICE_KEY, '1'); } catch",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
-   "id": "a_browser_that_keeps_nothing_means_off",
-   "file": "web/home/games.js",
-   "old": "!== '0'; } catch (e) { return true; } }",
-   "new": "!== '0'; } catch (e) { return false; } }",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
    "id": "the_head_ignores_the_matches",
    "file": "web/home/games.js",
    "old": "if (liveShown()) return !n && !live.length",
@@ -121,24 +100,10 @@
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
-   "id": "the_switch_does_not_look_again_when_it_comes_on",
-   "file": "web/home/games.js",
-   "old": "            if (on) pollLive();\n        }\n        filterBox",
-   "new": "        }\n        filterBox",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
    "id": "watch_is_under_44_px",
    "file": "web/home/games.css",
    "old": ".gwatch { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 72px; min-height: 44px;",
    "new": ".gwatch { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 72px; min-height: 30px;",
-   "test": "node tests/scripts/web_home_watch_browser.js"
-  },
-  {
-   "id": "the_switch_is_under_44_px",
-   "file": "web/home/games.css",
-   "old": ".gfilter { display: inline-flex; align-items: center; gap: 10px; min-height: 44px;",
-   "new": ".gfilter { display: inline-flex; align-items: center; gap: 10px; min-height: 30px;",
    "test": "node tests/scripts/web_home_watch_browser.js"
   },
   {
@@ -261,13 +226,6 @@
    "test": "node tests/scripts/web_home_watch_browser.js"
   },
   {
-   "id": "a_phone_on_its_side_gives_the_switch_a_row",
-   "file": "web/home/games.css",
-   "old": ".gfrow { flex: 0 0 auto; margin: -6px 0 -6px auto; }",
-   "new": ".gfrow { flex: 1 0 100%; margin: -6px 0 -6px auto; }",
-   "test": "node tests/scripts/web_home_watch_browser.js"
-  },
-  {
    "id": "live_a_bot_is_the_old_label_only",
    "file": "web/home/games.js",
    "old": "var BOT_NAME = /^Bot \\(|\\(bot(, [^()]+)?\\)$/;",
@@ -331,13 +289,6 @@
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {
-   "id": "live_an_answer_after_the_switch_went_off_is_taken",
-   "file": "web/home/games.js",
-   "old": "look(LIVE_URL).then(function (data) { if (mine === liveRound) {",
-   "new": "look(LIVE_URL).then(function (data) { if (true) {",
-   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
-  },
-  {
    "id": "live_seconds_have_no_cap",
    "file": "web/home/games.js",
    "old": "Math.min(Math.floor(secs), 359999)",
@@ -350,6 +301,27 @@
    "old": ".gdot.cn { --c: #8a8693; }",
    "new": ".gdot.cn { --c: #b3afb9; }",
    "test": "python3 tests/scripts/test_web_home_games.py TheStyle"
+  },
+  {
+   "id": "empty_card_stays_with_matches",
+   "file": "web/home/games.js",
+   "old": "popEmpty.hidden = !(loaded && !off && !shown.length && !(liveShown() && live.length));",
+   "new": "popEmpty.hidden = !(loaded && !off && !shown.length);",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "empty_card_hidden_with_no_match_either",
+   "file": "web/home/games.js",
+   "old": "popEmpty.hidden = !(loaded && !off && !shown.length && !(liveShown() && live.length));",
+   "new": "popEmpty.hidden = !(loaded && !off && !shown.length && !liveShown());",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
+  },
+  {
+   "id": "an_old_stored_off_word_is_read",
+   "file": "web/home/games.js",
+   "old": "function liveShown() { return liveLoaded && !liveOff && loaded; }",
+   "new": "function liveShown() { return liveLoaded && !liveOff && loaded && win.localStorage.getItem('ants.home.games.live') !== '0'; }",
+   "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   }
  ]
 }

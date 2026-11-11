@@ -440,7 +440,7 @@ class TheSharedStylesheet(unittest.TestCase):
         self.assertNotRegex(self.css, r"url\(\s*[\"']?(?:https?:)?//")
 
     def test_it_has_the_pieces_that_every_page_needs(self):
-        for needle in (".screen::after {", ".wrap {", ".btn, .banner {", ".btn:hover {", ".btn:active {", ".btn.sm {", ".btn.big {", ".banner {", ".panel {", ".site-head {", ".logo img {", ".bar {", ".bar .ver {",
+        for needle in (".screen::after {", ".wrap {", ".btn, .banner {", ".btn:hover {", ".btn:active:not([disabled]) {", ".btn.sm {", ".btn.big {", ".banner {", ".panel {", ".site-head {", ".logo img {", ".bar {", ".bar .ver {",
                        "select, input[type=text], input[type=search] {", "[hidden] { display: none !important; }"):
             self.assertIn(needle, self.css, needle)
         self.assertRegex(self.css, r"button:focus-visible[^{]*\{ outline: 3px solid var\(--gold\);")                    # (a focused control shows it, on every page)

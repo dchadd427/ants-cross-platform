@@ -58,14 +58,14 @@ details.versions { padding: 0; }
 .pager .where { margin: 0 auto; color: var(--muted); font-size: 14px; line-height: 1.3; text-align: center; }
 .pager.tabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .pager .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 52px; padding: 6px 8px; font-size: 16px; line-height: 1.15;
-    color: var(--cream); text-decoration: none; background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
+    color: var(--cream); text-decoration: none; background: var(--sheen) var(--teal); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
 .pager .tab span { font-size: 12.5px; color: #cfe3da; }
 .pager .tab:hover { background-color: var(--teal-hi); }
 .pager .tab.on { background: var(--pressed); color: var(--pressed-ink); transform: translate(1px, 2px); box-shadow: var(--btn-shadow-chosen); }
 .pager .tab.on span { color: #c9b66a; }
 section h2 { margin: 0 0 12px; font-size: 20px; font-weight: 500; line-height: 1.7; color: var(--gold); }
 section h2 a { color: var(--gold); }
-.rel { display: inline-block; margin-right: 12px; padding: 0 12px; line-height: 1.4; background: var(--teal) var(--sheen, none); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
+.rel { display: inline-block; margin-right: 12px; padding: 0 12px; line-height: 1.4; background: var(--sheen, none) var(--teal); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
 main:not(.paged) section:target { border-color: var(--gold); }
 section.deep { border-color: var(--gold); }
 @media (max-width: @PHONE_WIDTH@px) {

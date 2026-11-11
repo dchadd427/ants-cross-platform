@@ -114,8 +114,8 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertEqual(btn[name], theirs[name], name)
         for name in ("min-height", "padding", "font-size"):
             self.assertEqual(rule(self.style, ".btn.sm")[name], rule(self.lobby_style, ".btn.sm")[name], name)
-        self.assertEqual(rule(self.style, ".btn:active")["box-shadow"], rule(self.lobby_style, ".btn:active")["box-shadow"])
-        self.assertEqual(rule(self.style, ".btn:active")["transform"], rule(self.lobby_style, ".btn:active")["transform"])
+        self.assertEqual(rule(self.style, ".btn:active:not([disabled])")["box-shadow"], rule(self.lobby_style, ".btn:active:not([disabled])")["box-shadow"])
+        self.assertEqual(rule(self.style, ".btn:active:not([disabled])")["transform"], rule(self.lobby_style, ".btn:active:not([disabled])")["transform"])
         self.assertEqual(rule(self.style, ".btn:hover")["background-color"], rule(self.lobby_style, ".btn:hover")["background-color"])
         self.assertIn("outline: 3px solid var(--gold);", self.page)                                  # (the focused control shows it, as on the front page)
         self.assertEqual(rule(self.lobby_style, ":focus-visible")["outline"], "3px solid var(--gold)")
@@ -195,7 +195,7 @@ class TheLookIsTheFrontPages(PageCase):
         # The review of v0.8.2 found `background: #1e3a8a;` in the style attribute of one button of Sprites and sounds: a background shorthand resets the background image, so that button alone was flat.
         # A rule that names a button of the family says its face (the color with the sheen over it), the flat plate of a chosen one, or only a color (background-color); and no style attribute of such a
         # button says a background or corners of its own.
-        faces = {"var(--teal) var(--sheen)", "var(--teal) var(--sheen, none)", "#102b25", "var(--pressed)", "var(--gold)"}
+        faces = {"var(--sheen) var(--teal)", "var(--sheen, none) var(--teal)", "#102b25", "var(--pressed)", "var(--gold)"}
         seen = 0
         for where, (style, family) in self.family_styles().items():
             for selector, declarations in blocks(style):
@@ -226,7 +226,7 @@ class TheLookIsTheFrontPages(PageCase):
         self.assertEqual(rule(classic, ":root")["--sheen"], sheen)
         for where, declarations in self.faces_and_corners().items():
             # (Sprites and sounds takes the token from the changelog pages' style sheet: with an older style sheet its buttons are flat teal, not transparent)
-            self.assertEqual(declarations["background"], "var(--teal) var(--sheen, none)" if where == "the small buttons of Sprites and sounds" else "var(--teal) var(--sheen)", where)
+            self.assertEqual(declarations["background"], "var(--sheen, none) var(--teal)" if where == "the small buttons of Sprites and sounds" else "var(--sheen) var(--teal)", where)
         color_only = {
             "the front page's hovered button": rule(self.lobby_style, ".btn:hover"),
             "the front page's hovered picture dropdown": rule(self.lobby_style, ".shape-select:hover"),
@@ -242,51 +242,54 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertRegex(declarations["background-color"], r"^(?:var\(--teal(?:-hi)?\)|#[0-9a-f]{6})$", where)
         for where, declarations in (("the game page's chosen pair", rule(self.style, '.seg button[aria-checked="true"]')),):
             self.assertEqual(declarations["background"], "#102b25", where)                           # (flat and dark: pressed in)
-        # The light of the sheen sits at the very top and is gone by 4 px, above the words (the gradient starts inside the border, so 4 px of it is 6 px below the outer edge; the 12 px words of the smallest
-        # buttons, the chips of Sprites and sounds and the release plates, begin about 7 px down), so every text is still at least 4.5:1 on its face (the pairs of the tests above are the colors without
-        # the sheen; everything else of the sheen is shade, which only makes the words stand out more). The review of v0.8.2 measured 8 px taking those words down to 4.1:1.
+        # The sheen is the weave (a faint 45 degree canvas: a light and a dark line pattern, 4 px apart) and a soft light from above. The light sits at the top and is gone by 18% of the height, above the
+        # words, and the weave has no light dots that matter (its light lines are at most 4% white), so every text is still at least 4.5:1 on its face, hovered too (the pairs of the tests above are the colors
+        # without the sheen; tests/scripts/test_web_buttons.py has the measured numbers' limits). The color of the face goes LAST in `background` (a color may only be in the last layer of several).
+        weave = rule(self.lobby_style, ":root")["--weave"]
+        self.assertEqual(rule(self.style, ":root")["--weave"], weave)
+        self.assertEqual(rule(classic, ":root")["--weave"], weave)
+        self.assertTrue(sheen.startswith("var(--weave), linear-gradient(180deg, "), sheen)
+        gradient = sheen.split("linear-gradient(180deg, ", 1)[1]
         stops = [((int(m.group(1)), int(m.group(2)), int(m.group(3))), float(m.group(4)), m.group(5))
-                 for m in re.finditer(r"rgba\((\d+), (\d+), (\d+), ([\d.]+)\) ([\d.]+(?:px|%)?)", sheen)]
-        self.assertTrue(sheen.startswith("linear-gradient(180deg, "), sheen)
-        self.assertEqual(len(stops), len(re.findall(r"rgba\(", sheen)), sheen)
+                 for m in re.finditer(r"rgba\((\d+), (\d+), (\d+), ([\d.]+)\) ([\d.]+(?:px|%)?)", gradient)]
+        self.assertEqual(len(stops), len(re.findall(r"rgba\(", gradient)), sheen)
         light = [(alpha, position) for color, alpha, position in stops if color == (255, 255, 255)]
         self.assertEqual([position for alpha, position in light if alpha > 0], ["0"], sheen)           # (the light starts at the top edge ...)
-        self.assertLessEqual(max(alpha for alpha, position in light), 0.3, sheen)
-        self.assertTrue(all(re.fullmatch(r"[\d.]+px", position) and float(position[:-2]) <= 4 for alpha, position in light if alpha == 0), sheen)   # (... and is gone by 4 px)
+        self.assertLessEqual(max(alpha for alpha, position in light), 0.15, sheen)
+        self.assertTrue(all(re.fullmatch(r"[\d.]+%", position) and float(position[:-1]) <= 18 for alpha, position in light if alpha == 0), sheen)   # (... and is gone by 18%)
         shade = [alpha for color, alpha, position in stops if color == (0, 0, 0)]
-        self.assertTrue(shade and max(shade) <= 0.4, sheen)
+        self.assertTrue(shade and max(shade) <= 0.3, sheen)
         self.assertEqual(stops[-1][0], (0, 0, 0), sheen)                                               # (the bottom is the darkest part)
+        self.assertTrue(all(float(alpha) <= 0.04 for alpha in re.findall(r"rgba\(255, 255, 255, ([\d.]+)\)", weave) if float(alpha) > 0), weave)   # (no light dots in the weave)
 
-    def test_the_teal_buttons_are_bevelled_on_all_four_edges_on_every_page(self):
-        # Requested on 2026-10-05, about the left edge of START! (a flat light strip beside a bevel that lit only the top and shaded only the bottom): that area should look more
-        # beveled. The bevel is lit on the top AND the left edge and shaded on the bottom AND the right edge, so it turns the rounded corners; it is one pair of tokens that every page shares
-        # (the front page, this page, the style sheet of the changelog pages that Sprites and sounds links), and every teal face takes its inset shadows from them, none draws its own.
+
+    def test_the_teal_buttons_have_the_double_frame_on_every_page(self):
+        # The bevel is a double frame, the same on the front page, this page and the style sheet of the changelog pages (every teal face takes its inset shadows from the tokens, none draws its own):
+        # a light line of 1 px just inside the dark edge, then a dark groove, then a darker lower lip (-sm: the small buttons'), and a pressed button (-dn) is dark inside, with the light line gone.
         classic = re.sub(r"/\*.*?\*/", "", read("web", "front", "classic.css"), flags=re.S)
         roots = {"the front page": rule(self.lobby_style, ":root"), "the game page": rule(self.style, ":root"), "the style sheet of the changelog pages": rule(classic, ":root")}
-        for name in ("bevel", "bevel-sm"):
+        for name in ("bevel", "bevel-sm", "bevel-dn", "btn-text", "teal-hi"):
             values = {where: declarations["--" + name] for where, declarations in roots.items()}
             self.assertEqual(len(set(values.values())), 1, values)
-            shadows = re.findall(r"inset (-?\d+)px (-?\d+)px (\d+)(?:px)? (#[0-9a-f]{6}|rgba\([^)]*\)|var\(--[\w-]+\))", values["the front page"])
-            self.assertEqual(len(shadows), values["the front page"].count("inset "), values["the front page"])         # (every part of the bevel was read)
-            lit = [(int(x), int(y)) for x, y, blur, color in shadows if int(x) > 0 and int(y) > 0]
-            shaded = [(int(x), int(y)) for x, y, blur, color in shadows if int(x) < 0 and int(y) < 0]
-            self.assertEqual(len(lit) + len(shaded), len(shadows), name + ": every part lights the top and the left together, or shades the bottom and the right together")
-            self.assertGreaterEqual(len(lit), 2, name)                                                # (a bright line and a facet ...)
-            self.assertGreaterEqual(len(shaded), 2, name)                                             # (... and a thin dark line and a facet)
-            self.assertTrue(all(x == y for x, y in lit), name + ": the left edge is lit as thickly as the top")
-            self.assertTrue(all(-y >= -x for x, y in shaded), name + ": the shade is at least as thick at the bottom as at the right")
-            self.assertEqual(values["the front page"].count("#3d9a7d"), 1, name)
-        # no rule draws a bevel of its own: the pages' own text has the color of the lit facet only in the two tokens
-        for where, style in (("the front page", self.lobby_style), ("the game page", self.style), ("the style sheet of the changelog pages", classic)):
-            self.assertEqual(style.count("#3d9a7d"), 2, where)
+        bevel, small, down = (roots["the front page"]["--" + name] for name in ("bevel", "bevel-sm", "bevel-dn"))
+        self.assertTrue(bevel.startswith("inset 0 0 0 1px rgba(255, 255, 255, "), bevel)                 # (the light line ...)
+        self.assertIn(", inset 0 0 0 3px rgba(0, 0, 0, ", bevel)                                          # (... the groove ...)
+        self.assertIn(", inset 0 -4px 0 3px rgba(0, 0, 0, ", bevel)                                       # (... and the lip)
+        self.assertEqual(small, bevel.replace("inset 0 -4px 0 3px", "inset 0 -3px 0 3px"))
+        self.assertTrue(down.startswith("inset 0 0 0 1px rgba(0, 0, 0, "), down)
+        self.assertIn("inset 0 5px 8px 1px rgba(0, 0, 0, ", down)
         for where, declarations in self.faces_and_corners().items():
             self.assertRegex(declarations["box-shadow"], r"^var\(--(?:bevel|bevel-sm|btn-shadow|btn-shadow-sm)\)", where)
-        # the pressed button and the small buttons (`.btn.sm`): from the same tokens
-        for where, declarations in (("the front page's pressed button", rule(self.lobby_style, ".btn:active")), ("the game page's pressed button", rule(self.style, ".btn:active"))):
-            self.assertTrue(declarations["box-shadow"].startswith("var(--bevel), "), where)
+        # the pressed button goes 3 px right and 4 px down, is dark inside and has lost its red shadow; the small buttons (`.btn.sm`) are from the same tokens
+        for where, declarations in (("the front page's pressed button", rule(self.lobby_style, ".btn:active:not([disabled])")), ("the game page's pressed button", rule(self.style, ".btn:active:not([disabled])")),
+                                    ("the changelog pages' pressed button", rule(classic, ".btn:active:not([disabled])"))):
+            self.assertEqual(declarations["transform"], "translate(3px, 4px)", where)
+            self.assertIn(declarations.get("box-shadow", "var(--btn-shadow-down)"), ("var(--bevel-dn), 0 0 0 var(--shadow)", "var(--btn-shadow-down)"), where)
+        self.assertEqual(roots["the style sheet of the changelog pages"]["--btn-shadow-down"], "var(--bevel-dn), 0 0 0 var(--shadow)")
         self.assertTrue(rule(self.lobby_style, ".btn.sm")["box-shadow"].startswith("var(--bevel-sm), "))
-        for token, bevel in (("--btn-shadow", "var(--bevel)"), ("--btn-shadow-down", "var(--bevel)"), ("--btn-shadow-sm", "var(--bevel-sm)")):
-            self.assertTrue(roots["the style sheet of the changelog pages"][token].startswith(bevel + ", "), token)
+        for token, bevel_token in (("--btn-shadow", "var(--bevel)"), ("--btn-shadow-sm", "var(--bevel-sm)")):
+            self.assertTrue(roots["the style sheet of the changelog pages"][token].startswith(bevel_token + ", "), token)
+
 
     def test_the_picture_dropdown_has_the_face_of_the_two_pages_buttons_and_the_two_state_buttons_stay_the_game_pages(self):
         # The front page's Picture row is a native dropdown (`.shape-select`) with the face of the game page's own (`.pick-select`): the colors, the frame, the corners, the bevel and the chevron, but

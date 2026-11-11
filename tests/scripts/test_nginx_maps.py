@@ -191,7 +191,7 @@ class TheBuildPutsThePicturesAndTheMapsWhereNginxLooks(unittest.TestCase):
         for compose in ("docker-compose.stack.yml", "docker-compose.server.yml", "docker-compose.staging.yml"):
             body = read(compose)
             self.assertNotRegex(body, r":/community-maps")
-            self.assertNotIn("entrypoint:", body.replace('    entrypoint: ["/bin/sh", "-c"]\n', ""))      # (the image's --community-maps is kept; only the one-shot helper ants-results-init, tests/scripts/test_results_init.py, runs a shell instead)
+            self.assertNotIn("entrypoint:", body)                                              # (the image's --community-maps is kept)
         self.assertNotRegex(read("docker-compose.stack.yml"), r"/maps/community")
 
     def test_every_picture_and_map_is_in_the_repository_and_small(self):

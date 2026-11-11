@@ -6,7 +6,7 @@
 //   3. what the page tells the hub: `here` (a named visitor) and `who` once for each socket, when the room changes and not oftener than every 3 seconds, again after a lost link, nothing for a guest;
 //   4. what is drawn: the groups in order with their counts, the visitor first and as the page knows it, the moderator mark, the guests, the empty note and its Host button, a Join where a public room waits
 //      (the Games list's own Join does it, a list that is a popover is opened for it, a game that is gone is said), "and N more", every line as text;
-//   5. the fold: the minus button and Escape fold the panel, where the button is drawn;
+//   5. no fold: the panel has no minus button, no folded state, and Escape in it does nothing to it (it is always open);
 //   6. what the hub may send: unknown kinds, a wrong frame, an odd name, a flood of rows: nothing breaks, nothing becomes markup;
 //   7. the page (web/lobby.html with web/home/home.js): the list is loaded once, after the dock, a missing or broken one changes nothing, the hand-off makes it inert;
 //   8. the source of the script: no markup, no storage, no link, no address.
@@ -521,25 +521,17 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 5. The fold
+// 5. No fold
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const r = rig();
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
-    const fold = byClass(r.panel(), 'pl-fold')[0];
-    check('the fold: open, labelled for what it does', r.panel().getAttribute('data-folded') === 'false' && fold.getAttribute('aria-label') === 'Fold the list' && fold.getAttribute('aria-expanded') === 'true');
-    fold.click();
-    check('pressed: folded to its header, the button says it opens', r.panel().getAttribute('data-folded') === 'true' && fold.getAttribute('aria-label') === 'Open the list' && fold.getAttribute('aria-expanded') === 'false');
-    fold.click();
-    check('pressed again: open', r.panel().getAttribute('data-folded') === 'false');
-    fold.getClientRects = () => [];                           // (a phone's Players view: the fold is not drawn)
+    check('the panel has no fold button and no folded state: it is always open', byClass(r.panel(), 'pl-fold').length === 0 && byClass(r.panel(), 'pl-mark').length === 0 && r.panel().getAttribute('data-folded') === null);
+    const before = r.panel().getAttribute('data-state');
     r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
-    check('Escape does not fold a panel whose fold button is not drawn (a phone\'s Players view: it would stay folded in the wide layout later)', r.panel().getAttribute('data-folded') === 'false');
-    delete fold.getClientRects;
-    r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
-    check('Escape in a docked panel folds it and the focus is on the fold button', r.panel().getAttribute('data-folded') === 'true' && r.env.focused === fold);
+    check('Escape in the panel changes nothing (it used to fold it)', r.panel().getAttribute('data-folded') === null && r.panel().getAttribute('data-state') === before && byClass(r.panel(), 'pl-fold').length === 0);
     r.who(FULL(CROWD.concat([row(20, 'newcomer')]), { n: 14, g: 4 }));
-    check('a fold stays folded when the list changes', r.panel().getAttribute('data-folded') === 'true');
+    check('the list still changes while open: the rows of the list are drawn', byClass(r.panel(), 'pl-card').length > 0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -565,7 +557,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     const t = rig();
     t.state.client = { get room() { throw new Error('a page that breaks'); } };
     t.live();
-    check('a page that throws when asked about its room: the list reports it and its other parts go on (the fold still works)', t.errors.length >= 1);
+    check('a page that throws when asked about its room: the list reports it and its other parts go on', t.errors.length >= 1);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

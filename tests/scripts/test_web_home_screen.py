@@ -36,7 +36,9 @@ FILES = ("home.js", "home.css")
 LATER = ("games.js", "games.css")                    # the files that load after the first paint (tests/scripts/test_web_home_games.py has their budgets)
 CHAT_FILES = ("chat.js", "chat.css")                  # the chat dock, loaded after the first paint: its own budgets and tests are tests/scripts/test_web_home_chat.py
 PLAYERS_FILES = ("players.js", "players.css")         # the players list, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_players.py
-HOME_BUDGET, HOME_GZIP_BUDGET = 39 * 1000, 11600     # bytes, raw and gzipped, both files together (about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
+TALK_FILES = ("talk.js", "talk.css")                  # the emoji and microphone buttons of the chat, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_talk.py
+# (raised on purpose from 39,000 and 11,600 to 40,000 and 12,000 for the top bar's three rules: the account's name beside the badge, My room only while the page holds a room, and their comments; no comment was trimmed)
+HOME_BUDGET, HOME_GZIP_BUDGET = 40 * 1000, 12000     # bytes, raw and gzipped, both files together (about 38,464 and 11,691 now, 37,247 and 11,349 before the top bar's rules; it was about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
 LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
@@ -116,10 +118,10 @@ class ThePage(unittest.TestCase):
         self.assertNotIn("ready when the page opens", read("docker", "nginx.conf"))
         self.assertNotIn("ready when the page opens", read("docs", "PLAY_IN_BROWSER.md"))
 
-    def test_how_it_works_says_where_my_room_is_because_the_room_shows_it_too(self):
-        self.assertIn("<h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours.", self.page)
-        self.assertIn("To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>", self.page, "How it works says where the public rooms are and how to be in one")
-        self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no My room to press")
+    def test_how_it_works_says_where_the_room_comes_from_because_the_room_shows_it_too(self):
+        self.assertIn("<h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready, with the first color yours.", self.page)
+        self.assertIn("A public room is listed under Games, where players join it from the list or by its code; a private one is for the people who have its link.</p>", self.page, "How it works says where the public rooms are and how to be in one")
+        self.assertNotIn("<p>Press My room and your room", self.page, "the list opens from the Room too, where there is no Quick host to press")
         check = read("tests", "scripts", "web_home_check.py")
         self.assertNotIn("the front page makes a room again", check, "a plain visit of the front page makes no room: My room does")
         self.assertIn("the front page (Home), after My room, makes a room again", check)
@@ -133,7 +135,7 @@ class ThePage(unittest.TestCase):
 
 class TheFolder(unittest.TestCase):
     def test_it_holds_the_two_screens_the_games_list_the_chat_dock_and_the_players_list_and_nothing_else(self):
-        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
+        self.assertEqual(sorted(n for n in os.listdir(HOME) if not n.endswith(".mutbak")), sorted(FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES))      # (tools/mutate.py keeps FILE.mutbak while it changes a file)
 
     def test_it_is_under_its_budgets(self):
         raw = zipped = 0
@@ -158,7 +160,7 @@ class TheFolder(unittest.TestCase):
         self.assertIn("if (goingTimer !== null) clearTimeout(goingTimer);", js, "a second hand-off starts the time again")
 
     def test_nothing_of_it_is_in_the_folder_that_has_its_cap_already(self):
-        for name in FILES + LATER + CHAT_FILES + PLAYERS_FILES + ("home",):
+        for name in FILES + LATER + CHAT_FILES + PLAYERS_FILES + TALK_FILES + ("home",):
             self.assertNotIn(name, os.listdir(FRONT))
 
     def test_the_script_is_plain_es5_and_names_no_other_site(self):
@@ -183,6 +185,11 @@ class TheStyle(unittest.TestCase):
         self.assertRegex(css, r"\.mast \{ display: none; \}")
         self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')
         self.assertRegex(css, r'body\[data-screen="home"\] \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
+
+    def test_leave_room_is_red_like_leave_game_with_the_stamped_look(self):
+        self.assertIn(".leave { color: var(--cream); background: var(--sheen) #9d0d17; border-color: var(--edge); box-shadow: var(--bevel), 3px 4px 0 #3b0d10; }", self.css, "the red face, the weave, the double frame and a darker red shadow")
+        self.assertIn(".leave:hover { background-color: #b5222c; }", self.css, "a lighter red under the cream words (5.6 to 1)")
+        self.assertNotRegex(self.css, r"\.leave[^{]*\{[^}]*(transform|text-shadow|#1b0f0d)", "the press, the words' shadow and forced colors are .btn's")
 
     def test_the_rooms_bar_gives_the_logo_what_is_left_on_a_narrow_phone(self):
         match = re.search(r"@media \(max-width: 389px\) \{(.*?)\n\}", self.css, re.S)
@@ -234,6 +241,18 @@ class TheStyle(unittest.TestCase):
         self.assertNotRegex(self.css, r"overflow-x: *(scroll|auto)", "nothing scrolls sideways")
 
 
+    def test_a_phone_upright_shows_the_visitor_s_name_beside_the_badge_and_the_guest_chip_stays_the_mark(self):
+        """docs/HOME_SCREEN.md, "The top bar": the first row is the logo, then what is left of it is the chip's and the Menu's. Where the layout is in the real browser: tests/scripts/web_home_topbar_browser.js"""
+        phone = self.css[self.css.index("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {"):]
+        phone = phone[:phone.index("\n}\n")]
+        self.assertIn(".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: block;", phone, "the name only where the badge is drawn: a guest's chip says Log in with the mark alone")
+        self.assertIn(".hbar .hright { grid-area: 1 / 1 / 2 / 3; min-width: 0; margin-left: 102px;", phone, "the chip and the Menu use the row's free place, to the right of the logo (92 px and the gap)")
+        self.assertRegex(phone, r"\.hbar button\.hlogin \{ flex: 0 1 auto;", "the chip shrinks, so the name is cut and the Menu stays in the row")
+        side = self.css[self.css.index("@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {"):]
+        side = side[:side.index("\n}\n")]
+        self.assertIn(".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; }", side, "held sideways there is no free place: the badge alone")
+
+
 class TheBodyOfHome(unittest.TestCase):
     """Home under its bar is the games (left), the players (right) and the chat (along the bottom); a phone (up to 700 px wide) has one of the three at a time and a strip to pick it. There is no Yard on Home yet:
     no stand-in, no site label read, nothing that prints a size. The strip is the page's own small piece in home.js; the three parts keep their own files."""
@@ -268,7 +287,7 @@ class TheBodyOfHome(unittest.TestCase):
         self.assertIn("mirror(gamesPill, tabBtns.games.pill);", code)
         self.assertIn("mirror(c, tabBtns.players.pill);", code)
         self.assertIn("to.textContent = /^\\d{3}/.test(t) ? '99+' : t;", code, "a count of three digits or more (500+ too) is 99+ in the strip, as on the old bar's badge")
-        self.assertIn("login.addEventListener('click', function () { if (phone()) pick('chat'); }, true);", code, "the login chip shows the Chat view on a phone before the dock opens it")
+        self.assertNotIn("login.addEventListener('click'", code, "the chip opens the account's dropdown (chat.js): it does not change the view of a phone")
 
     def test_the_layout_is_a_grid_for_a_wide_window_and_one_view_for_a_phone(self):
         css = self.css
@@ -309,7 +328,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_screen_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = ["web/lobby.html", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
+    FILES = ["web/lobby.html", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
              "tests/scripts/web_home_check.py", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
     @classmethod

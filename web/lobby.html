@@ -13,15 +13,19 @@
        for a week (tests/scripts/test_web_front.py keeps them equal to the files). */
     @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
     :root {
-        --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #31765f; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f;
+        --clay: #db4b13; --ink: #0c0805; --teal: #2b6357; --teal-hi: #2f6f5a; --teal-lo: #17382f; --edge: #050a08; --cream: #f4ece2; --inset: #070b0f;
         --frame: #2b6b4f; --frame-hi: #3b976f; --frame-lo: #13634b; --shadow: #9d0d17; --gold: #f6d058; --muted: #8fb3a6;
         --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b;
         --tile: url("front/clay.png?v=ef1e7ee6");
-        --sheen: linear-gradient(180deg, rgba(255, 255, 255, .24) 0, rgba(255, 255, 255, 0) 4px, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, .32) 100%);
-        --bevel: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 4px 4px 2px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -3px -4px 2px var(--teal-lo);
-        --bevel-sm: inset 1px 1px 0 #f4f4ff, inset 2px 2px 0 #5dc2a0, inset 3px 3px 1px #3d9a7d, inset -1px -1px 0 rgba(0, 0, 0, .45), inset -2px -3px 1px var(--teal-lo);
+        --weave: repeating-linear-gradient(45deg, rgba(255, 255, 255, .03) 0 1px, rgba(255, 255, 255, 0) 1px 4px), repeating-linear-gradient(-45deg, rgba(0, 0, 0, .12) 0 1px, rgba(0, 0, 0, 0) 1px 4px);
+        --sheen: var(--weave), linear-gradient(180deg, rgba(255, 255, 255, .12) 0, rgba(255, 255, 255, 0) 18%, rgba(0, 0, 0, .28) 100%);
+        --bevel: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -4px 0 3px rgba(0, 0, 0, .14);
+        --bevel-sm: inset 0 0 0 1px rgba(255, 255, 255, .38), inset 0 0 0 3px rgba(0, 0, 0, .38), inset 0 -3px 0 3px rgba(0, 0, 0, .14);
+        --bevel-dn: inset 0 0 0 1px rgba(0, 0, 0, .5), inset 0 5px 8px 1px rgba(0, 0, 0, .65), inset 0 -1px 0 rgba(255, 255, 255, .22);
+        --btn-text: 0 1px 0 rgba(0, 0, 0, .6);
         --k: 3;                                   /* the ants are drawn at 3 or 4 times their size (2 on a phone): whole steps keep the pixels square */
     }
+    @media (forced-colors: active) { :root { --weave: linear-gradient(#0000, #0000); --sheen: linear-gradient(#0000, #0000); --btn-text: none; } }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { background: var(--clay); }
     body { background: var(--clay) var(--tile); color: var(--ink); font: 500 16px/1.45 "Libre Franklin", "Franklin Gothic Medium", "Liberation Sans", Arial, sans-serif; font-synthesis: none; -webkit-text-size-adjust: 100%; }
@@ -38,14 +42,16 @@
     .wrap { width: 100%; max-width: 1220px; margin: 0 auto; padding: 16px 30px 0; flex: 1; }
 
     /* ---- buttons: the teal bevel of the game ---- */
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 18px; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer; white-space: nowrap;
-        background: var(--teal) var(--sheen); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 18px; font-size: 16px; line-height: 1.1; text-decoration: none; cursor: pointer; white-space: nowrap; text-shadow: var(--btn-text);
+        background: var(--sheen) var(--teal); color: var(--cream); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
     .btn:hover { background-color: var(--teal-hi); }
-    .btn:active { transform: translate(2px, 3px); box-shadow: var(--bevel), 1px 1px 0 var(--shadow); }
     .btn.sm { min-height: 38px; padding: 6px 14px; font-size: 15px; box-shadow: var(--bevel-sm), 2px 3px 0 var(--shadow); }
+    .btn:active:not([disabled]) { transform: translate(3px, 4px); box-shadow: var(--bevel-dn), 0 0 0 var(--shadow); }
     .btn.big { min-height: 64px; font-size: 28px; padding: 10px 26px; letter-spacing: .04em; }
     .btn.square { min-width: 44px; padding: 4px 0 8px; font-size: 30px; line-height: 1; }
     .btn[disabled] { cursor: default; filter: saturate(.45) brightness(.78); transform: none; }
+    .btn .pill { text-shadow: none; }
+    .btn[aria-pressed="true"], .btn[aria-expanded="true"], .btn.on { background-image: none; }       /* a chosen button is the flat dark plate (Home's own rules give the color): no weave on it */
 
     /* ---- the mast: the logo and nothing else ---- */
     .mast { display: flex; align-items: center; gap: 22px; min-height: 68px; margin-bottom: 10px; }
@@ -189,7 +195,7 @@
     /* ---- the name step of a link that somebody else shared: the same card as the game page's own ---- */
     .name-modal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(12, 8, 5, .78); }
     .name-step { padding: 18px 20px 16px; width: min(420px, 100%); max-height: 100%; overflow-y: auto; text-align: left; background: var(--clay) var(--tile); border: 3px solid var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
-    .name-step-title { display: block; margin-bottom: 14px; padding: 7px 16px; font-size: 22px; font-weight: 500; line-height: 1.1; text-align: left; color: var(--gold); text-shadow: 0 2px 0 #0b2a22; overflow-wrap: anywhere; background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
+    .name-step-title { display: block; margin-bottom: 14px; padding: 7px 16px; font-size: 22px; font-weight: 500; line-height: 1.1; text-align: left; color: var(--gold); text-shadow: 0 2px 0 #0b2a22; overflow-wrap: anywhere; background: var(--sheen) var(--teal); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel), 3px 4px 0 var(--shadow); }
     .name-step label { display: block; font-size: 16px; margin-bottom: 6px; color: var(--ink); }
     .name-step-row { display: flex; gap: 14px; align-items: center; }
     .name-step input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 8px 14px; font: inherit; font-size: 16px; color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); cursor: default; }
@@ -265,7 +271,7 @@
     .shape-box { position: relative; display: flex; }
     .shape-box::after { content: ""; position: absolute; right: 16px; top: calc(50% - 6px); width: 7px; height: 7px; border: solid var(--cream); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
     .shape-select { appearance: none; -webkit-appearance: none; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 40px; padding: 6px 40px 6px 14px; font: inherit; font-size: 15px; line-height: 1.1; color: var(--cream); text-overflow: ellipsis; cursor: pointer;
-        background: var(--teal) var(--sheen); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 2px 0 var(--shadow); }     /* the picture's shapes: a native dropdown that the script fills from web/shapes.js's table */
+        background: var(--sheen) var(--teal); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 2px 0 var(--shadow); }     /* the picture's shapes: a native dropdown that the script fills from web/shapes.js's table */
     .shape-select:hover { background-color: var(--teal-hi); }
     .shape-select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
     .shape-select option { color: var(--cream); background: #102b25; }
@@ -335,11 +341,11 @@
 <div class="how pickhow" id="picker" hidden><div class="panel" id="picker-panel" role="dialog" aria-modal="true"></div></div>
 <div class="how" id="how" hidden><div class="panel" role="dialog" aria-modal="true" aria-label="How it works">
     <div class="head"><h2>How it works</h2><button class="btn sm" type="button" id="how-close">Close</button></div>
-    <h3>The room</h3><p>From Home, press My room and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color. To let anybody in, press Quick host on Home or switch the room to Public: it is then listed under Games, where players join it from the list or by its code.</p>
+    <h3>The room</h3><p>From Home, press Quick host, choose Public room or Private room, and your room is ready, with the first color yours. The four colors lie as the four hills lie on the maps: Black top left, Green top right, Red bottom left, Blue bottom right. Send the link: players who open it take the next free color and show up here at once. The host drags a player onto another color to move them; a color that is taken swaps places. On a phone, tap a player's dots and then the color. A public room is listed under Games, where players join it from the list or by its code; a private one is for the people who have its link.</p>
     <h3>The other colors</h3><p>A color that nobody holds can be left open for a player, given to a computer player (Easy, Medium or Hard) or set to Nobody, which keeps it out of the match.</p>
     <h3>Removing a player</h3><p>The host can take a player out of the room with the Remove button on their color. It asks first, and the color opens up again. The player gets a room of their own, with a note that says why, and can come back by using the link again.</p>
     <h3>Teams</h3><p>With three or four players (computer players count) you can play in teams: press Team 1 or Team 2 under a player. Two on the same team play together; with four players the other two are the other team. Press a lit button again to take it off. When you move a player to another color, their team goes along.</p>
-    <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where My room makes a new room.</p>
+    <h3>START!</h3><p>The host starts the match with whoever is in. An open color stays empty. When the match is over, Leave Game takes you back to the front page, where Quick host makes a new room.</p>
     <h3>When the host leaves</h3><p>A room lasts while anybody is in it. If the host leaves, the player who has been in the room longest becomes the host, and everybody is told. When the last player leaves, the room closes about a minute later, and a link to a room that is gone says that there is no room with that code, and offers to start a room of your own.</p>
     <div class="sheets"><img src="front/qh_quickhelp.png" alt="The original's quick help: how to win, how to move your ants, game play" width="257" height="453" loading="lazy" decoding="async"><img src="front/qh_power.png" alt="The original's game instructions: power-ups and the five special ants" width="362" height="455" loading="lazy" decoding="async"></div>
 </div></div>
@@ -570,7 +576,7 @@
         // ================================================================================================================================================================================================
         // THE LOBBY: the front page is a room on the game server (docs/NETWORK_PORT.md "Protocol 16"). front/lobby_net.js keeps this page's seat in it; front/lobby_rules.js decides what the four colors and the map side
         // say and what the leader asks of the room (tests/scripts/web_lobby_rules_check.js); this part is the screen: it builds the cards, takes the pointer, the keys and the buttons, and does what the rules say.
-        //   * A plain visit is Home and makes no room (My room does: a new code, you in it); ?room=<code> is the link of somebody's room (a name card first). The room's code and your key are kept in this tab's session storage
+        //   * A plain visit is Home and makes no room (Quick host does: a new code, you in it); ?room=<code> is the link of somebody's room (a name card first). The room's code and your key are kept in this tab's session storage
         //     (LOBBY_KEY), so that a reload takes the seat back. A name is only ever set as text, never into markup.
         //   * START sends every page to the game page at once with the key of its seat (ants.rejoin.<room>.<seat>, the way the game takes a seat back); a match for one player is the game page's own single player.
         // ================================================================================================================================================================================================
@@ -1053,7 +1059,7 @@
             if (Rules.startsAlone(model)) { startAlone(); return; }
             client.start();
         });
-        // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds Home, and My room makes a room again.
+        // A match for one: the game page's own single player (a room of the game server needs two to start). The room is let go of; Back finds Home, and Quick host makes a room again.
         function startAlone() {
             var address = soloAddress(model, client.name, pickedShape); if (!address) { say('This map cannot be played alone: the game does not take its file name. Choose another map.'); return; }
             handing = true; client.leave(); forgetSession();
@@ -1304,7 +1310,7 @@
             showRejoin();
             var wantedCode = wanted && /^[A-Za-z0-9_-]{1,32}$/.test(wanted) ? wanted.toLowerCase() : '';          // (a room code is lower case: a link that came in capitals leads to the same room)
             var stored = loadSession(), test = backBar.begin(function () { forgetSession(); connect({ code: newCode(), name: myName(), own: true }); });
-            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: My room does)
+            Home.start(test || wantedCode, stored);          // (the Room opens for a link and a test room; a plain visit is Home, and makes no room: Quick host does)
             if (test) return;
             if (wantedCode && !(stored && stored.code === wantedCode)) {
                 askLink(wantedCode, '');
