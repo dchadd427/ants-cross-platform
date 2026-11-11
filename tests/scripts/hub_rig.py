@@ -25,16 +25,26 @@ class FakeRoles:
         self.connected = lambda: ()
         self.changed = lambda account: None
         self.wanted = []
-        self.unknown = set()                    # accounts whose role is not known (as if no answer of Discord were young)
+        self.stale = set()                      # accounts whose answer is older than a minute (an action waits for `confirm`)
+        self.lookups = []                       # the accounts of every `confirm`
+        self.outcome = True                     # what `confirm` says: the lookups gave their answers (False: they failed)
 
     def role_of(self, account):
         return self.roles.get(account, "none")
 
-    def known_none(self, account):
-        return self.roles.get(account, "none") == "none" and account not in self.unknown
-
     def want(self, account):
         self.wanted.append(account)
+
+    def fresh(self, accounts):
+        """Whether every account has a young answer (hub.roles.Roles.fresh): all do, but those in `stale`."""
+        return not any(a in self.stale for a in accounts)
+
+    async def confirm(self, accounts):
+        """The urgent lookup of the accounts that are stale (hub.roles.Roles.confirm): `lookups` has the accounts that were asked about; `outcome` says whether they answered (then they are young)."""
+        self.lookups.append(sorted(accounts))
+        if self.outcome:
+            self.stale -= set(accounts)
+        return self.outcome
 
     def on_tick(self, now):
         pass

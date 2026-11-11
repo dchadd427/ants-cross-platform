@@ -5,14 +5,22 @@ Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}   {"t":"who"}   {"t":"here",...}      (the last two: hub/presence.py)
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
-  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick"}
+  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick|power|role|who"}
         {"t":"you","you":{...}}                      the whole `you` again, to every socket of an account whose role changed (hub/roles.py: who is a moderator or an administrator)
+        {"t":"ok","c":"mute|unmute|del|kick|ban|unban"}   the private answer to a moderator's command that was done
+        {"t":"bans","rows":[{"u","at"}]}             the private answer to /bans (a username, never an id; the newest 50)
+        {"t":"bye","why":"kicked|banned"}            to every socket of a person who was kicked or banned, just before the hub closes it
+A moderator's commands (docs/HUB.md, "Moderation") are /mute username minutes, /unmute username, /del id, /kick username, /ban username, /unban username and /bans, in any case. Who may do what to whom is
+one table (`allowed`); before an action the role of the one who acts and of the one acted on must have been answered by Discord within the last minute (hub/roles.py `fresh`, `confirm`), else an
+urgent lookup is waited for, and one that fails refuses the action (`err role`). Every action that is done is written to the moderators' log by a pseudonymous reference of the account (hub/pseudo.py),
+never the id; a kick or a ban is told to everybody as a line of the chat that names the person ("<name> was kicked.": a line of the account "" and the name `system`, kept like any other line).
 A name is not unique (Discord display names are not), so nothing that a moderator or a page does with a person goes by the name that is shown: a line and `you` carry `k`, a short key of the
 account that is made new with every start, and a moderator's `/mute` takes the username, the one name that is unique. The username of an author is sent only to moderators (`u` in a line,
 and only where it is not the name shown); the frame of everybody else never holds it.
 An `err` and every message that cannot be read count as a mistake of the socket (peer.strike()): twenty in a minute close it. A line is kept only if the account's own limit, the limit of
 all accounts together and the size of the database allow it (`rate` otherwise; `quota` when the account has said its lines for the hour or for the day); a moderator's command is never refused for those.
 """
+import asyncio
 import collections
 import hashlib
 import hmac
@@ -20,18 +28,35 @@ import json
 import os
 import re
 
-from . import PROTOCOL, presence as presencemod, text as textrules
+from . import PROTOCOL, presence as presencemod, pseudo, text as textrules
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
-COMMANDS = frozenset(("/mute", "/del"))     # the words of a moderator's commands: from an account with no role they are refused and never become a line of chat
+COMMANDS = frozenset(("/mute", "/unmute", "/del", "/kick", "/ban", "/unban", "/bans"))     # the words of a moderator's commands: from an account with no role they are refused and never become a line of chat
+RANK = {"none": 0, "mod": 1, "admin": 2}
+NEEDS = {"mute": 1, "unmute": 1, "del": 1, "kick": 1, "ban": 2, "unban": 2, "bans": 2}       # the rank that a command needs
+SYSTEM = "system"                           # who a line of the hub's own is from: a reserved name (hub/text.py), which no account can have
+BANS_SHOWN = 50                             # the newest bans that /bans lists
 PICK_REFUSED = "pick"                       # the code of the `err` for a `pick` that is not done (a page that reads the codes of its lines must not take it for one)
 
 
 def dumps(obj):
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def allowed(command, actor, target, same):
+    """THE table of the powers: may somebody of role `actor` (`none`, `mod`, `admin`) do `command` to somebody of role `target` (None: the command has no target), `same` when that is themselves? The
+    rank of the actor must be the command's; nobody acts on themselves (but anybody with a role may delete a line of their own: that is no power over a person); and the target's rank must be below
+    the actor's, so a moderator has no power over a moderator or an administrator, an administrator none over an administrator (and so none over the owner account, which is always one)."""
+    if RANK[actor] < NEEDS[command]:
+        return False
+    if target is None:
+        return True
+    if same:
+        return command == "del"
+    return RANK[target] < RANK[actor]
 
 
 class Chat:
@@ -51,6 +76,9 @@ class Chat:
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
         self.on_store_error = None                  # called with the error when the database cannot be used for a message (the hub logs it, not more than once in a while)
         self.end_logins = None                      # end_logins(account=...): the hub's call that closes every socket of an account (a logout's and a forget's too); the hub sets it
+        self.on_command_error = None                # called with the error when a command that waited for a lookup failed for a bug (the hub logs its class)
+        self.busy = {}                              # peer -> the task of its command that waits for a lookup of roles (one at a time for a socket)
+        self.secret = None                          # the key of the pseudonymous references (store.secret(), read at the first use)
         self.ring = collections.deque(maxlen=limits.history_lines)
         for line in store.recent_lines(limits.history_lines):
             self.ring.append(line)
@@ -127,7 +155,9 @@ class Chat:
     def line_of(self, line, names=None):
         """A line as it goes to a page: `k` is its author's key (the page tells its own lines by it, since names are not unique). `names` (account -> username) is given only for a moderator's
         copy: it adds `u`, the author's username, where that is not the name that the line shows."""
-        out = {"id": line.id, "at": line.at, "who": line.name, "text": line.text, "mod": bool(line.mod), "k": self.key_of(line.account)}
+        out = {"id": line.id, "at": line.at, "who": line.name, "text": line.text, "mod": bool(line.mod), "k": self.key_of(line.account) if line.account else ""}
+        if not line.account:
+            out["sys"] = True                      # (a line of the hub's own: nobody's, so it has no key)
         username = names.get(line.account) if names else None
         if username and username != line.name:
             out["u"] = username
@@ -184,6 +214,12 @@ class Chat:
         if self.on_store_error:
             self.on_store_error(error)
         self.mistake(peer, code, count=False)
+
+    def ref(self, account):
+        """The pseudonymous reference of an account (hub/pseudo.py): what is written about a person where the Discord id must not be."""
+        if self.secret is None:
+            self.secret = self.store.secret()
+        return pseudo.reference(self.secret, account)
 
     def on_say(self, peer, raw):
         who = peer.identity
@@ -259,24 +295,161 @@ class Chat:
         if self.end_logins:
             self.end_logins(account=who.account_id)
 
-    def command(self, peer, line):
-        """A moderator's /mute username minutes, /del id."""
+    @staticmethod
+    def parse(line):
+        """(command, who or line id, minutes) of a moderator's command, or None when it is not one that is written right: single spaces, a username (or a line's number), and for /mute minutes 1 to 10080."""
         words = line.split(" ")
+        name = words[0].lower()[1:]
+        if name == "mute" and len(words) == 3 and NUMBER.match(words[2]) and 1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES:
+            return name, words[1], int(words[2])
+        if name in ("unmute", "kick", "ban", "unban") and len(words) == 2:
+            return name, words[1], 0
+        if name == "del" and len(words) == 2 and NUMBER.match(words[1]):
+            return name, int(words[1]), 0
+        if name == "bans" and len(words) == 1:
+            return name, None, 0
+        return None
+
+    def command(self, peer, line):
+        """A moderator's command (see the top of this file). Done at once when the roles of the accounts that it involves were all answered by Discord within the last minute; otherwise it waits (a task
+        of its own, one at a time for a socket; a second command meanwhile is `rate`) for an urgent lookup of them, and is refused `role` if that does not give them."""
+        job = self.parse(line)
+        if job is None:
+            return self.mistake(peer, "bad")
+        if peer in self.busy:
+            return self.mistake(peer, "rate", count=False)
+        accounts, _, refusal = self.aim(peer.identity, job)
+        if refusal:
+            return self.mistake(peer, refusal)
+        if self.roles.fresh(accounts):
+            return self.carry_out(peer, job)
+        task = asyncio.ensure_future(self.wait_and_carry_out(peer, job, accounts))
+        self.busy[peer] = task
+        task.add_done_callback(lambda done, peer=peer: self.finished(peer, done))
+
+    def finished(self, peer, task):
+        """The task of a command that waited is over: the socket may send another; a bug in it is reported by its class (and the task's error is read, so that nothing prints its text)."""
+        self.busy.pop(peer, None)
+        if not task.cancelled() and task.exception() is not None and self.on_command_error:
+            self.on_command_error(task.exception())
+
+    async def wait_and_carry_out(self, peer, job, accounts):
+        try:
+            await self.roles.confirm(accounts)                      # (what it says is read again, in carry_out, from the answers themselves: they are fresh, or the command is refused `role`)
+            if getattr(peer, "closed", None):
+                return                                              # (the socket went while it waited: nothing is written to it, nothing is done)
+            who = peer.identity.account_id
+            if self.store.is_banned(who):
+                return self.mistake(peer, "banned")
+            if self.store.muted_until(who):
+                return self.mistake(peer, "muted")
+            self.carry_out(peer, job)
+        except StoreError as e:
+            self.trouble(peer, e, "bad")
+
+    def aim(self, me, job):
+        """(the accounts whose roles the command needs, the account it is done to or None, the code that refuses it or None): who is meant is found again every time, so that what is done is what was
+        looked up. `who` for a username that is nobody's here (or two people's), and for a /kick of a person who is not here; `bad` for a line that is not there; /del of one's own line needs nobody's role
+        but the one who acts."""
+        name, arg, _ = job
+        if name == "bans":
+            return [me.account_id], None, None
+        if name == "del":
+            target = self.store.account_of_line(arg)
+            if target is None:
+                return None, None, "bad"
+            if target == "":
+                return None, None, "power"                          # (a line of the hub's own is nobody's to delete from the chat)
+        else:
+            target = self.account_named(arg) or (self.ban_named(arg) if name == "unban" else None)
+            if target is None or (name == "kick" and not self.sockets_of(target)):
+                return None, None, "who"
+        return ([me.account_id] if target == me.account_id and name == "del" else [me.account_id, target]), target, None
+
+    def carry_out(self, peer, job):
+        """Do the command, now: the accounts' roles are fresh (else `role`), the table of the powers says yes (else `power`), and what is asked is true of the person (else `bad`: not muted, not banned, already
+        banned). Nothing here waits, so what was checked is what is done."""
         me = peer.identity
-        if words[0].lower() == "/mute" and len(words) == 3 and NUMBER.match(words[2]) and 1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES:
-            target = self.account_named(words[1])
-            if target is None or not self.roles.known_none(target):
-                return self.mistake(peer, "bad")                   # (only a person who is known to hold no role: an unknown role is never acted on)
-            self.store.mute(target, int(words[2]), me.account_id, words[1])
-        elif words[0].lower() == "/del" and len(words) == 2 and NUMBER.match(words[1]):
-            author = self.store.account_of_line(int(words[1]))
-            if author is None or (author != me.account_id and not self.roles.known_none(author)):
-                return self.mistake(peer, "bad")                   # (a line of a person with a role, or of one whose role is not known, is only its author's to delete)
-            if not self.store.delete_line(int(words[1]), me.account_id):
+        name, arg, minutes = job
+        accounts, target, refusal = self.aim(me, job)
+        if refusal:
+            return self.mistake(peer, refusal)
+        if not self.roles.fresh(accounts):
+            return self.mistake(peer, "role", count=False)
+        actor = self.roles.role_of(me.account_id)
+        if actor == "none":
+            return self.mistake(peer, "role", count=False)         # (no longer a moderator: the answer is fresh, and it says none)
+        if not allowed(name, actor, self.roles.role_of(target) if target is not None else None, target == me.account_id):
+            return self.mistake(peer, "power")
+        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else ""
+        if name == "mute":
+            self.store.mute(target, minutes, by, arg, note=(by, "mute", whom, str(minutes)))
+        elif name == "unmute":
+            if not self.store.muted_until(target):
+                return self.mistake(peer, "bad")
+            self.store.mute(target, 0, by, "", note=(by, "unmute", whom, ""))
+        elif name == "del":
+            if not self.store.delete_line(arg, by, note=None if target == me.account_id else (by, "del", whom, str(arg))):
                 return self.mistake(peer, "bad")
             self.sync_deletions()
+        elif name == "bans":
+            rows = [{"u": who, "at": at} for _, who, at, _ in reversed(self.store.bans())][:BANS_SHOWN]
+            return peer.send_text(dumps({"t": "bans", "rows": rows}))
+        elif name == "unban":
+            if not self.store.unban(target, note=(by, "unban", whom, "")):
+                return self.mistake(peer, "bad")
+        elif name == "kick":
+            sockets = self.sockets_of(target)
+            shown = sockets[0].identity.name
+            self.store.end_sessions(target, note=(by, "kick", whom, ""))
+            self.remove(sockets, "kicked")
+            self.announce("%s was kicked." % shown)
         else:
-            self.mistake(peer, "bad")
+            if self.store.is_banned(target):
+                return self.mistake(peer, "bad")
+            shown = self.shown_name(target) or arg
+            self.store.ban(target, by, arg, note=(by, "ban", whom, ""))
+            self.remove(self.sockets_of(target), "banned")
+            self.announce("%s was banned." % shown)
+        peer.send_text(dumps({"t": "ok", "c": name}))
+
+    def sockets_of(self, account):
+        return [p for p in self.peers if p.identity is not None and p.identity.account_id == account and not getattr(p, "closed", False)]
+
+    def remove(self, sockets, why):
+        """Tell every one of the sockets of a person who was kicked or banned (`bye`), and close them (a clean close, with the word as its reason)."""
+        for peer in sockets:
+            peer.send_text(dumps({"t": "bye", "why": why}))
+            peer.close(1000, why)
+
+    def shown_name(self, account):
+        """The name that the account is shown by: its open socket's, else its profile's (the display name where that is the pick), else None."""
+        here = self.sockets_of(account)
+        if here:
+            return here[0].identity.name
+        profile = self.store.profile(account)
+        if profile is None:
+            return None
+        return profile.display if profile.pick == "display" and profile.display else profile.username
+
+    def announce(self, text):
+        """A line of the hub's own to everybody (and into the history, like any line: the same time to live, the same count among the newest 200): the account is "" and the name `system`, a name that no
+        account can have. A database that refuses it costs the line, not the action, which was done already."""
+        try:
+            entry = self.store.add_line("", SYSTEM, text, False)
+        except StoreError as e:
+            if self.on_store_error:
+                self.on_store_error(e)
+            return
+        self.ring.append(entry)
+        self.broadcast(dict({"t": "line"}, **self.line_of(entry)))
+
+    def ban_named(self, username):
+        """The account that is banned under this username (the name that the ban was made with), when exactly one is: a ban outlives the profile that a login made, so a ban can be lifted by the name that /bans shows."""
+        if not textrules.valid_name(username):
+            return None
+        found = [account for account, name, _, _ in self.store.bans() if name == username]
+        return found[0] if len(found) == 1 else None
 
     def account_named(self, username):
         """The account that a moderator means by a USERNAME (never by the name that is shown: those are not unique, and two accounts can show the same one): the one that is here with it; of two

@@ -74,6 +74,10 @@ class Limits:
     roles_retry_max_seconds: float = 60.0
     roles_hold_max_seconds: float = 60.0        # the longest that one answer of Discord ("wait this long") can stop the lookups
     roles_log_seconds: float = 600.0    # a line in the log for a Discord that does not answer: this seldom at the most
+    roles_action_fresh_seconds: float = 60.0    # a moderator's action needs the answer of Discord about the one who acts and the one acted on to be no older than this, else an urgent lookup of both is made first ...
+    roles_urgent_seconds: float = 3.0           # ... and waited for this long at the most (an action whose lookups did not answer in time is refused)
+    roles_urgent_burst: int = 10                # the lookups that actions may ask for at once, and then one every `roles_urgent_refill_seconds` for the whole hub: an action that cannot have its lookups is refused (`role`), so that a moderator who asks for many ...
+    roles_urgent_refill_seconds: float = 1.0    # ... cannot use the whole of the two lookups a second, which everybody's role holds on to (half of them are the people's own)
     roles_entries_max: int = 2000       # people whose role is kept in memory: those with a socket open and a few that left (at most `sockets_total` are open)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
 

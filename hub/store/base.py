@@ -5,12 +5,20 @@ raises StoreError, and callers catch that and nothing of the backend's own. Oper
 here: they stay on that backend's class. tests/scripts/test_hub_store_contract.py runs the same checks against every backend.
 """
 import collections
+import re
 
 Line = collections.namedtuple("Line", "id at account name text mod")
+Line.__repr__ = lambda self: "<Line %d>" % self.id                 # (the default shows the account's Discord id: that is like a password and is in no representation)
+Action = collections.namedtuple("Action", "id at actor action target detail")         # a row of the moderators' log (see StoreBase.actions)
 Usage = collections.namedtuple("Usage", "bytes free lines oldest log")         # (see StoreBase.usage)
 Profile = collections.namedtuple("Profile", "username display pick")
 PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
+MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
+MODLOG_ROWS = 10000                     # ... and at most this many rows (the newest)
+ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban")     # what the log can say was done
+TERMINAL = "terminal"                   # the actor of an action that the command line did
+REFERENCE = re.compile(r"[0-9a-f]{16}\Z")      # the pseudonymous reference of an account (hub/pseudo.py)
 PROFILE_DAYS = 35                       # a profile that has not been refreshed by a login for this long belongs to nobody who is logged in (a login lasts 30 days): purge() deletes it
 
 
@@ -22,12 +30,24 @@ class StoreUnavailable(StoreError):
     """The data is out of reach (a server that does not answer): a kind of StoreError, so a caller that does not care about the difference catches StoreError."""
 
 
+def check_note(note):
+    """The note that goes into the moderators' log with an action: (actor, action, target, detail) where the actor is a reference or `terminal`, the action one of ACTIONS, the target a reference
+    (or '' for an action that has none) and the detail a few plain characters (minutes, a line's number). Anything else is a bug of the caller and is refused: an account id never goes in."""
+    actor, action, target, detail = note
+    if not ((isinstance(actor, str) and REFERENCE.match(actor)) or actor == TERMINAL) or action not in ACTIONS or not (target == "" or (isinstance(target, str) and REFERENCE.match(target))) \
+            or not isinstance(detail, str) or not re.fullmatch(r"[0-9a-z]{0,12}", detail):
+        raise ValueError("not a note of the moderators' log")
+    return note
+
+
 class StoreBase:
     """The operations common to every backend. `clock` gives seconds since 1970 and `retention` is how long a line is kept, in seconds."""
 
     clock = None
     retention = 0
     max_lines = MAX_LINES                       # at most this many lines are kept, the newest ones (an attribute, so that a test may lower it on one store)
+    modlog_days = MODLOG_DAYS                   # the moderators' log: how long an action is kept, and how many rows (attributes too)
+    max_modlog = MODLOG_ROWS
 
     def close(self):
         raise NotImplementedError
@@ -54,8 +74,8 @@ class StoreBase:
         """The account that wrote the line (a line that is not deleted), or None."""
         raise NotImplementedError
 
-    def delete_line(self, line_id, by):
-        """Mark a line deleted and give the deletion the next number of the counter; False when there is no such line or it was deleted already."""
+    def delete_line(self, line_id, by, note=None):
+        """Mark a line deleted and give the deletion the next number of the counter; False when there is no such line or it was deleted already. `note` (see check_note) goes into the moderators' log in the same step, and only when a line was deleted."""
         raise NotImplementedError
 
     def deletions_since(self, seq):
@@ -67,7 +87,7 @@ class StoreBase:
         raise NotImplementedError
 
     def purge(self, chunk=2000):
-        """Delete up to `chunk` lines past their time or past the newest `max_lines` (every line counts, a moderator's and a deleted one too), the mutes that are over, the logins that ran out and the profiles that no login has refreshed for PROFILE_DAYS; returns how many lines went."""
+        """Delete up to `chunk` lines past their time or past the newest `max_lines` (every line counts, a moderator's and a deleted one too), the mutes that are over, the logins that ran out, the profiles that no login has refreshed for PROFILE_DAYS, and the rows of the moderators' log that are older than `modlog_days` or past the newest `max_modlog`; returns how many lines went."""
         raise NotImplementedError
 
     def size(self):
@@ -91,8 +111,8 @@ class StoreBase:
 
     # ---- mutes and bans ----
 
-    def mute(self, account, minutes, by, name=""):
-        """Mute for `minutes` from now (0 lifts the mute). Returns the time it ends, or 0."""
+    def mute(self, account, minutes, by, name="", note=None):
+        """Mute for `minutes` from now (0 lifts the mute). Returns the time it ends, or 0. `note` (see check_note) goes into the moderators' log in the same step (a lifted mute: only if there was one)."""
         raise NotImplementedError
 
     def muted_until(self, account):
@@ -103,11 +123,12 @@ class StoreBase:
         """The mutes that are on: (account, name, until, by), the soonest to end first."""
         raise NotImplementedError
 
-    def ban(self, account, by, name=""):
+    def ban(self, account, by, name="", note=None):
+        """Ban the account (a ban that is there is made again, with a new time). `note` goes into the moderators' log in the same step."""
         raise NotImplementedError
 
-    def unban(self, account):
-        """True when the account was banned."""
+    def unban(self, account, note=None):
+        """True when the account was banned (and `note` went into the moderators' log, in the same step; none when it was not)."""
         raise NotImplementedError
 
     def is_banned(self, account):
@@ -136,6 +157,10 @@ class StoreBase:
         """End one login; True when there was one."""
         raise NotImplementedError
 
+    def end_sessions(self, account, note=None):
+        """End every login of the account (a kick) and return how many there were; the log file is cut by the hub's clock at its next look. `note` goes into the moderators' log in the same step."""
+        raise NotImplementedError
+
     # ---- profiles: who an account is, as its last login said ----
 
     def set_profile(self, account, username, display, total):
@@ -152,9 +177,29 @@ class StoreBase:
         """Choose which name the account is shown by, one of PICKS. False (nothing changed) when the account has no profile or no display name: there is nothing to choose between."""
         raise NotImplementedError
 
+    def usernames_by_reference(self, references):
+        """{reference: username} for the references (hub/pseudo.py) of `references` whose account has a profile, for the command line that reads the moderators' log."""
+        raise NotImplementedError
+
+    def account_of_reference(self, reference):
+        """The account (id) whose pseudonymous reference this is among the accounts that the data knows (lines, profiles, bans, mutes, logins), when exactly one is; else None. For the command line, which
+        prints references and takes them back."""
+        raise NotImplementedError
+
     def account_of_username(self, username):
         """The account whose profile has this username, when exactly one has (usernames are unique at Discord, but a profile is as old as its last login, so a name that was given up and taken by
         another account can be in two); None for none or for several: the caller never guesses which account is meant."""
+        raise NotImplementedError
+
+
+    # ---- the hub's secret and the moderators' log ----
+
+    def secret(self):
+        """The 32 random bytes that the pseudonymous references of this hub are keyed with (hub/pseudo.py): made once, when the data is first opened, and the same for every process that opens it."""
+        raise NotImplementedError
+
+    def actions(self, since=0, limit=1000):
+        """The rows of the moderators' log, newest first, from time `since` (seconds since 1970) on: Action(id, at, actor, action, target, detail). Actor and target are references, never an id."""
         raise NotImplementedError
 
 

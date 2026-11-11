@@ -11,9 +11,10 @@ import os
 import sqlite3
 import time
 
-from .base import MAX_LINES, PICKS, PROFILE_DAYS, PUBLIC, Line, Profile, StoreBase, StoreError, Usage
+from .base import MAX_LINES, PICKS, PROFILE_DAYS, PUBLIC, Action, Line, Profile, StoreBase, StoreError, Usage, check_note
+from ..pseudo import reference
 
-SCHEMA = 3
+SCHEMA = 4
 TRIM_ROWS = 8                                       # the most lines that a new line takes out: one is the rule, a few make up for a limit that was lowered
 
 
@@ -86,6 +87,15 @@ class Store(StoreBase):
                 CREATE INDEX IF NOT EXISTS sessions_expires ON sessions (expires);
                 PRAGMA user_version = 3;
                 COMMIT;""")
+        if version < 4:
+            self.db.executescript("""
+                BEGIN;
+                CREATE TABLE IF NOT EXISTS secrets (k TEXT PRIMARY KEY, v BLOB NOT NULL);
+                CREATE TABLE IF NOT EXISTS modlog (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '');
+                CREATE INDEX IF NOT EXISTS modlog_at ON modlog (at);
+                PRAGMA user_version = 4;
+                COMMIT;""")
+        self.db.execute("INSERT OR IGNORE INTO secrets (k, v) VALUES ('account', ?)", (os.urandom(32),))      # (the key of the pseudonymous references: made once, kept as long as the file)
         # (the profiles are an additive table: no version of the schema came with it, so a hub of an earlier version opens the same file and never looks at it; docs/HUB.md, "Data")
         if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profiles'").fetchone() is None:
             self.db.executescript("""
@@ -131,7 +141,7 @@ class Store(StoreBase):
         row = self.db.execute("SELECT account FROM lines WHERE id = ? AND deleted = 0", (line_id,)).fetchone()
         return row[0] if row else None
 
-    def delete_line(self, line_id, by):
+    def delete_line(self, line_id, by, note=None):
         """Mark a line deleted; False when there is no such line or it was deleted already. Every deletion gets the next number of a counter that nothing lowers (a purge of old
         lines does not), so the hub, which asks for the deletions after the last number it knows, never misses one."""
         with self.transaction():
@@ -140,6 +150,7 @@ class Store(StoreBase):
             self.db.execute("UPDATE meta SET v = v + 1 WHERE k = 'del_seq'")
             seq = self.last_deletion()
             self.db.execute("UPDATE lines SET deleted = 1, del_seq = ?, del_by = ? WHERE id = ?", (seq, by, line_id))
+            self.write_note(note)
             return True
 
     def deletions_since(self, seq):
@@ -171,6 +182,8 @@ class Store(StoreBase):
             self.db.execute("DELETE FROM mutes WHERE until <= ?", (now,))
             self.db.execute("DELETE FROM sessions WHERE expires <= ?", (now,))
             self.db.execute("DELETE FROM profiles WHERE updated < ?", (now - PROFILE_DAYS * 86400,))
+            self.db.execute("DELETE FROM modlog WHERE at < ?", (now - int(self.modlog_days * 86400),))
+            self.db.execute("DELETE FROM modlog WHERE id IN (SELECT id FROM modlog ORDER BY id DESC LIMIT -1 OFFSET ?)", (self.max_modlog,))
         self.checkpoint()
         return gone
 
@@ -262,6 +275,14 @@ class Store(StoreBase):
         self.unsettled = True
         return gone
 
+    def end_sessions(self, account, note=None):
+        """End every login of the account: what was deleted is in the log file until the hub's clock cuts it (`unsettled`), as for one login."""
+        with self.transaction():
+            gone = self.db.execute("DELETE FROM sessions WHERE account = ?", (account,)).rowcount
+            self.write_note(note)
+        self.unsettled = True
+        return gone
+
     def forget(self, account, since=0):
         """Everything that ties this account's id or name to the site, except what keeps the others safe: all its logins, its profile and all its chat lines go, and the name is wiped from its
         mute and ban (they stay, by id: forgetting must not lift one). Returns the ids of the lines that went and that a screen may still show: the lines that were not deleted, and the ones that a
@@ -305,22 +326,35 @@ class Store(StoreBase):
         with self.transaction():
             return self.db.execute("UPDATE profiles SET pick = ? WHERE account = ? AND display != ''", (pick, account)).rowcount == 1
 
+    def usernames_by_reference(self, references):
+        wanted = set(references)
+        secret = self.secret()
+        return {ref: username for ref, username in ((reference(secret, account), username) for account, username in self.db.execute("SELECT account, username FROM profiles")) if ref in wanted}
+
+    def account_of_reference(self, ref):
+        secret = self.secret()
+        found = {account for (account,) in self.db.execute("SELECT account FROM profiles UNION SELECT account FROM lines UNION SELECT account FROM bans UNION SELECT account FROM mutes "
+                                                          "UNION SELECT account FROM sessions") if reference(secret, account) == ref}
+        return next(iter(found)) if len(found) == 1 else None
+
     def account_of_username(self, username):
         rows = self.db.execute("SELECT account FROM profiles WHERE username = ? LIMIT 2", (username,)).fetchall()
         return rows[0][0] if len(rows) == 1 else None
 
     # ---- mutes and bans -------------------------------------------------------------------------------------------------------------------
 
-    def mute(self, account, minutes, by, name=""):
+    def mute(self, account, minutes, by, name="", note=None):
         """Mute for `minutes` from now (0 lifts the mute). Returns the time it ends, or 0."""
         with self.transaction():
             self.count_restriction()
             if minutes <= 0:
-                self.db.execute("DELETE FROM mutes WHERE account = ?", (account,))
+                if self.db.execute("DELETE FROM mutes WHERE account = ?", (account,)).rowcount == 1:
+                    self.write_note(note)
                 return 0
             now = int(self.clock())
             until = now + int(minutes) * 60
             self.db.execute("INSERT OR REPLACE INTO mutes (account, until, at, by, name) VALUES (?, ?, ?, ?, ?)", (account, until, now, by, name))
+            self.write_note(note)
             return until
 
     def muted_until(self, account):
@@ -328,15 +362,19 @@ class Store(StoreBase):
         row = self.db.execute("SELECT until FROM mutes WHERE account = ?", (account,)).fetchone()
         return row[0] if row and row[0] > self.clock() else 0
 
-    def ban(self, account, by, name=""):
+    def ban(self, account, by, name="", note=None):
         with self.transaction():
             self.count_restriction()
             self.db.execute("INSERT OR REPLACE INTO bans (account, at, by, name) VALUES (?, ?, ?, ?)", (account, int(self.clock()), by, name))
+            self.write_note(note)
 
-    def unban(self, account):
+    def unban(self, account, note=None):
         with self.transaction():
             self.count_restriction()
-            return self.db.execute("DELETE FROM bans WHERE account = ?", (account,)).rowcount == 1
+            done = self.db.execute("DELETE FROM bans WHERE account = ?", (account,)).rowcount == 1
+            if done:
+                self.write_note(note)
+            return done
 
     def is_banned(self, account):
         return self.db.execute("SELECT 1 FROM bans WHERE account = ?", (account,)).fetchone() is not None
@@ -346,6 +384,23 @@ class Store(StoreBase):
 
     def bans(self):
         return self.db.execute("SELECT account, name, at, by FROM bans ORDER BY at").fetchall()
+
+    # ---- the hub's secret and the moderators' log ----------------------------------------------------------------------------------------
+
+    def secret(self):
+        return bytes(self.db.execute("SELECT v FROM secrets WHERE k = 'account'").fetchone()[0])
+
+    def write_note(self, note):
+        """Inside the transaction of an action: the row of the moderators' log that says it was done (nothing for no note), and the rows past the newest `max_modlog` out (a few at a time, as a line does)."""
+        if note is None:
+            return
+        actor, action, target, detail = check_note(note)
+        self.db.execute("INSERT INTO modlog (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)", (int(self.clock()), actor, action, target, detail))
+        self.db.execute("DELETE FROM modlog WHERE id IN (SELECT id FROM modlog WHERE id <= (SELECT id FROM modlog ORDER BY id DESC LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?)", (self.max_modlog, TRIM_ROWS))
+
+    def actions(self, since=0, limit=1000):
+        rows = self.db.execute("SELECT id, at, actor, action, target, detail FROM modlog WHERE at >= ? ORDER BY id DESC LIMIT ?", (int(since), int(limit))).fetchall()
+        return [Action(*r) for r in rows]
 
     def count_restriction(self):
         """Inside the transaction of a ban, an unban or a mute: one more on the counter that last_restriction() reads (a row of `meta`, as the deletions' is), so that every process that reads

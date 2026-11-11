@@ -13,6 +13,13 @@ tells the person's pages. A Discord that is down, slow, busy or sends garbage is
 404 with the code for an unknown server) stops every call for `roles_pause_seconds` with one neutral line in the log and takes everybody's role away but the owner account's; then one call tries again. Chat
 itself is never held up: it asks `role_of`, which is a dictionary look and no I/O.
 
+An action of a moderator is another matter (`fresh`, `confirm`): the role of the person who acts and of the person who is acted on must have been answered by Discord within the last
+`roles_action_fresh_seconds` (60). If either answer is older, or there is none (the person is not here: a moderator may act on somebody who is offline), the action waits, up to `roles_urgent_seconds`
+(3), for an urgent lookup of both (the owner account needs none), which goes before everything else in the queue (still through the same bucket, the same rate-limit holds and the same pause, and from a
+share of its own, `roles_urgent_burst` and one more a second, so that a moderator who asks for many cannot use up the lookups that everybody's role holds on to); a lookup that does not give an answer
+in time, for any reason, refuses the action (`role`), and no role that is merely believed is ever enough. An urgent lookup is a lookup like another: the Discord id of the person is in the request
+and nowhere else.
+
 Nothing in a log line, an error or a frame holds the token, the server's id, a role's id or an account: the log says a kind and a status. The token is read once, from the settings.
 """
 import asyncio
@@ -83,6 +90,8 @@ class Roles:
         self.next_error_log = float("-inf")
         self.wake = None
         self.task = None
+        self.urgent = {}                        # account -> futures of the actions that wait for a lookup of it (see `confirm`)
+        self.urgent_bucket = TokenBucket(limits.roles_urgent_burst, limits.roles_urgent_refill_seconds, clock())      # what the actions may ask for, all together
 
     def __repr__(self):
         return "<Roles %s, %d entries>" % ("on" if self.on else "off", len(self.entries))      # (no setting, no account)
@@ -100,15 +109,72 @@ class Roles:
             return NONE
         return entry.role
 
-    def known_none(self, account):
-        """Whether the account is POSITIVELY known to hold no role now: an answer of Discord that is young says `none`. An account that is not here, has not been asked yet, or whose answer ran
-        out is not known (a moderator's command is never done to a person whose role is not known); the owner account is never none. Without the roles' settings nobody but the owner has one."""
-        if self.owner and account == self.owner:
-            return False
+    def fresh(self, accounts):
+        """Whether the role of every one of `accounts` was answered by Discord within the last `roles_action_fresh_seconds` (the owner account, which needs no answer, and any account when the roles are
+        off, which nobody holds, always are): the condition for an action of a moderator."""
         if not self.on:
             return True
-        entry = self.entries.get(account)
-        return entry is not None and entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE
+        now = self.clock()
+        for account in accounts:
+            if self.owner and account == self.owner:
+                continue
+            entry = self.entries.get(account)
+            if entry is None or entry.ok_at is None or now - entry.ok_at > self.limits.roles_action_fresh_seconds:
+                return False
+        return True
+
+    async def confirm(self, accounts):
+        """True when every one of `accounts` has a fresh answer (see `fresh`) now, after an urgent lookup of those that had not: the lookups go to the front of the queue and are one at a time like all of
+        them. False (fail closed) when one cannot be had within `roles_urgent_seconds`, whatever the reason (Discord down, slow, busy, refusing: the roles are paused, which is told at once)."""
+        accounts = [a for a in dict.fromkeys(accounts)]
+        if self.fresh(accounts):
+            return True
+        if self.task is None or self.clock() < self.pause_until:
+            return False                                                   # (no worker, or Discord refuses what the roles ask with: there is no answer to wait for)
+        loop = asyncio.get_running_loop()
+        stale = [a for a in accounts if not (self.owner and a == self.owner)]      # (one answer that is old is a reason to ask about all of them: the action rests on answers of one moment)
+        for account in stale:
+            if account not in self.entries:
+                if len(self.entries) >= self.limits.roles_entries_max and not self.evict():
+                    return False                                           # (nowhere to keep an answer: the action is refused, which is the safe side)
+                self.entries[account] = Entry(self.clock())
+        if not self.afford(len(stale)):
+            return False                                                   # (the actions have asked for more than their share of the lookups: this one is refused)
+        waiting = []
+        for account in stale:
+            future = loop.create_future()
+            self.urgent.setdefault(account, []).append(future)
+            waiting.append(future)
+        if self.wake is not None:
+            self.wake.set()
+        done, pending = await asyncio.wait(waiting, timeout=self.limits.roles_urgent_seconds)
+        for future in pending:
+            future.cancel()
+        return not pending and all(f.result() for f in done) and self.fresh(accounts)
+
+    def afford(self, count):
+        """Whether the actions may ask for `count` lookups now, from their own share (`roles_urgent_burst`, one more every `roles_urgent_refill_seconds`); if so, they are spent."""
+        bucket = self.urgent_bucket
+        bucket.ready(self.clock())                                         # (brings the tokens up to date)
+        if bucket.tokens < count:
+            return False
+        bucket.tokens -= count
+        return True
+
+    def next_urgent(self):
+        """The account of an action that waits for a lookup, first come first served (futures that were cancelled, by an action that gave up, are dropped)."""
+        for account in list(self.urgent):
+            self.urgent[account] = [f for f in self.urgent[account] if not f.done()]
+            if self.urgent[account]:
+                return account
+            del self.urgent[account]
+        return None
+
+    def answered(self, account, ok):
+        """A lookup of `account` is over (`ok`: it gave an answer): the actions that waited for it are told."""
+        for future in self.urgent.pop(account, ()):
+            if not future.done():
+                future.set_result(ok)
 
     def want(self, account):
         """A socket of `account` was let in: its role is asked at the front of the queue, unless an answer that is young is already known."""
@@ -208,12 +274,17 @@ class Roles:
         for until in (self.pause_until, self.hold_until):
             if now < until:
                 return min(until - now, MAX_WAIT)
-        account = self.pick(now)
+        account = self.next_urgent()
+        urgent = account is not None
+        if not urgent:
+            account = self.pick(now)
         if account is None:
             return self.until_next(now)
         if not self.bucket.take(now):
             return max(0.01, (1.0 - self.bucket.tokens) * self.bucket.refill)
-        await self.check(account)
+        ok = await self.check(account)
+        if urgent:
+            self.answered(account, ok)
         return 0.0
 
     def pick(self, now):
@@ -243,10 +314,12 @@ class Roles:
         try:
             status, data, rl = await self.client.member(self.guild, account, self._token)
         except discordmod.DiscordError:
-            return self.failed(account, "down")
+            self.failed(account, "down")
+            return False
         except Exception as e:                                       # (anything else is a failed check too, and the class of it is all that is logged)
             self.trouble(e)
-            return self.failed(account, "down")
+            self.failed(account, "down")
+            return False
         now = self.clock()
         remaining, reset = rl.get("remaining"), rl.get("reset_after")
         if remaining is not None and remaining < 1 and reset is not None:
@@ -259,19 +332,24 @@ class Roles:
         elif status == 404 and code in (NOT_A_MEMBER, UNKNOWN_USER):
             role = NONE
         elif status == 404 and code == UNKNOWN_GUILD:
-            return self.refused("guild", status, now)
+            self.refused("guild", status, now)
+            return False
         elif status == 401:
-            return self.refused("token", status, now)
+            self.refused("token", status, now)
+            return False
         elif status == 403:
-            return self.refused("access", status, now)
+            self.refused("access", status, now)
+            return False
         elif status == 429:
             wait = rl.get("retry_after", 5.0)                       # (an unreadable or huge value is read as the longest wait: see hub/discord.py)
             self.hold_until = max(self.hold_until, now + min(max(wait, 0.5), self.limits.roles_hold_max_seconds))     # (every call goes through this one worker: all of them wait)
-            return self.unwell("busy", now)
+            self.unwell("busy", now)
+            return False
         else:
             role = None
         if role is None:
-            return self.failed(account, "down")
+            self.failed(account, "down")
+            return False
         entry = self.entries.get(account)
         if entry is not None:
             entry.role, entry.ok_at, entry.fails, entry.new = role, now, 0, False
@@ -280,6 +358,7 @@ class Roles:
         if self.down:
             self.down = False
             self.log.event("roles_up")
+        return entry is not None
 
     def role_in(self, data, account):
         """The role that a member object says (`admin`, `mod` or `none`), or None when it is not the shape of a member: roles that are a list of at most 250 ids, and a user, if there is one,
@@ -326,3 +405,5 @@ class Roles:
             entry.due = self.pause_until
             entry.new = True
             self.settle(account, entry, now)
+        for account in list(self.urgent):
+            self.answered(account, False)                           # (the actions that wait are refused at once: there is no answer to wait for)

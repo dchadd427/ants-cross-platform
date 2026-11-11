@@ -111,10 +111,12 @@ class Hub:
         self.clock = clock
         self.chat = chatmod.Chat(store, roles or rolesmod.Roles(cfg, self.limits, clock, log), self.limits, clock, sessions.login)
         self.chat.on_store_error = self.store_trouble
+        self.chat.on_command_error = self.command_trouble
         self.chat.end_logins = self.end_logins            # (a switch of the shown name closes the account's sockets with the call that a logout uses)
         self.next_trouble_log = float("-inf")
         self.next_presence_log = float("-inf")
         self.next_roles_log = float("-inf")
+        self.next_command_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
         self.pending = 0
         self.server = None
@@ -139,6 +141,8 @@ class Hub:
         if self.ticker:
             self.ticker.cancel()
         self.chat.roles.stop()
+        for task in list(self.chat.busy.values()):
+            task.cancel()
         if self.server:
             self.server.close()
         for peer in list(self.chat.peers):
@@ -256,6 +260,13 @@ class Hub:
         if now >= self.next_presence_log:
             self.next_presence_log = now + 10.0
             self.log.event("error", kind=type(error).__name__, where="presence")
+
+    def command_trouble(self, error):
+        """A moderator's command that waited for a lookup failed for a bug: one line in the log every ten seconds at the most (the class of the error, never its text)."""
+        now = self.clock()
+        if now >= self.next_command_log:
+            self.next_command_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="command")
 
     def roles_trouble(self, now, error):
         """The roles' work in the clock failed: one line in the log every ten seconds at the most (the class of the error, never its text)."""
