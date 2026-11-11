@@ -31,10 +31,22 @@ OVERDUE = 30.0                                  # a role holder who has been due
 MAX_WAIT = 5.0                                  # the longest the worker sleeps without looking at the queue again
 
 
+class Entries(dict):
+    """The entries by account (a dictionary, which a test or a debugger may print): what it prints is how many there are, never the accounts, whose Discord ids are like passwords."""
+
+    def __repr__(self):
+        return "<%d entries>" % len(self)
+
+    __str__ = __repr__
+
+
 class Entry:
     """What is known of one person who is here: the role that Discord last said, when, when to ask again, and the role that the pages were last told."""
 
     __slots__ = ("role", "ok_at", "due", "fails", "new", "seen", "shown", "lost_at")
+
+    def __repr__(self):
+        return "<Entry>"                        # (no field: none of them is for a log, and the dictionary that holds it is keyed by the account)
 
     def __init__(self, now):
         self.role = NONE
@@ -60,7 +72,7 @@ class Roles:
         self.interval = float(cfg.role_recheck_seconds)
         self.grace = self.interval * (1.0 + limits.roles_jitter) + limits.roles_grace_seconds        # (past the latest that a check can be due: a jittered check never comes after the role ran out)
         self.client = client if client is not None else (discordmod.Discord(cfg, limits) if self.on else None)
-        self.entries = {}                       # account -> Entry, for the accounts that have a socket open (and, for one grace, those that had)
+        self.entries = Entries()                # account -> Entry, for the accounts that have a socket open (and, for one grace, those that had)
         self.connected = lambda: ()             # the accounts that have a socket open (the chat sets it)
         self.changed = lambda account: None     # called when the role that an account's pages should show changed (the chat sets it)
         self.bucket = TokenBucket(limits.roles_burst, limits.roles_refill_seconds, clock())
@@ -71,6 +83,11 @@ class Roles:
         self.next_error_log = float("-inf")
         self.wake = None
         self.task = None
+
+    def __repr__(self):
+        return "<Roles %s, %d entries>" % ("on" if self.on else "off", len(self.entries))      # (no setting, no account)
+
+    __str__ = __repr__
 
     # ---- what the chat asks ----------------------------------------------------------------------------------------------------------------
 

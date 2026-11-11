@@ -99,7 +99,13 @@ class Discord:
         DiscordError when there was no usable answer. The ids and the token are checked for their shape before they go into a request line or a header."""
         if not (config.SNOWFLAKE.match(guild) and config.ACCOUNT_ID.match(user) and config.BOT_TOKEN.match(token)):
             raise DiscordError("down")
-        return await self.call("GET", "/guilds/%s/members/%s" % (guild, user), {"Authorization": "Bot " + token, "User-Agent": BOT_USER_AGENT}, b"")
+        try:
+            return await self.call("GET", "/guilds/%s/members/%s" % (guild, user), {"Authorization": "Bot " + token, "User-Agent": BOT_USER_AGENT}, b"")
+        except DiscordError:
+            raise
+        except Exception:
+            pass                                                  # (whatever it was, it may have the request line, which holds the account's id: only the kind goes on, and with no cause)
+        raise DiscordError("down")
 
     @staticmethod
     def check_status(status):
@@ -117,7 +123,8 @@ class Discord:
         except DiscordError:
             raise
         except (asyncio.TimeoutError, OSError, ssl.SSLError, ValueError, EOFError, UnicodeError, RecursionError):
-            raise DiscordError("down")
+            pass                                                  # (raised below, outside the handler: the error that is kept has no cause, and what the cause said, which can hold an address, is not kept)
+        raise DiscordError("down")
 
     async def exchange(self, method, url, headers, body):
         parts = urllib.parse.urlsplit(url)

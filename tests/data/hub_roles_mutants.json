@@ -465,6 +465,34 @@
    "old": "if self.task is not None and self.task.done():",
    "new": "if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheScheduler"
+  },
+  {
+   "id": "the_log_keeps_a_long_number",
+   "file": "hub/log.py",
+   "old": "LONG_NUMBER.sub(\"#\", SAFE.sub(\"_\", str(v)))[:60]",
+   "new": "SAFE.sub(\"_\", str(v))[:60]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheIdIsLikeAPassword"
+  },
+  {
+   "id": "the_end_of_an_id_is_in_the_log",
+   "file": "hub/roles.py",
+   "old": "self.log.event(\"error\", kind=kind or type(error).__name__, where=\"roles\")",
+   "new": "self.log.event(\"error\", kind=kind or type(error).__name__, where=\"roles\", who=str(error)[-8:])",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheIdIsLikeAPassword"
+  },
+  {
+   "id": "the_entries_print_the_accounts",
+   "file": "hub/roles.py",
+   "old": "        return \"<%d entries>\" % len(self)",
+   "new": "        return dict.__repr__(self)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheIdIsLikeAPassword"
+  },
+  {
+   "id": "an_error_of_the_call_keeps_its_cause",
+   "file": "hub/discord.py",
+   "old": "        except Exception:\n            pass                                                  # (whatever it was, it may have the request line, which holds the account's id: only the kind goes on, and with no cause)\n        raise DiscordError(\"down\")",
+   "new": "        except Exception as exc:\n            raise DiscordError(\"down\") from exc",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheIdIsLikeAPassword"
   }
  ]
 }

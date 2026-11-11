@@ -11,19 +11,23 @@
   TheRateLimits                    `remaining` 0 and 429 stop the lookups for as long as Discord says (and no longer than a minute)
   TheLiveRoles                     real sockets and the real hub: the welcome, the live `you` frame, a promotion and a removal without a new login, /mute for a role holder, an outage that never stops the chat
   TheSecrets                       the token, the server's id, the roles' ids and the accounts are in no log line, frame, answer or error text, the real process included
+  TheIdIsLikeAPassword             a fake Discord id is planted and looked for in every log line, frame, error, repr and traceback, in every failure mode, the real process included
   TheSettings                      the variables, their limits, what a wrong value says (its name and never the value), the start line
 
 tests/data/hub_roles_mutants.json breaks the rules one at a time for tools/mutate.py (every one must be caught).
 """
 import asyncio
 import dataclasses
+import io
 import json
 import os
 import re
 import signal
 import sys
 import time
+import traceback
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -1126,7 +1130,7 @@ class TheSecrets(unittest.TestCase):
         fake.members = {first: [MOD], second: [ADMIN]}
         extra = dict(ENV, ANTS_HUB_TEST_LOGIN="1", ANTS_HUB_TEST_DISCORD_URL=fake.url, ANTS_HUB_ROLE_RECHECK_SECONDS="60", ANTS_HUB_OWNER=OWNER)
         proc, folder, log_path, env = ths.start_process(extra)
-        clients = []
+        clients, frames = [], []
         try:
             port = ths.wait_for_port(proc, log_path)
             self.assertIsNotNone(port, ths.read_text(log_path))
@@ -1134,13 +1138,17 @@ class TheSecrets(unittest.TestCase):
                 fake.member_mode = mode
                 c = hc.Client(port, login=first + ":alice.canary")
                 clients.append(c)
-                c.recv_json()
-                c.drain(0.4)
+                frames.append(c.recv_json())
+                frames += c.drain(0.4)
                 c.close()                                                            # (eight sockets for each address)
             fake.member_mode = "ok"
             o = hc.Client(port, login=OWNER + ":boss.canary")
             clients.append(o)
-            self.assertEqual(o.recv_json()["you"]["role"], "admin")
+            frames.append(o.recv_json())
+            self.assertEqual(frames[-1]["you"]["role"], "admin")
+            assert_no_id(self, json.dumps(frames).replace(first, "").replace(OWNER, ""), "the frames")        # (the ends of the ids too: none of them is in a frame)
+            for account in (first, second, OWNER):
+                self.assertNotIn(account, json.dumps(frames))
             status, health = hc.http_get(port, "/hub/healthz")
             self.assertEqual((status, health), (200, b'{"ok":true}'))
             for secret in SECRETS:
@@ -1161,6 +1169,79 @@ class TheSecrets(unittest.TestCase):
             if proc.poll() is None:
                 proc.kill()
             proc.wait(5)
+
+
+ID = "7311000099990001"                          # a made-up Discord id of a person: like a password, it is in no log line, frame, error, repr or traceback (what is looked for: all of it, and its two ends)
+PARTS = (ID, ID[:8], ID[-8:])
+
+
+def assert_no_id(test, text, where):
+    for part in PARTS:
+        test.assertNotIn(part, text, "%s holds the id (%s)" % (where, part))
+
+
+class TheIdIsLikeAPassword(SetupTest):
+    def test_no_state_of_the_roles_prints_the_id_and_no_failure_leaves_it_in_the_log(self):
+        cases = dict(FAILURES, **{"ok": lambda a: good(a, [MOD]), "refused token": lambda a: (401, {"code": 0}, {}), "refused access": lambda a: (403, {"code": 50001}, {}),
+                                  "refused guild": lambda a: (404, {"code": 10004}, {}), "429": lambda a: (429, {"retry_after": 3.0}, {"retry_after": 3.0}),
+                                  "an error with the id in it": lambda a: RuntimeError("GET /guilds/x/members/" + a), "deleted": lambda a: (404, {"code": 10013}, {}),
+                                  "not a member": lambda a: NOT_A_MEMBER})
+        for name, answer in cases.items():
+            s = self.setup(members={ID: [MOD]})
+            s.mode = answer
+            s.connect(ID, "1002")
+            s.run(700)
+            for what, text in (("log", s.log.text()), ("roles", repr(s.roles) + str(s.roles)), ("entries", repr(s.roles.entries) + str(s.roles.entries)),
+                               ("entry", "".join(repr(e) + str(e) for e in s.roles.entries.values()))):
+                assert_no_id(self, text, "%s of %s" % (what, name))
+
+    def test_an_error_of_the_call_has_a_kind_and_a_status_and_no_cause_that_could_hold_the_address(self):
+        cfg = config.load(dict(ENV, ANTS_HUB_TEST_DISCORD_URL="http://127.0.0.1:4999"))
+        client = discordmod.Discord(cfg, limitmod.Limits())
+        for error in (RuntimeError("GET /guilds/%s/members/%s" % (GUILD, ID)), ValueError(ID), OSError("connect to /members/" + ID), KeyError(ID), AssertionError(ID), UnicodeError(ID)):
+            async def fails(*args, _error=error, **kw):
+                raise _error
+            with mock.patch.object(discordmod.Discord, "exchange", fails):
+                with self.assertRaises(discordmod.DiscordError) as caught:
+                    asyncio.run(client.member(GUILD, ID, TOKEN))
+            e = caught.exception
+            self.assertEqual((e.kind, e.__cause__, e.__context__), ("down", None, None), repr(error))
+            text = "".join(traceback.format_exception(e)) + str(e) + repr(e)
+            assert_no_id(self, text, "the traceback of " + repr(error))
+            self.assertNotIn(TOKEN, text)
+
+    def test_the_log_replaces_any_long_number_a_caller_puts_in_it(self):
+        from hub.log import Log
+        out = io.StringIO()
+        Log(out).event("note", a=ID, b="x" + ID + "y", c="id=" + ID, d=[ID], e=ID[:14])
+        text = out.getvalue()
+        self.assertNotIn(ID, text)
+        self.assertNotIn(ID[:15], text)
+        self.assertIn("a=# b=x#y c=id_# d=__#__ e=" + ID[:14], text)             # (the number is replaced; a shorter one is a number)
+        self.assertEqual(len(text.splitlines()), 1)
+
+    def test_no_frame_no_log_and_no_answer_of_the_hub_holds_the_id_in_any_failure_of_discord(self):
+        fake = fd.FakeDiscord()
+        self.addCleanup(fake.close)
+        fake.members = {ID: [ADMIN]}
+        with hub_rig.Rig(member_fake=fake, recheck=1, **LiveTest.options) as rig:
+            seen = []
+            for n, mode in enumerate(("ok", "err:403", "ok", "rate:1", "ok", "status:500", "notjson", "close", "err:404:10004", "err:401", "ok")):
+                fake.member_mode = mode
+                c = hc.Client(rig.port, login=ID + ":idowner")
+                try:
+                    seen += [c.recv_json()] + c.drain(1.3)
+                    c.say("a line %d" % n)
+                    seen += c.drain(0.2)
+                finally:
+                    c.close()
+                time.sleep(0.05)
+            status, health = hc.http_get(rig.port, "/hub/healthz")
+            log = rig.log_text.getvalue()
+        self.assertIn("you", {m["t"] for m in seen})
+        assert_no_id(self, json.dumps(seen), "the frames")
+        assert_no_id(self, health.decode(), "healthz")
+        assert_no_id(self, log, "the log")
 
 
 class TheSettings(unittest.TestCase):
