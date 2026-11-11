@@ -581,7 +581,7 @@ bot_arena --map TREASURE --seeds 1 --seat 0=standard:hard --seat 1=standard:medi
 
 - The bots of a dedicated server's room are run by the referee and seated by the room's specification or by the leader's START: see [SERVER.md](SERVER.md#the-room-specification) and [SERVER.md](SERVER.md#the-rooms-status) for the specification and the status, and the chapter of [NETWORK_PORT.md](NETWORK_PORT.md#protocol-11-bots-fill-the-empty-seats-at-the-leaders-start-and-chat-in-the-waiting-room) for the rest.
 
-- (B6, built) The browser build runs bots in a game on this computer (`ants_ai` has no sockets), from the old address `/play.html?map=<key>&bots=<levels>`; rooms with bots need the server, and since v0.8.0 the front page seats them there (the lobby's plan buttons since v0.12.0).
+- (B6, built) The browser build runs bots in a game on this computer (`ants_ai` has no sockets), from the old address `/play?map=<key>&bots=<levels>`; rooms with bots need the server, and since v0.8.0 the front page seats them there (the lobby's plan buttons since v0.12.0).
 
 - How a bot's seat behaves under reconnect is described in [NETWORK_PORT.md](NETWORK_PORT.md#protocol-11-bots-fill-the-empty-seats-at-the-leaders-start-and-chat-in-the-waiting-room).
 

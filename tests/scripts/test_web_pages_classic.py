@@ -2,7 +2,7 @@
 """Every page of the site is in the Classic look of the front page (run by ./run_tests.sh --fast and by the CI).
 
 The site's pages are found, not listed: the html files of web/ (the front page and the game page: the Dockerfile copies the folder, the image serves them at "/", /lobby.html, /index.html and
-/play.html), every html file of asset_catalog/ (Sprites and sounds, copied whole), and the page that the Dockerfile generates from the changelog with tools/changelog_to_html.py (built
+/play), every html file of asset_catalog/ (Sprites and sounds, copied whole), and the page that the Dockerfile generates from the changelog with tools/changelog_to_html.py (built
 here the way the image builds it). A page is in the Classic look when it links the shared stylesheet, /front/classic.css, or, for the two pages that keep an inline copy of it
 (lobby.html and shell.html), defines the same colors as that stylesheet. A page that is not fails the test by name, so that a new page, or an old one that is redone, cannot be
 forgotten when the look moves on.

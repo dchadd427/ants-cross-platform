@@ -261,7 +261,7 @@ async function main() {
             ['', '', '', '', '', '', '', '', '']);
         same('a match of nobody named finds nothing', R.findReplay({ replays: [entry()] }, { t: T, map: 'TREASURE.LVL', people: [], names: ['', '', '', ''] }), '');
         same('a list that is none: no match (the link goes to the list of matches)', [R.findReplay(null, back), R.findReplay({}, back), R.findReplay({ replays: 'x' }, back)], ['', '', '']);
-        same('the link: the match\'s page, else the list of matches', [R.statsHref('ants-TREASURE-20261016-071320Z'), R.statsHref('')], ['/match.html?id=ants-TREASURE-20261016-071320Z', '/matches.html']);
+        same('the link: the match\'s page, else the list of matches', [R.statsHref('ants-TREASURE-20261016-071320Z'), R.statsHref('')], ['/match?id=ants-TREASURE-20261016-071320Z', '/matches']);
     }
 
     // ---- 7. what the results screen's Hello tells of the browser (protocol 15; web/lobby.html's rule) -----------------------------------------------------------------------------------------------------
@@ -467,32 +467,32 @@ async function main() {
         same('it is a status that says what happened, with a link (picture R2)', [bar.attrs.role, bar.id, byClass(bar, 'backbar-text').children[0].tag, byClass(bar, 'backbar-text').textContent], ['status', 'backbar', 'b',
             'Back from the match. Maple won with 2,040. Same room, same colors, same map.']);
         const link = find(bar, (x) => x.tag === 'a');
-        same('the link opens the matches in a new tab while the match is looked up', [link.textContent, link.href, link.target, link.rel], ['Stats and replay', '/matches.html', '_blank', 'noopener noreferrer']);
+        same('the link opens the matches in a new tab while the match is looked up', [link.textContent, link.href, link.target, link.rel], ['Stats and replay', '/matches', '_blank', 'noopener noreferrer']);
         same('the public list of replays is asked, with no cookies and no cache', fetched, [['/replays', { cache: 'no-store', credentials: 'omit' }]]);
         await flush(); await flush();
         same('not in the list yet: asked again in four seconds', later.map((l) => l[1]), [4000]);
         answer = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ replays: [{ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000) + 10, map: 'TREASURE.LVL', players: ['Green (Maple)', 'Red (Sam)'], finished: true }] }) });
         later.shift()[0]();
         await flush(); await flush();
-        same('found: the link opens the match\'s page', link.href, '/match.html?id=ants-TREASURE-20261016-071320Z');
+        same('found: the link opens the match\'s page', link.href, '/match?id=ants-TREASURE-20261016-071320Z');
         check('... and nothing more is asked', fetched.length === 2 && later.length === 0);
         answer = () => Promise.reject(new Error('offline'));
         strip.show(back);
-        check('shown again: the same strip (one), a new look', body.children.length === 2 && body.children[0] === bar && fetched.length === 3 && find(bar, (x) => x.tag === 'a').href === '/matches.html');
+        check('shown again: the same strip (one), a new look', body.children.length === 2 && body.children[0] === bar && fetched.length === 3 && find(bar, (x) => x.tag === 'a').href === '/matches');
         await flush(); await flush();
         later.shift()[0](); await flush(); await flush();
         later.shift()[0](); await flush(); await flush();
-        check('a list that cannot be had is asked three times in all, then the link stays on the matches', fetched.length === 5 && later.length === 0 && find(bar, (x) => x.tag === 'a').href === '/matches.html');
+        check('a list that cannot be had is asked three times in all, then the link stays on the matches', fetched.length === 5 && later.length === 0 && find(bar, (x) => x.tag === 'a').href === '/matches');
         let release = null;
         answer = () => new Promise((resolve) => { release = () => resolve({ ok: true, json: () => Promise.resolve({ replays: [{ file: 'ants-TREASURE-20261016-071320Z.antsrep', ended: Math.floor(T / 1000), map: 'TREASURE.LVL', players: ['Green (Maple)', 'Red (Sam)'], finished: true }] }) }); });
         strip.show(back);
         strip.hide();
         release();
         await flush(); await flush();
-        check('hidden: the strip goes, and an answer that comes after it changes nothing', bar.hidden && find(bar, (x) => x.tag === 'a').href === '/matches.html');
+        check('hidden: the strip goes, and an answer that comes after it changes nothing', bar.hidden && find(bar, (x) => x.tag === 'a').href === '/matches');
         const quiet = R.frontStrip({ doc, before: screen, fetch: null, later: () => { throw new Error('nothing to wait for'); } });
         quiet.show(back);
-        check('a browser without fetch: the strip and the link to the matches', body.children.length === 3 && find(body.children[1], (x) => x.tag === 'a').href === '/matches.html');
+        check('a browser without fetch: the strip and the link to the matches', body.children.length === 3 && find(body.children[1], (x) => x.tag === 'a').href === '/matches');
 
         // unlisted test-map room (?testroom=<id>)
         const tBody = node('body'), tScreen = node('div');

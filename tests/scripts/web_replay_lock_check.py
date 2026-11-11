@@ -180,9 +180,9 @@ def game_page(tab, args, check):
     print("[web replay lock] the game page (play.html): the baseline")
     web = args.web if args.web.endswith("/") else args.web + "/"
     tab.emulate(1440, 900, 1)
-    tab.open(web + "play.html?aspect=16:9", settle=0.5)
+    tab.open(web + "play?aspect=16:9", settle=0.5)
     tab.ev("localStorage.clear(); 1")
-    tab.open(web + "play.html?aspect=16:9", settle=2.5)
+    tab.open(web + "play?aspect=16:9", settle=2.5)
     tab.ev(SPY)
     click_element(tab, "fullscreen-btn")
     time.sleep(3.0)

@@ -282,8 +282,8 @@ class MadeUpFiles(unittest.TestCase):
 
     def test_the_footer_links_end_with_the_legal_page_in_a_new_tab(self):
         footer = part(self.text, "footer")
-        self.assertEqual(re.findall(r'<a href="([^"]*)"[^>]*>([^<]*)</a>', footer), [("/", "Play"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal.html", "Legal")])
-        self.assertIn('<a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a></nav>', footer)
+        self.assertEqual(re.findall(r'<a href="([^"]*)"[^>]*>([^<]*)</a>', footer), [("/", "Play"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal", "Legal")])
+        self.assertIn('<a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a></nav>', footer)
 
     def test_a_long_word_cannot_widen_the_page(self):
         out = os.path.join(self.tmp.name, "long.html")
@@ -361,7 +361,7 @@ class RealFile(unittest.TestCase):
                 self.assertTrue(os.path.exists(os.path.join(REPO, path)), "a link of the changelog names %s, which the repository does not have" % path)
             elif href.startswith("https://"):
                 self.assertNotIn(" ", href)
-            elif href == "/legal.html":
+            elif href == "/legal":
                 self.assertTrue(os.path.exists(os.path.join(REPO, "web", "legal.html")), "the footer links the Legal page, which the site does not have")
             else:
                 self.assertEqual(href, "/", "a link that is neither the front page of the site, the Legal page nor an address: %s" % href)     # (a path of the repository is an address, not a file of the site)

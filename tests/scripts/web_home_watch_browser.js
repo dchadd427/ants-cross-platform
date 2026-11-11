@@ -3,7 +3,7 @@
 //   1. a busy list (open rooms and eight matches in progress, with long names, a name that is markup and a map of the players): the page does not scroll sideways, no row is wider than the list, every Watch is at least
 //      44 x 44 px, inside its row and not over the row's own text (nor over the box of the names), and the Games button counts the open rooms only;
 //      (and Watch stands at the row's right edge, four names of 32 characters are cut at three lines inside their box, and a phone held sideways keeps the switch in the head's own line);
-//   2. Watch is a link to /play.html?live=<id> with target _blank: a press opens a NEW page on that address and the lobby page stays where it was, with its list;
+//   2. Watch is a link to /play?live=<id> with target _blank: a press opens a NEW page on that address and the lobby page stays where it was, with its list;
 //   3. a name that is markup is shown as text (no element and no script run: nothing in the page was made from it);
 //   4. the switch "Show games in progress" is a checkbox that the keyboard reaches (Tab) and flips (Space), its label is a target of 44 px, off puts the rows away and stops the looks at /live (the stand-in counts them), the choice
 //      is kept in this browser and holds after a reload (no look at /live at all), on brings them back;
@@ -124,7 +124,7 @@ const GEOM = () => {
                 check(name + ': the Games button counts the 3 open rooms only, and the head says "3 open, 8 in progress"', info.pill === '3' && info.head === '3 open, 8 in progress', JSON.stringify([info.pill, info.head]));
                 check(name + ': the computer players of a server ("Pip (bot, Hard)", "Kit (bot, idle)") and the older "Bot (Hard)" are rings, the 18 people filled dots', info.rings === 3 && info.dots === 18, JSON.stringify([info.rings, info.dots]));
                 check(name + ': a name that is markup ran nothing and made no element', info.hits && info.imgs === 0);
-                check(name + ': every Watch is /play.html?live=<id> in a new tab with no opener', info.links.length === 8 && info.links.every((l) => /^\/play\.html\?live=[A-Za-z0-9_]+-[0-9]{8}-[0-9]{6}Z$/.test(l[0]) && l[1] === '_blank' && /noopener/.test(l[2])), JSON.stringify(info.links[0]));
+                check(name + ': every Watch is /play?live=<id> in a new tab with no opener', info.links.length === 8 && info.links.every((l) => /^\/play\?live=[A-Za-z0-9_]+-[0-9]{8}-[0-9]{6}Z$/.test(l[0]) && l[1] === '_blank' && /noopener/.test(l[2])), JSON.stringify(info.links[0]));
                 check(name + ': Watch stands in the last column of its row, at its right edge (its grid area)', g.rows.every((r) => r.flush <= 20), JSON.stringify(g.rows.map((r) => Math.round(r.flush))));
                 check(name + ': four names of 32 characters are cut at three lines and leave nothing outside their box', g.rows.every((r) => !r.leak) && g.rows[6].h <= 200, JSON.stringify(g.rows.map((r) => [r.leak, Math.round(r.h)])));
                 if (name === 'side') check(name + ': a phone held sideways keeps the switch in the head\'s own line (the head stays one line tall, so the list keeps its room)', !!g.head && g.head.sw < g.head.title - 1 && g.head.h <= 60, JSON.stringify(g.head));
@@ -137,7 +137,7 @@ const GEOM = () => {
                     const pagePromise = context.waitForEvent('page', { timeout: 5000 });
                     await page.click('.gdock .glive:nth-of-type(2) .gwatch');
                     const popup = await pagePromise.catch(() => null);
-                    check('a press on Watch opens a NEW page on that match', !!popup && /\/play\.html\?live=ISLANDS-/.test(popup.url()), popup ? popup.url() : 'no page');
+                    check('a press on Watch opens a NEW page on that match', !!popup && /\/play\?live=ISLANDS-/.test(popup.url()), popup ? popup.url() : 'no page');
                     check('... and the lobby page is still on its list with its rows', /\/$/.test(page.url()) && (await page.evaluate(() => document.querySelectorAll('.gdock .glive').length)) === 8);
                     if (popup) await popup.close();
                     // the switch

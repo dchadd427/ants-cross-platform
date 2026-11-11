@@ -53,7 +53,7 @@ def game_tab(mod, browser_dt, known, size, mobile=False, timeout=20):
     found = []
 
     def look():
-        found[:] = [t for t in pages_of(browser_dt) if "play.html?testmap=" in t["url"] and t["targetId"] not in known]
+        found[:] = [t for t in pages_of(browser_dt) if "play?testmap=" in t["url"] and t["targetId"] not in known]
         return bool(found)
     if not mod.wait_for(look, timeout, 0.2):
         return None
@@ -192,7 +192,7 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     game.call("Network.enable")
     check(wait_ready(mod, game), "the game page loads the game")
     url = game.ev("location.href")
-    check(url.endswith("&seats=ymnn") and "/play.html?testmap=" in url and "TINY" not in url and "mapmaker" not in url, "its address holds an id and four letters, nothing of the map: %s" % url)
+    check(url.endswith("&seats=ymnn") and "/play?testmap=" in url and "TINY" not in url and "mapmaker" not in url, "its address holds an id and four letters, nothing of the map: %s" % url)
     time.sleep(1.5)
     strip = game.ev("document.getElementById('test-strip') && document.getElementById('test-strip').textContent")
     check(strip == "◀ Back to editorTest gameTINY · You: Green · Bots: Red MediumNot saved. Not counted.", "the strip says what this is: %r" % strip)
@@ -233,7 +233,7 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
             seen_control.append((msg["params"]["request"].get("method"), msg["params"]["request"].get("url")))
     dt.handlers.append(seen2)
     ctl.call("Network.enable")
-    ctl.open(args.web.rstrip("/") + "/play.html?map=tiny&bots=easy", settle=1)
+    ctl.open(args.web.rstrip("/") + "/play?map=tiny&bots=easy", settle=1)
     ok2, box2 = start_the_game(mod, ctl)
     mod.wait_for(lambda: any(m == "POST" and "/stats/local" in u for m, u in seen_control), 8, 0.2)
     check(ok2 and any(m == "POST" and "/stats/local" in u for m, u in seen_control), "control: a normal game on this computer does ask the server to count it (started %s, %d requests seen: %s)" % (ok2, len(seen_control), [u[-40:] for m, u in seen_control][-4:]))
@@ -244,12 +244,12 @@ def run_play(page, tab, args, check, mod, shots_prefix="mapmaker-play"):
     # a game tab that no map maker opened (a typed address, or the map maker's tab is gone): a card with a way to the map maker, not a game
     orphan = Tab(types.SimpleNamespace(devtools=dt))
     orphan.emulate(1280, 800, 1)
-    orphan.call("Page.navigate", {"url": args.web.rstrip("/") + "/play.html?testmap=abcdef123456&seats=ymnn"})
+    orphan.call("Page.navigate", {"url": args.web.rstrip("/") + "/play?testmap=abcdef123456&seats=ymnn"})
     check(mod.wait_for(lambda: orphan.ev("!!document.getElementById('load-failure')"), 20, 0.3) and "This test game cannot start" in orphan.ev("document.getElementById('load-failure').textContent")
           and not orphan.ev("!!document.getElementById('test-strip')"), "a game tab that no map maker opened shows a card, with no strip and no game")
     orphan.save_shot(args.shots, shots_prefix + "-desktop-no-opener")
     orphan.ev("setTimeout(function () { document.querySelector('#load-failure button').click(); }, 0); 1")
-    check(mod.wait_for(lambda: orphan.ev("location.pathname") == "/mapmaker.html", 15, 0.3), "and its button goes to the map maker")
+    check(mod.wait_for(lambda: orphan.ev("location.pathname") == "/mapmaker", 15, 0.3), "and its button goes to the map maker")
     orphan.close()
 
     # ---- the drawn map: a stroke, the unsaved work, the history

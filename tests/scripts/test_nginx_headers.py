@@ -338,23 +338,35 @@ SAME = (("Sec-Fetch-Site", "same-origin"),)
 LIVE_ROWS = [
     ("the front page", "GET", "/", (), 200, "page"),
     ("the front page, a room's link", "GET", "/?room=k7m2xq", (), 200, "page"),
-    ("the front page's file", "GET", "/lobby.html", (), 200, "page"),
+    ("the front page's old file", "GET", "/lobby.html?room=k7m2xq", (), 301, "plain"),
     ("the old front page's address", "GET", "/four.html?room=k7m2xq", (), 301, "plain"),
-    ("the game page", "GET", "/play.html", (), 200, "game"),
-    ("the game page's file", "GET", "/index.html", (), 200, "game"),
+    ("the game page", "GET", "/play", (), 200, "game"),
+    ("the game page with a query", "GET", "/play?live=ants-X-20260101-000000Z", (), 200, "game"),
+    ("the game page's old address", "GET", "/play.html?live=ants-X-20260101-000000Z", (), 301, "plain"),
+    ("the game page's old file", "GET", "/index.html", (), 301, "plain"),
+    ("the game page with a slash", "GET", "/play/", (), 301, "plain"),
     ("a joined game", "GET", "/?join=/ws&room=abc&name=Pebble", (), 200, "game"),
-    ("the replay in its frame", "GET", "/play.html?replay=ants-X-20260101-000000Z.antsrep&embed=1", (), 200, "game"),
+    ("the replay in its frame", "GET", "/play?replay=ants-X-20260101-000000Z.antsrep&embed=1", (), 200, "game"),
+    ("the replay in its frame, old address", "GET", "/play.html?replay=ants-X-20260101-000000Z.antsrep&embed=1", (), 301, "plain"),
     ("an address that is nothing", "GET", "/no/such/page", (), 200, "game"),
-    ("the list of matches", "GET", "/matches.html?q=ann", (), 200, "page"),
-    ("a match", "GET", "/match.html?id=x", (), 200, "page"),
-    ("the matches that run now", "GET", "/live.html", (), 200, "page"),
-    ("the legal page", "GET", "/legal.html", (), 200, "page"),
-    ("the changelog page", "GET", "/changelog.html", (), 200, "page"),
+    ("the list of matches", "GET", "/matches?q=ann", (), 200, "page"),
+    ("the list of matches, old address", "GET", "/matches.html?q=ann", (), 301, "plain"),
+    ("the old list of recordings", "GET", "/watch.html", (), 301, "plain"),
+    ("a match", "GET", "/match?id=x", (), 200, "page"),
+    ("a match, old address", "GET", "/match.html?id=x", (), 301, "plain"),
+    ("the matches that run now", "GET", "/live-now", (), 200, "page"),
+    ("the matches that run now, old address", "GET", "/live.html", (), 301, "plain"),
+    ("the legal page", "GET", "/legal", (), 200, "page"),
+    ("the legal page, old address", "GET", "/legal.html", (), 301, "plain"),
+    ("the changelog page", "GET", "/changelog", (), 200, "page"),
+    ("the changelog page, old address", "GET", "/changelog.html", (), 301, "plain"),
+    ("the changelog page with a slash", "GET", "/changelog/", (), 301, "plain"),
     ("a page that is not there", "GET", "/nothing.html", (), 404, "page"),
     ("the asset catalog", "GET", "/asset_catalog/", (), 200, "page"),
     ("the asset catalog's file", "GET", "/asset_catalog/index.html", (), 200, "page"),
     ("the asset catalog's data script", "GET", "/asset_catalog/catalog_data.js", (), 200, "plain"),
-    ("the map maker", "GET", "/mapmaker.html", (), 200, "mapmaker"),
+    ("the map maker", "GET", "/mapmaker", (), 200, "mapmaker"),
+    ("the map maker, old address", "GET", "/mapmaker.html", (), 301, "plain"),
     ("the admin page", "GET", "/admin", (), 200, "admin"),
     ("the admin page's file", "GET", "/admin.html", (), 404, "plain"),
     ("the admin page with a slash", "GET", "/admin/", (), 301, "plain"),
@@ -517,6 +529,9 @@ class TheFileRuns(unittest.TestCase):
 
     def check(self, what, answer, kind, host=SITE):
         want = expected(kind, host)
+        self.assertEqual(answer.get("server"), "nginx", "%s: the Server header names the program and no version (%s)" % (what, answer.get("server")))      # (server_tokens off)
+        for name in ("x-powered-by", "via", "x-aspnet-version", "x-runtime"):
+            self.assertIsNone(answer.get(name), "%s: %s tells what is behind nginx" % (what, name))
         for name in POLICED:
             self.assertLessEqual(answer.names().count(name), 1, "%s: %s comes %d times" % (what, name, answer.names().count(name)))
         for name, rule in want.items():
@@ -548,9 +563,9 @@ class TheFileRuns(unittest.TestCase):
         self.check("the login over its limit", over[0], "hubpage")
 
     def test_the_policy_of_a_page_is_read_directive_by_directive(self):
-        for path in ("/", "/matches.html", "/asset_catalog/", "/legal.html"):
+        for path in ("/", "/matches", "/asset_catalog/", "/legal", "/live-now", "/match?id=x", "/changelog"):
             self.assertEqual(parse_csp(fetch(self.live.port, path).get("content-security-policy")), page_policy(SITE), path)
-        for path in ("/play.html", "/index.html", "/?join=/ws&room=x"):
+        for path in ("/play", "/play?live=x", "/?join=/ws&room=x"):
             self.assertEqual(parse_csp(fetch(self.live.port, path).get("content-security-policy")), game_policy(SITE), path)
         page, game = page_policy(SITE), game_policy(SITE)
         for policy in (page, game):
@@ -587,15 +602,15 @@ class TheFileRuns(unittest.TestCase):
             answer = fetch(self.live.port, path)
             for name in PAGE_HEADERS:
                 self.assertIsNone(answer.get(name), "%s %s" % (path, name))
-        for path in ("/", "/play.html", "/legal.html", "/asset_catalog/", "/nothing.html"):
+        for path in ("/", "/play", "/legal", "/mapmaker", "/asset_catalog/", "/nothing.html"):
             answer = fetch(self.live.port, path)
             for name in PAGE_HEADERS:
                 self.assertIsNotNone(answer.get(name), "%s %s" % (path, name))
 
     def test_an_unchanged_page_is_still_answered_304_with_the_headers_of_the_page(self):
-        first = fetch(self.live.port, "/matches.html")
+        first = fetch(self.live.port, "/matches")
         self.assertIn("etag", first.names())
-        again = fetch(self.live.port, "/matches.html", headers=(("If-None-Match", first.get("etag")),))
+        again = fetch(self.live.port, "/matches", headers=(("If-None-Match", first.get("etag")),))
         self.assertEqual(again.status, 304)
         self.check("the 304", again, "page")
 
@@ -733,7 +748,7 @@ class TheFileRuns(unittest.TestCase):
             stock_before = f.read()
         secrets = ("ROOMSECRET1", "ROOMSECRET2", "NAMESECRET", "SEARCHSECRET", "HISTSECRET", "UNKNOWNSECRET", "REFSECRET", "COOKIESECRET", "AUTHSECRET", "XFFSECRET")
         extra = (("Referer", "https://other.example/?room=REFSECRET"), ("Cookie", "session=COOKIESECRET"), ("Authorization", "Bearer AUTHSECRET"), ("User-Agent", "agent-visible/1.0"), ("X-Forwarded-For", "1.2.3.4, XFFSECRET"))
-        asked = [("/?room=ROOMSECRET1", "/", 200), ("/play.html?join=/ws&room=ROOMSECRET2&name=NAMESECRET", "/play.html", 200), ("/matches.html?q=SEARCHSECRET", "/matches.html", 200),
+        asked = [("/?room=ROOMSECRET1", "/", 200), ("/play?join=/ws&room=ROOMSECRET2&name=NAMESECRET", "/play", 200), ("/matches?q=SEARCHSECRET", "/matches", 200), ("/play.html?live=SEARCHSECRET", "/play.html", 301),
                  ("/history?q=HISTSECRET", "/history", 200), ("/nowhere/at/all?x=UNKNOWNSECRET", "/nowhere/at/all", 200), ("/wp-login.php?x=UNKNOWNSECRET", "/wp-login.php", 200), ("/busy", "/busy", 200)]
         for target, _, _ in asked:
             fetch(self.live.port, target, headers=extra)
@@ -844,7 +859,7 @@ class TheFileRuns(unittest.TestCase):
     # ---- every Host name ----------------------------------------------------------------------------------------------------------------------------------
     def test_any_host_name_is_served_like_the_public_one(self):
         for host in (SITE, "localhost", "127.0.0.1", "staging.example.org", "ants.my-own-server.example", "unknown.example:8080"):
-            for path, kind in (("/", "page"), ("/play.html", "game"), ("/stats", "door"), ("/lobbies", "door")):
+            for path, kind in (("/", "page"), ("/play", "game"), ("/stats", "door"), ("/lobbies", "door")):
                 answer = fetch(self.live.port, path, host=host)
                 self.assertEqual(answer.status, 200, (host, path))
                 self.check("%s at %s" % (path, host), answer, kind, host=host)

@@ -382,9 +382,12 @@ class TheBlocksRun(unittest.TestCase):
         self.assertEqual(self.count(self.rig.door), before)
 
     def test_the_editor_page_comes_with_its_policy_and_cannot_be_framed_and_its_scripts_are_still_served_as_scripts(self):
-        status, headers, body = self.rig.ask("GET", "/mapmaker.html")
+        status, headers, body = self.rig.ask("GET", "/mapmaker")
         self.assertEqual(status, 200)
         self.assertIn(b"Map maker", body)
+        old = self.rig.ask("GET", "/mapmaker.html?x=1")                                    # (the old address is a 301 to the clean one, with the query)
+        self.assertEqual(old[0], 301)
+        self.assertEqual(names(old[1], "location"), ["/mapmaker?x=1"])
         policy = names(headers, "content-security-policy")
         self.assertEqual(len(policy), 1)
         self.assertIn("script-src 'self' 'wasm-unsafe-eval'", policy[0])
@@ -395,7 +398,7 @@ class TheBlocksRun(unittest.TestCase):
         self.assertEqual(names(headers, "x-content-type-options"), ["nosniff"])
         self.assertEqual(names(headers, "cross-origin-embedder-policy"), ["require-corp"])
         self.assertEqual(names(headers, "cross-origin-opener-policy"), ["same-origin"])
-        self.assertEqual(self.rig.ask("HEAD", "/mapmaker.html")[0], 200)
+        self.assertEqual(self.rig.ask("HEAD", "/mapmaker")[0], 200)
         status, headers, body = self.rig.ask("GET", "/front/mapmaker_app.js")
         self.assertEqual(status, 200)
         self.assertEqual(names(headers, "cache-control"), ["no-cache, must-revalidate"])                 # (a script keeps the headers it had)

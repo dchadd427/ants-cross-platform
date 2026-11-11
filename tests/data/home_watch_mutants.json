@@ -18,8 +18,8 @@
   {
    "id": "watch_goes_to_a_made_up_address",
    "file": "web/home/games.js",
-   "old": "go.setAttribute('href', '/play.html?live=' + encodeURIComponent(e.id));",
-   "new": "go.setAttribute('href', '/play.html?live=' + encodeURIComponent(e.id.toLowerCase()));",
+   "old": "go.setAttribute('href', '/play?live=' + encodeURIComponent(e.id));",
+   "new": "go.setAttribute('href', '/play?live=' + encodeURIComponent(e.id.toLowerCase()));",
    "test": "node tests/scripts/web_home_games_live_check.js web/lobby.html"
   },
   {

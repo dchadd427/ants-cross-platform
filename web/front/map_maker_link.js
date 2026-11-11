@@ -7,7 +7,7 @@
     var link = document.createElement('a');
     link.className = 'btn sm';
     link.id = 'mapmaker-top';
-    link.href = '/mapmaker.html';
+    link.href = '/mapmaker';
     link.title = 'Map maker: draw your own map';
     link.textContent = 'Map maker';
     head.insertBefore(link, matches);

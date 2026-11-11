@@ -69,7 +69,7 @@ class Replay:
 
     def __init__(self, tab, web, data, mobile):
         self.tab = tab
-        self.url = (web if web.endswith("/") else web + "/") + "play.html?replay=" + NAME + "&aspect=16:9"
+        self.url = (web if web.endswith("/") else web + "/") + "play?replay=" + NAME + "&aspect=16:9"
         self.hook = HOOK % (json.dumps(base64.b64encode(data).decode()), NAME)
         self.mobile = mobile
         self.hooked = False

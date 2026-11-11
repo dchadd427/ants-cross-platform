@@ -4,7 +4,7 @@
 //   * The room's state is the server's word: the switch is drawn from the last Room message, never from what a press asked, and a request that the page's pace holds back sends nothing.
 //   * Everything from the list is UNTRUSTED text: checked field by field (parseList), drawn with textContent, never as markup or a link, and a row that is not of the shape is dropped. At most 50 rows. The one address that a
 //     row's text makes is its map's picture (a checked file name, percent-encoded: AntsMapPicker.previewPath).
-//   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (a new tab on /play.html?live=<id>); a switch in the list's head (kept in this browser
+//   * Matches that run now (GET /live, docs/REPLAYS.md "Live") stand in the list below the open rooms as rows with a Live mark and Watch (a new tab on /play?live=<id>); a switch in the list's head (kept in this browser
 //     only) turns them off. The door carries no room code and a room that is listed is waiting, so a running match is never a room's row. /live is looked at every 10 s at the most, only while the list shows, and a
 //     server without that door (404) or a failed look only hides the section.
 //   * The list is polled (30 s closed, 5 s open, never while the tab is hidden or the Room shows, +-20 % of jitter, doubled after a failure). Nothing that goes wrong here reaches Home, the Room or the hand-off:
@@ -73,7 +73,7 @@
         return { code: raw.code, host: raw.host.replace(/^ +| +$/g, '') || 'Player', map: raw.map, mapKey: known ? known.key : '', mapName: known ? known.name : rules.communityName(raw.map).slice(0, 28), people: raw.people, bots: raw.bots, free: raw.free, size: raw.size, age: raw.age };
     }
     // One match of the door's answer to GET /live as the page may show it, or null: the id of the server's shape, the map as the door sends it (the whole file name, like a room's: 'TREASURE.LVL', 'DRY LAND.lvl'; else the one in the id), the seconds it has run (or its turns / 20), and at most four
-    // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only. Everything is text, and the only address that is made is /play.html?live=<id> from the checked id.
+    // players as the door writes them ("Green (Ann)", "Red", "Blue (Bot (Medium))"): a color word and the name, printable ASCII only. Everything is text, and the only address that is made is /play?live=<id> from the checked id.
     function liveOf(raw, rules) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw) || typeof raw.id !== 'string' || !LIVE_ID.test(raw.id)) return null;
         var file = typeof raw.map === 'string' ? raw.map : raw.id.replace(/-[0-9]{8}-[0-9]{6}Z(-[0-9]{1,4})?$/, '') + '.LVL';
@@ -514,7 +514,7 @@
             top.appendChild(el('span', 'gname', e.mapName)); top.appendChild(el('span', 'glive-mark', TEXT.liveMark));
             line.appendChild(dots); line.appendChild(who); line.appendChild(len);
             text.appendChild(top); text.appendChild(line); li.appendChild(picOf(e)); li.appendChild(text);
-            go.setAttribute('href', '/play.html?live=' + encodeURIComponent(e.id)); go.setAttribute('target', '_blank'); go.setAttribute('rel', 'noopener'); go.setAttribute('data-live', e.id);
+            go.setAttribute('href', '/play?live=' + encodeURIComponent(e.id)); go.setAttribute('target', '_blank'); go.setAttribute('rel', 'noopener'); go.setAttribute('data-live', e.id);
             go.setAttribute('aria-label', 'Watch the match on ' + e.mapName + ', ' + names + ', ' + clockText(e.seconds) + TEXT.soFar);
             li.appendChild(go);
             liveLens.push({ id: e.id, node: len, link: go, names: names, map: e.mapName });
