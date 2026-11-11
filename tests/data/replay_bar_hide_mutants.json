@@ -330,6 +330,14 @@
    "why": "a finger would not be told how to bring a hidden bar back"
   },
   {
+   "id": "handle_hit_area_covers_the_bar",
+   "file": "web/shell.html",
+   "old": ".rhandle[aria-expanded=\"true\"]::before { display: none; } ",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the handle's tall invisible hit area would lie over the controls of a peeking bar and take their clicks"
+  },
+  {
    "id": "hidden_hint_names_the_edge",
    "file": "web/shell.html",
    "old": "$('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back';",

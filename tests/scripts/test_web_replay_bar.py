@@ -35,6 +35,7 @@ class TheStyleAndTheMarkup(unittest.TestCase):
         for text in ("width: 44px;", "height: 14px;", "bottom: env(safe-area-inset-bottom, 0px);", "touch-action: none;"):
             self.assertIn(text, rule)
         self.assertRegex(self.page, r'\.rhandle::before \{ content: ""; position: absolute; left: -12px; right: -12px; top: -30px; bottom: 0; \}')       # (a hit area of 44 px high, invisible)
+        self.assertIn('.rhandle[aria-expanded="true"]::before { display: none; }', self.page)               # (the invisible hit area is for a finger on a hidden bar only: over a peeking or open bar it would cover the controls)
         self.assertIn(".rhandle:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }", self.page)
         self.assertIn(".rhandle[hidden]", self.page)                                                         # (no markup of the handle shows while the attribute is there)
         self.assertNotIn("rzone", self.page)                                                                 # (the hot zone is a rectangle that the script reads: no element lies over the picture)
