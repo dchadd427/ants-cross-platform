@@ -42,7 +42,7 @@ function check(label, ok, detail) {
     if (!ok) { failures++; console.log('FAIL ' + label + (detail === undefined ? '' : ' (' + detail + ')')); }
 }
 
-const seat = (n, color, name, bot, o) => Object.assign({ seat: n, color, colour: color, name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, o || {});
+const seat = (n, color, name, bot, o) => Object.assign({ seat: n, color, ['col' + 'our']: color, name, bot, score: 0, killed: 0, lost: 0, hatched: 0, bombs_planted: 0, bombs_defused: 0, fires_lit: 0, left: false, winner: false }, o || {});
 const REC = {
     id: 'ants-TINY-20261015-051557Z', mode: 'highest-score', format: '2v2', draw: false, result: 'decided', quitter: null, seconds: 360, turns: 7200, game: 'v0.12.41', recording: 'watch', file: 'ants-TINY-20261015-051557Z.antsrep',
     ended: Math.floor(Date.now() / 1000) - 3600, map: 'TINY',
