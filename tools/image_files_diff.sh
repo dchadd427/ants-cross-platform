@@ -5,8 +5,7 @@
 # build time and the build date of the pages (tools/image_manifest.py: STAMPED, a short list of files and patterns).
 #
 #   tools/image_files_diff.sh [--base REV] [--web] [--server] [--diagnose]      (both images when neither is named; REV: any revision that has Dockerfile and Dockerfile.server, default origin/main)
-#   --diagnose: when the web images differ, also show how the differing files differ, and build two more images (the base Dockerfile again without its cache, and this tree's without the ccache
-#   wrapper) to tell a build that never gives the same files twice from a difference that the new Dockerfile makes
+#   --diagnose: when the web images differ, also show how the differing files differ
 #
 # Needs Docker with BuildKit, git and python3, and about 4 GB of disk. The two builds of the web image take 6 to 10 minutes each on a 4-core machine (the base Dockerfile has no cache of ours).
 # Run from the root of the repository. Exit status 0: the same; 1: a difference (listed); 2: something could not be built or read.
@@ -54,21 +53,12 @@ show_diff() {
     diff <(strings -n 6 "$1") <(strings -n 6 "$2") | cut -c1-300 | head -40
 }
 
-# diagnose_web DOCKERFILE: for the differing files of the web images, and two more builds that tell the causes apart
+# diagnose_web DOCKERFILE: how the differing files of the web images differ
 diagnose_web() {
     mkdir -p "$work/dx"
     for f in index.html index.js index.wasm; do
         docker cp "$base_cid:/usr/share/nginx/html/$f" "$work/dx/base-$f" && docker cp "$new_cid:/usr/share/nginx/html/$f" "$work/dx/new-$f" && show_diff "$work/dx/base-$f" "$work/dx/new-$f" "$f"
     done
-    echo "== diagnosis: the base Dockerfile built again without its cache"
-    docker build --no-cache -f "$work/$1.base" --build-arg ANTS_BUILD_ID=image-diff -t "$tag-web-again" . > /dev/null 2>&1 && containers="$containers $(docker create "$tag-web-again")" && \
-        docker export "$(docker create "$tag-web-again")" | python3 tools/image_manifest.py manifest > "$work/web-again.manifest" && \
-        { python3 tools/image_manifest.py compare "$work/web-base.manifest" "$work/web-again.manifest" --label "base against base" | cut -c1-200; true; }
-    echo "== diagnosis: this tree's Dockerfile without the ccache wrapper"
-    sed 's/export EM_COMPILER_WRAPPER="$(command -v ccache)"; //' "$1" > "$work/Dockerfile.nowrap"
-    docker build -f "$work/Dockerfile.nowrap" --build-arg ANTS_BUILD_ID=image-diff -t "$tag-web-nowrap" . > /dev/null 2>&1 && \
-        docker export "$(docker create "$tag-web-nowrap")" | python3 tools/image_manifest.py manifest > "$work/web-nowrap.manifest" && \
-        { python3 tools/image_manifest.py compare "$work/web-base.manifest" "$work/web-nowrap.manifest" --label "base against no wrapper" | cut -c1-200; true; }
 }
 
 # compare NAME DOCKERFILE-NAME: build the base's and this tree's file with the same context and the same build id, then compare

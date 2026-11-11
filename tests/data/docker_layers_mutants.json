@@ -360,6 +360,38 @@
    "new": "CACHE_MOUNT = re.compile(r\"^(?:--mount=type=[a-z]+",
    "test": "python3 tests/scripts/test_web_without_docker.py TheDockerfileIsRead",
    "expect": "test_what_the_tool_cannot_play_is_refused"
+  },
+  {
+   "id": "wasm_signature_ignores_the_data_section",
+   "file": "tools/image_manifest.py",
+   "old": "            payload = data[at:at + size]",
+   "new": "            payload = b\"\"",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_same_program_with_its_functions_in_another_order_is_the_same_and_one_with_other_text_is_not"
+  },
+  {
+   "id": "wasm_size_may_change_by_any_amount",
+   "file": "tools/image_manifest.py",
+   "old": "SIZE_TOLERANCE = 64 ",
+   "new": "SIZE_TOLERANCE = 10 ** 9 ",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_program_that_grew_or_gained_a_section_is_found"
+  },
+  {
+   "id": "javascript_digits_are_not_made_one",
+   "file": "tools/image_manifest.py",
+   "old": "re.sub(rb\"\\d+\", b\"#\", data)",
+   "new": "data",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_javascript_is_the_same_apart_from_its_numbers"
+  },
+  {
+   "id": "minified_build_time_is_not_read",
+   "file": "tools/image_manifest.py",
+   "old": "(r\"(ANTS_BUILD_VER\\s*=\\s*['\\\"]?)\\d+\", r\"\\1<build time>\")",
+   "new": "(r\"(ANTS_BUILD_VER = ')\\d+\", r\"\\1<build time>\")",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_minified_game_page_is_read_too"
   }
  ]
 }

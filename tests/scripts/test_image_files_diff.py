@@ -4,12 +4,15 @@
 The script builds the images from the Dockerfile of a base revision and from this tree's, exports their file systems and compares them. There is no Docker daemon here, so:
 
   - the manifest: every entry with type, mode, owner, size, link target and sha256; the stamps of the pages (the build time and the build date) are replaced before the hash, in the listed files only
+  - the files of two builds of one Dockerfile that are never the same (the linked WebAssembly programs and their JavaScript: CI built the old Dockerfile twice and they differed): only a signature is
+    compared (a wasm's data section, its sections and size; the JavaScript with its numbers made one), and a change of what a program holds or says is found
   - the comparison: the same files are the same; a changed byte, a changed mode or owner, a file on one side only, a link that points elsewhere, a stamp that appears or goes, a stamp in a file
     that is not listed, and a changed configuration (user, entrypoint, command, ports, environment) are each a difference with exit status 1; an empty export is refused
   - the CI job: a job of its own (not one of the five required checks, waited for by the deploy like every job, which it passes at once on a push) that runs for a pull request that changes a Dockerfile, the program of the pre-warming or this check
   - the script, run against a stand-in `docker` (a small program that builds nothing and exports the files that the test chose) and a real git repository: the same images pass, a difference of one
     byte in either image fails and names the file, a difference of the configuration fails, a failed build is status 2, and the base is read from git
 """
+import gzip
 import io
 import json
 import os
@@ -131,6 +134,69 @@ class TheManifest(unittest.TestCase):
             changed = json.loads(json.dumps(inspected))
             changed[0]["Config"][key] = value
             self.assertTrue(im.differences(kept, im.config(changed)), key)
+
+
+def leb128(value):
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        out.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def wasm(code, data=b"strings of the program v0.16.0", extra_section=None):
+    """A small WebAssembly file: a type section, a code section made of `code` (any bytes: the order of the functions) and a data section."""
+    def section(number, payload):
+        return bytes([number]) + leb128(len(payload)) + payload
+    parts = [b"\0asm\1\0\0\0", section(1, b"\1\x60\0\0"), section(10, code), section(11, data)]
+    if extra_section:
+        parts.append(section(*extra_section))
+    return b"".join(parts)
+
+
+class TheProgramsThatNoBuildRepeats(unittest.TestCase):
+    def files(self, **by_name):
+        return {HTML + name.replace("lvl_core", "lvl-core").replace("_", ".").replace("lvl-core", "lvl_core"): value for name, value in by_name.items()}
+
+    def test_the_same_program_with_its_functions_in_another_order_is_the_same_and_one_with_other_text_is_not(self):
+        one = manifest(self.files(index_wasm=wasm(b"AAAA" + b"B" * 300), lvl_core_wasm=wasm(b"CC")))
+        two = manifest(self.files(index_wasm=wasm(b"B" * 300 + b"AAAA" + b"x" * 5), lvl_core_wasm=wasm(b"C" * 40)))
+        self.assertEqual(im.differences(one, two), [])
+        other = manifest(self.files(index_wasm=wasm(b"B" * 300 + b"AAAA", data=b"strings of the program v0.0.0"), lvl_core_wasm=wasm(b"CC")))
+        found = im.differences(one, other)
+        self.assertEqual(len(found), 1)
+        self.assertIn("index.wasm differs in signature", found[0])
+
+    def test_a_program_that_grew_or_gained_a_section_is_found(self):
+        base = manifest(self.files(index_wasm=wasm(b"A" * 100)))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=wasm(b"A" * 100 + b"B" * 70)))))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=wasm(b"A" * 100, extra_section=(0, b"\4name"))))))
+
+    def test_a_compressed_copy_is_read_through_and_a_file_that_is_no_program_is_not_ignored(self):
+        one = manifest(self.files(index_wasm_gz=gzip.compress(wasm(b"AA"), mtime=1), index_js_gz=gzip.compress(b"f(12)", mtime=1)))
+        two = manifest(self.files(index_wasm_gz=gzip.compress(wasm(b"A" * 9), mtime=2), index_js_gz=gzip.compress(b"f(99)", mtime=2)))
+        self.assertEqual(im.differences(one, two), [])
+        broken = manifest(self.files(index_wasm=b"not a program", lvl_core_wasm=wasm(b"A")))
+        self.assertTrue(im.differences(broken, manifest(self.files(index_wasm=b"not a program either", lvl_core_wasm=wasm(b"A")))))
+
+    def test_the_javascript_is_the_same_apart_from_its_numbers(self):
+        one = manifest(self.files(index_js=b"var a=f(1234,5);g('index.wasm')"))
+        self.assertEqual(im.differences(one, manifest(self.files(index_js=b"var a=f(98,76543);g('index.wasm')"))), [])
+        self.assertTrue(im.differences(one, manifest(self.files(index_js=b"var a=f(1234,5);g('index.data')"))))
+        self.assertTrue(im.differences(one, manifest(self.files(index_js=b"var a=f(1234,5);g('index.wasm');"))), "a longer file is another file")
+
+    def test_the_list_is_short_and_has_only_the_linked_programs_and_their_script(self):
+        self.assertEqual(sorted(p[len(HTML):] for p in im.LOOSE), ["index.js", "index.js.gz", "index.wasm", "index.wasm.gz", "lvl_core.js", "lvl_core.wasm"])
+        self.assertTrue(set(im.LOOSE).isdisjoint(im.STAMPED))
+
+    def test_the_minified_game_page_is_read_too(self):
+        text = b"<script>var ANTS_BUILD_VER=\"%d\";var x='index.js?v=%d'</script><span id=game-build-date>(2026-11-10 %02d:57 PT)</span>"
+        one = manifest({HTML + "index.html": text % (1731000001, 1731000002, 21)})
+        two = manifest({HTML + "index.html": text % (1731000999, 1731000998, 22)})
+        self.assertEqual(im.differences(one, two), [])
+        self.assertEqual(one[HTML + "index.html"]["stamps"], 3)
 
 
 class TheCommandLine(unittest.TestCase):
