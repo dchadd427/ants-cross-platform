@@ -185,7 +185,7 @@ class Game:
 
     def __init__(self, tab, web, profile):
         self.tab = tab
-        self.web = (web if web.endswith("/") else web + "/") + "play.html"
+        self.web = (web if web.endswith("/") else web + "/") + "play"
         self.profile = profile
         self.fingers = Fingers(tab)
 

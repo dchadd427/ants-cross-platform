@@ -282,7 +282,7 @@ for (const seat of [4, -1, 255, 1.5, NaN, '1', null, undefined]) same('withSeat:
 {
     const doc = { getElementById() { return { setAttribute() {}, classList: { add() {} } }; }, querySelectorAll() { return []; }, body: { classList: { add() {} }, style: { setProperty() {} } } };
     const pageAt = (search, throws) => {
-        const win = { location: { search, protocol: 'http:', host: 'h', pathname: '/play.html', hash: '#x' }, localStorage: null, urls: [] };
+        const win = { location: { search, protocol: 'http:', host: 'h', pathname: '/play', hash: '#x' }, localStorage: null, urls: [] };
         win.history = {
             replaceState(state, title, url) {
                 if (throws) throw new Error('refused');
@@ -297,11 +297,11 @@ for (const seat of [4, -1, 255, 1.5, NaN, '1', null, undefined]) same('withSeat:
     const told = pageAt('?join=/ws&room=ABC&name=Bob', false);
     check('antsSeatKnown is a function of the page: the game calls it', typeof told.antsSeatKnown === 'function');
     told.antsSeatKnown(1);
-    same('a game of a server\'s room is told its seat: the address gets it (the hash stays)', told.urls, ['/play.html?join=/ws&room=ABC&name=Bob&seat=1#x']);
+    same('a game of a server\'s room is told its seat: the address gets it (the hash stays)', told.urls, ['/play?join=/ws&room=ABC&name=Bob&seat=1#x']);
     told.antsSeatKnown(1);
     same('... told the same seat again, it leaves the address alone', told.urls.length, 1);
     told.antsSeatKnown(2);
-    same('... another seat replaces it', told.urls[1], '/play.html?join=/ws&room=ABC&name=Bob&seat=2#x');
+    same('... another seat replaces it', told.urls[1], '/play?join=/ws&room=ABC&name=Bob&seat=2#x');
     const local = pageAt('?map=TINY.LVL&bots=easy', false);
     local.antsSeatKnown(0);
     same('a game on this computer leaves its address alone', local.urls, []);
@@ -1061,12 +1061,12 @@ async function codeBox(env) {
     const env = runLobby('', { 'ants.name': 'Maya' });
     const s = env.arrive({ key: KEY });
     env.$('start').click();
-    same('START with nobody else in the room plays a game on this computer: the game page\'s own single player, on the map of the room, under the name of the player', env.assigned, ['https://play.test/play.html?map=treasure&name=Maya']);
+    same('START with nobody else in the room plays a game on this computer: the game page\'s own single player, on the map of the room, under the name of the player', env.assigned, ['https://play.test/play?map=treasure&name=Maya']);
     check('... the room is let go of (a Leave, the socket closes), the tab forgets it, and no key is written for the game page', s.sent.length === 2 && s.sent[1][0] === NET0.MSG.Leave && s.closed && env.session.data['ants.lobby'] === undefined && Object.keys(env.storage.data).every((k) => k.indexOf('ants.rejoin.') !== 0));
     const evil = runLobby('', { 'ants.name': '<b>x</b>&y' });
     evil.arrive({ key: KEY, seats: [[C, '<b>x</b>&y'], [E, ''], [E, ''], [E, '']] });
     evil.$('start').click();
-    check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play.html?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
+    check('a name with < > & goes into that address encoded (a plain value in the query, never markup)', evil.assigned[0] === 'https://play.test/play?map=treasure&name=%3Cb%3Ex%3C%2Fb%3E%26y' && evil.param(evil.assigned[0], 'name') === '<b>x</b>&y', evil.assigned[0]);
 }
 
 // ---- 5.5c the rematch (front/rematch.js, docs/PLAY_IN_BROWSER.md "After a match"): the tab comes back from its match with the room's code and the key of its seat (the game page's hand-over in the

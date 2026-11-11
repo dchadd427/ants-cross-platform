@@ -147,7 +147,7 @@ class TheFolder(unittest.TestCase):
         for word in ("percentEncode", "escape(", "/maps/previews", ".webp", "decodeURI"):
             self.assertNotIn(word, self.js, "%s: the address is made by AntsMapPicker.previewPath (web/front/map_picker.js), which checks the file name and the shape of what it makes" % word)
         self.assertEqual(self.js.count("encodeURIComponent"), 1, "the one use: the id in the address of Watch (a second guard, the id is checked by its shape first)")
-        self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.js)
+        self.assertIn("'/play?live=' + encodeURIComponent(e.id)", self.js)
         picker = read("web", "front", "map_picker.js")
         self.assertIn("function previewPath(map) {", picker)
         self.assertIn("previewPath: previewPath", picker)

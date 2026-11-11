@@ -2,7 +2,7 @@
 """The web page's picture in a REAL browser (widescreen milestone M5; opt-in; see tests/scripts/test_web_aspect.sh and docs/PLAY_IN_BROWSER.md).
 
 Needs a running web page (the web image of this tree: `docker build -t ants-beta .` and run it, or `docker-compose.stack.yml`; --web is the site's address: the game page is opened at its own
-path /play.html, "/" being the front page), a Chromium-based browser and Python 3; nothing
+path /play, "/" being the front page), a Chromium-based browser and Python 3; nothing
 else (the DevTools protocol is spoken with the WebSocket client of web_hidden_check.py, standard library only). The check opens the page in a throwaway headless browser (its own
 profile, its own port; nothing of yours is touched) and looks at what only a browser can show:
 
@@ -36,7 +36,7 @@ profile, its own port; nothing of yours is touched) and looks at what only a bro
     download that fails for good shows the message with a Reload button; the loading of the game itself: index.js or index.wasm that fail, a game that never starts (the watchdog), a
     body that is a web page / too small / an error status / cut short / a byte short (each is a failed try, the game starts on the next good one), the package that is handed to the
     file packager once and only for index.data, a promise that fails after the game runs (no card over it), and index.js asked for once with one ?v= (`--load-only`);
-    and (`--downloads N`) N cold-cache runs of the game page (at /play.html), each of which must start (the browser's cache can refuse a download: net::ERR_CACHE_WRITE_FAILURE).
+    and (`--downloads N`) N cold-cache runs of the game page (at /play), each of which must start (the browser's cache can refuse a download: net::ERR_CACHE_WRITE_FAILURE).
 
 Exit status 0: every check passed; 1: a check failed, or the browser or the page broke down during the check (a page that hangs, a browser that crashes, a script that raises:
 a page that came up and then misbehaved is a failure, never a skip); 3: the check could not be made because the environment is not there (no browser, the browser did not start,
@@ -684,7 +684,7 @@ def main():
     ap.add_argument("--wheel", action="store_true", help="also the wheel and the pinch: cancelled over the canvas only, and the game zooms (the full run does it too; --wheel-only does nothing else)")
     ap.add_argument("--wheel-only", action="store_true", help="only the wheel and the pinch of the page (cancelled over the canvas only; the game zooms a level a notch: 2, 0.71, 0.5, the map's limit; the middle button)")
     ap.add_argument("--load-only", action="store_true", help="only the page's logic and the faults of the loading of the game (index.js, index.wasm, a game that never starts, a body that is not the data)")
-    ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of the game page (at /play.html), each of which must start")
+    ap.add_argument("--downloads", type=int, default=0, metavar="N", help="also N cold-cache runs of the game page (at /play), each of which must start")
     ap.add_argument("--ready-timeout", type=float, default=120.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 120)")
     ap.add_argument("--exit-codes", action="store_true", help="only check this script's own exit statuses: a closed port is a skip (3), a page that hangs is a failure (1)")
     args = ap.parse_args()
@@ -707,7 +707,7 @@ def main():
         print("  SKIP: no Chromium-based browser found (give one with --browser or CHROME)")
         return 3
     site = args.web if args.web.endswith("/") else args.web + "/"
-    web = site + "play.html"                                                      # the game page, at its own path ("/" is the front page, the lobby, since the Play online page became it)
+    web = site + "play"                                                      # the game page, at its own path ("/" is the front page, the lobby, since the Play online page became it)
     browser = None
     try:
         browser = Browser(path)
@@ -717,7 +717,7 @@ def main():
         tab.emulate(1280, 720, 1)
         tab.open(web, settle=0.5)
         def cold_runs():
-            print("[web aspect] web/shell.html (the game page, at /play.html), cold cache, %d runs: the game must start" % args.downloads)
+            print("[web aspect] web/shell.html (the game page, at /play), cold cache, %d runs: the game must start" % args.downloads)
             for run in range(args.downloads):
                 fresh = Browser(path)                                           # a browser of its own: nothing is cached
                 try:
