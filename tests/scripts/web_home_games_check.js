@@ -316,7 +316,7 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
     site.body = listOf([]);
     await wait(env, 5000);
     check('no rows at all: "none waiting", the empty state with Host one!, the count 0', first(popOf(env), 'gpcount').textContent === 'none waiting' && first(popOf(env), 'gempty').hidden === false && first(popOf(env), 'glist').hidden === true && pillOf(env).textContent === '0');
-    check('... the empty state says it and has no button (the bar has Quick host and Quick join)', textOf(first(popOf(env), 'gempty')).indexOf('No open games right now.') !== -1 && textOf(first(popOf(env), 'gempty')).indexOf('Rooms show up here when their host switches them to Public.') !== -1 && first(popOf(env), 'gempty').findAll((e) => e.tagName === 'button').length === 0);
+    check('... the empty state says it and has one button, Host a game (the bar has Quick host and Quick join)', textOf(first(popOf(env), 'gempty')).indexOf('No open games right now.') !== -1 && textOf(first(popOf(env), 'gempty')).indexOf('Rooms show up here when their host switches them to Public.') !== -1 && first(popOf(env), 'gempty').findAll((e) => e.tagName === 'button').map(textOf).join() === 'Host a game');
 }
 {   // the count: 50 rows are "50+"
     const site = fakeSite();
@@ -450,7 +450,11 @@ for (const [what, setup] of [['a 404', (s) => { s.status = 404; s.body = { error
 {
     const env = await page({ options: { popover: false } });     // no rooms: the empty state is in the body too, words only, and Join by code under it
     check('no open games: the empty state ("No open games right now.") and Join by code are in the docked list', textOf(popOf(env)).indexOf('No open games right now.') !== -1 && !first(popOf(env), 'gempty').hidden && !!first(popOf(env), 'gcode') && textOf(first(popOf(env), 'gpcount')) === 'none waiting');
-    check('... and the card has no button at all (the bar above has Quick host and Quick join)', first(popOf(env), 'gempty').findAll((e) => e.tagName === 'button').length === 0);
+    check('... and the card has the one button, Host a game (the bar above has Quick host and Quick join)', first(popOf(env), 'gempty').findAll((e) => e.tagName === 'button').map(textOf).join() === 'Host a game');
+    first(popOf(env), 'gempty').findAll((e) => e.tagName === 'button')[0].click();
+    const asked = hostCard(env);
+    same('... a press on it does what Quick host does with no room: the card "Host a game" with Public room, Private room and Cancel, nothing made yet', [!!asked, asked ? find(asked, 'btn').map(textOf) : [], env.sockets.length], [true, ['Public room', 'Private room', 'Cancel'], 0]);
+    pressEscape(env);
 }
 {
     const env = await page({ options: { popover: true } });         // the test site: the popover, closed until Games is pressed, as ever
