@@ -235,8 +235,8 @@
   {
    "id": "redirect_is_cached_for_a_day",
    "file": "docker/nginx.conf",
-   "old": "        return 302 $ants_clean_address$is_args$args;",
-   "new": "        add_header Cache-Control \"max-age=86400\" always;\n        return 302 $ants_clean_address$is_args$args;",
+   "old": "    absolute_redirect off;\n",
+   "new": "    absolute_redirect off;\n    add_header Cache-Control \"max-age=86400\" always;\n",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   }
  ]
