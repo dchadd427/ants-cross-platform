@@ -1,0 +1,57 @@
+{
+ "note": "Mutants of tools/check_doc_move.py (the proof that a split of a document is a pure move) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_check_doc_move.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/check_doc_move_mutants.json --keep-going --jobs 1.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_check_doc_move"
+ },
+ "defaults": {
+  "file": "tools/check_doc_move.py",
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_check_doc_move"
+ },
+ "mutants": [
+  {
+   "id": "a_lost_line_is_accepted",
+   "old": "    lost = old - new\n",
+   "new": "    lost = collections.Counter()\n"
+  },
+  {
+   "id": "a_line_is_accepted_when_it_is_there_once",
+   "old": "    lost = old - new\n",
+   "new": "    lost = collections.Counter(set(old) - set(new))\n"
+  },
+  {
+   "id": "a_changed_link_target_is_a_changed_line",
+   "old": "    return TARGET.sub(\"]()\", line)",
+   "new": "    return line"
+  },
+  {
+   "id": "another_page_may_change",
+   "old": "        if lines_of(text_at_base(root, base, p)) != lines_of(text_now(root, p)):",
+   "new": "        if False:"
+  },
+  {
+   "id": "a_lost_link_is_accepted",
+   "old": "    for (src, dst, text), n in sorted(((k, v) for k, v in (before - after).items()), key=str):",
+   "new": "    for (src, dst, text), n in []:"
+  },
+  {
+   "id": "the_anchors_are_not_checked",
+   "old": "    out.extend(\"(c) \" + f for f in ch.check_anchors(root, now))",
+   "new": "    out.extend([])"
+  },
+  {
+   "id": "the_heading_of_a_link_may_change",
+   "old": "                found[(page_of(rel), page_of(path), text)] += 1",
+   "new": "                found[(page_of(rel), page_of(path), None)] += 1"
+  },
+  {
+   "id": "a_part_that_is_not_in_git_is_ignored",
+   "old": "\"ls-files\", \"-z\", \"--cached\", \"--others\", \"--exclude-standard\"",
+   "new": "\"ls-files\", \"-z\", \"--cached\""
+  },
+  {
+   "id": "a_part_is_not_in_the_new_set",
+   "old": "    for p in [doc] + parts:\n        new.update(lines_of(text_now(root, p)))",
+   "new": "    for p in [doc]:\n        new.update(lines_of(text_now(root, p)))"
+  }
+ ]
+}

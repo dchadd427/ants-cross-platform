@@ -6,7 +6,7 @@ bar) shows, and going from one to the other is a class and one render of the pag
 at its cap and web/lobby.html at its line limit.
 
   - the page: the strips (the notices and the Rejoin button) are above both screens, Home's mount is before the Room, the stylesheet and the script are linked, the page opens on Home, a plain visit makes no
-    room, the page calls Home from render(), from the hand-off to the game and from the dialog's inert, and it is still under its line limit;
+    room, the page calls Home from render(), from the hand-off to the game and from the dialog's inert;
   - the folder: exactly home.js and home.css, under their budgets (raw and gzipped), nothing of it in web/front/;
   - the style: which screen shows what, every target at least 44 px, nothing loaded from another site, the pictures are data;
   - the body of Home (the grid that the games and the players list mount into) and the phone's strip: no Yard, no stand-in, no site label read;
@@ -39,7 +39,6 @@ PLAYERS_FILES = ("players.js", "players.css")         # the players list, loaded
 TALK_FILES = ("talk.js", "talk.css")                  # the emoji and microphone buttons of the chat, loaded after the dock: its own budgets and tests are tests/scripts/test_web_home_talk.py
 # (raised on purpose from 39,000 and 11,600 to 40,000 and 12,000 for the top bar's three rules: the account's name beside the badge, My room only while the page holds a room, and their comments; no comment was trimmed)
 HOME_BUDGET, HOME_GZIP_BUDGET = 40 * 1000, 12000     # bytes, raw and gzipped, both files together (about 38,464 and 11,691 now, 37,247 and 11,349 before the top bar's rules; it was about 38,810 and 11,590, with the loaders of the dock and of the Games list, the timers of the hand-off, the narrow logo, the question before Leave room, the steps of the bar for narrow windows and the two compact rows of a phone held sideways; the caps went from 38,000 to 39,000 raw and from 11,300 to 11,600 gzipped because those two rules take about 2,000 bytes raw and 420 gzipped together): web/front/ has no room left, and the Games list and the chat dock load later, with caps of their own
-LINES = 1500                                          # tools/check_hygiene.py: the page's line limit
 
 
 def read(*parts):
@@ -128,9 +127,6 @@ class ThePage(unittest.TestCase):
 
     def test_the_coffee_picture_of_the_footer_that_is_not_shown_on_home_is_lazy(self):
         self.assertRegex(self.page, r'<img src="https://cdn\.buymeacoffee\.com/[^"]*" alt="Buy Me a Coffee" width="217" height="61" crossorigin="anonymous" loading="lazy">')
-
-    def test_the_page_is_under_its_line_limit(self):
-        self.assertLessEqual(len(self.page.split("\n")) - 1, LINES, "tools/check_hygiene.py: the page's line limit")
 
 
 class TheFolder(unittest.TestCase):

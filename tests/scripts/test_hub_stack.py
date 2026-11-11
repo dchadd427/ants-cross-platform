@@ -268,7 +268,6 @@ class TheWiring(unittest.TestCase):
     def test_the_page_is_linked_from_the_readme_once(self):
         readme = read(os.path.join(REPO, "README.md"))
         self.assertEqual(len(re.findall(r"\]\(docs/HUB\.md\)", readme)), 1)
-        self.assertTrue(os.path.getsize(os.path.join(REPO, "docs", "HUB.md")) < 100 * 1024)
 
     def test_the_two_pages_that_are_at_their_size_ceiling_do_not_mention_it(self):
         for name in ("TESTING.md", "SERVER.md"):

@@ -3,17 +3,21 @@
 
 usage: check_hygiene.py [--root DIR] [--list]
 
-Exit 0 when everything is in order, 1 when there are findings (one line each), 2 for a usage error. --list prints the current numbers that the ratchet tables below pin.
+Exit 0 when everything is in order, 1 when there are findings (one line each on stdout), 2 for a usage error. Warnings go to stderr and do not change the exit status (under GITHUB_ACTIONS
+they are ::warning lines, which show on the pull request). --list prints every file over its target size.
 Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --tools and by CI). The checks:
-  1. a document (docs/**/*.md, root *.md) is at most DOC_LIMIT bytes, except the pages of DOC_CEILINGS (ceilings that may only shrink);
-  2. every docs/*.md and docs/<folder>/README.md is reachable from README.md by relative markdown links (a link to a folder reaches its README.md);
+  1. sizes (the numbers are all in tools/size_limits.py): a document (docs/**/*.md, root *.md) is measured in bytes, a test or production file in lines. Over 125% of its base a file
+     fails; from 90% it warns (documents from 75%, the target): split it by topic. The files of SPLIT_PENDING are over the cap and wait for their split: they warn, and a name that is
+     gone or back under the cap fails. A document line over DOC_LINE_WARN_CHARACTERS characters is a warning too;
+  2. every docs/**/*.md is reachable from README.md by relative markdown links (a link to a folder reaches its README.md);
+  2a. every relative link to a heading (file.md#anchor or #anchor) in a tracked .md file names a real heading of that file (GitHub's slugs; a redirect <a id> does not count);
   3. no tracked text file and no tracked path names a private planning document or repository (PRIVATE_NAME_DIGESTS: kept as digests, spelled nowhere; the files of FORBIDDEN_ALLOWED are looked at for these too), and no tracked text file names a commit trailer or a session link (FORBIDDEN), except the files of FORBIDDEN_ALLOWED and the vendored files of VENDORED_CODE;
-  4. a test file has at most TEST_LINES lines and a production file at most PROD_LINES, except the files of LINE_CEILINGS (ceilings that may only shrink);
+  4. (the line limits of code files are check 1);
   5. at most ASSERT_TRUE_DEFINITIONS definitions of the macro ASSERT_TRUE;
   6. every .cpp under src/, tests/ and tools/ is named in a CMakeLists.txt, except CMAKE_EXCEPTIONS;
   7. no tracked path begins with a build folder (build/ or build_*/ at the top: local build output that .gitignore keeps out; it gets in by `git add -f` or a tool that adds everything).
   8. American spelling (AGENTS.md "Spelling"): no tracked text file writes the British spelling of "color" (SPELLING_*: the kept names are allowed by file; the word is built from two halves below, so that this file does not name it);
-Ratchets: a number may never grow. When a page or file shrinks by more than the tolerance, the table must be lowered, so that the gain is kept.
+A page that gets near its limit is split by topic as a pure move (tools/check_doc_move.py), never trimmed or joined to fit.
 """
 import argparse
 import hashlib
@@ -21,24 +25,10 @@ import os
 import re
 import subprocess
 import sys
+import urllib.parse
 
-DOC_LIMIT = 100 * 1024
-DOC_SLACK = 0.05  # a page more than 5% below its ceiling: lower the ceiling
-DOC_CEILINGS = {
-    "docs/NETWORK_PORT.md": 318396,
-    "docs/BOTS.md": 177480,
-    "docs/GAME_REVERSE_ENGINEERING.md": 429658,
-}
-
-TEST_LINES = 2500
-PROD_LINES = 1500
-LINE_SLACK = 0.10  # a file more than 10% below its ceiling: lower the ceiling
-LINE_CEILINGS = {
-    "web/shell.html": 3915,   # lowered from 3927 by the name step (nobody types a name on the game page: its card shows the name and the typed-name code is gone), from 3928 by the picker (the dropdowns are made by web/shape_picker.js), from 3966 by the dropdowns (the markup and the style of the shape buttons are gone) and from 3998 by the one shape table (web/shapes.js); that was raised once from 3989 by the maintainer's word, for the settings menu's loader (docs/GAME_MENU.md): the call, the 8-line antsLoadGameMenu and two help sentences; the panel itself is in web/game_menu.js
-    "tools/map_sweep.cpp": 2626,
-    "src/ants_sim/movement_system.cpp": 1678,
-    "src/ants_sim/sim_engine.cpp": 1533,
-}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import size_limits  # noqa: E402  (every size number of the repository)
 
 ASSERT_TRUE_DEFINITIONS = 2  # tests/common/test_assert.hpp and the throwing ASSERT_TRUE of tests/e2e/e2e_framework.hpp: a third one is a new copy to remove
 
@@ -90,25 +80,70 @@ def is_doc(rel):
     return rel.endswith(".md") and (rel.startswith("docs/") or "/" not in rel)
 
 
-def check_doc_sizes(root, files, limit=DOC_LIMIT, ceilings=None, slack=DOC_SLACK):
-    ceilings = DOC_CEILINGS if ceilings is None else ceilings
+def levels(base):
+    """The sizes of one base (a number of bytes or lines): the target, the split line and the safety cap, as whole numbers (percents are integers, so that no float rounds)."""
+    return {"target": base * size_limits.TARGET_PERCENT // 100, "split": base * size_limits.SPLIT_PERCENT // 100, "cap": base * size_limits.CAP_PERCENT // 100}
+
+
+def measure(root, rel):
+    """(kind, unit, size, base) of a measured file, or None: a document in bytes, a test or production file in lines."""
+    if is_doc(rel):
+        return "document", "B", os.path.getsize(os.path.join(root, rel)), size_limits.DOC_BASE_BYTES
+    kind, base = kind_of(rel)
+    if kind:
+        return kind, "lines", line_count(read_bytes(root, rel)), base
+    return None
+
+
+def percent(size, base):
+    return int(size * 100 / base + 0.5)
+
+
+def num(n):
+    return format(n, ",")
+
+
+def check_sizes(root, files, pending=None):
+    """(errors, warnings): the sizes of every document and code file against tools/size_limits.py. A warning is (file, text)."""
+    pending = size_limits.SPLIT_PENDING if pending is None else pending
+    errors, warnings = [], []
+    fileset = set(files)
+    for rel in files:
+        got = measure(root, rel)
+        if not got:
+            continue
+        kind, unit, size, base = got
+        at = levels(base)
+        what = "%s %s, %d%% of %s" % (num(size), unit, percent(size, base), num(base))
+        advice = "split it by topic (target %s)" % num(at["target"])
+        if rel in pending:
+            if size <= at["cap"]:
+                errors.append("%s: %s %s is no longer over the safety cap %s: remove it from SPLIT_PENDING (tools/size_limits.py)" % (rel, num(size), unit, num(at["cap"])))
+            else:
+                warnings.append((rel, "%s: %s (over the safety cap %s: it waits in SPLIT_PENDING)" % (what, advice, num(at["cap"]))))
+        elif size > at["cap"]:
+            errors.append("%s: %s %s is above the safety cap %s (split it by topic as a pure move: tools/check_doc_move.py)" % (rel, num(size), unit, num(at["cap"])))
+        elif size >= at["split"] or (kind == "document" and size > at["target"]):
+            warnings.append((rel, "%s: %s" % (what, advice)))
+    for rel in sorted(pending):
+        if rel not in fileset:
+            errors.append("%s: in SPLIT_PENDING but not a tracked file: remove it from the set (tools/size_limits.py)" % rel)
+        elif not measure(root, rel):
+            errors.append("%s: in SPLIT_PENDING but neither a document nor a code file that is measured: remove it from the set" % rel)
+    return errors, warnings
+
+
+def check_long_lines(root, files, limit=None):
+    """Warnings (file, text): a document with lines over `limit` characters (agent readers may cut them)."""
+    limit = size_limits.DOC_LINE_WARN_CHARACTERS if limit is None else limit
     out = []
     for rel in files:
         if not is_doc(rel):
             continue
-        size = os.path.getsize(os.path.join(root, rel))
-        if rel in ceilings:
-            if size > ceilings[rel]:
-                out.append("%s: %d bytes is above its ceiling %d (the page may only shrink; split it)" % (rel, size, ceilings[rel]))
-            elif size < ceilings[rel] * (1 - slack):
-                out.append("%s: %d bytes is more than %d%% below its ceiling %d: lower the ceiling to %d" % (rel, size, round(slack * 100), ceilings[rel], size))
-            if ceilings[rel] <= limit:
-                out.append("%s: its ceiling %d is within the limit %d: remove it from the table" % (rel, ceilings[rel], limit))
-        elif size > limit:
-            out.append("%s: %d bytes is above the document limit %d (split it)" % (rel, size, limit))
-    for rel in ceilings:
-        if rel not in files:
-            out.append("%s: in the ceiling table but not a tracked file: remove it from the table" % rel)
+        long = [(len(line), n) for n, line in enumerate(read_bytes(root, rel).decode("utf-8", "replace").splitlines(), 1) if len(line) > limit]
+        if long:
+            top = max(long)
+            out.append((rel, "%d line(s) over %s characters (the longest has %s, line %d): a reader may cut them; reflow in a change that moves no text" % (len(long), num(limit), num(top[0]), top[1])))
     return out
 
 
@@ -151,12 +186,84 @@ def check_reachable(root, files, start="README.md"):
                 todo.append(nxt)
     out = []
     for rel in files:
-        if not rel.endswith(".md") or not rel.startswith("docs/"):
+        if rel.endswith(".md") and rel.startswith("docs/") and rel not in seen:
+            out.append("%s: not reachable from README.md by relative links (link it from README.md or from a page README.md links)" % rel)
+    return out
+
+
+FENCE = re.compile(r"^ {0,3}(```|~~~)")
+ATX_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
+INLINE_CODE = re.compile(r"(`+)(.+?)\1")
+
+
+def prose_lines(text):
+    """(number, line) of the lines of a markdown text that are outside fenced code blocks."""
+    fence = None
+    for n, line in enumerate(text.splitlines(), 1):
+        m = FENCE.match(line)
+        if fence:
+            if m and m.group(1) == fence:
+                fence = None
             continue
-        parts = rel.split("/")
-        if len(parts) == 2 or parts[-1] == "README.md":
-            if rel not in seen:
-                out.append("%s: not reachable from README.md by relative links (link it from README.md or from a page README.md links)" % rel)
+        if m:
+            fence = m.group(1)
+            continue
+        yield n, line
+
+
+def slug_of(heading):
+    """GitHub's anchor of a heading's text, before the -1, -2 of a repeated one: the rendered text, lower case, with punctuation removed and each space a hyphen."""
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", heading)      # a link or an image is its text
+    text = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", text)
+
+    def markup(piece):                                                 # (outside code: an HTML tag goes, `*` and an underscore that marks emphasis go, one inside a word stays)
+        return re.sub(r"(?<!\w)_|_(?!\w)", "", re.sub(r"<[^>]*>", "", piece).replace("*", ""))
+    pieces, at = [], 0
+    for m in INLINE_CODE.finditer(text):                               # (the text of a code span is kept as written)
+        pieces += [markup(text[at:m.start()]), m.group(2).strip()]
+        at = m.end()
+    pieces.append(markup(text[at:]))
+    return re.sub(r"[^\w\- ]", "", "".join(pieces).strip().lower()).replace(" ", "-")
+
+
+def headings_of(text):
+    """The anchors of the headings of a markdown text (a repeated one gets -1, -2 ...). A redirect <a id> is not one."""
+    seen, out = {}, set()
+    for _, line in prose_lines(text):
+        m = ATX_HEADING.match(line)
+        if m:
+            slug = slug_of(m.group(1))
+            count = seen.get(slug, 0)
+            seen[slug] = count + 1
+            out.add(slug if count == 0 else "%s-%d" % (slug, count))
+    return out
+
+
+def check_anchors(root, files):
+    """Every relative link `file.md#anchor` or `#anchor` in a tracked .md file names a real heading of that file."""
+    fileset = set(files)
+    anchors = {}
+    def anchors_of(rel):
+        if rel not in anchors:
+            anchors[rel] = headings_of(read_bytes(root, rel).decode("utf-8", "replace"))
+        return anchors[rel]
+    out = []
+    for rel in files:
+        if not rel.endswith(".md"):
+            continue
+        here = os.path.dirname(rel)
+        for n, line in prose_lines(read_bytes(root, rel).decode("utf-8", "replace")):
+            line = INLINE_CODE.sub("", line)
+            for target in LINK.findall(line) + REFDEF.findall(line):
+                if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or "#" not in target:
+                    continue
+                name, anchor = target.split("#", 1)
+                anchor = urllib.parse.unquote(anchor.split("?")[0]).lower()
+                path = rel if not name else os.path.normpath(os.path.join(here, name.split("?")[0])).replace(os.sep, "/")
+                if not anchor or path not in fileset or not path.endswith(".md"):
+                    continue
+                if anchor not in anchors_of(path):
+                    out.append("%s:%d: the link to %s#%s names no heading (a redirect <a id> does not count; check the heading's slug)" % (rel, n, path, anchor))
     return out
 
 
@@ -227,33 +334,10 @@ def check_forbidden(root, files, allowed=FORBIDDEN_ALLOWED, digests=PRIVATE_NAME
 def kind_of(rel):
     ext = os.path.splitext(rel)[1]
     if rel.startswith("tests/") and ext in (".cpp", ".hpp", ".js", ".py"):
-        return "test", TEST_LINES
+        return "test", size_limits.TEST_BASE_LINES
     if rel.startswith(("src/", "include/", "web/", "tools/")) and ext in (".cpp", ".hpp", ".js", ".html", ".py"):
-        return "production", PROD_LINES
+        return "production", size_limits.PRODUCTION_BASE_LINES
     return None, None
-
-
-def check_lines(root, files, ceilings=None, slack=LINE_SLACK):
-    ceilings = LINE_CEILINGS if ceilings is None else ceilings
-    out = []
-    for rel in files:
-        kind, limit = kind_of(rel)
-        if not kind:
-            continue
-        n = line_count(read_bytes(root, rel))
-        if rel in ceilings:
-            if n > ceilings[rel]:
-                out.append("%s: %d lines is above its ceiling %d (a %s file over %d lines is split, never grown)" % (rel, n, ceilings[rel], kind, limit))
-            elif n <= limit:
-                out.append("%s: %d lines no longer exceeds %d: remove it from the table" % (rel, n, limit))
-            elif n < ceilings[rel] * (1 - slack):
-                out.append("%s: %d lines is more than %d%% below its ceiling %d: lower the ceiling to %d" % (rel, n, round(slack * 100), ceilings[rel], n))
-        elif n > limit:
-            out.append("%s: %d lines is above the %s limit %d (split it)" % (rel, n, kind, limit))
-    for rel in ceilings:
-        if rel not in files:
-            out.append("%s: in the line ceiling table but not a tracked file: remove it from the table" % rel)
-    return out
 
 
 ASSERT_DEF = re.compile(r"^\s*#\s*define\s+ASSERT_TRUE\b", re.M)
@@ -361,27 +445,34 @@ def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
     return out
 
 
-def run_checks(root):
+def run_all(root):
+    """(errors, warnings) of every check; a warning is (file, text)."""
     files = tracked_files(root)
-    return (check_doc_sizes(root, files) + check_reachable(root, files) + check_forbidden(root, files)
-            + check_lines(root, files) + check_assert_true(root, files) + check_cmake(root, files) + check_build_folders(files) + check_spelling(root, files)
-            + check_spelling_table(root, files))
+    size_errors, warnings = check_sizes(root, files)
+    errors = (size_errors + check_reachable(root, files) + check_anchors(root, files) + check_forbidden(root, files) + check_assert_true(root, files) + check_cmake(root, files)
+              + check_build_folders(files) + check_spelling(root, files) + check_spelling_table(root, files))
+    return errors, warnings + check_long_lines(root, files)
+
+
+def warning_lines(warnings, github=None):
+    """The lines that print the warnings: `warning: FILE: TEXT`, or a ::warning line (it shows on the pull request) under GITHUB_ACTIONS."""
+    github = bool(os.environ.get("GITHUB_ACTIONS")) if github is None else github
+    return [("::warning file=%s::%s" % (rel, text)) if github else ("warning: %s: %s" % (rel, text)) for rel, text in warnings]
 
 
 def list_numbers(root):
     files = tracked_files(root)
-    lines = ["documents (bytes, largest first; limit %d):" % DOC_LIMIT]
-    docs = sorted(((os.path.getsize(os.path.join(root, r)), r) for r in files if is_doc(r)), reverse=True)
-    lines += ["  %8d  %s%s" % (s, r, "  (ceiling %d)" % DOC_CEILINGS[r] if r in DOC_CEILINGS else "") for s, r in docs[:8]]
-    lines.append("files over the line limits (tests %d, production %d):" % (TEST_LINES, PROD_LINES))
     over = []
-    for r in files:
-        kind, limit = kind_of(r)
-        if kind:
-            n = line_count(read_bytes(root, r))
-            if n > limit:
-                over.append((n, r))
-    lines += ["  %6d  %s%s" % (n, r, "  (ceiling %d)" % LINE_CEILINGS[r] if r in LINE_CEILINGS else "") for n, r in sorted(over, reverse=True)]
+    for rel in files:
+        got = measure(root, rel)
+        if got and got[2] > levels(got[3])["target"]:
+            over.append((percent(got[2], got[3]), got, rel))
+    lines = ["files over their target (documents %s bytes, production %s lines, tests %s lines; the target is %d%%, the split line %d%%, the safety cap %d%%; largest first):"
+             % (num(size_limits.DOC_BASE_BYTES), num(size_limits.PRODUCTION_BASE_LINES), num(size_limits.TEST_BASE_LINES), size_limits.TARGET_PERCENT, size_limits.SPLIT_PERCENT, size_limits.CAP_PERCENT)]
+    for pct, (kind, unit, size, base), rel in sorted(over, reverse=True):
+        at = levels(base)
+        state = "over the cap, waiting in SPLIT_PENDING" if rel in size_limits.SPLIT_PENDING else "over the cap" if size > at["cap"] else "split it now" if size >= at["split"] else "over the target"
+        lines.append("  %9s %-5s %5d%%  %s  (%s)" % (num(size), unit, pct, rel, state))
     lines.append("ASSERT_TRUE definitions: %d (constant %d)" % (assert_true_count(root, files), ASSERT_TRUE_DEFINITIONS))
     return lines
 
@@ -389,7 +480,7 @@ def list_numbers(root):
 def main(argv):
     parser = argparse.ArgumentParser(description="Repository hygiene check (see the top of this file).")
     parser.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."), help="the repository (default: this tool's)")
-    parser.add_argument("--list", action="store_true", help="print the current numbers that the ratchet tables pin, and exit")
+    parser.add_argument("--list", action="store_true", help="print every file over its target size, and exit")
     try:
         args = parser.parse_args(argv[1:])
     except SystemExit as e:
@@ -401,7 +492,9 @@ def main(argv):
     if args.list:
         print("\n".join(list_numbers(root)))
         return 0
-    findings = run_checks(root)
+    findings, warnings = run_all(root)
+    for line in warning_lines(warnings):
+        print(line, file=sys.stderr)
     for f in findings:
         print(f)
     return 1 if findings else 0
