@@ -145,7 +145,7 @@ async function flows() {
             const look = (page) => page.evaluate(() => {
                 const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)]; };
                 const main = document.getElementById('hmain'), bar = document.querySelector('.hbar'), pop = document.querySelector('.gpop'), chat = document.querySelector('.gc'), tabs = document.querySelector('.htabs'), shown = (e) => !!e && e.getClientRects().length > 0;
-                const covered = [...document.querySelectorAll('.gpop .gjoin, .gpop .gcode input')].filter((b) => {          // (a button that shows in the list's own window, and is under something else)
+                const covered = [...document.querySelectorAll('.gpop .gjoin, .gpop .gcodelink')].filter((b) => {          // (a button that shows in the list's own window, and is under something else)
                     const q = b.getBoundingClientRect(), p = document.querySelector('.gpbody').getBoundingClientRect(); if (q.top < p.top || q.bottom > p.bottom || !shown(pop)) return false;
                     const top = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !(top === b || b.contains(top));
                 }).length;
@@ -183,13 +183,13 @@ async function flows() {
                 for (const size of [['desktop', 1280, 800], ['phone', 390, 844], ['side', 844, 390]]) {
                     const empty = await newPage(browser, none, 'Maple', size, '/', true), long = await newPage(browser, many, 'Maple', size, '/', true);
                     await empty.waitForSelector('.gpop .gempty:not([hidden])'); await long.waitForSelector('.gpop .gitem'); await long.waitForSelector('.gc', { state: 'attached' });
-                    check('' + size[0] + ': no open games shows the empty state (words only, no Quick host or Quick join: the bar has them) and Join by code in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), b = [...p.querySelectorAll('.gempty button')]; return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcode input') && /none waiting/.test(p.textContent) && b.length === 0; }));
+                    check('' + size[0] + ': no open games shows the empty state (words only, no Quick host or Quick join: the bar has them) and Have a code? in the docked list', await empty.evaluate(() => { const p = document.querySelector('.gpop'), b = [...p.querySelectorAll('.gempty button')]; return p.textContent.indexOf('No open games right now.') !== -1 && !!p.querySelector('.gcodelink') && /none waiting/.test(p.textContent) && b.length === 0; }));
                     const m = await long.evaluate(async () => {
                         const p = document.querySelector('.gpop'), body = p.querySelector('.gpbody'), q = p.getBoundingClientRect(), y = document.getElementById('hmain').getBoundingClientRect(); const scrolls = body.scrollHeight > body.clientHeight + 4;
-                        body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcode input'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
+                        body.scrollTop = body.scrollHeight; await new Promise((r) => setTimeout(r, 50)); const c = p.querySelector('.gcodelink'), cr = c.getBoundingClientRect(), top = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2), last = [...p.querySelectorAll('.gjoin')].pop(), lr = last.getBoundingClientRect(), lt = document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2);
                         return { scrolls, bottom: q.bottom <= y.bottom + 1, codeReachable: top === c, lastReachable: lt === last || last.contains(lt), count: document.querySelectorAll('.gpop .gitem').length, wide: document.documentElement.scrollWidth <= window.innerWidth };
                     });
-                    check('' + size[0] + ': twelve games scroll inside the list (it stays in the body), the last Join can be reached, Join by code is in view at the foot, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.lastReachable && m.count === 12 && m.wide, JSON.stringify(m));
+                    check('' + size[0] + ': twelve games scroll inside the list (it stays in the body), the last Join can be reached, Have a code? stays in the heading, nothing sideways', m.scrolls && m.bottom && m.codeReachable && m.lastReachable && m.count === 12 && m.wide, JSON.stringify(m));
                     await empty.context().close(); await long.context().close();
                 }
                 none.close(); many.close();
@@ -270,7 +270,7 @@ async function flows() {
             await a.click('.gyes');
             await a.waitForSelector('.gpnote:not([hidden])');
             check('"Leave and join" into a game that is gone: the list is open and says "That game is not open any more." (and the room that the page is in is kept)', !(await a.evaluate(() => document.querySelector('.gpop').hidden)) && (await textOf(a, '.gpnote')) === 'That game is not open any more.' && await screenOf(a) === 'home' && (await a.evaluate(() => !!document.getElementById('code').textContent)));
-            await a.fill('.gcode input', 'zzzzzz');
+            await a.click('.gcodelink'); await a.fill('.gcode input', 'zzzzzz');
             await a.click('.gcgo');
             await a.waitForSelector('.gconfirm');
             await a.click('.gyes');
@@ -370,7 +370,7 @@ async function flows() {
             await page.click('.gjoin');
             check('Join in the list with the Rejoin offer up: the same words and the same Rejoin, the list stays where it is (docked in the body), no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => { const p = document.querySelector('.gpop'); return p.classList.contains('gdock') ? !p.hidden : p.hidden; })) && sockets.length === 0);
             await page.click('.gtoast .btn:last-child');
-            await page.click('.hchip.games'); await page.waitForSelector('.gcode input');
+            await page.click('.hchip.games'); await page.waitForSelector('.gcodelink'); await page.click('.gcodelink'); await page.waitForSelector('.gcode input');
             await page.fill('.gcode input', 'abc234');
             await page.click('.gcgo');
             check('Join by code with the Rejoin offer up: the same words, no name card, no socket', (await said()) === 'Your match is running.RejoinOK' && (await page.evaluate(() => document.getElementById('name-step').hidden)) && sockets.length === 0);
