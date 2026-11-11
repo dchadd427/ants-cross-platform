@@ -945,7 +945,7 @@ async function codeBox(env) {
     const box = await codeBox(env);
     check('Join by code is in the Games list: a field (empty, with the cursor in the list) and a button', box.input.value === '' && box.go.textContent === 'Join' && box.hint.textContent === '');
     for (const [what, typed, why] of [['nothing', '', 'Type or paste the code first.'], ['a line of blanks', '   \n', 'Type or paste the code first.'], ['text that is no code', 'not a code!', 'A room code has letters and numbers only, like k7m 2xq.'], ['a path', 'k7m2/xq', 'A room code has letters and numbers only, like k7m 2xq.'],
-                                       ['an accent', 'abé', 'A room code has letters and numbers only, like k7m 2xq.'], ['33 characters', 'x'.repeat(33), 'A room code has letters and numbers only, like k7m 2xq.'], ['an address', '?room=x&seat=1', 'A room code has letters and numbers only, like k7m 2xq.']]) {
+                                       ['an accent', 'abé', 'A room code has letters and numbers only, like k7m 2xq.'], ['33 characters', 'x'.repeat(33), 'A room code has letters and numbers only, like k7m 2xq.'], ['an address', '?seat=1&x=1', 'A room code has letters and numbers only, like k7m 2xq.']]) {
         box.input.value = typed;
         box.input.fire('input', {});
         box.go.click();

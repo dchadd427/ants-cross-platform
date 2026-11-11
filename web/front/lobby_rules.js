@@ -82,7 +82,8 @@
     // A code that was typed, pasted or linked: blanks and capital letters do not matter ("K7M 2xq" is k7m2xq), and what is left must be 1 to 32 letters, digits, - and _ (a code that the server
     // takes: the older codes were up to eight characters and keep working). { ok: true, code } or { ok: false, why } (why is the line under the field).
     function typedCode(text) {
-        var code = typeof text === 'string' ? text.replace(/\s+/g, '').toLowerCase() : '';
+        var link = typeof text === 'string' ? /room=([^&#\s]*)/i.exec(text) : null, value = link ? link[1] : text;       // (a pasted room link has the code after room=)
+        var code = typeof value === 'string' ? value.replace(/\s+/g, '').toLowerCase() : '';
         if (code === '') return { ok: false, why: 'Type or paste the code first.' };
         if (!/^[a-z0-9_-]{1,32}$/.test(code)) return { ok: false, why: 'A room code has letters and numbers only, like k7m 2xq.' };
         return { ok: true, code: code };
