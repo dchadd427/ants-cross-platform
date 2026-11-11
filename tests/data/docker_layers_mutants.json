@@ -1,0 +1,365 @@
+{
+ "note": "Mutants of the order of the layers of Dockerfile and Dockerfile.server (tests/scripts/test_docker_layers.py), of the comparison of the images' files (tools/image_manifest.py, tools/image_files_diff.sh and the CI job: tests/scripts/test_image_files_diff.py) and of the replay of the Dockerfile on a machine without Docker (tools/web_without_docker.py). Each must be noticed by the test named in it. No build: python3 tools/mutate.py tests/data/docker_layers_mutants.json --keep-going --jobs 1, from the repository folder.",
+ "mutants": [
+  {
+   "id": "web_version_is_copied_before_the_compile",
+   "file": "Dockerfile",
+   "old": "COPY CMakeLists.txt ./\n",
+   "new": "COPY CMakeLists.txt VERSION ./\n",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_compile_reads_only_the_build_files_and_the_sources"
+  },
+  {
+   "id": "web_pages_are_copied_before_the_compile",
+   "file": "Dockerfile",
+   "old": "COPY src/ ./src/\n\n# The stubs",
+   "new": "COPY src/ ./src/\nCOPY web/ ./web/\n\n# The stubs",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_compile_reads_only_the_build_files_and_the_sources"
+  },
+  {
+   "id": "web_data_is_copied_before_the_compile",
+   "file": "Dockerfile",
+   "old": "COPY src/ ./src/\n\n# The stubs",
+   "new": "COPY src/ ./src/\nCOPY Original-Ants/ ./Original-Ants/\n\n# The stubs",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_compile_reads_only_the_build_files_and_the_sources"
+  },
+  {
+   "id": "web_build_argument_is_known_before_the_compile",
+   "file": "Dockerfile",
+   "old": "WORKDIR /src\nENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G\n\nCOPY CMakeLists.txt",
+   "new": "WORKDIR /src\nARG ANTS_BUILD_ID=\nENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G\n\nCOPY CMakeLists.txt",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_no_build_argument_and_no_page_is_known_before_the_link"
+  },
+  {
+   "id": "web_first_compile_has_no_cache_mount",
+   "file": "Dockerfile",
+   "old": "# Configure and compile using default Makefiles\nRUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \\\n",
+   "new": "# Configure and compile using default Makefiles\nRUN \\\n",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_every_compile_has_the_ccache_mount_and_the_wrapper"
+  },
+  {
+   "id": "web_link_keeps_the_old_outputs",
+   "file": "Dockerfile",
+   "old": "    rm -f build_web/src/ants_app/index.html build_web/src/ants_app/index.js build_web/src/ants_app/index.wasm build_web/src/ants_app/index.data && \\\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_link_is_made_again_with_the_outputs_removed_and_the_version_checked"
+  },
+  {
+   "id": "web_stale_header_is_not_noticed",
+   "file": "Dockerfile",
+   "old": "    grep -q \"\\\"v$(head -n 1 VERSION | tr -d '[:space:]')\\\"\" build_web/generated/ants_app/version.hpp && \\\n    cmake --build build_web -j$(nproc) && \\\n    test -s",
+   "new": "    cmake --build build_web -j$(nproc) && \\\n    test -s",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_link_is_made_again_with_the_outputs_removed_and_the_version_checked"
+  },
+  {
+   "id": "web_stamps_go_into_the_template",
+   "file": "Dockerfile",
+   "old": "build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "new": "web/shell.html web/lobby.html web/matches.html web/match.html web/live.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_stamps_go_into_the_game_page_that_the_link_made_not_into_the_template"
+  },
+  {
+   "id": "web_pages_come_before_the_link",
+   "file": "Dockerfile",
+   "old": "# The real version, template of the game page and data package:",
+   "new": "COPY web/ ./web/\n\n# The real version, template of the game page and data package:",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_pages_the_stamps_the_build_id_and_the_rest_come_after_the_link"
+  },
+  {
+   "id": "web_warm_stage_copies_more_than_the_program",
+   "file": "Dockerfile",
+   "old": "COPY docker/emsdk_warm.cpp /warm/emsdk_warm.cpp",
+   "new": "COPY docker/ /warm/",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_warm_stage_depends_on_the_version_and_one_program_only"
+  },
+  {
+   "id": "web_warm_stage_has_no_ttf_port",
+   "file": "Dockerfile",
+   "old": "emsdk_warm.cpp -sUSE_SDL=2 -sUSE_SDL_TTF=2 -sALLOW_MEMORY_GROWTH=1",
+   "new": "emsdk_warm.cpp -sUSE_SDL=2 -sALLOW_MEMORY_GROWTH=1",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_ports_are_the_ones_of_the_game"
+  },
+  {
+   "id": "web_warm_core_flavour_has_no_wasm_exceptions",
+   "file": "Dockerfile",
+   "old": "-Oz -flto -fwasm-exceptions -std=c++17 -DWARM_CORE",
+   "new": "-Oz -flto -std=c++17 -DWARM_CORE",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_map_core_flavour_has_the_compile_and_link_options_of_the_core"
+  },
+  {
+   "id": "web_runner_exposes_another_port",
+   "file": "Dockerfile",
+   "old": "EXPOSE 80\n",
+   "new": "EXPOSE 80 443\n",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_runner_stage_copies_the_same_builder_outputs_and_runs_as_before"
+  },
+  {
+   "id": "web_runner_copies_another_builder_output",
+   "file": "Dockerfile",
+   "old": "COPY --from=builder /src/live.html /usr/share/nginx/html/live.html",
+   "new": "COPY --from=builder /src/live.html /usr/share/nginx/html/live.html\nCOPY --from=builder /src/VERSION /usr/share/nginx/html/VERSION",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_runner_stage_copies_the_same_builder_outputs_and_runs_as_before"
+  },
+  {
+   "id": "web_syntax_line_is_gone",
+   "file": "Dockerfile",
+   "old": "# syntax=docker/dockerfile:1\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_every_compile_has_the_ccache_mount_and_the_wrapper"
+  },
+  {
+   "id": "server_tools_are_copied_again",
+   "file": "Dockerfile.server",
+   "old": "COPY third_party/ ./third_party/\n",
+   "new": "COPY third_party/ ./third_party/\nCOPY tools/ ./tools/\n",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_first_compile_reads_the_build_files_and_the_sources_only"
+  },
+  {
+   "id": "server_version_is_copied_before_the_compile",
+   "file": "Dockerfile.server",
+   "old": "COPY CMakeLists.txt ./\n",
+   "new": "COPY CMakeLists.txt VERSION ./\n",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_first_compile_reads_the_build_files_and_the_sources_only"
+  },
+  {
+   "id": "server_tools_are_not_left_out_of_cmake",
+   "file": "Dockerfile.server",
+   "old": " -DBUILD_TESTS=OFF -DANTS_BUILD_TOOLS=OFF &&",
+   "new": " -DBUILD_TESTS=OFF &&",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_first_compile_reads_the_build_files_and_the_sources_only"
+  },
+  {
+   "id": "server_stale_header_is_not_noticed",
+   "file": "Dockerfile.server",
+   "old": "    grep -q \"\\\"v$(head -n 1 VERSION | tr -d '[:space:]')\\\"\" build/generated/ants_app/version.hpp && \\\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_second_compile_checks_that_the_header_has_the_real_version"
+  },
+  {
+   "id": "server_second_compile_has_no_cache_mount",
+   "file": "Dockerfile.server",
+   "old": "COPY VERSION ./VERSION\nRUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-server \\\n",
+   "new": "COPY VERSION ./VERSION\nRUN \\\n",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_compiles_have_the_cache_mount_and_ccache_is_installed"
+  },
+  {
+   "id": "server_uses_the_web_cache",
+   "file": "Dockerfile.server",
+   "old": "id=ants-ccache-server \\\n    ccache -z",
+   "new": "id=ants-ccache-web \\\n    ccache -z",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_compiles_have_the_cache_mount_and_ccache_is_installed"
+  },
+  {
+   "id": "server_runner_runs_as_root",
+   "file": "Dockerfile.server",
+   "old": "USER ants\n",
+   "new": "USER root\n",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_runner_stage_is_what_it_was"
+  },
+  {
+   "id": "server_build_id_comes_before_the_version",
+   "file": "Dockerfile.server",
+   "old": "# The real version (the file VERSION):",
+   "new": "ARG ANTS_BUILD_ID=\n\n# The real version (the file VERSION):",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_version_comes_after_the_first_compile_and_before_the_build_id"
+  },
+  {
+   "id": "tools_option_is_off_by_default",
+   "file": "CMakeLists.txt",
+   "old": "replay_tool, lvl_tool)\" ON)",
+   "new": "replay_tool, lvl_tool)\" OFF)",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_option_is_on_by_default"
+  },
+  {
+   "id": "tools_may_be_left_out_of_a_build_with_tests",
+   "file": "CMakeLists.txt",
+   "old": "if(NOT ANTS_BUILD_TOOLS AND BUILD_TESTS)",
+   "new": "if(FALSE)",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_tools_cannot_be_left_out_of_a_build_with_tests"
+  },
+  {
+   "id": "tools_are_defined_whatever_the_option_says",
+   "file": "CMakeLists.txt",
+   "old": "if(NOT EMSCRIPTEN AND ANTS_BUILD_TOOLS)",
+   "new": "if(NOT EMSCRIPTEN)",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_tree_of_the_image_configures_without_tools_and_follows_the_version"
+  },
+  {
+   "id": "manifest_ignores_the_content",
+   "file": "tools/image_manifest.py",
+   "old": "entry.update(size=len(data), sha256=hashlib.sha256(data).hexdigest())",
+   "new": "entry.update(size=len(data), sha256=\"\")",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_each_kind_of_difference_is_found_and_named"
+  },
+  {
+   "id": "manifest_ignores_the_mode",
+   "file": "tools/image_manifest.py",
+   "old": "\"mode\": \"%o\" % (member.mode & 0o7777)",
+   "new": "\"mode\": \"0\"",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_each_kind_of_difference_is_found_and_named"
+  },
+  {
+   "id": "manifest_ignores_the_owner",
+   "file": "tools/image_manifest.py",
+   "old": "\"uid\": member.uid, \"gid\": member.gid}",
+   "new": "\"uid\": 0, \"gid\": 0}",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_each_kind_of_difference_is_found_and_named"
+  },
+  {
+   "id": "manifest_ignores_the_link_target",
+   "file": "tools/image_manifest.py",
+   "old": "entry[\"target\"] = member.linkname",
+   "new": "entry[\"target\"] = \"\"",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_each_kind_of_difference_is_found_and_named"
+  },
+  {
+   "id": "manifest_does_not_replace_the_build_date_of_the_game_page",
+   "file": "tools/image_manifest.py",
+   "old": "HTML + \"index.html\": (TIME, CACHE, DATE),",
+   "new": "HTML + \"index.html\": (TIME, CACHE),",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_stamps_of_the_game_page_do_not_count_and_nothing_else_of_it"
+  },
+  {
+   "id": "manifest_ignores_every_page_stamp",
+   "file": "tools/image_manifest.py",
+   "old": "STAMPED.get(path, ())",
+   "new": "STAMPED.get(path, ()) if path in STAMPED else (TIME, CACHE, DATE)",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_stamp_in_a_page_that_is_not_listed_is_a_difference"
+  },
+  {
+   "id": "manifest_does_not_count_the_stamps",
+   "file": "tools/image_manifest.py",
+   "old": "                if path in STAMPED:\n                    entry[\"stamps\"] = stamps\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_stamps_of_the_game_page_do_not_count_and_nothing_else_of_it"
+  },
+  {
+   "id": "compare_passes_with_a_difference",
+   "file": "tools/image_manifest.py",
+   "old": "return 1 if found else 0",
+   "new": "return 0",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_compare_exits_with_1_for_a_difference_and_0_for_none"
+  },
+  {
+   "id": "an_empty_export_is_accepted",
+   "file": "tools/image_manifest.py",
+   "old": "MINIMUM_ENTRIES = 20 ",
+   "new": "MINIMUM_ENTRIES = 0 ",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_an_export_with_hardly_any_file_is_refused"
+  },
+  {
+   "id": "configuration_leaves_out_the_user",
+   "file": "tools/image_manifest.py",
+   "old": "CONFIG_KEYS = (\"User\", ",
+   "new": "CONFIG_KEYS = (",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_configuration_keeps_what_decides_how_the_image_runs"
+  },
+  {
+   "id": "script_builds_with_different_ids",
+   "file": "tools/image_files_diff.sh",
+   "old": "docker build -f \"$dockerfile\" --build-arg ANTS_BUILD_ID=image-diff -t",
+   "new": "docker build -f \"$dockerfile\" -t",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_same_images_pass_with_stamps_that_differ"
+  },
+  {
+   "id": "script_does_not_fail_on_a_difference_of_files",
+   "file": "tools/image_files_diff.sh",
+   "old": "--label \"$name files\" || rc=$?\n    [ \"$rc\" -ge 2 ] && return 2\n    [ \"$rc\" = 1 ] && fail=1",
+   "new": "--label \"$name files\" || rc=$?\n    [ \"$rc\" -ge 2 ] && return 2",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_changed_byte_fails_and_names_the_file"
+  },
+  {
+   "id": "script_does_not_compare_the_configuration",
+   "file": "tools/image_files_diff.sh",
+   "old": "--label \"$name configuration\" || rc=$?",
+   "new": "--label \"$name configuration\" > /dev/null || rc=0",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_changed_configuration_fails"
+  },
+  {
+   "id": "script_compares_the_image_with_itself",
+   "file": "tools/image_files_diff.sh",
+   "old": "[ \"$which\" = base ] && dockerfile=\"$work/$file.base\"",
+   "new": "[ \"$which\" = base ] && dockerfile=\"$file\"",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_same_images_pass_with_stamps_that_differ"
+  },
+  {
+   "id": "script_passes_when_a_build_fails",
+   "file": "tools/image_files_diff.sh",
+   "old": "echo \"image_files_diff: the $which build of the $name image failed\" >&2; return 2",
+   "new": "echo \"image_files_diff: the $which build of the $name image failed\" >&2; return 0",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_a_build_that_fails_is_status_2_and_no_comparison_passes"
+  },
+  {
+   "id": "ci_job_always_compares",
+   "file": ".github/workflows/ci.yml",
+   "old": "        if: steps.decide.outputs.run == 'true'\n        run: bash tools/image_files_diff.sh",
+   "new": "        run: bash tools/image_files_diff.sh",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_it_runs_the_script_against_origin_main_when_a_dockerfile_or_the_check_changed"
+  },
+  {
+   "id": "ci_job_compares_against_another_base",
+   "file": ".github/workflows/ci.yml",
+   "old": "bash tools/image_files_diff.sh --base origin/main",
+   "new": "bash tools/image_files_diff.sh",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_it_runs_the_script_against_origin_main_when_a_dockerfile_or_the_check_changed"
+  },
+  {
+   "id": "the_warm_stage_is_replayed",
+   "file": "tools/web_without_docker.py",
+   "old": "SKIPPED_STAGES = (\"emsdk-warm\",)",
+   "new": "SKIPPED_STAGES = ()",
+   "test": "python3 tests/scripts/test_web_without_docker.py TheReplay",
+   "expect": "test_the_stage_that_only_prepares_the_compiler_is_not_played_and_a_cache_mount_is_run_without_the_mount"
+  },
+  {
+   "id": "any_mount_is_dropped",
+   "file": "tools/web_without_docker.py",
+   "old": "CACHE_MOUNT = re.compile(r\"^(?:--mount=type=cache",
+   "new": "CACHE_MOUNT = re.compile(r\"^(?:--mount=type=[a-z]+",
+   "test": "python3 tests/scripts/test_web_without_docker.py TheDockerfileIsRead",
+   "expect": "test_what_the_tool_cannot_play_is_refused"
+  }
+ ]
+}

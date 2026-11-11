@@ -1,39 +1,89 @@
+# syntax=docker/dockerfile:1
 # =============================================================================
-# Stage 1: Build WebAssembly Target via Emscripten SDK
+# Stage 1: Emscripten's libraries and ports, made once per Emscripten version
 # =============================================================================
-FROM emscripten/emsdk:3.1.58 AS builder
+# Emscripten makes its system libraries (libc, libc++, ...) and fetches and builds its ports (SDL2, SDL2_ttf, FreeType, HarfBuzz) the first time that a program needs them: about 100 seconds of
+# a build that starts from a clean emsdk. This stage does it with a small program (docker/emsdk_warm.cpp) before any file of the game is copied, in the two flavours that CMake builds (the game's
+# flags of src/ants_app/CMakeLists.txt, the map core's of CMakeLists.txt), so that its layers are reused by every build until the version below or the program changes. The build log of the
+# stage after it must show no "generating system library" and no "retrieving port" line. ccache (the compile of the stage after it uses it through EM_COMPILER_WRAPPER) is installed here too.
+FROM emscripten/emsdk:3.1.58 AS emsdk-warm
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ccache && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY docker/emsdk_warm.cpp /warm/emsdk_warm.cpp
+RUN cd /warm && \
+    em++ -O3 -DNDEBUG -std=c++17 emsdk_warm.cpp -sUSE_SDL=2 -sUSE_SDL_TTF=2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 -sMAXIMUM_MEMORY=536870912 -sWASM=1 -sFORCE_FILESYSTEM=1 "-sEXPORTED_RUNTIME_METHODS=['FS','UTF8ToString']" -o warm_game.html && \
+    em++ -Oz -flto -fwasm-exceptions -std=c++17 -DWARM_CORE emsdk_warm.cpp --no-entry -sMODULARIZE=1 -sEXPORT_NAME=createWarm -sENVIRONMENT=web,worker,node -sFILESYSTEM=0 -sALLOW_MEMORY_GROWTH=1 -sMALLOC=emmalloc -sEXPORTED_FUNCTIONS=_warm_core -o warm_core.js && \
+    test -s warm_game.wasm && test -s warm_core.wasm && \
+    rm -rf /warm
+
+# =============================================================================
+# Stage 2: Build WebAssembly Target via Emscripten SDK
+# =============================================================================
+# The layers of this stage are ordered by how often their input changes, so that a release that changes no C++ does not compile the game again:
+#   1. the build files and the sources: the compile reads nothing else (CMakeLists.txt, cmake/, include/, src/; the web build has no third_party/ and no tools/ in it);
+#   2. the file VERSION, web/shell.html and Original-Ants/: only the link reads them (the page's template and the data package). They are stubs in layer 1, which compiles and links with them, and the
+#      real ones replace them here: the version is a constant in a header that CMake generates from VERSION, so the few files that include it (src/ants_app/application*.cpp and main.cpp) are compiled again,
+#      then the game is linked again (the map core is not: nothing of it reads these);
+#   3. everything else (the pages, the stamps, the changelog), below.
+# ccache (a BuildKit cache mount, kept by the host between builds and never part of the image; `RUN --mount` needs BuildKit: docs/BUILD_AND_RUN.md) makes a compile of unchanged sources a copy.
+FROM emsdk-warm AS builder
 
 WORKDIR /src
+ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G
 
-# Copy build files and source code (VERSION is the one source of the version: CMake generates the game's version header from it)
-COPY CMakeLists.txt VERSION ./
+COPY CMakeLists.txt ./
 COPY cmake/ ./cmake/
 COPY include/ ./include/
 COPY src/ ./src/
-COPY web/ ./web/
-COPY Original-Ants/ ./Original-Ants/
 
-# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html (the game page), lobby.html (the front page: its footer) and the three pages of the match history (matches.html, match.html, live.html: their footers), and check the map maker's own version (web/MAPMAKER_VERSION) against web/mapmaker.html
+# The stubs of what only the link reads (CMake checks the format of VERSION; emcc wants {{{ SCRIPT }}} in the template)
+RUN echo 0.0.0 > VERSION && mkdir -p web Original-Ants && echo '{{{ SCRIPT }}}' > web/shell.html && echo stub > Original-Ants/stub.txt
+
+# Configure and compile using default Makefiles
+RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
+    if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER=ccache; ccache -z > /dev/null; fi && \
+    emcmake cmake -B build_web \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_TESTS=OFF && \
+    cmake --build build_web -j$(nproc) && \
+    (ccache -s || true)
+
+# The real version, template of the game page and data package: the link's outputs are removed so that CMake links again (it does not know that these three are inputs of the link)
+RUN rm -rf VERSION web Original-Ants
+COPY VERSION ./VERSION
+COPY web/shell.html ./web/shell.html
+COPY Original-Ants/ ./Original-Ants/
+RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
+    if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER=ccache; ccache -z > /dev/null; fi && \
+    rm -f build_web/src/ants_app/index.html build_web/src/ants_app/index.js build_web/src/ants_app/index.wasm build_web/src/ants_app/index.data && \
+    emcmake cmake -B build_web \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_TESTS=OFF && \
+    grep -q "\"v$(head -n 1 VERSION | tr -d '[:space:]')\"" build_web/generated/ants_app/version.hpp && \
+    cmake --build build_web -j$(nproc) && \
+    test -s build_web/src/ants_app/index.html && test -s build_web/src/ants_app/index.wasm && test -s build_web/src/ants_app/index.data && \
+    (ccache -s || true)
+
+# The three big files of the game are compressed once, here, and nginx sends the compressed copy to a browser that accepts gzip (gzip_static in docker/nginx.conf; the plain files stay, for a browser that does not): compressing
+# index.data (14 MB) and index.wasm (4 MB) again for every request cost nginx half a second and a fifth of a second of one core each time. -9 makes them smaller than nginx's own level 6, -n leaves the name and the time out of the
+# file. The COPY of index.* below takes the .gz files with the rest. The build stops if one is missing or empty.
+RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k "$f" && test -s "$f.gz" || exit 1; done
+
+# The pages of web/ (the front page, the pages of the match history, the map maker), and the stamps of the build that the compile does not read: the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text
+# (the file VERSION) go into the game page that the link made from shell.html (the same sed puts the placeholders of lobby.html, the front page: its footer, and of the three pages of the match history, matches.html, match.html and live.html: their footers),
+# and the map maker's own version (web/MAPMAKER_VERSION) is checked against web/mapmaker.html
+COPY web/ ./web/
 RUN BUILD_TIME=$(date +%s) && \
     GAME_VERSION="v$(head -n 1 VERSION | tr -d '[:space:]')" && \
     MAPMAKER_VERSION="v$(head -n 1 web/MAPMAKER_VERSION | tr -d '[:space:]')" && \
     case "${GAME_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION is not MAJOR.MINOR.PATCH: ${GAME_VERSION}" >&2; exit 1 ;; esac && \
     case "${MAPMAKER_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "MAPMAKER_VERSION is not MAJOR.MINOR.PATCH: ${MAPMAKER_VERSION}" >&2; exit 1 ;; esac && \
     grep -q "id=\"mapmaker-version\">${MAPMAKER_VERSION}<" web/mapmaker.html && \
-    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html web/lobby.html web/matches.html web/match.html web/live.html && \
-    ! grep -q '@@GAME_VERSION@@' web/shell.html web/lobby.html web/matches.html web/match.html web/live.html
-
-# Configure and compile using default Makefiles
-RUN emcmake cmake -B build_web \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTS=OFF
-
-RUN cmake --build build_web -j$(nproc)
-
-# The three big files of the game are compressed once, here, and nginx sends the compressed copy to a browser that accepts gzip (gzip_static in docker/nginx.conf; the plain files stay, for a browser that does not): compressing
-# index.data (14 MB) and index.wasm (4 MB) again for every request cost nginx half a second and a fifth of a second of one core each time. -9 makes them smaller than nginx's own level 6, -n leaves the name and the time out of the
-# file. The COPY of index.* below takes the .gz files with the rest. The build stops if one is missing or empty.
-RUN cd build_web/src/ants_app && for f in index.data index.wasm index.js; do gzip -9 -n -k "$f" && test -s "$f.gz" || exit 1; done
+    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html && \
+    ! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html
 
 # Append dynamic build cache-buster to the index.js script tag (only a <script> tag: the page adds the ?v= to its own script address itself, and a sed over every `src=index.js`
 # gave that one a second ?v=) to prevent stale browser caching, and write the exact size of index.data into the page (the page refuses a download of another size: a captive portal's

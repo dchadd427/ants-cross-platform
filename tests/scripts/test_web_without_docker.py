@@ -88,11 +88,11 @@ class TheDockerfileIsRead(unittest.TestCase):
     def test_the_repositorys_dockerfile_is_read_to_the_end_and_no_step_is_lost(self):
         for op in ("FROM", "COPY", "RUN"):
             self.assertEqual(len([s for s in self.steps if s.op == op]), len(re.findall(r"^%s " % op, self.text, re.M)), op)
-        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1])
+        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2])
         self.assertTrue(all(s.text.strip() for s in self.steps))
 
     def test_the_emscripten_version_is_the_one_of_the_from_line(self):
-        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:(\S+) AS builder", self.text, re.M).group(1))
+        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:(\S+) AS emsdk-warm", self.text, re.M).group(1))
 
     def test_a_dockerfile_without_the_emsdk_image_is_an_error(self):
         with self.assertRaises(wd.ToolError):
@@ -110,12 +110,16 @@ class TheDockerfileIsRead(unittest.TestCase):
         self.assertEqual((step.flags, step.words), ({"from": "builder"}, ["/x/a", "/y/"]))
 
     def test_what_the_tool_cannot_play_is_refused(self):
-        for text in ("ADD x y", "ONBUILD RUN x", "SHELL [\"/bin/bash\", \"-c\"]", "RUN [\"a\", \"b\"]", "COPY [\"a\", \"b\"]", "RUN --mount=type=cache,target=/x true"):
+        for text in ("ADD x y", "ONBUILD RUN x", "SHELL [\"/bin/bash\", \"-c\"]", "RUN [\"a\", \"b\"]", "COPY [\"a\", \"b\"]", "RUN --mount=type=bind,target=/x true", "RUN --network=none true"):
             with self.subTest(text):
                 with self.assertRaises(wd.ToolError):
                     wd.parse_dockerfile("FROM a\n" + text + "\n")
         with self.assertRaises(wd.ToolError):
             wd.parse_dockerfile("RUN true\n")
+
+    def test_a_cache_mount_is_dropped_and_the_command_stays(self):
+        step = wd.parse_dockerfile("FROM a\nRUN --mount=type=cache,target=/root/.ccache,id=x \\\n    --mount=type=cache,target=/y echo one && echo --mount=type=cache true\n")[1]
+        self.assertEqual(step.text, "echo one && echo --mount=type=cache true")
 
     def test_a_heredoc_is_refused_at_its_first_line(self):
         with self.assertRaisesRegex(wd.ToolError, r"line 2: this form of RUN is not supported"):       # (the lines after it would be refused as unknown instructions, which is not the point)
@@ -175,6 +179,14 @@ class TheReplay(Scratch):
 
     def seen(self, fs, *parts):
         return os.path.join(fs, *parts)
+
+    def test_the_stage_that_only_prepares_the_compiler_is_not_played_and_a_cache_mount_is_run_without_the_mount(self):
+        fs, said = self.play("FROM a AS emsdk-warm\nRUN touch /src/made_by_the_warm_stage\nCOPY a.txt /src/warm.txt\n"
+                             "FROM emsdk-warm AS builder\nWORKDIR /src\nRUN --mount=type=cache,target=/root/.ccache,id=x touch made_by_the_builder\n", {"a.txt": "A"})
+        self.assertFalse(os.path.exists(self.seen(fs, "src", "made_by_the_warm_stage")))
+        self.assertFalse(os.path.exists(self.seen(fs, "src", "warm.txt")))
+        self.assertTrue(os.path.exists(self.seen(fs, "src", "made_by_the_builder")))
+        self.assertIn("stage emsdk-warm is not replayed", said)
 
     def test_copy_puts_files_folders_and_patterns_where_docker_does(self):
         fs, _ = self.play("FROM a AS one\nWORKDIR /src\nCOPY a.txt b.txt ./\nCOPY dir/ ./dir/\nCOPY web/f1.* /usr/share/nginx/html/\nCOPY a.txt /src/renamed.txt\nCOPY dir/sub /etc/nginx/conf.d/\n",
@@ -276,7 +288,8 @@ class TheRealDockerfileReplayed(Scratch):
     @classmethod
     def setUpClass(cls):
         cls.base = tempfile.mkdtemp(prefix="ants_wwd_real_")
-        write(os.path.join(cls.base, "bin", "emcmake"), "#!/bin/sh\nmkdir -p build_web\n", 0o755)
+        write(os.path.join(cls.base, "bin", "emcmake"), "#!/bin/sh\nmkdir -p build_web/generated/ants_app\n"
+              "printf 'inline constexpr std::string_view VERSION_STRING = \"v%s\";\\n' \"$(head -n 1 VERSION)\" > build_web/generated/ants_app/version.hpp\n", 0o755)
         write(os.path.join(cls.base, "bin", "cmake"),
               "#!/bin/sh\nout=build_web/src/ants_app\nmkdir -p \"$out\"\n"
               "sed 's|{{{ SCRIPT }}}|<script async type=\"text/javascript\" src=\"index.js\"></script>|' web/shell.html > \"$out/index.html\"\n"

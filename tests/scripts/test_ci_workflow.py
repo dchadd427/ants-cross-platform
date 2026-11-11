@@ -735,8 +735,8 @@ class Structure(unittest.TestCase):
         cls.doc = yaml.safe_load(TEXT)
 
     def test_it_parses_and_the_jobs_are_these(self):
-        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "deploy"])
-        self.assertEqual(self.doc["jobs"]["deploy"]["needs"], ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web"])      # (every other job: the legs too)
+        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "image_files", "deploy"])
+        self.assertEqual(self.doc["jobs"]["deploy"]["needs"], ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "image_files"])      # (every other job: the legs too)
         self.assertEqual(self.doc["jobs"]["deploy"]["permissions"], {"contents": "read", "actions": "read"})
 
     def test_the_triggers(self):

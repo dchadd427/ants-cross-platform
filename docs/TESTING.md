@@ -225,7 +225,7 @@ cmake --build build_e2e
 
 Every pull request, every push to `main` and to `staging`, and every manual run is built and tested by GitHub Actions (`.github/workflows/ci.yml`). A newer push to a branch or pull request cancels the run of the older one.
 
-The five jobs of the table below are the checks that `main` requires, as [`WORKFLOW.md`](WORKFLOW.md#branches-pull-requests-and-releases) describes; the deploy that follows a merge is described under [the deploy job](#the-deploy-job), below.
+The five jobs of the table below are the checks that `main` requires, as [`WORKFLOW.md`](WORKFLOW.md#branches-pull-requests-and-releases) describes; the deploy that follows a merge is described under [the deploy job](#the-deploy-job), below. A sixth job, "Image files unchanged by a Dockerfile change", is not required: for a pull request that changes a Dockerfile it compares every file of the old and new images (`tools/image_files_diff.sh`).
 
 The jobs run side by side and a run takes 11 to 13 minutes (the slowest Windows or macOS job decides; Linux is done in about 7 and the web job in about 6). The time is in the tests, not in the build (the compiler caches make a build a minute), so the Linux and macOS work is shared between jobs that run at the same time, the legs (`Linux tests (...)`, `macOS tests (...)`), and **Linux (GCC)** and **macOS (Apple clang)** are small jobs that fail when any leg failed, was cancelled or did not run. The first job, "Which checks does this change need?", decides on the light checks ([`WORKFLOW.md`](WORKFLOW.md#light-checks-for-web-and-document-pull-requests)): a pull request of documents, web pages (not the lobby page) and their tests only skips macOS and has the Windows jobs report without building.
 

@@ -146,7 +146,7 @@ class TheText(unittest.TestCase):
         self.assertIsNotNone(step)
         self.assertEqual(step.group(1).split(), ["index.data", "index.wasm", "index.js"])          # (-k: the plain files stay; test -s: a missing or empty copy stops the build)
         builder, runner = DOCKERFILE.split("FROM nginx:alpine")
-        self.assertLess(builder.index("RUN cmake --build build_web"), builder.index(step.group(0)))
+        self.assertLess(builder.rindex("cmake --build build_web"), builder.index(step.group(0)))
         self.assertIn("COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/", runner)       # (index.* takes the .gz files along)
         self.assertNotIn("gzip ", runner.replace("gzip_", ""))                                    # (nothing is compressed in the last stage: its gzip is busybox's, and a file there is changed no more)
 

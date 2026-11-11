@@ -28,14 +28,14 @@ DEPLOYS = [
     "third_party/sqlite/sqlite3.c", "third_party/sqlite/sqlite3.h", "third_party/sqlite/CMakeLists.txt",
     "src/ants_app/application.cpp", "web/shell.html", "web/lobby.html", "web/favicon.png", "docker/nginx.conf", "docker/resolve_build_id.sh",
     "Dockerfile", "Dockerfile.server", "Dockerfile.hub", ".dockerignore", "docker-compose.stack.yml", "hub/server.py", "hub/__main__.py", "hub/ws.py",
-    "CHANGELOG.md", "tools/changelog_to_html.py",
+    "CHANGELOG.md", "tools/changelog_to_html.py", "tools/map_atlas.py", "docker/emsdk_warm.cpp",
     "Original-Ants/ants.chd", "Original-Ants/Maps/TINY.LVL", "Original-Ants/INTRO.mp3", "asset_catalog/index.html", "asset_catalog/sprites/s1.png",
 ]
 SKIPS = [
     "third_party/sqlite/README.md", "README.md", "AGENTS.md", "THIRD_PARTY_NOTICES.md", "LICENSE", "docs/WORKFLOW.md", "docs/BOTS.md", "docs/NETWORK_PORT.md",
     "docs/reverse_engineering/notes.txt", ".github/workflows/ci.yml", ".github/dependabot.yml",
     "tests/test_sim/test_sim_rules.cpp", "tests/scripts/test_run_tests.py", "tests/data/edge_scroll_samples.csv", "tests/common/ants_test_paths.hpp", "tests/e2e/e2e_model.hpp",
-    "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh",
+    "tools/check_version_consistency.py", "tools/release.py", "tools/mutate.py", "tools/map_sweep.cpp", "tools/deploy_filter.py", "tools/deploy_wait.py", "tools/deploy_webhook.sh", "tools/image_files_diff.sh", "tools/image_manifest.py",
     "run_tests.sh", "run_tests.bat", "start_game.sh", "start_game.bat", "build_web.sh", ".editorconfig", ".gitignore", ".gitattributes",
     "docs/HUB.md", "tests/scripts/test_hub_ws.py", "tests/scripts/hub_client.py", "tests/data/hub_mutants.json", "hub/__pycache__/ws.cpython-312.pyc",
     "docker-compose.yml", "docker-compose.server.yml", "docker-compose.staging.yml",
@@ -88,11 +88,11 @@ class TheList(unittest.TestCase):
             elif path.endswith(".md") and "/" not in path:
                 self.assertEqual(counts, path == "CHANGELOG.md", "%s (%s)" % (path, why))
             elif top == "tools":
-                self.assertEqual(counts, path == "tools/changelog_to_html.py", "%s (%s)" % (path, why))
+                self.assertEqual(counts, path in ("tools/changelog_to_html.py", "tools/map_atlas.py"), "%s (%s)" % (path, why))      # (the two scripts that the web image runs; no image copies the folder)
 
     def test_the_sources_of_the_dockerfiles_are_derived_from_the_real_files(self):
         sources = [s for s, _ in self.classifier.sources]
-        for expected in ("src/", "include/", "cmake/", "web/", "Original-Ants/", "Original-Ants/Maps/", "tools/", "asset_catalog/", "CHANGELOG.md",
+        for expected in ("src/", "include/", "cmake/", "web/", "Original-Ants/", "Original-Ants/Maps/", "tools/changelog_to_html.py", "tools/map_atlas.py", "asset_catalog/", "CHANGELOG.md",
                          "docker/nginx.conf", "docker/resolve_build_id.sh", "web/favicon.*", "CMakeLists.txt", "VERSION", "third_party/", "hub/"):
             self.assertIn(expected, sources)
         self.assertEqual([s for s in sources if s.startswith("docs")], [])                  # no image copies a document of docs/

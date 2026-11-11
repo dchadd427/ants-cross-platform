@@ -22,11 +22,9 @@ import re
 import subprocess
 import sys
 
-# Copied into a build context and still not in any image. tools/: the server image copies the folder because CMakeLists.txt names the sources of the tools that it does
-# not build; the web image copies the one script that makes the changelog page. .gitattributes and .gitignore: `COPY VERSION .git*` copies them so that the copy works
-# when the context has no .git folder.
+# Copied into a build context and still not in any image. .gitattributes and .gitignore: `COPY VERSION .git*` copies them so that the copy works when the context has no .git folder.
+# (The server image no longer copies tools/ at all, and the web image copies the two scripts that it runs by name, so a file of tools/ counts when a COPY names it and not otherwise.)
 COPIED_UNUSED = (
-    ("tools/", "tools/changelog_to_html.py", "the server image copies tools/ only for CMake; none of it is built there"),
     (".gitattributes", None, "copied only so that COPY VERSION .git* works without a .git folder"),
     (".gitignore", None, "copied only so that COPY VERSION .git* works without a .git folder"),
 )

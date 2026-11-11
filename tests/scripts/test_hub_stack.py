@@ -247,7 +247,7 @@ class TheWiring(unittest.TestCase):
     def test_the_web_job_builds_and_starts_the_image_and_there_is_no_job_for_it(self):
         workflow = read(os.path.join(REPO, ".github", "workflows", "ci.yml"))
         jobs = re.findall(r"(?m)^  ([a-z0-9_-]+):\s*$", workflow[workflow.index("\njobs:"):])
-        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "deploy"])
+        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "image_files", "deploy"])
         web = workflow[workflow.index("\n  web:"):workflow.index("\n  deploy:")]
         step = web[web.index("- name: Build the chat hub image"):]
         step = step[:step.index("\n      # The two stacks")]

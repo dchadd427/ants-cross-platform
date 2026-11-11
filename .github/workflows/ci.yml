@@ -571,9 +571,40 @@ jobs:
           docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html matches.html match.html live.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html play.html lobby.html matches.html match.html live.html'
 
+  # Not one of the five required checks: it runs for a pull request that changes a Dockerfile or this check, and proves that the images' files did not change with it (tools/image_files_diff.sh builds the
+  # web image and the game server's image from origin/main's Dockerfiles and from this tree's, with one build context and one build id, and compares every file and the image's configuration; about 20 minutes).
+  image_files:
+    name: Image files unchanged by a Dockerfile change
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Did a Dockerfile or this check change?
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          run=false
+          if [ "$EVENT" = pull_request ]; then
+            changed=$(git diff --name-only "$BASE_SHA" HEAD)
+            echo "$changed"
+            if echo "$changed" | grep -Eq '^(Dockerfile|Dockerfile\.server|docker/emsdk_warm\.cpp|tools/image_files_diff\.sh|tools/image_manifest\.py)$'; then run=true; fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "compare the images: $run"
+
+      - name: Build the images from origin/main's Dockerfiles and from this tree's, and compare their files
+        if: steps.decide.outputs.run == 'true'
+        run: bash tools/image_files_diff.sh --base origin/main
+
   deploy:
     name: Deploy (Portainer webhook)
-    needs: [changes, linux_tests, linux, macos_tests, macos, windows, web]
+    needs: [changes, linux_tests, linux, macos_tests, macos, windows, web, image_files]
     if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
     runs-on: ubuntu-latest
     # The job may wait for a quiet server for hours (tools/deploy_wait.py waits 300 minutes at the most, whatever DEPLOY_MAX_WAIT_MINUTES says): its limit is above that.

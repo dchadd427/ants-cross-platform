@@ -421,8 +421,8 @@
   {
    "id": "the_first_job_has_no_history",
    "file": ".github/workflows/ci.yml",
-   "old": "          fetch-depth: 0\n          persist-credentials: false\n",
-   "new": "          persist-credentials: false\n",
+   "old": "          fetch-depth: 0\n          persist-credentials: false\n\n      # The decision and every changed file are printed.",
+   "new": "          persist-credentials: false\n\n      # The decision and every changed file are printed.",
    "test": "python3 tests/scripts/test_ci_workflow.py"
   },
   {

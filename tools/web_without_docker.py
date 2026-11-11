@@ -52,6 +52,8 @@ VIRTUAL_ROOTS = ("/src", "/usr/share/nginx/html", "/etc/nginx", "/srv/community-
 BASE_FOLDERS = ("/src", "/usr/share/nginx/html", "/etc/nginx/conf.d")  # what the base images already have (the emsdk image's /src, the nginx image's two)
 HARMLESS_PATHS = ("/dev/null", "/bin/sh", "/usr/bin/env")
 IGNORED = ("EXPOSE", "HEALTHCHECK", "CMD", "ENTRYPOINT", "LABEL", "MAINTAINER", "STOPSIGNAL", "USER")
+SKIPPED_STAGES = ("emsdk-warm",)        # stages that only prepare the compiler's image (system packages, Emscripten's libraries and ports): here the emsdk is installed by ensure_emsdk and the ports by prepare_ports, and nothing is installed on this machine
+CACHE_MOUNT = re.compile(r"^(?:--mount=type=cache(?:,[\w=/.-]+)*\s+)+")      # RUN --mount=type=cache,target=...: BuildKit's cache of the build (ccache); this tool has none, and the command runs as it is without it
 MOUSE = "--blink-settings=primaryPointerType=4,availablePointerTypes=4,primaryHoverType=2,availableHoverTypes=2"       # a fine pointer that hovers: a desktop's
 PORTS_OF_FLAGS = {("USE_SDL", "2"): "sdl2", ("USE_SDL_TTF", "2"): "sdl2_ttf"}   # -sUSE_SDL=2 -sUSE_SDL_TTF=2 of the CMake files; the other ports come from `deps` of the port files
 
@@ -119,7 +121,7 @@ def json_array(text):
 
 
 def parse_dockerfile(text):
-    """[Step] of a Dockerfile. What this tool cannot do (ADD, ONBUILD, SHELL, the exec forms, RUN --mount, heredocs, COPY from an image) is an error, never a step that is left out."""
+    """[Step] of a Dockerfile. What this tool cannot do (ADD, ONBUILD, SHELL, the exec forms, RUN with a flag other than --mount=type=cache, heredocs, COPY from an image) is an error, never a step that is left out."""
     steps, stage = [], -1
     for line, instruction in logical_lines(text):
         match = re.match(r"([A-Za-z]+)\s*(.*)$", instruction, re.S)
@@ -131,6 +133,8 @@ def parse_dockerfile(text):
             continue
         if op not in ("FROM", "ARG", "ENV", "WORKDIR", "COPY", "RUN"):
             raise ToolError("Dockerfile line %d: %s is not supported by this tool (tools/web_without_docker.py: add it, with a test, or build with Docker)" % (line, op))
+        if op == "RUN":
+            rest = CACHE_MOUNT.sub("", rest)            # (a cache mount is dropped: the command is the same without it)
         if json_array(rest) or "<<" in rest or (op == "RUN" and rest.startswith("--")):
             raise ToolError("Dockerfile line %d: this form of %s is not supported by this tool" % (line, op))
         steps.append(Step(line, stage, op, rest))
@@ -275,7 +279,13 @@ class Replay:
     def play(self):
         for folder in BASE_FOLDERS:
             os.makedirs(self.real(folder), exist_ok=True)
+        skipped = set()
         for step in self.steps:
+            if step.op == "FROM" and len(step.words) >= 3 and step.words[1].upper() == "AS" and step.words[2] in SKIPPED_STAGES:
+                skipped.add(step.stage)
+                say("stage %s is not replayed (it only prepares the compiler's image)" % step.words[2])
+            if step.stage in skipped and step.op != "FROM":
+                continue
             getattr(self, "do_" + step.op.lower())(step)
         for name in sorted(set(self.build_args) - self.declared):
             say("warning: --build-arg %s is not an ARG of the Dockerfile" % name)
