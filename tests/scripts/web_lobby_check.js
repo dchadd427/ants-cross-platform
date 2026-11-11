@@ -134,7 +134,7 @@ try {
     const FFA = { value: 'ffa', text: 'Free for all' };
     const BLOCK = (map, seats, teams, leaderStart) => ({ map, seats, teams, leaderStart });          // (a room's create block as the page holds it)
 
-    same('the page of a game on this computer is play.html', L.LOCAL_PAGE, 'play.html');
+    same('the page of a game on this computer is play (the clean address)', L.LOCAL_PAGE, 'play');
     same('localGameQuery: the whole choice', L.localGameQuery('treasure', 'medium', 'Bob', '16:9'), '?map=treasure&bots=medium&name=Bob&aspect=16%3A9'.replace('%3A', ':'));
     same('localGameQuery: no opponents leaves the parameter out (alone)', L.localGameQuery('tiny', '', 'Bob', '16:9'), '?map=tiny&name=Bob&aspect=16:9');
     same('localGameQuery: every level', ['easy', 'medium', 'hard'].map((l) => L.localGameQuery('small', l, 'Bob', '4:3')), ['easy', 'medium', 'hard'].map((l) => '?map=small&bots=' + l + '&name=Bob&aspect=4:3'));
@@ -155,10 +155,10 @@ try {
     {
         const go = (model) => L.soloAddress(model, 'Bob', '16:9');
         same('soloAddress: a community map is played from its file (?mapfile=, URL-encoded), a key from the key', [go({ mapFile: 'Bomb Island.lvl' }), go({ map: 'tiny' }), go({ map: 'tiny', mapFile: 'Grid.lvl' })],
-             ['./play.html?mapfile=Bomb%20Island.lvl&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9']);
-        same('soloAddress: a room with no map plays the default map, an original by its file is its key', [go({}), go({ mapFile: 'TINY.LVL' })], ['./play.html?map=treasure&name=Bob&aspect=16:9', './play.html?map=tiny&name=Bob&aspect=16:9']);
+             ['./play?mapfile=Bomb%20Island.lvl&name=Bob&aspect=16:9', './play?map=tiny&name=Bob&aspect=16:9', './play?map=tiny&name=Bob&aspect=16:9']);
+        same('soloAddress: a room with no map plays the default map, an original by its file is its key', [go({}), go({ mapFile: 'TINY.LVL' })], ['./play?map=treasure&name=Bob&aspect=16:9', './play?map=tiny&name=Bob&aspect=16:9']);
         same('soloAddress: a room whose map is a text the game does not take gives none (the lobby says so; it never plays Treasure under another map\'s name)', [go({ mapFile: '../x.lvl' }), go({ mapFile: 'a/b.lvl' }), go({ mapFile: 'noext' }), go({ mapFile: '.hidden.lvl' })], ['', '', '', '']);
-        same('soloAddress: a key wins, whatever the room also holds as a file (nothing is refused)', go({ map: 'tiny', mapFile: '../x.lvl' }), './play.html?map=tiny&name=Bob&aspect=16:9');
+        same('soloAddress: a key wins, whatever the room also holds as a file (nothing is refused)', go({ map: 'tiny', mapFile: '../x.lvl' }), './play?map=tiny&name=Bob&aspect=16:9');
         const asked = new URLSearchParams(go({ mapFile: '!!!BLOCKADES!!!.lvl' }).split('?')[1]);
         check('soloAddress: the game page reads the same file back', asked.get('mapfile') === '!!!BLOCKADES!!!.lvl' && !asked.has('map') && !asked.has('bots'), asked.toString());
     }
@@ -274,7 +274,7 @@ try {
     same('... nameless only for a game here with no name in its address (a map, a map file, bots or a test game), never when the address has a name, even an empty one', ['?map=tiny', '?mapfile=' + encodeURIComponent(COMMUNITY), '?bots=easy', '?map=tiny&name=Bob', '?map=tiny&name=', '', '?aspect=4:3', '?join=/ws&room=abc'].map((t) => P.localArguments(t).nameless), [true, true, true, false, false, false, false, false]);
     same('another page\'s parameters are not local ones (join, room, fill, seat, embed)', local('?join=/ws&room=abc&fill=hard&seat=2&embed=1'), []);
 
-    // a test game from the map maker (play.html?testmap=<id>&seats=<four letters>; web/front/test_game.js, docs/MAP_EDITOR.md "Play this map"): the map is the one name of the game's maps folder, you sit at the seat of the letter y,
+    // a test game from the map maker (play?testmap=<id>&seats=<four letters>; web/front/test_game.js, docs/MAP_EDITOR.md "Play this map"): the map is the one name of the game's maps folder, you sit at the seat of the letter y,
     // the bots at the others, and the address's own words never reach the game
     {
         const ID = 'k7m2xq9abc12', TEST = ['--map', 'Original-Ants/Maps/playtest.lvl', '--play'];

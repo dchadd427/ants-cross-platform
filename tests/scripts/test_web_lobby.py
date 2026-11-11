@@ -337,13 +337,13 @@ class TheFrontPageMarkup(PageCase):
     def test_the_footer_links_the_name_card_the_picture_row_and_the_test_room_buttons_are_there(self):
         self.assertEqual(self.page.count("<nav "), 1, "the header is the logo, the tagline and the one button of Matches: the other links are in the footer")
         self.assertIn('<header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1>', self.markup)
-        self.assertIn('<a class="btn sm" href="/matches.html" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
+        self.assertIn('<a class="btn sm" href="/matches" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
         nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
         nav = nav[:nav.index("</nav>")]
         self.assertEqual(re.findall(r">(How it works|Matches|Live now|Sprites and sounds|Changelog|GitHub|Feedback|Legal)</(?:a|button)>", nav),
                          ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"])
-        for needle in ('href="/matches.html" id="watch-link"', 'href="/live.html"', 'href="/asset_catalog/"', 'href="/changelog.html"', 'href="https://github.com/dchadd427/ants-cross-platform"',
-                       'href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="/legal.html"'):
+        for needle in ('href="/matches" id="watch-link"', 'href="/live-now"', 'href="/asset_catalog/"', 'href="/changelog"', 'href="https://github.com/dchadd427/ants-cross-platform"',
+                       'href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="/legal"'):
             self.assertIn(needle, nav, needle)
         self.assertIn('id="game-version"', self.page)
         self.assertIn('id="game-build-id"', self.page)
@@ -381,7 +381,7 @@ class TheFrontPageMarkup(PageCase):
         anchors = re.findall(r"<a [^>]*>", self.page)
         blank = [a for a in anchors if 'target="_blank"' in a]
         hrefs = sorted(set(re.search(r'href="([^"]*)"', a).group(1) for a in blank))
-        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog.html", "/legal.html", "https://discord.gg/WaWrXQnKPj", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "https://www.buymeacoffee.com/dchadd"])       # (the last is the owner's Buy Me a Coffee button, the one link that leaves for another site)
+        self.assertEqual(hrefs, ["/asset_catalog/", "/changelog", "/legal", "https://discord.gg/WaWrXQnKPj", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "https://www.buymeacoffee.com/dchadd"])       # (the last is the owner's Buy Me a Coffee button, the one link that leaves for another site)
         self.assertEqual(len(re.findall(r"window\.open\(", self.page)), 0, "the front page opens no window of its own")
 
     def test_start_goes_to_this_tab(self):
@@ -401,7 +401,7 @@ class TheFrontPageMarkup(PageCase):
         alone = script[script.index("function startAlone() {"):script.index("function pressTeam(seat, side) {")]
         self.assertIn("window.location.assign(new URL(address, window.location.href).href);", alone)
         self.assertLess(alone.index("client.leave();"), alone.index("window.location.assign("))
-        self.assertIn("var LOCAL_PAGE = 'play.html';", script)
+        self.assertIn("var LOCAL_PAGE = 'play';", script)
         self.assertIn("client.start();", script)
         # the selector of the picture's shape changes the lobby's next game at once and asks nothing (the lobby has no game open)
         block = script[script.index("// SELECTOR_BEGIN"):script.index("// SELECTOR_END")]
@@ -586,7 +586,7 @@ class TheImageAndTheCi(PageCase):
 class TheDocuments(unittest.TestCase):
     def test_the_browser_page_and_the_notes_say_where_the_lobby_is_and_what_it_does(self):
         page = read("docs", "PLAY_IN_BROWSER.md")
-        for needle in ("`/play.html?map=", "## The front page: Home, and a room one press away", "### Your room", "### START!", "### The notices", "### The old addresses", "**Host**", "**You**", "**Open**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**",
+        for needle in ("`/play?map=", "## The front page: Home, and a room one press away", "### Your room", "### START!", "### The notices", "### The old addresses", "**Host**", "**You**", "**Open**", "**Nobody**", "**Teams**", "**Team 1**", "**Team 2**",
                        "**Remove**", "**Keep**", "**Copy link**", "**Share**", "**START!**", "**Join by code**", "**Rejoin it**", "**Start a room of my own instead**", "/four.html", "`--start-when`", "**Menu**",
                        "`/stats`", "`web/front/`", "`tools/front_page_art/`", "`ants.lobby`", "`k7m 2xq`"):
             self.assertIn(needle, page, needle)

@@ -131,7 +131,7 @@ def state(tab):
 def open_page(tab, web, data):
     tab.emulate(1440, 900, 1)
     tab.call("Page.addScriptToEvaluateOnNewDocument", {"source": HOOK % (json.dumps(base64.b64encode(data).decode()), NAME)})
-    tab.open((web if web.endswith("/") else web + "/") + "play.html?replay=" + NAME + "&aspect=16:9", settle=0.5)
+    tab.open((web if web.endswith("/") else web + "/") + "play?replay=" + NAME + "&aspect=16:9", settle=0.5)
 
 
 def main():

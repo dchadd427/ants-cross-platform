@@ -2,7 +2,7 @@
 """The routes of docker/nginx.conf, run for real (run by ./run_tests.sh --fast and by the CI where docker works).
 
 The front page and the game page share the address "/" (the Play online page is the front page, which is the lobby now; every address that the game
-page ever had keeps opening it): "/" is the lobby unless the query has join=..., /four.html is a permanent redirect to "/" with the same query, /play.html is the game page. The
+page ever had keeps opening it): "/" is the lobby unless the query has join=..., /four.html is a permanent redirect to "/" with the same query, /play is the game page (/play.html is a 301 to it). The
 rules cannot be seen by reading the file (what a `rewrite` or an `if` does with a query string, which headers an answer ends with), so this starts the real nginx of the image's own base
 (nginx:alpine) with the repository's docker/nginx.conf and two stand-in pages that carry the markers of the real ones, and asks it, with tests/scripts/web_routes_check.py (which the CI also
 runs against the real web image; the stand-in docroot also has the Classic look's stylesheet and font and the two other pages of the site). Skipped, with the reason, where docker or the nginx
@@ -29,6 +29,7 @@ CLASSIC_PAGE = '<!DOCTYPE html><html><head><title>a stand-in page</title><link r
 MATCHES_PAGE = '<!DOCTYPE html><html><head><title>Matches - stand-in</title></head><body><div id="list-panel"></div></body></html>\n'
 MATCH_PAGE = '<!DOCTYPE html><html><head><title>Match - stand-in</title></head><body><div id="sections"></div></body></html>\n'
 LIVE_PAGE = '<!DOCTYPE html><html><head><title>Live now - stand-in</title></head><body><div id="live-h"></div></body></html>\n'
+MAPMAKER_PAGE = '<!DOCTYPE html><html><head><title>Map maker - stand-in</title></head><body><div id="mapmaker-root"></div></body></html>\n'
 GAME_PAGE = '<!DOCTYPE html><html><head><title>Ants (1998) - game</title></head><body><div id="game-stage" data-aspect="16:9"></div><p>the stand-in game page</p></body></html>\n'
 
 
@@ -68,16 +69,16 @@ class TheFile(unittest.TestCase):
     def test_the_old_play_online_address_redirects_for_good_with_its_query(self):
         self.assertRegex(self.conf, r"location = /four\.html \{\s*return 301 /\$is_args\$args;\s*\}")
 
-    def test_the_old_addresses_of_the_list_of_matches_redirect_for_good(self):
-        """/matches and the old /watch.html are 301s to /matches.html: exact locations, a `return` and no header of their own (a location with an add_header of its own drops the server's)."""
-        for path in ("/matches", "/watch.html"):
-            blocks = re.findall(r"location = %s \{([^{}]*)\}" % re.escape(path), self.conf)
-            self.assertEqual(len(blocks), 1, path)
-            self.assertEqual(blocks[0].split(), ["return", "301", "/matches.html;"], path)
+    def test_the_list_of_matches_is_a_clean_address_and_the_old_watch_page_redirects_to_it(self):
+        """/matches serves matches.html (an exact location and an internal rewrite: tests/scripts/test_nginx_clean_urls.py has the rest); the old /watch.html is a 302 to /matches that keeps the query, with no header of its own (a location with an add_header of its own drops the server's)."""
+        blocks = re.findall(r"location = /matches \{([^{}]*)\}", self.conf)
+        self.assertEqual([b.split() for b in blocks], [["rewrite", "^", "/matches.html", "last;"]])
+        blocks = re.findall(r"location = /watch\.html \{([^{}]*)\}", self.conf)
+        self.assertEqual([b.split() for b in blocks], [["return", "302", "/matches$is_args$args;"]])
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", self.conf, re.M)
         self.assertEqual([l for l in locations if "matches" in l or "watch" in l], ["= /matches", "= /watch.html"])      # (no other location could catch them: the pages themselves are files of the html location)
         for page in ("live", "matches", "match"):
-            self.assertNotIn("location = /%s.html" % page, self.conf)            # (/live and /history are the game server's own JSON routes: a page named so would be one of them; these are files)
+            self.assertNotIn("location = /%s.html" % page, self.conf)            # (/live and /history are the game server's own JSON routes: the page of the matches that run now is /live-now; the .html addresses are the map's redirects)
 
     def test_the_game_page_has_no_route_of_its_own_it_is_a_file_play_html(self):
         self.assertNotIn("location = /play.html", self.conf)                               # (a file of the image: index.html copied, see the Dockerfile)
@@ -108,7 +109,7 @@ class TheRoutesRun(unittest.TestCase):
         os.makedirs(os.path.join(html, "front"))
         os.makedirs(os.path.join(html, "asset_catalog"))
         for name, text in (("lobby.html", LOBBY_PAGE), ("matches.html", MATCHES_PAGE), ("match.html", MATCH_PAGE), ("live.html", LIVE_PAGE), ("matches.css", ":root { --won: #f6d058; }\n"), ("replay_stats.css", "body.embed { padding-top: 10px; }\n"), ("replay_page.js", "window.AntsReplay = {};\n"),
-                           ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE),
+                           ("history_page.js", "window.AntsHistory = {};\n"), ("match_stats.js", "window.AntsMatchStats = {};\n"), ("match_stats.css", ".chips { display: grid; }\n"), ("death_map.js", "window.AntsDeathMap = {};\n"), ("death_map.css", ".dm-stage { position: relative; }\n"), ("index.html", GAME_PAGE), ("play.html", GAME_PAGE), ("changelog.html", CLASSIC_PAGE), ("legal.html", CLASSIC_PAGE), ("mapmaker.html", MAPMAKER_PAGE),
                            (os.path.join("asset_catalog", "index.html"), CLASSIC_PAGE), (os.path.join("front", "classic.css"), ":root { --clay: #db4b13; }\n")):
             with open(os.path.join(html, name), "w", encoding="utf-8") as f:
                 f.write(text)

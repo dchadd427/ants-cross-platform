@@ -32,8 +32,8 @@
   {
    "id": "js_wrong_address",
    "file": "web/front/map_maker_link.js",
-   "old": "'/mapmaker.html'",
-   "new": "'/mapmaker'",
+   "old": "'/mapmaker'",
+   "new": "'/map-maker'",
    "test": "python3 tests/scripts/test_web_map_maker_link.py MapMakerLink.test_the_page_and_the_script_are_right MapMakerLink.test_it_adds_one_link_before_matches_and_never_two MapMakerLink.test_without_matches_it_adds_nothing"
   },
   {

@@ -125,16 +125,16 @@ same('an address with nothing is the default', [H.stateOf(''), H.stateOf('?')], 
 same('every key is read', H.stateOf('?who=people&format=team&result=cut&rec=old&color=blue&mode=187&sort=kills&q=Ann&page=4'),
     { who: 'people', format: 'team', result: 'cut', rec: 'old', color: 'blue', mode: '187', sort: 'kills', q: 'Ann', page: 4 });
 same('an old bookmark says colour=: the same filter', [H.stateOf('?colour=blue').color, H.stateOf('?colour=blue&format=ffa').format, H.stateOf('?color=red&colour=blue').color, H.stateOf('?colour=Blue').color], ['blue', 'ffa', 'red', 'all']);
-same('... and the address written from it says color=', H.urlOf(H.stateOf('?colour=blue')), 'matches.html?color=blue');
+same('... and the address written from it says color=', H.urlOf(H.stateOf('?colour=blue')), '/matches?color=blue');
 same('... and the server is asked color=', H.planOf(H.stateOf('?colour=blue')).query, 'color=blue&limit=25&offset=0');
 same('a word that is not one of the server\'s is the default (nothing is guessed)', H.stateOf('?who=everybody&format=4v4&result=won&rec=gone&color=Blue&mode=hard&sort=best'), D);
 same('the page is a whole number from 1', [H.stateOf('?page=0').page, H.stateOf('?page=-3').page, H.stateOf('?page=x').page, H.stateOf('?page=2.5').page, H.stateOf('?page=999999999').page, H.stateOf('?page=7').page], [1, 1, 1, 2, 1, 7]);
 same('a search is printable ASCII, blanks folded, at most 40 characters', [H.cleanQuery('  a   b  '), H.cleanQuery('Käse\u0000\u007féx'), H.cleanQuery('x'.repeat(60)).length, H.cleanQuery(5), H.cleanQuery('a b'.repeat(20)).length <= 40, H.cleanQuery('ab '.repeat(14) + 'zz')], ['a b', 'Ksex', 40, '', true, 'ab ab ab ab ab ab ab ab ab ab ab ab ab a']);
 same('the address of a state: only what is not the default, the server\'s words', [H.urlOf(D), H.urlOf(H.stateOf('?who=people&sort=kills')), H.urlOf(H.stateOf('?q=a%20b&page=3')), H.urlOf(D, 2)],
-    ['matches.html', 'matches.html?who=people&sort=kills', 'matches.html?q=a%20b&page=3', 'matches.html?page=2']);
+    ['/matches', '/matches?who=people&sort=kills', '/matches?q=a%20b&page=3', '/matches?page=2']);
 for (const q of ['', '?who=computers', '?format=ffa&result=draw&rec=removed&color=black&mode=highest-score&sort=short&page=12', '?q=Pip%20(bot%2C%20Hard)&page=2', '?q=a%26b%3Dc%25d%2Be']) {
     const st = H.stateOf(q);
-    same('an address is read back as it was written: ' + q, H.stateOf(H.urlOf(st).replace(/^matches\.html\??/, '?')), st);
+    same('an address is read back as it was written: ' + q, H.stateOf(H.urlOf(st).replace(/^\/matches\??/, '?')), st);
 }
 
 // ---- what is asked of the server ----
@@ -149,7 +149,7 @@ for (const text of ['Pip (bot, Hard)', "it's!", 'a(b)c*d~e', 'x&y=z%w+v', 'a b',
     check('the search ' + JSON.stringify(text) + ' is a query that nginx lets through', NGINX.test(plan.query), plan.query);
     const back = new URLSearchParams(plan.query).get('q');
     check('... and reads back as the text that was typed (the server reads it as it is)', back === H.cleanQuery(text), back);
-    check('... and the page address lets through too', NGINX.test(H.urlOf(Object.assign({}, D, { q: H.cleanQuery(text) })).replace(/^matches\.html\??/, '')));
+    check('... and the page address lets through too', NGINX.test(H.urlOf(Object.assign({}, D, { q: H.cleanQuery(text) })).replace(/^\/matches\??/, '')));
 }
 {
     const keys = new URLSearchParams(H.planOf(H.stateOf('?who=people&format=ffa&result=cut&rec=old&color=blue&mode=187&sort=kills&q=Ann&page=3')).query);
