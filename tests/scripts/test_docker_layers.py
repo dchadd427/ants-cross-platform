@@ -199,7 +199,7 @@ class TheWebImage(unittest.TestCase):
         self.assertEqual(len(runs), 2)
         for run in runs:
             self.assertTrue(run.startswith("RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web "), run[:80])
-            self.assertIn("EM_COMPILER_WRAPPER=ccache", run)
+            self.assertIn('EM_COMPILER_WRAPPER="$(command -v ccache)"', run, "Emscripten runs the wrapper with execv: a full path, not a name that the PATH would resolve")
             self.assertIn("command -v ccache", run, "the build must work where ccache is not installed (the tool that replays the Dockerfile on a machine)")
         self.assertIn("CCACHE_DIR=/root/.ccache", self.docker.text)
         self.assertTrue(self.docker.text.startswith("# syntax=docker/dockerfile:1\n"))

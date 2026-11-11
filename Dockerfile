@@ -44,7 +44,7 @@ RUN echo 0.0.0 > VERSION && mkdir -p web Original-Ants && echo '{{{ SCRIPT }}}' 
 
 # Configure and compile using default Makefiles
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
-    if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER=ccache; ccache -z > /dev/null; fi && \
+    if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER="$(command -v ccache)"; ccache -z > /dev/null; fi && \
     emcmake cmake -B build_web \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_TESTS=OFF && \
@@ -57,7 +57,7 @@ COPY VERSION ./VERSION
 COPY web/shell.html ./web/shell.html
 COPY Original-Ants/ ./Original-Ants/
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
-    if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER=ccache; ccache -z > /dev/null; fi && \
+    if command -v ccache > /dev/null 2>&1; then export EM_COMPILER_WRAPPER="$(command -v ccache)"; ccache -z > /dev/null; fi && \
     rm -f build_web/src/ants_app/index.html build_web/src/ants_app/index.js build_web/src/ants_app/index.wasm build_web/src/ants_app/index.data && \
     emcmake cmake -B build_web \
         -DCMAKE_BUILD_TYPE=Release \
