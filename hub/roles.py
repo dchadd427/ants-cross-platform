@@ -140,7 +140,12 @@ class Roles:
     def on_tick(self, now):
         """Once a tick: forget those who left (after the grace: a page that reloads keeps its role), and tell the pages of a role that ran out."""
         if self.task is not None and self.task.done():                # (the worker ended: roles run out by themselves meanwhile; say so once and start it again)
-            self.task = None
+            ended, self.task = self.task, None
+            try:
+                if not ended.cancelled():
+                    ended.exception()                                # (read, so that asyncio does not print it, with its text, when the task is dropped: only the class of it goes in the log, below)
+            except BaseException:
+                pass
             self.trouble(RuntimeError("worker ended"), "worker_ended")
             self.start()
         here = set(self.connected())

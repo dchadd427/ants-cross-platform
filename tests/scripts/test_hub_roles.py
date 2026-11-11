@@ -18,8 +18,10 @@ tests/data/hub_roles_mutants.json breaks the rules one at a time for tools/mutat
 """
 import asyncio
 import dataclasses
+import gc
 import io
 import json
+import logging
 import os
 import re
 import signal
@@ -253,6 +255,21 @@ class TheChatAsksTheRoles(unittest.TestCase):
         self.assertEqual(self.w.store.muted_until("1001"), 0)
         self.assertEqual(self.alice.codes(), ["bad"])                            # (refused, privately)
         self.assertEqual(self.w.chat.ring[-1].text, "hello")                     # (and not posted for everybody to read)
+
+    def test_the_command_words_are_read_in_any_case(self):
+        self.w.say(self.bob, "hello")
+        for n, text in enumerate(("/Mute alice 5", "/MUTE alice 5", "/Del 1", "/dEl 1")):
+            self.w.clock.now += 3
+            self.w.say(self.alice, text)                                         # (a role-less account: a phone's capital letter does not make it a line for everybody)
+        self.assertEqual(self.alice.codes(), ["bad"] * 4)
+        self.assertEqual([l.text for l in self.w.chat.ring], ["hello"])
+        self.w.roles.set("1002", "mod")
+        self.w.roles.set("1001", "none")
+        self.w.say(self.alice, "hi")
+        self.w.clock.now += 3
+        self.w.say(self.bob, "/Mute alice 5")                                    # (and a moderator's own capital letter is a command)
+        self.assertGreater(self.w.store.muted_until("1001"), 0)
+        self.assertEqual(self.bob.codes(), [])
 
     def test_a_command_is_done_only_to_a_person_whose_role_is_known(self):
         self.w.roles.set("1001", "mod")
@@ -1163,6 +1180,7 @@ class TheSecrets(unittest.TestCase):
                 self.assertNotIn(secret, text, "the log shows " + secret)
             for line in text.splitlines():
                 self.assertRegex(line, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ [a-z_]+( [a-z_]+=[A-Za-z0-9_.:/-]*)*$", line)
+            self.assertNotIn("#", text)                                          # (the log's scrubber replaces a long number with #: it never had anything to replace)
         finally:
             for c in clients:
                 c.close()
@@ -1220,6 +1238,72 @@ class TheIdIsLikeAPassword(SetupTest):
         self.assertIn("a=# b=x#y c=id_# d=__#__ e=" + ID[:14], text)             # (the number is replaced; a shorter one is a number)
         self.assertEqual(len(text.splitlines()), 1)
 
+    def test_the_report_of_a_worker_that_ended_has_no_text_in_it(self):
+        s = self.setup(members={"1001": [MOD]})
+        records = []
+
+        class Catch(logging.Handler):
+            def emit(self, record):
+                records.append(self.format(record) + "".join(traceback.format_exception(*record.exc_info)) if record.exc_info else self.format(record))
+        handler = Catch()
+        logging.getLogger("asyncio").addHandler(handler)
+        self.addCleanup(logging.getLogger("asyncio").removeHandler, handler)
+
+        async def dies(self):
+            raise RuntimeError("worker with the id " + ID)
+
+        async def scenario():
+            with mock.patch.object(rolesmod.Roles, "run", dies):
+                s.roles.start()
+                await asyncio.sleep(0.05)
+                s.roles.on_tick(s.clock.t)                                       # (ended: its error is read, and dropped with the task, and a new one starts and ends at once)
+                await asyncio.sleep(0.05)
+                s.roles.on_tick(s.clock.t + 1)
+                s.roles.stop()
+        s.loop.run_until_complete(scenario())
+        gc.collect()
+        s.loop.run_until_complete(asyncio.sleep(0.05))
+        gc.collect()
+        self.assertEqual(records, [], "asyncio reported: %r" % records)
+        self.assertEqual(s.log.named("error"), [{"kind": "worker_ended", "where": "roles"}])
+
+    def test_the_report_of_a_task_nobody_read_is_its_class_and_nothing_else(self):
+        from hub import server
+        log = Log()
+        server.scrubbed_error(log, {"message": "Task exception was never retrieved " + ID, "exception": RuntimeError("the id " + ID), "future": object()})
+        server.scrubbed_error(log, {"message": "something " + ID})
+        self.assertEqual(log.events, [("error", {"kind": "RuntimeError", "where": "loop"}), ("error", {"kind": "none", "where": "loop"})])
+        assert_no_id(self, log.text(), "the report")
+
+    def test_the_stderr_of_the_real_process_has_no_id_when_a_worker_and_a_task_die(self):
+        code = ("import asyncio, os, sys\nsys.path.insert(0, %r)\nfrom hub import roles, server\nplant = os.environ['PLANT']\n"
+                "async def dies(self):\n    raise RuntimeError('worker with the id ' + plant)\nroles.Roles.run = dies\n"
+                "start = server.Hub.start\nasync def started(self, host, port):\n    result = await start(self, host, port)\n"
+                "    async def stray():\n        raise RuntimeError('task with the id ' + plant)\n    asyncio.ensure_future(stray())\n    return result\n"
+                "server.Hub.start = started\nraise SystemExit(server.main())\n") % REPO
+        extra = dict(ENV, PLANT=ID, ANTS_HUB_TEST_LOGIN="1")
+        proc, folder, log_path, env = ths.start_process(extra)
+        proc.kill()
+        proc.wait(5)
+        env["PYTHONUNBUFFERED"] = "1"
+        with open(log_path, "wb") as out:
+            proc = __import__("subprocess").Popen([sys.executable, "-c", code], cwd=REPO, env=env, stdout=out, stderr=__import__("subprocess").STDOUT)
+        try:
+            port = ths.wait_for_port(proc, log_path)
+            self.assertIsNotNone(port, ths.read_text(log_path))
+            time.sleep(3.5)                                                      # (the clock sees the ended task, starts it again, and the stray task is collected)
+            proc.send_signal(signal.SIGTERM)
+            proc.wait(10)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(5)
+        text = ths.read_text(log_path)
+        assert_no_id(self, text, "stdout and stderr of the process")
+        self.assertNotIn("never retrieved", text)
+        self.assertIn(" error kind=worker_ended where=roles", text)
+        self.assertIn(" error kind=RuntimeError where=loop", text)
+
     def test_no_frame_no_log_and_no_answer_of_the_hub_holds_the_id_in_any_failure_of_discord(self):
         fake = fd.FakeDiscord()
         self.addCleanup(fake.close)
@@ -1242,6 +1326,8 @@ class TheIdIsLikeAPassword(SetupTest):
         assert_no_id(self, json.dumps(seen), "the frames")
         assert_no_id(self, health.decode(), "healthz")
         assert_no_id(self, log, "the log")
+        self.assertNotIn("#", log)                                               # (the log's scrubber replaces a long number with #: it must never have had anything to replace)
+        self.assertNotIn("#", json.dumps(seen))
 
 
 class TheSettings(unittest.TestCase):

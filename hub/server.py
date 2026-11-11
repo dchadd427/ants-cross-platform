@@ -365,12 +365,20 @@ class Hub:
                 self.log.event("crowded", sockets=biggest, groups=len(self.per_address.counts))      # (no address: see docs/HUB.md, "Behind a reverse proxy")
 
 
+def scrubbed_error(log, context):
+    """What the event loop reports of a task or a callback that failed without anybody reading it (asyncio's own report holds the text of the error and its traceback, and a text can hold an
+    id): the class of the error, in the log, and nothing else."""
+    error = context.get("exception")
+    log.event("error", kind=type(error).__name__ if error is not None else "none", where="loop")
+
+
 async def serve(cfg, store, sessions, log):
     hub = Hub(cfg, store, sessions, log)
     port = await hub.start(cfg.host, cfg.port)
     log.event("listening", port=port)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
+    loop.set_exception_handler(lambda _loop, context: scrubbed_error(log, context))
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
     await stop.wait()
