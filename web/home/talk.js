@@ -20,8 +20,8 @@
     var TEXT = {
         emoji: 'Emoji', emojiList: 'Emoji: choose one to add it to your message', voice: 'Voice to text: your browser\'s speech service hears you',
         asking: 'Your browser\'s speech service hears you. Allow the microphone if it asks.', listening: 'Listening. Press the microphone again to stop. Then press Send.',
-        full: 'The message is full.', nothing: 'No speech was heard.', blocked: 'The microphone is blocked for this page.', mic: 'No microphone was found.',
-        network: 'The speech service could not be reached.', failed: 'Voice to text did not work.'
+        full: 'The message is full.', nothing: 'No speech was heard. Press the microphone and speak.', blocked: 'The microphone is blocked for this site. Allow it in your browser\'s site settings, then try again.', policy: 'This page does not allow the microphone.', mic: 'No microphone was found.',
+        network: 'The speech service could not be reached. Check your connection and try again.', failed: 'Voice to text did not work.'
     };
     var ERR = { 'not-allowed': 'blocked', 'service-not-allowed': 'blocked', 'no-speech': 'nothing', 'audio-capture': 'mic', 'network': 'network' };     // (what the browser says went wrong -> a line of TEXT; 'aborted' is the page's own stop)
     // The emoji, by group: code points in hex (one single code point each: the hub keeps it as it is, and none is newer than Unicode 9, which every Python of the hub knows)
@@ -64,6 +64,14 @@
         if (!win || win.isSecureContext !== true) return null;
         var C = win.SpeechRecognition || win.webkitSpeechRecognition;
         return typeof C === 'function' ? C : null;
+    }
+
+    // the page's own permissions policy (the Permissions-Policy header of docker/nginx.conf): true only when this browser can tell and says the microphone is not allowed; a browser without the API, or one that throws, is "not known"
+    function policyBlocks(doc) {
+        try {
+            var p = doc && (doc.permissionsPolicy || doc.featurePolicy);
+            return !!(p && typeof p.allowsFeature === 'function' && p.allowsFeature('microphone') === false);
+        } catch (e) { return false; }
     }
 
     function mount(env) {
@@ -128,14 +136,16 @@
             run = null; me.over = true; paint(me, '');
             try { me.rec.abort(); } catch (e) { /* it has ended */ }
         }
+        function why(code) { return TEXT[policyBlocks(doc) && ERR[code] === 'blocked' ? 'policy' : ERR[code] || 'failed']; }       // (a refusal by the page's own policy says so, not "blocked for this site")
         function finish(me) {
             if (run !== me) return;
             run = null; me.over = true;
-            paint(me, me.error ? TEXT[ERR[me.error] || 'failed'] : me.full ? TEXT.full : (me.text.trim() ? '' : TEXT.nothing));
+            paint(me, me.error ? why(me.error) : me.full ? TEXT.full : (me.text.trim() ? '' : TEXT.nothing));
         }
         function halted(me) { var held = dock.root && dock.root.closest && dock.root.closest('[inert]'); if (held && run === me) drop(); return !!held; }       // (the page is on its way to the game, or a question stands over it: nothing is written, and nothing listens)
         function listen() {
             if (run) { run.over = true; paint(run, ''); try { run.rec.stop(); } catch (e) { drop(); } return; }     // (a second press: what was heard so far stays, and the final words may still come)
+            if (policyBlocks(doc)) { note(TEXT.policy); return; }       // (the page's policy refuses the microphone: nothing to ask the browser for)
             var v = field.value, a = typeof field.selectionStart === 'number' ? field.selectionStart : v.length, b = typeof field.selectionEnd === 'number' ? field.selectionEnd : a;
             var me = { rec: null, before: v.slice(0, a), after: v.slice(b), text: '', error: '', over: false, full: false };
             try {
@@ -149,7 +159,7 @@
                     me.text = t; draw(me);
                     if (points(field.value) >= LIMIT - 2 && !me.over) { me.over = true; me.full = true; try { rec.stop(); } catch (x) { /* ended */ } paint(me, TEXT.full); }
                 };
-                rec.onerror = function (e) { if (run === me && e && e.error !== 'aborted') me.error = String(e.error || 'failed'); };
+                rec.onerror = function (e) { if (run === me && e && e.error !== 'aborted') { me.error = String(e.error || 'failed'); note(why(me.error)); } };       // (said at once: some phones end the listening late)
                 rec.onend = function () { finish(me); };
                 me.rec = rec; run = me; paint(me, TEXT.asking);
                 rec.start();
@@ -183,5 +193,5 @@
         return { root: tools, pick: pick, say: say, emoji: emojiBtn, mic: micBtn, field: field, drop: drop, close: close };
     }
 
-    return { LIMIT: LIMIT, TEXT: TEXT, ERR: ERR, GROUPS: GROUPS, emoji: emoji, points: points, head: head, insert: insert, speak: speak, recognition: recognition, mount: mount };
+    return { LIMIT: LIMIT, TEXT: TEXT, ERR: ERR, GROUPS: GROUPS, emoji: emoji, points: points, head: head, insert: insert, speak: speak, recognition: recognition, policyBlocks: policyBlocks, mount: mount };
 });

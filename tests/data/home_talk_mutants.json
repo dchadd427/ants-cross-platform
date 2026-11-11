@@ -346,6 +346,55 @@
    "old": "'1F44D 1F44E ",
    "new": "'1F44D 1FAE8 1F44E ",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_refusal_is_the_old_short_line",
+   "file": "web/home/talk.js",
+   "old": "blocked: 'The microphone is blocked for this site. Allow it in your browser\\'s site settings, then try again.'",
+   "new": "blocked: 'The microphone is blocked for this page.'",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "no_speech_has_no_hint",
+   "file": "web/home/talk.js",
+   "old": "nothing: 'No speech was heard. Press the microphone and speak.'",
+   "new": "nothing: 'No speech was heard.'",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_pages_own_policy_is_not_asked_before_listening",
+   "file": "web/home/talk.js",
+   "old": "            if (policyBlocks(doc)) { note(TEXT.policy); return; }       // (the page's policy refuses the microphone: nothing to ask the browser for)\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "an_unknown_policy_counts_as_a_refusal",
+   "file": "web/home/talk.js",
+   "old": "p.allowsFeature('microphone') === false",
+   "new": "p.allowsFeature('microphone') !== true",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_policy_that_throws_is_not_caught",
+   "file": "web/home/talk.js",
+   "old": "        } catch (e) { return false; }\n    }\n\n    function mount",
+   "new": "        } finally { }\n    }\n\n    function mount",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_error_is_said_only_when_the_listening_ends",
+   "file": "web/home/talk.js",
+   "old": "{ me.error = String(e.error || 'failed'); note(why(me.error)); }",
+   "new": "{ me.error = String(e.error || 'failed'); }",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_policy_refusal_says_blocked_for_this_site",
+   "file": "web/home/talk.js",
+   "old": "TEXT[policyBlocks(doc) && ERR[code] === 'blocked' ? 'policy' : ERR[code] || 'failed']",
+   "new": "TEXT[ERR[code] || 'failed']",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   }
  ]
 }

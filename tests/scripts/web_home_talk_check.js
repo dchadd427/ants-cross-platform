@@ -336,7 +336,8 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     check('...and the microphone press closes the picker and stops the listening', r.pick.hidden === true && rec.stops === 1);
 }
 {   // errors, in plain words
-    const cases = [['not-allowed', 'The microphone is blocked for this page.'], ['service-not-allowed', 'The microphone is blocked for this page.'], ['no-speech', 'No speech was heard.'], ['audio-capture', 'No microphone was found.'], ['network', 'The speech service could not be reached.'], ['language-not-supported', 'Voice to text did not work.'], ['bad-grammar', 'Voice to text did not work.']];
+    const BLOCKED = 'The microphone is blocked for this site. Allow it in your browser\'s site settings, then try again.', NOSPEECH = 'No speech was heard. Press the microphone and speak.', NETWORK = 'The speech service could not be reached. Check your connection and try again.', POLICY = 'This page does not allow the microphone.';
+    const cases = [['not-allowed', BLOCKED], ['service-not-allowed', BLOCKED], ['no-speech', NOSPEECH], ['audio-capture', 'No microphone was found.'], ['network', NETWORK], ['language-not-supported', 'Voice to text did not work.'], ['bad-grammar', 'Voice to text did not work.']];
     for (const [code, words] of cases) {
         const r = rig(); const rec = r.start();
         rec.onerror({ error: code }); rec.onend({});
@@ -349,17 +350,31 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     check('the next press clears the error (the first note shows)', r.sayText() === 'Your browser\'s speech service hears you. Allow the microphone if it asks.');
     const a = rig(); const ra = a.start();
     ra.onerror({ error: 'aborted' }); ra.onend({});
-    check('"aborted" (a stop that the page made) is no error: only that nothing was heard', a.sayText() === 'No speech was heard.');
+    check('"aborted" (a stop that the page made) is no error: only that nothing was heard', a.sayText() === NOSPEECH);
     const n = rig(); const rn = n.start(); rn.onend({});
-    check('it ends with nothing heard and no error: "No speech was heard."', n.sayText() === 'No speech was heard.' && n.field.value === '');
+    check('it ends with nothing heard and no error: "No speech was heard."', n.sayText() === NOSPEECH && n.field.value === '');
     const h = rig(); const rh = h.start(); h.heard('  '); rh.onend({});
-    check('only blanks heard: the same', h.sayText() === 'No speech was heard.' && h.field.value === '');
+    check('only blanks heard: the same', h.sayText() === NOSPEECH && h.field.value === '');
     const t = rig({ startThrows: true }); t.mic.click();
     check('a recognizer that cannot start: "Voice to text did not work.", idle, and the page is whole', t.sayText() === 'Voice to text did not work.' && t.mic.getAttribute('aria-pressed') === 'false');
     t.mic.click();
     check('...and a second press tries again (no stuck state)', t.recs.length === 2);
+    const e1 = rig(); const re1 = e1.start(); re1.onerror({ error: 'not-allowed' });
+    check('the refusal is said at once, when the error comes (a phone may end the listening late), as visible text', e1.sayText() === BLOCKED && e1.say.hidden === false && /^[\x20-\x7e]+$/.test(e1.sayText()));
+    const pol = (allowed) => ({ allowsFeature: (f) => { pol.asked = f; return allowed; } });
+    const p1 = rig(); p1.doc.permissionsPolicy = pol(false); p1.mic.click();
+    check('the page\'s own policy says no: "This page does not allow the microphone." and no recognizer is made', p1.sayText() === POLICY && p1.recs.length === 0 && pol.asked === 'microphone' && p1.mic.getAttribute('aria-pressed') === 'false');
+    const p2 = rig(); p2.doc.permissionsPolicy = pol(true); const rp2 = p2.start(); rp2.onerror({ error: 'not-allowed' }); rp2.onend({});
+    check('the policy allows it: a refusal is the browser\'s ("blocked for this site")', p2.sayText() === BLOCKED && p2.recs.length === 1);
+    const p3 = rig(); p3.doc.permissionsPolicy = pol(true); const rp3 = p3.start(); p3.doc.permissionsPolicy = pol(false); rp3.onerror({ error: 'not-allowed' }); rp3.onend({});
+    check('a refusal while the policy says no: the page-policy sentence', p3.sayText() === POLICY);
+    const p4 = rig(); p4.doc.featurePolicy = pol(false); p4.mic.click();
+    check('the older name (featurePolicy) is read too', p4.sayText() === POLICY && p4.recs.length === 0);
+    const p5 = rig(); p5.doc.permissionsPolicy = { allowsFeature() { throw new Error('no'); } }; const rp5 = p5.start();
+    check('an API that throws, one that is no object, or one without allowsFeature never stops the button', p5.recs.length === 1 && rp5 !== null && (() => { const q = rig(); q.doc.permissionsPolicy = {}; q.mic.click(); const z = rig(); z.doc.permissionsPolicy = 5; z.mic.click(); return q.recs.length === 1 && z.recs.length === 1; })());
+    same('policyBlocks: only an explicit false counts', [Pure.policyBlocks(null), Pure.policyBlocks({}), Pure.policyBlocks({ permissionsPolicy: pol(undefined) }), Pure.policyBlocks({ permissionsPolicy: pol(true) }), Pure.policyBlocks({ permissionsPolicy: pol(false) })], [false, false, false, false, true]);
     const w = rig(); const rw = w.start(); rw.onerror({ error: 'network' }); rw.onerror({ error: 'aborted' }); rw.onend({});
-    check('a later "aborted" does not hide the real error', w.sayText() === 'The speech service could not be reached.');
+    check('a later "aborted" does not hide the real error', w.sayText() === NETWORK);
 }
 {   // untrusted words, a long speech
     const r = rig(); const rec = r.start();

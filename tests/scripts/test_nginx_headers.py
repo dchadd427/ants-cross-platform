@@ -50,6 +50,7 @@ SITE = "beta.playants.org"
 HSTS = "max-age=604800"
 HSTS_LINE = 'add_header Strict-Transport-Security "max-age=604800" always;'
 PERMISSIONS = ("camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), interest-cohort=()")
+LOBBY_PERMISSIONS = PERMISSIONS.replace("microphone=()", "microphone=(self)")        # (the front page has the chat's voice button: the microphone for the page itself and for no frame in it)
 ADMIN_PERMISSIONS = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
 PAGE_HEADERS = ("content-security-policy", "x-frame-options", "referrer-policy", "permissions-policy")
 POLICED = PAGE_HEADERS + ("strict-transport-security", "cross-origin-opener-policy", "cross-origin-embedder-policy", "x-content-type-options", "cache-control")
@@ -105,6 +106,18 @@ class TheText(unittest.TestCase):
         # the maps are declared once, outside the server block
         for name in ("ants_page", "ants_csp", "ants_csp_common", "ants_ws_sources", "ants_frame_options", "ants_referrer_policy", "ants_permissions_policy", "ants_ws_origin_ok", "ants_path"):
             self.assertEqual(len(re.findall(r"^map \S+ \$%s \{" % name, HEAD, re.M)), 1, name)
+
+    def test_the_microphone_is_allowed_to_the_front_page_itself_and_to_no_other_page(self):
+        # (the map: only lobby.html gets "(self)", never "*" or a host, so a frame inside the page has no microphone; every other address of a page, and the map maker and the admin page, keep "()")
+        self.assertRegex(HEAD, r'map \$uri \$ants_microphone \{\s*default "\(\)";\s*"~\^/lobby\\\.html\\z" "\(self\)";\s*\}')
+        self.assertEqual(len(re.findall(r"\(self\)", re.search(r"map \$uri \$ants_microphone \{.*?\n\}", HEAD, re.S).group(0))), 1)
+        policy = re.search(r"map \$ants_page \$ants_permissions_policy \{.*?\n\}", HEAD, re.S).group(0)
+        self.assertIn('~. "camera=(), microphone=$ants_microphone, geolocation=()', policy)
+        self.assertEqual(PERMISSIONS.count("microphone=()"), 1)
+        self.assertNotIn("microphone=(self)", ADMIN_PERMISSIONS)
+        self.assertEqual(len(re.findall(r"microphone=", CONF)), 2)                    # (this map's, and the admin page's own fixed line)
+        for denied in ("camera", "geolocation", "payment", "usb", "serial", "hid", "midi", "magnetometer", "gyroscope", "accelerometer", "display-capture", "interest-cohort"):
+            self.assertIn("%s=()" % denied, LOBBY_PERMISSIONS)
 
     def test_the_game_door_checks_the_origin_first_and_names_what_it_passes_on(self):
         ws = stats.block_of(CONF, "location = /ws ")
@@ -311,6 +324,8 @@ def expected(kind, host=SITE):
     no_page = {name: None for name in PAGE_HEADERS}
     if kind == "page":
         return dict(cross, **{"content-security-policy": csp_is(page_policy(host)), "x-frame-options": "DENY", "referrer-policy": "same-origin", "permissions-policy": PERMISSIONS, "cache-control": "no-cache, must-revalidate"})
+    if kind == "lobby":
+        return dict(expected("page", host), **{"permissions-policy": LOBBY_PERMISSIONS})
     if kind == "game":
         return dict(cross, **{"content-security-policy": csp_is(game_policy(host)), "x-frame-options": "SAMEORIGIN", "referrer-policy": "same-origin", "permissions-policy": PERMISSIONS, "cache-control": "no-cache, must-revalidate"})
     if kind == "mapmaker":
@@ -336,9 +351,9 @@ HEXID = "a" * 32
 SAME = (("Sec-Fetch-Site", "same-origin"),)
 # (what it is, method, address, request headers, the status, the kind) for the nginx with a stand-in behind it
 LIVE_ROWS = [
-    ("the front page", "GET", "/", (), 200, "page"),
-    ("the front page, a room's link", "GET", "/?room=k7m2xq", (), 200, "page"),
-    ("the front page's file", "GET", "/lobby.html", (), 200, "page"),
+    ("the front page", "GET", "/", (), 200, "lobby"),
+    ("the front page, a room's link", "GET", "/?room=k7m2xq", (), 200, "lobby"),
+    ("the front page's file", "GET", "/lobby.html", (), 200, "lobby"),
     ("the old front page's address", "GET", "/four.html?room=k7m2xq", (), 301, "plain"),
     ("the game page", "GET", "/play.html", (), 200, "game"),
     ("the game page's file", "GET", "/index.html", (), 200, "game"),
@@ -844,7 +859,7 @@ class TheFileRuns(unittest.TestCase):
     # ---- every Host name ----------------------------------------------------------------------------------------------------------------------------------
     def test_any_host_name_is_served_like_the_public_one(self):
         for host in (SITE, "localhost", "127.0.0.1", "staging.example.org", "ants.my-own-server.example", "unknown.example:8080"):
-            for path, kind in (("/", "page"), ("/play.html", "game"), ("/stats", "door"), ("/lobbies", "door")):
+            for path, kind in (("/", "lobby"), ("/play.html", "game"), ("/stats", "door"), ("/lobbies", "door")):
                 answer = fetch(self.live.port, path, host=host)
                 self.assertEqual(answer.status, 200, (host, path))
                 self.check("%s at %s" % (path, host), answer, kind, host=host)
