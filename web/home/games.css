@@ -43,7 +43,6 @@
 .gempty .ant { --k: 2; margin: 0 auto 4px; filter: brightness(0) invert(1); opacity: .13; animation: none; }       /* (a shadow of the ant of an open color) */
 .gemtitle { margin: 0; font-size: 22px; line-height: 1.2; }
 .gemline { margin: 0 0 4px; font-size: 15px; line-height: 1.35; color: #a8cfc0; }
-.btn.ghostbtn { margin-top: 6px; }
 .gcode { margin-top: 14px; }
 .gclabel { display: block; font-size: 14px; color: #a8cfc0; }
 .gcode .joinbox { margin-top: 6px; }

@@ -6,7 +6,6 @@ has no `user:` of root and no `cap_add`.
 """
 import glob
 import os
-import re
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
