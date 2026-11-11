@@ -25,9 +25,13 @@ class FakeRoles:
         self.connected = lambda: ()
         self.changed = lambda account: None
         self.wanted = []
+        self.unknown = set()                    # accounts whose role is not known (as if no answer of Discord were young)
 
     def role_of(self, account):
         return self.roles.get(account, "none")
+
+    def known_none(self, account):
+        return self.roles.get(account, "none") == "none" and account not in self.unknown
 
     def want(self, account):
         self.wanted.append(account)

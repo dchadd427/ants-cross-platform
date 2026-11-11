@@ -26,6 +26,7 @@ from .store import PICKS, StoreError
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
+COMMANDS = frozenset(("/mute", "/del"))     # the words of a moderator's commands: from an account with no role they are refused and never become a line of chat
 PICK_REFUSED = "pick"                       # the code of the `err` for a `pick` that is not done (a page that reads the codes of its lines must not take it for one)
 
 
@@ -206,6 +207,8 @@ class Chat:
                 return self.command(peer, line)
             except StoreError as e:
                 return self.trouble(peer, e, "bad")                # (a moderator is told that the command did not happen, and may type it again)
+        if line.split(" ")[0] in COMMANDS:
+            return self.mistake(peer, "bad")                       # (a command from an account that holds no role, or whose role is not known yet, is not posted for everybody to read)
         now = self.clock()
         try:
             full = self.store.size() >= self.limits.db_max_bytes
@@ -262,10 +265,13 @@ class Chat:
         me = peer.identity
         if words[0] == "/mute" and len(words) == 3 and NUMBER.match(words[2]) and 1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES:
             target = self.account_named(words[1])
-            if target is None or self.is_mod(target):
-                return self.mistake(peer, "bad")
+            if target is None or not self.roles.known_none(target):
+                return self.mistake(peer, "bad")                   # (only a person who is known to hold no role: an unknown role is never acted on)
             self.store.mute(target, int(words[2]), me.account_id, words[1])
         elif words[0] == "/del" and len(words) == 2 and NUMBER.match(words[1]):
+            author = self.store.account_of_line(int(words[1]))
+            if author is None or (author != me.account_id and not self.roles.known_none(author)):
+                return self.mistake(peer, "bad")                   # (a line of a person with a role, or of one whose role is not known, is only its author's to delete)
             if not self.store.delete_line(int(words[1]), me.account_id):
                 return self.mistake(peer, "bad")
             self.sync_deletions()

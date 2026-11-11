@@ -122,6 +122,13 @@ class Contract(unittest.TestCase):
 
     # ---- deletions ----
 
+    def test_the_account_of_a_line_is_known_until_the_line_is_deleted(self):
+        a, b = self.say(1, "1001"), self.say(2, "1002", "bob")
+        self.assertEqual((self.store.account_of_line(a.id), self.store.account_of_line(b.id)), ("1001", "1002"))
+        self.assertIsNone(self.store.account_of_line(9999))
+        self.store.delete_line(a.id, "me")
+        self.assertIsNone(self.store.account_of_line(a.id))
+
     def test_a_deletion_is_numbered_once_and_a_second_one_does_nothing(self):
         a, b = self.say(1), self.say(2)
         self.assertEqual(self.store.last_deletion(), 0)

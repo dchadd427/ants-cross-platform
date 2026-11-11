@@ -34,6 +34,7 @@ import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
 import test_hub_server as ths  # noqa: E402  (its helpers start the real process and read its log)
 from test_hub_core import ALICE, BOB, World  # noqa: E402  (a chat without sockets, and its identities)
+from hub import session as sessionmod  # noqa: E402
 from hub import config, discord as discordmod, limits as limitmod, roles as rolesmod  # noqa: E402
 
 TOKEN, GUILD, ADMIN, MOD, OTHER = fd.BOT_TOKEN, fd.GUILD_ID, fd.ROLE_ADMIN, fd.ROLE_MOD, fd.ROLE_OTHER
@@ -150,6 +151,13 @@ class TheMapping(SetupTest):
         self.assertEqual([s.role(a) for a in ("1001", "1002", "1003", "1004", "1005", "1006")], ["admin", "mod", "admin", "none", "mod", "none"])
         self.assertEqual({a for _, a in s.stub.calls}, {"1001", "1002", "1003", "1004", "1005", "1006"})
 
+    def test_a_deleted_discord_account_is_an_answer_and_holds_no_role(self):
+        s = self.setup()
+        s.mode = lambda account: (404, {"message": "Unknown User", "code": 10013}, {})
+        s.connect("1006")
+        s.run(5)
+        self.assertEqual((s.roles.entries["1006"].fails, s.log.events, s.roles.known_none("1006")), (0, [], True))
+
     def test_a_person_who_is_not_in_the_server_is_an_answer_and_not_a_failure(self):
         s = self.setup()
         s.connect("1006")
@@ -192,9 +200,12 @@ class TheMapping(SetupTest):
             for frame in ({"t": "you", "you": {"role": "admin", "mod": True}}, {"t": "say", "text": "/mute bob 5", "role": "admin", "mod": True}, {"t": "here", "at": "look", "role": "admin"}):
                 c.send(hc.frame(1, json.dumps(frame).encode()))
             seen = c.drain(0.5)
-            self.assertIn({"t": "err", "code": "bad"}, seen)                       # (`you` is not a message that a client may send)
-            line = [m for m in seen if m["t"] == "line"]
-            self.assertEqual([(m["text"], m["mod"]) for m in line], [("/mute bob 5", False)])       # (a command from somebody with no role is a line of text)
+            self.assertEqual([m for m in seen if m["t"] == "err"], [{"t": "err", "code": "bad"}] * 2)       # (`you` is not a message that a client may send; and a command from somebody with no role is refused)
+            self.assertEqual([m for m in seen if m["t"] == "line"], [])                                    # (and is not posted for everybody to read)
+
+
+def session_identity(account, name):
+    return sessionmod.Identity(account, name, False)
 
 
 class TheChatAsksTheRoles(unittest.TestCase):
@@ -236,8 +247,70 @@ class TheChatAsksTheRoles(unittest.TestCase):
         self.w.roles.set("1001", "none")
         self.w.say(self.alice, "/mute alice 5")
         self.assertEqual(self.w.store.muted_until("1001"), 0)
-        self.assertEqual(self.alice.kinds("err"), [])
-        self.assertEqual(self.w.chat.ring[-1].text, "/mute alice 5")           # (a line of text, like any other)
+        self.assertEqual(self.alice.codes(), ["bad"])                            # (refused, privately)
+        self.assertEqual(self.w.chat.ring[-1].text, "hello")                     # (and not posted for everybody to read)
+
+    def test_a_command_is_done_only_to_a_person_whose_role_is_known(self):
+        self.w.roles.set("1001", "mod")
+        self.w.say(self.bob, "hello")
+        self.w.roles.unknown.add("1002")
+        self.w.say(self.alice, "/mute bob 5")
+        self.assertEqual((self.w.store.muted_until("1002"), self.alice.codes()), (0, ["bad"]))
+        self.w.roles.unknown.clear()
+        self.w.clock.now += 3
+        self.w.say(self.alice, "/mute bob 5")
+        self.assertGreater(self.w.store.muted_until("1002"), 0)
+
+    def test_a_line_is_deleted_by_a_moderator_only_if_its_author_is_known_to_hold_no_role(self):
+        self.w.roles.set("1001", "mod")
+        self.w.say(self.bob, "from bob")
+        self.w.say(self.alice, "from alice")
+        self.w.clock.now += 3
+        self.w.roles.set("1002", "admin")
+        self.w.say(self.alice, "/del 1")
+        self.assertEqual((self.alice.codes(), self.w.store.account_of_line(1)), (["bad"], "1002"))            # (an administrator's line)
+        self.w.roles.set("1002", "none")
+        self.w.roles.unknown.add("1002")
+        self.w.clock.now += 3
+        self.w.say(self.alice, "/del 1")
+        self.assertEqual((self.alice.codes(), self.w.store.account_of_line(1)), (["bad", "bad"], "1002"))     # (a role that is not known)
+        self.w.roles.unknown.clear()
+        self.w.clock.now += 3
+        self.w.say(self.alice, "/del 1")
+        self.assertIsNone(self.w.store.account_of_line(1))
+        self.w.clock.now += 3
+        self.w.say(self.alice, "/del 2")                                           # (a moderator's own line)
+        self.assertIsNone(self.w.store.account_of_line(2))
+        self.w.say(self.alice, "/del 99")
+        self.assertEqual(self.alice.codes()[-1], "bad")
+
+    def test_with_the_real_roles_nobody_is_muted_who_is_offline_or_new_or_after_a_refusal(self):
+        s = Setup(members={"1001": [MOD], "1002": [ADMIN], "1003": []})
+        self.addCleanup(s.close)
+        w = World(mods=())
+        self.addCleanup(w.close)
+        w.chat.roles = s.roles
+        s.roles.connected, s.roles.changed = w.chat.accounts, w.chat.role_changed
+        w.store.set_profile("1002", "bob", "", 100)                               # (an administrator who is offline, with a profile: the command line addresses by it)
+        w.store.set_profile("1004", "dave", "", 100)
+        a, c = w.join(ALICE), w.join(session_identity("1003", "carol"))
+        s.here.update({"1001", "1003"})
+        w.chat.welcome(a), w.chat.welcome(c)
+        s.run(5)
+        s.clock.t = w.clock.now = 1000.0 + 5
+        w.say(a, "/mute bob 5")                                                   # (offline: not known)
+        w.clock.now += 3
+        w.say(a, "/mute dave 5")                                                  # (offline, never asked: not known)
+        self.assertEqual((w.store.mutes(), a.codes()), ([], ["bad", "bad"]))
+        w.clock.now += 3
+        w.say(a, "/mute carol 5")                                                 # (here, asked, none: known)
+        self.assertEqual([m[0] for m in w.store.mutes()], ["1003"])
+        s.mode = lambda account: (401, {"code": 0}, {})                            # (the token is refused: nobody's role is known, and nobody is muted)
+        s.members["1003"] = []
+        s.run(300)
+        w.clock.now += 3
+        w.say(a, "/mute carol 9")
+        self.assertEqual(a.codes()[-1], "bad")
 
     def test_both_roles_are_a_moderator_for_the_lines_the_list_and_the_username(self):
         for role in ("mod", "admin"):
@@ -257,6 +330,37 @@ class TheChatAsksTheRoles(unittest.TestCase):
         w.say(a, "/mute bob 5")
         self.assertEqual(w.store.muted_until("1002"), 0)                         # (a moderator's command on an account with a role is refused)
         self.assertEqual(a.codes(), ["bad"])
+
+
+class TheKnownNone(SetupTest):
+    """A moderator's command is done only to a person who is POSITIVELY known to hold no role."""
+
+    def test_only_a_young_answer_of_none_is_known(self):
+        s = self.setup(owner=OWNER, members={"1001": [MOD], "1002": [], "1004": [ADMIN]})
+        self.assertEqual([s.roles.known_none(a) for a in ("1001", "1002", "1003", OWNER)], [False, False, False, False])          # (nobody has been asked yet)
+        s.connect("1001", "1002", "1004")
+        self.assertFalse(s.roles.known_none("1002"))                             # (asked for, not answered)
+        s.run(5)
+        self.assertEqual([s.roles.known_none(a) for a in ("1001", "1002", "1003", "1004", OWNER)], [False, True, False, False, False])
+        s.here.discard("1002")                                                   # (it leaves; the answer stands for the grace only)
+        s.clock.t = s.roles.entries["1002"].ok_at + s.roles.grace
+        self.assertTrue(s.roles.known_none("1002"))
+        s.clock.t += 1.0
+        self.assertFalse(s.roles.known_none("1002"))
+        self.assertFalse(s.roles.known_none("1003"))
+
+    def test_an_answer_that_ran_out_or_was_taken_back_is_not_known(self):
+        s = self.setup(members={"1002": []})
+        s.connect("1002")
+        s.run(5)
+        self.assertTrue(s.roles.known_none("1002"))
+        s.mode = lambda a: (401, {"code": 0}, {})
+        s.run(300)
+        self.assertFalse(s.roles.known_none("1002"))
+
+    def test_without_the_settings_everybody_but_the_owner_account_is_known_to_hold_no_role(self):
+        roles = rolesmod.Roles(config.load({"ANTS_HUB_OWNER": OWNER}), limitmod.Limits(), Clock(), Log())
+        self.assertEqual((roles.known_none("1001"), roles.known_none(OWNER)), (True, False))
 
 
 class TheLookup(unittest.TestCase):
@@ -334,11 +438,15 @@ class TheLookup(unittest.TestCase):
 
     def test_a_rate_limit_value_that_is_not_a_small_plain_number_is_left_out(self):
         rl = discordmod.Discord.rate_limits
-        junk = {"x-ratelimit-remaining": "nan", "x-ratelimit-reset-after": "1e9", "retry-after": "-1"}
+        junk = {"x-ratelimit-remaining": "nan", "x-ratelimit-reset-after": "1e9"}
         self.assertEqual(rl(junk, {}), {"global": False})
-        self.assertEqual(rl({"x-ratelimit-reset-after": "99999", "retry-after": "abc"}, {}), {"global": False})
+        self.assertEqual(rl({"x-ratelimit-reset-after": "99999"}, {}), {"global": False})
         self.assertEqual(rl({}, {"retry_after": True}), {"global": False})
-        self.assertEqual(rl({}, {"retry_after": 10 ** 9}), {"global": False})
+        longest = {"retry_after": 3600.0, "global": False}                       # (a wait that is asked for and cannot be read, or is huge, is the longest wait and never a short one)
+        for fields, body in (({"retry-after": "abc"}, {}), ({"retry-after": "-1"}, {}), ({"retry-after": "99999"}, {}), ({"retry-after": "nan"}, {}), ({}, {"retry_after": 10 ** 9}),
+                             ({}, {"retry_after": "soon"}), ({}, {"retry_after": [1]}), ({}, {"retry_after": -1})):
+            self.assertEqual(rl(fields, body), longest, (fields, body))
+        self.assertEqual(rl({"retry-after": "7"}, {}), {"retry_after": 7.0, "global": False})
         self.assertEqual(rl({}, {"retry_after": 2.5, "global": True}), {"retry_after": 2.5, "global": True})
         self.assertEqual(rl({"x-ratelimit-scope": "shared"}, {}), {"global": False})
 
@@ -356,7 +464,7 @@ FAILURES = {
     "500": lambda a: (500, {"message": "x"}, {}),
     "502": lambda a: (502, {}, {}),
     "400": lambda a: (400, {"message": "x"}, {}),
-    "404 of another kind": lambda a: (404, {"message": "Unknown User", "code": 10013}, {}),
+    "404 of another kind": lambda a: (404, {"message": "Unknown Channel", "code": 10003}, {}),
     "404 with no code": lambda a: (404, {}, {}),
     "404 with a code that is text": lambda a: (404, {"code": "10007"}, {}),
     "404 with a code that is true": lambda a: (404, {"code": True}, {}),
@@ -484,14 +592,27 @@ class TheGrace(SetupTest):
         asked = s.roles.entries["1001"].ok_at
         s.mode = lambda a: discordmod.DiscordError("down")
         s.changes.clear()
-        s.clock.t = asked + 240.0
-        self.assertEqual(s.role("1001"), "mod")                                  # (180 + 60: still believed)
-        s.clock.t = asked + 240.5
+        s.clock.t = asked + 258.0
+        self.assertEqual(s.role("1001"), "mod")                                  # (180 + a tenth + 60: still believed)
+        s.clock.t = asked + 258.5
         self.assertEqual(s.role("1001"), "none")
         s.roles.on_tick(s.clock.t)
         self.assertEqual(s.changes, ["1001"])                                    # (the pages are told, once)
         s.roles.on_tick(s.clock.t + 1)
         self.assertEqual(s.changes, ["1001"])
+
+    def test_a_check_that_is_due_as_late_as_it_can_be_never_comes_after_the_role_ran_out(self):
+        for recheck in (180, 3600):
+            s = self.setup(recheck=recheck, rng=lambda: 1.0, members={"1001": [MOD]})        # (the latest: the interval and a tenth)
+            s.connect("1001")
+            s.run(1)
+            s.changes.clear()
+            step = recheck / 20.0
+            for _ in range(int(recheck * 1.1 / step) + 2):
+                s.run(step)
+                self.assertEqual(s.role("1001"), "mod", (recheck, s.clock.t))
+            self.assertEqual(s.changes, [], recheck)
+            self.assertGreaterEqual(s.roles.grace, recheck * 1.1 + 60.0)
 
     def test_the_grace_follows_the_setting(self):
         s = self.setup(recheck=60, members={"1001": [MOD]})
@@ -499,9 +620,9 @@ class TheGrace(SetupTest):
         s.run(1)
         asked = s.roles.entries["1001"].ok_at
         s.mode = lambda a: discordmod.DiscordError("down")
-        s.clock.t = asked + 119.0
+        s.clock.t = asked + 125.0
         self.assertEqual(s.role("1001"), "mod")
-        s.clock.t = asked + 121.0
+        s.clock.t = asked + 127.0
         self.assertEqual(s.role("1001"), "none")
 
     def test_a_role_that_comes_back_is_told_again(self):
@@ -633,6 +754,49 @@ class TheScheduler(SetupTest):
         self.assertGreater(len(asked), 100)
         s.run(300)                                                               # (and those that left are forgotten after the grace)
         self.assertEqual(set(s.roles.entries), {"1001"})
+
+    def test_a_page_that_reconnects_does_not_skip_the_delay_of_a_failed_check(self):
+        s = self.setup(members={"1001": [MOD]})
+        s.mode = lambda a: (500, {}, {})
+        s.connect("1001")
+        s.run(1)
+        due = s.roles.entries["1001"].due
+        self.assertGreater(due, s.clock.t + 10.0)
+        for _ in range(5):
+            s.connect("1001")                                                    # (the page connects again and again)
+        self.assertEqual(s.roles.entries["1001"].due, due)
+        s.run(10)
+        self.assertEqual(len(s.stub.calls), 1)
+        s.run(10)
+        self.assertEqual(len(s.stub.calls), 2)
+
+    def test_a_worker_that_ended_is_said_once_and_started_again(self):
+        s = self.setup(members={"1001": [MOD]})
+
+        async def scenario():
+            s.roles.start()
+            first = s.roles.task
+            first.cancel()
+            try:
+                await first
+            except asyncio.CancelledError:
+                pass
+            s.roles.on_tick(s.clock.t)
+            second = s.roles.task
+            assert second is not first and not second.done()
+            first_log = list(s.log.events)
+            second.cancel()
+            try:
+                await second
+            except asyncio.CancelledError:
+                pass
+            s.roles.on_tick(s.clock.t + 1)                                       # (it ends again at once: started again, and not said again)
+            s.roles.stop()
+            return first_log
+        said = s.loop.run_until_complete(scenario())
+        self.assertEqual(said, [("error", {"kind": "worker_ended", "where": "roles"})])
+        self.assertEqual(s.log.events, said)
+        s.roles.stop()
 
     def test_a_person_who_reloads_keeps_the_role_that_was_known(self):
         s = self.setup(members={"1001": [MOD]})
@@ -824,6 +988,7 @@ class TheLiveRoles(LiveTest):
         victim, _ = self.connect("1003:victim")
         self.wait_role(mod, "mod")
         victim.say("hello")
+        self.assertTrue(self.wait_for(lambda: self.rig.call(lambda: self.rig.hub.chat.roles.known_none("1003")), 8.0))          # (the victim's role is known: it was asked)
         mod.say("/mute victim 5")
         time.sleep(0.4)
         victim.drain(0.2)
@@ -833,8 +998,8 @@ class TheLiveRoles(LiveTest):
         self.wait_role(mod, "none")
         mod.drain(0.2)
         mod.say("/mute nobody 5")
-        text = [m for m in mod.drain(0.5) if m["t"] == "line"]
-        self.assertEqual([(m["text"], m["mod"]) for m in text], [("/mute nobody 5", False)])
+        seen = mod.drain(0.5)
+        self.assertEqual(([m for m in seen if m["t"] == "line"], [m["code"] for m in seen if m["t"] == "err"]), ([], ["bad"]))     # (refused, and not posted for everybody to read)
 
     def test_the_players_list_marks_both_roles(self):
         self.fake.members = {"1001": [MOD], "1002": [ADMIN]}

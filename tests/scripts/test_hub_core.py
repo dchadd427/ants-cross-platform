@@ -494,8 +494,8 @@ class TheModerators(WorldTest):
         self.assertIs(self.w.chat.welcome(impostor)["you"]["mod"], False)
         self.w.say(self.alice, "hi")
         self.w.say(impostor, "/mute alice 5")
-        line = self.reader.kinds("line")[-1]
-        self.assertEqual((line["text"], line["mod"]), ("/mute alice 5", False))        # text, from someone who is not one
+        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi"])           # (the command is not posted for everybody to read: it is refused)
+        self.assertEqual(impostor.codes(), ["bad"])
         self.assertEqual(self.w.store.mutes(), [])
 
     def test_deleting_goes_on_working_after_old_lines_were_purged(self):
@@ -655,11 +655,13 @@ class TheModerators(WorldTest):
     def test_the_commands_are_for_moderators_only(self):
         self.w.say(self.alice, "hi")
         self.w.clock.now += 3
-        self.w.say(self.bob, "/mute alice 5")                       # for anybody else it is a line of text
+        self.w.say(self.bob, "/mute alice 5")                       # for anybody else it is refused, privately, and never a line that names the person
         self.w.clock.now += 3
         self.w.say(self.bob, "/del 1")
-        self.assertEqual(self.bob.codes(), [])
-        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi", "/mute alice 5", "/del 1"])
+        self.w.clock.now += 3
+        self.w.say(self.bob, "/shrug")                              # (any other line that starts with a slash is text)
+        self.assertEqual(self.bob.codes(), ["bad", "bad"])
+        self.assertEqual([m["text"] for m in self.reader.kinds("line")], ["hi", "/shrug"])
         self.assertEqual(self.w.store.mutes(), [])
         self.assertEqual(self.reader.kinds("del"), [])
 

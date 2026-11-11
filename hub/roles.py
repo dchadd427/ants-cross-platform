@@ -8,7 +8,7 @@ lookups are made by one task, one at a time, at about two a second (a token buck
 last hour, then everybody else; each is asked again `ANTS_HUB_ROLE_RECHECK_SECONDS` after the last answer, plus or minus a tenth, so that a crowd that arrived together is spread out. The busier
 it is, the later the last group is asked; a role holder is never held back for it.
 
-Fail closed. An answer is believed for the interval and `roles_grace_seconds` more (a missed check is forgiven once); after that the person is `none` until Discord says otherwise, and a `you` frame
+Fail closed. An answer is believed for the interval, a tenth more (the latest that a check is due) and `roles_grace_seconds` more (a missed check is forgiven once); after that the person is `none` until Discord says otherwise, and a `you` frame
 tells the person's pages. A Discord that is down, slow, busy or sends garbage is a failed check, never "no role" and never a role. A token, a server or an access that Discord refuses (401, 403,
 404 with the code for an unknown server) stops every call for `roles_pause_seconds` with one neutral line in the log and takes everybody's role away but the owner account's; then one call tries again. Chat
 itself is never held up: it asks `role_of`, which is a dictionary look and no I/O.
@@ -24,6 +24,7 @@ from .limits import TokenBucket
 NONE, MOD, ADMIN = "none", "mod", "admin"
 MAX_ROLES = 250                                 # a member has at most this many roles in Discord; an answer with more is not Discord's
 NOT_A_MEMBER = 10007                            # Discord's code for "Unknown Member": the person is not in the server (an answer, and the answer is `none`)
+UNKNOWN_USER = 10013                            # ... and "Unknown User": a Discord account that was deleted; it is in no server either
 UNKNOWN_GUILD = 10004
 LOST_FOR = 3600.0                               # a person who lost a role is asked again like a role holder for this long (the direction that matters)
 OVERDUE = 30.0                                  # a role holder who has been due this long is asked before even a new socket (a crowd that arrives must not run out a role)
@@ -57,7 +58,7 @@ class Roles:
         self.log = log
         self.rng = rng
         self.interval = float(cfg.role_recheck_seconds)
-        self.grace = self.interval + limits.roles_grace_seconds
+        self.grace = self.interval * (1.0 + limits.roles_jitter) + limits.roles_grace_seconds        # (past the latest that a check can be due: a jittered check never comes after the role ran out)
         self.client = client if client is not None else (discordmod.Discord(cfg, limits) if self.on else None)
         self.entries = {}                       # account -> Entry, for the accounts that have a socket open (and, for one grace, those that had)
         self.connected = lambda: ()             # the accounts that have a socket open (the chat sets it)
@@ -82,6 +83,16 @@ class Roles:
             return NONE
         return entry.role
 
+    def known_none(self, account):
+        """Whether the account is POSITIVELY known to hold no role now: an answer of Discord that is young says `none`. An account that is not here, has not been asked yet, or whose answer ran
+        out is not known (a moderator's command is never done to a person whose role is not known); the owner account is never none. Without the roles' settings nobody but the owner has one."""
+        if self.owner and account == self.owner:
+            return False
+        if not self.on:
+            return True
+        entry = self.entries.get(account)
+        return entry is not None and entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE
+
     def want(self, account):
         """A socket of `account` was let in: its role is asked at the front of the queue, unless an answer that is young is already known."""
         if not self.on or (self.owner and account == self.owner):
@@ -92,8 +103,8 @@ class Roles:
             if len(self.entries) >= self.limits.roles_entries_max and not self.evict():
                 return                                              # (nowhere to keep it: the person is `none`, which is the safe side)
             entry = self.entries[account] = Entry(now)
-        elif entry.ok_at is None or now - entry.ok_at >= self.interval:
-            entry.new, entry.due = True, now
+        elif (entry.ok_at is None or now - entry.ok_at >= self.interval) and not (entry.fails > 0 and entry.due > now):
+            entry.new, entry.due = True, now                        # (a person whose checks fail keeps the delay of the retries: a page that reconnects does not skip it)
         entry.seen = now
         if self.wake is not None:
             self.wake.set()
@@ -111,6 +122,10 @@ class Roles:
 
     def on_tick(self, now):
         """Once a tick: forget those who left (after the grace: a page that reloads keeps its role), and tell the pages of a role that ran out."""
+        if self.task is not None and self.task.done():                # (the worker ended: roles run out by themselves meanwhile; say so once and start it again)
+            self.task = None
+            self.trouble(RuntimeError("worker ended"), "worker_ended")
+            self.start()
         here = set(self.connected())
         for account, entry in list(self.entries.items()):
             if account in here:
@@ -159,11 +174,11 @@ class Roles:
             else:
                 await asyncio.sleep(0)
 
-    def trouble(self, error):
+    def trouble(self, error, kind=None):
         now = self.clock()
         if now >= self.next_error_log:
             self.next_error_log = now + self.limits.roles_log_seconds
-            self.log.event("error", kind=type(error).__name__, where="roles")
+            self.log.event("error", kind=kind or type(error).__name__, where="roles")
 
     async def step(self):
         """One look at the queue: asks about the person who is first, if a call may be made now. The number is the seconds until the next look is worth making (0: look again at once)."""
@@ -219,7 +234,7 @@ class Roles:
             code = None
         if status == 200:
             role = self.role_in(data, account)
-        elif status == 404 and code == NOT_A_MEMBER:
+        elif status == 404 and code in (NOT_A_MEMBER, UNKNOWN_USER):
             role = NONE
         elif status == 404 and code == UNKNOWN_GUILD:
             return self.refused("guild", status, now)
@@ -228,7 +243,7 @@ class Roles:
         elif status == 403:
             return self.refused("access", status, now)
         elif status == 429:
-            wait = rl.get("retry_after", 5.0)
+            wait = rl.get("retry_after", 5.0)                       # (an unreadable or huge value is read as the longest wait: see hub/discord.py)
             self.hold_until = max(self.hold_until, now + min(max(wait, 0.5), self.limits.roles_hold_max_seconds))     # (every call goes through this one worker: all of them wait)
             return self.unwell("busy", now)
         else:

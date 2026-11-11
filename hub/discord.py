@@ -154,13 +154,17 @@ class Discord:
         """What the answer says of Discord's rate limits, as bounded numbers (a value that is not a small plain number is left out): `remaining` (calls left in the bucket), `reset_after` and
         `retry_after` (seconds), and `global` (the limit that was hit is the whole bot's)."""
         found = {}
-        for key, name in (("x-ratelimit-remaining", "remaining"), ("x-ratelimit-reset-after", "reset_after"), ("retry-after", "retry_after")):
+        for key, name in (("x-ratelimit-remaining", "remaining"), ("x-ratelimit-reset-after", "reset_after")):
             value = fields.get(key, "")
             if NUMBER.match(value):
                 found[name] = float(value)
+        if "retry-after" in fields:                               # (a wait that is asked for and cannot be read, or is huge, is the longest wait, never a short one)
+            found["retry_after"] = min(float(fields["retry-after"]), 3600.0) if NUMBER.match(fields["retry-after"]) else 3600.0
         said = data.get("retry_after")
-        if isinstance(said, (int, float)) and not isinstance(said, bool) and 0 <= said <= 3600:
-            found["retry_after"] = float(said)
+        if isinstance(said, (int, float)) and not isinstance(said, bool) and said >= 0:
+            found["retry_after"] = min(float(said), 3600.0)
+        elif "retry_after" in data and not isinstance(said, bool):
+            found["retry_after"] = 3600.0
         found["global"] = fields.get("x-ratelimit-global") == "true" or fields.get("x-ratelimit-scope") == "global" or data.get("global") is True
         return found
 

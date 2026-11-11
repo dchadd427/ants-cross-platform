@@ -127,6 +127,10 @@ class Store(StoreBase):
                                "ORDER BY id DESC LIMIT ?", (int(self.clock()) - self.retention, self.max_lines, count)).fetchall()
         return [Line(*r) for r in reversed(rows)]
 
+    def account_of_line(self, line_id):
+        row = self.db.execute("SELECT account FROM lines WHERE id = ? AND deleted = 0", (line_id,)).fetchone()
+        return row[0] if row else None
+
     def delete_line(self, line_id, by):
         """Mark a line deleted; False when there is no such line or it was deleted already. Every deletion gets the next number of a counter that nothing lowers (a purge of old
         lines does not), so the hub, which asks for the deletions after the last number it knows, never misses one."""

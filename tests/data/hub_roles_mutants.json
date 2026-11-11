@@ -14,8 +14,8 @@
   {
    "id": "a_person_who_is_not_in_the_server_is_a_failed_check",
    "file": "hub/roles.py",
-   "old": "        elif status == 404 and code == NOT_A_MEMBER:\n            role = NONE",
-   "new": "        elif status == 404 and code == NOT_A_MEMBER:\n            role = None",
+   "old": "        elif status == 404 and code in (NOT_A_MEMBER, UNKNOWN_USER):\n            role = NONE",
+   "new": "        elif status == 404 and code in (NOT_A_MEMBER, UNKNOWN_USER):\n            role = None",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheMapping"
   },
   {
@@ -35,8 +35,8 @@
   {
    "id": "no_grace_at_all",
    "file": "hub/roles.py",
-   "old": "self.grace = self.interval + limits.roles_grace_seconds",
-   "new": "self.grace = self.interval",
+   "old": "self.grace = self.interval * (1.0 + limits.roles_jitter) + limits.roles_grace_seconds",
+   "new": "self.grace = self.interval * (1.0 + limits.roles_jitter)",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheGrace tests.scripts.test_hub_roles.TheFailures"
   },
   {
@@ -140,8 +140,8 @@
   {
    "id": "the_text_of_an_error_is_in_the_log",
    "file": "hub/roles.py",
-   "old": "self.log.event(\"error\", kind=type(error).__name__, where=\"roles\")",
-   "new": "self.log.event(\"error\", kind=type(error).__name__, where=\"roles\", text=str(error))",
+   "old": "self.log.event(\"error\", kind=kind or type(error).__name__, where=\"roles\")",
+   "new": "self.log.event(\"error\", kind=kind or type(error).__name__, where=\"roles\", text=str(error))",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheFailures"
   },
   {
@@ -380,6 +380,90 @@
    "file": "hub/roles.py",
    "old": "key = (0 if holder and now - entry.due > OVERDUE else 1 if entry.new else 2 if holder else 3, entry.due)",
    "new": "key = (1 if entry.new else 2 if holder else 3, entry.due)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheScheduler"
+  },
+  {
+   "id": "the_grace_is_shorter_than_the_latest_check",
+   "file": "hub/roles.py",
+   "old": "self.grace = self.interval * (1.0 + limits.roles_jitter) + limits.roles_grace_seconds",
+   "new": "self.grace = self.interval + limits.roles_grace_seconds",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheGrace"
+  },
+  {
+   "id": "a_target_of_unknown_role_is_actable",
+   "file": "hub/chat.py",
+   "old": "if target is None or not self.roles.known_none(target):",
+   "new": "if target is None or self.is_mod(target):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles tests.scripts.test_hub_roles.TheKnownNone"
+  },
+  {
+   "id": "an_old_answer_of_none_is_known",
+   "file": "hub/roles.py",
+   "old": "entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE",
+   "new": "entry.ok_at is not None and entry.role == NONE",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone"
+  },
+  {
+   "id": "a_person_who_was_not_asked_is_known_to_hold_none",
+   "file": "hub/roles.py",
+   "old": "return entry is not None and entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE",
+   "new": "return entry is None or (entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone tests.scripts.test_hub_roles.TheChatAsksTheRoles"
+  },
+  {
+   "id": "the_owner_account_is_known_to_hold_none",
+   "file": "hub/roles.py",
+   "old": "        if self.owner and account == self.owner:\n            return False\n        if not self.on:",
+   "new": "        if False:\n            return False\n        if not self.on:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone"
+  },
+  {
+   "id": "without_the_settings_nobody_is_known_to_hold_none",
+   "file": "hub/roles.py",
+   "old": "        if not self.on:\n            return True",
+   "new": "        if not self.on:\n            return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone"
+  },
+  {
+   "id": "the_author_of_a_line_is_not_looked_at",
+   "file": "hub/chat.py",
+   "old": "if author is None or (author != me.account_id and not self.roles.known_none(author)):",
+   "new": "if author is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles"
+  },
+  {
+   "id": "a_command_from_a_person_with_no_role_is_posted",
+   "file": "hub/chat.py",
+   "old": "        if line.split(\" \")[0] in COMMANDS:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles tests.scripts.test_hub_roles.TheLiveRoles tests.scripts.test_hub_roles.TheMapping"
+  },
+  {
+   "id": "a_page_that_reconnects_skips_the_delay",
+   "file": "hub/roles.py",
+   "old": "        elif (entry.ok_at is None or now - entry.ok_at >= self.interval) and not (entry.fails > 0 and entry.due > now):",
+   "new": "        elif entry.ok_at is None or now - entry.ok_at >= self.interval:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheScheduler"
+  },
+  {
+   "id": "an_unreadable_wait_is_a_short_one",
+   "file": "hub/discord.py",
+   "old": "if NUMBER.match(fields[\"retry-after\"]) else 3600.0",
+   "new": "if NUMBER.match(fields[\"retry-after\"]) else 5.0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheLookup"
+  },
+  {
+   "id": "a_deleted_account_is_a_failed_check",
+   "file": "hub/roles.py",
+   "old": "code in (NOT_A_MEMBER, UNKNOWN_USER)",
+   "new": "code == NOT_A_MEMBER",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheMapping"
+  },
+  {
+   "id": "a_worker_that_ended_is_not_noticed",
+   "file": "hub/roles.py",
+   "old": "if self.task is not None and self.task.done():",
+   "new": "if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheScheduler"
   }
  ]

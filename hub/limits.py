@@ -67,7 +67,7 @@ class Limits:
     discord_total_seconds: float = 10.0         # ... and the two calls of a login together (nginx waits 15 seconds for the hub's answer)
     roles_burst: int = 5                # the roles' lookups (hub/roles.py): a burst of 5, then one every half second (two a second), one at a time, however many people are here ...
     roles_refill_seconds: float = 0.5
-    roles_grace_seconds: float = 60.0   # ... a role is believed for the re-check interval and this long more, then it is `none` until Discord has said it again
+    roles_grace_seconds: float = 60.0   # ... a role is believed for the re-check interval, a tenth of it (the jitter) and this long more, then it is `none` until Discord has said it again
     roles_pause_seconds: float = 600.0  # a token, a server or an access that Discord refuses: no call at all for this long, then one to try again
     roles_jitter: float = 0.1           # the next check of a person is the interval plus or minus this part of it, so that a crowd that came together does not stay together
     roles_retry_seconds: float = 15.0   # a check that failed is tried again after this, then double, up to the next number, then at the normal pace

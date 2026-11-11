@@ -50,6 +50,10 @@ class StoreBase:
         """The name the account last spoke under (the one that was shown then), or ''."""
         raise NotImplementedError
 
+    def account_of_line(self, line_id):
+        """The account that wrote the line (a line that is not deleted), or None."""
+        raise NotImplementedError
+
     def delete_line(self, line_id, by):
         """Mark a line deleted and give the deletion the next number of the counter; False when there is no such line or it was deleted already."""
         raise NotImplementedError
