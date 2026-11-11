@@ -300,8 +300,8 @@
   {
    "id": "script_does_not_fail_on_a_difference_of_files",
    "file": "tools/image_files_diff.sh",
-   "old": "--label \"$name files\" || rc=$?\n    [ \"$rc\" -ge 2 ] && return 2\n    [ \"$rc\" = 1 ] && fail=1",
-   "new": "--label \"$name files\" || rc=$?\n    [ \"$rc\" -ge 2 ] && return 2",
+   "old": "    if [ \"$rc\" = 1 ]; then\n        fail=1\n",
+   "new": "    if [ \"$rc\" = 1 ]; then\n        :\n",
    "test": "python3 tests/scripts/test_image_files_diff.py",
    "expect": "test_a_changed_byte_fails_and_names_the_file"
   },
