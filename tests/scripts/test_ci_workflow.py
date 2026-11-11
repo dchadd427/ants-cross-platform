@@ -583,8 +583,9 @@ class TheJobsBehindTheRequiredNames(unittest.TestCase):
     def test_each_check_passes_only_when_the_first_job_and_every_job_behind_it_succeeded_or_were_rightly_skipped(self):
         """Every combination of results (the first job and each job behind the check: success, failure, cancelled, skipped, none) and of the first job's answer (true, false, none), each small job
         run in bash as GitHub runs it: it passes for exactly the combinations that the rule lets through."""
-        doc = yaml.safe_load(TEXT) if yaml else None
-        self.assertIsNotNone(doc, "PyYAML is needed")
+        if not yaml:
+            self.skipTest("PyYAML is needed (the Linux jobs of the CI have it, and TheCiMachinesHavePyYAML checks that)")
+        doc = yaml.safe_load(TEXT)
         self.assertEqual(problems_of_how_the_aggregates_decide(doc), [])
         # the rule itself, for the reader: a job that failed to decide never passes; the skip passes only for a light answer, for the three names that can be skipped
         self.assertTrue(aggregate_passes(doc, "macos", "success", "true", {"macos_tests": "skipped"}))
