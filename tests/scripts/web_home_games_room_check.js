@@ -703,6 +703,25 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     away.$('name-step-own').click();
     check('"Start a room of my own instead" on the card closes it: the own room stays and Join is back', away.$('name-step').hidden && away.sockets.length === 1 && !awayOwn.closed && first(popOf(away), 'gcgo').disabled === false);
 }
+{   // "Have a code?": a text button in the heading folds the box open under it (the focus goes to the field), Escape or the close button folds it shut (the focus goes back to the button)
+    const env = await withList();
+    myRoom(env, ['Maya']);
+    env.roomBar('rhome').click();
+    await openGames(env);
+    const head = first(popOf(env), 'gphead'), link = first(head, 'gcodelink'), box = first(popOf(env), 'gcode'), input = first(box, 'joinbox').children[0], close = first(box, 'gcx');
+    check('"Have a code?" is a button in the heading with aria-expanded="false", controlling the box, which is shut and has no label above the field', link.tagName === 'button' && link.textContent === 'Have a code?' && link.getAttribute('aria-expanded') === 'false'
+          && link.getAttribute('aria-controls') === box.id && box.hidden === true && !first(popOf(env), 'gclabel') && popOf(env).children[1] === box && close.getAttribute('aria-label') === 'Close');
+    tap(link);
+    check('pressed: the box is open, aria-expanded is true and the focus is in the field', box.hidden === false && link.getAttribute('aria-expanded') === 'true' && env.focused === input);
+    pressEscape(env);
+    check('Escape in the field shuts the box, gives the focus back to the button, and keeps the list open', box.hidden === true && link.getAttribute('aria-expanded') === 'false' && env.focused === link && popOf(env).hidden === false);
+    tap(link); input.value = 'k7m2'; input.fire('input', {}); tap(close);
+    check('the close button shuts it too, with the focus on the button', box.hidden === true && env.focused === link);
+    tap(link); link.focus(); tap(link);
+    check('the button pressed again shuts the box (the focus is on it)', box.hidden === true && link.getAttribute('aria-expanded') === 'false' && env.focused === link);
+    tap(link); input.value = 'https://play.test/?join=x1&room=k7m2xq'; input.key('Enter');
+    check('a pasted room link and Enter ask for the name: the card says the room of the link', !env.$('name-step').hidden && env.$('name-step-title').textContent === 'Join the room k7m 2xq');
+}
 {   // Join by code with others in the room: the question first, then the name card
     const env = await withList();
     const own = myRoom(env, OTHERS);
@@ -754,7 +773,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     await wait(env, 5000);
     check('... for as long as the look takes (a second client waits up to 15 s)', bar.hidden === false && bar.children[1].disabled === false);
     tap(bar.children[1]);
-    check('Cancel: the line goes, the buttons are back, the second client is let go of (a Leave, closed), the own room is as it was, and the focus is in the field', bar.hidden === true && joinOf(rowsOf(env)[0]).disabled === false && leaves(probe) === 1 && probe.closed && leaves(own) === 0 && !own.closed && env.focused === first(popOf(env), 'joinbox').children[0]);
+    check('Cancel: the line goes, the buttons are back, the second client is let go of (a Leave, closed), the own room is as it was, and the focus is on Have a code?, the box being shut', bar.hidden === true && joinOf(rowsOf(env)[0]).disabled === false && leaves(probe) === 1 && probe.closed && leaves(own) === 0 && !own.closed && env.focused === first(first(popOf(env), 'gphead'), 'gcodelink'));
     probe.receive(welcome(1, KEY2, 0));
     await wait(env, 20000);
     check('a Welcome (or the 15 s of silence) that comes after Cancel changes nothing: no notice, no Room, no words, the own room stays', env.screen() === 'home' && own.closed === false && leaves(own) === 0 && toastOf(env).hidden === true && textOf(first(popOf(env), 'gpnote')) === '' && bar.hidden === true);

@@ -314,11 +314,13 @@ def open_name_card(t):
 
 
 def open_games(t):
-    """Home, then the Games list (web/home/games.js: the page loads it after its first paint, so the button is waited for), with the cursor in the field of Join by code."""
+    """Home, then the Games list (web/home/games.js: the page loads it after its first paint, so the button is waited for), with "Have a code?" pressed (the box is open under the heading and the cursor is in its field)."""
     t.ev("(function () { var h = document.querySelector('.rhome'); if (h && document.body.getAttribute('data-screen') === 'room') h.click(); return 1; })()")
     wait_for(lambda: t.ev("(function () { var g = document.querySelector('.hchip.games'); return !!g && !g.disabled; })()"), 10)
     click_on(t, ".hchip.games")
     wait_for(lambda: t.ev("!document.querySelector('.gpop').hidden"), 5)
+    if t.ev("document.querySelector('.gpop .gcode').hidden"):
+        click_on(t, ".gpop .gcodelink")
     t.ev("document.querySelector('.gpop .joinbox input').focus(); 1")
 
 
@@ -689,7 +691,11 @@ def main():
 
             # Join by code (the Games list of Home)
             open_games(tab)
-            check(value("!document.querySelector('.gpop').hidden"), "Games opens the list, with Join by code at its end")
+            check(value("!document.querySelector('.gpop').hidden"), "Games opens the list, with Have a code? in its heading")
+            check(value("document.querySelector('.gpop .gcodelink').getAttribute('aria-expanded')") == "true" and value("document.activeElement === document.querySelector('.gpop .joinbox input')") is True,
+                  "Have a code? opens the box (aria-expanded) with the cursor in the field")
+            size = json.loads(value("JSON.stringify([document.querySelector('.gpop .gcodelink'), document.querySelector('.gpop .gcx'), document.querySelector('.gpop .gcgo')].map(function (e) { var r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }))"))
+            check(all(w >= 44 and h >= 44 for w, h in size), "Have a code?, the close button and Join are at least 44 px each way (%s)" % (size,))
             contrast("1440 px with the Games list open", least=45)
             real_click(".gpop .gcgo")
             check(value("document.querySelector('.gpop .hint').textContent") == "Type or paste the code first.", "Join with nothing typed says to type or paste the code first")
@@ -698,6 +704,14 @@ def main():
             real_click(".gpop .gcgo")
             check(value("document.querySelector('.gpop .hint').textContent") == "A room code has letters and numbers only, like k7m 2xq.", "a code with a sign in it is told: letters and numbers only (%r)" % value("document.querySelector('.gpop .hint').textContent"))
             contrast("1440 px with a line under the code field", least=45)
+            tab.ev("document.querySelector('.gpop .joinbox input').value = ''; document.querySelector('.gpop .joinbox input').focus(); 1")
+            tab.call("Input.insertText", {"text": "https://play.test/?join=x&room=" + code.upper()})
+            real_click(".gpop .gcgo")
+            check(value("document.querySelector('.gpop .hint').textContent") == "That is your own room." and not open_name_card(tab), "a pasted room link (also with ?join= before room=) is read as its code: the page's own room is \"That is your own room.\"")
+            key("Escape", 27)
+            check(value("document.querySelector('.gpop .gcode').hidden") is True and value("document.activeElement === document.querySelector('.gpop .gcodelink')") is True and value("document.querySelector('.gpop .gcodelink').getAttribute('aria-expanded')") == "false",
+                  "Escape shuts the box and puts the focus back on Have a code?")
+            real_click(".gpop .gcodelink")
             tab.ev("document.querySelector('.gpop .joinbox input').value = ''; document.querySelector('.gpop .joinbox input').focus(); 1")
             tab.call("Input.insertText", {"text": code[:3].upper() + " " + code[3:]})
             real_click(".gpop .gcgo")
