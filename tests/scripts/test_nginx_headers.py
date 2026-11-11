@@ -50,7 +50,7 @@ SITE = "beta.playants.org"
 HSTS = "max-age=604800"
 HSTS_LINE = 'add_header Strict-Transport-Security "max-age=604800" always;'
 PERMISSIONS = ("camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), interest-cohort=()")
-LOBBY_PERMISSIONS = PERMISSIONS.replace("microphone=()", "microphone=(self)")        # (the front page has the chat's voice button: the microphone for the page itself and for no frame in it)
+LOBBY_PERMISSIONS = PERMISSIONS.replace("microphone=()", "microphone=(self)")        # (the front page has the chat's voice button: the microphone for the page itself and for no frame of another site in it)
 ADMIN_PERMISSIONS = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
 PAGE_HEADERS = ("content-security-policy", "x-frame-options", "referrer-policy", "permissions-policy")
 POLICED = PAGE_HEADERS + ("strict-transport-security", "cross-origin-opener-policy", "cross-origin-embedder-policy", "x-content-type-options", "cache-control")

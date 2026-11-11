@@ -395,6 +395,13 @@
    "old": "TEXT[policyBlocks(doc) && ERR[code] === 'blocked' ? 'policy' : ERR[code] || 'failed']",
    "new": "TEXT[ERR[code] || 'failed']",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_speech_service_refusal_gives_the_site_settings_advice",
+   "file": "web/home/talk.js",
+   "old": "'service-not-allowed': 'service'",
+   "new": "'service-not-allowed': 'blocked'",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   }
  ]
 }

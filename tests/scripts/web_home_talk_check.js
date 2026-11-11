@@ -336,8 +336,8 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     check('...and the microphone press closes the picker and stops the listening', r.pick.hidden === true && rec.stops === 1);
 }
 {   // errors, in plain words
-    const BLOCKED = 'The microphone is blocked for this site. Allow it in your browser\'s site settings, then try again.', NOSPEECH = 'No speech was heard. Press the microphone and speak.', NETWORK = 'The speech service could not be reached. Check your connection and try again.', POLICY = 'This page does not allow the microphone.';
-    const cases = [['not-allowed', BLOCKED], ['service-not-allowed', BLOCKED], ['no-speech', NOSPEECH], ['audio-capture', 'No microphone was found.'], ['network', NETWORK], ['language-not-supported', 'Voice to text did not work.'], ['bad-grammar', 'Voice to text did not work.']];
+    const BLOCKED = 'The microphone is blocked for this site. Allow it in your browser\'s site settings, then try again.', NOSPEECH = 'No speech was heard. Press the microphone and speak.', NETWORK = 'The speech service could not be reached. Check your connection and try again.', POLICY = 'This page does not allow the microphone.', SERVICE = 'The browser\'s speech service is not available.';
+    const cases = [['not-allowed', BLOCKED], ['service-not-allowed', SERVICE], ['no-speech', NOSPEECH], ['audio-capture', 'No microphone was found.'], ['network', NETWORK], ['language-not-supported', 'Voice to text did not work.'], ['bad-grammar', 'Voice to text did not work.']];
     for (const [code, words] of cases) {
         const r = rig(); const rec = r.start();
         rec.onerror({ error: code }); rec.onend({});

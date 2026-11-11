@@ -20,10 +20,10 @@
     var TEXT = {
         emoji: 'Emoji', emojiList: 'Emoji: choose one to add it to your message', voice: 'Voice to text: your browser\'s speech service hears you',
         asking: 'Your browser\'s speech service hears you. Allow the microphone if it asks.', listening: 'Listening. Press the microphone again to stop. Then press Send.',
-        full: 'The message is full.', nothing: 'No speech was heard. Press the microphone and speak.', blocked: 'The microphone is blocked for this site. Allow it in your browser\'s site settings, then try again.', policy: 'This page does not allow the microphone.', mic: 'No microphone was found.',
+        full: 'The message is full.', nothing: 'No speech was heard. Press the microphone and speak.', blocked: 'The microphone is blocked for this site. Allow it in your browser\'s site settings, then try again.', service: 'The browser\'s speech service is not available.', policy: 'This page does not allow the microphone.', mic: 'No microphone was found.',
         network: 'The speech service could not be reached. Check your connection and try again.', failed: 'Voice to text did not work.'
     };
-    var ERR = { 'not-allowed': 'blocked', 'service-not-allowed': 'blocked', 'no-speech': 'nothing', 'audio-capture': 'mic', 'network': 'network' };     // (what the browser says went wrong -> a line of TEXT; 'aborted' is the page's own stop)
+    var ERR = { 'not-allowed': 'blocked', 'service-not-allowed': 'service', 'no-speech': 'nothing', 'audio-capture': 'mic', 'network': 'network' };     // (what the browser says went wrong -> a line of TEXT; 'aborted' is the page's own stop)
     // The emoji, by group: code points in hex (one single code point each: the hub keeps it as it is, and none is newer than Unicode 9, which every Python of the hub knows)
     var GROUPS = [
         ['Faces', '1F600 1F603 1F604 1F601 1F606 1F605 1F602 1F923 1F60A 1F607 1F642 1F643 1F609 1F60D 1F618 1F60B 1F61C 1F60E 1F913 1F914 1F610 1F611 1F644 1F60F 1F62C 1F634 1F622 1F62D 1F62E 1F631 1F621 1F620 1F629 1F633'],
