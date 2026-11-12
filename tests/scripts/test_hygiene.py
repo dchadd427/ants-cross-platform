@@ -307,6 +307,18 @@ class Anchors(Tree):
         self.assertEqual(len(out), 1)
         self.assertIn("A.md#template", out[0])
 
+    def test_a_comment_mark_in_inline_code_is_text_and_hides_nothing(self):
+        self.assertEqual(ch.headings_of("Write `<!--` to open a comment.\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("Write ``a <!-- b`` and `<!--` here.\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("`<!--` <!-- real --> text\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("`<!--` <!-- real\n## G\n--> text\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("<!-- real `-->` code is no code inside a comment\n## G\n"), {"g"})
+        self.put("docs/A.md", "# A\n\nWrite `<!--` to open a comment.\n\n## Later\n")
+        self.put("docs/B.md", "[ok](A.md#later) [bad](A.md#gone)\n")
+        out = ch.check_anchors(self.root, self.files())
+        self.assertEqual(len(out), 1)
+        self.assertIn("A.md#gone", out[0])
+
     def test_a_fence_closes_with_its_own_mark_and_no_words(self):
         text = "````\n```\n# inside\n```\n# still inside\n````\n# outside\n~~~ python\n# in a tilde block\n~~~ not a close\n# still in it\n~~~\n# after\n"
         self.assertEqual(ch.headings_of(text), {"outside", "after"})
