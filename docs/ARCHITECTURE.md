@@ -131,8 +131,8 @@ ants-cross-platform/
 │   │   ├── test_ants_server.sh         # The dedicated server end to end, with real programs
 │   │   ├── flaky_proxy.py              # A TCP proxy that can be cut (for the server's reconnect checks)
 │   │   ├── test_*.py                   # The python tests of the repository's tools and tiers (changelog page,
-│   │   │                               # version tools, run_tests.sh --fast, CI workflow, nginx, deploy, release,
-│   │   │                               # mutation, staging, the web pages)
+│   │   │                               # version tools, run_tests.sh --fast, CI workflow, nginx, release,
+│   │   │                               # mutation, the web pages)
 │   │   ├── run_python_tests.py         # Runs those python tests side by side
 │   │   ├── process_state.py            # Helper: whether a process still runs
 │   │   ├── stack_command.py            # Helper: the server's command in docker-compose.stack.yml
@@ -175,20 +175,15 @@ ants-cross-platform/
 │   │                                   # --target bot_arena)
 │   ├── bench_aggressor.hpp             # Scripted aggressor bots to measure the standard bot against (arena and tests
 │   │                                   # only)
-│   ├── changelog_to_html.py            # Turns CHANGELOG.md into the site's /changelog.html
+│   ├── changelog_to_html.py            # Turns CHANGELOG.md into the site's /changelog page
 │   ├── check_version_consistency.py    # Checks that VERSION, CHANGELOG.md and README.md name the same
 │   │                                   # release
 │   ├── release.py                      # A release in one command: VERSION, the changelog's "## Next" heading, the
 │   │                                   # README's version line (--dry-run, --open-pr)
 │   ├── mutate.py                       # The mutation runner of the deep tier: one change at a time, always restored,
 │   │                                   # baselines of the unmutated tree
-│   ├── deploy_filter.py                # Does a push change what the images contain or the stack file? (the deploy
-│   │                                   # job's file filter)
-│   ├── deploy_wait.py                  # Waits until the game server is idle (GET /busy) before the deploy job
-│   │                                   # restarts the site
 │   ├── web_without_docker.py           # The web image without Docker (Linux): the Dockerfile's commands on
 │   │                                   # this machine, the pages served with nginx, for the browser checks
-│   ├── deploy_webhook.sh               # Calls the deploy hook without ever printing its address
 │   ├── ci_light.sh                     # Does a pull request need all of CI or only the light checks? (the first job
 │   │                                   # of ci.yml: pages, documents and page tests only)
 │   └── front_page_art/                 # Makes the front page's pictures in web/front/ from the game's own assets
@@ -216,15 +211,13 @@ ants-cross-platform/
 │                                       # original program, per-user files)
 ├── README.md                           # The short front page; the details are in docs/
 ├── CHANGELOG.md                        # What changed in each release, a few lines each (also served at
-│                                       # /changelog.html)
+│                                       # /changelog)
 ├── CMakeLists.txt                      # Root CMake build configuration
 ├── docker-compose.yml                  # The web game alone (service ants-beta); the whole site is
 │                                       # docker-compose.stack.yml
 ├── docker-compose.server.yml           # Example service of the dedicated game server
 ├── docker-compose.stack.yml            # The web game, the game server and the chat hub together as one stack
-│                                       # (the stack that the deploy job redeploys)
-├── docker-compose.staging.yml          # The same three services as a second stack with its own names, ports, volumes
-│                                       # and network, for trying finished work
+│                                       # (the stack that the host's own update follows)
 ├── Dockerfile                          # Multi-stage Emscripten + Nginx build
 ├── Dockerfile.server                   # The dedicated game server alone (no SDL, no sprites or sounds; it carries
 │                                       # the six maps)

@@ -85,11 +85,10 @@ class TheText(unittest.TestCase):
         self.assertGreater(main.index("upkeep_test_maps("), main.index("while (!g_stop)"))
 
     def test_the_stacks_and_the_image_start_the_door_and_the_documents_name_it(self):
-        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+        for name in ("docker-compose.stack.yml",):
             text = "\n".join(l for l in read(name).splitlines() if not l.lstrip().startswith("#"))
             self.assertIn('"--test-map-port", "${ANTS_TEST_MAP_PORT:-4031}"', text, name)                  # (on by default: nothing for the owner to switch)
             self.assertNotIn("4031:4031", text, name)                                                      # (not published on the host)
-        self.assertIn("ANTS_TEST_MAP_PORT", read("docker-compose.staging.yml"))
         self.assertIn("--test-map-any-interface", read("Dockerfile.server"))
         self.assertIn("4031", RAW)
         doc = read("docs", "MAP_SUBMISSIONS.md")

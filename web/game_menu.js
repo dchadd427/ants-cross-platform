@@ -478,7 +478,7 @@
         win.antsGameMenuAsk = function () { open(null); }; // (the game's Esc with nothing to cancel: src/ants_app/application_game_menu.cpp)
         (page.every || function (fn, ms) { return setInterval(fn, ms); })(refresh, POLL_MS);
         loadStyle();
-        return { open: open, close: close, isOpen: function () { return !!state; }, refresh: refresh, buttons: buttons, onKey: onKey, setStyleReady: function (v) { styleReady = v; refresh(); } };
+        return { open: open, close: close, isOpen: function () { return !!state; }, refresh: refresh, buttons: buttons, onKey: onKey };
     }
 
     return { forPage: forPage, POLL_MS: POLL_MS, CONTROLS: CONTROLS };

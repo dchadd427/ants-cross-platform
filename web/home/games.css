@@ -9,7 +9,7 @@
     border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
 .gphead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .gptitle { margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
-.gpcount { font-size: 15px; color: #a8cfc0; text-align: right; }
+.gpcount { margin-left: auto; font-size: 15px; color: #a8cfc0; text-align: right; }
 .gjoining { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; padding: 4px 4px 4px 10px; font-size: 16px; color: var(--cream); border-left: 6px solid var(--gold); background: rgba(255, 255, 255, .05); }
 .gjoining span { min-width: 0; overflow-wrap: anywhere; }
 .gjoining .btn { flex: none; min-height: 44px; min-width: 88px; }
@@ -43,21 +43,21 @@
 .gempty .ant { --k: 2; margin: 0 auto 4px; filter: brightness(0) invert(1); opacity: .13; animation: none; }       /* (a shadow of the ant of an open color) */
 .gemtitle { margin: 0; font-size: 22px; line-height: 1.2; }
 .gemline { margin: 0 0 4px; font-size: 15px; line-height: 1.35; color: #a8cfc0; }
-.btn.ghostbtn { margin-top: 6px; }
-.gcode { margin-top: 14px; }
-.gclabel { display: block; font-size: 14px; color: #a8cfc0; }
-.gcode .joinbox { margin-top: 6px; }
+.gemhost { min-height: 48px; margin-top: 8px; }
+.gcodelink { appearance: none; -webkit-appearance: none; flex: none; min-width: 44px; min-height: 44px; margin: -12px 0; padding: 0 2px; font: inherit; font-size: 16px; color: var(--gold); background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.gcodelink[aria-expanded="true"] { color: var(--cream); }
+.gcodelink:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.gcode { box-sizing: border-box; margin: 0 0 12px; padding: 8px; background: #08140f; border: 1px solid #1f5a46; border-radius: 4px; }
+.gcode[hidden] { display: none; }
+.gcode .joinbox { align-items: center; margin-top: 0; }
 .gcode .joinbox input { min-height: 48px; font-size: 16px; }
-.gcode .gcgo { min-width: 72px; min-height: 44px; align-self: center; }
+.gcode .gcgo { min-width: 72px; min-height: 44px; }
+.gcode .gcx { min-width: 44px; min-height: 44px; padding: 0; font-size: 22px; line-height: 1; }
 .gcode .hint { margin-top: 6px; overflow-wrap: anywhere; }
 
-/* ---- the matches in progress: a switch in the list's head, and rows with a red Live mark and Watch ---- */
+/* ---- the matches in progress: rows with a red Live mark and Watch ---- */
 .gphead { flex-wrap: wrap; }
-.gfrow { flex: 1 0 100%; margin: -4px 0 -4px; }
-.gfrow[hidden], .glivebox[hidden], .gnolive[hidden], .glivelist[hidden] { display: none; }
-.gfilter { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; font-size: 15px; color: #a8cfc0; cursor: pointer; }
-.gfilter input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: #3b976f; cursor: pointer; }
-.gfilter:focus-within { outline: 2px solid var(--gold); outline-offset: 2px; }
+.glivebox[hidden], .gnolive[hidden], .glivelist[hidden] { display: none; }
 .gsub { margin: 16px 0 8px; font-size: 18px; font-weight: 500; line-height: 1.2; color: #a8cfc0; }
 .gnolive { margin: 0; padding: 12px 4px; }
 .glive-mark { display: inline-block; align-self: center; padding: 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; line-height: 18px; text-transform: uppercase; color: #fff; background: #c0392b; border-radius: 3px; }
@@ -123,7 +123,8 @@
 @media (max-width: 359px) { .vbtn { padding: 5px 4px 3px; font-size: 4.7vw; } .vbtn small { margin-left: .47em; font-size: .765em; } }
 
 /* ---- a phone upright and a short window ---- */
-@media (max-width: 720px) { .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
-@media (max-height: 500px) and (orientation: landscape) { .gphead { align-items: center; } .gfrow { flex: 0 0 auto; margin: -6px 0 -6px auto; } .gptitle { font-size: 20px; } .gpop { padding: 10px 14px 12px; } .gcbtns .btn { min-height: 44px; } .gconfirm { padding: 12px 16px; } .gctitle { font-size: 22px; } .gcline { margin-bottom: 10px; } }
+@media (max-width: 720px) { .gphead { align-items: center; } .gptitle { flex: 1 1 auto; } .gcodelink { order: 1; } .gpcount { order: 2; flex: 1 0 100%; margin-left: 0; text-align: left; } .gpop { padding: 12px 12px 14px; } .gitem { gap: 10px; padding: 8px 8px; } .gmap { width: 52px; height: 52px; } .gname { font-size: 19px; } .gcode .joinbox input { min-width: 0; } }
+@media (max-height: 500px) and (orientation: landscape) { .gphead { align-items: center; } .gptitle { font-size: 20px; } .gpop { padding: 10px 14px 12px; } .gcbtns .btn { min-height: 44px; } .gconfirm { padding: 12px 16px; } .gctitle { font-size: 22px; } .gcline { margin-bottom: 10px; } }
 @media (max-height: 350px), (max-width: 260px) { .gshade { padding: 8px; } .gmark { margin-bottom: 6px; } .gmark.shadow .ant { --k: 1; } .gcline { margin-bottom: 8px; } .gcbtns .gyes.big { min-height: 48px; font-size: 22px; } .gcnote { margin: 6px 0; } .gbar, .gconfirm .gitem { margin-bottom: 10px; } }       /* (a short window or a zoomed phone: the none card fits without a scroll) */
 @media (max-width: 260px) { .gconfirm { padding: 10px; } .gctitle { margin-bottom: 6px; font-size: 20px; } .gcline { font-size: 14px; } .gcnote { font-size: 13px; } }
+@media (max-height: 460px) { .gempty { padding: 8px 12px; gap: 2px; } .gempty .ant { display: none; } .gemtitle { font-size: 20px; } .gemhost { min-height: 44px; margin-top: 4px; } }       /* (a sideways phone: the empty state keeps its Host a game in view) */

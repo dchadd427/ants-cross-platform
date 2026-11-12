@@ -22,9 +22,7 @@
     var TEXT = {
         title: 'Players', here: ' here now', you: 'you', mod: 'mod', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
         guest: ' guest', guests: ' guests', notIn: 'not logged in', more: ' more', and: 'and ', many: '500+', player: ' player', players: ' players', of: ' of ',
-        empty: 'Just you here. Host a game!', emptyNote: 'People who log in with Discord show up here by name.', host: '+ Host a game',
-        off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.',
-        fold: 'Fold the list', unfold: 'Open the list'
+        off: 'Players list is off right now', offNote: 'The chat hub is not answering. Games and rooms work as always; this list comes back by itself.'
     };
 
     // ---- the pure parts ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -106,7 +104,7 @@
     }
 
     // ---- the list ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    // mount({ doc, win, host (Home's div), yard (the box that it mounts into), quickHost and games (the bar's buttons), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, state, model, open, sync }, or null
+    // mount({ doc, win, host (Home's div), yard (the box that it mounts into), games (the bar's button), dock (the chat dock: tap(fn), send(obj)), page (the bridge: client(), info(), handing()), now, error }) returns { root, state, model, open, sync }, or null
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, dock = env.dock, page = env.page || {};
         var Chat = win.AntsHomeChat, rules = win.AntsLobbyRules, Home = win.AntsHome;
@@ -132,12 +130,11 @@
 
         // The markup: one box, `root`, that Home can make inert, with the panel in it
         var panel = el('section', 'pl'); panel.id = 'players'; panel.setAttribute('aria-labelledby', 'players-title');
-        panel.setAttribute('data-state', 'off'); panel.setAttribute('data-folded', 'false');
+        panel.setAttribute('data-state', 'off');
         var head = el('div', 'pl-head'), title = el('h2', 'pl-title', TEXT.title); title.id = 'players-title';
-        var total = el('span', 'pill pl-count'), dot = el('i', 'pl-dot'), fold = button('pl-fold');
+        var total = el('span', 'pill pl-count'), dot = el('i', 'pl-dot');
         dot.setAttribute('aria-hidden', 'true'); total.hidden = true; dot.hidden = true;
-        fold.appendChild(el('i', 'pl-mark')); fold.setAttribute('aria-controls', 'players-body');
-        put(head, [title, total, dot, fold]);
+        put(head, [title, total, dot]);
         var body = el('div', 'pl-body'), youBox = el('div', 'pl-you'), youList = el('ul', 'pl-cards'), rule = el('hr', 'pl-div'), status = el('p', 'pl-status'), list = el('div', 'pl-list'), offBox = el('div', 'pl-note');
         body.id = 'players-body'; youBox.appendChild(youList);
         status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
@@ -160,7 +157,6 @@
             if (game) copy.mapName = game.name === (row.mapName || row.guess) ? game.name : '';
             return copy;
         }
-        function quick() { return env.quickHost; }
         function card(row, o) {                                          // o: { you: the visitor's own row, label: say where the person is under the name, join: a Join button (a public room that waits) }
             var li = el('li', 'pl-card'), who = el('span', 'pl-who'), name = el('span', 'pl-name'), av = el('span', 'pl-av', initial(row.name, Chat)), meta = metaOf(row, o.label, o.you);
             li.setAttribute('data-s', row.at);
@@ -197,10 +193,10 @@
             return put(g, [av, text]);
         }
         function paintBody() {                                           // the part under the header: made again only when what it shows changed (the scroll and the focus stay where they were)
-            var q = quick(), own = ownCode(), shown = listOf(model, me), people = 0;
+            var own = ownCode(), shown = listOf(model, me), people = 0;
             GROUPS.forEach(function (x) { shown[x[0]] = shown[x[0]].map(named); people += shown[x[0]].length; });
             var empty = model.n <= 1 && model.more === 0 && people === 0, mine = you ? { name: you.name, mod: you.mod, doing: doing } : null;
-            var sig = JSON.stringify([phase, mine, own, !!(q && !q.disabled), model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.pub, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
+            var sig = JSON.stringify([phase, mine, own, model.n, model.g, model.more, GROUPS.map(function (x) { return shown[x[0]].map(function (r) { return [r.id, r.name, r.at, r.mod, r.pub, r.mapName, r.n, r.of, r.code, r.listed]; }); })]);
             if (sig === painted) return;
             var active = doc.activeElement, focused = active && active.getAttribute ? active.getAttribute('data-code') : null, scroll = list.scrollTop;
             painted = sig;
@@ -211,11 +207,7 @@
                 if (row) { row.mapName = row.mapName || row.guess; youList.appendChild(card(row, { you: true, label: true, join: false })); put(body, [youBox, rule]); }       // (the page's own room: its map's name is its own word)
             }
             body.appendChild(status);
-            if (empty) {
-                var n = el('div', 'pl-note'), hostBtn = button('pl-host', TEXT.host, function () { var b = quick(); if (b && !b.disabled) b.click(); });
-                hostBtn.disabled = !(q && !q.disabled);
-                list.appendChild(put(n, [el('p', '', TEXT.empty), el('p', 'small', TEXT.emptyNote), hostBtn]));
-            } else {
+            if (!empty) {                                                // (alone: the list stays blank under the visitor's own row)
                 GROUPS.forEach(function (x) { if (shown[x[0]].length) list.appendChild(group(x[0], x[1], shown[x[0]], own)); });
                 if (model.more > 0) list.appendChild(el('p', 'pl-more', TEXT.and + model.more + TEXT.more));
                 if (model.g > 0) list.appendChild(guests(model.g, 'in-list'));
@@ -248,12 +240,6 @@
             }
             if (b) b.click(); else say(TEXT.gone);
         }
-        function setFold(on) { panel.setAttribute('data-folded', on ? 'true' : 'false'); fold.setAttribute('aria-expanded', on ? 'false' : 'true'); fold.setAttribute('aria-label', on ? TEXT.unfold : TEXT.fold); }
-        setFold(false);
-        fold.addEventListener('click', guard(function () { setFold(panel.getAttribute('data-folded') !== 'true'); }));
-        panel.addEventListener('keydown', guard(function (e) {         // Escape folds the panel, where its fold button is drawn (a phone's Players view has none)
-            if (e && e.key === 'Escape' && (!fold.getClientRects || fold.getClientRects().length)) { setFold(true); if (fold.focus) fold.focus(); }
-        }));
 
         // ---- what the page says, and what the hub says ----------------------------------------------------------------------------------------------------------------------------------------------
         function look() {
@@ -270,7 +256,7 @@
             if (dock.send(frame)) { sentSig = sig; lastSent = now(); }
         }
         function ask() { if (live && supported && !asked && dock.send({ t: 'who' })) asked = true; }
-        function sync() {                                                // once a second: the visitor's own row follows the page's room at once, the hub is told, the Host button follows Quick host
+        function sync() {                                                // once a second: the visitor's own row follows the page's room at once, the hub is told
             doing = look();
             tell(); ask();
             if (phase !== 'none') paint();

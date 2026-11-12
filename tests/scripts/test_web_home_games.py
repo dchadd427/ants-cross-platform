@@ -147,7 +147,7 @@ class TheFolder(unittest.TestCase):
         for word in ("percentEncode", "escape(", "/maps/previews", ".webp", "decodeURI"):
             self.assertNotIn(word, self.js, "%s: the address is made by AntsMapPicker.previewPath (web/front/map_picker.js), which checks the file name and the shape of what it makes" % word)
         self.assertEqual(self.js.count("encodeURIComponent"), 1, "the one use: the id in the address of Watch (a second guard, the id is checked by its shape first)")
-        self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.js)
+        self.assertIn("'/play?live=' + encodeURIComponent(e.id)", self.js)
         picker = read("web", "front", "map_picker.js")
         self.assertIn("function previewPath(map) {", picker)
         self.assertIn("previewPath: previewPath", picker)
@@ -159,13 +159,12 @@ class TheFolder(unittest.TestCase):
         self.assertLess(self.js.index("img.setAttribute('loading', 'lazy');"), self.js.index("img.src = src;"), "set before the address, which is when a browser reads it")
         self.assertIn("pic.setAttribute('aria-hidden', 'true');", self.js)
 
-    def test_only_the_switch_of_the_matches_in_progress_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
+    def test_nothing_is_kept_in_the_browser_and_the_two_addresses_have_no_query_and_no_cookies(self):
         for word in ("sessionStorage", "indexedDB", "document.cookie", "XMLHttpRequest", "sendBeacon", "WebSocket", "BroadcastChannel"):
             self.assertNotIn(word, self.code, word)
-        self.assertEqual(len(re.findall(r"localStorage", self.code)), 3, "the one choice, in two small functions that each have a try: read, and written or removed")
-        self.assertIn("function readChoice() { try { return win.localStorage.getItem(CHOICE_KEY) !== '0'; } catch (e) { return true; } }", self.js, "a browser that keeps nothing: the default, on")
-        self.assertIn("function keepChoice(on) { try { if (on) win.localStorage.removeItem(CHOICE_KEY); else win.localStorage.setItem(CHOICE_KEY, '0'); } catch (e) {", self.js)
-        self.assertIn("var CHOICE_KEY = 'ants.home.games.live';", self.js)
+        self.assertNotIn("localStorage", self.code, "nothing is kept in the browser: the matches in progress always show")
+        self.assertNotIn("ants.home.games", self.code, "no stored word (an old one from an earlier version is never read)")
+        self.assertNotRegex(read("web", "home", "games.css"), r"\.gfilter|\.gfrow", "no switch in the list's head")
         self.assertIn("var LIST_URL = '/lobbies';", self.js)
         self.assertIn("var LIVE_URL = '/live';", self.js)
         self.assertEqual(len(re.findall(r"win\.fetch\(", self.code)), 1, "one fetch, in look(url), for both addresses")
@@ -231,18 +230,26 @@ class TheStyle(unittest.TestCase):
         self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
         self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 
+    def test_have_a_code_is_a_disclosure_button_in_the_heading(self):
+        js = read("web", "home", "games.js")
+        self.assertIn("popHead.appendChild(codeLink);", js.replace("popHead.appendChild(popTitle); popHead.appendChild(popCount); ", ""), "the button is in the heading")
+        self.assertIn("codeLink.setAttribute('aria-expanded', 'false'); codeLink.setAttribute('aria-controls', 'gc-box');", js)
+        self.assertIn("codeLink.setAttribute('aria-expanded', on ? 'true' : 'false');", js, "the state is told every time it changes")
+        self.assertIn("else if (codeOpen && pop.contains(doc.activeElement)) setCode(false, true);", js, "Escape shuts the box first and puts the focus back on the button")
+        self.assertIn(".gcode[hidden] { display: none; }", self.css, "a shut box takes no room")
+
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".gjoin", ".gcode .gcgo", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
+        for selector in (".gjoin", ".gcodelink", ".gcode .gcgo", ".gcode .gcx", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
         self.assertIn(".gjoining[hidden] { display: none; }", self.css, "a Join that is not on its way shows no line (and no Cancel)")
-        for selector in (r"\.gjoin", r"\.gcode \.gcgo", r"\.gjoining \.btn"):
+        for selector in (r"\.gjoin", r"\.gcodelink", r"\.gcode \.gcgo", r"\.gcode \.gcx", r"\.gjoining \.btn"):
             self.assertGreaterEqual(int(re.search(selector + r" \{[^}]*min-width: (\d+)px", self.css).group(1)), 44, selector)
         self.assertNotRegex(self.css, r"(?<!min-)height: [1-3]\d px; *}", "no fixed height under 40 px on a control")
 
@@ -284,7 +291,7 @@ class TheStyle(unittest.TestCase):
             made.update(m.group(1).split())
         for m in re.finditer(r"button\('([\w -]+)'", read("web", "home", "games.js")):
             made.update(m.group(1).split())
-        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr", "gerow"}      # (the page's: web/lobby.html, "gerow" the two big buttons of the empty state in Home's body (home.css), "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
+        theirs = {"btn", "banner", "sm", "joinbox", "hint", "ant", "ant-green", "gyes", "sr"}      # (the page's: web/lobby.html, "sr" its line that only a screen reader reads; and the answer that is the page's own teal button: only the tests look for it by its class)
         for name in sorted(made - theirs):
             self.assertRegex(self.css, r"\." + re.escape(name) + r"\b", "the class %s has no style" % name)
 
@@ -327,11 +334,13 @@ class TheListIsDockedInHomesBody(unittest.TestCase):
         self.assertIn(".gdock .gitem:has(.gyours) { border-color: var(--gold); }", rules)
         self.assertIn(".gdock .glist { grid-template-columns: minmax(0, 1fr); }", rules, "one column on a phone")
 
-    def test_the_empty_state_has_two_big_buttons_and_both_are_a_press_that_the_script_handles(self):
-        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickHost, guard(function () { quickHost(); })));", self.js)
-        self.assertIn("emptyRow.appendChild(button('ghostbtn', TEXT.quickJoin, guard(function () { quickJoin(); })));", self.js)
-        rules = re.sub(r"/\*.*?\*/", "", self.homecss, flags=re.S)
-        self.assertRegex(rules, r"\.gdock \.gerow \.btn \{[^}]*min-height: 56px;")
+    def test_the_empty_state_is_text_only_the_bar_has_quick_host_and_join(self):
+        self.assertNotIn("gerow", self.js)
+        self.assertNotIn("gerow", self.homecss)
+        self.assertNotIn("emptyRow", self.js)
+        m = re.search(r"popEmpty[.]appendChild[(]el[(]'span', 'ant ant-green'.*\n.*\n", self.js)
+        self.assertIsNotNone(m)
+        self.assertNotIn("button(", m.group(0), "the card says it in words; the buttons are the bar's")
 
 
 class TheWayIntoTheImage(unittest.TestCase):

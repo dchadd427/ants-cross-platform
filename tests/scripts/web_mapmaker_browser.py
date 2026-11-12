@@ -173,7 +173,7 @@ EDGES_JS, edges_bytes = _edges.EDGES_JS, _edges.edges_bytes
 
 class Page:
     def __init__(self, tab, url):
-        self.tab, self.url = tab, url.rstrip("/") + "/mapmaker.html"
+        self.tab, self.url = tab, url.rstrip("/") + "/mapmaker"
 
     def ev(self, expression):
         return self.tab.ev(expression)
@@ -2123,7 +2123,7 @@ def run_part(part, tab, args, check, tiny, junk):
         check(page2.open(fake) and page2.ready(), "the page starts from a status link")
         page2.ev("window.__srv.list = [{id: 'e'.repeat(32), state: 'approved', kind: 'classic', name: 'Elsewhere', width: 20, height: 20, sent_at: Math.floor(Date.now() / 1000)}]")
         check(dialog(page2, "Add submissions from a link?") and "made by someone else" in text_of(page2, ".dlg"), "it asks first, in words that say the submissions are someone else's")
-        check(wait_for(lambda: page2.ev("location.hash") == "") and page2.ev("location.href").endswith("/mapmaker.html"), "and the address has lost the token (%s)" % page2.ev("location.href"))
+        check(wait_for(lambda: page2.ev("location.hash") == "") and page2.ev("location.href").endswith("/mapmaker"), "and the address has lost the token (%s)" % page2.ev("location.href"))
         check(page2.ev("document.getElementById('mine').hidden") is True, "nothing is opened or added before the answer")
         click_text(page2, ".dlg-foot .btn", "Add them")
         check(wait_for(lambda: not page2.ev("document.getElementById('mine').hidden") and page2.ev("document.getElementById('mine-title').textContent") == "My submissions"), "Add them opens My submissions")

@@ -7,15 +7,11 @@
 /* ---- the panel ---- */
 .pl { display: flex; flex-direction: column; min-height: 0; color: var(--cream); background: var(--inset);
     border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
-.pl[data-folded="true"] .pl-body { display: none; }
 .pl-head { flex: none; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 4px 10px 4px 16px; }
 .pl-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 22px; font-weight: 500; line-height: 1.2; }
 .pl-count { flex: none; }
 .pl-dot { flex: none; width: 11px; height: 11px; border-radius: 50%; background: #7f9c92; box-shadow: 0 0 0 1px #000; }
 .pl[data-state="off"] .pl-title { color: #c9dcd4; }
-.pl-fold { flex: none; min-width: 46px; min-height: 46px; padding: 0; }
-.pl-mark { display: block; width: 18px; height: 3px; background: var(--cream); border-radius: 1px; }
-.pl[data-folded="true"] .pl-mark { width: 12px; height: 12px; margin-top: -4px; background: none; border: solid var(--cream); border-width: 0 3px 3px 0; border-radius: 0; transform: rotate(45deg); }
 
 .pl-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0 12px 12px; }
 .pl-div { flex: none; height: 0; margin: 10px 2px 4px; border: 0; border-top: 2px solid #1d3a31; }
@@ -55,7 +51,5 @@
 .pl-note { margin: 18px 6px 0; text-align: center; }
 .pl-note p { margin: 0 0 12px; font-size: 17px; line-height: 1.35; color: var(--cream); }
 .pl-note p.small { font-size: 14px; color: #a8cfc0; }
-.pl-host { min-height: 48px; }
 
-@media (max-width: 700px) { .pl-fold { display: none; } .pl[data-folded="true"] .pl-body { display: flex; } }
 @media (max-height: 500px) and (orientation: landscape) { .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; } .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; } .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; } }

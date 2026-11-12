@@ -66,7 +66,7 @@ class TheText(unittest.TestCase):
     def test_the_port_is_the_one_the_image_listens_on_and_the_service_is_the_one_the_stacks_name(self):
         self.assertIn("EXPOSE 4040", read("Dockerfile.hub"))
         self.assertIn("ANTS_HUB_PORT=4040", read("Dockerfile.hub"))
-        for stack in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+        for stack in ("docker-compose.stack.yml",):
             self.assertRegex(read(stack), r"(?m)^  ants-hub:\s*$", stack)
 
     def test_it_is_an_upgrade_that_lives_as_long_as_the_hubs_pings_do(self):

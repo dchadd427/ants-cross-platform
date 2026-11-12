@@ -976,12 +976,12 @@
             }
         }
 
-        /* ================= REPLAY MODE (docs/REPLAYS.md "Watching"): the page opened as play.html?replay=<file>. Everything above is the game page as it is; this block and the markup marked "rep-only"
+        /* ================= REPLAY MODE (docs/REPLAYS.md "Watching"): the page opened as play?replay=<file>. Everything above is the game page as it is; this block and the markup marked "rep-only"
            are the new part. The page puts `replay` on <body> (the first line of the body) and the pieces that belong to the other mode are hidden here. ================= */
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
         body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
-        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rnote[hidden] { display: none !important; }
+        .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rhandle[hidden], .rnote[hidden] { display: none !important; }
 
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
@@ -1063,8 +1063,13 @@
         footer.bar a[aria-current] { color: var(--gold); text-decoration: underline; text-underline-offset: 4px; }
 
         /* fullscreen: the bar lies over the bottom of the picture (the page moves it into the picture's box) and goes away by itself while the pointer rests */
-        .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease; }
+        .rbar.over { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(94%, 1180px); min-width: 0; margin: 0; padding: 8px 16px; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); z-index: 60; transition: opacity .25s ease, transform .2s ease; }
         .rbar.over.idle { opacity: 0; pointer-events: none; }
+        /* hidden by the viewer (the chevron or the B key): the bar is not there at all (no hit, no focus) until the handle, the key or the mouse resting at the bottom edge calls it (docs/REPLAYS.md "Hiding the bar") */
+        .rbar.over.gone { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(14px); transition: opacity .2s ease, transform .2s ease, visibility 0s .2s; }
+        .rhandle { position: absolute; left: 50%; bottom: env(safe-area-inset-bottom, 0px); transform: translateX(-50%); z-index: 61; display: flex; align-items: flex-start; justify-content: center; width: 44px; height: 14px; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 2px solid var(--frame); border-bottom: 0; border-radius: 8px 8px 0 0; cursor: pointer; touch-action: none; }
+        .rhandle::before { content: ""; position: absolute; left: -12px; right: -12px; top: -30px; bottom: 0; } .rhandle svg { width: 18px; height: 9px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; } .rhandle:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) { .rbar.over, .rbar.over.gone { transition: none; } } @media (forced-colors: active) { .rhandle { color: ButtonText; background: ButtonFace; border-color: ButtonText; } .rhandle:focus-visible { outline-color: Highlight; } }
         .rbar.over { touch-action: none; }                                      /* (a swipe down on the bar is the page's: the browser does not take it for a scroll) */
         .rbar.over .rtag { left: 14px; transform: none; font-size: 14px; }
         .rbar.over .rtab { display: flex; position: absolute; left: 50%; bottom: calc(100% + 3px); transform: translateX(-50%); width: 60px; height: 20px; align-items: center; justify-content: center; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 3px solid var(--frame); border-bottom: 0; border-radius: 9px 9px 0 0; cursor: pointer; touch-action: manipulation; }
@@ -1102,7 +1107,7 @@
             .rbar.over .tl .thumb { height: 30px; }
         }
 
-        /* ================= LIVE (docs/REPLAYS.md "Watching a live match"): the page opened as play.html?live=<id>, a match that is still being played. The bar and the header are the replay's; the red LIVE marks, the
+        /* ================= LIVE (docs/REPLAYS.md "Watching a live match"): the page opened as play?live=<id>, a match that is still being played. The bar and the header are the replay's; the red LIVE marks, the
            notch at the present and the button that jumps to it are the new part. `live` is on <body> and `islive` on the bar while the page follows the match; `nodl` is on <body> when there is no file to download ================= */
         .pill.lv { color: #ffc3bd; background: #3a0d11; border: 1px solid #9d0d17; letter-spacing: .1em; }
         .pill.lv::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff5a4f; box-shadow: 0 0 6px rgba(255, 90, 79, .9); }
@@ -1152,9 +1157,9 @@
         <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
         <div class="header-actions">
             <a href="/" id="menu-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Menu</a>
-            <a href="/matches.html" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
+            <a href="/matches" target="_blank" rel="noopener noreferrer" id="watch-btn" class="btn sm wide-only" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
-            <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="What changed in each version">Changelog</a>
+            <a href="/changelog" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="What changed in each version">Changelog</a>
             <button id="reset-btn" type="button" class="btn sm wide-only" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
             <button id="fullscreen-btn" type="button" class="btn sm" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
             <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View Source Code on GitHub">GitHub</a>
@@ -1162,9 +1167,9 @@
             <details class="more">
                 <summary><span class="btn sm">More</span></summary>
                 <div class="more-list">
-                    <a href="/matches.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
+                    <a href="/matches" target="_blank" rel="noopener noreferrer" class="btn sm" title="Matches: every match played here, with its stats and replay (opens in a new tab: a match that is being played here goes on)">Matches</a>
                     <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer" class="btn sm" title="View 1998 Sprites, Animations &amp; Audio SFX">Sprites and sounds</a>
-                    <a href="/changelog.html" target="_blank" rel="noopener noreferrer" class="btn sm" title="What changed in each version">Changelog</a>
+                    <a href="/changelog" target="_blank" rel="noopener noreferrer" class="btn sm" title="What changed in each version">Changelog</a>
                     <button type="button" class="btn sm" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
                     <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm" title="View Source Code on GitHub">GitHub</a>
                     <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" class="btn sm" title="Give Feedback or Report Issues">Feedback</a>
@@ -1172,7 +1177,7 @@
             </details>
         </div>
         <div class="header-actions rep-only">
-            <a href="/matches.html" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
+            <a href="/matches" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
             <button id="copy-btn" type="button" class="btn sm wide-only" title="Copy the link to this match">Copy link</button>
             <button id="stats-btn" type="button" class="btn sm wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
             <a href="#" data-dl="" class="btn sm wide-only" title="Download the recording (.antsrep)">Download</a>
@@ -1207,6 +1212,7 @@
         </div>
         <button type="button" id="pseudo-exit" aria-label="Leave fullscreen" title="Leave fullscreen">&times;</button>
         <div class="redge rep-only" id="redge" hidden></div>
+        <button class="rhandle rep-only" type="button" id="b-handle" aria-label="Show the bar" aria-controls="rbar" aria-expanded="false" title="Show the bar (B key; or rest the mouse at the bottom edge)" hidden><svg viewBox="0 0 18 9" aria-hidden="true"><path d="M2 7l7-5 7 5"/></svg></button>
         <div class="rnote rep-only" id="rnote" role="status" hidden>Swipe up from the bottom edge to bring the bar back</div>
         <div class="rnote rep-only camnote" id="camnote" role="status" hidden>You have the camera. Press&#8197;<b>Auto camera</b>&#8197;to follow the action again.</div>
     </div>
@@ -1255,7 +1261,7 @@
         <div class="seg speed" role="radiogroup" aria-label="Speed" id="speed"><button type="button" role="radio" data-s="0.5" aria-checked="false">&frac12;&times;</button><button type="button" role="radio" data-s="1" aria-checked="true">1&times;</button><button type="button" role="radio" data-s="2" aria-checked="false">2&times;</button><button type="button" role="radio" data-s="4" aria-checked="false">4&times;</button><button type="button" role="radio" data-s="8" aria-checked="false">8&times;</button></div>
         <div class="picwrap" id="picwrap"><button class="btn sm" type="button" id="picbtn" aria-haspopup="true" aria-expanded="false" aria-controls="picpop" title="The shape of the picture">Picture &#9652;</button><div class="picpop" id="picpop" role="group" aria-labelledby="picpop-h" hidden><h3 id="picpop-h">Picture</h3><span class="pick" id="pic-pick"><span class="fit-note" id="pic-note" hidden></span></span></div></div>
         <button class="btn sm fsx" type="button" id="b-fsx" aria-label="Leave fullscreen" title="Leave fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 3H11v8H3V8.4h5.4zM13 3h2.6v5.4H21V11h-8zM3 13h8v8H8.4v-5.4H3zM13 13h8v2.6h-5.4V21H13z"/></svg></button>
-        <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" title="Hide the bar (swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
+        <button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" aria-expanded="true" title="Hide the bar (B key, or swipe down on it)"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6 7-6"/></svg></button>
     </div>
     <section class="mstats flow rep-only" id="mstats-flow" aria-label="Match stats" hidden></section>
 
@@ -1361,12 +1367,12 @@
             <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
             <nav aria-label="Footer links">
                 <a href="/" id="menu-link">Menu</a>
-                <a href="/matches.html" target="_blank" rel="noopener noreferrer" id="watch-link">Matches</a>
-                <a href="/live.html" target="_blank" rel="noopener noreferrer">Live now</a>
+                <a href="/matches" target="_blank" rel="noopener noreferrer" id="watch-link">Matches</a>
+                <a href="/live-now" target="_blank" rel="noopener noreferrer">Live now</a>
                 <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
-                <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+                <a href="/changelog" target="_blank" rel="noopener noreferrer">Changelog</a>
                 <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
-                <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a> <a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a>
+                <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a> <a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a>
             </nav>
         </div>
     </footer>
@@ -1674,7 +1680,7 @@
                 return out;
             }
 
-            // A game on THIS computer (the front page's Play: play.html?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): its arguments come only from this whitelist, never from the address text. map: one of the six
+            // A game on THIS computer (the front page's Play: play?map=<key>[&bots=<levels>][&teams=0+N]&name=<name>): its arguments come only from this whitelist, never from the address text. map: one of the six
             // by key, or mapfile (when no map): the file of a map of the players (AntsMapFiles.communityFile; the data block fetches it before the game starts); bots: one level word (all of seats 1-3) or three words for seats 1, 2, 3 (none|easy|medium|hard), any case, all or nothing; teams: ffa or 0+N (the + may come as a blank) with a bot at seat N; name: printable ASCII, 32 characters.
             // `--play` starts the map as the setup screen's START does (Get ready dialog, start sound, music) once the loading screen and quick help are done. No map, bots or name: no arguments (the setup screen).
             var LOCAL_MAPS = { tiny: 'TINY.LVL', small: 'SMALL.LVL', medium: 'MEDIUM.LVL', gauntlet: 'GAUNTLET.LVL', treasure: 'TREASURE.LVL', islands: 'ISLANDS.LVL' };
@@ -1835,7 +1841,7 @@
         //   start  the front page's card: how many people must be in the room before the leader's game presses START by itself (1 - 4: the game's --start-when; 1 + the card's Friend rows; the same
         //          number in every link of the room, because whoever connects first leads and only the leader's game presses it)
         var ANTS_ARGS = [], ANTS_LOCAL_FILE = '', ANTS_TEST = null, ANTS_OWN_NAME = false;       // (ANTS_LOCAL_FILE: the file of a map of the players that a game on this computer plays, fetched by the data block below; '' for every other page)
-        // Watching a replay: play.html?replay=<file>, a match that is still being played: play.html?live=<id>, or a file of your own: play.html?local=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
+        // Watching a replay: play?replay=<file>, a match that is still being played: play?live=<id>, or a file of your own: play?local=<id> (docs/REPLAYS.md "Watching"). The name of the file and the id are checked by web/replay_page.js (an address
         // with replay= and no valid name is "that replay is gone", one with live= and no valid id is "that match isn't live", one with local= and no record is "choose the file again"; replay= wins over local=, which wins over live=). The game gets nothing else from the address then (no room,
         // no map, no bots, no name): its arguments are the picture's shape (the same choice as a match: ?aspect=, else the remembered one, else the shape nearest to the screen) and --replay (and --replay-live for a live match), which the page's replay block adds once the recording is here.
         var ANTS_REPLAY_MODE = /(^|[?&])(replay|live|local)=/.test(window.location.search), ANTS_OWN_MODE = ANTS_REPLAY_MODE && /(^|[?&])local=/.test(window.location.search) && !/(^|[?&])replay=/.test(window.location.search);      // (a file of your own: local=<id>)
@@ -1847,7 +1853,7 @@
             if (ANTS_REPLAY_MODE) return;
             var joined = ANTS_PAGE.joinArguments(window.location.search, window.location.protocol === 'https:', window.location.host);
             joined.args.forEach(function (a) { ANTS_ARGS.push(a); });
-            if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play.html?map=...&bots=...): its local parameters, through a whitelist
+            if (joined.args.indexOf('--join-url') === -1) {                  // a game on THIS computer (the front page's Play: play?map=...&bots=...): its local parameters, through a whitelist
                 var local = ANTS_PAGE.localArguments(window.location.search); local.args.forEach(function (a) { ANTS_ARGS.push(a); }); ANTS_LOCAL_FILE = local.file; ANTS_TEST = local.test; ANTS_OWN_NAME = local.nameless;
             }
         })();
@@ -2683,7 +2689,7 @@
             if (!isLocked()) { if (lockStartAt) lockStartAt = { x: e.clientX - rect.left, y: e.clientY - rect.top }; return; }
             e.stopPropagation();                                            // the game gets the page's cursor, not the lock's relative motion
             if (!lockCursor) startLockedCursor();
-            lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;      // (the cursor is on the bar: the bar's, not the game's)
+            lockCursor = ANTS_PAGE.moveLocked(lockCursor, e.movementX, e.movementY, rect.width, rect.height); if (ANTS_REPLAY_MODE && window.antsReplayZone) window.antsReplayZone(rect.left + lockCursor.x, rect.top + lockCursor.y, e.buttons); if (ANTS_REPLAY_MODE && barLock.move(e.buttons)) return;      // (the cursor is on the bar: the bar's, not the game's)
             handToGame('mousemove', { x: Math.trunc(lockCursor.x), y: Math.trunc(lockCursor.y) }, e.buttons);
         }, true);
         canvas.addEventListener('mousedown', function (e) {                // a click on the game takes the lock in a match or takes it back where the browser let it go; not while the countdown card is up (ants_probe 60 is its seconds, -1 none): a locked pointer cannot click the card's Fullscreen button
@@ -3131,7 +3137,7 @@
     </script>
     <!-- BEGIN replay glue (tests/scripts/test_web_replay.py reads it) -->
     <script>
-        // ---- Watching a replay (docs/REPLAYS.md "Watching"; only when the address is play.html?replay=<file> or play.html?live=<id>) ----
+        // ---- Watching a replay (docs/REPLAYS.md "Watching"; only when the address is play?replay=<file> or play?live=<id>) ----
         // The page fetches the recording from the server's public door (GET /replays/<file>, the shape of the name is checked first: web/replay_page.js), puts it in the game's file system as /replay.antsrep and starts
         // the game with --replay: the game plays the match from the file on its own engine, without the Fog of War and with every order of the HUD discarded (Application::replay_*). The game is the player; this
         // block is its remote control: the header (what is playing), the bar (play and pause, the timeline, the clock, the speed, fullscreen), the end of the match, and the cards for a file that cannot be shown.
@@ -3169,6 +3175,7 @@
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
             var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout }), rew = R.rewindControl({ doc: document, turn: function () { return get(VALUE.state) === STATE.jumping ? get(VALUE.target) : get(VALUE.turn); }, seek: function (seconds) { seek(seconds); } });   // (the Auto / Manual button and Back 30 seconds, made by web/replay_page.js)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
+            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var c = $('canvas'), r = c.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, bottom: r.bottom, height: r.height, rows: c.height } : null; }, bar: function () { var a = $('rbar').getBoundingClientRect(), t = $('b-tab').getBoundingClientRect(), h = $('b-handle').hidden ? null : $('b-handle').getBoundingClientRect(); return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) }; }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
             var ICON = {
                 play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',
                 pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5h5v17h-5zM13.5 3.5h5v17h-5z"/></svg>',
@@ -3198,7 +3205,7 @@
                 var text = ($('game-version') || {}).textContent || '';
                 return text.indexOf('@') === -1 && text ? text : (info && info.version ? 'v' + info.version : 'this version');
             }
-            function replayUrl() { return window.location.origin + (FILE ? '/play.html?replay=' + encodeURIComponent(FILE) : '/play.html?live=' + encodeURIComponent(LIVE_ID || '')); }
+            function replayUrl() { return window.location.origin + (FILE ? '/play?replay=' + encodeURIComponent(FILE) : '/play?live=' + encodeURIComponent(LIVE_ID || '')); }
 
             // ---- the header: what is playing ----
             function lengthSeconds() { return info && info.turns ? Math.floor(info.turns / TPS) : 0; }
@@ -3262,7 +3269,7 @@
                 };
                 var all = function () {
                     var a = el('a', 'btn', '‹ All matches');
-                    a.href = '/matches.html';
+                    a.href = '/matches';
                     buttons.appendChild(a);
                 };
                 var made = info && info.game ? info.game : 'a version of the game', plan = OWN ? OWN.card(kind, { made: made, version: pageVersion(), map: info && info.map ? info.map : OWN.map(), why: why }) : null;
@@ -3287,7 +3294,7 @@
                     title = 'This match is over';
                     paragraph(['The match you were watching has ended. It is kept in the list for 30 days, and you can watch all of it.']);
                     var watch = el('a', 'btn', 'Watch the replay');
-                    watch.href = '/play.html?replay=' + encodeURIComponent(why);
+                    watch.href = '/play?replay=' + encodeURIComponent(why);
                     buttons.appendChild(watch);
                     all();
                 } else if (kind === 'notlive') {              // the link of a match that is not being played and was not kept (or is not a match)
@@ -3456,32 +3463,46 @@
                 cam.fullscreen(over);
                 if (dragging && bar.parentNode !== home) return;                  // (a press on the timeline is going on: moving the bar now would cancel it; pointerup/pointercancel come back here)
                 if (over && bar.parentNode !== home) { home.appendChild(bar); bar.classList.add('over'); wake(); }
-                else if (!over && (bar.parentNode === stageElement || bar.parentNode === boxElement)) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); wake(); }
+                else if (!over && (bar.parentNode === stageElement || bar.parentNode === boxElement)) { stageElement.parentNode.insertBefore(bar, stageElement.nextSibling); bar.classList.remove('over'); bar.classList.remove('idle'); zone.settle(); wake(); }
             };
             function syncEdge() {
                 var bar = $('rbar');
-                $('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle'));
+                var gone = bar.classList.contains('over') && zone.mode() === 'hidden';
+                $('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle') && !gone);       // (a hidden bar has the handle, not the strip)
+                $('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() === 'hidden');       // (the handle is there only while the bar is hidden: over a shown bar the chevron is the one arrow)
             }
+            // the bar's three states (R.barZone): open (as ever), hidden (the viewer's choice: only the handle shows) and peek (called by the mouse at the bottom edge, goes back by itself)
+            function applyZone(m) {
+                var bar = $('rbar'), fromHandle = document.activeElement === $('b-handle');
+                bar.classList.toggle('gone', m === 'hidden');
+                $('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); if (m !== 'hidden' && fromHandle) $('b-tab').focus();       // (the handle goes when the bar shows: the focus goes to the chevron)
+                syncEdge(); if (m === 'hidden') {
+                    clearTimeout(idleTimer); barLock.hideMark(); if (bar.contains(document.activeElement)) $('b-handle').focus();
+                    if (touchSeen && !noteShown) { noteShown = true; $('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back'; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)
+                } else wake();
+            }
+            function showBar(focus) { var from = document.activeElement === $('b-handle'); zone.open(); if (focus || from) $('b-tab').focus(); }
+            function toggleBar() { if (zone.mode() === 'hidden') showBar(false); else zone.hide(); }
             function wake() {
                 var bar = $('rbar');
+                if (bar.classList.contains('over') && zone.mode() === 'hidden') { syncEdge(); return; }        // (hidden by the viewer: no move of the mouse, key or click calls it)
                 bar.classList.remove('idle');
                 clearTimeout(idleTimer);
                 clearTimeout(noteTimer);
                 $('rnote').hidden = true;
                 swiped = -1;
-                if (bar.classList.contains('over') && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(hideBar, 3000);
+                if (bar.classList.contains('over') && zone.mode() === 'open' && get(VALUE.state) === STATE.playing) idleTimer = setTimeout(hideBar, 3000);
                 syncEdge();
             }
             function hideBar() {                                                  // (only in fullscreen: the bar of the page is always there)
                 var bar = $('rbar');
-                if (!bar.classList.contains('over')) return;
+                if (!bar.classList.contains('over') || zone.mode() !== 'open') return;
                 clearTimeout(idleTimer);
                 if (dragging || !$('picpop').hidden) { idleTimer = setTimeout(hideBar, 1000); return; }       // (a finger on the timeline, or the Picture window open, is a touch of the bar: it looks again)
                 bar.classList.add('idle'); barLock.hideMark();                     // (the arrow of a locked mouse goes with the bar: it is not there to be hit)
                 syncEdge();
                 if (touchSeen && !noteShown) {                                    // (the first time that it goes in a visit, a finger is told for 3 seconds how to bring it back)
-                    noteShown = true;
-                    $('rnote').hidden = false;
+                    noteShown = true; $('rnote').textContent = 'Swipe up from the bottom edge to bring the bar back'; $('rnote').hidden = false;
                     clearTimeout(noteTimer);
                     noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000);
                 }
@@ -3498,7 +3519,7 @@
             };
             window.antsReplayLeave = function () {
                 if (ANTS_EMBED && window.parent !== window) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }      // (the frame of a match page: it hides the replay; opened on its own it goes to the list)
-                window.location.assign('/matches.html');
+                window.location.assign('/matches');
             };
 
             // ---- the wiring ----
@@ -3574,6 +3595,9 @@
                 seek(to);
             });
             window.addEventListener('keydown', function (ev) {
+                if ((ev.key === 'b' || ev.key === 'B' || ev.code === 'KeyB') && $('rbar').classList.contains('over') && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test((ev.target && ev.target.tagName) || '') && !document.querySelector('[role="dialog"]:not([hidden]), [role="alertdialog"]:not([hidden])') && $('picpop').hidden) {
+                    ev.preventDefault(); ev.stopImmediatePropagation(); if (!ev.repeat) toggleBar(); return;       // (B hides the bar of a fullscreen page and brings it back; the game does not get it)
+                }
                 wake();
                 if (ev.key === ' ' && !shown && isReadyToPlay && !ev.ctrlKey && !ev.altKey && !ev.metaKey && !/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test((ev.target && ev.target.tagName) || '')) {
                     ev.preventDefault();
@@ -3612,10 +3636,19 @@
             $('rbar').addEventListener('pointermove', function (ev) {
                 if (!barFrom || ev.pointerId !== barFrom.id) return;
                 var down = ev.clientY - barFrom.y;
-                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; hideBar(); swiped = ev.pointerId; }
+                if (down >= BAR_SWIPE && down > 1.5 * Math.abs(ev.clientX - barFrom.x)) { barFrom = null; zone.hide(); swiped = ev.pointerId; }
             });
             ['pointerup', 'pointercancel'].forEach(function (name) { $('rbar').addEventListener(name, function () { barFrom = null; }); });
-            $('b-tab').addEventListener('click', hideBar);
+            $('b-tab').addEventListener('click', function () { zone.hide(); });
+            $('b-handle').addEventListener('click', function () { showBar(false); });
+            var handleFrom = null;                                                  // a finger on the handle: a swipe up brings the bar back as a tap does
+            $('b-handle').addEventListener('pointerdown', function (ev) { handleFrom = ev.pointerType === 'touch' ? { id: ev.pointerId, y: ev.clientY } : null; });
+            $('b-handle').addEventListener('pointermove', function (ev) { if (handleFrom && ev.pointerId === handleFrom.id && handleFrom.y - ev.clientY >= EDGE_SWIPE) { handleFrom = null; showBar(false); } });
+            ['pointerup', 'pointercancel'].forEach(function (name) { $('b-handle').addEventListener(name, function () { handleFrom = null; }); });
+            // the mouse at the picture's bottom edge calls a hidden bar (R.barZone): a mouse or a pen only, never a finger; the locked mouse comes from the page's own cursor (antsReplayZone)
+            document.addEventListener('pointermove', function (ev) { if (ev.pointerType !== 'touch' && !isLocked() && $('rbar').classList.contains('over')) zone.pointer(ev.clientX, ev.clientY, ev.buttons); }, { passive: true });
+            document.documentElement.addEventListener('mouseleave', function () { if (!isLocked()) zone.gone(); });
+            window.antsReplayZone = function (x, y, buttons) { if ($('rbar').classList.contains('over')) zone.pointer(x, y, buttons); };
 
             // ---- a match that is being played: the feed ----
             var feedTimer = 0, notLiveLooks = 0;

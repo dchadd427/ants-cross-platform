@@ -11,7 +11,7 @@
 // tests/scripts/test_web_home_games.py runs this with node (the quick tier). usage: node web_home_games_room_check.js web/lobby.html     (exit 0: every check holds; every failure is printed)
 'use strict';
 const R = require('./web_home_games_rig.js')(process.argv[2]);
-const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
+const { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf, myRoom, guestRoom, roomAs,
         PUBLIC, PRIVATE, STARTING, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, RULES0, done, broke, pressEscape, pressElsewhere } = R;
 
 const KEY2 = Uint8Array.from(Array.from({ length: 16 }, (_, i) => 0x60 + i));
@@ -246,6 +246,36 @@ const OTHERS = ['Maya', 'Sage'];
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 3. Quick host
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{   // no room: Quick host asks first, Public or Private (a card over Home; Escape and Cancel change nothing)
+    const env = await page();
+    env.home('host').focus();
+    env.home('host').click();
+    const card = hostCard(env), words = card ? find(card, 'btn').map((b) => textOf(b)) : [];
+    same('Quick host with no room asks first: the card "Host a game" with Public room, Private room and Cancel, nothing made yet (no socket, still Home)', [!!card, words, env.sockets.length, env.screen()], [true, ['Public room', 'Private room', 'Cancel'], 0, 'home']);
+    check('... Public room has the focus (one press makes the room), the card is a dialog, and every button is a target of 48 px (the style of the other cards)', !!card && env.focused === find(card, 'btn')[0] && card.getAttribute('role') === 'dialog' && card.getAttribute('aria-modal') === 'true' && find(card, 'gcbtns').length >= 1);
+    pressEscape(env);
+    check('Escape cancels: the card is gone, nothing was made, the focus is back on Quick host', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
+    env.home('host').click();
+    find(hostCard(env), 'btn')[2].click();
+    check('Cancel does the same', hostCard(env) === null && env.sockets.length === 0 && env.screen() === 'home' && env.focused === env.home('host'));
+    env.home('host').click();
+    chooseHost(env, 'Private room');
+    check('Private room makes the private room (one socket, the Room shows, My room is there) and never asks for Visibility(public), also after the Welcome', env.sockets.length === 1 && env.screen() === 'room' && hostCard(env) === null && env.home('mine').hidden === false);
+    const sock = env.last();
+    env.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
+    same('... no Visibility message is sent, the room stays private', [visibilities(sock), pressed(env)], [[], ['true', 'false']]);
+    const pub = await page();
+    pub.home('host').click();
+    chooseHost(pub, 'Public room');
+    const ps = pub.last();
+    pub.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
+    same('Public room is Quick host as it was: a room and Visibility(public), once', [pub.sockets.length, visibilities(ps)], [1, [1]]);
+    const two = await page();
+    two.home('host').click(); chooseHost(two, 'Private room');
+    two.arrive({ key: KEY, seats: seatsOf(['Maya']), room: { flags: PRIVATE } });
+    two.home('host').click();
+    check('with a room of the page\'s own (private) Quick host does not ask Public or Private again: it asks the old question about making it public, or flips it when alone', hostCard(two) === null);
+}
 {   // no room: it makes one, then sends Visibility(public) after the Welcome
     const env = await page();
     tap(env.home('host'));
@@ -673,6 +703,25 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     away.$('name-step-own').click();
     check('"Start a room of my own instead" on the card closes it: the own room stays and Join is back', away.$('name-step').hidden && away.sockets.length === 1 && !awayOwn.closed && first(popOf(away), 'gcgo').disabled === false);
 }
+{   // "Have a code?": a text button in the heading folds the box open under it (the focus goes to the field), Escape or the close button folds it shut (the focus goes back to the button)
+    const env = await withList();
+    myRoom(env, ['Maya']);
+    env.roomBar('rhome').click();
+    await openGames(env);
+    const head = first(popOf(env), 'gphead'), link = first(head, 'gcodelink'), box = first(popOf(env), 'gcode'), input = first(box, 'joinbox').children[0], close = first(box, 'gcx');
+    check('"Have a code?" is a button in the heading with aria-expanded="false", controlling the box, which is shut and has no label above the field', link.tagName === 'button' && link.textContent === 'Have a code?' && link.getAttribute('aria-expanded') === 'false'
+          && link.getAttribute('aria-controls') === box.id && box.hidden === true && !first(popOf(env), 'gclabel') && popOf(env).children[1] === box && close.getAttribute('aria-label') === 'Close');
+    tap(link);
+    check('pressed: the box is open, aria-expanded is true and the focus is in the field', box.hidden === false && link.getAttribute('aria-expanded') === 'true' && env.focused === input);
+    pressEscape(env);
+    check('Escape in the field shuts the box, gives the focus back to the button, and keeps the list open', box.hidden === true && link.getAttribute('aria-expanded') === 'false' && env.focused === link && popOf(env).hidden === false);
+    tap(link); input.value = 'k7m2'; input.fire('input', {}); tap(close);
+    check('the close button shuts it too, with the focus on the button', box.hidden === true && env.focused === link);
+    tap(link); link.focus(); tap(link);
+    check('the button pressed again shuts the box (the focus is on it)', box.hidden === true && link.getAttribute('aria-expanded') === 'false' && env.focused === link);
+    tap(link); input.value = 'https://play.test/?join=x1&room=k7m2xq'; input.key('Enter');
+    check('a pasted room link and Enter ask for the name: the card says the room of the link', !env.$('name-step').hidden && env.$('name-step-title').textContent === 'Join the room k7m 2xq');
+}
 {   // Join by code with others in the room: the question first, then the name card
     const env = await withList();
     const own = myRoom(env, OTHERS);
@@ -724,7 +773,7 @@ for (const [what, reason, words] of [['full', 1, 'That room is full.'], ['a matc
     await wait(env, 5000);
     check('... for as long as the look takes (a second client waits up to 15 s)', bar.hidden === false && bar.children[1].disabled === false);
     tap(bar.children[1]);
-    check('Cancel: the line goes, the buttons are back, the second client is let go of (a Leave, closed), the own room is as it was, and the focus is in the field', bar.hidden === true && joinOf(rowsOf(env)[0]).disabled === false && leaves(probe) === 1 && probe.closed && leaves(own) === 0 && !own.closed && env.focused === first(popOf(env), 'joinbox').children[0]);
+    check('Cancel: the line goes, the buttons are back, the second client is let go of (a Leave, closed), the own room is as it was, and the focus is on Have a code?, the box being shut', bar.hidden === true && joinOf(rowsOf(env)[0]).disabled === false && leaves(probe) === 1 && probe.closed && leaves(own) === 0 && !own.closed && env.focused === first(first(popOf(env), 'gphead'), 'gcodelink'));
     probe.receive(welcome(1, KEY2, 0));
     await wait(env, 20000);
     check('a Welcome (or the 15 s of silence) that comes after Cancel changes nothing: no notice, no Room, no words, the own room stays', env.screen() === 'home' && own.closed === false && leaves(own) === 0 && toastOf(env).hidden === true && textOf(first(popOf(env), 'gpnote')) === '' && bar.hidden === true);

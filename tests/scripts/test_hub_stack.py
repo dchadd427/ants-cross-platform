@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The chat hub's wiring (docs/HUB.md "The stack and the site's nginx"): its image, its service in both stacks, the CI step, the deploy filter, the page in the README.
+"""The chat hub's wiring (docs/HUB.md "The stack and the site's nginx"): its image, its service in the stack, the CI step, the page in the README.
 
 Read as text where docker is not needed (and with `docker compose config` where it is installed): the image is slim, non-root, read-only-ready, healthy by a command that the image has, has
-no build id argument and copies hub/ and nothing else; the service is hardened in both stacks, publishes no port, has a volume of its own; the test login cannot reach a deployment; the
-code is the standard library and nothing else; the Web job builds and starts the image (and is still the one job, not a sixth check); the deploy filter counts hub/.
+no build id argument and copies hub/ and nothing else; the service is hardened in the stack, publishes no port, has a volume of its own; the test login cannot reach a deployment; the
+code is the standard library and nothing else; the Web job builds and starts the image (and is still the one job, not a sixth check).
 """
 import ast
 import json
@@ -18,11 +18,29 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from hub import limits as limitmod  # noqa: E402
-import test_staging_stack as stack_tests  # noqa: E402  (its readers of the compose files)
 
-read = stack_tests.read
-STACK = stack_tests.STACK
-STAGING = stack_tests.STAGING
+STACK = os.path.join(REPO, "docker-compose.stack.yml")
+
+
+def read(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def top_level_keys(text, section):
+    """The names under a top-level `volumes:` or `networks:` of a compose file."""
+    keys = []
+    inside = False
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        if re.match(r"^\S", line):
+            inside = line.startswith(section + ":")
+            continue
+        m = re.match(r"^  ([A-Za-z0-9_.-]+):", line)
+        if inside and m:
+            keys.append(m.group(1))
+    return keys
 
 
 def service(text, name):
@@ -92,7 +110,7 @@ class TheImage(unittest.TestCase):
 class TheServices(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.files = {"stack": read(STACK), "staging": read(STAGING)}
+        cls.files = {"stack": read(STACK)}
 
     def test_it_is_hardened_like_the_game_server_and_smaller(self):
         for name, text in self.files.items():
@@ -109,22 +127,18 @@ class TheServices(unittest.TestCase):
             self.assertNotIn("ANTS_BUILD_ID", hub, name)
             self.assertNotIn("expose:", hub, name)
 
-    def test_its_log_is_kept_small_in_both_stacks(self):
+    def test_its_log_is_kept_small_in_the_stack(self):
         for name, text in self.files.items():
             hub = service(text, "ants-hub")
             self.assertRegex(hub, r"logging:\s*\n\s+driver: json-file\s*\n\s+options:\s*\n\s+max-size: \"\d+m\"\s*\n\s+max-file: \"\d+\"", name)
             self.assertNotIn("logging:", service(text, "ants-server"), name)          # (the other services are as they were)
 
     def test_its_volume_and_network_are_its_own(self):
-        stack_hub, staging_hub = service(self.files["stack"], "ants-hub"), service(self.files["staging"], "ants-hub")
+        stack_hub = service(self.files["stack"], "ants-hub")
         self.assertIn("- ants-hub-data:/data", stack_hub)
-        self.assertIn("- ants-staging-hub-data:/data", staging_hub)
         self.assertIn("- proxy-network", stack_hub)
-        self.assertIn("- staging", staging_hub)
         self.assertIn("container_name: ants-hub\n", stack_hub + "\n")
-        self.assertIn("container_name: ants-hub-staging\n", staging_hub + "\n")
-        self.assertIn("ants-hub-data", stack_tests.top_level_keys(self.files["stack"], "volumes"))
-        self.assertNotIn("ants-hub-data", stack_tests.top_level_keys(self.files["staging"], "volumes"))
+        self.assertIn("ants-hub-data", top_level_keys(self.files["stack"], "volumes"))
 
     def test_the_settings_it_is_given(self):
         for name, text in self.files.items():
@@ -144,10 +158,9 @@ class TheServices(unittest.TestCase):
             self.assertIn("ANTS_HUB_MIN_ACCOUNT_DAYS: ${ANTS_HUB_MIN_ACCOUNT_DAYS:-7}\n", hub + "\n", name)
             self.assertNotIn("ANTS_HUB_TEST", hub, name)
         self.assertIn("ANTS_HUB_PUBLIC_URL: ${ANTS_HUB_PUBLIC_URL:-https://beta.playants.org}", service(self.files["stack"], "ants-hub"))
-        self.assertIn("ANTS_HUB_PUBLIC_URL: ${ANTS_HUB_PUBLIC_URL:-}", service(self.files["staging"], "ants-hub"))      # (the staging site has an address of its own: no default)
 
     def test_the_test_login_and_the_secrets_are_in_no_deployment(self):
-        for path in ("docker-compose.stack.yml", "docker-compose.staging.yml", "docker-compose.yml", "docker-compose.server.yml", "Dockerfile", "Dockerfile.server", "Dockerfile.hub",
+        for path in ("docker-compose.stack.yml", "docker-compose.yml", "docker-compose.server.yml", "Dockerfile", "Dockerfile.server", "Dockerfile.hub",
                      os.path.join("docker", "nginx.conf"), os.path.join(".github", "workflows", "ci.yml")):
             text = code(read(os.path.join(REPO, path)))
             self.assertNotIn("ANTS_HUB_TEST_LOGIN", text, path)
@@ -159,6 +172,17 @@ class TheServices(unittest.TestCase):
                         self.assertEqual(line.strip(), "%s: ${%s:-}" % (name, name), path)
                         self.assertTrue(path.startswith("docker-compose.st"), path)
 
+    def test_the_stack_has_these_three_services_and_no_profile(self):
+        text = self.files["stack"]
+        self.assertEqual(top_level_keys(text, "services"), ["ants-beta", "ants-server", "ants-hub"])
+        for dockerfile in ("Dockerfile", "Dockerfile.server", "Dockerfile.hub"):
+            self.assertIn("dockerfile: %s\n" % dockerfile, text)
+        self.assertNotIn("profiles:", code(text))
+        for line in ("read_only: true", "cap_drop: [ALL]", 'security_opt: ["no-new-privileges:true"]', "pids_limit: 64"):
+            self.assertIn(line, service(text, "ants-server"))
+        ports = [int(m.group(1) or m.group(2)) for m in re.finditer(r'(?m)^\s+- "(?:\$\{ANTS_WEB_BIND_PREFIX:-\})?(?:127\.0\.0\.1:)?(?:\$\{[A-Z_]+:-(\d+)\}|(\d+)):\d+"\s*$', code(text))]
+        self.assertEqual(sorted(ports), [4001, 4002, 4010, 19980])
+
     def test_the_game_servers_service_is_not_changed_by_the_hub(self):
         for name, text in self.files.items():
             server = service(text, "ants-server")
@@ -167,7 +191,7 @@ class TheServices(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("docker"), "docker is needed")
     def test_compose_renders_the_hub_with_a_log_that_rotates(self):
-        for path in (STACK, STAGING):
+        for path in (STACK,):
             done = subprocess.run(["docker", "compose", "-f", path, "config", "--format", "json"], capture_output=True, text=True)
             if done.returncode != 0:
                 self.skipTest("docker compose is not available: " + done.stderr[:200])
@@ -177,7 +201,7 @@ class TheServices(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("docker"), "docker is needed")
     def test_compose_renders_the_hub_with_no_published_port(self):
-        for path in (STACK, STAGING):
+        for path in (STACK,):
             done = subprocess.run(["docker", "compose", "-f", path, "config", "--format", "json"], capture_output=True, text=True)
             if done.returncode != 0:
                 self.skipTest("docker compose is not available: " + done.stderr[:200])
@@ -255,23 +279,13 @@ class TheWiring(unittest.TestCase):
     def test_the_web_job_builds_and_starts_the_image_and_there_is_no_job_for_it(self):
         workflow = read(os.path.join(REPO, ".github", "workflows", "ci.yml"))
         jobs = re.findall(r"(?m)^  ([a-z0-9_-]+):\s*$", workflow[workflow.index("\njobs:"):])
-        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web", "deploy"])
-        web = workflow[workflow.index("\n  web:"):workflow.index("\n  deploy:")]
+        self.assertEqual(jobs, ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows", "web"])
+        web = workflow[workflow.index("\n  web:"):]
         step = web[web.index("- name: Build the chat hub image"):]
-        step = step[:step.index("\n      # The two stacks")]
+        step = step[:step.index("\n      # The stack file")]
         for needle in ("docker build -f Dockerfile.hub -t ants-hub .", "--read-only", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit 32", "--memory 192m", "--tmpfs /tmp",
                        "-v ants-hub-check-data:/data", "State.Health.Status", "= healthy", "python -m hub.admin list", "evil.example", "docker rm -f ants-hub-check"):
             self.assertIn(needle, step, needle)
-
-    def test_the_deploy_filter_counts_the_hub(self):
-        sys.path.insert(0, os.path.join(REPO, "tools"))
-        import deploy_filter as df
-        classifier = df.Classifier(REPO, "docker-compose.stack.yml")
-        for path in ("hub/server.py", "hub/ws.py", "Dockerfile.hub"):
-            self.assertTrue(classifier.verdict(path)[0], path)
-        for path in ("docs/HUB.md", "tests/scripts/test_hub_ws.py", "tests/data/hub_mutants.json"):
-            self.assertFalse(classifier.verdict(path)[0], path)
-        self.assertIn("Dockerfile.hub", df.DEFINITIONS)
 
     def test_the_page_is_linked_from_the_readme_once(self):
         readme = read(os.path.join(REPO, "README.md"))

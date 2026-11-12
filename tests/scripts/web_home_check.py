@@ -34,10 +34,10 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
              to the front page at once, and the server drops the seat now (a room with nobody left ends); the front page does not offer to rejoin a match that was left on purpose;
   * friend   two people, each a browser of its own: the host and a player who comes through the link and the name card; START takes both into the real game, the match starts by itself, with no START pressed after that
              (the server's status lists both seats, no bot and no START that did not lead; /busy counts two people) and the two games' state hashes agree;
-  * old      the old addresses: /?join=...&room=... opens the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a shared link, /play.html with
+  * old      the old addresses: /?join=...&room=... opens the game page (a shared link asks for a name), /four.html?room=... goes to /?room=... and the front page asks for the name of a shared link, /play with
              nothing is the game page's own setup screen (no argument but the picture's shape), and the addresses of the test page that "More ways to play" opened (/?map=...&players=1, /?map=...&play=here, /?embed=1)
              are the front page like any other, with a room of its own and no name card;
-  * game     the GAME PAGE in the front page's look (web/shell.html at /play.html): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure card; 19 widths
+  * game     the GAME PAGE in the front page's look (web/shell.html at /play): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure card; 19 widths
              from 320 to 1600 px with no sideways scroll, the header's eight controls (one row with "More" up to 700 px: the six other links, over the picture), the picture, the bar and the guide inside the frame, a phone
              on its side; the logo goes back to the front page as Menu does (it asks first while a match runs or a room is joined: No stays); the two pairs under the game (the chosen one is pressed in; the clicks keep their
              ids and what they remember); the name step of a shared link, with that line; the contrast of every text (4.5:1) in each of these states.
@@ -314,11 +314,13 @@ def open_name_card(t):
 
 
 def open_games(t):
-    """Home, then the Games list (web/home/games.js: the page loads it after its first paint, so the button is waited for), with the cursor in the field of Join by code."""
+    """Home, then the Games list (web/home/games.js: the page loads it after its first paint, so the button is waited for), with "Have a code?" pressed (the box is open under the heading and the cursor is in its field)."""
     t.ev("(function () { var h = document.querySelector('.rhome'); if (h && document.body.getAttribute('data-screen') === 'room') h.click(); return 1; })()")
     wait_for(lambda: t.ev("(function () { var g = document.querySelector('.hchip.games'); return !!g && !g.disabled; })()"), 10)
     click_on(t, ".hchip.games")
     wait_for(lambda: t.ev("!document.querySelector('.gpop').hidden"), 5)
+    if t.ev("document.querySelector('.gpop .gcode').hidden"):
+        click_on(t, ".gpop .gcodelink")
     t.ev("document.querySelector('.gpop .joinbox input').focus(); 1")
 
 
@@ -466,7 +468,7 @@ def main():
 
         def clear_storage():
             """The site's storage of this tab emptied (a page of the site that holds no room: My room makes one and the page keeps its key in the tab's session storage)."""
-            tab.open(web + "changelog.html", wait=False)
+            tab.open(web + "changelog", wait=False)
             time.sleep(1.0)
             tab.ev("try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} 1")
 
@@ -689,7 +691,11 @@ def main():
 
             # Join by code (the Games list of Home)
             open_games(tab)
-            check(value("!document.querySelector('.gpop').hidden"), "Games opens the list, with Join by code at its end")
+            check(value("!document.querySelector('.gpop').hidden"), "Games opens the list, with Have a code? in its heading")
+            check(value("document.querySelector('.gpop .gcodelink').getAttribute('aria-expanded')") == "true" and value("document.activeElement === document.querySelector('.gpop .joinbox input')") is True,
+                  "Have a code? opens the box (aria-expanded) with the cursor in the field")
+            size = json.loads(value("JSON.stringify([document.querySelector('.gpop .gcodelink'), document.querySelector('.gpop .gcx'), document.querySelector('.gpop .gcgo')].map(function (e) { var r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }))"))
+            check(all(w >= 44 and h >= 44 for w, h in size), "Have a code?, the close button and Join are at least 44 px each way (%s)" % (size,))
             contrast("1440 px with the Games list open", least=45)
             real_click(".gpop .gcgo")
             check(value("document.querySelector('.gpop .hint').textContent") == "Type or paste the code first.", "Join with nothing typed says to type or paste the code first")
@@ -698,6 +704,14 @@ def main():
             real_click(".gpop .gcgo")
             check(value("document.querySelector('.gpop .hint').textContent") == "A room code has letters and numbers only, like k7m 2xq.", "a code with a sign in it is told: letters and numbers only (%r)" % value("document.querySelector('.gpop .hint').textContent"))
             contrast("1440 px with a line under the code field", least=45)
+            tab.ev("document.querySelector('.gpop .joinbox input').value = ''; document.querySelector('.gpop .joinbox input').focus(); 1")
+            tab.call("Input.insertText", {"text": "https://play.test/?join=x&room=" + code.upper()})
+            real_click(".gpop .gcgo")
+            check(value("document.querySelector('.gpop .hint').textContent") == "That is your own room." and not open_name_card(tab), "a pasted room link (also with ?join= before room=) is read as its code: the page's own room is \"That is your own room.\"")
+            key("Escape", 27)
+            check(value("document.querySelector('.gpop .gcode').hidden") is True and value("document.activeElement === document.querySelector('.gpop .gcodelink')") is True and value("document.querySelector('.gpop .gcodelink').getAttribute('aria-expanded')") == "false",
+                  "Escape shuts the box and puts the focus back on Have a code?")
+            real_click(".gpop .gcodelink")
             tab.ev("document.querySelector('.gpop .joinbox input').value = ''; document.querySelector('.gpop .joinbox input').focus(); 1")
             tab.call("Input.insertText", {"text": code[:3].upper() + " " + code[3:]})
             real_click(".gpop .gcgo")
@@ -729,13 +743,13 @@ def main():
             check("Version" in info["footer"] and "@@" not in info["footer"] and "build" in info["footer"] and re.match(r"^\d+\.\d+\.\d+", info["version"][0]) is not None and info["version"][1] != "",
                   "the footer names the version and the build (%r)" % re.sub(r"\s+", " ", info["footer"]).strip()[:80])
             hrefs = {n[1]: (n[0], n[2], n[3]) for n in info["nav"]}
-            check([n[1] for n in info["nav"]] == ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Matches"][1] == "/matches.html" and hrefs["Live now"][1] == "/live.html"
-                  and hrefs["Sprites and sounds"][1] == "/asset_catalog/" and hrefs["Changelog"][1] == "/changelog.html" and "github.com" in hrefs["GitHub"][1] and "issues" not in hrefs["GitHub"][1] and hrefs["Feedback"][1].endswith("/issues")
-                  and hrefs["Legal"][1] == "/legal.html",
+            check([n[1] for n in info["nav"]] == ["How it works", "Matches", "Live now", "Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal"] and hrefs["How it works"][0] == "BUTTON" and hrefs["Matches"][1] == "/matches" and hrefs["Live now"][1] == "/live-now"
+                  and hrefs["Sprites and sounds"][1] == "/asset_catalog/" and hrefs["Changelog"][1] == "/changelog" and "github.com" in hrefs["GitHub"][1] and "issues" not in hrefs["GitHub"][1] and hrefs["Feedback"][1].endswith("/issues")
+                  and hrefs["Legal"][1] == "/legal",
                   "the footer links: How it works, Matches, Live now, Sprites and sounds, Changelog, GitHub, Feedback, Legal (%s)" % [n[1] for n in info["nav"]])
             check(all(hrefs[k][2] == "_blank" for k in ("Sprites and sounds", "Changelog", "GitHub", "Feedback", "Legal")) and hrefs["Matches"][2] is None and hrefs["Live now"][2] is None, "the links that leave the front page keep their new tab, the ones to the match pages do not")
             top = json.loads(value("(function () { var b = document.getElementById('watch-top'), m = document.querySelector('header.mast'), r = b && b.getBoundingClientRect(), h = m.getBoundingClientRect(), l = m.querySelector('img').getBoundingClientRect(); return JSON.stringify({text: b && b.textContent.trim(), href: b && b.getAttribute('href'), target: b && b.getAttribute('target'), inHeader: !!b && m.contains(b), right: r && Math.round(h.right - r.right), after: r && r.left > l.right, vis: !!r && r.width > 0 && getComputedStyle(b).visibility === 'visible'}); })()"))
-            check(top["text"] == "Matches" and top["href"] == "/matches.html" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Matches, at the right of the row, in this tab (%s)" % top)
+            check(top["text"] == "Matches" and top["href"] == "/matches" and top["target"] is None and top["inHeader"] and top["vis"] and top["after"] and 0 <= top["right"] <= 4, "the header has the one button, Matches, at the right of the row, in this tab (%s)" % top)
             check(info["notice"] == LOBBY_NOTICE and info["noticeShown"], "the footer says that online matches are recorded, the recordings kept for 30 days, the results and names kept for good and public (%r)" % info["notice"])
             stats = json.loads(value("JSON.stringify({hidden: document.getElementById('stats').hidden, text: document.getElementById('stats').textContent.replace(/\\s+/g, ' ').trim()})"))
             check(stats["hidden"] or re.match(r"^\d[\d,]* matches? being played · \d[\d,]* players? online(\d[\d,]* games? played \(\d[\d,]* today\))?$", stats["text"]) is not None,
@@ -935,9 +949,9 @@ def main():
                 time.sleep(0.15)
                 m = json.loads(value("(function () { var a = document.getElementById('mapmaker-top'), b = document.getElementById('watch-top'), l = document.querySelector('header.mast img'), h = document.querySelector('header.mast'); if (!a) return 'null'; var r = a.getBoundingClientRect(), q = b.getBoundingClientRect(), g = l.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = function (px, py) { return document.elementFromPoint(px, py) === a; }; "
                                      "return JSON.stringify({href: a.getAttribute('href'), text: a.textContent.trim(), n: document.querySelectorAll('#mapmaker-top').length, before: r.right <= q.left + 0.5, gap: Math.round(q.left - r.right), h: r.height, hitAbove: hit(x, y - 21.5), hitBelow: hit(x, y + 21.5), hitLeft: hit(r.left - 1.5, y), hitRight: hit(r.right + 1.5, y), farAbove: !hit(x, y - 30), overLogo: r.left < g.right, scroll: document.documentElement.scrollWidth > innerWidth, inside: r.left >= h.getBoundingClientRect().left - 0.5 && q.right <= h.getBoundingClientRect().right + 4.5, row: innerWidth > 720 || r.top < g.bottom}); })()"))
-                if m is None or m["href"] != "/mapmaker.html" or m["text"] != "Map maker" or m["n"] != 1 or not m["before"] or m["gap"] < 6 or abs(m["h"] - 38) > 1 or not (m["hitAbove"] and m["hitBelow"] and m["hitLeft"] and m["hitRight"]) or not m["farAbove"] or m["overLogo"] or m["scroll"] or not m["inside"] or not m["row"]:
+                if m is None or m["href"] != "/mapmaker" or m["text"] != "Map maker" or m["n"] != 1 or not m["before"] or m["gap"] < 6 or abs(m["h"] - 38) > 1 or not (m["hitAbove"] and m["hitBelow"] and m["hitLeft"] and m["hitRight"]) or not m["farAbove"] or m["overLogo"] or m["scroll"] or not m["inside"] or not m["row"]:
                     bad.append((width, m))
-            check(not bad, "the Map maker link: one, to /mapmaker.html, before Matches and as tall as it, a hit area of 44 px, clear of the logo, on the logo's row on a phone, no sideways scroll at 1280, 390 and 320 px (wrong: %s)" % bad)
+            check(not bad, "the Map maker link: one, to /mapmaker, before Matches and as tall as it, a hit area of 44 px, clear of the logo, on the logo's row on a phone, no sideways scroll at 1280, 390 and 320 px (wrong: %s)" % bad)
             # the quiet line under the dropdown (32:9 here: a 5120 x 1440 screen, "32:9 fills your screen"): in a narrow window it stays inside the page and the page does not scroll sideways
             fresh_tab()
             tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 5120, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)
@@ -1440,10 +1454,10 @@ def main():
             code = code_of(st)
             before = pages()
             real_click("#start")
-            ok = wait_for(lambda: tab.ev("location.pathname") == "/play.html", 20)
+            ok = wait_for(lambda: tab.ev("location.pathname") == "/play", 20)
             where = tab.ev("location.pathname + location.search") if ok else ""
             check(ok and "map=treasure" in where and "bots=" not in where and "join=" not in where and "room=" not in where and "aspect" not in where,
-                  "START takes this tab to /play.html with the map and no shape (nothing was picked: the game page picks its own): no bots, no room (the game page takes the name out of the address: it is in the game's arguments) (%s)" % where)
+                  "START takes this tab to /play with the map and no shape (nothing was picked: the game page picks its own): no bots, no room (the game page takes the name out of the address: it is in the game's arguments) (%s)" % where)
             if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
                 check(pages() == before, "no new tab or window was opened (%d pages before and after)" % before)
                 given = [x for x in game_args(tab) if x != "./this.program"]
@@ -1473,7 +1487,7 @@ def main():
             aspect.choose_shape(tab, "4:3")
             set_modes(tab, {"red": "nobody", "blue": "nobody", "black": "nobody"})
             real_click("#start")
-            ok = wait_for(lambda: tab.ev("location.pathname") == "/play.html", 20)
+            ok = wait_for(lambda: tab.ev("location.pathname") == "/play", 20)
             where = tab.ev("location.pathname + location.search") if ok else ""
             check(ok and "aspect=4:3" in where, "with Classic 4:3 chosen under Screen, START takes this tab to the game with that shape (%s)" % where)
             if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
@@ -1549,7 +1563,7 @@ def main():
 
             for shape_name, shape in (("16:9", (960, 540)), ("4:3", (640, 480))):             # a game on this computer against one Easy bot, each shape of the picture (the button is in another place)
                 clear_storage()
-                load(web + "play.html?map=tiny&bots=easy,none,none&name=Bob&aspect=" + shape_name, ready=True, settle=1.5)
+                load(web + "play?map=tiny&bots=easy,none,none&name=Bob&aspect=" + shape_name, ready=True, settle=1.5)
                 started = start_by_enter()
                 check(started, "a game on this computer against one bot (%s) starts" % shape_name)
                 if started:
@@ -1690,10 +1704,10 @@ def main():
             real_click("#name-step-own")
             went = wait_for(lambda: front_up() and not open_name_card(tab), 15)
             check(bool(went) and (not can_play or front_ready()), "... and its way out closes the card and leaves the front page with a room of its own%s" % ("" if not can_play else " (the visitor is seated in it)"))
-            load(web + "play.html", ready=True, settle=1.0)
+            load(web + "play", ready=True, settle=1.0)
             info = json.loads(value("JSON.stringify({args: ANTS_ARGS})"))
             given = [a for a in info["args"] if a != "./this.program"]                             # (the runtime puts the program's own name in front)
-            check(given == ["--aspect", FIRST], "/play.html with nothing is today's front page: no argument but the picture's shape (%s)" % given)
+            check(given == ["--aspect", FIRST], "/play with nothing is today's front page: no argument but the picture's shape (%s)" % given)
             shot("home_play_plain")
             for old in ("?map=small&players=1&fill=hard", "?map=tiny&players=2&play=here", "?embed=1&aspect=16:9"):
                 load(web + old, ready=False, settle=1.5)
@@ -1706,7 +1720,7 @@ def main():
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------
         if wanted("game"):
             print("[web home] the game page in the front page's look")
-            play = web + "play.html"
+            play = web + "play"
             fresh_tab()
 
             def contrast_of(where, at_least, prepare="", restore=""):
@@ -1946,7 +1960,7 @@ def main():
                 answer["accept"] = False
                 tab.ev("document.getElementById('logo-link').click(); 1")
                 time.sleep(0.8)
-                check(len(dialogs) == 1 and "Leave the game and go back to the menu?" in dialogs[0] and tab.ev("location.pathname") == "/play.html",
+                check(len(dialogs) == 1 and "Leave the game and go back to the menu?" in dialogs[0] and tab.ev("location.pathname") == "/play",
                       "the logo while a match runs asks \"Leave the game and go back to the menu?\" (%s) and No stays in the game" % dialogs)
                 check(tab.ev("Module._ants_match_running()") == 1, "... the match goes on")
                 answer["accept"] = True
@@ -1962,7 +1976,7 @@ def main():
             answer["accept"] = False
             tab.ev("document.getElementById('logo-link').click(); 1")
             time.sleep(0.8)
-            check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and tab.ev("location.pathname") == "/play.html", "the logo in a joined room asks too, and No stays (%s)" % dialogs)
+            check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and tab.ev("location.pathname") == "/play", "the logo in a joined room asks too, and No stays (%s)" % dialogs)
             answer["accept"] = True
             dialogs.clear()
 
