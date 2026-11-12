@@ -60,6 +60,7 @@ cp -f "${SCRIPT_DIR}/web/match_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/death_map.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/death_map.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/replay_stats.css" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/rejoin_key.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/shapes.js" "${DIST_DIR}/"                                                                                                                                           # the pages' one table of the picture's shapes
 cp -f "${SCRIPT_DIR}/web/shape_picker.js" "${DIST_DIR}/"                                                                                                                                     # ... and its control, a button and a list that the page makes (a native list does not open under the fullscreen mouse lock)
 cp -f "${SCRIPT_DIR}/web/map_files.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers it shares with the game page
