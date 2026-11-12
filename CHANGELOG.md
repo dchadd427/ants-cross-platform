@@ -35,7 +35,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.0 page or game still joins. The rest of this release is internal: unused code and staging leftovers removed, changes to the build checks, and nine tests made deterministic.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ca2367...xxxxxxxx)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ca2367...6a03974d)
 
 ## v0.16.0 - 2026-11-10 - A top bar, Quick host asks Public or Private, chat emoji and voice buttons, and a new look for the buttons
 
