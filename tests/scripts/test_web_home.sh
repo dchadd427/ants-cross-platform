@@ -5,7 +5,7 @@
 # Team 2, a bot, the pencil, Remove with its question, a typed code, a reload, a phone, and START, which hands everybody into the real game), START in THIS tab against bots (no new tab; the game's
 # arguments; the match starts by itself; the bots' scores rise: their ants move; the Menu link goes back), START alone (a game for one on this computer: the map and the name, no room, no bot; the match runs
 # with its one colony), Leave game (the results' button and the quit dialog's Yes go back to the front page, in each shape of the picture and in a room, where the seat is dropped), two people in a match
-# (the host's room, a friend through the link, the match starts by itself, the state hashes agree), the old addresses (/?join=..., /four.html?room=..., /play.html; the addresses of the test page that
+# (the host's room, a friend through the link, the match starts by itself, the state hashes agree), the old addresses (/?join=..., /four.html?room=..., /play; the addresses of the test page that
 # "More ways to play" opened, /?map=..., /?embed=1, are the front page like any other), and the game page in the front page's look (part game: the loading screen and its failure card, 19 widths from 320 to 1600 px, the header with
 # "More", the logo that goes back like Menu, the pairs under the game, the name step, the contrast of every text).
 # No automated test reaches the logic of web/lobby.html and web/shell.html with a layout, nginx's routes and the real game: this starts throwaway headless browsers (their own profile and port)

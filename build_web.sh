@@ -51,6 +51,8 @@ for PAGE in matches match live; do                                # the pages of
     sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/${PAGE}.html" > "${DIST_DIR}/${PAGE}.html"
 done
 cp -f "${SCRIPT_DIR}/web/matches.css" "${DIST_DIR}/"                                                                                                                                                # ... their stylesheet
+cp -f "${SCRIPT_DIR}/web/site_nav.css" "${DIST_DIR}/"                                                                                                                                              # the bar at the top of every page (its style and its Menu)
+cp -f "${SCRIPT_DIR}/web/site_nav.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/replay_page.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers they share with the game page
 cp -f "${SCRIPT_DIR}/web/history_page.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/match_stats.js" "${DIST_DIR}/"
@@ -82,4 +84,5 @@ echo " Build Succeeded! Web distribution ready in: ${DIST_DIR}"
 echo " To test locally in your browser:"
 echo "   python3 -m http.server 8080 -d dist"
 echo " Then navigate to: http://localhost:8080/lobby.html (the front page; the image's nginx serves it at /, python's server serves the game page there)"
+echo " (the clean page addresses /play, /matches, /match, /live-now, /legal, /changelog and /mapmaker are docker/nginx.conf's: python's server knows the .html files only; tools/web_without_docker.py serves the site with nginx)"
 echo "========================================================"

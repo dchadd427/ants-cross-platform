@@ -6,7 +6,6 @@ has no `user:` of root and no `cap_add`.
 """
 import glob
 import os
-import re
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -26,7 +25,7 @@ class TheServerUser(unittest.TestCase):
 
     def test_no_compose_file_runs_a_service_as_root_or_adds_capabilities(self):
         files = sorted(glob.glob(os.path.join(REPO, "docker-compose*.yml")))
-        self.assertGreaterEqual(len(files), 4)
+        self.assertGreaterEqual(len(files), 3)
         for path in files:
             text = code(os.path.relpath(path, REPO))
             self.assertNotIn("cap_add", text, path)

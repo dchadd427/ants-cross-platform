@@ -1,4 +1,4 @@
-# Continuous integration: every pull request, every push to main and to staging, and every manual run is built and tested on Windows (MSVC), macOS (Apple clang) and Linux (GCC),
+# Continuous integration: every pull request, every push to main, and every manual run is built and tested on Windows (MSVC), macOS (Apple clang) and Linux (GCC),
 # and the web image (Emscripten, the beta site's Docker build) and the game server's image are built once. main is protected: it takes a change only through a pull request whose five
 # checks pass, and these five checks are the jobs "Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)" and "Web (Emscripten, Docker image)": rename or split
 # none of them without changing the branch protection in the same release (tests/scripts/test_ci_workflow.py keeps the names). What runs where is listed in docs/TESTING.md ("Continuous
@@ -7,35 +7,36 @@
 # The Linux and macOS work is shared between jobs that run side by side (the tests, not the build, take the time), behind the same two names:
 #   - `linux_tests` and `macos_tests` build and test. Each is a matrix of legs: ctest in parts (Linux), the tool self-tests and the script suites, the python tests (in slices on Linux, the
 #     groups that depend on the system on macOS: tests/scripts/run_python_tests.py). Every leg builds what it needs from the compiler cache (about a minute).
-#   - `linux` and `macos` are small jobs that carry the required names. They look at the result of the legs and pass only when every leg passed. `linux` runs whatever the legs did
-#     (`if: always()`), because a job whose needs failed would otherwise be skipped, and a skipped job counts as passing for a required check: the explicit test is what keeps a failed leg from passing.
+#   - `linux`, `macos`, `windows_2022`, `windows_2026` and `web` are small jobs that carry the required names. Each looks at the result of the jobs behind it and at the job `changes`, and it
+#     passes only when `changes` succeeded and every job behind it passed, or (macOS and the two Windows names only) when `changes` said that the change needs none of them and they were skipped.
+#     They run whatever the legs did (`if: always()`), because a job whose needs failed would otherwise be skipped, and a skipped job counts as passing for a required check: the explicit test is what
+#     keeps a failed leg, a cancelled one, or a job that failed to decide, from passing. `windows_tests` is one matrix (MSVC 2022 and MSVC 2026) behind the two names, so a failed Windows leg turns
+#     both names red; `web_image` and `web_stack` are the two legs behind the Web name (the web image and its checks; the game server and hub images and the stack files), which run side by side.
 #   - `changes`, the first job, decides for a pull request (never for a push or a manual run) whether the change is of documents, web pages and page tests only, apart from the few files that the C++ tests
-#     and the macOS script suite read (tools/ci_light.sh; the rules are in docs/WORKFLOW.md). Then `macos` and its legs are skipped, and the Windows jobs run but skip their steps: a matrix job that a
-#     job-level `if` skips is reported once, under the unexpanded template of its name, so the required names "Windows (MSVC 2022)" and "Windows (MSVC 2026)" would never appear. Linux and the web job
-#     run in full for every change. If `changes` itself fails, everything runs.
+#     and the macOS script suite read (tools/ci_light.sh; the rules are in docs/WORKFLOW.md). It judges the change against the base branch of the pull request (not against main), and a run starts again
+#     when a pull request is edited (`edited`: a new base branch is one of the edits), so that the decision is made for the base that the pull request has now. Then `macos_tests` and `windows_tests` are
+#     skipped (their small jobs say so and pass); Linux and the web legs run in full for every change. If `changes` itself fails, none of the five names passes.
 #
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
 # application), then the self-tests of the four tools (map_sweep, bot_arena, replay_tool, lvl_tool; bot_watch and gen_food_footprints are only built, so that no change breaks them unseen; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
-# tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
+# tests of tests/scripts). The web legs also build the game server's image and the hub's. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
 # --asan, locally) and the browser-based checks are opt-in (docs/TESTING.md).
 #
-# The last job, `deploy`, runs for a push to main (a merged pull request) or to staging, after every other job of the run passed, and only when the push changed what an image contains
-# or the stack file (tools/deploy_filter.py). A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server (the site's public GET /busy,
-# tools/deploy_wait.py: at most DEPLOY_MAX_WAIT_MINUTES, 180 by default), then calls the Portainer webhook that the repository secret PORTAINER_WEBHOOK_URL (staging:
-# PORTAINER_STAGING_WEBHOOK_URL) holds (tools/deploy_webhook.sh). Without the secret it says so and does nothing, so nothing is deployed from here until it is set
-# (docs/WORKFLOW.md: the steps).
+# CI does not deploy: the site follows main through the host's own automatic update (docs/WORKFLOW.md, "Deploy").
 name: CI
 
 on:
   pull_request:
+    # the default types, and `edited` (a pull request that gets another base branch is judged again; so is one whose title or text is edited, which costs a run and is never less checked)
+    types: [opened, synchronize, reopened, edited]
   push:
-    branches: [main, staging]
+    branches: [main]
   workflow_dispatch:
 
-# One run per branch (or pull request): a newer push cancels the run of the older one.
+# One run per pull request (or branch, for a push or a manual run): a newer push cancels the run of the older one. Two pull requests of one branch do not cancel each other.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -70,15 +71,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # The decision and every changed file are printed. The commit ids come through the environment; no text of the pull request (title, branch, body) is read by this job. The change is judged
-      # against the base of the pull request and against main (MAIN_REF, a literal): a pull request that is retargeted starts no new run, so the verdict must not depend on the base.
+      # The decision and every changed file are printed. The commit ids and the name of the base branch come through the environment; no other text of the pull request (title, head branch, body) is read by this job, and the base name is only compared with a literal, never evaluated or printed by the script. The change is judged
+      # against the base of the pull request (the commit that its base branch is at in this run: an `edited` run, which a new base branch starts, has the new one). A pull request into main is always full (the script compares BASE_REF with the literal main and prints nothing of it).
       - name: Light checks or all of them?
         id: decide
         env:
           EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          MAIN_REF: refs/remotes/origin/main
         run: bash tools/ci_light.sh
 
   linux_tests:
@@ -215,7 +216,7 @@ jobs:
   # The required check "Linux (GCC)": it passes when every leg of linux_tests passed. It runs whatever the legs did (a job whose needs failed would be skipped, and a skipped job counts as passing).
   linux:
     name: Linux (GCC)
-    needs: linux_tests
+    needs: [changes, linux_tests]
     if: ${{ always() }}
     # pinned like linux_tests (its legs), for the same reason
     runs-on: ubuntu-24.04
@@ -223,16 +224,18 @@ jobs:
     steps:
       - name: Did every Linux job pass?
         env:
+          CHANGES: ${{ needs.changes.result }}
           RESULT: ${{ needs.linux_tests.result }}
         run: |
-          echo "the Linux test jobs: $RESULT"
+          echo "the job that decides what runs: $CHANGES; the Linux test jobs: $RESULT"
+          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }
           [ "$RESULT" = success ] || { echo "a Linux test job failed, was cancelled or did not run: this check fails"; exit 1; }
 
   macos_tests:
     name: macOS tests (${{ matrix.name }})
     needs: changes
-    # Skipped for a change of web pages, documents and page tests only (the job `changes`); if that job failed, everything runs.
-    if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}
+    # Skipped for a change of web pages, documents and page tests only (the job `changes`); it does not run when that job failed (the small job `macos` then fails).
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.light != 'true' }}
     runs-on: macos-latest
     timeout-minutes: 40
     strategy:
@@ -357,55 +360,56 @@ jobs:
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
-  # The required check "macOS (Apple clang)": it passes when every leg of macos_tests passed, and is skipped (which counts as passing) together with them when the change is of pages, documents
-  # and page tests only. Like "Linux (GCC)" it runs whatever the legs did.
+  # The required check "macOS (Apple clang)": it passes when every leg of macos_tests passed, or when `changes` succeeded and said that the change is of pages, documents and page tests only
+  # and the legs were skipped. It runs whatever the legs did, and fails when `changes` did not succeed.
   macos:
     name: macOS (Apple clang)
     needs: [changes, macos_tests]
-    if: ${{ always() && needs.changes.outputs.light != 'true' }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Did every macOS job pass?
+      - name: Did every macOS job pass (or was it right to skip them)?
         env:
+          CHANGES: ${{ needs.changes.result }}
+          LIGHT: ${{ needs.changes.outputs.light }}
           RESULT: ${{ needs.macos_tests.result }}
         run: |
-          echo "the macOS test jobs: $RESULT"
-          [ "$RESULT" = success ] || { echo "a macOS test job failed, was cancelled or did not run: this check fails"; exit 1; }
+          echo "the job that decides what runs: $CHANGES (light: ${LIGHT:-nothing}); the macOS test jobs: $RESULT"
+          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }
+          [ "$RESULT" = success ] && exit 0
+          [ "$RESULT" = skipped ] && [ "$LIGHT" = true ] && { echo "skipped for a change of pages, documents and page tests only"; exit 0; }
+          echo "a macOS test job failed, was cancelled or did not run: this check fails"
+          exit 1
 
-  windows:
-    name: Windows (${{ matrix.name }})
+  # The legs behind the required names "Windows (MSVC 2022)" and "Windows (MSVC 2026)" (the jobs windows_2022 and windows_2026 below carry the names, as `linux` and `macos` do for theirs).
+  windows_tests:
+    name: Windows tests (${{ matrix.name }})
     needs: changes
-    # For a change of web pages, documents and page tests only (the job `changes`) there is nothing to build: the job then runs on a small Linux machine and every step below is skipped. (It is not
-    # skipped as a whole: a matrix job that is skipped by its `if` is reported once, under the unexpanded template of its name, so that "Windows (MSVC 2022)" and "Windows (MSVC 2026)", the names
-    # that main requires, would never be reported and the pull request could not be merged.) If `changes` failed, everything runs: the `if` below (no `success()`) keeps the job from being skipped
-    # with it, which a plain `needs` would do.
-    if: ${{ !cancelled() }}
-    runs-on: ${{ needs.changes.outputs.light == 'true' && 'ubuntu-latest' || matrix.os }}
+    # Skipped for a change of web pages, documents and page tests only (the job `changes`): there is nothing to build. A matrix job that is skipped is reported once, under the unexpanded template
+    # of its name, which is why the required names are carried by the small jobs below, and not by these legs. It does not run when `changes` failed (the small jobs then fail).
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.light != 'true' }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         # Visual Studio 2022 (MSVC 19.4x) is what developers build with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
-        # MSVC 2026 runs for every pull request and push; MSVC 2022 for pull requests, pushes to main and manual runs (not for a push to staging), which is what the matrix
-        # below says: the list is chosen here, because a job's own `if` cannot see its matrix.
-        include: ${{ fromJSON(github.event_name == 'push' && github.ref != 'refs/heads/main' && '[{"name":"MSVC 2026","os":"windows-latest"}]' || '[{"name":"MSVC 2022","os":"windows-2022"},{"name":"MSVC 2026","os":"windows-latest"}]') }}
+        # Both compilers run for every event, so that neither required name can pass without its compiler.
+        include:
+          - name: MSVC 2022
+            os: windows-2022
+          - name: MSVC 2026
+            os: windows-latest
     env:
       # The compiler cache: sccache (with the Ninja generator under the MSVC environment, as the Visual Studio generators cannot use a launcher), its folder cached like the
       # ccache folder of the Linux job (keyed by the runner image and the commit, restored from the latest older one).
       SCCACHE_DIR: ${{ github.workspace }}/.sccache
       SCCACHE_CACHE_SIZE: 600M
     steps:
-      - name: Nothing to build (only web pages, documents and page tests changed)
-        if: ${{ needs.changes.outputs.light == 'true' }}
-        run: |
-          echo "Light checks: no file of this change is read by the Windows build or its tests (see the first job, Which checks does this change need?)."
-
       - uses: actions/checkout@v7
-        if: ${{ needs.changes.outputs.light != 'true' }}
 
       - name: Restore the compiler cache
-        if: ${{ needs.changes.outputs.light != 'true' }}
         uses: actions/cache@v6
         with:
           path: .sccache
@@ -414,7 +418,6 @@ jobs:
 
       # sccache: a pinned release of Mozilla's compiler cache, its SHA-256 checked (the digest is the one that GitHub shows for the release asset).
       - name: Install sccache 0.14.0
-        if: ${{ needs.changes.outputs.light != 'true' }}
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
@@ -431,14 +434,12 @@ jobs:
 
       # The Visual C++ environment (cl, link, the include and library paths) for the steps below; the action is pinned to the commit of its tag v1.13.0.
       - name: Set up the MSVC environment (x64)
-        if: ${{ needs.changes.outputs.light != 'true' }}
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756
         with:
           arch: x64
 
       # SDL2 and SDL2_ttf are not installed: CMakeLists.txt downloads the prebuilt Visual C++ packages itself (FetchContent), as it does on a developer's PC.
       - name: Configure (Ninja, Release, warnings are errors, sccache)
-        if: ${{ needs.changes.outputs.light != 'true' }}
         run: |
           cmake --version | head -1
           cl 2>&1 | head -1 || true
@@ -446,20 +447,18 @@ jobs:
 
       - name: Build the game, the server and the test programs (Release)
         id: build
-        if: ${{ needs.changes.outputs.light != 'true' }}
         run: |
           cmake --build build
           cmake --build build --target map_sweep bot_arena replay_tool lvl_tool bot_watch gen_food_footprints
 
       - name: Build the E2E runner (Release)
         id: build_e2e
-        if: ${{ needs.changes.outputs.light != 'true' }}
         run: |
           cmake -S tests/e2e -B build_e2e -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
           cmake --build build_e2e
 
       - name: Compiler cache statistics
-        if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}
+        if: ${{ !cancelled() }}
         run: |
           sccache --show-stats || true
           sccache --stop-server || true
@@ -490,21 +489,83 @@ jobs:
           path: build/Testing/Temporary/
           if-no-files-found: ignore
 
-  web:
-    name: Web (Emscripten, Docker image)
+  # The required checks "Windows (MSVC 2022)" and "Windows (MSVC 2026)": each passes when every leg of windows_tests passed, or when `changes` succeeded and said that the change is of pages,
+  # documents and page tests only and the legs were skipped. They run whatever the legs did, and fail when `changes` did not succeed. The legs are one matrix, so a failed leg of either compiler
+  # fails both checks.
+  windows_2022:
+    name: Windows (MSVC 2022)
+    needs: [changes, windows_tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Did every Windows job pass (or was it right to skip them)?
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          LIGHT: ${{ needs.changes.outputs.light }}
+          RESULT: ${{ needs.windows_tests.result }}
+        run: |
+          echo "the job that decides what runs: $CHANGES (light: ${LIGHT:-nothing}); the Windows test jobs: $RESULT"
+          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }
+          [ "$RESULT" = success ] && exit 0
+          [ "$RESULT" = skipped ] && [ "$LIGHT" = true ] && { echo "skipped for a change of pages, documents and page tests only"; exit 0; }
+          echo "a Windows test job failed, was cancelled or did not run: this check fails"
+          exit 1
+
+  windows_2026:
+    name: Windows (MSVC 2026)
+    needs: [changes, windows_tests]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Did every Windows job pass (or was it right to skip them)?
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          LIGHT: ${{ needs.changes.outputs.light }}
+          RESULT: ${{ needs.windows_tests.result }}
+        run: |
+          echo "the job that decides what runs: $CHANGES (light: ${LIGHT:-nothing}); the Windows test jobs: $RESULT"
+          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }
+          [ "$RESULT" = success ] && exit 0
+          [ "$RESULT" = skipped ] && [ "$LIGHT" = true ] && { echo "skipped for a change of pages, documents and page tests only"; exit 0; }
+          echo "a Windows test job failed, was cancelled or did not run: this check fails"
+          exit 1
+
+  # The leg of the required check "Web (Emscripten, Docker image)" that builds the web image (the beta site's Docker build) and checks it: the job `web` below carries the name.
+  web_image:
+    name: Web leg (the web image and its checks)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
 
+      # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
+      # the Dockerfile copies before the compile (a run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own). The image is
+      # the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
+      # The builder image is pinned to a release (the default is a moving tag).
+      - name: Restore the Docker layer cache of the web image
+        uses: actions/cache@v6
+        with:
+          path: /tmp/docker-cache/web
+          key: docker-web-${{ hashFiles('Dockerfile', '.dockerignore', 'CMakeLists.txt', 'VERSION', 'cmake/**', 'include/**', 'src/**', 'web/**', 'Original-Ants/**') }}
+          restore-keys: docker-web-
+
+      - name: Create the buildx builder
+        run: |
+          mkdir -p /tmp/docker-cache/web
+          docker buildx create --name ants-builder --driver docker-container --driver-opt image=moby/buildkit:v0.19.0 --use
+
       # The same build as the beta site's image (Dockerfile: emsdk, the WebAssembly game, the page, nginx). Nothing is pushed or run anywhere.
       - name: Build the web image
-        run: docker build -t ants-beta .
+        run: |
+          docker buildx build --load -t ants-beta --cache-from type=local,src=/tmp/docker-cache/web --cache-to type=local,dest=/tmp/docker-cache/web-new,mode=max .
+          rm -rf /tmp/docker-cache/web && mv /tmp/docker-cache/web-new /tmp/docker-cache/web
 
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html live.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_minimap.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/mapmaker_store.js front/mapmaker_mine.js front/mapmaker_submit.js front/test_game.js home/home.js home/home.css home/chat.js home/chat.css home/games.js home/games.css home/players.js home/players.css home/talk.js home/talk.css mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html live.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html site_nav.css site_nav.js death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_minimap.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/mapmaker_store.js front/mapmaker_mine.js front/mapmaker_submit.js front/test_game.js home/home.js home/home.css home/chat.js home/chat.css home/games.js home/games.css home/players.js home/players.css home/talk.js home/talk.css mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css && cmp index.html play.html'
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html matches.html match.html live.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && grep -Eo "id=.?game-build-date.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
 
       # The map core's module (docs/MAP_FORMAT.md, "In the browser"), taken out of the image that was just built and run in node on the library's maps: its answers are the native core's, byte
@@ -522,12 +583,12 @@ jobs:
           node tests/scripts/web_mapmaker_play_check.js --module lvl_core_from_image --require
           node tests/scripts/web_mapmaker_pickup_check.js --module lvl_core_from_image --require
 
-      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play.html is the game page, and every html answer has
+      # The routes of the site: "/" is the front page (the lobby) unless the address is a game's (?join=), /four.html redirects to "/" for good, /play is the game page, every page is asked for without .html (the old address is a 301 that keeps the query; /live-now is the matches page because /live is the server's list), and every html answer has
       # the revalidation headers (tests/scripts/web_routes_check.py). The game server is not needed: nginx starts without it.
       - name: Check the routes of the site (the front page, the game page's addresses, the redirect of the old Play online address, the six original maps)
         run: |
           docker run -d --name ants-routes -p 127.0.0.1:18080:80 ants-beta
-          for i in $(seq 1 50); do curl -fs -o /dev/null http://127.0.0.1:18080/lobby.html && break; sleep 0.2; done
+          for i in $(seq 1 50); do curl -fs -o /dev/null http://127.0.0.1:18080/ && break; sleep 0.2; done
           python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || { docker logs ants-routes; docker rm -f ants-routes; exit 1; }
           # the six original maps are served like every map file (the Map Maker opens one as a starting point): byte for byte the files of Original-Ants/Maps
           for n in TINY SMALL MEDIUM GAUNTLET TREASURE ISLANDS; do
@@ -535,18 +596,43 @@ jobs:
           done
           docker rm -f ants-routes
 
+  # The other leg of the required check "Web (Emscripten, Docker image)", side by side with the web image: the game server's image, the chat hub's image and the stack files.
+  web_stack:
+    name: Web leg (the server and hub images, the stack files)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
+      # the Dockerfile copies before the compile (a run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own). The image is
+      # the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
+      # The builder image is pinned to a release (the default is a moving tag).
+      - name: Restore the Docker layer cache of the server image
+        uses: actions/cache@v6
+        with:
+          path: /tmp/docker-cache/server
+          key: docker-server-${{ hashFiles('Dockerfile.server', '.dockerignore', 'CMakeLists.txt', 'VERSION', 'cmake/**', 'include/**', 'src/**', 'third_party/**', 'tools/**') }}
+          restore-keys: docker-server-
+
+      - name: Create the buildx builder
+        run: |
+          mkdir -p /tmp/docker-cache/server
+          docker buildx create --name ants-builder --driver docker-container --driver-opt image=moby/buildkit:v0.19.0 --use
+
       # The game server's image (Dockerfile.server): built the same way as the stack's, and it must say which build it is.
       - name: Build the game server image and run its --version
         run: |
-          docker build -f Dockerfile.server -t ants-server .
+          docker buildx build --load -f Dockerfile.server -t ants-server --cache-from type=local,src=/tmp/docker-cache/server --cache-to type=local,dest=/tmp/docker-cache/server-new,mode=max .
+          rm -rf /tmp/docker-cache/server && mv /tmp/docker-cache/server-new /tmp/docker-cache/server
           docker run --rm --entrypoint /usr/local/bin/ants_server ants-server --version
 
       # The chat hub's image (Dockerfile.hub, docs/HUB.md): built the way the stacks build it, and started the way they start it (read only, no capabilities, no new privileges, 32 processes, 192 MB, a
       # tmpfs for /tmp, a volume for the database): its health check must say healthy, its command line tool must open the database, and a socket from the wrong site must be refused. (No sixth
-      # required check: this is a step of the Web job.)
+      # required check: this is a step of a leg of the Web job.)
       - name: Build the chat hub image and start it with the stack's hardening
         run: |
-          docker build -f Dockerfile.hub -t ants-hub .
+          docker buildx build --load -f Dockerfile.hub -t ants-hub .
           docker run -d --name ants-hub-check --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 32 --memory 192m --tmpfs /tmp --health-interval 2s --health-start-period 2s -v ants-hub-check-data:/data \
             -e ANTS_HUB_PUBLIC_URL=https://chat.example.org ants-hub
           ok=
@@ -561,104 +647,26 @@ jobs:
           docker rm -f ants-hub-check
           docker volume rm ants-hub-check-data
 
-      # The two stacks (docker-compose.stack.yml and docker-compose.staging.yml) must render, and the build argument ANTS_SITE_LABEL of the staging stack must put "staging" in the
-      # title and the footer of the pages, while the production pages do not have the word. (The second image reuses the layers of the first: only its last layers are built.)
-      - name: Check the stack files and the staging label of the pages
+      # The stack file (docker-compose.stack.yml) must render.
+      - name: Check the stack file
         run: |
           docker compose -f docker-compose.stack.yml config --quiet
-          docker compose -f docker-compose.staging.yml config --quiet
-          docker build --build-arg ANTS_SITE_LABEL=staging -t ants-beta-staging .
-          docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html matches.html match.html live.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html play.html lobby.html matches.html match.html live.html'
 
-  deploy:
-    name: Deploy (Portainer webhook)
-    needs: [changes, linux_tests, linux, macos_tests, macos, windows, web]
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
+  # The required check "Web (Emscripten, Docker image)": it passes when both legs passed. It runs whatever the legs did, and fails when `changes` did not succeed. (The two legs always run: nothing
+  # of a change makes the web checks unnecessary.)
+  web:
+    name: Web (Emscripten, Docker image)
+    needs: [changes, web_image, web_stack]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
-    # The job may wait for a quiet server for hours (tools/deploy_wait.py waits 300 minutes at the most, whatever DEPLOY_MAX_WAIT_MINUTES says): its limit is above that.
-    timeout-minutes: 330
-    # One deploy per branch, and a newer one replaces an older one that still waits (the group is not the workflow's, which would cancel the run this job is in).
-    concurrency:
-      group: deploy-${{ github.ref }}
-      cancel-in-progress: true
-    permissions:
-      contents: read
-      actions: read
-    env:
-      # The webhook addresses are secrets: they are read from the environment by tools/deploy_webhook.sh and never printed, never put in an argument and never in a log line.
-      # Each variable holds its secret on its own branch only, so that a missing production secret can never be replaced by the staging one.
-      PRODUCTION_WEBHOOK: ${{ github.ref == 'refs/heads/main' && secrets.PORTAINER_WEBHOOK_URL || '' }}
-      STAGING_WEBHOOK: ${{ github.ref == 'refs/heads/staging' && secrets.PORTAINER_STAGING_WEBHOOK_URL || '' }}
-      BRANCH: ${{ github.ref_name }}
+    timeout-minutes: 5
     steps:
-      - name: Is the deploy secret set?
-        id: secret
-        run: |
-          if [ -z "${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" ]; then
-            echo "deploy secret not set: skipped"
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/checkout@v7
-        if: steps.secret.outputs.present == 'true'
-        with:
-          fetch-depth: 0
-
-      # What changed since the last run of this workflow that passed on this branch (so that a push whose run was cancelled by a newer push is not forgotten), else since the
-      # push's own "before". A push of documents, CI files and tests only is skipped: a deploy restarts the site and ends the matches that are running.
-      - name: Did the push change what the site serves or runs?
-        if: steps.secret.outputs.present == 'true'
-        id: filter
+      - name: Did both web jobs pass?
         env:
-          GH_TOKEN: ${{ github.token }}
-          BEFORE: ${{ github.event.before }}
+          CHANGES: ${{ needs.changes.result }}
+          IMAGE: ${{ needs.web_image.result }}
+          STACK: ${{ needs.web_stack.result }}
         run: |
-          base=$(gh run list --workflow ci.yml --branch "$BRANCH" --event push --status success --limit 1 --json headSha --jq '.[0].headSha' 2> /dev/null || true)
-          [ -n "$base" ] || base="$BEFORE"
-          compose=docker-compose.stack.yml
-          [ "$BRANCH" = staging ] && compose=docker-compose.staging.yml
-          echo "comparing ${base:0:12} with ${GITHUB_SHA:0:12}"
-          python3 tools/deploy_filter.py --base "$base" --head "$GITHUB_SHA" --compose "$compose" --github-output "$GITHUB_OUTPUT"
-
-      # A deploy recreates the game server and ends every match that runs, so it waits for a quiet moment: the site's public GET /busy ({"matches": N, "players": M}) is polled every minute
-      # and the deploy goes on when no match runs, after DEPLOY_MAX_WAIT_MINUTES (a repository variable, 180 by default) whatever runs, or when the address has not answered for five
-      # minutes (the first deploy of a site that has no /busy yet). The addresses are the sites' own, public, so they are variables and not secrets: DEPLOY_BUSY_URL (the production
-      # site's address, the public beta site's by default) and STAGING_BUSY_URL (none by default: the staging site is deployed without a wait). A newer push cancels a job that waits.
-      - name: Wait for an idle game server
-        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
-        env:
-          PRODUCTION_BUSY_URL: ${{ vars.DEPLOY_BUSY_URL || 'https://beta.playants.org/busy' }}
-          STAGING_BUSY_URL: ${{ vars.STAGING_BUSY_URL }}
-          MAX_WAIT_MINUTES: ${{ vars.DEPLOY_MAX_WAIT_MINUTES || '180' }}
-        run: |
-          site=production
-          url="$PRODUCTION_BUSY_URL"
-          if [ "$BRANCH" = staging ]; then
-            site=staging
-            url="$STAGING_BUSY_URL"
-          fi
-          python3 tools/deploy_wait.py --label "$site" --url "$url" --max-wait-minutes "$MAX_WAIT_MINUTES"
-
-      # The webhook makes Portainer pull the branch as it is now: a push that is not the tip any more (a newer one is on its way, its own run decides) is not deployed from here. This is
-      # checked after the wait, which may have taken hours.
-      - name: Is this push still the tip of the branch?
-        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
-        id: tip
-        run: |
-          tip=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
-          if [ "$tip" = "$GITHUB_SHA" ]; then
-            echo "tip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "a newer push is on the branch: its run decides; nothing is called"
-            echo "tip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Call the deploy webhook
-        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true' && steps.tip.outputs.tip == 'true'
-        run: |
-          site=production
-          [ "$BRANCH" = staging ] && site=staging
-          WEBHOOK_URL="${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" bash tools/deploy_webhook.sh "$site"
+          echo "the job that decides what runs: $CHANGES; the web image job: $IMAGE; the server, hub and stack job: $STACK"
+          [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }
+          [ "$IMAGE" = success ] && [ "$STACK" = success ] || { echo "a web job failed, was cancelled or did not run: this check fails"; exit 1; }

@@ -55,16 +55,16 @@ def lazy_problems(page):
     body = function_body(script, "function setReplay(open)")
     if "el('iframe')" not in body or "if (open && !frame)" not in body:
         problems.append("the frame is not made inside setReplay, when it opens")
-    if "frame.src = '/play.html?replay=' + encodeURIComponent(file) + '&embed=1';" not in body:
+    if "frame.src = '/play?replay=' + encodeURIComponent(file) + '&embed=1';" not in body:
         problems.append("the frame's address is not the replay in embed mode")
     if "frame.src = 'about:blank'" not in body or "removeChild(frame)" not in body or "frame = null" not in body:
         problems.append("closing does not take the frame away")
     if sorted(re.findall(r"setReplay\(([^)]*)\)", script)) != ["!frame", "false", "open"]:          # (the definition, the press that toggles, the game's own Quit that closes: nothing opens it by itself)
         problems.append("setReplay is called by something else than the press and the game's Quit")
-    # the only requests of the page: the match, the list of live matches (a button), the sum of the map's deaths (only when "All matches on this map" is pressed), the maps (history_page.js); a recording is a link, never a request
+    # the only requests of the page: the match, the sum of the map's deaths (only when "All matches on this map" is pressed), the maps (history_page.js); a recording is a link, never a request
     asked = re.findall(r"fetch\('([^']*)'", script)
-    if sorted(asked) != ["/history/", "/history/deaths?map=", "/live"]:
-        problems.append("the page asks for something else than the match, the sum of the map's deaths and the live list: %s" % asked)
+    if sorted(asked) != ["/history/", "/history/deaths?map="]:
+        problems.append("the page asks for something else than the match and the sum of the map's deaths: %s" % asked)
     if "dl.href = '/replays/' + encodeURIComponent(st.file);" not in script:
         problems.append("the recording is not a download link")
     return problems
@@ -102,23 +102,20 @@ class TheCommonFiles(unittest.TestCase):
                 self.assertIn("cache: 'no-store'", call, name + ": " + call)
         self.assertIn("fetch('/maps/all', { credentials: 'same-origin' })", read("web", "history_page.js").replace("fetcher(", "fetch("))      # (the list of the maps is the site's own and cached by it)
 
-    def test_every_page_ends_its_header_buttons_with_the_front_pages_discord_link(self):
-        lobby = read("web", "lobby.html")
-        link = re.search(r'<a class="btn sm discord".*?</a>', lobby).group(0)                              # (the same markup as the front page's header: its mark, its words, its new tab)
-        self.assertIn('href="https://discord.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer"', link)
+    def test_every_page_has_the_site_bar_with_the_discord_link_and_no_page_of_its_own(self):
         for name in PAGES:
             page = read("web", name)
-            acts = re.search(r'<div class="acts">(.*?)</div>', page, re.S).group(1)
-            self.assertTrue(acts.endswith(link), name + ": the last button of the header's row")
+            bar = re.search(r'<header class="sb"[^>]*>.*?</header>', page, re.S).group(0)                    # (the bar of every page: web/site_nav.css, web/site_nav.js)
+            self.assertIn('<a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc"', bar, name)
             self.assertEqual(page.count("discord.gg"), 1, name)
-            self.assertEqual(len(re.findall(r"<img", re.search(r"<header.*?</header>", page, re.S).group(0))), 1, name + ": the logo is the header's only picture")
+            self.assertEqual(len(re.findall(r"<img", bar)), 1, name + ": the logo is the bar's only picture")
+            self.assertNotIn('class="mast"', page, name)
+            self.assertIn('<link rel="stylesheet" href="site_nav.css">', page, name)
+            self.assertIn('<script src="site_nav.js"></script>\n<script src="replay_page.js"></script>', page, name)      # (the bar's script before the page's own)
+            self.assertEqual(len(re.findall(r"<h1[ >]", page)), 1, name)
         css = read("web", "matches.css")
-        phone = css[css.index(".mast .acts .btn.hide-s { display: none; }"):]                           # (the phone's rules that come after the hide-s rule, inside the 720 px block that holds it)
-        self.assertIn(".discord::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }", css)      # (the 44 px target)
-        self.assertRegex(phone, r"\.discord \.dt \{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect\(0 0 0 0\); \}")     # (a phone: the mark alone, the word stays for a screen reader)
-        self.assertIn(".discord { min-width: 44px;", phone)
-        self.assertIn("@media (max-width: 389px)", css)
-        self.assertRegex(css[css.index("@media (max-width: 389px)"):], r"\.mast \.acts \{[^}]*flex-wrap: wrap;")       # (with a match running there are three buttons: they never cover the logo)
+        self.assertNotIn(".mast", css)                                                                       # (the bar's rules are web/site_nav.css's)
+        self.assertNotIn(".discord", css)
 
     def test_the_one_stylesheet_is_the_pages_and_the_colors_are_the_front_pages(self):
         css = read("web", "matches.css")
@@ -146,8 +143,8 @@ class TheListPage(unittest.TestCase):
         self.assertIn("askTimer = setTimeout(run, wait)", self.page)
         self.assertIn("go(copy(state, { q: q }), false, false, 0)", self.page)                               # (the search has waited already)
         self.assertIn("'Back to the first page'", self.page)                                                 # (a page past the last one has a way back)
-        self.assertIn("fetch('/live'", self.page)                                                            # (the button of the live page, one look)
-        self.assertIn("' live now'", self.page)
+        self.assertNotIn("fetch('/live'", self.page)                                                         # (the count of live matches is web/site_nav.js's one look: data-live="now")
+        self.assertIn('<header class="sb" data-live="now">', self.page)
 
     def test_it_says_what_it_shows_and_what_went_wrong_in_the_approved_words(self):
         for words in ("Every match played here.", "Find a map or a player", "No match fits those filters.", "Clear the filters", "Stats & replay", "Older version", "Replay removed",
@@ -155,7 +152,7 @@ class TheListPage(unittest.TestCase):
             self.assertIn(words, self.page + read("web", "history_page.js"), words)
 
     def test_the_whole_card_is_one_link_and_a_recording_that_cannot_be_played_is_marked(self):
-        self.assertIn("'match.html?id=' + encodeURIComponent(rec.id)", self.page)
+        self.assertIn("'/match?id=' + encodeURIComponent(rec.id)", self.page)
         self.assertIn("var li = el('li', 'm' + (s.kind === 'watch' ? '' : ' dim'));", self.page)
         self.assertIn("rec.mode !== 'highest-score'", self.page)                                              # (the mode is a pill when it is not the original's game)
         self.assertIn("sd.winner && rec.draw !== true", self.page)                                            # (a draw has no winner)
@@ -198,14 +195,14 @@ class TheMatchPage(unittest.TestCase):
 
     def test_the_rule_for_the_frame_can_fail(self):
         broken = {
-            "the markup holds the frame": ('<div id="sections" aria-live="polite">', '<div id="sections" aria-live="polite"><iframe src="/play.html?replay=x&embed=1"></iframe>'),
+            "the markup holds the frame": ('<div id="sections" aria-live="polite">', '<div id="sections" aria-live="polite"><iframe src="/play?replay=x&embed=1"></iframe>'),
             "the page opens the replay as soon as it is made": ("        current = rec;\n", "        current = rec;\n        setReplay(true);\n"),
             "a second place makes a frame": ("        var show = $('show'); if (show)", "        var extra = el('iframe');\n        var show = $('show'); if (show)"),
             "the frame is made on closing as well": ("if (open && !frame) {", "if (!frame) {"),
             "closing leaves the frame": ("if (!open && frame) { frame.src = 'about:blank'; if (frame.parentNode) frame.parentNode.removeChild(frame); frame = null; }", ""),
             "the frame is the page without the embed mode": ("'&embed=1';", "'';"),
             "the page asks for the recording itself": ("function build(rec) {", "function build(rec) {\n        fetch('/replays/' + rec.file);"),
-            "the page asks for the game page itself": ("        if (open && !frame) {", "        fetch('/play.html');\n        if (open && !frame) {"),
+            "the page asks for the game page itself": ("        if (open && !frame) {", "        fetch('/play');\n        if (open && !frame) {"),
         }
         for why, (old, new) in broken.items():
             self.assertEqual(self.page.count(old), 1, why)
@@ -227,7 +224,7 @@ class TheLivePage(unittest.TestCase):
         self.assertIn("LIVE_EVERY = 10000", self.page)
         self.assertIn("document.hidden", self.page)                                                          # (a page that is out of sight does not ask)
         self.assertIn("R.liveEntriesOf(", self.page)                                                         # (the door's answer goes through the shared code that keeps only what is well formed)
-        self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.page)
+        self.assertIn("'/play?live=' + encodeURIComponent(e.id)", self.page)
         for words in ("Matches being played right now.", "No match is on right now.", "Watch live", "so far", "See all matches", "This server doesn’t show matches that are being played.",
                       "A match shows up here after its first 30 seconds, and this list updates by itself. The picture is about ' + R.LIVE_LAG + ' seconds behind the players."):
             self.assertIn(words, self.page, words)
@@ -267,7 +264,7 @@ class TheGamePagesStats(unittest.TestCase):
 
     def test_the_frame_of_a_match_page_leaves_by_telling_it(self):
         self.assertIn("if (ANTS_EMBED && window.parent !== window) { try { window.parent.postMessage({ ants: 'replay-leave' }, window.location.origin); } catch (e) { /* the page around the frame is gone */ } return; }", self.page)
-        self.assertIn("window.location.assign('/matches.html');", self.page)
+        self.assertIn("window.location.assign('/matches');", self.page)
 
     def test_fullscreen_of_the_match_page_is_the_games_own_not_the_frames(self):
         # the frame holds the game page, whose own Fullscreen button makes the game's stage fullscreen (the picture as large as the screen allows, the bar over it); the frame itself goes only where the page cannot be reached
@@ -382,7 +379,7 @@ class TheDocument(unittest.TestCase):
     def test_the_replays_page_describes_the_pages_the_stats_and_what_a_later_section_reads(self):
         text = read("docs", "REPLAYS.md")
         self.assertIn("## The match pages", text)
-        for needle in ("web/matches.html", "web/match.html", "web/live.html", "web/history_page.js", "embed=1", "details", "Show replay", "/matches.html", "/live.html"):
+        for needle in ("web/matches.html", "web/match.html", "web/live.html", "web/history_page.js", "embed=1", "details", "Show replay", "/matches", "/live-now"):
             self.assertIn(needle, text, needle)
         self.assertNotIn("web/watch.html", text)                                                             # (the old list is gone: one home for the topic)
 

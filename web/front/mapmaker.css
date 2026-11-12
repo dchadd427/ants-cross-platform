@@ -31,7 +31,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 /* the screen: top bar, then tools - map - side */
 .screen.ed { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 .screen::after { z-index: 5; }
-.edtop { display: flex; align-items: center; gap: 14px; padding: 14px 24px 8px; }
+.screen.ed > .sb { padding: 12px 24px 0; margin: 0; }                /* the site bar (web/site_nav.css) above the editor's own row */
+.edtop { display: flex; align-items: center; gap: 14px; padding: 6px 24px 8px; }
 .edlogo { display: block; flex: none; width: 110px; } .edlogo img { width: 100%; }
 .edname { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
 .edname .nm { width: auto; flex: 0 1 300px; min-width: 120px; min-height: 44px; font-size: 18px; }
@@ -310,7 +311,8 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     html, body { height: auto; min-height: 100%; } body { overflow-y: auto; }
     .screen.ed { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; } .edbody { flex: 1 0 auto; min-height: auto; }
     .scrim { position: fixed; }
-    .edtop { padding: 10px 14px 6px; gap: 8px 10px; flex-wrap: wrap; align-items: center; } .edtop .edmenu { order: 2; margin-left: auto; } .edtop .edname { order: 3; flex: 1 1 100%; flex-wrap: nowrap; }
+    .screen.ed > .sb { padding: 10px 14px 0; }
+    .edtop { padding: 4px 14px 6px; gap: 8px 10px; flex-wrap: wrap; align-items: center; } .edtop .edmenu { order: 2; margin-left: auto; } .edtop .edname { order: 1; flex: 1 1 0; flex-wrap: nowrap; }
     .edlogo { width: 64px; }
     .edname { gap: 6px; }
     .edname .nm { min-width: 0; flex: 1 1 110px; font-size: 16px; padding: 4px 10px; min-height: 44px; }
