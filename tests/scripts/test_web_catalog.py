@@ -28,8 +28,9 @@ def read(*parts):
 PAGE = read("asset_catalog", "index.html")
 STYLE = PAGE[PAGE.index("<style>") + len("<style>"):PAGE.index("</style>")]
 HEAD = PAGE[:PAGE.index("<style>")]
-HEADER = PAGE[PAGE.index("<header"):PAGE.index("</header>") + len("</header>")]
-AFTER_HEADER = PAGE[PAGE.index("</header>"):]
+HEADER = PAGE[PAGE.index('<header class="site-head">'):PAGE.index("</header>", PAGE.index('<header class="site-head">')) + len("</header>")]
+BAR = PAGE[PAGE.index('<header class="sb"'):PAGE.index("</header>")]                        # (the site bar above the catalog's own header: web/site_nav.css)
+AFTER_HEADER = PAGE[PAGE.index('<header class="site-head">'):]
 SCRIPT = PAGE[PAGE.index("<script>"):PAGE.rindex("</script>")]
 SHARED = read("web", "front", "classic.css")
 
@@ -50,8 +51,8 @@ class TheHead(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(REPO, "web", "front", name)), name)
 
     def test_nothing_is_loaded_but_the_data_the_font_and_the_stylesheet(self):
-        self.assertEqual(re.findall(r'<script[^>]*\bsrc="([^"]+)"', PAGE), ["catalog_data.js"])
-        self.assertEqual(re.findall(r'<link[^>]*\bhref="([^"]+)"', PAGE), ["/front/LibreFranklin-Medium.ttf", "/front/classic.css"])
+        self.assertEqual(re.findall(r'<script[^>]*\bsrc="([^"]+)"', PAGE), ["catalog_data.js", "/site_nav.js"])
+        self.assertEqual(re.findall(r'<link[^>]*\bhref="([^"]+)"', PAGE), ["/front/LibreFranklin-Medium.ttf", "/front/classic.css", "/site_nav.css"])
         self.assertNotIn("@import", STYLE)
         self.assertNotRegex(STYLE, r"url\(\s*[\"']?(?:https?:)?//")
         self.assertNotRegex(PAGE, r"<(?:img|iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")
@@ -59,7 +60,7 @@ class TheHead(unittest.TestCase):
 
 class TheHeader(unittest.TestCase):
     def test_the_logo_is_a_link_to_the_front_page_and_has_the_size_of_its_picture(self):
-        link = re.search(r'<a class="logo" href="/"[^>]*><img src="/front/logo\.png" alt="ants!" width="(\d+)" height="(\d+)"></a>', HEADER)
+        link = re.search(r'<a class="sblogo" href="/"><img src="/front/logo\.png" alt="ants! - Home" width="(\d+)" height="(\d+)"></a>', BAR)
         self.assertIsNotNone(link)
         self.assertEqual((int(link.group(1)), int(link.group(2))), png_size(os.path.join(REPO, "web", "front", "logo.png")))
 
@@ -70,9 +71,9 @@ class TheHeader(unittest.TestCase):
         for ident in ("tab-sounds-count", "tab-anims-count", "tab-sprites-count"):
             self.assertIn('<span id="%s">' % ident, HEADER)
         actions = HEADER[HEADER.index('<div class="header-actions">'):]
-        self.assertTrue(actions.lstrip().startswith('<div class="header-actions">\n      <a href="/" class="btn sm" title="Return to Play Ants Game">Play</a>'), "Play, a button to the front page, comes first")
-        self.assertIn('href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm"', actions)
-        self.assertIn('<button class="btn sm" id="btn-shortcuts-help"', actions)
+        self.assertTrue(actions.lstrip().startswith('<div class="header-actions">\n      <button class="btn sm" id="btn-shortcuts-help"'), "the Shortcuts button is the only one: Play and GitHub are in the site bar's Menu")
+        self.assertNotIn("github.com", HEADER)
+        self.assertIn('data-live="menu"', BAR)
 
 
 class TheScriptAndTheMarkup(unittest.TestCase):
@@ -114,8 +115,7 @@ class TheStyle(unittest.TestCase):
                        ".sprites-grid {\n      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));", ".meta-grid {\n      grid-template-columns: 1fr;", ".search-input-wrapper { flex: 1 1 100%; }",
                        ".stage-hint-pill { display: none; }"):
             self.assertIn(needle, phone, needle)
-        self.assertIn(".header-actions { grid-column: 2; grid-row: 1; justify-content: flex-end; gap: 8px 10px; }", phone)         # (Play stays on a phone: the old rules hid every button)
-        self.assertNotRegex(phone, r"\.header-actions \{\s*display: none;")
+        self.assertIn(".header-actions { display: none; }", phone)         # (it holds only the Shortcuts button, which a phone has no keyboard for; Play and the rest are in the site bar)
 
     def test_the_colors_that_the_markup_and_the_script_give_to_buttons_are_overridden(self):
         self.assertRegex(STYLE, r"\.copy-btn \{[^}]*color: var\(--cream\) !important; border-color: var\(--edge\) !important;")        # (the links to sounds, animations and sprites)

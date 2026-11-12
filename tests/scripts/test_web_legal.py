@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The legal notice (run by ./run_tests.sh --fast and by the CI): the Legal page (web/legal.html, served at /legal.html), the same notice in the README's License section, and the footer link to it.
+"""The legal notice (run by ./run_tests.sh --fast and by the CI): the Legal page (web/legal.html, served at /legal), the same notice in the README's License section, and the footer link to it.
 
   - the page is the changelog page's look (it links /front/classic.css), loads nothing from another site, runs no script, is short, links the LICENSE and THIRD_PARTY_NOTICES.md of the repository
     (files that exist) and says nothing about what the site stores or for how long (that wording has its own home);
@@ -16,6 +16,7 @@ import sys
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+DISCORD = "https://discord.gg/WaWrXQnKPj"                                             # (the Discord button of the site bar)
 GITHUB = "https://github.com/dchadd427/ants-cross-platform"
 LEGAL_URL = "https://beta.playants.org/legal.html"
 
@@ -64,7 +65,7 @@ def addresses_that_leave_the_site(page):
         for address in ([part.split()[0] for part in value.split(",") if part.strip()] if name == "srcset" else [value]):
             if address.startswith("/") and not address.startswith("//") or address.startswith("#"):
                 continue
-            if address == GITHUB or address.startswith(GITHUB + "/"):
+            if address == GITHUB or address.startswith(GITHUB + "/") or address == DISCORD:
                 continue
             found.append(address)
     for style in re.findall(r"<style[^>]*>(.*?)</style>", page, re.S):
@@ -105,9 +106,11 @@ class TheLegalPage(unittest.TestCase):
         self.assertTrue(self.page.startswith("<!DOCTYPE html>"))
         self.assertIn("<title>Ants (1998) - Legal</title>", self.page)
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
-        self.assertIn('<h1 class="banner gold">Legal</h1>', self.page)
-        self.assertEqual(re.findall(r'class="btn sm" href="([^"]*)"', self.page), ["/", GITHUB])                 # the header's two buttons, as the changelog page's
-        self.assertNotIn("<script", self.page)
+        self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
+        self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
+        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">'])               # (the site bar's Menu: no other script)
+        self.assertIn('<header class="sb" data-live="menu">', self.page)
+        self.assertEqual(re.findall(r'<nav aria-label="Pages">(.*?)</nav>', self.page, re.S)[0].count('aria-current'), 0)      # (Legal is not one of the bar's five: it is in the Menu)
         self.assertNotIn("@@", self.page)                                                                         # (the page is copied as it is: nothing in it is filled in by the build)
         for blank in re.findall(r"<a [^>]*target=\"_blank\"[^>]*>", self.page):
             self.assertIn('rel="noopener noreferrer"', blank)
@@ -183,8 +186,8 @@ class TheLegalPage(unittest.TestCase):
 
     def test_its_footer_is_the_changelog_pages_and_marks_the_page_it_is(self):
         self.assertEqual([(href, text) for href, _, text in footer_links(self.page)],
-                         [("/", "Play"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal.html", "Legal")])
-        self.assertIn('<a href="/legal.html" aria-current="page">Legal</a>', self.page)
+                         [("/", "Play"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal", "Legal")])
+        self.assertIn('<a href="/legal" aria-current="page">Legal</a>', self.page)
         self.assertIn(".bar a[aria-current]", self.page)
 
 
@@ -217,16 +220,16 @@ class TheFooterLinks(unittest.TestCase):
     def test_every_footer_ends_with_the_legal_link_in_a_new_tab(self):
         for name, page in sorted(self.pages.items()):
             links = footer_links(page)
-            self.assertEqual(links[-1][0], "/legal.html", name)
+            self.assertEqual(links[-1][0], "/legal", name)
             self.assertEqual(links[-1][2], "Legal", name)
             self.assertIn('target="_blank" rel="noopener noreferrer"', links[-1][1], name)
-            self.assertEqual([l for l in links if l[0] == "/legal.html"], [links[-1]], "%s: one link to the page" % name)
+            self.assertEqual([l for l in links if l[0] == "/legal"], [links[-1]], "%s: one link to the page" % name)
             self.assertEqual(len([l for l in links if l[2] == "Feedback"]), 1, name)
             self.assertEqual([l[2] for l in links][-2:], ["Feedback", "Legal"], name)                                # (after Feedback, the link that the other pages end with)
 
     def test_the_link_is_the_same_markup_in_every_footer(self):
         for name, page in sorted(self.pages.items()):
-            self.assertEqual(page.count('<a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a>'), 1, name)
+            self.assertEqual(page.count('<a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a>'), 1, name)
 
     def test_the_header_buttons_of_the_game_page_do_not_have_it(self):
         game = read("web", "shell.html")
@@ -238,13 +241,14 @@ class TheRouteAndTheImage(unittest.TestCase):
     def test_the_dockerfile_copies_the_page_to_the_site(self):
         self.assertIn("\nCOPY web/legal.html /usr/share/nginx/html/legal.html\n", read("Dockerfile"))
 
-    def test_nginx_sends_legal_to_the_page_with_a_plain_redirect_like_changelog(self):
+    def test_nginx_serves_legal_and_changelog_at_their_clean_addresses_and_the_old_files_answer_200_not_a_redirect(self):
         conf = read("docker", "nginx.conf")
-        block = re.search(r"\n    location = /legal \{([^}]*)\}", conf)
-        self.assertIsNotNone(block, "location = /legal")
-        self.assertEqual(block.group(1).strip(), "return 301 /legal.html;")                                          # no add_header: a header here would hide the server's own
-        changelog = re.search(r"\n    location = /changelog \{([^}]*)\}", conf).group(1).strip()
-        self.assertEqual(changelog, "return 301 /changelog.html;")
+        for name in ("legal", "changelog"):
+            block = re.search(r"\n    location = /%s \{([^}]*)\}" % name, conf)
+            self.assertIsNotNone(block, "location = /" + name)
+            self.assertEqual(block.group(1).split(), ["rewrite", "^", "/%s.html" % name, "last;"])      # (no add_header: a header here would hide the server's own; the file's address sends the page's headers)
+        self.assertNotIn("    /legal.html /legal;\n", conf)                                         # (not in the map of old addresses: /legal used to redirect to the file, so the file answers 200, tests/scripts/test_nginx_clean_urls.py)
+        self.assertNotIn("    /changelog.html /changelog;\n", conf)
 
 
 if __name__ == "__main__":

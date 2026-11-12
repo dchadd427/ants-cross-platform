@@ -1,7 +1,7 @@
 {
- "note": "Mutants of the chat hub (hub/, Dockerfile.hub, its two stack services, its nginx block, the deploy filter and the wait of the test rig) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_*.py or test_nginx_hub.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_mutants.json --keep-going --jobs 1 --baseline-every 40. The tests use the real sockets of this machine and a real nginx program where one is installed (without one, the nginx mutants cannot be caught and show as survived).",
+ "note": "Mutants of the chat hub (hub/, Dockerfile.hub, its stack service, its nginx block, the wait of the test rig) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'; docs/HUB.md, 'Tests'): each breaks one rule on purpose, and some test of tests/scripts/test_hub_*.py or test_nginx_hub.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_mutants.json --keep-going --jobs 1 --baseline-every 40. The tests use the real sockets of this machine and a real nginx program where one is installed (without one, the nginx mutants cannot be caught and show as survived).",
  "baseline": {
-  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_text tests.scripts.test_hub_ws tests.scripts.test_hub_core tests.scripts.test_hub_store_contract tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_nginx_hub tests.scripts.test_staging_stack tests.scripts.test_deploy_filter"
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hub_text tests.scripts.test_hub_ws tests.scripts.test_hub_core tests.scripts.test_hub_store_contract tests.scripts.test_hub_server tests.scripts.test_hub_stack tests.scripts.test_nginx_hub"
  },
  "mutants": [
   {
@@ -1094,84 +1094,63 @@
    "file": "docker-compose.stack.yml",
    "old": "    read_only: true\n    cap_drop: [ALL]\n    security_opt: [\"no-new-privileges:true\"]\n    pids_limit: 32",
    "new": "    cap_drop: [ALL]\n    security_opt: [\"no-new-privileges:true\"]\n    pids_limit: 32",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "stack_hub_more_processes",
    "file": "docker-compose.stack.yml",
    "old": "    pids_limit: 32\n    mem_limit: 192m",
    "new": "    pids_limit: 256\n    mem_limit: 192m",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "stack_hub_publishes_a_port",
    "file": "docker-compose.stack.yml",
    "old": "    container_name: ants-hub\n    restart: unless-stopped\n",
    "new": "    container_name: ants-hub\n    restart: unless-stopped\n    ports:\n      - \"4040:4040\"\n",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "stack_hub_gets_a_build_id",
    "file": "docker-compose.stack.yml",
    "old": "      dockerfile: Dockerfile.hub\n",
    "new": "      dockerfile: Dockerfile.hub\n      args:\n        ANTS_BUILD_ID: ${ANTS_BUILD_ID:-}\n",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "stack_hub_turns_on_the_test_login",
    "file": "docker-compose.stack.yml",
    "old": "      ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}\n    volumes:\n      - ants-hub-data:/data",
    "new": "      ANTS_HUB_OWNER: ${ANTS_HUB_OWNER:-}\n      ANTS_HUB_TEST_LOGIN: \"1\"\n    volumes:\n      - ants-hub-data:/data",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
-  },
-  {
-   "id": "staging_hub_shares_the_volume_of_the_site",
-   "file": "docker-compose.staging.yml",
-   "old": "      - ants-staging-hub-data:/data",
-   "new": "      - ants-staging-results:/data",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "image_runs_as_root",
    "file": "Dockerfile.hub",
    "old": "USER hub\nEXPOSE 4040",
    "new": "EXPOSE 4040",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "image_copies_the_whole_context",
    "file": "Dockerfile.hub",
    "old": "COPY hub/ /app/hub/",
    "new": "COPY . /app/",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "image_takes_a_build_id",
    "file": "Dockerfile.hub",
    "old": "WORKDIR /app\n",
    "new": "ARG ANTS_BUILD_ID=\nWORKDIR /app\n",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "image_health_check_needs_curl",
    "file": "Dockerfile.hub",
    "old": "CMD [\"python\", \"-m\", \"hub.health\"]",
    "new": "CMD [\"curl\", \"-f\", \"http://127.0.0.1:4040/hub/healthz\"]",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
-  },
-  {
-   "id": "deploy_filter_ignores_the_hub_image",
-   "file": "tools/deploy_filter.py",
-   "old": "for dockerfile in (\"Dockerfile\", \"Dockerfile.server\", \"Dockerfile.hub\"):",
-   "new": "for dockerfile in (\"Dockerfile\", \"Dockerfile.server\"):",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_deploy_filter tests.scripts.test_hub_stack"
-  },
-  {
-   "id": "deploy_filter_ignores_the_hub_dockerfile_itself",
-   "file": "tools/deploy_filter.py",
-   "old": "DEFINITIONS = (\"Dockerfile\", \"Dockerfile.server\", \"Dockerfile.hub\", \".dockerignore\")",
-   "new": "DEFINITIONS = (\"Dockerfile\", \"Dockerfile.server\", \".dockerignore\")",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_deploy_filter tests.scripts.test_hub_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "header_pattern_backtracks",
@@ -1535,14 +1514,7 @@
    "file": "docker-compose.stack.yml",
    "old": "    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n",
    "new": "",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
-  },
-  {
-   "id": "staging_hub_log_grows_for_ever",
-   "file": "docker-compose.staging.yml",
-   "old": "    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n",
-   "new": "",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack tests.scripts.test_staging_stack"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
    "id": "admin_refused_write_is_a_traceback",

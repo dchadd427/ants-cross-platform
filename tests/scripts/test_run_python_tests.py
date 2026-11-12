@@ -278,9 +278,9 @@ class TheRealTests(unittest.TestCase):
 
     def test_the_macos_job_keeps_what_the_macos_runners_taught_the_tests(self):
         left = {label for label, _ in rpt.units(HERE, "tests.scripts")} - rpt.LINUX_ONLY
-        for prefix in ("test_hub_", "test_e2e_deadlines.", "test_deploy_wait.", "test_deploy_webhook.", "test_measure_tick_rate.", "test_quick_http.", "test_run_tests.", "test_run_python_tests.",
+        for prefix in ("test_hub_", "test_e2e_deadlines.", "test_measure_tick_rate.", "test_quick_http.", "test_run_tests.", "test_run_python_tests.",
                        "test_library_guard.", "test_community_maps.", "test_repair_maps.", "test_cmake_", "test_mutate_tool.", "test_release_tool.", "test_version_tools.", "test_source_portability.",
-                       "test_hygiene.", "test_ci_workflow.", "test_staging_stack.", "test_nginx_", "test_pbkdf2_vectors.", "test_web_without_docker.",
+                       "test_hygiene.", "test_ci_workflow.", "test_nginx_", "test_pbkdf2_vectors.", "test_web_without_docker.",
                        "test_web_mapmaker.TheCodeRuns", "test_web_mapmaker.TheTimeAndTheBail", "test_web_mapmaker_play.ThePlayChecks", "test_web_home_chat.TheCodeRuns",
                        "test_web_lobby_net.TheChecksThatNodeRuns", "test_web_lobby_chat.TheChecksThatNodeRuns", "test_web_rematch.TheChecksThatNodeRuns"):
             self.assertTrue([label for label in left if label.startswith(prefix)], "the macOS job would run nothing of " + prefix)

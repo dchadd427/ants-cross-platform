@@ -62,7 +62,7 @@ def id_pattern():
 class TheLocations(unittest.TestCase):
     def test_the_two_addresses_have_their_two_locations_and_no_other_location_could_catch_them(self):
         locations = re.findall(r"^\s*location\s+(.*?)\s*\{", CONF, re.M)
-        self.assertEqual([l for l in locations if "live" in l], ["= /live", "^~ /live/"])     # (no regular-expression location could also catch /live/x)
+        self.assertEqual([l for l in locations if "live" in l], ["= /live-now", "= /live", "^~ /live/"])     # (no regular-expression location could also catch /live/x)
         self.assertEqual(len(re.findall(r"location\s+= /live\s*\{", CONF)), 1)
         self.assertEqual(len(re.findall(r"location\s+\^~ /live/\s*\{", CONF)), 1)
         self.assertEqual([l for l in locations if "replays" in l], ["= /replays", "^~ /replays/", "@replays_off"])     # (the recorded matches are as they were)

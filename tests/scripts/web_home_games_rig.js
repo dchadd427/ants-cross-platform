@@ -80,7 +80,10 @@ const classes = (e) => String(e.className).split(/\s+/);
 const find = (root, cls) => root.findAll((e) => classes(e).indexOf(cls) !== -1);
 const first = (root, cls) => find(root, cls)[0] || null;
 const home = (env, cls) => first(env.$('home'), cls);
-const tap = (b) => { if (b && !b.disabled) b.click(); };                              // (a disabled button takes no press, as in a browser)
+const hostCard = (env) => { const c = first(env.doc.body, 'gconfirm'); return c && textOf(first(c, 'gctitle')) === 'Host a game' ? c : null; };       // (the question that Quick host asks with no room: Public room, Private room, Cancel)
+const chooseHost = (env, word) => { const c = hostCard(env); const b = c && find(c, 'btn').filter((x) => textOf(x) === word)[0]; if (b) b.click(); return !!b; };
+// (a press on a button; a disabled one takes none, as in a browser. A press on Quick host that gets the question "Host a game" is answered "Public room", the way that Quick host always went; the checks of the question itself press it by hand)
+const tap = (b) => { if (b && !b.disabled) { b.click(); if (b.env && b.env.doc && /\bhost\b/.test(b.className || '')) chooseHost(b.env, 'Public room'); } };
 const pressEscape = (env) => (env.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
 const pressElsewhere = (env, target) => (env.doc.capturing.click || []).concat(env.doc.listeners.click || []).forEach((fn) => fn({ target }));
 const popOf = (env) => home(env, 'gpop');
@@ -113,6 +116,6 @@ const roomAs = (names, me, flags, o) => roomMessage(seatsOf(names), Object.assig
 
 const done = (title) => { console.log(title + ': ' + checks + ' checks, ' + failures + ' failed'); process.exit(failures === 0 ? 0 : 1); };
 const broke = (e) => { console.log('FAIL the check itself broke: ' + (e && e.stack || e)); process.exit(1); };
-return { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
+return { GUEST, check, same, flush, fakeSite, row, listOf, page, wait, classes, find, first, home, tap, hostCard, chooseHost, pressEscape, pressElsewhere, popOf, rowsOf, joinOf, textOf, toastOf, toastTextOf, toastButtons, pillOf, dialogOf, visibilities, leaves, seatsOf,
          PUBLIC, PRIVATE, STARTING, myRoom, guestRoom, roomAs, Games, PopoverGames, H, NET0, KEY, E, C, hex, roomMessage, welcome, reject, helloBytes, helloName, helloRoom, grouped, runLobby, RULES0, lobbyDir, done, broke };
 };

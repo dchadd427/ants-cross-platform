@@ -4,9 +4,9 @@
 //      under a name, and what the page tells the hub it is doing (looking, waiting, playing; a public room's details and never a private room's);
 //   2. the phases: nothing until the hub has said the list, nothing for a hub that has none, "off" for a hub that is gone, back by itself, the count (not for one person alone), the class that Home carries;
 //   3. what the page tells the hub: `here` (a named visitor) and `who` once for each socket, when the room changes and not oftener than every 3 seconds, again after a lost link, nothing for a guest;
-//   4. what is drawn: the groups in order with their counts, the visitor first and as the page knows it, the moderator mark, the guests, the empty note and its Host button, a Join where a public room waits
+//   4. what is drawn: the groups in order with their counts, the visitor first and as the page knows it, the moderator mark, the guests, nothing under the visitor when alone, a Join where a public room waits
 //      (the Games list's own Join does it, a list that is a popover is opened for it, a game that is gone is said), "and N more", every line as text;
-//   5. the fold: the minus button and Escape fold the panel, where the button is drawn;
+//   5. no fold: the panel has no minus button, no folded state, and Escape in it does nothing to it (it is always open);
 //   6. what the hub may send: unknown kinds, a wrong frame, an odd name, a flood of rows: nothing breaks, nothing becomes markup;
 //   7. the page (web/lobby.html with web/home/home.js): the list is loaded once, after the dock, a missing or broken one changes nothing, the hand-off makes it inert;
 //   8. the source of the script: no markup, no storage, no link, no address.
@@ -364,19 +364,11 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 {   // empty: just the visitor
     const r = rig();
     r.live(); r.who(FULL([row(1, 'maple')], { n: 1 }));
-    same('just the visitor: the note and the button, and the visitor first', [texts(r.panel(), 'pl-note').join('|'), r.names(), r.groups().length], ['Just you here. Host a game!People who log in with Discord show up here by name.+ Host a game', ['maple'], 0]);
-    const host = one(r.panel(), 'pl-host');
-    check('... Host a game is Quick host\'s button pressed', host.textContent === '+ Host a game' && host.disabled === false);
-    host.click();
-    same('... and a press does what Quick host does', r.pressed, ['quick host']);
-    const off = rig({ noQuick: true });
-    off.live(); off.who(FULL([row(1, 'maple')], { n: 1 }));
-    check('Quick host is not lit (the Games list has not come): the button is off, and a press does nothing', one(off.panel(), 'pl-host').disabled === true);
-    off.quick.disabled = false; off.tick(1000);
-    check('... and it is lit when Quick host is', one(off.panel(), 'pl-host').disabled === false);
+    same('just the visitor: only the visitor\'s own row; no note, no button, no groups', [texts(r.panel(), 'pl-note').length, byClass(r.panel(), 'pl-host').length, r.panel().findAll((e) => e.tagName === 'button').length, r.names(), r.groups().length], [0, 0, 0, ['maple'], 0]);
+    same('... and nothing in the list under the row says anything', texts(one(r.panel(), 'pl-list'), 'pl-note').length + byClass(one(r.panel(), 'pl-list'), 'pl-card').length, 0);
     const guest = rig();
     guest.live(W({ you: null })); guest.who(FULL([], { n: 1, g: 1 }));
-    check('a guest alone: the note too, no row, no guests line', texts(guest.panel(), 'pl-note')[0].indexOf('Just you here') === 0 && byClass(guest.panel(), 'pl-card').length === 0 && byClass(guest.panel(), 'pl-guests').length === 0);
+    check('a guest alone: no note, no row, no guests line', texts(guest.panel(), 'pl-note').length === 0 && byClass(guest.panel(), 'pl-card').length === 0 && byClass(guest.panel(), 'pl-guests').length === 0);
 }
 {   // more people than rows, and a crowd
     const r = rig();
@@ -521,25 +513,17 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 5. The fold
+// 5. No fold
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const r = rig();
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
-    const fold = byClass(r.panel(), 'pl-fold')[0];
-    check('the fold: open, labelled for what it does', r.panel().getAttribute('data-folded') === 'false' && fold.getAttribute('aria-label') === 'Fold the list' && fold.getAttribute('aria-expanded') === 'true');
-    fold.click();
-    check('pressed: folded to its header, the button says it opens', r.panel().getAttribute('data-folded') === 'true' && fold.getAttribute('aria-label') === 'Open the list' && fold.getAttribute('aria-expanded') === 'false');
-    fold.click();
-    check('pressed again: open', r.panel().getAttribute('data-folded') === 'false');
-    fold.getClientRects = () => [];                           // (a phone's Players view: the fold is not drawn)
+    check('the panel has no fold button and no folded state: it is always open', byClass(r.panel(), 'pl-fold').length === 0 && byClass(r.panel(), 'pl-mark').length === 0 && r.panel().getAttribute('data-folded') === null);
+    const before = r.panel().getAttribute('data-state');
     r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
-    check('Escape does not fold a panel whose fold button is not drawn (a phone\'s Players view: it would stay folded in the wide layout later)', r.panel().getAttribute('data-folded') === 'false');
-    delete fold.getClientRects;
-    r.panel().fire('keydown', { key: 'Escape', preventDefault() {} });
-    check('Escape in a docked panel folds it and the focus is on the fold button', r.panel().getAttribute('data-folded') === 'true' && r.env.focused === fold);
+    check('Escape in the panel changes nothing (it used to fold it)', r.panel().getAttribute('data-folded') === null && r.panel().getAttribute('data-state') === before && byClass(r.panel(), 'pl-fold').length === 0);
     r.who(FULL(CROWD.concat([row(20, 'newcomer')]), { n: 14, g: 4 }));
-    check('a fold stays folded when the list changes', r.panel().getAttribute('data-folded') === 'true');
+    check('the list still changes while open: the rows of the list are drawn', byClass(r.panel(), 'pl-card').length > 0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -565,7 +549,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     const t = rig();
     t.state.client = { get room() { throw new Error('a page that breaks'); } };
     t.live();
-    check('a page that throws when asked about its room: the list reports it and its other parts go on (the fold still works)', t.errors.length >= 1);
+    check('a page that throws when asked about its room: the list reports it and its other parts go on', t.errors.length >= 1);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -139,7 +139,7 @@ def main():
             if cmd == "stop":
                 break
             elif cmd == "user":
-                fake.user = (words[1], words[2])
+                fake.user = tuple(words[1:4])
             elif cmd == "consent":
                 fake.consent = words[1] == "on"
             elif cmd == "token_mode":

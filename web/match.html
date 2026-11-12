@@ -15,17 +15,17 @@
     <link rel="stylesheet" href="matches.css">
     <link rel="stylesheet" href="match_stats.css">
     <link rel="stylesheet" href="death_map.css">
+    <link rel="stylesheet" href="site_nav.css">
 </head>
 <body>
 <div class="screen">
 <main class="wrap">
-    <header class="mast" id="mast">
-        <h1 class="sr">Ants (1998): a match</h1>
-        <a class="logo" href="/" title="Back to the front page"><img src="front/logo.png" alt="ants! - the front page" width="581" height="218"></a>
-        <p><span class="tag">A match, with all its stats.</span><span class="sub">The stats of every seat; the replay opens right here.</span></p>
-        <span class="grow"></span>
-        <div class="acts"><a class="btn sm live" id="live-btn" href="/live.html" hidden>Live now</a><a class="btn sm" id="all-btn" href="/matches.html">&lsaquo; All matches</a><a class="btn sm hide-s" href="/">Play a match</a><a class="btn sm discord" href="https://discord.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer" title="Discord: chat with other players (opens the project&rsquo;s Discord invite in a new tab)"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg><span class="dt">Discord</span></a></div>
-    </header>
+    <header class="sb" data-live="now"><a class="btn sbhome" href="/"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>
+    <a class="sblogo" href="/"><img src="front/logo.png" alt="ants! - Home" width="581" height="218"></a>
+    <nav aria-label="Pages"><a class="btn" href="/">Home</a><a class="btn" href="/matches" aria-current="page">Matches</a><a class="btn sblv" href="/live-now"><span>Live now</span><span class="sbn"></span></a><a class="btn" href="/mapmaker">Map maker</a><a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a></nav>
+    <span class="sbgrow"></span><a class="btn sblive" href="/live-now" hidden></a>
+    <button class="btn sbtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sbm"><i class="sbbars"></i></button></header>
+    <div class="pt"><a class="crumb" id="all-btn" href="/matches">&lsaquo; All matches</a><h1>A match</h1><p>The stats of every seat; the replay opens right here.</p></div>
     <div id="sections" aria-live="polite"><section class="panel"><div class="note"><p><b>Loading the match&hellip;</b></p></div></section></div>
     <noscript><section class="panel"><div class="note"><p><b>This page needs JavaScript.</b> It shows a match from the game server.</p></div></section></noscript>
 </main>
@@ -35,18 +35,19 @@
         <span>@@SITE_FOOTER@@<span class="ver" id="game-version-line">Version&#8197;<span id="game-version">@@GAME_VERSION@@</span><span id="game-build">&#8197;-&#8197;build&#8197;<span id="game-build-id">@@BUILD_ID@@</span>&#8197;<span id="game-build-date">(@@BUILD_DATE@@)</span></span></span></span>
         <span class="grow">Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2</span>
         <nav aria-label="Footer links">
-            <a href="/matches.html" id="matches-link" aria-current="page">Matches</a>
-            <a href="/live.html">Live now</a>
+            <a href="/matches" id="matches-link" aria-current="page">Matches</a>
+            <a href="/live-now">Live now</a>
             <a href="/asset_catalog/" target="_blank" rel="noopener noreferrer">Sprites and sounds</a>
-            <a href="/changelog.html" target="_blank" rel="noopener noreferrer">Changelog</a>
+            <a href="/changelog" target="_blank" rel="noopener noreferrer">Changelog</a>
             <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer">GitHub</a>
             <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer">Feedback</a>
-            <a href="/legal.html" target="_blank" rel="noopener noreferrer">Legal</a>
+            <a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a>
         </nav>
     </div>
 </footer>
 </div>
 
+<script src="site_nav.js"></script>
 <script src="replay_page.js"></script>
 <script src="front/map_picker.js"></script>
 <script src="history_page.js"></script>
@@ -116,7 +117,7 @@
         rest.appendChild(acts); s.appendChild(rest);
         return s;
     }
-    // The replay: the game page itself in an iframe (play.html?replay=<file>&embed=1), made only when "Show replay" is pressed, so that nothing of the game (the wasm and its data) and no recording is fetched before,
+    // The replay: the game page itself in an iframe (play?replay=<file>&embed=1), made only when "Show replay" is pressed, so that nothing of the game (the wasm and its data) and no recording is fetched before,
     // and taken away again by "Hide replay" (which frees the game). The page and the frame are one origin and carry the same COOP/COEP headers (docker/nginx.conf).
     function replaySection(rec) {
         var st = H.recState(rec);
@@ -124,7 +125,7 @@
         var s = panel('replay', 'rep-h'); s.hidden = true; s.setAttribute('tabindex', '-1');
         var head = el('div', 'rhead'), h2 = el('h2', '', 'Replay'); h2.id = 'rep-h'; head.appendChild(h2);
         var r = el('div', 'r'), full = el('button', 'btn sm', 'Fullscreen'); full.type = 'button'; full.id = 'rep-full'; r.appendChild(full);
-        var own = el('a', 'btn sm', 'Own page ↗'); own.href = '/play.html?replay=' + encodeURIComponent(st.file); own.target = '_blank'; own.rel = 'noopener noreferrer'; r.appendChild(own);
+        var own = el('a', 'btn sm', 'Own page ↗'); own.href = '/play?replay=' + encodeURIComponent(st.file); own.target = '_blank'; own.rel = 'noopener noreferrer'; r.appendChild(own);
         head.appendChild(r); s.appendChild(head);
         s.appendChild(el('div', 'player', undefined)); s.lastChild.id = 'rep-player';
         s.appendChild(el('p', 'lgd', 'The game page loads when you press Show replay (about 9 MB the first time, kept by your browser after that) and plays this match from its recording.'));
@@ -136,7 +137,7 @@
         if (!sec || !btn || !file) return;
         if (open && !frame) {
             frame = el('iframe'); frame.title = 'Replay of this match'; frame.setAttribute('allow', 'fullscreen; autoplay');
-            frame.src = '/play.html?replay=' + encodeURIComponent(file) + '&embed=1';
+            frame.src = '/play?replay=' + encodeURIComponent(file) + '&embed=1';
             $('rep-player').appendChild(frame);
         }
         if (!open && frame) { frame.src = 'about:blank'; if (frame.parentNode) frame.parentNode.removeChild(frame); frame = null; }
@@ -239,9 +240,9 @@
     function missing() {
         var file = H.fileOfId(id);
         put([notice('This match is not in the history.', 'A match that has only just ended can take a few minutes to be counted; its replay may already be there.',
-            [file ? { label: 'Try the replay', href: '/play.html?replay=' + encodeURIComponent(file) } : null, { label: 'All matches', href: '/matches.html' }].filter(Boolean))]);
+            [file ? { label: 'Try the replay', href: '/play?replay=' + encodeURIComponent(file) } : null, { label: 'All matches', href: '/matches' }].filter(Boolean))]);
     }
-    function problem(status, body) { var p = H.problemOf(status, body); put([notice(p.text, '', p.retry ? [{ label: 'Try again', click: function () { window.location.reload(); } }] : [{ label: 'All matches', href: '/matches.html' }])]); }
+    function problem(status, body) { var p = H.problemOf(status, body); put([notice(p.text, '', p.retry ? [{ label: 'Try again', click: function () { window.location.reload(); } }] : [{ label: 'All matches', href: '/matches' }])]); }
     function build(rec) {
         current = rec;
         var ctx = { sides: H.sidesOf(rec) };
@@ -256,7 +257,7 @@
         pics.lookMaps().then(function () { var d = $('fact-map'); if (d) d.textContent = R.mapTitle(rec.map) + (H.mapFact(rec.map, pics.maps()) ? '  ' + H.mapFact(rec.map, pics.maps()) : ''); });
     }
     function load() {
-        if (!id) { put([notice('That is not the address of a match.', '', [{ label: 'All matches', href: '/matches.html' }])]); return; }
+        if (!id) { put([notice('That is not the address of a match.', '', [{ label: 'All matches', href: '/matches' }])]); return; }
         var request;
         try { request = fetch('/history/' + id, { cache: 'no-store', credentials: 'omit' }); } catch (e) { problem(0, null); return; }
         request.then(function (response) {
@@ -269,25 +270,17 @@
     }
     // "All matches" goes back to the list as the visitor left it (its filters, its page) when the visitor came from it
     $('all-btn').addEventListener('click', function (ev) {
-        try { if (document.referrer && new URL(document.referrer).origin === window.location.origin && new URL(document.referrer).pathname === '/matches.html' && window.history.length > 1) { ev.preventDefault(); window.history.back(); } } catch (e) { /* the link works */ }
+        try { if (document.referrer && new URL(document.referrer).origin === window.location.origin && new URL(document.referrer).pathname === '/matches' && window.history.length > 1) { ev.preventDefault(); window.history.back(); } } catch (e) { /* the link works */ }
     });
     window.addEventListener('resize', function () { window.AntsMatchStats.redraw(document); window.AntsDeathMap.redraw(document); });
     // the game page in the frame says so when its own Quit is pressed
     window.addEventListener('message', function (ev) { if (ev.origin === window.location.origin && ev.data && ev.data.ants === 'replay-leave' && frame && ev.source === frame.contentWindow) setReplay(false); });
-    function lookLive() {
-        var request;
-        try { request = fetch('/live', { cache: 'no-store', credentials: 'omit' }); } catch (e) { return; }
-        request.then(function (response) { return response.ok ? response.json() : null; }).then(function (data) {
-            var n = data ? R.liveEntriesOf(data).length : 0;
-            if (n > 0) { $('live-btn').textContent = n + ' live now'; $('live-btn').hidden = false; }
-        }).catch(function () { /* no button */ });
-    }
 
     // The footer names the version and the build (the Docker image fills them in). A page that was not built (the repository's own file) says nothing of them, as the game page does.
     if ($('game-version').textContent.indexOf('@') !== -1) $('game-version-line').style.display = 'none';
     else if ($('game-build-id').textContent.indexOf('@') !== -1) $('game-build').style.display = 'none';
     else if ($('game-build-date').textContent.indexOf('@') !== -1) $('game-build-date').style.display = 'none';
-    if (typeof fetch === 'function') { load(); lookLive(); }
+    if (typeof fetch === 'function') { load(); }
 })();
 </script>
 </body>

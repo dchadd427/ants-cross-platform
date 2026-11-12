@@ -95,12 +95,6 @@
    "new": "${ANTS_TRUSTED_PROXIES_FILE:-./docker/trusted-proxies.conf}"
   },
   {
-   "id": "staging_mount_blanks_the_images_list",
-   "file": "docker-compose.staging.yml",
-   "old": "/etc/nginx/ants-trusted-proxies.d/own.conf:ro",
-   "new": "/etc/nginx/ants-trusted-proxies/proxies.conf:ro"
-  },
-  {
    "id": "legacy_mount_is_not_read_only",
    "file": "docker-compose.yml",
    "old": "/etc/nginx/ants-trusted-proxies.d/own.conf:ro",
@@ -123,12 +117,6 @@
    "file": "docker-compose.stack.yml",
    "old": "\"${ANTS_WEB_BIND_PREFIX:-}${ANTS_PORT:-19980}:80\"",
    "new": "\"${ANTS_WEB_BIND_PREFIX:-0.0.0.0:}${ANTS_PORT:-19980}:80\""
-  },
-  {
-   "id": "web_port_prefix_missing_in_staging",
-   "file": "docker-compose.staging.yml",
-   "old": "\"${ANTS_WEB_BIND_PREFIX:-}${ANTS_STAGING_PORT:-19981}:80\"",
-   "new": "\"${ANTS_STAGING_PORT:-19981}:80\""
   },
   {
    "id": "web_port_prefix_missing_in_the_legacy_file",
@@ -159,12 +147,6 @@
    "file": "docker-compose.stack.yml",
    "old": "The path must name an existing FILE:\n    # for a path that does not exist Docker makes a directory there and nginx stops with \"Is a directory\". The image's list names",
    "new": "The image's list names"
-  },
-  {
-   "id": "staging_comment_forgets_that_the_path_must_be_an_existing_file",
-   "file": "docker-compose.staging.yml",
-   "old": "(/dev/null is an empty file: the web image's list is used). The path must name an existing FILE:\n    # for a path that does not exist Docker makes a directory there and nginx stops with \"Is a directory\"\n",
-   "new": "(/dev/null is an empty file: the web image's list is used)\n"
   },
   {
    "id": "legacy_comment_forgets_that_the_path_must_be_an_existing_file",

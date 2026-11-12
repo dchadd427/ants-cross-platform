@@ -18,7 +18,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -61,7 +60,7 @@ class TheStrip(unittest.TestCase):
     css = read("web", "matches.css")
 
     def test_it_stands_between_the_header_and_the_tools_with_the_approved_words(self):
-        order = [self.page.index(x) for x in ('<header class="mast"', 'id="opener"', 'id="open-note"', 'id="tools"', 'id="list-panel"')]
+        order = [self.page.index(x) for x in ('<header class="sb"', 'id="opener"', 'id="open-note"', 'id="tools"', 'id="list-panel"')]
         self.assertEqual(order, sorted(order))
         strip = self.page[self.page.index('<section class="panel opener"'):self.page.index('<div id="open-note"')]
         has(self, 'aria-labelledby="opener-h" hidden>', strip)                                         # (hidden until the script knows that the browser can read a file)
@@ -93,7 +92,7 @@ class TheStrip(unittest.TestCase):
 
     def test_the_page_asks_the_site_for_nothing_because_of_the_strip(self):
         script = self.page[self.page.index("<script>\n(function"):]
-        self.assertEqual(sorted(re.findall(r"fetch\('([^']*)'", script)), ["/history", "/live"])
+        self.assertEqual(sorted(re.findall(r"fetch\('([^']*)'", script)), ["/history"])
         for bad in ("XMLHttpRequest", "sendBeacon", "FormData", "method:", "WebSocket", "navigator.serviceWorker"):
             lacks(self, bad, script)
 
@@ -202,7 +201,7 @@ class TheDocument(unittest.TestCase):
         has(self, "## A file of your own", text)
         part = text[text.index("## A file of your own"):]
         part = part[:part.index("\n## ", 5)] if "\n## " in part[5:] else part
-        for needle in ("play.html?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts", "kMaxEmbeddedPlantWaypointPairs", "1,000,000", "fits_a_replay", "WHICHEVER copy"):
+        for needle in ("play?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts", "kMaxEmbeddedPlantWaypointPairs", "1,000,000", "fits_a_replay", "WHICHEVER copy"):
             has(self, needle, part)
 
     def test_the_tree_of_the_sources_lists_the_fuzz_script(self):

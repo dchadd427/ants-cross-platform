@@ -1018,32 +1018,41 @@ function bring(env) {                                     // the two files arriv
     r.live(W({ login: true, you: YOU, history: HISTORY }));
     check('named: the field and Send, no Log in button, the guest line gone, no word of "read-only" or "log in"', r.form().hidden === false && r.field().disabled === false && r.field().getAttribute('placeholder') === 'Say something to everyone' && one(r.root, 'gc-send').hidden === false
           && one(r.root, 'gc-login').hidden === true && one(r.root, 'gc-guest').hidden === true && r.note() === '');
-    check('the place of the login says "Chatting as maple.leaf" with Log out and a small menu (More), in its own box (#gchat-login-slot), the name as text in a <bdi>', r.dock.slot.hidden === false && r.dock.slot.id === 'gchat-login-slot' && r.dock.slot.textContent.indexOf('Chatting as maple.leaf') === 0
-          && one(r.dock.slot, 'gc-an').tagName === 'bdi' && one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && one(r.dock.slot, 'gc-link').textContent === 'Log out' && one(r.dock.slot, 'gc-more').getAttribute('aria-label') === 'More');
-    check('the chip is the circle with the first letter and the name, and its words say who: "Chatting as maple.leaf"', r.chip.hidden === false && one(r.chip, 'gc-av').hidden === false && one(r.chip, 'gc-av').textContent === 'm' && one(r.chip, 'gc-dc').hidden === true && one(r.chip, 'gc-cn').textContent === 'maple.leaf'
-          && r.chip.getAttribute('aria-label') === 'Chatting as maple.leaf');
-    check('Forget me is not on the screen until the small menu is opened (and the menu is not either)', one(r.root, 'gc-menu').hidden === true && buttonsShown(r.root).indexOf('Forget me') === -1 && one(r.root, 'gc-more').getAttribute('aria-expanded') === 'false');
-    one(r.root, 'gc-more').click();
-    check('More opens it: a sentence that says what Forget me does (the lines go, every login goes, a ban or a mute stays) and the button; the toggle says it is open', one(r.root, 'gc-menu').hidden === false && one(r.root, 'gc-more').getAttribute('aria-expanded') === 'true'
-          && one(r.root, 'gc-mnote').textContent === 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.' && buttonsShown(r.root).indexOf('Forget me') !== -1);
-    r.root.fire('keydown', { key: 'Escape' });
-    check('Escape puts the small menu away first (and the focus goes back to More), and the panel stays; the next Escape folds the panel', one(r.root, 'gc-menu').hidden === true && r.root.getAttribute('data-open') === 'true' && r.env.focused === one(r.root, 'gc-more') && (r.root.fire('keydown', { key: 'Escape' }), r.root.getAttribute('data-open') === 'false'));
-    r.dock.open(true);
+    check('the chat panel has no account line: no "Chatting as", no Log out, no More button in it (the chip carries them)', r.root.textContent.indexOf('Chatting as') === -1 && !one(r.root, 'gc-out') && !one(r.root, 'gc-slot') && !one(r.root, 'gc-more') && !one(r.root, 'gc-acct') && buttonsShown(r.root).join() === 'Fold chat,Send');
+    check('the chip is the circle with the first letter and the name, and its words say who: "Chatting as maple.leaf"; it is a button that opens a dropdown (aria-haspopup), shut', r.chip.hidden === false && one(r.chip, 'gc-av').hidden === false && one(r.chip, 'gc-av').textContent === 'm' && one(r.chip, 'gc-dc').hidden === true && one(r.chip, 'gc-cn').textContent === 'maple.leaf'
+          && r.chip.getAttribute('aria-label') === 'Chatting as maple.leaf' && r.chip.getAttribute('aria-haspopup') === 'true' && r.chip.getAttribute('aria-expanded') === 'false' && r.chip.getAttribute('aria-controls') === 'gchat-login-slot');
+    check('the dropdown is its own box (#gchat-login-slot) outside the panel (in the body), shut: "Chatting as maple.leaf" with the name as text in a <bdi>, Log out, and Forget me with its sentence', r.dock.slot.hidden === true && r.dock.slot.id === 'gchat-login-slot' && !r.root.contains(r.dock.slot) && r.dock.slot.textContent.indexOf('Chatting as maple.leaf') === 0
+          && one(r.dock.slot, 'gc-an').tagName === 'bdi' && one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && one(r.dock.slot, 'gc-out').textContent === 'Log out' && one(r.dock.slot, 'gc-forget').textContent === 'Forget me'
+          && one(r.dock.slot, 'gc-mnote').textContent === 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.');
     r.chip.click();
-    check('a press on the name chip opens the dock if it is folded and puts the focus on Log out (a chip that does nothing is a dead button)', r.root.getAttribute('data-open') === 'true' && r.env.focused === one(r.root, 'gc-link'));
-    r.dock.open(false); r.chip.click();
-    check('... also from a folded dock', r.root.getAttribute('data-open') === 'true' && r.went.length === 0);
+    check('a press on the chip opens the dropdown (it is not a dead button) and puts the focus on Log out; the chip says it is open; the panel is as it was (a phone\'s view is not changed)', r.dock.slot.hidden === false && r.chip.getAttribute('aria-expanded') === 'true' && r.env.focused === one(r.dock.slot, 'gc-out') && r.root.getAttribute('data-open') === 'true' && r.went.length === 0);
+    const escape = () => (r.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+    escape();
+    check('Escape closes it and the focus goes back to the chip, and the panel stays', r.dock.slot.hidden === true && r.chip.getAttribute('aria-expanded') === 'false' && r.env.focused === r.chip && r.root.getAttribute('data-open') === 'true');
+    r.chip.click(); r.chip.focus(); escape();
+    check('Escape closes it with the focus on the chip too (not only inside the dropdown), and the panel is not folded by that Escape', r.dock.slot.hidden === true && r.root.getAttribute('data-open') === 'true' && r.env.focused === r.chip);
+    r.chip.click(); r.chip.click();
+    check('a second press on the chip closes it', r.dock.slot.hidden === true && r.chip.getAttribute('aria-expanded') === 'false');
+    const docClick = (target) => (r.doc.listeners.click || []).forEach((fn) => fn({ target }));
+    r.chip.click(); docClick(r.field());
+    check('a press anywhere else puts it away (a press inside it does not)', r.dock.slot.hidden === true && (r.chip.click(), docClick(one(r.dock.slot, 'gc-an')), r.dock.slot.hidden === false));
+    r.dock.open(false);
+    check('the dock may be folded: the chip and its dropdown work all the same', r.root.getAttribute('data-open') === 'false' && r.dock.slot.hidden === false && r.went.length === 0);
+    r.dock.shown(false);
+    check('the Room (Home is not shown) closes the dropdown', r.dock.slot.hidden === true && r.chip.getAttribute('aria-expanded') === 'false');
     r.s().fail();
     check('the link goes: the account line and the chip go until the hub speaks again (a Log out now could not reach it)', r.dock.slot.hidden === true && r.chip.hidden === true);
 }
 {   // Log out
     const r = rig({ chip: true });
     const first = r.live(W({ login: true, you: YOU, history: HISTORY }));
-    one(r.root, 'gc-link').click();
+    r.chip.click();
+    one(r.dock.slot, 'gc-out').click();
     same('Log out is ONE POST of the page to /hub/logout, same origin, with its cookie, never cached, no redirect followed, and nothing else (no body, no header of its own)', [r.fetches.length, r.fetches[0].path, r.fetches[0].init], [1, '/hub/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }]);
-    check('while it is on its way both buttons are off (a second press is nothing)', one(r.root, 'gc-link').disabled === true && one(r.root, 'gc-forget').disabled === true && (one(r.root, 'gc-link').click(), r.fetches.length === 1) && r.sockets.length === 1);
+    check('while it is on its way both buttons are off (a second press is nothing)', one(r.dock.slot, 'gc-out').disabled === true && one(r.dock.slot, 'gc-forget').disabled === true && (one(r.dock.slot, 'gc-out').click(), r.fetches.length === 1) && r.sockets.length === 1);
     r.answer({ ok: true, status: 200 });
     check('answered: the socket that was let in with the login is dropped and a new one is made AT ONCE (no wait of a second): the page asks to be told who it is now', first.closes === 1 && r.sockets.length === 2 && r.s() !== first && r.s().url === 'wss://play.test/hub/ws' && r.clock.timers.every((t) => t.fn.toString().length > 0));
+    check('after Log out the dropdown is gone from under the focus and the focus is on the chip (the Log in chip now), not nowhere', r.dock.slot.hidden === true && r.env.focused === r.chip);
     check('... the person is nobody on the screen at once (no field to write in, the Log in button, the chip says Log in), whatever the hub says next', r.field().disabled === true && one(r.root, 'gc-login').hidden === false && r.dock.slot.hidden === true && r.chip.hidden === false && one(r.chip, 'gc-cn').textContent === 'Log in' && r.root.getAttribute('data-you') === 'no');
     check('... and a say() in that moment sends nothing (the new socket is not open): "Chat is offline"', r.dock.say('hello') === 'offline' && first.sent.filter((x) => x.indexOf('say') !== -1).length === 0);
     r.s().open().recv(W({ login: true, you: null, history: HISTORY }));
@@ -1059,33 +1068,44 @@ function bring(env) {                                     // the two files arriv
     Object.keys(refusals).forEach((label) => {
         const r = rig({ chip: true });
         const first = r.live(W({ login: true, you: YOU }));
-        one(r.root, 'gc-link').click();
+        r.chip.click();
+        one(r.dock.slot, 'gc-out').click();
         refusals[label](r);
-        check(label + ': "That did not work, try again" for a few seconds, the visitor is still who they were, the socket stays, the buttons are on again', r.note() === 'That did not work, try again' && r.field().disabled === false && first.closes === 0 && r.sockets.length === 1 && one(r.root, 'gc-link').disabled === false && r.dock.slot.hidden === false);
+        check(label + ': "That did not work, try again" for a few seconds, the visitor is still who they were, the socket stays, the buttons are on again', r.note() === 'That did not work, try again' && r.field().disabled === false && first.closes === 0 && r.sockets.length === 1 && one(r.dock.slot, 'gc-out').disabled === false && r.dock.slot.hidden === false);
         r.clock.advance(6001);
         check('... and the words go', r.note() === '');
     });
     const t = rig({ fetchThrows: true });
-    t.live(W({ login: true, you: YOU })); one(t.root, 'gc-link').click();
-    check('a fetch that throws is the same: the words, nothing dropped, nothing thrown at the page', t.note() === 'That did not work, try again' && t.sockets.length === 1 && t.errors.length === 0 && one(t.root, 'gc-link').disabled === false);
+    t.live(W({ login: true, you: YOU })); one(t.dock.slot, 'gc-out').click();
+    check('a fetch that throws is the same: the words, nothing dropped, nothing thrown at the page', t.note() === 'That did not work, try again' && t.sockets.length === 1 && t.errors.length === 0 && one(t.dock.slot, 'gc-out').disabled === false);
     const n = rig({ noFetch: true });
-    n.live(W({ login: true, you: YOU })); one(n.root, 'gc-link').click();
+    n.live(W({ login: true, you: YOU })); one(n.dock.slot, 'gc-out').click();
     check('a browser without fetch: the same words (it cannot log out; it can still read and write)', n.note() === 'That did not work, try again' && n.field().disabled === false && n.sockets.length === 1);
 }
 {   // Forget me
     const r = rig({ chip: true });
     const first = r.live(W({ login: true, you: YOU, history: HISTORY }));
-    one(r.root, 'gc-more').click();
-    one(r.root, 'gc-forget').click();
+    (r.chip && r.chip.click());
+    const forget = one(r.dock.slot, 'gc-forget');
+    forget.click();
+    check('Forget me asks once more first: the first press sends nothing and the control says "Are you sure? Press again"', r.fetches.length === 0 && forget.textContent === 'Are you sure? Press again' && forget.getAttribute('data-sure') === 'true');
+    forget.blur();
+    check('... a press elsewhere (the focus leaves it) puts the question back, and the next press asks again', forget.textContent === 'Forget me' && (forget.click(), r.fetches.length === 0 && forget.textContent === 'Are you sure? Press again'));
+    r.dock.slot.hidden === false && (r.doc.listeners.keydown || []).forEach((fn) => fn({ key: 'Escape' }));
+    check('... Escape (the dropdown goes) puts the question back too, and nothing was sent', forget.textContent === 'Forget me' && r.fetches.length === 0 && r.dock.slot.hidden === true);
+    r.chip.click();
+    forget.click(); forget.click();
+    check('a double press on Forget me counts once: nothing is sent, the question is still there', r.fetches.length === 0 && forget.textContent === 'Are you sure? Press again');
+    r.clock.advance(450); forget.click();
     same('Forget me is ONE POST of the page to /hub/forget, the same kind of request as Log out', [r.fetches.length, r.fetches[0].path, r.fetches[0].init], [1, '/hub/forget', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error' }]);
     r.s().recv({ t: 'del', id: 1 }); r.s().recv({ t: 'del', id: 2 });
     r.answer({ ok: true });
     r.s().open().recv(W({ login: true, you: null, history: HISTORY.slice(2) }));
-    check('the lines of the account are taken off the screen as the hub says (del), the visitor is a reader after it, the small menu is shut, and the log holds what the hub keeps', first.closes === 1 && r.rowTexts().join('|') === 'juniper: joining!' && r.field().disabled === true && one(r.root, 'gc-menu').hidden === true && r.errors.length === 0);
+    check('the lines of the account are taken off the screen as the hub says (del), the visitor is a reader after it, the small menu is shut, and the log holds what the hub keeps', first.closes === 1 && r.rowTexts().join('|') === 'juniper: joining!' && r.field().disabled === true && r.dock.slot.hidden === true && r.errors.length === 0);
     const two = rig();
     two.live(W({ login: true, you: YOU }));
-    one(two.root, 'gc-link').click();
-    one(two.root, 'gc-more').click(); one(two.root, 'gc-forget').click();
+    one(two.dock.slot, 'gc-out').click();
+    (two.chip && two.chip.click()); one(two.dock.slot, 'gc-forget').click(); two.clock.advance(450); one(two.dock.slot, 'gc-forget').click();
     check('Forget me while Log out is on its way is not a second request (one thing at a time)', two.fetches.length === 1);
 }
 {   // the name is text, whatever it is
@@ -1095,7 +1115,7 @@ function bring(env) {                                     // the two files arriv
         r.live(W({ login: true, you: { name, mod: false } }));
         const shown = one(r.dock.slot, 'gc-an').textContent, circle = one(r.chip, 'gc-av').textContent, named = one(r.chip, 'gc-cn').textContent;
         check('a name from the hub is shown as the text it is, cleaned and cut like a line\'s: ' + JSON.stringify(name).slice(0, 30), shown === named && shown.length <= 33 && !/[\u202a-\u202e\u200b\u3164\u2800]/.test(shown + circle) && circle.length <= 2
-              && r.env.innerHTMLWrites.length === 0 && r.errors.length === 0 && r.chip.all().every((e) => Object.keys(e.attributes).every((k) => ['class', 'aria-label'].indexOf(k) !== -1)));
+              && r.env.innerHTMLWrites.length === 0 && r.errors.length === 0 && r.chip.all().every((e) => Object.keys(e.attributes).every((k) => ['class', 'aria-label', 'aria-haspopup', 'aria-controls', 'aria-expanded'].indexOf(k) !== -1)));
     });
     const r = rig({ chip: true });
     r.live(W({ login: true, you: { name: '\ud83d\ude00smile', mod: false } }));
@@ -1167,7 +1187,7 @@ const MINE = 'aaaaaaaaaaaa', OTHERS = 'bbbbbbbbbbbb';
 const TWO = { name: 'Maple Leaf', mod: false, k: MINE, pick: 'display', other: 'maple.leaf' };
 const NAMED = ['\u041c\u0430\u0440\u0438\u044f', '\u0418\u0432\u0430\u043d \u041f\u0435\u0442\u0440\u043e\u0432', '\u039d\u03af\u03ba\u03bf\u03c2', '\u7530\u4e2d\u592a\u90ce', '\u3055\u304f\u3089', '\uae40\ubbfc\uc218', '\u0645\u0631\u064a\u0645', '\u0645\u064e\u0631\u0652\u064a\u064e\u0645', '\u05d3\u05d5\u05d3',
                '\u05d3\u05b8\u05bc\u05d5\u05b4\u05d3', '\u0930\u093e\u091c\u0947\u0936', '\u0915\u094d\u0937\u0924\u094d\u0930\u093f\u092f', '\u0e2a\u0e21\u0e0a\u0e32\u0e22', '\u0e01\u0e34\u0e49\u0e07', 'Dave \u05d3\u05d5\u05d3', 'Zo\u00eb', 'Nguy\u1ec5n V\u0103n'];
-const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
+const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock = live(...args); if (r.chip && r.root.getAttribute('data-you') === 'yes' && r.dock.slot.hidden) r.chip.click(); return sock; }; return r; };       // (the account's dropdown is opened by the chip once the welcome names the visitor)
 {   // the pure parts
     const P = Pure;
     same('lineOf: the key and the username of the author, cleaned like a name', [P.lineOf({ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }), P.lineOf({ id: 4, who: 'a', text: 'x', k: 5, u: 5 }), P.lineOf({ id: 4, who: 'a', text: 'x', k: null, u: [] }),
@@ -1179,17 +1199,22 @@ const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
 {   // the switch: where it is, what it says, what it sends
     const r = menuOf(rig({ chip: true }));
     r.live(W({ login: true, you: TWO }));
-    const note = one(r.root, 'gc-pn'), button = one(r.root, 'gc-pick'), menu = one(r.root, 'gc-menu');
+    const note = one(r.dock.slot, 'gc-pn'), button = one(r.dock.slot, 'gc-pick'), menu = r.dock.slot;
     check('a hub that says that the account has both names: the small menu has a sentence that says which one the chat shows and a button that offers the other, with its name; both are in the menu, before Forget me', shows(note) && shows(button) && note.textContent === 'Chat shows your display name.'
-          && button.textContent === 'Show my username: maple.leaf' && button.tagName === 'button' && button.type === 'button' && menu.children.indexOf(note) < menu.children.indexOf(button) && menu.children.indexOf(button) < menu.children.indexOf(one(r.root, 'gc-forget')));
+          && button.textContent === 'Show my username: maple.leaf' && button.tagName === 'button' && button.type === 'button' && menu.children.indexOf(note) < menu.children.indexOf(button) && menu.children.indexOf(button) < menu.children.indexOf(one(r.dock.slot, 'gc-forget')));
     check('... the account line says the name that is shown (the display name), the chip too', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && one(r.chip, 'gc-cn').textContent === 'Maple Leaf' && one(r.chip, 'gc-av').textContent === 'M');
     button.click();
     same('a press sends ONE frame, {"t":"pick","pick":"username"} (the other name), on the open socket, and nothing else (no request, no navigation)', [r.s().sent.filter((x) => x.indexOf('pick') !== -1), r.fetches.length, r.went], [['{"t":"pick","pick":"username"}'], 0, []]);
     check('... the page does not change what it shows by itself: the name is the hub\'s to change (it closes the socket and the page connects again)', one(r.dock.slot, 'gc-an').textContent === 'Maple Leaf' && note.textContent === 'Chat shows your display name.');
     const first = r.s();
-    first.fail();
+    button.focus();
+    const dropHidden = () => { for (let e = r.env.focused; e; e = e.parent) if (e.hidden) { r.env.focused = null; r.env.doc.activeElement = null; return; } };       // (a browser drops the focus from an element that is hidden, or in one)
+    first.fail(); dropHidden();
+    check('the dropdown goes while the hub closes the socket, and the chip goes with it (offline): the focus is nowhere for the moment, as in a browser', r.dock.slot.hidden === true && r.chip.hidden === true && r.env.focused === null);
     check('the hub closes the socket: "Chat is offline" for a moment, the account line is away, and the page connects again after its first wait', r.dock.state() === 'offline' && r.dock.slot.hidden === true && (r.clock.advance(1500), r.sockets.length === 2));
     r.s().open().recv(W({ login: true, you: { name: 'maple.leaf', mod: false, k: MINE, pick: 'username', other: 'Maple Leaf' } }));
+    dropHidden();
+    check('the dropdown is back with the new welcome and the focus is back on the button of the name (not left on the page)', r.dock.slot.hidden === false && r.env.focused === button);
     check('the new welcome says the other name: the account line, the sentence and the button follow, and the small menu is as open as it was', one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && note.textContent === 'Chat shows your username.' && button.textContent === 'Show my display name: Maple Leaf' && menu.hidden === false);
     button.click();
     same('... and a press now sends the first name', r.s().sent.filter((x) => x.indexOf('pick') !== -1), ['{"t":"pick","pick":"display"}']);
@@ -1215,22 +1240,22 @@ const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
     Object.keys(cases).forEach((label) => {
         const r = menuOf(rig({ chip: true }));
         r.live(W({ login: true, you: cases[label] }));
-        check(label + ': no sentence and no button of the switch, the rest of the menu as it was', one(r.root, 'gc-pn').hidden === true && one(r.root, 'gc-pick').hidden === true && buttonsShown(r.root).indexOf('Forget me') !== -1 && one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && r.errors.length === 0);
-        one(r.root, 'gc-pick').click();
+        check(label + ': no sentence and no button of the switch, the rest of the menu as it was', one(r.dock.slot, 'gc-pn').hidden === true && one(r.dock.slot, 'gc-pick').hidden === true && buttonsShown(r.dock.slot).indexOf('Forget me') !== -1 && one(r.dock.slot, 'gc-an').textContent === 'maple.leaf' && r.errors.length === 0);
+        one(r.dock.slot, 'gc-pick').click();
         check(label + ': a press that gets through anyway sends nothing', r.s().sent.filter((x) => x.indexOf('pick') !== -1).length === 0);
     });
     const reader = menuOf(rig({}));
     reader.live(W({ login: true, you: null }));
-    check('a reader has no account line and so no switch', one(reader.root, 'gc-pick').hidden === true && reader.dock.slot.hidden === true);
+    check('a reader has no account line and so no switch', one(reader.dock.slot, 'gc-pick').hidden === true && reader.dock.slot.hidden === true);
     const nologin = menuOf(rig({}));
     nologin.live(W({ login: false, you: TWO }));
-    check('where the hub has no login there is no account line and no switch', nologin.dock.slot.hidden === true && one(nologin.root, 'gc-menu').hidden === true);
+    check('where the hub has no login there is no account line and no switch', nologin.dock.slot.hidden === true && nologin.dock.slot.hidden === true);
 }
 {   // a press that cannot be made, and a hub that refuses
     const r = menuOf(rig({}));
     r.live(W({ login: true, you: TWO }));
     r.s().readyState = 2;
-    one(r.root, 'gc-pick').click();
+    one(r.dock.slot, 'gc-pick').click();
     check('the socket is closing: nothing is written to it, and the visitor is told that it did not work', r.s().sent.filter((x) => x.indexOf('pick') !== -1).length === 0 && r.note() === 'That did not work, try again');
     const q = menuOf(rig({}));
     q.live(W({ login: true, you: TWO }));
@@ -1244,7 +1269,7 @@ const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
     const t = menuOf(rig({}));
     t.live(W({ login: true, you: TWO }));
     t.s().send = () => { throw new Error('gone'); };
-    one(t.root, 'gc-pick').click();
+    one(t.dock.slot, 'gc-pick').click();
     check('a socket that throws when written to is a lost link, as for any frame, and nothing is thrown at the page', t.dock.state() === 'offline' && t.errors.length === 0);
 }
 {   // a line is the visitor's by the hub's key
@@ -1279,7 +1304,7 @@ const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
     check('... also when only the lines have a key (a hub of the next version and a welcome of this one): the name decides', cls(half.rows()[0]).indexOf('gc-me') !== -1);
     const huge = rig({});
     huge.live(W({ login: true, you: Object.assign({}, TWO, { k: 'k'.repeat(5000) }), history: [{ id: 1, at: 1, who: 'x', text: 'y', mod: false, k: 'k'.repeat(5000) }] }));
-    check('a key that is far too long is cut, the same way on both sides, and nothing breaks', huge.errors.length === 0 && cls(huge.rows()[0]).indexOf('gc-me') !== -1 && one(huge.root, 'gc-an') !== null);
+    check('a key that is far too long is cut, the same way on both sides, and nothing breaks', huge.errors.length === 0 && cls(huge.rows()[0]).indexOf('gc-me') !== -1 && one(huge.dock.slot, 'gc-an') !== null);
 }
 {   // a moderator's copy of a line has the author's username
     const history = [{ id: 1, at: 1, who: 'Maple Leaf', text: 'hello', mod: false, k: OTHERS, u: 'aaa.one' }, { id: 2, at: 2, who: 'pebble', text: 'a line that shows the username', mod: false, k: MINE }];
@@ -1287,19 +1312,19 @@ const menuOf = (r) => { one(r.root, 'gc-more').click(); return r; };
     r.live(W({ login: true, you: Object.assign({}, TWO, { mod: true }), history }));
     r.s().recv(Object.assign(L(3, 'Maple Leaf', 'live'), { k: OTHERS, u: 'bbb.two' }));
     const rows = r.rows();
-    check('the username is a <bdi> after the name, as text, in the history and in a live line, and a line that has none has none', rows.length === 3 && one(rows[0], 'gc-u').tagName === 'bdi' && one(rows[0], 'gc-u').textContent === 'aaa.one' && one(rows[2], 'gc-u').textContent === 'bbb.two' && one(rows[1], 'gc-u') === null
-          && rows[0].textContent === 'Maple Leafaaa.one: hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[0].children.indexOf(one(rows[0], 'gc-who')) < rows[0].children.indexOf(one(rows[0], 'gc-u')) && rows[0].children.indexOf(one(rows[0], 'gc-u')) < rows[0].children.indexOf(one(rows[0], 'gc-sep')));
+    check('a line is drawn with the name only: no username, not even in a moderator\'s copy (the hub still sends it; the page keeps it in its model and does not draw it)', rows.length === 3 && rows.every((x) => one(x, 'gc-u') === null)
+          && rows[0].textContent === 'Maple Leaf: hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[2].textContent === 'Maple Leaf: live' && Pure.lineOf({ id: 1, who: 'a', text: 'x', u: 'aaa.one' }).u === 'aaa.one');
     const odd = rig({});
     odd.live(W({ login: true, you: TWO, history: [{ id: 1, at: 1, who: 'a', text: 'x', mod: false, u: '<i>x</i> \u202eevil\u202c \u200b' }, { id: 2, at: 2, who: 'a', text: 'y', mod: false, u: 'u'.repeat(80) }, { id: 3, at: 3, who: 'a', text: 'z', mod: false, u: { x: 1 } }] }));
-    check('a username from the hub is text, cleaned and cut like a name, and what is not text is none', one(odd.rows()[0], 'gc-u').textContent === '<i>x</i> evil' && one(odd.rows()[1], 'gc-u').textContent === 'u'.repeat(32) + '\u2026' && one(odd.rows()[2], 'gc-u') === null
+    check('a username from the hub in any shape is not drawn and breaks nothing (markup, invisible characters, a long one, an object)', odd.rows().every((x) => one(x, 'gc-u') === null) && odd.rows()[0].textContent === 'a: x'
           && odd.env.innerHTMLWrites.length === 0 && odd.log().all().every((e) => ['div', 'p', 'span', 'bdi'].indexOf(e.tagName) !== -1));
 }
 {   // other scripts: whole, in the line, the account line, the chip and the button
     NAMED.forEach((name) => {
         const r = menuOf(rig({ chip: true }));
         r.live(W({ login: true, you: { name, mod: false, k: MINE, pick: 'display', other: name + '.x' }, history: [{ id: 1, at: 1, who: name, text: 'hello', mod: false, k: MINE, u: name + '.x' }] }));
-        check('a name in another script comes through whole (' + name + '): the line, its username, the account line, the chip, the button', r.rows()[0].textContent === name + name + '.x' + ': hello' && one(r.dock.slot, 'gc-an').textContent === name && one(r.chip, 'gc-cn').textContent === name
-              && one(r.root, 'gc-pick').textContent === 'Show my username: ' + name + '.x' && cls(r.rows()[0]).indexOf('gc-me') !== -1 && r.errors.length === 0);
+        check('a name in another script comes through whole (' + name + '): the line (no username drawn), the account line, the chip, the button', r.rows()[0].textContent === name + ': hello' && one(r.dock.slot, 'gc-an').textContent === name && one(r.chip, 'gc-cn').textContent === name
+              && one(r.dock.slot, 'gc-pick').textContent === 'Show my username: ' + name + '.x' && cls(r.rows()[0]).indexOf('gc-me') !== -1 && r.errors.length === 0);
     });
 }
 

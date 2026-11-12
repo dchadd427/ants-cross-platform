@@ -14,7 +14,7 @@ It serves the pages and starts no game server (nginx answers the list of maps, /
 
   --context DIR  the tree to build (default: the tree of this script; a git worktree of a branch works)     --work DIR  where everything goes (default: CONTEXT/scratch/web_without_docker)
   --emsdk DIR    the emsdk (default: $EMSDK when it has the right version, else ~/.cache/ants-web/emsdk-VERSION, made there when it is not)     --port N  nginx's port (0: a free one)
-  --build-arg    NAME=VALUE for an ARG of the Dockerfile (ANTS_BUILD_ID, ANTS_SITE_LABEL)     --keep  leave nginx running     --stop  stop it
+  --build-arg    NAME=VALUE for an ARG of the Dockerfile (ANTS_BUILD_ID)     --keep  leave nginx running     --stop  stop it
   --reuse        serve what an earlier run built (a run that was cut short is not taken)
 
 The RUN lines of the Dockerfile get the work folder's path as it is, so a path with a space or a character that a shell reads apart is refused: give --work a plain one.

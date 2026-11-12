@@ -160,7 +160,7 @@ struct WsServerOptions {
     uint32_t handshake_timeout_ms{kWsHandshakeTimeoutMs};
     uint32_t ping_interval_ms{kWsPingIntervalMs};               // 0 = never ping
     size_t max_pending{64};                                     // handshakes in progress at once; further sockets are closed at once
-    // A public, read-only status (the game server's /busy: how many matches run, so that a deploy can wait for a quiet moment): a plain GET of exactly `status_path` (no query, no Upgrade
+    // A public, read-only status (the game server's /busy: how many matches run): a plain GET of exactly `status_path` (no query, no Upgrade
     // header, nothing but GET: every other method is 405) is answered 200 with the text that `status_body()` returns (JSON, at most kWsMaxStatusBytes; Cache-Control: no-store), and the
     // connection closes. A reverse proxy routes the path like /ws. Empty path or no function: none.
     std::string status_path;

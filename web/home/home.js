@@ -2,7 +2,7 @@
 // session storage are never touched here, so Home <-> Room is a class on <body> (data-screen, home.css) and one render(): no request, the seat is never dropped. Text and properties only, never markup. ES5:
 // a page gets AntsHome, node gets module.exports (tests/scripts/web_home_screen_check.js).
 //   * Home is "/", the Room "/#room" (pushState: Back goes to Home); a link ("?room=CODE") opens the Room; the page writes no history until a button is pressed.
-//   * A plain visit makes no room: My room makes a private one. Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
+//   * A plain visit makes no room (Quick host makes one; My room is there only while the page holds a room). Quick host and Games are lit by games.js, which loads after the first paint. START reaches a guest on Home as on the Room: Home says so.
 (function (root, factory) {
     var api = factory();
     if (typeof module === 'object' && module.exports) module.exports = api;
@@ -23,8 +23,8 @@
         players: 'Players', chat: 'Chat', views: 'Home views'
     };
     // The Menu's links: the footer's and the header's (test_web_home_screen.py keeps them equal), and the page's How it works (no address)
-    var MENU_MAIN = [['Matches', '/matches.html'], ['Live now', '/live.html'], ['Map maker', '/mapmaker.html'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
-    var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog.html'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal.html']];
+    var MENU_MAIN = [['Home', '/'], ['Matches', '/matches'], ['Live now', '/live-now'], ['Map maker', '/mapmaker'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
+    var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
     var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];      // the phone's strip (a window up to 700 px wide): one view at a time
     var PHONE = '(max-width: 700px)';
 
@@ -53,7 +53,7 @@
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
+        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, liveN = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -86,7 +86,7 @@
         var quickHost = stub('quick host', TEXT.quickHost), quickJoin = stub('quick join', TEXT.quickJoin);
         var mine = button('hchip mine', '', function () { openRoom(); });
         var mineName = el('span', 'name', TEXT.mine), minePill = el('span', 'pill'); minePill.hidden = true;
-        mine.appendChild(mineName); mine.appendChild(minePill);
+        mine.appendChild(mineName); mine.appendChild(minePill); mine.hidden = true;       // (My room is there only while the page holds a room: sync() shows it)
         var gamesBtn = stub('hchip games', ''), gamesPill = el('span', 'pill');
         gamesPill.hidden = true; gamesBtn.appendChild(el('span', 'name', TEXT.games)); gamesBtn.appendChild(gamesPill);
         var right = el('div', 'hright'), login = button('hlogin', TEXT.login); login.hidden = true;       // (the login chip: the chat dock fills it and shows it where the hub offers a login)
@@ -126,6 +126,8 @@
                 var item;
                 if (m[1]) item = link(m[0], m[1], 'mitem');
                 else { item = el('button', 'mitem', m[0]); item.type = 'button'; item.addEventListener('click', function () { var back = menuFor; closeMenu(); if (back && back.focus) back.focus(); page.how(); }); }      // (the page's list gives the focus back to what had it: the Menu's button)
+                if (m[1] === '/') { item.setAttribute('aria-current', 'page'); item.addEventListener('click', function (e) { e.preventDefault(); show('home', 'push'); }); }      // (this page: the Room's Home goes back to the front page's own screen)
+                if (m[1] === '/live-now') { liveN = el('span', 'mn'); item.appendChild(liveN); }
                 menuBox.appendChild(item);
             });
             var small = el('p', 'msmall');
@@ -152,6 +154,8 @@
             menuFor = btn; menuOpen = true;
             var lines = facts();
             factsBox.textContent = lines.join('\n'); factsBox.hidden = !lines.length;
+            var sl = doc.getElementById('stats-live'), nl = sl && /^[1-9]\d*/.exec(sl.textContent);      // the count of live matches that the footer's line already has
+            liveN.textContent = nl ? nl[0] : '';
             menuBox.hidden = false;
             placeMenu();
             btn.setAttribute('aria-expanded', 'true');
@@ -217,7 +221,7 @@
             gamesCall('shown', name);
             if (how !== 'first') {
                 try { win.scrollTo(0, 0); } catch (e) { /* no scrolling here */ }
-                var next = name === 'room' ? homeBtn : mine;
+                var next = name === 'room' ? homeBtn : mine.hidden ? away() : mine;
                 if (next.focus) next.focus();
             }
         }
@@ -225,8 +229,11 @@
             if (!page.info().client) page.make();
             show('room', 'push');
         }
+        function away() { return !quickHost.disabled ? quickHost : !gamesBtn.disabled ? gamesBtn : menuHome; }       // (where the focus goes when My room is not there: the first button that takes a press)
         function sync() {
             var info = page.info(), n = info.client ? countOf(info.model) : null;
+            mine.hidden = !info.client;
+            if (mine.hidden && doc.activeElement === mine) away().focus();       // (the room ended under the focus: it goes to Quick host, not to nowhere)
             minePill.textContent = n ? n.people + '/' + n.size : '';
             minePill.hidden = !n;
             mine.setAttribute('aria-label', n ? TEXT.mine + ', ' + n.people + ' of ' + n.size : TEXT.mine);
@@ -291,7 +298,7 @@
             if (asked) return;
             asked = true;
             var parts = 2;
-            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); login.addEventListener('click', function () { if (phone()) pick('chat'); }, true); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }
+            function mountDock() { if (--parts) return; try { if (win.AntsHomeChat) { dock = win.AntsHomeChat.mount({ doc: doc, win: win, host: host, chip: login, screen: function () { return screen; } }); inert(held); dockShown(); pick(tab); wantPlayers(); wantTalk(); } } catch (e) { dock = null; } }
             function load() {
                 try {
                     var tail = doc.head || doc.body, css = el('link'), js = el('script');
