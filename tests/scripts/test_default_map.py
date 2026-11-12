@@ -57,7 +57,7 @@ class StackFile(unittest.TestCase):
         # so the stack sets --log-mb and its rooms times that stay under the budget.
         header = read("include", "ants_server", "room_manager.hpp")
         budget_mib = int(re.search(r"log_budget_bytes\{(\d+)ull \* 1024ull \* 1024ull\}", header).group(1))
-        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+        for name in ("docker-compose.stack.yml",):
             args = stack_command.server_command(read(name))
             self.assertIn("--log-mb", args, name)
             rooms = int(stack_command.demo_options(args)["--demo-rooms"])

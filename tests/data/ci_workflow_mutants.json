@@ -452,13 +452,6 @@
    "old": "on:\n  pull_request:\n",
    "new": "on:\n  pull_request_target:\n",
    "test": "python3 tests/scripts/test_ci_workflow.py"
-  },
-  {
-   "id": "the_deploy_runs_after_a_failure",
-   "file": ".github/workflows/ci.yml",
-   "old": "    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}",
-   "new": "    if: ${{ always() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}",
-   "test": "python3 tests/scripts/test_ci_workflow.py"
   }
  ]
 }

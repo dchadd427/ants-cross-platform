@@ -45,7 +45,7 @@
     var TEXT = {
         title: 'Open games', loading: 'Looking for games…', off: 'Games list is off right now', offHint: 'Join by code still works.', none: 'none waiting',
         emptyTitle: 'No open games right now.', emptyLine: 'Rooms show up here when their host switches them to Public.', hostOne: 'Host one!', quickHost: 'Quick host', quickJoin: 'Quick join',
-        legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
+        legendPlayer: 'player', legendBot: 'bot', legendOpen: 'open seat', code: 'Join by code', haveCode: 'Have a code?', closeCode: 'Close', codePlaceholder: 'Room code, like k7m 2xq', join: 'Join',
         private: 'Private', privateSub: 'link only', public: 'Public', publicSub: 'listed', publicWide: ' in Open games', publicRoom: 'Public room', privateRoom: 'Private room', visLabel: 'Who can find this room',
         noteHow: 'Public rooms show your name and map in the Games list.', noteListed: 'Listed. Anyone on the front page can join from Open games. The link works too.', noteWait: 'One moment, then press again.',
         ok: 'OK', makePublic: 'Make it public', rejoin: 'Rejoin', stay: 'Stay here', keepPrivate: 'Keep it private', hostTitle: 'Host a game', hostLine: 'Who can join? A public room shows in Open games. A private room is for the people you send its link to.', hostPublic: 'Public room', hostPrivate: 'Private room', leaveJoin: 'Leave and join', leaveHost: 'Leave and host', cancel: 'Cancel', reload: 'Reload', best: 'BEST', yours: 'Yours', live: ' · updates live', finding: 'Finding a game…', looking: 'Looking for open games…', roomOpening: 'Opening the room…', goRoom: 'Go to the room', leaveRoom: 'Leave room', notNow: 'Not now',
@@ -448,25 +448,33 @@
         var popBody = el('div', 'gpbody'), popList = el('ul', 'glist'), popLoad = el('p', 'gemline', TEXT.loading), popEmpty = el('div', 'gempty'), popOff = el('div', 'goff'), popLegend = el('p', 'glegend');
         var liveBox = el('div', 'glivebox'), liveHead = el('h3', 'gsub', TEXT.inProgress), liveList = el('ul', 'glist glivelist'), liveNone = el('p', 'gemline gnolive', TEXT.noLive);
         var popJoin = el('div', 'gjoining'), popJoinText = el('span'), popJoinStop = button('sm', TEXT.cancel, guard(function () { cancelJoin(); }));
-        var codeBox = el('div', 'gcode'), codeLabel = el('label', 'gclabel', TEXT.code), codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
+        var codeBox = el('div', 'gcode'), codeLink = el('button', 'gcodelink', TEXT.haveCode), codeClose = button('sm gcx', '\u00d7'), codeOpen = false, codeRow = el('div', 'joinbox'), codeInput = el('input'), codeGo = button('sm gcgo', TEXT.join), codeHint = el('p', 'hint');
         pop.hidden = !docked; pop.setAttribute('role', docked ? 'region' : 'dialog'); pop.setAttribute('aria-label', TEXT.title); popNote.setAttribute('role', 'status'); codeHint.setAttribute('role', 'status'); popNote.hidden = true;
-        popHead.appendChild(popTitle); popHead.appendChild(popCount);
+        popHead.appendChild(popTitle); popHead.appendChild(popCount); popHead.appendChild(codeLink);
         liveBox.hidden = true; liveBox.appendChild(liveHead); liveBox.appendChild(liveList); liveBox.appendChild(liveNone);
         popJoin.hidden = true; popJoin.setAttribute('role', 'status'); popJoin.appendChild(popJoinText); popJoin.appendChild(popJoinStop);
         popEmpty.appendChild(el('span', 'ant ant-green')); popEmpty.firstChild.setAttribute('aria-hidden', 'true');
         popEmpty.appendChild(el('p', 'gemtitle', TEXT.emptyTitle)); popEmpty.appendChild(el('p', 'gemline', TEXT.emptyLine));
+        popEmpty.appendChild(button('gemhost', TEXT.hostTitle, guard(function () { quickHost(); })));       // (Host a game: the same as Quick host in the bar)
         popOff.appendChild(el('p', 'gemtitle', TEXT.off)); popOff.appendChild(el('p', 'gemline', TEXT.offHint));
         [['player', TEXT.legendPlayer], ['bot', TEXT.legendBot], ['open', TEXT.legendOpen]].forEach(function (k) { var s = el('span', 'gleg'); s.appendChild(el('i', 'gdot ' + k[0])); s.appendChild(doc.createTextNode(k[1])); popLegend.appendChild(s); });
         codeInput.type = 'text'; codeInput.setAttribute('placeholder', TEXT.codePlaceholder); codeInput.setAttribute('aria-label', TEXT.code); codeInput.setAttribute('autocomplete', 'off'); codeInput.setAttribute('autocapitalize', 'off');
         codeInput.setAttribute('spellcheck', 'false'); codeInput.setAttribute('aria-describedby', 'gc-hint'); codeHint.id = 'gc-hint';
-        codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeBox.appendChild(codeLabel); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
+        codeRow.appendChild(codeInput); codeRow.appendChild(codeGo); codeRow.appendChild(codeClose); codeBox.appendChild(codeRow); codeBox.appendChild(codeHint);
+        codeLink.type = 'button'; codeBox.id = 'gc-box'; codeBox.hidden = true; codeLink.setAttribute('aria-expanded', 'false'); codeLink.setAttribute('aria-controls', 'gc-box'); codeClose.setAttribute('aria-label', TEXT.closeCode);
         [popList, popLoad, popEmpty, popOff, liveBox].forEach(function (n) { popBody.appendChild(n); });
-        [popHead, popJoin, popNote, popBody, popLegend, codeBox].forEach(function (n) { pop.appendChild(n); });
+        [popHead, codeBox, popJoin, popNote, popBody, popLegend].forEach(function (n) { pop.appendChild(n); });
         if (docked) pop.className += ' gdock';
         (env.dock || host).appendChild(pop);
         codeInput.addEventListener('input', guard(function () { codeHint.textContent = ''; }));
         codeInput.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter') joinTyped(); }));
         codeGo.addEventListener('click', guard(function () { joinTyped(); }));
+        function setCode(on, back) {                       // "Have a code?" folds the field open under the heading (the focus goes to it) and the close button or Escape folds it shut (the focus goes back to the link)
+            codeOpen = on; codeBox.hidden = !on; codeLink.setAttribute('aria-expanded', on ? 'true' : 'false');
+            if (on) { if (codeInput.focus) codeInput.focus(); } else { codeHint.textContent = ''; if (back && codeLink.focus) codeLink.focus(); }
+        }
+        codeLink.addEventListener('click', guard(function () { setCode(!codeOpen, false); }));
+        codeClose.addEventListener('click', guard(function () { setCode(false, true); }));
 
         function visibleRows() { var own = ownCode(); return bestOrder(rows.filter(function (r) { return r.code !== own; })); }          // the OTHER rooms, best first (Quick join and BEST)
         function listRows() { var own = ownCode(); return rows.filter(function (r) { return r.code === own; }).concat(visibleRows()); }      // the list: the page's own public room first (tagged Yours), then the others
@@ -569,7 +577,7 @@
             place(); paintList(); poll(); pollLive();
             focusList();
         }
-        function focusList() { var first = popList.querySelector('button') || popEmpty.querySelector('button') || codeInput; if (first && first.focus) first.focus(); }
+        function focusList() { var first = popList.querySelector('button') || popEmpty.querySelector('button') || codeLink; if (first && first.focus) first.focus(); }
         function closeList(back) {
             if (!isOpen || docked) return;
             isOpen = false; pop.hidden = true;
@@ -606,7 +614,7 @@
             joinSeq++;
             try { if (page.cancel) page.cancel(); } catch (e) { /* the page's own */ }
             busy(false);
-            if (isOpen && codeInput.focus) codeInput.focus();
+            var f = codeOpen ? codeInput : codeLink; if (isOpen && f.focus) f.focus();
         }
         function refused(res, fromList) {
             var words = res.kind === 'full' ? TEXT.full : res.kind === 'running' ? TEXT.started : res.kind === 'silent' ? TEXT.silent : res.kind === 'version' ? res.text : fromList ? TEXT.gone : res.text;
@@ -614,7 +622,7 @@
             poll();
         }
         function joined(what) {                           // (the Room shows: the list is put away by that)
-            codeInput.value = ''; codeHint.textContent = ''; popNote.textContent = '';
+            codeInput.value = ''; popNote.textContent = ''; setCode(false, false);
             notice('joined', 'Joined ' + what + '.', '', []);
             ctl.show('room', 'push');
         }
@@ -811,7 +819,7 @@
         doc.addEventListener('keydown', guard(function (e) {
             if (!e || e.key !== 'Escape') return;
             if (!dialog && toast.contains(doc.activeElement)) { clearNotice(); if (lastFocus && lastFocus.focus) lastFocus.focus(); }       // (Escape puts a toast away that has the focus, and the focus goes back)
-            if (dialog) closeAsk(true); else if (isOpen) closeList(true);
+            if (dialog) closeAsk(true); else if (codeOpen && pop.contains(doc.activeElement)) setCode(false, true); else if (isOpen) closeList(true);
         }));
         doc.addEventListener('visibilitychange', guard(function () {
             if (!visible() && pollTimer !== null) { cancel(pollTimer); pollTimer = null; }

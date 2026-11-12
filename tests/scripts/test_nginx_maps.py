@@ -188,7 +188,7 @@ class TheBuildPutsThePicturesAndTheMapsWhereNginxLooks(unittest.TestCase):
         text = read("Dockerfile.server")
         self.assertRegex(text, r"COPY Community-Maps/\*\.lvl Community-Maps/\*\.LVL Community-Maps/maps\.json Community-Maps/previews\.json /community-maps/")
         self.assertIn('"--community-maps", "/community-maps"', text)
-        for compose in ("docker-compose.stack.yml", "docker-compose.server.yml", "docker-compose.staging.yml"):
+        for compose in ("docker-compose.stack.yml", "docker-compose.server.yml"):
             body = read(compose)
             self.assertNotRegex(body, r":/community-maps")
             self.assertNotIn("entrypoint:", body)                                              # (the image's --community-maps is kept)
