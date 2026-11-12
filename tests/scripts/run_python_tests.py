@@ -31,23 +31,30 @@ import time
 # order of the run starts the longest first, so that the last one to start is a short one and a runner with three cores does not begin a class of two minutes when the others are nearly done
 # (the output stays in the order of the files); --shard shares the groups between its slices by the same numbers. A name that is not a class here is refused by test_run_python_tests.
 COSTS = {
-    "test_web_home_games.TheChecksAreNotVacuous": 537, "test_web_home_chat.TheChecksAreNotVacuous": 462, "test_web_mapmaker.TheGroundAndTheSprites": 387,
-    "test_web_mapmaker.TheCodeRuns": 157, "test_nginx_history.TheBlocksRun": 60, "test_web_home_screen.TheChecksAreNotVacuous": 58, "test_web_map_files.ThePagesOwnCode": 47,
-    "test_web_replay_open.TheChecksAreNotVacuous": 45, "test_web_admin.ThePagesOwnCode": 44, "test_web_mapmaker_play.ThePlayChecks": 42, "test_bot_names.TheMutants": 35, "test_web_mapmaker.ThePage": 30,
-    "test_nginx_stats.TheCacheRuns": 29, "test_web_death_map.TheCards": 28, "test_web_game_menu.TheMutants": 23, "test_web_lobby_chat.TheChecksAreNotVacuous": 23,
-    "test_web_lobby_net.TheBudgetChecksAreNotVacuous": 22, "test_web_rematch.TheChecksAreNotVacuous": 20, "test_e2e_deadlines.Waits": 18,
-    "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18, "test_run_tests.ParallelResources": 17, "test_web_shapes.TheMutantsOfTheTable": 16,
-    "test_web_lobby_rules.TheCheckIsNotVacuous": 16, "test_web_lobby.TheCheckIsNotVacuous": 15, "test_nginx_live.TheBlocksRun": 15, "test_e2e_deadlines.Watchdog": 14,
-    "test_map_atlas.TheAtlas": 13, "test_web_without_docker.TheRealDockerfileReplayed": 13, "test_changelog_to_html.TheScriptRunByNode": 13,
-    "test_web_shapes.TheMutantsOfThePicker": 12, "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous": 12, "test_nginx_replays.TheBlocksRun": 11, "test_hub_ws.TheFuzz": 11,
-    "test_nginx_lobbies.TheCacheRuns": 10, "test_e2e_deadlines.TheScriptCounts": 10, "test_hub_login.TheCallback": 10,
-    "test_hub_login.TheSocket": 10, "test_nginx_lobbies.TheServerHangsRuns": 10, "test_measure_tick_rate.Program": 10, "test_nginx_maps.TheBlocksRun": 8,
-    "test_nginx_hub_login.TheBlocksRun": 8, "test_hub_login.TheForget": 8, "test_web_map_picker.ThePickersOwnCode": 8, "test_hub_login.TheProcess": 7,
-    "test_web_home_chat.TheCodeRuns": 7, "test_nginx_lobbies.TheServerFailsRuns": 7, "test_hub_login.TheDiscordClient": 7, "test_hub_server.TheProcess": 7,
-    "test_nginx_stats.TheRealServerBehindTheFile": 7, "test_hub_server.TheTimers": 6, "test_mutate_tool.Project": 6, "test_mutate_tool.WithABuildStep": 6,
-    "test_community_maps.TheList": 6, "test_run_tests.ParallelRunner": 6, "test_web_map_maker_link.TheChecksAreNotVacuous": 6, "test_nginx_stats.TheBlocksRun": 6,
-    "test_ci_light.Decision": 6, "test_cmake_version.CcacheSupport": 5,
+    "test_web_home_games.TheChecksAreNotVacuous": 490, "test_web_home_chat.TheChecksAreNotVacuous": 355, "test_web_mapmaker.TheGroundAndTheSprites": 194, "test_web_mapmaker.TheCodeRuns": 89,
+    "test_web_map_files.ThePagesOwnCode": 84, "test_web_home_players.TheChecksAreNotVacuous": 68, "test_nginx_history.TheBlocksRun": 60, "test_web_mapmaker_play.ThePlayChecks": 57,
+    "test_web_home_screen.TheChecksAreNotVacuous": 44, "test_web_replay_open.TheChecksAreNotVacuous": 43, "test_bot_names.TheMutants": 35, "test_web_death_map.TheCards": 35,
+    "test_web_admin.ThePagesOwnCode": 30, "test_nginx_stats.TheCacheRuns": 29, "test_web_lobby_chat.TheChecksAreNotVacuous": 27, "test_web_mapmaker.ThePage": 22,
+    "test_nginx_live.TheBlocksRun": 20, "test_web_home_talk.TheChecksAreNotVacuous": 19, "test_e2e_deadlines.Waits": 18, "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18,
+    "test_run_tests.ParallelResources": 16, "test_web_lobby_net.TheBudgetChecksAreNotVacuous": 15, "test_web_lobby_rules.TheCheckIsNotVacuous": 15, "test_e2e_deadlines.Watchdog": 14,
+    "test_web_game_menu.TheMutants": 14, "test_web_home_chat.TheCodeRuns": 14, "test_web_player_name.TheChecksAreNotVacuous": 14, "test_web_rematch.TheChecksAreNotVacuous": 14,
+    "test_map_atlas.TheAtlas": 11, "test_nginx_lobbies.TheCacheRuns": 11, "test_nginx_replays.TheBlocksRun": 11,
+    "test_web_shapes.TheMutantsOfTheTable": 11, "test_changelog_to_html.TheScriptRunByNode": 10, "test_e2e_deadlines.TheScriptCounts": 10,
+    "test_hub_login.TheCallback": 10, "test_hub_login.TheSocket": 10, "test_measure_tick_rate.Program": 10, "test_nginx_lobbies.TheServerHangsRuns": 10, "test_hub_ws.TheFuzz": 9,
+    "test_web_lobby.TheCheckIsNotVacuous": 9, "test_hub_login.TheDisplayName": 8, "test_hub_login.TheForget": 8, "test_hygiene.RealRepository": 8, "test_nginx_hub_login.TheBlocksRun": 8,
+    "test_nginx_maps.TheBlocksRun": 8, "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous": 8, "test_web_map_picker.ThePickersOwnCode": 8, "test_hub_login.TheDiscordClient": 7,
+    "test_hub_login.TheProcess": 7, "test_hub_server.TheProcess": 7, "test_hub_server.TheTimers": 7, "test_mutate_tool.WithABuildStep": 7, "test_nginx_lobbies.TheServerFailsRuns": 7,
+    "test_nginx_stats.TheRealServerBehindTheFile": 7, "test_web_without_docker.TheRealDockerfileReplayed": 7, "test_ci_light.Decision": 6, "test_community_maps.TheList": 6,
+    "test_mutate_tool.Project": 6, "test_nginx_stats.TheBlocksRun": 6, "test_run_tests.ParallelRunner": 6, "test_web_map_maker_link.TheChecksAreNotVacuous": 6,
+    "test_web_shapes.TheMutantsOfThePicker": 6, "test_cmake_version.CcacheSupport": 5,
 }
+
+# The mutation classes that run as several units (the groups of this table, `NAME[K/N]`, K from 1): each unit gets the environment variable SHARD_ENV, "K/N", and the class (through
+# tests/scripts/mutant_shard.py) tries every N-th mutant of its list from the K-th on, in the same order as the whole list, so that the units together try exactly the mutants of the list, each
+# once, and a plain `python3 -m unittest` of the class (no variable) tries all of them. The cost of a unit is its class's cost in COSTS divided by N (rounded up). A unit is a class of the
+# page tests that LINUX_ONLY names, as the class is (the names there and in COSTS are the class's, without the brackets).
+SHARDS = {"test_web_home_games.TheChecksAreNotVacuous": 4, "test_web_home_chat.TheChecksAreNotVacuous": 4}
+SHARD_ENV = "ANTS_MUTANT_SHARD"
 
 # The groups that the macOS job leaves to Linux (--skip-linux-only): page tests only. They run the JavaScript of the site's pages with node against the files of the checkout (or build the map
 # maker's atlas from them), start no server and no socket of their own, and assert no time, so nothing in them depends on the operating system. Most are the "checks are not vacuous" groups
@@ -65,8 +72,29 @@ LINUX_ONLY = {
 }
 
 
+def base_of(label):
+    """the class (or file) of a group's label: `test_x.TheClass[2/4]` is a unit of `test_x.TheClass`"""
+    return label.split("[", 1)[0]
+
+
+def unit_of(label):
+    """(K, N) of a label that names a unit of a sharded class, else None"""
+    picked = re.fullmatch(r"[^\[]+\[(\d+)/(\d+)\]", label)
+    return (int(picked.group(1)), int(picked.group(2))) if picked else None
+
+
+def cost_of(label):
+    """what a group costs in seconds (COSTS; a unit of a sharded class: its class's share; a group that is not in COSTS counts 1)"""
+    if label in COSTS:
+        return COSTS[label]
+    unit = unit_of(label)
+    if unit and base_of(label) in COSTS:
+        return -(-COSTS[base_of(label)] // unit[1])
+    return 1
+
+
 def units(directory, package):
-    """[(label, dotted name)] of what runs in one process: a class that defines tests, or the whole module when it has none."""
+    """[(label, dotted name)] of what runs in one process: a class that defines tests, or the whole module when it has none; a class of SHARDS is N units that share its dotted name."""
     found = []
     for path in sorted(glob.glob(os.path.join(directory, "test_*.py"))):
         module = os.path.splitext(os.path.basename(path))[0]
@@ -74,7 +102,12 @@ def units(directory, package):
             tree = ast.parse(f.read(), path)
         classes = [n.name for n in tree.body if isinstance(n, ast.ClassDef) and any(isinstance(b, ast.FunctionDef) and b.name.startswith("test") for b in n.body)]
         if classes:
-            found += [("%s.%s" % (module, c), "%s.%s.%s" % (package, module, c)) for c in classes]
+            for c in classes:
+                label = "%s.%s" % (module, c)
+                if label in SHARDS:
+                    found += [("%s[%d/%d]" % (label, k, SHARDS[label]), "%s.%s.%s" % (package, module, c)) for k in range(1, SHARDS[label] + 1)]
+                else:
+                    found.append((label, "%s.%s.%s" % (package, module, c)))
         else:
             found.append((module, "%s.%s" % (package, module)))
     return found
@@ -82,7 +115,7 @@ def units(directory, package):
 
 def start_order(work):
     """the indexes of work in the order in which the groups start: the longest (COSTS) first; what has no cost keeps the order of the files"""
-    return sorted(range(len(work)), key=lambda i: -COSTS.get(work[i][0], 0))
+    return sorted(range(len(work)), key=lambda i: -(cost_of(work[i][0]) if work[i][0] in COSTS or unit_of(work[i][0]) else 0))
 
 
 def shard_of(work, k, n):
@@ -93,7 +126,7 @@ def shard_of(work, k, n):
     mine = []
     for i in start_order(work):
         s = min(range(n), key=lambda j: (load[j], j))
-        load[s] += COSTS.get(work[i][0], 1)
+        load[s] += cost_of(work[i][0])
         if s == k - 1:
             mine.append(work[i])
     return [w for w in work if w in mine]
@@ -124,6 +157,11 @@ def run_unit(label, dotted, root, shim=None):
     if shim:
         env["PATH"] = shim + os.pathsep + env.get("PATH", "")
     env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    unit = unit_of(label)
+    if unit:
+        env[SHARD_ENV] = "%d/%d" % unit
+    else:
+        env.pop(SHARD_ENV, None)                        # (a variable of the caller's must not make another group try a part of its list)
     done = subprocess.run([sys.executable, "-m", "unittest", dotted], capture_output=True, text=True, cwd=root, env=env)
     text = done.stdout + done.stderr
     ran = re.search(r"^Ran (\d+) tests? in", text, re.M)
@@ -162,7 +200,7 @@ def main(argv):
         print("run_python_tests: no test_*.py in %s (or --jobs below 1)" % directory, file=sys.stderr)
         return 2
     if args.skip_linux_only:
-        work = [w for w in work if w[0] not in LINUX_ONLY]
+        work = [w for w in work if base_of(w[0]) not in LINUX_ONLY]
     shard = None
     if args.shard is not None:
         picked = re.fullmatch(r"(\d+)/(\d+)", args.shard)
