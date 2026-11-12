@@ -232,6 +232,23 @@ class Wrapper(unittest.TestCase):
             rpt.LINUX_ONLY.clear()
             rpt.LINUX_ONLY.update(saved)
 
+    def test_the_annotations_of_the_units_of_a_sharded_class_are_passed_on_once_each(self):
+        self.add("test_big.py", "import unittest\nclass Big(unittest.TestCase):\n    def test_it(self):\n        print('::warning::the same line from every unit')\n        print('::notice::a note')\n")
+        saved, saved_costs = dict(rpt.SHARDS), dict(rpt.COSTS)
+        try:
+            rpt.SHARDS.clear()
+            rpt.SHARDS["test_big.Big"] = 3
+            results = [rpt.run_unit(label, dotted, self.tmp.name) for label, dotted in rpt.units(self.scripts, "tests.scripts")]
+            self.assertEqual([r["label"] for r in results], ["test_big.Big[1/3]", "test_big.Big[2/3]", "test_big.Big[3/3]"])
+            self.assertEqual(rpt.annotations(results), ["::warning::the same line from every unit", "::notice::a note"])
+            results[1]["status"] = 1                                                      # (a unit that failed prints all its output itself)
+            self.assertEqual(rpt.annotations(results[1:2]), [])
+        finally:
+            rpt.SHARDS.clear()
+            rpt.SHARDS.update(saved)
+            rpt.COSTS.clear()
+            rpt.COSTS.update(saved_costs)
+
     def test_a_sharded_class_is_units_that_each_get_their_number_and_the_others_get_none(self):
         self.add("test_big.py", "import os, unittest\nclass Big(unittest.TestCase):\n    def test_it(self):\n        print('SHARD=' + os.environ.get('%s', 'none'))\n" % rpt.SHARD_ENV)
         self.add("test_small.py", "import os, unittest\nclass Small(unittest.TestCase):\n    def test_it(self):\n        print('SHARD=' + os.environ.get('%s', 'none'))\n" % rpt.SHARD_ENV)
