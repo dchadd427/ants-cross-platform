@@ -353,9 +353,11 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     FILES = ["web/lobby.html", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/home/players.js", "web/home/players.css", "web/home/talk.js", "web/home/talk.css", "web/shapes.js", "tests/scripts/test_web_home_screen.py", "tests/scripts/web_home_screen_check.js", "tests/scripts/web_page_harness.js",
              "tests/scripts/web_home_check.py", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "docker/nginx.conf", "docs/PLAY_IN_BROWSER.md"] + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
 
+    SPEC = "home_screen_mutants.json"
+
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(REPO, "tests", "data", "home_screen_mutants.json"), encoding="utf-8") as f:
+        with open(os.path.join(REPO, "tests", "data", cls.SPEC), encoding="utf-8") as f:
             cls.spec = json.load(f)
         cls.folder = tempfile.mkdtemp(prefix="ants_home_mutants.")
         for name in cls.FILES:
@@ -393,6 +395,15 @@ class TheChecksAreNotVacuous(unittest.TestCase):
             if status == 0:
                 missed.append(m["id"])
         self.assertEqual(missed, [], "the checks did not see these changes")
+
+
+class TheMapCardChecksAreNotVacuous(TheChecksAreNotVacuous):
+    """the same for tests/data/map_card_mutants.json: the room's map card (its name and chips, the host's Change map button, the list's fallback of the six originals and its In this room tag) in web/lobby.html"""
+    SPEC = "map_card_mutants.json"
+
+    def test_the_spec_changes_the_page_only(self):
+        self.assertEqual({m["file"] for m in self.spec["mutants"]}, {"web/lobby.html"})
+        self.assertTrue(all(m["test"] == "node tests/scripts/web_home_screen_check.js web/lobby.html" for m in self.spec["mutants"]))
 
 
 if __name__ == "__main__":

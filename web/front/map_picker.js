@@ -1,6 +1,7 @@
 // The front page's map picker (docs/PLAY_IN_BROWSER.md "Choosing a map"): the list of the maps that the game server offers (GET /maps: the six originals and the players' maps, with a preview picture and how
-// often each was played), shown as a Detail list or a Thumbnails grid, with a search over name and description and four sorts. The page opens it from the map selector; choosing a map hands the entry to the page,
-// which sets the room's map as the selector does.
+// often each was played), shown as a Detail list or a Thumbnails grid, with a search over name and description and four sorts; in the default sort under two headings, The six originals and Players' maps, with
+// the room's map marked In this room, and on a wide screen next to a preview of the map that is picked. The page opens it from the map card's Change map button; choosing a map hands the entry to the page, which
+// sets the room's map. A list that cannot be had still shows the six originals, from the page's own table (opts.originals).
 //   * ES5 and no module system, as the site's other scripts: a page gets the global AntsMapPicker, node gets module.exports (tests/scripts/web_map_picker_check.js runs it, the pure functions on tables and the
 //     whole picker with a small fake of the browser's DOM).
 //   * Nothing a server says is ever written as markup: names, descriptions and addresses are set as text or as an attribute of an element made here.
@@ -121,6 +122,15 @@
     function metaText(m) { return m.original ? 'Shipped with the game' : m.players + ' players · ' + m.minutes + ' min · ' + m.width + '×' + m.height; }
     // The Map Info line of a map of the players, as the selector shows it under the picture
     function infoText(m) { return (m.description ? m.description + ' ' : '') + '(' + m.minutes + ' min)'; }
+    // The chips of the map card and the facts of the preview: what kind of map it is, then the players, minutes and size that the list knows (an entry that is not known yet: only the kind; `community` says which)
+    function factsOf(m, community) {
+        if (!m) return [community ? "Players' map" : 'Original'];
+        var out = [m.original ? 'Original' : m.kind === 'extended' ? 'Extended' : "Players' map"];
+        if (m.players) out.push(m.players + (m.players === 1 ? ' player' : ' players'));
+        if (m.minutes) out.push(m.minutes + ' min');
+        if (m.width && m.height) out.push(m.width + '\u00d7' + m.height);
+        return out;
+    }
 
     function recall(storage) {
         try { var v = storage && storage.getItem(VIEW_KEY); return v === 'thumbs' ? 'thumbs' : 'detail'; } catch (e) { return 'detail'; }
@@ -128,19 +138,32 @@
     function remember(storage, v) { try { if (storage) storage.setItem(VIEW_KEY, v); } catch (e) { /* the choice is for this visit only */ } }
 
     // opts: { host (the dialog's panel; its parent is the overlay that is shown and hidden), doc, fetch, storage, setTimeout, clearTimeout, AbortController, now, matchMedia,
-    //         canOpen() and canChoose() (the host of the room, START not pressed: asked when the list opens and again when a map is chosen), onChoose(entry), onList(), onOpen(), onClose() }
+    //         canOpen() and canChoose() (the host of the room, START not pressed: asked when the list opens and again when a map is chosen), onChoose(entry), onList(), onOpen(), onClose(),
+    //         room() (the file of the room's map: it is marked In this room), originals (the page's table of the six: { key, name, file, info }, shown when the list cannot be had) }
     function create(opts) {
         var doc = opts.doc, host = opts.host;
         var later = opts.setTimeout || function (f, ms) { return setTimeout(f, ms); }, unlater = opts.clearTimeout || function (t) { clearTimeout(t); };
         var clock = opts.now || function () { return Date.now(); };
         var list = null, status = 'idle', view = recall(opts.storage), sort = 'default', query = '', picked = '', shown = [], opened = false, byFile = {}, byLower = {};
-        var parts = {}, typing = 0, failedAt = 0, attempt = 0;
+        var parts = {}, typing = 0, failedAt = 0, attempt = 0, fb = null, fbList = [], sections = 0;
 
         function el(tag, cls, txt) { var e = doc.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; }
         function button(cls, label) { var b = el('button', cls, label); b.setAttribute('type', 'button'); return b; }
         // a file name as the list has it (the room may say it in another case)
         function canon(file) { return byFile[file] ? file : byLower[String(file || '').toLowerCase()] ? byLower[String(file).toLowerCase()].file : file; }
         function find(file) { return byFile[file] || byLower[String(file || '').toLowerCase()] || null; }
+        // the six originals as entries, from the page's own table: what the list shows when the server's list cannot be had (no play counts: the page has none)
+        function fallback() {
+            if (!fb) {
+                fb = {};
+                (opts.originals || []).forEach(function (o, i) {
+                    var e = { file: o.file, name: o.name, original: true, kind: 'classic', order: i, width: 0, height: 0, minutes: 0, players: 0, description: text(o.info, 200), plays: 0, thumb: ownPath('/front/preview_' + o.key + '.png'), heavy: false, tooManyAnts: false, bare: true };
+                    fb[o.file] = e; fbList.push(e);
+                });
+            }
+            return fbList;
+        }
+        function lookup(file) { return byFile[file] || (status === 'error' ? fb && fb[file] : null) || null; }
 
         function build() {
             host.textContent = '';
@@ -160,12 +183,15 @@
             parts.sorts = {};
             SORTS.forEach(function (s) { var b = button('pk-chip', s.label); b.setAttribute('data-sort', s.id); parts.sorts[s.id] = b; sorts.appendChild(b); });
             parts.out = el('div', 'pk-out');
+            parts.pane = el('div', 'pk-pane'); parts.pane.setAttribute('role', 'group'); parts.pane.setAttribute('aria-label', 'The map picked');       // (a wide screen shows it beside the list; a phone's sheet has none)
+            parts.pimg = el('img', 'pk-pic'); parts.pimg.setAttribute('alt', ''); parts.pname = el('p', 'pk-pn'); parts.pmeta = el('p', 'pk-meta'); parts.pdesc = el('p', 'pk-pd');
+            [parts.pimg, parts.pname, parts.pmeta, parts.pdesc].forEach(function (n) { parts.pane.appendChild(n); });
             parts.fine = el('p', 'pk-fine', 'Plays count only matches with people in them that lasted at least 30 seconds.');
             var foot = el('div', 'pk-foot');
             parts.count = el('span', 'pk-count'); parts.count.setAttribute('role', 'status'); parts.count.setAttribute('aria-live', 'polite');
             parts.go = button('btn', 'Choose map');
             foot.appendChild(parts.count); foot.appendChild(parts.go);
-            [head, bar, sorts, parts.out, parts.fine, foot].forEach(function (n) { host.appendChild(n); });
+            [head, bar, sorts, parts.out, parts.pane, parts.fine, foot].forEach(function (n) { host.appendChild(n); });
 
             parts.close.addEventListener('click', close);
             parts.q.addEventListener('input', function () { unlater(typing); typing = later(function () { typing = 0; query = parts.q.value; paint('top'); }, 120); });       // (a search is made when the typing pauses)
@@ -248,6 +274,7 @@
             var d = el('div', thumbs ? 'pk-card' : 'pk-row');
             d.setAttribute('role', 'option'); d.setAttribute('data-file', m.file); d.setAttribute('tabindex', m.file === picked ? '0' : '-1'); d.setAttribute('aria-selected', m.file === picked ? 'true' : 'false');
             if (m.file === picked) d.className += ' sel';
+            var here = opts.room ? canon(opts.room() || '') : '';
             if (m.thumb) {
                 var img = el('img'); img.setAttribute('src', m.thumb); img.setAttribute('alt', ''); img.setAttribute('width', String(px)); img.setAttribute('height', String(px)); img.setAttribute('loading', 'lazy'); img.setAttribute('decoding', 'async');
                 d.appendChild(img);
@@ -258,13 +285,14 @@
             else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));
             if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));
             else if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));
+            if (here && m.file === here) { nm.appendChild(el('span', 'pk-badge pk-here', 'In this room')); d.className += ' here'; }
             body.appendChild(nm);
             if (!thumbs) {
                 body.appendChild(el('div', 'pk-meta', metaText(m)));
-                var pl = el('div', 'pk-pl'); pl.appendChild(el('b', '', playsText(m.plays))); pl.appendChild(doc.createTextNode(m.plays === 1 ? 'play' : 'plays'));
-                d.appendChild(body); d.appendChild(pl);
+                d.appendChild(body);
+                if (!m.bare) { var pl = el('div', 'pk-pl'); pl.appendChild(el('b', '', playsText(m.plays))); pl.appendChild(doc.createTextNode(m.plays === 1 ? 'play' : 'plays')); d.appendChild(pl); }
             } else {
-                body.appendChild(el('div', 'pk-meta', playsText(m.plays) + (m.plays === 1 ? ' play' : ' plays')));
+                if (!m.bare) body.appendChild(el('div', 'pk-meta', playsText(m.plays) + (m.plays === 1 ? ' play' : ' plays')));
                 d.appendChild(body);
             }
             return d;
@@ -277,6 +305,34 @@
                 nodes[i].className = nodes[i].className.replace(/ sel\b/, '') + (on ? ' sel' : '');
             }
             parts.go.disabled = pickedIndex() < 0;   // (a pick that a search hides is not chosen)
+            paintPane();
+        }
+        // the preview beside the list: the map that is picked (none: empty), its picture, name, facts and description
+        function paintPane() {
+            var m = pickedIndex() >= 0 ? lookup(picked) : null;
+            parts.pane.className = 'pk-pane' + (m ? '' : ' pk-none');
+            parts.pname.textContent = m ? m.name : ''; parts.pmeta.textContent = ''; parts.pdesc.textContent = m ? m.description : '';
+            if (m && m.thumb) parts.pimg.setAttribute('src', m.thumb); else parts.pimg.removeAttribute('src');
+            if (!m) return;
+            if (m.original) parts.pname.appendChild(el('span', 'pk-badge', 'Original')); else if (m.kind === 'extended') parts.pname.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));
+            var facts = factsOf(m).slice(1); if (m.original) facts.unshift('Shipped with the game'); if (!m.bare) facts.push(playsText(m.plays) + (m.plays === 1 ? ' play' : ' plays'));
+            parts.pmeta.textContent = facts.join(' \u00b7 ');
+        }
+        // the items under their headings (a flat list when `groups` has one group with no title); the headings are the groups' names for a screen reader
+        function sectionsOf(groups, role) {
+            var frag = doc.createDocumentFragment ? doc.createDocumentFragment() : parts.out, first = pickedIndex() < 0, n = 0;
+            groups.forEach(function (g) {
+                if (!g.items.length) return;
+                var sec = el('div', 'pk-sec ' + (view === 'thumbs' ? 'pk-grid' : 'pk-list'));
+                if (g.title) {
+                    var h = el('h3', 'pk-h', g.title); h.id = 'pk-h-' + (++sections);
+                    if (g.note) { h.appendChild(doc.createTextNode(' ')); h.appendChild(el('span', '', g.note)); }
+                    sec.setAttribute('role', 'group'); sec.setAttribute('aria-labelledby', h.id); sec.appendChild(h);
+                } else if (role) { sec.setAttribute('role', 'listbox'); sec.setAttribute('aria-label', role); }
+                g.items.forEach(function (m) { var node = item(m); if (first && n === 0) node.setAttribute('tabindex', '0'); n++; sec.appendChild(node); });
+                frag.appendChild(sec);
+            });
+            if (frag !== parts.out) parts.out.appendChild(frag);
         }
 
         // where the list stands afterwards: 'top' a search (a new list), 'picked' a sort or a view (the chosen row is brought into view, else the list stays where it was), '' nothing is moved
@@ -288,25 +344,28 @@
             parts.out.removeAttribute('role'); parts.out.removeAttribute('aria-label');
             parts.out.className = 'pk-out';
             parts.go.disabled = true;
-            if (status === 'loading' || status === 'idle') { parts.out.appendChild(el('p', 'pk-note', 'Loading the maps…')); parts.count.textContent = ''; return; }
+            if (status === 'loading' || status === 'idle') { parts.out.appendChild(el('p', 'pk-note', 'Loading the maps\u2026')); parts.count.textContent = ''; shown = []; paintPane(); return; }
             if (status === 'error') {
                 var p = el('div', 'pk-note pk-err');
-                p.appendChild(el('p', '', 'The list of maps is not available right now. The six original maps can still be chosen with the arrows beside the picture.'));
+                p.appendChild(el('p', '', 'The full list of maps is not available right now. The six original maps can still be chosen here.'));
                 var r = button('btn sm', 'Try again'); r.setAttribute('data-retry', '1'); p.appendChild(r);
-                parts.out.appendChild(p); parts.count.textContent = ''; return;
+                parts.out.appendChild(p); parts.count.textContent = '';
+                shown = fallback().slice(); if (!fb[picked]) picked = '';
+                sectionsOf([{ title: '', items: shown }], 'The six originals');
+                parts.go.disabled = pickedIndex() < 0; paintPane(); return;
             }
             parts.q.setAttribute('placeholder', 'Search ' + list.length + ' maps');
             shown = sortMaps(filterMaps(list, query), sort);
             parts.count.textContent = shown.length + ' of ' + list.length + ' maps shown';
-            if (!shown.length) { var e = el('div', 'pk-note pk-empty'); e.appendChild(el('b', '', 'No map is called "' + query.trim() + '".')); e.appendChild(el('span', '', 'Try fewer letters.')); parts.out.appendChild(e); return; }
+            if (!shown.length) { var e = el('div', 'pk-note pk-empty'); e.appendChild(el('b', '', 'No map is called "' + query.trim() + '".')); e.appendChild(el('span', '', 'Try fewer letters.')); parts.out.appendChild(e); paintPane(); return; }
             if (!byFile[picked]) picked = '';
-            parts.out.className = 'pk-out ' + (view === 'thumbs' ? 'pk-grid' : 'pk-list');
             parts.out.setAttribute('role', 'listbox'); parts.out.setAttribute('aria-label', 'Maps');
-            var frag = doc.createDocumentFragment ? doc.createDocumentFragment() : parts.out;
-            var firstStop = pickedIndex() < 0;
-            shown.forEach(function (m, i) { var n = item(m); if (firstStop && i === 0) n.setAttribute('tabindex', '0'); frag.appendChild(n); });
-            if (frag !== parts.out) parts.out.appendChild(frag);
+            if (sort === 'default') {      // (the originals come first in this order: two headings, the second says how many players' maps there are)
+                var own = shown.filter(function (m) { return m.original; }), rest = shown.filter(function (m) { return !m.original; });
+                sectionsOf([{ title: 'The six originals', items: own }, { title: "Players' maps", note: rest.length + (rest.length === 1 ? ' map, most played first' : ' maps, most played first'), items: rest }]);
+            } else sectionsOf([{ title: '', items: shown }]);
             parts.go.disabled = pickedIndex() < 0;   // (a pick that a search hides is not chosen)
+            paintPane();
             if (where === 'top') parts.out.scrollTop = 0;
             else if (where === 'picked') {
                 var cur = parts.out.querySelector ? parts.out.querySelector('[data-file].sel') : null;
@@ -367,7 +426,7 @@
         }
         function choose() {
             flush();
-            var m = byFile[picked];
+            var m = lookup(picked);
             if (!m) return;
             var allowed = !opts.canChoose || opts.canChoose();                     // (the room may have changed hands, or START been pressed, while the list was open)
             close();
@@ -379,5 +438,5 @@
         };
     }
 
-    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, previewPath: previewPath, thumbFor: thumbFor, percentEncode: percentEncode, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, HEAVY_TEXT: HEAVY_TEXT, TOO_MANY_TEXT: TOO_MANY_TEXT, create: create };
+    return { VIEW_KEY: VIEW_KEY, SORTS: SORTS, validMapFile: validMapFile, previewPath: previewPath, thumbFor: thumbFor, percentEncode: percentEncode, displayName: displayName, parseList: parseList, sortMaps: sortMaps, filterMaps: filterMaps, playsText: playsText, metaText: metaText, infoText: infoText, factsOf: factsOf, HEAVY_TEXT: HEAVY_TEXT, TOO_MANY_TEXT: TOO_MANY_TEXT, create: create };
 });

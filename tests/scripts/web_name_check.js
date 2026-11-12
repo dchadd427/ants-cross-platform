@@ -792,8 +792,9 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     const button = (seat, side) => env.$('slots').querySelector('[data-seat="' + seat + '"][data-side="' + side + '"]');
     const lit = (seat, side) => button(seat, side).getAttribute('aria-pressed') === 'true';
     check('the leader of three has the two team buttons on every color, and the room has no teams', button(0, 1) !== null && button(1, 1) !== null && button(2, 2) !== null && !lit(0, 1) && !lit(1, 1) && /Free for all/.test(env.$('teams-note').textContent));
-    for (let i = 0; i < 8; i++) env.$('next').click();
-    check('the map arrow held down (8 presses) sends 5 plans: the plan budget of the page is empty', plans().length === 5, String(plans().length));
+    const level = env.$('slots').querySelector('[data-mode="3"]');
+    for (let i = 0; i < 8; i++) { level.value = i % 2 ? 'medium' : 'easy'; env.$('slots').fire('change', { target: level }); }
+    check('the open color\'s level changed 8 times in a row sends 5 plans: the plan budget of the page is empty', plans().length === 5, String(plans().length));
     env.press(button(0, 1));
     check('a team button pressed alone is the page\'s own (a pair is what the room holds): lit, nothing sent', lit(0, 1) && plans().length === 5);
     env.press(button(1, 1));

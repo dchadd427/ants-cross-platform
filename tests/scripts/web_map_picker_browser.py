@@ -8,7 +8,7 @@ and drives the front page like a person: opens the list, switches the view, sear
   * desktop  the list opens (540 maps, the six originals first with their badge, then the most played), the Thumbnails switch is kept over a reload, a search with no result says "No maps found", a map
              chosen with the keyboard becomes the room's map (the server says so, the page shows its name and picture, and the file is fetched into the browser's cache at once), the list opens on it;
   * phone    the list is a sheet at the bottom of a 390 px screen, with no sideways scroll, in both views and when empty;
-  * error    the list of maps is down: the dialog says so, the old selector with the six originals still works;
+  * error    the list of maps is down: the dialog says so and still holds the six originals, which can be chosen;
   * match    a map of the players chosen in the lobby with a computer player at Red: START opens the game, the game has the file and the match runs;
   * solo     alone in the room on a map of the players, desktop and phone: the line under START is "A game for one" (no computer player asked for), START opens the game page's own game for one, which fetches
              the file and runs (and is still going after a few seconds).
@@ -73,7 +73,7 @@ class Visitor(Player):
         return self.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel [data-file] .pk-nm'), 0, %d).map(function (e) { return e.firstChild.textContent; })" % n) or []
 
     def open_list(self):
-        self.ev("document.getElementById('browse').click()")
+        self.ev("document.getElementById('change-map').click()")
         return bool(wait_for(lambda: self.rows() > 5, 15, 0.2))
 
     def visible(self):
@@ -165,8 +165,9 @@ def main():
             v = visitor()
             v.desktop()
             check(v.open_front(web), "the front page is up with its room")
-            check(v.ev("!document.getElementById('browse').hidden"), "the Browse all maps button is there")
-            check(v.ev("!!document.getElementById('prev') && !!document.getElementById('next') && document.getElementById('map').options.length >= 6"), "the old selector (previous, next, the drop-down) is still there")
+            check(v.ev("!document.getElementById('change-map').hidden"), "the Change map button is there")
+            check(v.ev("['map', 'prev', 'next', 'browse'].every(function (id) { return !document.getElementById(id); })"), "the old arrows, drop-down and Browse button are gone: one card")
+            check(v.ev("document.getElementById('map-name').textContent") == "Treasure", "the card names the room's map")
             check(v.open_list(), "the list opens")
             check(v.rows() == len(listing), "the list holds all %d maps (%d)" % (len(listing), v.rows()))
             names = v.names(8)
@@ -177,6 +178,9 @@ def main():
             check(v.ev("(function () { var i = document.querySelector('#picker-panel [data-file] img'); return i.getAttribute('width') === '64' && i.getAttribute('loading') === 'lazy' && i.getAttribute('alt') === '' && i.naturalWidth > 0; })()"), "the pictures are 64 px, lazy and loaded")
             check(v.ev("document.querySelectorAll('#picker-panel [data-file] img').length") == v.rows(), "every row has a picture (%s of %s)" % (v.ev("document.querySelectorAll('#picker-panel [data-file] img').length"), v.rows()))
             check(v.selected() == "TREASURE.LVL", "the room's map (Treasure) is the highlighted one (%s)" % v.selected())
+            check(v.ev("Array.prototype.map.call(document.querySelectorAll('#picker-panel .pk-h'), function (h) { return h.firstChild.textContent; }).join('|')") == "The six originals|Players' maps", "the two headings: the six originals, then the players' maps")
+            check(v.ev("Array.prototype.map.call(document.querySelectorAll('#picker-panel .pk-here'), function (b) { return b.parentNode.firstChild.textContent; }).join()") == "Treasure", "the room's map carries the In this room tag, and only it")
+            check(v.ev("(function () { var p = document.querySelector('#picker-panel .pk-pane'), r = p.getBoundingClientRect(); return getComputedStyle(p).display !== 'none' && r.width > 200 && p.querySelector('.pk-pn').textContent.indexOf('Treasure') === 0 && p.querySelector('.pk-pic').naturalWidth > 0; })()"), "on a wide screen the picked map is shown large beside the list")
             v.shot(args.shots, "picker-desktop-detail")
             v.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel .pk-chip')).filter(function (b) { return b.textContent === 'Thumbnails'; })[0].click()")
             check(v.ev("document.querySelector('#picker-panel .pk-grid') !== null && document.querySelector('#picker-panel [data-file] img').getAttribute('width') === '130'"), "Thumbnails: a grid of 130 px pictures")
@@ -208,12 +212,14 @@ def main():
             v.press("Enter")
             time.sleep(0.6)
             check(not v.visible(), "Enter chooses and closes the list")
-            check(v.ev("document.activeElement.id") == "browse", "the focus goes back to the Browse button")
+            check(v.ev("document.activeElement.id") == "change-map", "the focus goes back to the Change map button")
             room = server.room(v.room_code()) or {}
             check(room.get("map") == chosen, "the server's room is on the chosen map (%s)" % room.get("map"))
-            check(v.ev("document.getElementById('map-other').textContent") == chosen[:-4], "the drop-down shows its name")
+            check(v.ev("document.getElementById('map-name').textContent") == chosen[:-4], "the card shows its name")
+            facts = v.ev("Array.prototype.map.call(document.getElementById('map-facts').children, function (c) { return c.textContent; }).join()") or ""
+            check(facts.startswith("Players' map") or facts.startswith("Extended"), "and says what kind of map it is, then what the list knows of it (%s)" % facts)
             check(v.ev("document.getElementById('picker-panel').getAttribute('aria-labelledby')") == "picker-h", "the dialog is named by its heading")
-            check(bool(wait_for(lambda: v.ev("document.getElementById('preview').naturalWidth") == 300, 10)), "the picture beside the selector is the map's own (300 px)")
+            check(bool(wait_for(lambda: v.ev("document.getElementById('preview').naturalWidth") == 300, 10)), "the picture of the card is the map's own (300 px)")
             check(len(v.ev("document.getElementById('info').textContent")) > 0, "the Map Info line under the picture says something of it (%s)" % v.ev("document.getElementById('info').textContent"))
             check(("/maps/files/" + chosen) in front.requests, "the file was fetched at once (the browser's cache is warm)")
             v.shot(args.shots, "lobby-community-map-chosen")
@@ -222,25 +228,23 @@ def main():
             v.shot(args.shots, "picker-desktop-selected")
             v.press("Escape")
             check(not v.visible(), "Escape closes the list")
-            check(v.ev("document.getElementById('browse').getAttribute('aria-haspopup')") == "dialog", "the button says it opens a dialog")
+            check(v.ev("document.getElementById('change-map').getAttribute('aria-haspopup')") == "dialog", "the button says it opens a dialog")
             check(v.ev("document.querySelector('#picker-panel .pk-q').getAttribute('placeholder')") == "Search %d maps" % len(listing), "the search box says how many maps there are")
             check("30 seconds" in (v.ev("document.querySelector('#picker-panel .pk-fine').textContent") or ""), "the fine print about the plays is under the list")
-            v.ev("document.getElementById('next').click()")
-            time.sleep(0.5)
-            room = server.room(v.room_code()) or {}
-            check(room.get("map") == "TINY.LVL", "next from a map of the players goes to the first original (%s)" % room.get("map"))
 
-            def pick_top():
+            def pick(file):
                 v.open_list()
-                v.ev("document.querySelector('#picker-panel [data-file=\"%s\"]').click()" % top[0]["file"].replace('"', ''))
+                v.ev("document.querySelector('#picker-panel [data-file=\"%s\"]').click()" % file.replace('"', ''))
                 v.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel button')).filter(function (b) { return b.textContent === 'Choose map'; })[0].click()")
                 time.sleep(0.6)
-            pick_top()
-            v.ev("document.getElementById('prev').click()")
-            time.sleep(0.5)
+            pick("TINY.LVL")
             room = server.room(v.room_code()) or {}
-            check(room.get("map") == "ISLANDS.LVL", "previous from a map of the players goes to the last original (%s)" % room.get("map"))
-            pick_top()
+            check(room.get("map") == "TINY.LVL" and v.ev("document.getElementById('map-name').textContent") == "Tiny", "from a map of the players the list chooses an original (%s)" % room.get("map"))
+            check(v.ev("Array.prototype.map.call(document.getElementById('map-facts').children, function (c) { return c.textContent; })[0]") == "Original", "and the card says Original")
+            pick("ISLANDS.LVL")
+            room = server.room(v.room_code()) or {}
+            check(room.get("map") == "ISLANDS.LVL", "the last original too (%s)" % room.get("map"))
+            pick(top[0]["file"])
             plan = v.ev("document.getElementById('plan').textContent") or ""
             check(plan.startswith("A game for one"), "alone on a map of the players the line under START is the same as for an original (%s)" % plan)
             check("computer player" not in plan, "and it asks for no computer player")
@@ -293,14 +297,15 @@ def main():
             v = visitor("Cy")
             v.desktop()
             check(v.open_front(web), "the front page is up while the list of maps is down")
-            check(v.open_list() is False and "not available right now" in (v.ev("document.getElementById('picker-panel').textContent") or ""), "the dialog says that the list is not available")
-            check("six original maps" in (v.ev("document.getElementById('picker-panel').textContent") or ""), "and that the six originals can be chosen with the arrows")
+            v.ev("document.getElementById('change-map').click()")
+            check(bool(wait_for(lambda: "not available right now" in (v.ev("document.getElementById('picker-panel').textContent") or ""), 15, 0.2)), "the dialog says that the list is not available")
+            check("six original maps can still be chosen here" in (v.ev("document.getElementById('picker-panel').textContent") or "") and v.rows() == 6, "and holds the six originals (%d rows)" % v.rows())
             v.shot(args.shots, "picker-error")
-            v.press("Escape")
-            v.ev("document.getElementById('next').click()")
-            time.sleep(0.5)
+            v.ev("document.querySelector('#picker-panel [data-file=\"SMALL.LVL\"]').click()")
+            v.ev("Array.prototype.slice.call(document.querySelectorAll('#picker-panel button')).filter(function (b) { return b.textContent === 'Choose map'; })[0].click()")
+            time.sleep(0.6)
             room = server.room(v.room_code()) or {}
-            check(room.get("map", "").endswith(".LVL"), "the old selector still sets the room's map (%s)" % room.get("map"))
+            check(room.get("map") == "SMALL.LVL", "an original chosen from it sets the room's map (%s)" % room.get("map"))
             front.maps_down = False
 
         if wanted("match"):

@@ -1,0 +1,75 @@
+{
+ "note": "Mutants of the map card of the room (web/lobby.html: its name, chips and Change map button, the list's fallback and its In this room tag) for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's own code runs in the fake browser of tests/scripts/web_page_harness.js (tests/scripts/web_home_screen_check.js). The mutants of the list itself (headings, preview pane, fallback) are in tests/scripts/test_web_map_picker.py. Run from the checkout: python3 tools/mutate.py tests/data/map_card_mutants.json --keep-going --jobs 1 --timeout 120. Every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "card_name_is_not_written",
+   "file": "web/lobby.html",
+   "old": "setText($('map-name'), side.mapName);",
+   "new": "0;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "card_chips_are_not_written",
+   "file": "web/lobby.html",
+   "old": "now.forEach(function (t, i) { facts.appendChild(el('span', i ? '' : 'tag', t)); });",
+   "new": "0;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "card_kind_chip_is_not_tagged",
+   "file": "web/lobby.html",
+   "old": "el('span', i ? '' : 'tag', t)",
+   "new": "el('span', '', t)",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "card_facts_ignore_the_list",
+   "file": "web/lobby.html",
+   "old": "e = picker && model && model.mapFile ? picker.find(model.mapFile) : null;",
+   "new": "e = null;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "guest_sees_the_change_button",
+   "file": "web/lobby.html",
+   "old": "$('change-map').hidden = !window.AntsMapPicker || !model || !!model.guest;",
+   "new": "$('change-map').hidden = !window.AntsMapPicker || !model;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "host_button_stays_on_after_start",
+   "file": "web/lobby.html",
+   "old": "$('change-map').disabled = side.mapDisabled;",
+   "new": "$('change-map').disabled = false;",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "focus_does_not_return_to_change_map",
+   "file": "web/lobby.html",
+   "old": "onClose: function () { inert(false); $('change-map').focus(); },",
+   "new": "onClose: function () { inert(false); },",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "list_has_no_originals_without_the_server_list",
+   "file": "web/lobby.html",
+   "old": "originals: Rules.MAPS });",
+   "new": "originals: [] });",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "list_does_not_know_the_rooms_map",
+   "file": "web/lobby.html",
+   "old": "room: function () { return model ? model.mapFile : ''; },",
+   "new": "room: function () { return ''; },",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "change_map_does_not_open_the_list",
+   "file": "web/lobby.html",
+   "old": "$('change-map').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });",
+   "new": "$('change-map').addEventListener('click', function () { });",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  }
+ ]
+}
