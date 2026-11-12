@@ -33,7 +33,7 @@ function between(text, begin, end) {
 const shellText = fs.readFileSync(shellPath, 'utf8');
 const code = ['ANTS_PAGE', 'NAME', 'REJOINKEY', 'NAMEGATE'].map((m) => between(shellText, m + '_BEGIN', m + '_END')).join('\n')
     + '\nreturn { P: ANTS_PAGE, holdsThisSeat: holdsThisSeat };';
-const shell = new Function('window', 'document', code)({ location: { search: '' }, localStorage: null }, {
+const shell = new Function('window', 'document', code)({ location: { search: '' }, localStorage: null, AntsRejoinKey: require(path.join(path.dirname(path.resolve(shellPath)), 'rejoin_key.js')) }, {
     getElementById() { return { setAttribute() {}, classList: { add() {} } }; },
     querySelectorAll() { return []; },
     body: { style: { setProperty() {} } },
