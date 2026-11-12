@@ -23,6 +23,7 @@ A second nginx has no server behind it, for the answers of the named locations (
 import base64
 import gzip
 import hashlib
+import json
 import http.client
 import http.server
 import os
@@ -166,6 +167,18 @@ class TheText(unittest.TestCase):
     def test_every_host_name_is_served(self):
         self.assertEqual(len(re.findall(r"^\s*server\s*\{", CONF, re.M)), 1)
         self.assertNotIn("default_server", CONF)                                                   # (the public names, the staging site and a self-hosted name differ, and the health check asks for 127.0.0.1)
+
+    def test_the_manifest_has_one_exact_location_of_its_own_with_its_type_its_caching_and_the_headers_of_a_static_file(self):
+        found = [words for words, _ in locations() if "manifest" in words]
+        self.assertEqual(found, ["= /manifest.webmanifest"])                                       # (an exact location: the fallback for an unknown address is the game page)
+        block = dict(locations())["= /manifest.webmanifest"]
+        for line in ("default_type application/manifest+json;", 'add_header Cache-Control "no-cache, must-revalidate" always;', 'add_header Cross-Origin-Opener-Policy "same-origin" always;',
+                     'add_header Cross-Origin-Embedder-Policy "require-corp" always;', 'add_header X-Content-Type-Options "nosniff" always;', HSTS_LINE):
+            self.assertEqual(block.count(line), 1, line)
+        self.assertNotIn("try_files", block)
+        self.assertNotIn("Content-Security-Policy", block)
+        self.assertNotIn("manifest-src", CONF)                                                     # (default-src 'self' covers the manifest: the policy of the pages is not widened)
+        self.assertNotIn("service-worker", CONF.lower())
 
     def test_the_documents_name_what_is_built(self):
         text = stats.read("docs", "BUILD_AND_RUN.md")
@@ -336,6 +349,10 @@ def expected(kind, host=SITE):
                               "x-frame-options": "DENY", "referrer-policy": "no-referrer", "permissions-policy": ADMIN_PERMISSIONS, "cache-control": "no-store"})
     if kind in ("plain", "door"):
         return dict(cross, **no_page)
+    if kind == "manifest":                                   # (the web app's manifest: the four headers of any static file, revalidated, its own type; no page header)
+        return dict(cross, **dict(no_page, **{"cache-control": "no-cache, must-revalidate", "content-type": "application/manifest+json"}))
+    if kind == "icon":                                       # (the web app's icons: the picture rule, a week)
+        return dict(cross, **dict(no_page, **{"cache-control": "public, max-age=604800, no-transform", "content-type": "image/png"}))
     if kind == "open":                                       # (the sprites and sounds that any site may use: their own cross-origin headers, none of the page's)
         return dict(no_page, **{"cross-origin-resource-policy": "cross-origin", "access-control-allow-origin": "*", "x-content-type-options": "nosniff", "strict-transport-security": HSTS,
                                 "cross-origin-opener-policy": None, "cross-origin-embedder-policy": None})
@@ -389,6 +406,10 @@ LIVE_ROWS = [
     ("a script", "GET", "/shapes.js", (), 200, "plain"),
     ("the home screen's script", "GET", "/home/home.js", (), 200, "plain"),
     ("a picture", "GET", "/front/logo.png", (), 200, "plain"),
+    ("the web app's manifest", "GET", "/manifest.webmanifest", (), 200, "manifest"),
+    ("the web app's manifest with a query", "GET", "/manifest.webmanifest?v=1", (), 200, "manifest"),
+    ("the web app's icon", "GET", "/app/icon-192.png?v=0a1b2c3d", (), 200, "icon"),
+    ("the web app's Apple icon", "GET", "/app/apple-touch-icon.png", (), 200, "icon"),
     ("the favicon", "GET", "/favicon.png", (), 200, "plain"),
     ("the old favicon", "GET", "/favicon.ico", (), 200, "plain"),
     ("a sound", "GET", "/front/click.wav", (), 200, "plain"),
@@ -451,7 +472,7 @@ def docroot_files():
     big = (b"ANTS " + bytes(range(32, 120))) * 4000
     files = {name: page % name for name in ("lobby.html", "index.html", "play.html", "matches.html", "match.html", "live.html", "legal.html", "changelog.html", "mapmaker.html", "admin.html", "asset_catalog/index.html")}
     files.update({"front/classic.css": "body { color: #222; }\n" * 80, "front/big.css": ".a { color: red; }\n" * 400, "shapes.js": "var shapes = 1;\n" * 80, "home/home.js": "var home = 1;\n" * 80, "asset_catalog/catalog_data.js": "var data = 1;\n" * 80,
-                  "front/logo.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
+                  "front/logo.png": "\x89PNG stand-in", "manifest.webmanifest": stats.read("web", "manifest.webmanifest"), "app/icon-192.png": "\x89PNG stand-in", "app/apple-touch-icon.png": "\x89PNG stand-in", "favicon.png": "\x89PNG stand-in", "favicon.ico": "ico stand-in", "front/click.wav": "RIFF stand-in", "mapmaker_atlas/atlas.json": '{"v":1}', "mapmaker_atlas/ground.png": "\x89PNG stand-in",
                   "asset_catalog/sprites/s1.png": "\x89PNG stand-in", "asset_catalog/sounds/a.wav": "RIFF stand-in", "lvl_core.wasm": "\0asm stand-in", "index.js": big[:50000], "index.wasm": big[:120000], "index.data": big})
     return files
 
@@ -564,6 +585,33 @@ class TheFileRuns(unittest.TestCase):
             answer = fetch(self.live.port, path, method, headers, body=b"x" if method == "POST" and path.startswith("/test-maps") else b"")
             self.assertEqual(answer.status, status, "%s (%s %s)" % (what, method, path))
             self.check("%s (%s %s)" % (what, method, path), answer, kind)
+
+    def test_the_manifest_is_the_file_and_never_the_game_page_even_when_the_file_is_missing(self):
+        want = stats.read("web", "manifest.webmanifest").encode("utf-8")
+        answer = fetch(self.live.port, "/manifest.webmanifest")
+        self.assertEqual(answer.body, want)
+        self.assertNotIn(b"<html", answer.body.lower())
+        self.assertTrue(json.loads(answer.body)["icons"])
+        path = os.path.join(self.docroot, "manifest.webmanifest")
+        os.rename(path, path + ".away")
+        try:
+            gone = fetch(self.live.port, "/manifest.webmanifest")
+            self.assertEqual(gone.status, 404)                                                     # (an unknown address falls back to the game page: this one must not)
+            self.assertNotIn(b"a stand-in page", gone.body)
+            self.assertEqual(fetch(self.live.port, "/manifest.webmanifest.x").status, 200)         # (only the exact address is special: any other unknown address is still the game page)
+        finally:
+            os.rename(path + ".away", path)
+        self.assertEqual(fetch(self.live.port, "/manifest.webmanifest", "HEAD").status, 200)
+        self.assertEqual(fetch(self.live.port, "/manifest.webmanifest", "POST", body=b"x").status, 405)
+
+    def test_the_policy_of_the_pages_is_the_one_that_it_was_and_covers_the_manifest_and_the_icons_without_a_new_directive(self):
+        for path in ("/", "/play", "/matches", "/legal"):
+            policy = parse_csp(fetch(self.live.port, path).get("content-security-policy"))
+            self.assertEqual(policy["default-src"], ["'self'"], path)
+            self.assertNotIn("manifest-src", policy, path)
+            self.assertNotIn("https:", policy["img-src"], path)
+        self.assertEqual(parse_csp(fetch(self.live.port, "/").get("content-security-policy")), page_policy(SITE))
+        self.assertEqual(parse_csp(fetch(self.live.port, "/play").get("content-security-policy")), game_policy(SITE))
 
     def test_the_named_answers_for_a_server_that_is_not_there_carry_theirs(self):
         for what, method, path, headers, status, kind in DEAD_ROWS:

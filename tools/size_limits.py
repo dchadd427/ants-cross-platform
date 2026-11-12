@@ -60,6 +60,9 @@ PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 33_000, 10_500
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 56_500, 18_000
 TALK_BUDGET, TALK_GZIP_BUDGET = 24_500, 8_800
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
+# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 66,850 bytes), and the manifest (measured 1,166, revalidated on every visit)
+APP_ICONS_BUDGET = 73_600
+APP_MANIFEST_BUDGET = 1_300
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
 NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 5_900, 1_900
 NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 4_400, 1_800
