@@ -37,7 +37,8 @@ HUB_CHECK = os.path.join(REPO, "tests", "scripts", "web_home_chat_hub_check.js")
 NODE = shutil.which("node")
 FILES = ("chat.js", "chat.css")
 LOGIN_LINK = 'href="/hub/login?next=home"'      # (the one thing that a page may say of the hub in its markup: the plain link of the name card that logs a guest in; tests/scripts/test_web_name.py)
-CHAT_BUDGET, CHAT_GZIP_BUDGET = 52500, 16400           # bytes, raw and gzipped, both files together (about 48,600 and 15,200, with the login: the button, the chip, the account line, the mark of Discord; and with its queue of lines that wait for an answer; raised from 51,000 and 15,900 on purpose for the two names (docs/HUB.md, "Names"): the switch in the account menu, the key that tells a line's author, the username that a moderator sees, about 1,550 bytes and 460 gzipped, when 204 and 37 were left, with the one cleaner of a name that replaced two): they load after the first paint, so they cost the first look nothing
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import CHAT_BUDGET, CHAT_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(*parts):
@@ -439,7 +440,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])
@@ -448,6 +449,9 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     def setUpClass(cls):
         with open(os.path.join(REPO, "tests", "data", "home_chat_mutants.json"), encoding="utf-8") as f:
             cls.spec = json.load(f)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import mutant_shard                     # (here and not at the top: the copies in which the mutants run have this file but not that one, and run the other classes)
+        cls.mutants = mutant_shard.from_environment(cls.spec["mutants"])     # (all of them, or the units of tests/scripts/run_python_tests.py: ANTS_MUTANT_SHARD=K/N)
         cls.folder = tempfile.mkdtemp(prefix="ants_home_chat_mutants.")
         for name in cls.FILES:
             os.makedirs(os.path.dirname(os.path.join(cls.folder, *name.split("/"))), exist_ok=True)
@@ -462,7 +466,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         return done.returncode, done.stdout + done.stderr
 
     def test_the_copy_with_nothing_changed_passes(self):
-        for command in sorted({m["test"] for m in self.spec["mutants"]}):
+        for command in sorted({m["test"] for m in self.mutants}):
             status, out = self.run_command(command)
             self.assertEqual(status, 0, command + "\n" + out[-3000:])
 
@@ -470,7 +474,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         missed = []
-        for m in self.spec["mutants"]:
+        for m in self.mutants:
             path = os.path.join(self.folder, *m["file"].split("/"))
             with open(path, encoding="utf-8", newline="") as f:
                 text = f.read()

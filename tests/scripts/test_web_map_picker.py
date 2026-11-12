@@ -51,7 +51,6 @@ class ThePage(unittest.TestCase):
         self.assertTrue("onOpen: function () { inert(true); }, onClose: function () { inert(false); $('browse').focus(); }" in self.page)
         for ident in ('<header class="mast">', 'id="banner"', 'id="rejoin"', 'id="lobby"', 'id="footer-bar"'):
             self.assertTrue(ident in self.page, ident)
-        self.assertLessEqual(self.page.count("\n"), 1500)
 
     def test_the_scripts_come_before_the_pages_own_in_this_order(self):
         self.assertTrue('<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>' in self.page)
@@ -82,7 +81,7 @@ class ThePage(unittest.TestCase):
         self.assertTrue(re.search(r"https?://|@import", self.css) is None)
 
     def test_the_lists_rules_are_in_its_own_stylesheet_which_the_page_links_after_its_own_style(self):
-        """the rules of the map list left web/lobby.html (at the 1500 lines of tools/check_hygiene.py) for web/front/map_picker.css, which is linked after the page's <style>: a rule that wins a tie
+        """the rules of the map list left web/lobby.html for web/front/map_picker.css, which is linked after the page's <style>: a rule that wins a tie
         by order (.pickhow .panel against .how .panel) still comes later, as it did"""
         self.assertNotRegex(re.search(r"<style>.*?</style>", self.page, re.S).group(0), r"\.pk-|\.pickhow")
         self.assertTrue(self.page.index('<link rel="stylesheet" href="front/map_picker.css">') > self.page.index("</style>"))

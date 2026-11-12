@@ -699,14 +699,16 @@ class TheNamesAreNotKeys(WorldTest):
         self.assertEqual([h["k"] for h in self.w.chat.welcome(self.reader)["history"]], [lines[0]["k"], lines[1]["k"]])
 
     def test_a_key_is_twelve_hex_digits_that_name_nobody_after_a_restart(self):
-        self.w.chat.salt = bytes(range(16))                                       # (a fixed salt: with a random one, about one run in 7,000 makes a key that holds the four digits by chance)
-        key = self.w.chat.key_of("1101")
+        started = self.w.chat.key_of("1101")                    # (the salt of this start)
+        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
+        self.assertNotEqual(started, again.key_of("1101"))      # (two starts make two salts: the same key at every start would name one account across starts)
+        self.w.chat.salt = b"test-salt-0"                       # (a fixed salt from here: the key is then one value, and "does not show the id" is a check of that value; with a random salt a key of hex digits
+        key = self.w.chat.key_of("1101")                        # could by chance hold the four digits of the id, which says nothing of whether the id can be read out of it)
         self.assertRegex(key, r"^[0-9a-f]{12}$")
+        self.assertEqual(key, "49a527f8f2b6")
         self.assertNotIn("1101", key)
         self.assertEqual(key, self.w.chat.key_of("1101"))
         self.assertNotEqual(key, self.w.chat.key_of("1102"))
-        again = chatmod.Chat(self.w.store, self.w.roles, LIMITS, self.w.clock, True)
-        self.assertNotEqual(key, again.key_of("1101"))
 
     def test_a_mute_takes_the_username_and_hits_that_account_whatever_the_names_shown(self):
         self.w.say(self.a, "hello")

@@ -73,8 +73,7 @@ class ThePage(unittest.TestCase):
         self.assertIn("gameType.paint({ id: m.mode, guest: v.guest, disabled: v.ro });", self.page)
         self.assertIn("setText($('mode-tag'), Modes.tagOf(m.mode)); $('mode-tag').hidden = !Modes.tagOf(m.mode);", self.page)
 
-    def test_the_page_stays_within_its_line_limit_and_the_control_is_not_in_it(self):
-        self.assertLessEqual(self.page.count("\n") + 1, 1500)
+    def test_the_control_is_not_in_the_page(self):
         for word in ("gt-combo", "gt-opt", "aria-activedescendant"):
             self.assertNotIn(word, self.page, word)
 

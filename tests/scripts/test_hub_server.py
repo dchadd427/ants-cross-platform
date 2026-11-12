@@ -575,9 +575,26 @@ class TheFreeRefusalsCostFramesOnTheWire(RigTest):
 
     def test_a_socket_that_keeps_asking_while_the_hub_is_busy_is_cut_off_sooner_than_it_would_have_been(self):
         alice = self.connect("1001:alice")
+        closed = None
         for n in range(10):                                                              # (the first line is kept; the other nine are answered `rate` with no mistake counted: without the charge they cost nine frames of the ten)
-            alice.say("line number %d" % n)
-        self.assertEqual(alice.expect_close(3), 1008)
+            try:
+                alice.say("line number %d" % n)
+            except (BrokenPipeError, ConnectionResetError):                              # (the hub has cut this socket off already: that is what is being waited for; the close frame is read below)
+                break
+            try:                                                                         # (the next line goes out only after the hub has answered this one or closed, so that the hub has read
+                while closed is None:                                                    # everything that was sent when it closes, and does not reset the socket under the close frame)
+                    opcode, payload = alice.recv_frame(1.5)
+                    if opcode == 8:
+                        closed = struct.unpack("!H", payload[:2])[0] if len(payload) >= 2 else 1005
+                    elif opcode == 1:
+                        break
+            except socket.timeout:                                                       # (a line that is not answered at all)
+                pass
+            except EOFError:
+                break
+            if closed is not None:
+                break
+        self.assertEqual(closed if closed is not None else alice.expect_close(3), 1008)
 
 
 class TheModeratorsOnTheWire(RigTest):

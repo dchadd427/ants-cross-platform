@@ -6,7 +6,7 @@ script and a style that the page loads after its first paint, in the folder of t
 drawn as text only.
 
   - the page: what the script reads of web/lobby.html is there (the heading, the colors, the strips, the Rejoin button), the page hands it its small bridge (the client, the look at a room, a typed code, the name), the
-    page's probe leaves the old room only when the new one welcomes the page, and the page is still under its line limit;
+    page's probe leaves the old room only when the new one welcomes the page;
   - the folder: games.js and games.css, under their budgets (raw and gzipped), plain ES5, no markup written anywhere (no innerHTML and no neighbors of it), no address of another site, nothing kept in the browser, one
     address that is asked for (/lobbies, no query, no cookies);
   - the style: every target at least 44 px high and wide, a layout for a phone, a short window and a wide one, nothing loaded from another site, nothing that scrolls sideways;
@@ -22,7 +22,9 @@ import json
 import os
 import re
 import shutil
+import sys
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -33,8 +35,8 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_check.js", "web_home_games_room_check.js", "web_home_games_quickjoin_check.js", "web_home_games_live_check.js")]
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
-GAMES_BUDGET, GAMES_GZIP_BUDGET = 90 * 1000, 25500      # bytes, raw and gzipped, both files together (about 86,000 and 24,200; raised on purpose from 78,000 and 22,500 for the rows of the matches in progress with Watch, their switch, the parser of GET /live and its looks): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
-LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import GAMES_BUDGET, GAMES_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(*parts):
@@ -98,9 +100,6 @@ class ThePage(unittest.TestCase):
 
     def test_the_map_picker_comes_before_home_so_that_it_is_there_when_the_list_runs(self):
         self.assertLess(self.page.index('<script src="front/map_picker.js"></script>'), self.page.index('<script src="home/home.js"></script>'), "the list's script (loaded after the first paint) reads AntsMapPicker from the window")
-
-    def test_the_page_is_under_its_line_limit(self):
-        self.assertLessEqual(len(self.page.split("\n")) - 1, LINES, "tools/check_hygiene.py: the page's line limit")
 
     def test_the_card_of_a_code_that_was_typed_is_the_one_that_the_names_of_links_use(self):
         self.assertEqual(self.page.count("askName({"), 2, "a link and a typed code are the two things that ask for a name")
@@ -370,7 +369,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_games_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the copy with
     nothing changed must pass"""
-    FILES = ["web/lobby.html", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
+    FILES = ["tools/size_limits.py", "web/lobby.html", "web/front/player_name.js", "web/home/home.js", "web/home/home.css", "web/home/chat.css", "web/home/games.js", "web/home/games.css", "web/shapes.js", "tests/scripts/test_web_home_games.py", "tests/scripts/web_home_games_check.js",
              "tests/data/home_games_thumbs.json", "Community-Maps/previews.json",
              "tests/scripts/web_home_games_room_check.js", "tests/scripts/web_home_games_quickjoin_check.js", "tests/scripts/web_home_games_rig.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml"] \
         + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")]
@@ -379,6 +378,9 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     def setUpClass(cls):
         with open(os.path.join(REPO, "tests", "data", "home_games_mutants.json"), encoding="utf-8") as f:
             cls.spec = json.load(f)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import mutant_shard                     # (here and not at the top: the copies in which the mutants run have this file but not that one, and run the other classes)
+        cls.mutants = mutant_shard.from_environment(cls.spec["mutants"])     # (all of them, or the units of tests/scripts/run_python_tests.py: ANTS_MUTANT_SHARD=K/N)
         cls.folder = tempfile.mkdtemp(prefix="ants_games_mutants.")
         for name in cls.FILES:
             os.makedirs(os.path.dirname(os.path.join(cls.folder, *name.split("/"))), exist_ok=True)
@@ -393,14 +395,14 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         return done.returncode, done.stdout + done.stderr
 
     def test_the_copy_with_nothing_changed_passes(self):
-        status, out = self.run_command(self.spec["mutants"][0]["test"])
+        status, out = self.run_command(self.mutants[0]["test"])
         self.assertEqual(status, 0, out[-3000:])
 
     def test_every_mutant_is_seen(self):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         missed = []
-        for m in self.spec["mutants"]:
+        for m in self.mutants:
             path = os.path.join(self.folder, *m["file"].split("/"))
             with open(path, encoding="utf-8", newline="") as f:
                 text = f.read()
