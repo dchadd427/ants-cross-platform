@@ -927,9 +927,8 @@ def main():
             check(tab.ev(gone) is True, "a drag along the bottom edge (a button down) does not open it")
             tab.mouse("mouseMoved", 400, H - 30, button="none")                    # rests in the zone
             check(until(tab, "!" + gone, 2) is True and until(tab, shown, 2) is True, "the pointer resting in the bottom zone opens it (peek)")
-            check(tab.ev("document.getElementById('b-handle').hidden") is False and tab.ev("document.getElementById('b-handle').getAttribute('aria-label')") == "Keep the bar open", "the handle stays while the bar only peeks (a press keeps the bar open)")
+            check(tab.ev("document.getElementById('b-handle').hidden") is True and tab.ev("getComputedStyle(document.getElementById('b-handle')).display") == "none", "while the bar peeks there is no handle (the chevron is the only arrow)")
             tab.ev(calm)
-            check(tab.ev("(function () { var h = document.getElementById('b-handle').getBoundingClientRect(); var e = document.elementFromPoint(h.left + h.width / 2, h.top - 10); return !!e && e.id !== 'b-handle'; })()") is True, "over a peeking bar the handle takes no press above its own 14 px (it never covers the controls)")
             shot(tab, "bar-peek-1280")
             tab.mouse("mouseMoved", 400, 300, button="none")
             check(tab.ev(gone) is False, "a peek stays a moment after the pointer leaves (about 700 ms)")

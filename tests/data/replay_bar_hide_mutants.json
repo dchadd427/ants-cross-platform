@@ -330,12 +330,20 @@
    "why": "a finger would not be told how to bring a hidden bar back"
   },
   {
-   "id": "handle_hit_area_covers_the_bar",
+   "id": "handle_shows_over_a_shown_bar",
    "file": "web/shell.html",
-   "old": ".rhandle[aria-expanded=\"true\"]::before { display: none; } ",
+   "old": "$('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() === 'hidden');",
+   "new": "$('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() !== 'open');",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a peeking bar would have a second arrow and a handle that lies over its controls"
+  },
+  {
+   "id": "focus_is_lost_with_the_handle",
+   "file": "web/shell.html",
+   "old": "if (m !== 'hidden' && fromHandle) $('b-tab').focus();",
    "new": "",
    "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
-   "why": "the handle's tall invisible hit area would lie over the controls of a peeking bar and take their clicks"
+   "why": "a keyboard user whose handle goes away when the bar shows would lose the focus"
   },
   {
    "id": "hidden_hint_names_the_edge",

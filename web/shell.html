@@ -1068,7 +1068,7 @@
         /* hidden by the viewer (the chevron or the B key): the bar is not there at all (no hit, no focus) until the handle, the key or the mouse resting at the bottom edge calls it (docs/REPLAYS.md "Hiding the bar") */
         .rbar.over.gone { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(14px); transition: opacity .2s ease, transform .2s ease, visibility 0s .2s; }
         .rhandle { position: absolute; left: 50%; bottom: env(safe-area-inset-bottom, 0px); transform: translateX(-50%); z-index: 61; display: flex; align-items: flex-start; justify-content: center; width: 44px; height: 14px; padding: 0; color: var(--cream); background: rgba(7, 11, 15, .9); border: 2px solid var(--frame); border-bottom: 0; border-radius: 8px 8px 0 0; cursor: pointer; touch-action: none; }
-        .rhandle::before { content: ""; position: absolute; left: -12px; right: -12px; top: -30px; bottom: 0; } .rhandle svg { width: 18px; height: 9px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; } .rhandle[aria-expanded="true"]::before { display: none; } .rhandle:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+        .rhandle::before { content: ""; position: absolute; left: -12px; right: -12px; top: -30px; bottom: 0; } .rhandle svg { width: 18px; height: 9px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; display: block; } .rhandle:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
         @media (prefers-reduced-motion: reduce) { .rbar.over, .rbar.over.gone { transition: none; } } @media (forced-colors: active) { .rhandle { color: ButtonText; background: ButtonFace; border-color: ButtonText; } .rhandle:focus-visible { outline-color: Highlight; } }
         .rbar.over { touch-action: none; }                                      /* (a swipe down on the bar is the page's: the browser does not take it for a scroll) */
         .rbar.over .rtag { left: 14px; transform: none; font-size: 14px; }
@@ -3469,13 +3469,13 @@
                 var bar = $('rbar');
                 var gone = bar.classList.contains('over') && zone.mode() === 'hidden';
                 $('redge').hidden = !(touchSeen && bar.classList.contains('over') && bar.classList.contains('idle') && !gone);       // (a hidden bar has the handle, not the strip)
-                $('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() !== 'open');       // (the handle stays while the bar only peeks: a press keeps it open)
+                $('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() === 'hidden');       // (the handle is there only while the bar is hidden: over a shown bar the chevron is the one arrow)
             }
             // the bar's three states (R.barZone): open (as ever), hidden (the viewer's choice: only the handle shows) and peek (called by the mouse at the bottom edge, goes back by itself)
             function applyZone(m) {
-                var bar = $('rbar');
+                var bar = $('rbar'), fromHandle = document.activeElement === $('b-handle');
                 bar.classList.toggle('gone', m === 'hidden');
-                $('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-label', m === 'peek' ? 'Keep the bar open' : 'Show the bar');
+                $('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); if (m !== 'hidden' && fromHandle) $('b-tab').focus();       // (the handle goes when the bar shows: the focus goes to the chevron)
                 syncEdge(); if (m === 'hidden') {
                     clearTimeout(idleTimer); barLock.hideMark(); if (bar.contains(document.activeElement)) $('b-handle').focus();
                     if (touchSeen && !noteShown) { noteShown = true; $('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back'; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)

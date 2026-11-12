@@ -27,15 +27,15 @@ class TheStyleAndTheMarkup(unittest.TestCase):
     def test_the_handle_is_a_focusable_button_with_the_state_in_aria_and_the_chevron_says_it_too(self):
         self.assertRegex(self.page, r'<button class="rhandle rep-only" type="button" id="b-handle" aria-label="Show the bar" aria-controls="rbar" aria-expanded="false"[^>]*hidden>')
         self.assertRegex(self.page, r'<button class="rtab" type="button" id="b-tab" aria-label="Hide the bar" aria-expanded="true"')
-        self.assertIn("$('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); $('b-handle').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true');", self.glue)
-        self.assertIn("m === 'peek' ? 'Keep the bar open' : 'Show the bar'", self.glue)
+        self.assertIn("$('b-tab').setAttribute('aria-expanded', m === 'hidden' ? 'false' : 'true'); if (m !== 'hidden' && fromHandle) $('b-tab').focus();", self.glue)
+        self.assertNotIn("Keep the bar open", self.page)                                                     # (no handle over a shown bar: nothing to keep open with it)
 
     def test_the_handle_is_thin_big_enough_to_hit_and_leaves_the_picture_to_the_game(self):
         rule = re.search(r"\.rhandle \{([^}]*)\}", self.page).group(1)
         for text in ("width: 44px;", "height: 14px;", "bottom: env(safe-area-inset-bottom, 0px);", "touch-action: none;"):
             self.assertIn(text, rule)
         self.assertRegex(self.page, r'\.rhandle::before \{ content: ""; position: absolute; left: -12px; right: -12px; top: -30px; bottom: 0; \}')       # (a hit area of 44 px high, invisible)
-        self.assertIn('.rhandle[aria-expanded="true"]::before { display: none; }', self.page)               # (the invisible hit area is for a finger on a hidden bar only: over a peeking or open bar it would cover the controls)
+        self.assertIn("$('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() === 'hidden');", self.glue)       # (the handle shows only while the bar is hidden: never a second arrow over a shown bar, and no tall hit area over its controls)
         self.assertIn(".rhandle:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }", self.page)
         self.assertIn(".rhandle[hidden]", self.page)                                                         # (no markup of the handle shows while the attribute is there)
         self.assertNotIn("rzone", self.page)                                                                 # (the hot zone is a rectangle that the script reads: no element lies over the picture)
