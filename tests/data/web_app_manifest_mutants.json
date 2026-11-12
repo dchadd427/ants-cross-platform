@@ -249,8 +249,8 @@
   {
    "id": "ci_check_without_maskable_icon",
    "file": ".github/workflows/ci.yml",
-   "old": " app/icon-maskable-512.png app/apple-touch-icon.png &&",
-   "new": " app/apple-touch-icon.png &&",
+   "old": " app/icon-maskable-512.png app/apple-touch-icon.png home/home.js",
+   "new": " app/apple-touch-icon.png home/home.js",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
