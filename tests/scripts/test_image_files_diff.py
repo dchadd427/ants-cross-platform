@@ -791,14 +791,19 @@ class TheCiJob(unittest.TestCase):
         self.assertIn("      - name: Build the images from the pull request's base Dockerfiles and from this tree's, and compare their files\n        if: steps.decide.outputs.run == 'true'\n"
                       "        env:\n          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}\n        run: bash tools/image_files_diff.sh --base \"$PR_BASE_SHA\" --diagnose\n", self.job + "\n")
         self.assertIn("        env:\n          EVENT: ${{ github.event_name }}\n          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}\n", self.job)
-        self.assertIn('changed=$(git diff --name-only "$PR_BASE_SHA" HEAD)', self.job)
-        self.assertIn('[ "$EVENT" = pull_request ]', self.job)
+        self.assertIn('          case "$EVENT" in\n            pull_request)\n', self.job)
         self.assertIn("fetch-depth: 0", self.job)                  # (the base commit must be there)
         self.assertNotIn("origin/main", "\n".join(self.code()), "a pull request into another branch is compared with its own base")
 
-    def test_the_trigger_is_the_whole_pattern_of_the_files_that_the_images_depend_on(self):
-        self.assertIn("            if echo \"$changed\" | grep -Eq '^(Dockerfile|Dockerfile\\.server|docker/emsdk_warm\\.cpp|tools/image_files_diff\\.sh|tools/image_manifest\\.py|tools/link_inputs\\.py|tools/relink_outputs\\.sh)$'; then run=true; fi\n", self.job)
-        self.assertNotIn("Dockerfile\\.hub", self.job, "the hub's image is not part of the check")
+    def test_the_trigger_is_the_whole_list_of_the_files_that_the_images_depend_on(self):
+        """The decision is made by git (a pathspec: a failing git fails the step, nothing is matched by a grep whose error would read as "no"), with no `if` line (a gate in the workflow's own test
+        must be a plain command)."""
+        self.assertIn("              changed=$(git diff --name-only \"$PR_BASE_SHA\" HEAD -- Dockerfile Dockerfile.server docker/emsdk_warm.cpp tools/image_files_diff.sh tools/image_manifest.py tools/link_inputs.py "
+                      "tools/relink_outputs.sh)\n", self.job)
+        self.assertIn('              [ -z "$changed" ] || run=true\n', self.job)
+        self.assertNotIn("Dockerfile.hub", self.job, "the hub's image is not part of the check")
+        self.assertNotIn("grep", "\n".join(self.code()), "a grep whose own failure would read as no change")
+        self.assertNotRegex("\n".join(self.code()), r"(?m)^\s+(if|elif|while)\b(?!:)")
         self.assertIn('          run=false\n', self.job)
         self.assertIn('          echo "run=$run" >> "$GITHUB_OUTPUT"\n', self.job)
 

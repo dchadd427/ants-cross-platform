@@ -9,6 +9,7 @@ taught the tests).
 """
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -20,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.join(HERE, "run_python_tests.py")
 sys.path.insert(0, HERE)
 import run_python_tests as rpt     # noqa: E402
+import mutant_shard                # noqa: E402
 
 PASSING = "import unittest\nclass Good(unittest.TestCase):\n    def test_one(self):\n        pass\n    def test_two(self):\n        self.assertEqual(1, 1)\n"
 FAILING = "import unittest\nclass Bad(unittest.TestCase):\n    def test_it_fails(self):\n        self.fail('this is the message of the failure')\n"
@@ -211,6 +213,49 @@ class Wrapper(unittest.TestCase):
             rpt.LINUX_ONLY.clear()
             rpt.LINUX_ONLY.update(saved)
 
+    def test_a_sharded_class_is_units_that_each_get_their_number_and_the_others_get_none(self):
+        self.add("test_big.py", "import os, unittest\nclass Big(unittest.TestCase):\n    def test_it(self):\n        print('SHARD=' + os.environ.get('%s', 'none'))\n" % rpt.SHARD_ENV)
+        self.add("test_small.py", "import os, unittest\nclass Small(unittest.TestCase):\n    def test_it(self):\n        print('SHARD=' + os.environ.get('%s', 'none'))\n" % rpt.SHARD_ENV)
+        saved, saved_costs, saved_linux = dict(rpt.SHARDS), dict(rpt.COSTS), set(rpt.LINUX_ONLY)
+        os.environ[rpt.SHARD_ENV] = "9/9"                                            # (a caller's variable must not reach a group that is not sharded)
+        try:
+            rpt.SHARDS.clear()
+            rpt.SHARDS["test_big.Big"] = 3
+            rpt.COSTS.clear()
+            rpt.COSTS["test_big.Big"] = 100
+            def here(*args):                    # (in this process: SHARDS and COSTS are patched here)
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    self.assertEqual(rpt.main(["run_python_tests.py", "--dir", self.scripts, "--list", *args]), 0)
+                return [line.split("\t")[0] for line in out.getvalue().splitlines()]
+            listing = here()
+            self.assertEqual(listing, ["test_big.Big[1/3]", "test_big.Big[2/3]", "test_big.Big[3/3]", "test_small.Small"])
+            self.assertEqual([rpt.cost_of(label) for label in listing], [34, 34, 34, 1])        # (the class's cost shared, rounded up)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(rpt.main(["run_python_tests.py", "--dir", self.scripts, "--jobs", "2"]), 0)
+            self.assertIn("Ran 4 tests in 4 groups", out.getvalue())
+            # what each unit saw, by running them as the runner does
+            seen = {}
+            for label, dotted in rpt.units(self.scripts, "tests.scripts"):
+                result = rpt.run_unit(label, dotted, self.tmp.name)
+                seen[label] = [line for line in result["output"].splitlines() if line.startswith("SHARD=")]
+            self.assertEqual(seen, {"test_big.Big[1/3]": ["SHARD=1/3"], "test_big.Big[2/3]": ["SHARD=2/3"], "test_big.Big[3/3]": ["SHARD=3/3"], "test_small.Small": ["SHARD=none"]})
+            # the units are slices' work like any group; --skip-linux-only goes by the class
+            rpt.LINUX_ONLY.add("test_big.Big")
+            self.assertEqual(here("--skip-linux-only"), ["test_small.Small"])
+            rpt.LINUX_ONLY.clear()
+            every = [here("--shard", "%d/2" % k) for k in (1, 2)]
+            self.assertEqual(sorted(sum(every, [])), sorted(listing))
+        finally:
+            del os.environ[rpt.SHARD_ENV]
+            rpt.SHARDS.clear()
+            rpt.SHARDS.update(saved)
+            rpt.COSTS.clear()
+            rpt.COSTS.update(saved_costs)
+            rpt.LINUX_ONLY.clear()
+            rpt.LINUX_ONLY.update(saved_linux)
+
     @unittest.skipUnless(shutil.which("node") and os.name != "nt", "node is not installed (or this is Windows, where the suites do not run)")
     def test_the_node_of_the_tests_is_started_single_threaded(self):
         """a node 24 that exits while a background thread compiles with Maglev can hang for ever (see node_shim in run_python_tests.py): the tests get a node that starts with --single-threaded, so that V8 has no background thread to wait for the main one"""
@@ -244,13 +289,13 @@ class TheRealTests(unittest.TestCase):
                         found.add("%s.%s" % (module, type(item).__name__))
         walk(suite)
         found.discard("unittest.loader._FailedTest")
-        grouped = {label for label, _ in rpt.units(HERE, "tests.scripts")}
+        grouped = {rpt.base_of(label) for label, _ in rpt.units(HERE, "tests.scripts")}
         self.assertEqual(grouped - found, set(), "the runner would run a group that unittest does not find")
         # a class with tests that is only in the loader's list would be left out by the runner
         self.assertEqual(found - grouped, set(), "the runner would leave these classes out: " + ", ".join(sorted(found - grouped)))
 
     def test_the_costs_name_classes_that_exist_and_the_long_ones_start_first(self):
-        grouped = {label for label, _ in rpt.units(HERE, "tests.scripts")}
+        grouped = {rpt.base_of(label) for label, _ in rpt.units(HERE, "tests.scripts")}
         self.assertEqual(set(rpt.COSTS) - grouped, set(), "a cost for a class that is not there")
         self.assertTrue(all(isinstance(v, int) and v >= 1 for v in rpt.COSTS.values()))
 
@@ -260,16 +305,56 @@ class TheRealTests(unittest.TestCase):
         for n in (2, 3, 4):
             slices = [[label for label, _ in rpt.shard_of(work, k, n)] for k in range(1, n + 1)]
             self.assertEqual(sorted(sum(slices, [])), sorted(every), n)
-            costs = [sum(rpt.COSTS.get(label, 1) for label in one) for one in slices]
-            self.assertLessEqual(max(costs) - min(costs), max(rpt.COSTS.values()), "slices of %d: %s" % (n, costs))
+            costs = [sum(rpt.cost_of(label) for label in one) for one in slices]
+            self.assertLessEqual(max(costs) - min(costs), max(map(rpt.cost_of, every)), "slices of %d: %s" % (n, costs))
             self.assertLessEqual(max(costs), 1.05 * sum(costs) / n, "slices of %d: %s" % (n, costs))
         # the biggest groups are in different slices (one of them alone takes more than a fair share of the time of a fourth)
-        biggest = sorted(rpt.COSTS, key=lambda label: -rpt.COSTS[label])[:2]
+        biggest = sorted((label for label in every if label in rpt.COSTS or rpt.unit_of(label)), key=lambda label: -rpt.cost_of(label))[:2]
         slices = [{label for label, _ in rpt.shard_of(work, k, 2)} for k in (1, 2)]
         self.assertNotEqual(biggest[0] in slices[0], biggest[1] in slices[0])
 
+    def test_the_two_long_mutation_classes_are_units_that_together_try_every_mutant_once(self):
+        """The checks stay as strong as they were: the units of a sharded class run the same class, and the mutants of the units are the whole list, each once, whatever the number of units."""
+        self.assertEqual(sorted(rpt.SHARDS), ["test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_games.TheChecksAreNotVacuous"])
+        work = rpt.units(HERE, "tests.scripts")
+        for label, n in rpt.SHARDS.items():
+            self.assertGreaterEqual(n, 2)
+            self.assertEqual([w for w in work if rpt.base_of(w[0]) == label], [("%s[%d/%d]" % (label, k, n), "tests.scripts." + label) for k in range(1, n + 1)])
+            self.assertIn(label, rpt.COSTS)
+            self.assertIn(label, rpt.LINUX_ONLY)
+        for spec in ("home_games", "home_chat"):
+            with open(os.path.join(HERE, "..", "data", spec + "_mutants.json"), encoding="utf-8") as f:
+                ids = [m["id"] for m in json.load(f)["mutants"]]
+            self.assertGreater(len(ids), 300)
+            for n in range(1, 13):
+                parts = [mutant_shard.pick(ids, (k, n)) for k in range(1, n + 1)]
+                self.assertEqual(sorted(sum(parts, [])), sorted(ids), "%s in %d units" % (spec, n))      # the union is the list, no mutant twice
+                self.assertEqual(len(set(sum(parts, []))), len(ids))
+                for part in parts:
+                    self.assertTrue(part)
+                    self.assertEqual(part, [i for i in ids if i in set(part)], "the order of the list")
+                self.assertLessEqual(max(map(len, parts)) - min(map(len, parts)), 1, "the units are of the same size")
+        for name in ("test_web_home_games.py", "test_web_home_chat.py"):
+            with open(os.path.join(HERE, name), encoding="utf-8") as f:
+                text = f.read()
+            self.assertIn('cls.mutants = mutant_shard.from_environment(cls.spec["mutants"])', text, name)
+            self.assertIn("for m in self.mutants:", text, name)
+            self.assertNotIn('\n        for m in self.spec["mutants"]', text, name + ": a loop over the whole list would run it in every unit")
+
+    def test_the_variable_of_a_unit_is_read_strictly(self):
+        self.assertEqual(mutant_shard.parse(None), (1, 1))
+        self.assertEqual(mutant_shard.parse(""), (1, 1))
+        self.assertEqual(mutant_shard.parse("3/4"), (3, 4))
+        for bad in ("0/4", "5/4", "1/0", "x", "1", "1/2/3", "-1/2", " 1/2", "1/2 "):
+            with self.assertRaises(ValueError, msg=bad):
+                mutant_shard.parse(bad)
+        self.assertEqual(mutant_shard.from_environment(list("abcdefg"), {}), list("abcdefg"))
+        self.assertEqual(mutant_shard.from_environment(list("abcdefg"), {mutant_shard.ENV: "2/3"}), ["b", "e"])
+        with self.assertRaises(ValueError):                                          # a unit with nothing to try would pass without looking
+            mutant_shard.from_environment(["a"], {mutant_shard.ENV: "2/3"})
+
     def test_the_linux_only_groups_exist_and_are_page_tests(self):
-        grouped = {label for label, _ in rpt.units(HERE, "tests.scripts")}
+        grouped = {rpt.base_of(label) for label, _ in rpt.units(HERE, "tests.scripts")}
         self.assertEqual(rpt.LINUX_ONLY - grouped, set(), "a Linux-only name that is not a class")
         for label in rpt.LINUX_ONLY:
             self.assertIn(".", label, "a class, not a whole file: " + label)
@@ -277,7 +362,7 @@ class TheRealTests(unittest.TestCase):
         self.assertGreaterEqual(len(rpt.LINUX_ONLY), 10)
 
     def test_the_macos_job_keeps_what_the_macos_runners_taught_the_tests(self):
-        left = {label for label, _ in rpt.units(HERE, "tests.scripts")} - rpt.LINUX_ONLY
+        left = {rpt.base_of(label) for label, _ in rpt.units(HERE, "tests.scripts")} - rpt.LINUX_ONLY
         for prefix in ("test_hub_", "test_e2e_deadlines.", "test_measure_tick_rate.", "test_quick_http.", "test_run_tests.", "test_run_python_tests.",
                        "test_library_guard.", "test_community_maps.", "test_repair_maps.", "test_cmake_", "test_mutate_tool.", "test_release_tool.", "test_version_tools.", "test_source_portability.",
                        "test_hygiene.", "test_ci_workflow.", "test_nginx_", "test_pbkdf2_vectors.", "test_web_without_docker.",
