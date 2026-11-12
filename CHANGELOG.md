@@ -23,6 +23,20 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.1 - 2026-11-12 - Clean page addresses, a clearer voice button, Have a code, Host a game, a hideable replay bar and one top bar
+
+**For players:**
+- **The voice button asks for the microphone and says why when it cannot work.** The front page now allows the microphone, and when voice to text cannot run the chat says why in plain words.
+- **Page addresses no longer end in .html.** The front page, the game, Matches and the other pages open at short addresses, and an old link with .html still opens the same page.
+- **"Have a code?" opens the Join by code box,** and you can paste a whole room link there instead of only the code.
+- **Host a game is a button in the empty Games list.** The hint in the Players list is gone.
+- **In a fullscreen replay the arrow hides the bar, and resting the pointer near the bottom brings it back.** Only one arrow shows at a time, and the B key hides and shows the bar too.
+- **One bar at the top of the other pages.** Matches, Live now, the map maker and the other pages share one bar with links to each other.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.0 page or game still joins. The rest of this release is internal: unused code and staging leftovers removed, changes to the build checks, and nine tests made deterministic.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/47ca2367...71c9d830)
+
 ## v0.16.0 - 2026-11-10 - A top bar, Quick host asks Public or Private, chat emoji and voice buttons, and a new look for the buttons
 
 **For players:**
@@ -485,26 +499,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e95da98a...1158f600)
 
-## v0.12.119 - 2026-10-23 - One table for the picture's shapes
+## Older versions (v0.12.119 and before)
 
-**For players:**
-- **Nothing changes on screen.** The four shapes (Classic 4:3, 16:10, 16:9 and 21:9), their sizes, the default (16:9), `?aspect=` in the address, the choice the browser remembers and the "fills your screen" tag work exactly as before.
-- Under the hood, the shapes were listed in six places (the game, the game page, the front page, the settings menu, the page's style and its checks). The game now has one table and the web pages have one table, and a test fails when the two differ, so a new shape is one row in each instead of a hunt through the code.
-
-**Rules / network:** none: network protocol 21, the simulation rules and every recording are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/d01c8ec8...7812b621)
-
-## v0.12.118 - 2026-10-23 - No Settings button over the picture in fullscreen
-
-**For players:**
-- **Nothing is laid over the game's picture in fullscreen any more.** The Settings button that sat at the top of the picture is gone, on computers and phones alike. On a computer press **Esc** (with nothing selected and no dialog open) to open the settings menu, as before.
-- **A phone in fullscreen has no way to open the menu** (it has no Esc): leave fullscreen first, then use the **Settings** button under the picture or in the header. In Safari and Firefox on a computer, Esc belongs to the browser in fullscreen, so leave fullscreen first there too.
-
-**Rules / network:** none: the page only; network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/c93ee3f5...26f6d531)
-
-## Older versions (v0.12.117 and before)
-
-Every release before v0.12.118, and the long notes of v0.12.117 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.120, and the long notes of v0.12.119 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

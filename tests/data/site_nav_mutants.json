@@ -164,6 +164,20 @@
    "old": "COPY web/site_nav.css /usr/share/nginx/html/site_nav.css\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "discord_rule_names_a_class_no_page_has",
+   "file": "web/site_nav.css",
+   "old": ".sb nav .btn.sbdc { min-width: 44px; }",
+   "new": ".sb nav .btn.dcb { min-width: 44px; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "menu_always_asks_for_the_count",
+   "file": "web/site_nav.js",
+   "old": "if (bar.getAttribute('data-live') === 'menu') look();",
+   "new": "look();",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
   }
  ]
 }
