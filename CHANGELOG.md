@@ -27,10 +27,10 @@ Work that is not released yet is written in the same template under a heading th
 
 **For players:**
 - **The voice button asks for the microphone and says why when it cannot work.** The front page now allows the microphone, and when voice to text cannot run the chat says why in plain words.
-- **Page addresses no longer end in .html.** The front page, the game, Matches and the other pages open at short addresses, and an old link with .html still opens the same page. The pages no longer show the server version.
+- **Page addresses no longer end in .html.** The front page, the game, Matches and the other pages open at short addresses, and an old link with .html still opens the same page.
 - **"Have a code?" opens the Join by code box,** and you can paste a whole room link there instead of only the code.
 - **Host a game is a button in the empty Games list.** The hint in the Players list is gone.
-- **In a replay the arrow hides the bar, and resting the pointer near the bottom brings it back.** Only one arrow shows at a time, and the B key hides and shows the bar too.
+- **In a fullscreen replay the arrow hides the bar, and resting the pointer near the bottom brings it back.** Only one arrow shows at a time, and the B key hides and shows the bar too.
 - **One bar at the top of the other pages.** Matches, Live now, the map maker and the other pages share one bar with links to each other.
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.0 page or game still joins. The rest of this release is internal: unused code and staging leftovers removed, changes to the build checks, and nine tests made deterministic.

@@ -352,6 +352,22 @@
    "new": "",
    "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs tests.scripts.test_web_replay",
    "why": "a finger that hid the bar would be told to swipe up from an edge strip that is not there while the bar is hidden"
+  },
+  {
+   "id": "zone_rows_are_canvas_pixels",
+   "file": "web/shell.html",
+   "old": "rows: (function () { try { var n = Module._ants_probe(41); return n > 0 ? n : c.height; } catch (e) { return c.height; } })() }",
+   "new": "rows: c.height }",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the bottom gap would stay 12 px on a big screen, where the game's scroll strip is 13 to 20 px, and a rest there would scroll the map and open the bar"
+  },
+  {
+   "id": "zone_rows_ask_the_wrong_probe",
+   "file": "web/shell.html",
+   "old": "Module._ants_probe(41)",
+   "new": "Module._ants_probe(40)",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the logical height would not come from the game and the canvas pixels would be used again"
   }
  ]
 }

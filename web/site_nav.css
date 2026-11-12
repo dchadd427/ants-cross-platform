@@ -50,14 +50,14 @@
     .sb .sblogo { flex: none; width: 100px; margin-right: 6px; }
     .sb nav { display: flex; gap: 6px; align-items: center; }
     .sb nav .btn { padding: 6px 10px; font-size: 15px; }
-    .sb nav .btn.dcb { min-width: 44px; }
+    .sb nav .btn.sbdc { min-width: 44px; }
 }
 @media (min-width: 960px) {
     .sb { gap: 10px; }
     .sb .sblogo { width: 150px; }
     .sb nav { gap: 10px; }
     .sb nav .btn { padding: 6px 16px; font-size: 16px; }
-    .sb nav .btn.dcb { padding: 6px 12px; }
+    .sb nav .btn.sbdc { padding: 6px 12px; }
 }
 @media (max-height: 480px) and (max-width: 900px) {
     .pt { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; }

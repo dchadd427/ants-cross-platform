@@ -44,7 +44,7 @@
     }
     function open() {
         if (!box) build();
-        look();
+        if (bar.getAttribute('data-live') === 'menu') look();
         var top = Math.round(bar.getBoundingClientRect().bottom + 6);
         box.style.top = top + 'px';
         box.style.maxHeight = Math.max(160, (window.innerHeight || 0) - top - 10) + 'px';
