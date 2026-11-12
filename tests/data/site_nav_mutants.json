@@ -1,0 +1,169 @@
+{
+ "note": "Mutants of the bar at the top of every page (web/site_nav.css, web/site_nav.js, the markup of the pages, the front page's Menu and the Dockerfile) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_web_site_nav.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/site_nav_mutants.json --keep-going --jobs 1.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_web_site_nav"
+ },
+ "mutants": [
+  {
+   "id": "escape_does_not_close_the_menu",
+   "file": "web/site_nav.js",
+   "old": "if (e.key === 'Escape') close(true);",
+   "new": "if (e.key === 'Escape') close(false);",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "focus_does_not_go_back_to_the_button",
+   "file": "web/site_nav.js",
+   "old": "if (back) btn.focus();",
+   "new": "if (back) btn.blur();",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "menu_does_not_say_it_is_open",
+   "file": "web/site_nav.js",
+   "old": "btn.setAttribute('aria-expanded', 'true');",
+   "new": "btn.setAttribute('aria-expanded', 'false');",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "small_links_differ_from_the_front_pages",
+   "file": "web/site_nav.js",
+   "old": "['Legal', '/legal']",
+   "new": "['Legal', '/legal.html']",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "small_links_lose_one",
+   "file": "web/site_nav.js",
+   "old": "['Changelog', '/changelog'], ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "live_look_is_cached",
+   "file": "web/site_nav.js",
+   "old": "{ cache: 'no-store', credentials: 'omit' }",
+   "new": "{ credentials: 'omit' }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "script_asks_for_a_second_thing",
+   "file": "web/site_nav.js",
+   "old": "fetch('/live', {",
+   "new": "fetch('/live-now', {",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "buttons_are_smaller_than_44_px",
+   "file": "web/site_nav.css",
+   "old": ".sb .btn { min-height: 44px;",
+   "new": ".sb .btn { min-height: 38px;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "the_logo_is_a_small_target",
+   "file": "web/site_nav.css",
+   "old": ".sb .sblogo { display: flex; align-items: center; min-height: 44px;",
+   "new": ".sb .sblogo { display: flex; align-items: center; min-height: 34px;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "the_row_never_shows_on_a_phone_breakpoint",
+   "file": "web/site_nav.css",
+   "old": "@media (min-width: 720px)",
+   "new": "@media (min-width: 900px)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "the_row_shows_on_a_phone",
+   "file": "web/site_nav.css",
+   "old": ".sb nav { display: none; }",
+   "new": ".sb nav { display: flex; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "forced_colors_lose_the_outline",
+   "file": "web/site_nav.css",
+   "old": "outline: 3px solid Highlight",
+   "new": "outline: none",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "the_bar_has_motion",
+   "file": "web/site_nav.css",
+   "old": ".sb .sbbars { position: relative; }",
+   "new": ".sb .sbbars { position: relative; transition: all 1s; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "the_open_page_is_not_marked",
+   "file": "web/matches.html",
+   "old": "<a class=\"btn\" href=\"/matches\" aria-current=\"page\">Matches</a>",
+   "new": "<a class=\"btn\" href=\"/matches\">Matches</a>",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "legal_bar_hands_over_the_page",
+   "file": "web/legal.html",
+   "old": "target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"Discord server\"",
+   "new": "target=\"_blank\" aria-label=\"Discord server\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "live_page_asks_for_the_count",
+   "file": "web/live.html",
+   "old": "<header class=\"sb\">",
+   "new": "<header class=\"sb\" data-live=\"now\">",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "match_loses_its_crumb",
+   "file": "web/match.html",
+   "old": "<a class=\"crumb\" id=\"all-btn\" href=\"/matches\">&lsaquo; All matches</a>",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "mapmaker_keeps_two_menus",
+   "file": "web/mapmaker.html",
+   "old": "data-act=\"menu\" disabled>File</button>",
+   "new": "data-act=\"menu\" disabled>Menu</button>",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "home_does_not_mark_itself",
+   "file": "web/home/home.js",
+   "old": "item.setAttribute('aria-current', 'page');",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "home_menu_loses_its_count",
+   "file": "web/home/home.js",
+   "old": "liveN.textContent = nl ? nl[0] : '';",
+   "new": "liveN.textContent = '';",
+   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html"
+  },
+  {
+   "id": "home_menu_orders_differ",
+   "file": "web/home/home.js",
+   "old": "['Changelog', '/changelog'], ['GitHub'",
+   "new": "['GitHub'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "the_image_does_not_copy_the_script",
+   "file": "Dockerfile",
+   "old": "COPY web/site_nav.js /usr/share/nginx/html/site_nav.js\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "the_image_does_not_copy_the_style",
+   "file": "Dockerfile",
+   "old": "COPY web/site_nav.css /usr/share/nginx/html/site_nav.css\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  }
+ ]
+}

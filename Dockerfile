@@ -140,6 +140,8 @@ COPY --from=builder /src/matches.html /usr/share/nginx/html/matches.html
 COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
 COPY --from=builder /src/live.html /usr/share/nginx/html/live.html
 COPY web/matches.css /usr/share/nginx/html/matches.css
+COPY web/site_nav.css /usr/share/nginx/html/site_nav.css
+COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
 COPY web/match_stats.css /usr/share/nginx/html/match_stats.css
 COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 COPY web/history_page.js /usr/share/nginx/html/history_page.js

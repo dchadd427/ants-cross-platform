@@ -61,10 +61,10 @@ def lazy_problems(page):
         problems.append("closing does not take the frame away")
     if sorted(re.findall(r"setReplay\(([^)]*)\)", script)) != ["!frame", "false", "open"]:          # (the definition, the press that toggles, the game's own Quit that closes: nothing opens it by itself)
         problems.append("setReplay is called by something else than the press and the game's Quit")
-    # the only requests of the page: the match, the list of live matches (a button), the sum of the map's deaths (only when "All matches on this map" is pressed), the maps (history_page.js); a recording is a link, never a request
+    # the only requests of the page: the match, the sum of the map's deaths (only when "All matches on this map" is pressed), the maps (history_page.js); a recording is a link, never a request
     asked = re.findall(r"fetch\('([^']*)'", script)
-    if sorted(asked) != ["/history/", "/history/deaths?map=", "/live"]:
-        problems.append("the page asks for something else than the match, the sum of the map's deaths and the live list: %s" % asked)
+    if sorted(asked) != ["/history/", "/history/deaths?map="]:
+        problems.append("the page asks for something else than the match and the sum of the map's deaths: %s" % asked)
     if "dl.href = '/replays/' + encodeURIComponent(st.file);" not in script:
         problems.append("the recording is not a download link")
     return problems
@@ -102,23 +102,20 @@ class TheCommonFiles(unittest.TestCase):
                 self.assertIn("cache: 'no-store'", call, name + ": " + call)
         self.assertIn("fetch('/maps/all', { credentials: 'same-origin' })", read("web", "history_page.js").replace("fetcher(", "fetch("))      # (the list of the maps is the site's own and cached by it)
 
-    def test_every_page_ends_its_header_buttons_with_the_front_pages_discord_link(self):
-        lobby = read("web", "lobby.html")
-        link = re.search(r'<a class="btn sm discord".*?</a>', lobby).group(0)                              # (the same markup as the front page's header: its mark, its words, its new tab)
-        self.assertIn('href="https://discord.gg/WaWrXQnKPj" id="discord-top" target="_blank" rel="noopener noreferrer"', link)
+    def test_every_page_has_the_site_bar_with_the_discord_link_and_no_page_of_its_own(self):
         for name in PAGES:
             page = read("web", name)
-            acts = re.search(r'<div class="acts">(.*?)</div>', page, re.S).group(1)
-            self.assertTrue(acts.endswith(link), name + ": the last button of the header's row")
+            bar = re.search(r'<header class="sb"[^>]*>.*?</header>', page, re.S).group(0)                    # (the bar of every page: web/site_nav.css, web/site_nav.js)
+            self.assertIn('<a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc"', bar, name)
             self.assertEqual(page.count("discord.gg"), 1, name)
-            self.assertEqual(len(re.findall(r"<img", re.search(r"<header.*?</header>", page, re.S).group(0))), 1, name + ": the logo is the header's only picture")
+            self.assertEqual(len(re.findall(r"<img", bar)), 1, name + ": the logo is the bar's only picture")
+            self.assertNotIn('class="mast"', page, name)
+            self.assertIn('<link rel="stylesheet" href="site_nav.css">', page, name)
+            self.assertIn('<script src="site_nav.js"></script>\n<script src="replay_page.js"></script>', page, name)      # (the bar's script before the page's own)
+            self.assertEqual(len(re.findall(r"<h1[ >]", page)), 1, name)
         css = read("web", "matches.css")
-        phone = css[css.index(".mast .acts .btn.hide-s { display: none; }"):]                           # (the phone's rules that come after the hide-s rule, inside the 720 px block that holds it)
-        self.assertIn(".discord::before { content: \"\"; position: absolute; left: -4px; right: -4px; top: -6px; bottom: -6px; }", css)      # (the 44 px target)
-        self.assertRegex(phone, r"\.discord \.dt \{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect\(0 0 0 0\); \}")     # (a phone: the mark alone, the word stays for a screen reader)
-        self.assertIn(".discord { min-width: 44px;", phone)
-        self.assertIn("@media (max-width: 389px)", css)
-        self.assertRegex(css[css.index("@media (max-width: 389px)"):], r"\.mast \.acts \{[^}]*flex-wrap: wrap;")       # (with a match running there are three buttons: they never cover the logo)
+        self.assertNotIn(".mast", css)                                                                       # (the bar's rules are web/site_nav.css's)
+        self.assertNotIn(".discord", css)
 
     def test_the_one_stylesheet_is_the_pages_and_the_colors_are_the_front_pages(self):
         css = read("web", "matches.css")
@@ -146,8 +143,8 @@ class TheListPage(unittest.TestCase):
         self.assertIn("askTimer = setTimeout(run, wait)", self.page)
         self.assertIn("go(copy(state, { q: q }), false, false, 0)", self.page)                               # (the search has waited already)
         self.assertIn("'Back to the first page'", self.page)                                                 # (a page past the last one has a way back)
-        self.assertIn("fetch('/live'", self.page)                                                            # (the button of the live page, one look)
-        self.assertIn("' live now'", self.page)
+        self.assertNotIn("fetch('/live'", self.page)                                                         # (the count of live matches is web/site_nav.js's one look: data-live="now")
+        self.assertIn('<header class="sb" data-live="now">', self.page)
 
     def test_it_says_what_it_shows_and_what_went_wrong_in_the_approved_words(self):
         for words in ("Every match played here.", "Find a map or a player", "No match fits those filters.", "Clear the filters", "Stats & replay", "Older version", "Replay removed",
