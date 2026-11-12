@@ -1,5 +1,5 @@
 // The global chat dock of Home (docs/HOME_SCREEN.md, "The chat dock"): a panel along the bottom of Home (the Chat view on a phone) that reads and writes the site's chat hub, one WebSocket, JSON, version 1
-// (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
+// (docs/HUB.md: up {"t":"say","text"} and {"t":"ping"}; down welcome, line, del, online, err, and for a moderator you, ok, bans, bye). Loaded by web/home/home.js after the first paint, with web/home/chat.css, and only by the front page: a plain visit of any
 // other page opens no hub socket. ES5, no module system: a page gets AntsHomeChat, node gets module.exports (tests/scripts/web_home_chat_check.js).
 //   * Everything the hub sends is text from strangers: it becomes DOM text with createElement and textContent only (never markup, never a link); names and lines are cut for display, the bidirectional and zero-width
 //     controls are removed, and each name and line sits in a <bdi>; a frame that is too big, is not JSON or is of a kind that is not known is ignored; at most 100 lines are kept (in memory and on the screen).
@@ -8,6 +8,9 @@
 //   * It reads for everybody; the field and Send are there only when the welcome names the visitor (`you`). The login (docs/HUB.md, "Login") is the hub's: where the welcome says login:true and names nobody, the field is off and a
 //     Log in button takes its place, here and in the bar's chip (`env.chip`), and it is a full navigation to /hub/login (Discord, then back to this screen); where it names the visitor, the chip is a button that opens #gchat-login-slot (a dropdown under the chip): "Chatting as <name>",
 //     the choice of the name that the chat shows, Log out and Forget me, which are POSTs of this page to the hub (same origin, with the cookie, which this script never sees: it is HttpOnly). Nothing of the login is read, kept or sent by this script.
+//   * Roles (docs/HUB.md, "Roles", "Moderation"): `you.role` is none, mod or admin and a `you` frame changes it live. Only the flags `mod`, `role` and `sys` of the hub's frames decide a mark or the hub's own line, never
+//     a person's text. /help is this page's own (never sent) and lists the commands of the role; each reply of the hub (`ok`, `bans`, the codes power, role, who, rate, bad) is told in plain words as a private line of this
+//     screen. A `bye` is a plain notice, the field off where the hub's state needs it, and the usual reconnect with its backoff (so the person reads on).
 //   * While the tab is hidden the socket stays and the model follows, but nothing is painted (the screen is made again when the tab is back); a line that arrives while the dock is folded, on the Room or in a hidden tab is unread.
 (function (root, factory) {
     var api = factory();
@@ -27,12 +30,24 @@
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', sure: 'Are you sure? Press again', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
-        shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my '
+        shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my ',
+        admin: 'admin', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an admin' }, asModerator: ', moderator', asAdmin: ', admin',
+        helpHead: 'Commands you can use. Only you can see this.', helpNone: 'There are no chat commands for you.', cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
+        kicked: 'A moderator removed you from the chat. You can log in again.', banned: 'You are banned from the chat. You can still read it.', banField: 'You are banned from the chat'
     };
+    var RANK = { none: 0, mod: 1, admin: 2 };                            // (the hub's own table: docs/HUB.md, "Moderation")
+    var COMMANDS = [                                                     // [the word, the rank that may use it, how it is typed, what it does]: what /help lists; the hub decides what is done
+        ['/mute', 1, '/mute name minutes', 'stop a person writing for 1 to 10080 minutes'], ['/unmute', 1, '/unmute name', 'allow a muted person to write again'],
+        ['/del', 1, '/del number', 'take one line off the screen of everybody (by its number)'], ['/kick', 1, '/kick name', 'remove a person from the chat (they can log in again)'],
+        ['/ban', 2, '/ban name', 'stop a person writing until the ban is lifted (they can still read)'], ['/unban', 2, '/unban name', 'lift a ban'], ['/bans', 2, '/bans', 'list the people who are banned']
+    ];
+    var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.' };
+    var MAXBANS = 50;                                                    // (the hub sends the newest 50)
+    var ABOUT = ['power', 'role', 'who'];                                // the codes that are only for a command (a line is never refused with them)
     var SAID = ['rate', 'login', 'muted', 'banned', 'long', 'empty', 'young', 'quota', 'bad'];       // the codes that the hub answers a line with: an err of any other code (a refused `here` has its own) is not about a line
     var ERR = {                                                          // the words of the hub's err codes (docs/HUB.md: "the page owns the words") and of this page's own refusals
         rate: 'Slow down a little', login: 'Log in with Discord to chat', muted: 'You cannot chat for a while', banned: 'You cannot chat here', long: 'That line is too long', empty: 'Write something first',
-        young: 'Your account is too new to chat yet', quota: 'You have chatted a lot, try again later', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again'
+        young: 'Your account is too new to chat yet', quota: 'You have chatted a lot, try again later', bad: 'That line could not be sent', markup: 'Lines cannot hold < or >', power: 'You are not allowed to do that', role: 'Could not confirm your role, try again in a moment', who: 'Nobody by that name is here', offline: TEXT.offline, readonly: TEXT.readonly, failed: 'That did not work, try again'
     };
 
     // ---- the pure parts -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -74,10 +89,37 @@
     }
     function count(n) { return typeof n === 'number' && n >= 0 && n <= LIMIT.count && n === Math.floor(n) ? n : null; }
     function nameOf(s) { return typeof s === 'string' ? clip(plain(s.slice(0, LIMIT.name * 4), true), LIMIT.name) : ''; }       // (a name of the hub, or its key of an account)
-    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, k (its author's key), u (its author's username: moderators only; kept in the model, not drawn) }, or null when it is not a line
+    function roleOf(role, mod) {                                         // the role that the hub's flags say: `admin` or `mod` only where the hub says moderator (`mod`: true for both roles, which is all that an older hub says), else `none`; nothing else is a role
+        return mod !== true ? 'none' : role === 'admin' ? 'admin' : 'mod';
+    }
+    function youOf(y) {                                                  // the visitor, as the hub's `you` says (a welcome, or the frame that changes it), or null when it names nobody: { name, mod, role, k, pick, other }
+        if (!y || typeof y !== 'object') return null;
+        var name = nameOf(y.name), role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none';       // (`role` where the hub says it; an older hub says `mod` only)
+        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '' } : null;
+    }
+    function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, role, sys (a line of the hub's own: only its flag says so), k (its author's key), u (its author's username: moderators only; kept in the model, not drawn) }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
-        var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line);
-        return shows(text) ? { id: m.id, who: nameOf(m.who) || '?', text: text, mod: m.mod === true, k: nameOf(m.k), u: nameOf(m.u) } : null;
+        var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line), sys = m.sys === true;
+        return shows(text) ? { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) } : null;
+    }
+    function wordOfCommand(text) {                                       // the command word that a text starts with, in lower case ('/mute'), or '': the hub reads them in any case
+        var m = /^(\/[a-z]+)(?: |$)/i.exec(text);
+        return m ? m[1].toLowerCase() : '';
+    }
+    function helpOf(role) {                                              // what /help says to a role: [the lines], each a text or [how it is typed, what it does]
+        var rank = RANK[role] || 0, out = [];
+        COMMANDS.forEach(function (c) { if (c[1] <= rank) out.push([c[2], c[3]]); });
+        return out.length ? [TEXT.helpHead].concat(out) : [TEXT.helpNone];
+    }
+    function dayOf(at) {                                                 // the day of a time in seconds since 1970 (UTC, as 2026-11-12), or ''
+        if (typeof at !== 'number' || at !== Math.floor(at) || at < 0 || at > 4e9) return '';
+        return new Date(at * 1000).toISOString().slice(0, 10);
+    }
+    function bansOf(m) {                                                // the hub's private list of bans { rows: [{ u, at }] }, as the lines to show: [the heading, a line for each person], or null when it is not that
+        if (!m || !Array.isArray(m.rows) || m.rows.length > MAXBANS) return null;
+        var out = [m.rows.length ? TEXT.bansHead : TEXT.bansNone];
+        m.rows.forEach(function (r) { if (r && typeof r === 'object') out.push([nameOf(r.u) || TEXT.noName, dayOf(r.at)]); });
+        return out;
     }
     function wordOf(code, login) {                                       // the words of an err code; "log in" is asked only where the hub has a login
         if (code === 'login' && !login) return ERR.readonly;
@@ -105,6 +147,7 @@
         var busy = false, menuOn = false, forgetSure = false, refocus = false, forgetAt = 0;                                       // (a POST of the login is on its way; the chip's dropdown of the account is open)
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
+        var removed = '';                                                        // 'kicked' or 'banned' after the hub said `bye` (or `banned` to a line): a notice stays on the screen, and a banned person's field stays off
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
@@ -144,9 +187,10 @@
         var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'btn gc-out', TEXT.logout), forgetBtn = el('button', 'gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
         outBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
-        put(slot, [acct, pickNote, pickBtn, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
-        var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
-        if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
+        var yr = el('p', 'gc-yr'), yrBadge = el('span', 'gc-badge'), yrText = el('span', 'gc-yt'); yr.hidden = true; put(yr, [yrBadge, yrText]);       // (the role, in words, in the dropdown of the account)
+        put(slot, [acct, yr, pickNote, pickBtn, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
+        var chipMark = null, chipAv = null, chipName = null, chipRole = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
+        if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chipRole = el('span', 'gc-cr'); chipRole.hidden = true; chip.textContent = ''; put(chip, [chipMark, chipAv, chipName, chipRole]); }
         put(body, [log, note, news, form, guest]);
         put(box, [head, body]);
         host.appendChild(box); if (chip && chip.parentNode && chip.parentNode.insertBefore) chip.parentNode.insertBefore(slot, chip.nextSibling); else (doc.body || host).appendChild(slot);       // (right after the chip: the Tab order and the bar's inert follow)
@@ -156,8 +200,15 @@
         function seen() { return isHome && open && visible(); }                 // the log is on the screen and somebody can read it
         function unread() { var n = 0; for (var i = 0; i < feed.length; i++) if (feed[i].fresh) n++; return n; }
         function row(e) {
-            var r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (e.own ? ' gc-me' : ''));
-            if (e.mod) r.appendChild(el('span', 'gc-badge', TEXT.mod + ' '));
+            var r, admin = e.role === 'admin';
+            if (e.priv) {                                                        // an answer to this visitor alone (never sent, never kept by the hub): a tag, then its lines
+                r = el('div', 'gc-line gc-private'); r.appendChild(el('span', 'gc-tag', TEXT.only));
+                e.lines.forEach(function (l) { r.appendChild(typeof l === 'string' ? el('div', 'gc-pl', l) : put(el('div', 'gc-pl'), [el('bdi', 'gc-cmd', l[0]), el('span', 'gc-pw', l[1] ? ' ' + l[1] : '')])); });
+                return r;
+            }
+            if (e.sys) return put(el('div', 'gc-line gc-event'), [el('bdi', 'gc-text', e.text)]);       // (a line of the hub's own, drawn quietly; it names the person in its words, and has no author)
+            r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (admin ? ' gc-admin' : '') + (e.own ? ' gc-me' : ''));
+            if (e.mod) r.appendChild(el('span', 'gc-badge' + (admin ? ' gc-badge-admin' : ''), (admin ? TEXT.admin : TEXT.mod) + ' '));
             put(r, [el('bdi', 'gc-who', e.who)]);
             put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
             return r;
@@ -196,6 +247,7 @@
             var n = unread(), dead = typeof Socket !== 'function';
             var out = open;
             box.setAttribute('data-state', state); box.setAttribute('data-open', out ? 'true' : 'false'); box.setAttribute('data-you', you ? 'yes' : 'no');
+            box.setAttribute('data-role', you ? you.role : 'none');
             body.hidden = !out;
             fold.setAttribute('aria-expanded', out ? 'true' : 'false');
             fold.setAttribute('aria-label', out ? TEXT.fold : TEXT.open + (n ? ', ' + n + TEXT.unread : ''));
@@ -205,11 +257,15 @@
             var live = state === 'live';
             form.hidden = !(live && (you || login));
             var ask = live && !you && login;                                    // (a login is offered and nobody is named: the field says so, and is off)
-            field.disabled = !you; field.setAttribute('placeholder', ask ? ERR.login : TEXT.field); field.setAttribute('aria-label', ask ? ERR.login : TEXT.field);
-            send.hidden = !you; enter.hidden = !!you;
+            var barred = removed === 'banned' && !!you, said = ask ? ERR.login : barred ? TEXT.banField : TEXT.field;       // (a banned person reads on: the field is off, and says why)
+            field.disabled = !you || barred; field.setAttribute('placeholder', said); field.setAttribute('aria-label', said);
+            send.hidden = !you || barred; enter.hidden = !!you;
             guest.hidden = !(live && !you);
-            note.textContent = notice || (state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');
+            note.textContent = notice || (removed ? TEXT[removed] : state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');       // (the notice of a removal stays until the person is somebody else)
+            note.setAttribute('data-removed', removed && !notice ? removed : '');
             slot.hidden = !(live && you && login && menuOn); acctName.textContent = you ? you.name : '';
+            yr.hidden = !(you && you.role !== 'none');       // (the role in words, with its mark)
+            if (!yr.hidden) { yrBadge.className = 'gc-badge' + (you.role === 'admin' ? ' gc-badge-admin' : ''); yrBadge.textContent = you.role === 'admin' ? TEXT.admin : TEXT.mod; yrText.textContent = ' ' + TEXT.youAre[you.role]; }
             if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) { if (live && login) chip.focus(); else refocus = true; }       // (the dropdown goes under the focus: a Log out, a Forget me: the focus goes to the chip, not to nowhere; a name that is picked closes the socket and hides the chip too, so the focus waits for the dropdown to come back)
             outBtn.disabled = forgetBtn.disabled = busy;
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
@@ -222,7 +278,9 @@
                 chip.hidden = !(live && login);
                 chipAv.hidden = !you; chipMark.hidden = !!you;
                 chipAv.textContent = you ? initial(you.name) : ''; chipName.textContent = you ? you.name : TEXT.login;
-                chip.setAttribute('aria-label', you ? TEXT.chatting + you.name : TEXT.loginWith);
+                var has = !!you && you.role !== 'none';
+                chipRole.hidden = !has; chipRole.className = 'gc-cr' + (has && you.role === 'admin' ? ' gc-cr-admin' : ''); chipRole.textContent = has ? (you.role === 'admin' ? TEXT.admin : TEXT.mod) : '';       // (the mark on the chip: the word, so that the color is never the only sign)
+                chip.setAttribute('aria-label', you ? TEXT.chatting + you.name + (has ? (you.role === 'admin' ? TEXT.asAdmin : TEXT.asModerator) : '') : TEXT.loginWith);
                 if (you) { chip.setAttribute('aria-haspopup', 'true'); chip.setAttribute('aria-controls', slot.id); chip.setAttribute('aria-expanded', menuOn ? 'true' : 'false'); } else { chip.removeAttribute('aria-haspopup'); chip.removeAttribute('aria-controls'); chip.removeAttribute('aria-expanded'); }
             }
             if (stale && seen()) repaint();
@@ -286,21 +344,30 @@
         function known(id) { for (var i = 0; i < feed.length; i++) if (feed[i].id === id) return true; return false; }
         function push(e) {
             feed.push(e);
-            if (e.id > lastId) lastId = e.id;
+            if (e.id !== null && e.id > lastId) lastId = e.id;
             while (feed.length > LIMIT.feed) { var old = feed.shift(); if (seen() && !stale && old.el && old.el.parentNode) old.el.parentNode.removeChild(old.el); else stale = true; }       // (a screen that is not painted is made again when it comes back)
+        }
+        function answer(lines) {                                                // a private answer: a line of this screen, with its lines, for this visitor alone (nothing is sent, the hub keeps nothing)
+            var e = { id: null, priv: true, lines: lines, mod: false, role: 'none', own: false, fresh: false };
+            push(e);
+            if (seen() && !stale) { settle(true); e.el = row(e); log.appendChild(e.el); reveal(e); } else stale = true;
+            render();
+        }
+        function reveal(e) {                                                     // an answer taller than the log is read from its first line, not from its last (a list of commands)
+            setTimeout(guard(function () { if (e.el && e.el.getBoundingClientRect && log.getBoundingClientRect && e.el.offsetHeight > log.clientHeight) log.scrollTop += e.el.getBoundingClientRect().top - log.getBoundingClientRect().top; }), 1);
         }
         function onWelcome(m) {
             if (welcomed) return;                                                // (one welcome for each socket)
             if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }       // (a hub that speaks another version is no hub for this page)
-            var y = m.you && typeof m.you === 'object' ? m.you : {}, name = nameOf(y.name);
-            you = name ? { name: name, mod: y.mod === true, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '' } : null;
+            you = youOf(m.you);
+            if ((removed === 'kicked' && you) || (removed === 'banned' && !you)) removed = '';       // (a person who is somebody else now, or nobody, is not the one that was removed)
             login = m.login === true; people = count(m.online);
             var before = lastId;
             feed.length = 0;
             (m.history || []).slice(-LIMIT.history).forEach(function (raw) {
                 var e = lineOf(raw);
                 if (!e || known(e.id)) return;
-                e.own = mine(e);
+                e.own = !e.sys && mine(e);
                 e.fresh = ever && e.id > before && !e.own && !seen();             // (the first welcome is the past; after a lost link, the lines that came meanwhile are news)
                 push(e);
             });
@@ -312,7 +379,7 @@
         function onLine(m) {
             var e = lineOf(m);
             if (!e || known(e.id)) return;
-            e.own = mine(e); e.fresh = !e.own && !seen();
+            e.own = !e.sys && mine(e); e.fresh = !e.own && !seen();
             if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
@@ -327,6 +394,29 @@
             }
             render();
         }
+        function onYou(m) {                                                      // the role changed (a promotion, a removal, a role that ran out): the marks and the commands follow at once; who the visitor is does not change on a socket
+            var next = you ? youOf(m.you) : null;
+            if (!next) return;
+            you.role = next.role; you.mod = next.mod;
+            render();
+            tapped('you', m);
+        }
+        function onBye(m) {                                                      // the hub removed this person: a plain notice stays; the hub closes the socket, and the page connects again as it does after any close (with its backoff: no storm)
+            removed = m.why === 'kicked' ? 'kicked' : m.why === 'banned' ? 'banned' : removed;
+            render();
+        }
+        function onBans(m) {
+            var lines = bansOf(m), at;
+            if (!lines) return;
+            for (var i = 0; i < unanswered.length && at === undefined; i++) if (unanswered[i].cmd && wordOfCommand(unanswered[i].text) === '/bans') at = i;
+            if (at !== undefined) unanswered.splice(at, 1);
+            answer(lines);
+        }
+        function onOk(m) {                                                       // a command was done: the oldest command that waits is answered
+            var at = oldest(true), c = typeof m.c === 'string' && Object.prototype.hasOwnProperty.call(DONE, m.c) ? m.c : '';
+            if (at >= 0) unanswered.splice(at, 1);
+            if (c) answer([DONE[c]]);
+        }
         function take(data) {
             var m = parse(data);
             if (!m) { if (++bad >= LIMIT.bad) lost(); return; }                  // (a hub that sends nothing but noise is dropped; a frame of noise is ignored)
@@ -335,9 +425,13 @@
             if (m.t === 'welcome') onWelcome(m);
             else if (m.t === 'line') onLine(m);
             else if (m.t === 'del') onDel(m);
+            else if (m.t === 'you') onYou(m);
+            else if (m.t === 'ok') onOk(m);
+            else if (m.t === 'bans') onBans(m);
+            else if (m.t === 'bye') onBye(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
-            else if (m.t === 'err' && SAID.indexOf(m.code) !== -1) refuse(m.code);
+            else if (m.t === 'err' && (SAID.indexOf(m.code) !== -1 || ABOUT.indexOf(m.code) !== -1)) refuse(m.code);
             else if (m.t === 'err' && m.code === 'pick') tell('failed');
         }                                                                        // (any other kind is ignored)
 
@@ -346,9 +440,12 @@
         function oldest(cmd) { for (var i = 0; i < unanswered.length; i++) if (!unanswered[i].cmd === !cmd) return i; return -1; }       // (the oldest line that waits, or with `cmd` the oldest command)
         function refuse(code) {                                                 // the hub refused a send, in order: `bad` is what it says to a wrong command, any other code is for a line; nothing of ours waiting, no refusal of ours
             waiting();
-            var at = oldest(code === 'bad'), refused = unanswered.splice(at < 0 ? 0 : at, 1)[0];
+            var about = ABOUT.indexOf(code) !== -1, at = oldest(about || code === 'bad'), refused = at < 0 && about ? { cmd: true } : unanswered.splice(at < 0 ? 0 : at, 1)[0];       // (power, role and who are a command's, even when its wait is over)
             if (!refused) return;
-            tell(code); delete said[refused.text];
+            if (code === 'banned') removed = 'banned';                           // (a banned person who reloads the page is told by the hub's refusal: the notice and the field off)
+            if (refused.cmd) answer([code === 'bad' ? TEXT.cmdBad : code === 'rate' ? TEXT.cmdRate : wordOf(code, login)]); else tell(code);
+            if (refused.text === undefined) return;
+            delete said[refused.text];
             if (!refused.cmd && !field.value) field.value = refused.text;      // (a command is not put back: Enter would issue it again)
         }
         function allowed(text) {                                                // this page's own pace, below the hub's; a text that was sent in the last 31 s is not sent again (the hub remembers every one of them, not only the last)
@@ -360,8 +457,10 @@
             return true;
         }
         function sendLine(raw) {                                                // '' when the line went out, else the code that says why not; never while the link is down
-            var text = plain(String(raw));
-            var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
+            var text = plain(String(raw)), word = you ? wordOfCommand(text) : '';
+            if (word === '/help') { answer(helpOf(you.role)); return ''; }       // (this page's own: it is never sent, and it never is a line)
+            if (word && you.role === 'none' && COMMANDS.some(function (c) { return c[0] === word; })) { answer([ERR.power]); return ''; }       // (a command word from a person who holds no role is not a line either: the hub would refuse it and never post it)
+            var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : removed === 'banned' ? 'banned' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
             var cmd = you.mod && text.charAt(0) === '/';
@@ -375,7 +474,7 @@
         }
         function relink() {                                                     // the login changed (the hub closes the sockets of the old one): this page connects again at once, and is told who it is now
             drop();
-            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null;
+            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = '';
             go();
             render();
         }
@@ -422,5 +521,5 @@
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, youOf: youOf, roleOf: roleOf, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
 });

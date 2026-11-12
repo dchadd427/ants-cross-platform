@@ -132,7 +132,7 @@ function rig(o) {
 {
     const P = Pure;
     const rowOf = (raw) => P.rowOf(raw, Chat, Rules);
-    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
+    same('a plain row: the name, where, no mark, no details', rowOf({ i: 4, name: 'sage', at: 'look' }), { id: 4, name: 'sage', at: 'look', mod: false, role: 'none', pub: false, map: '', mapName: '', guess: '', n: -1, of: -1, code: '' });
     same('the mark of a moderator is exactly true (a string or a number is none)', [rowOf(row(1, 'a1', 'look', { mod: true })).mod, rowOf(row(1, 'a1', 'look', { mod: 'true' })).mod, rowOf(row(1, 'a1', 'look', { mod: 1 })).mod], [true, false, false]);
     same('a name loses the invisible and bidirectional characters and is cut at 32 code points', [rowOf(row(1, '‮alice​⁦')).name, rowOf(row(1, 'x'.repeat(40))).name], ['alice', 'x'.repeat(32) + '…']);
     same('markup in a name stays text', rowOf(row(1, '<img src=x onerror=1>')).name, '<img src=x onerror=1>');
@@ -646,6 +646,37 @@ function bringPlayers(env) {
     check('nothing is kept in the browser and no socket is opened by the list itself', !/localStorage|sessionStorage|indexedDB|document\.cookie|new WebSocket|WebSocket\(|XMLHttpRequest|fetch\(|navigator\.sendBeacon/.test(code));
     check('it never names the hub\'s door (the dock\'s script alone knows it)', !/\/hub\b/.test(code));
     same('it makes only these kinds of element', [...new Set([...code.matchAll(/\bel\('(\w+)'/g)].map((m) => m[1]).concat([...code.matchAll(/\bbutton\('/g)].length ? ['button'] : []))].sort(), ['bdi', 'button', 'div', 'h2', 'h3', 'hr', 'i', 'li', 'p', 'section', 'span', 'ul']);
+}
+
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. The roles: the words ADMIN and MOD beside a name (the hub's `mod` is true for both; `role` says which), and the visitor's own row that follows a live change
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const P = Pure;
+    same('a row\'s role is the hub\'s `role` where `mod` is true: admin, mod; a row that says admin and not mod, a word that is neither, or no role is mod or none',
+        [P.rowOf({ i: 1, name: 'a', at: 'look', mod: true, role: 'admin' }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: true, role: 'mod' }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: true }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: true, role: 'root' }, Chat, Rules).role,
+         P.rowOf({ i: 1, name: 'a', at: 'look', mod: false, role: 'admin' }, Chat, Rules).role, P.rowOf({ i: 1, name: 'a', at: 'look', mod: 'true', role: 'admin' }, Chat, Rules).role], ['admin', 'mod', 'mod', 'mod', 'none', 'none']);
+    const r = rig();
+    r.live(W({ you: { name: 'maple', mod: false, role: 'none' } }));
+    r.who(FULL([row(2, 'zed', 'look', { mod: true, role: 'mod' }), row(3, 'boss', 'look', { mod: true, role: 'admin' }), row(4, 'amy', 'look', { mod: true }), row(5, 'sage')], { n: 5 }));
+    const cardOf = (name) => byClass(r.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === name);
+    const badgeOf = (name) => { const b = one(cardOf(name), 'pl-badge'); return b ? [b.textContent, cls(b).indexOf('pl-badge-admin') !== -1] : null; };
+    same('the Moderators group has both, the admins first, then by name; each has its word (the admin\'s with the class for red, the moderator\'s for gold), and a person with no role has none', [r.groups()[0].names, badgeOf('boss'), badgeOf('amy'), badgeOf('zed'), badgeOf('sage')], [['boss', 'amy', 'zed'], ['admin', true], ['mod', false], ['mod', false], null]);
+    r.who({ t: 'who', full: false, n: 5, g: 0, more: 0, rows: [row(2, 'zed', 'look', { mod: true, role: 'admin' })], gone: [] });
+    same('a change that makes a moderator an admin is drawn at once (the word, the class, the place in the group)', [r.groups()[0].names, badgeOf('zed')], [['boss', 'zed', 'amy'], ['admin', true]]);
+    r.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'admin' } });
+    same('the visitor\'s own row follows a live `you` at once: the word ADMIN with the red class, and "you"; then MOD, then nothing', [(() => { const b = one(one(r.panel(), 'pl-you'), 'pl-badge'); return b ? [b.textContent, cls(b).indexOf('pl-badge-admin') !== -1] : null; })(),
+        (r.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'mod' } }), (() => { const b = one(one(r.panel(), 'pl-you'), 'pl-badge'); return b ? [b.textContent, cls(b).indexOf('pl-badge-admin') !== -1] : null; })()),
+        (r.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none' } }), one(one(r.panel(), 'pl-you'), 'pl-badge'))], [['admin', true], ['mod', false], null]);
+    r.emit('you', { t: 'you' }); r.emit('you', { t: 'you', you: 'admin' }); r.emit('you', null);
+    check('a `you` that is not a visitor changes nothing and throws nothing; a reader has no row to change', one(one(r.panel(), 'pl-you'), 'pl-badge') === null && r.errors.length === 0);
+    const reader = rig(); reader.live(W({ you: null })); reader.who(FULL([row(2, 'zed', 'look', { mod: true })], { n: 2 })); reader.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'admin' } });
+    check('a reader that is told a `you` is still a reader (no own row)', one(reader.panel(), 'pl-you') === null && reader.errors.length === 0);
+    const old = rig(); old.live(W({ you: { name: 'moddy', mod: true } })); old.who(FULL([], { n: 1 }));
+    check('a hub that says `mod` only: the visitor is a moderator, with the gold word', texts(old.panel(), 'pl-badge').join() === 'mod' && cls(one(old.panel(), 'pl-badge')).indexOf('pl-badge-admin') === -1);
+    const adm = rig(); adm.live(W({ you: { name: 'boss', mod: true, role: 'admin' } })); adm.who(FULL([], { n: 1 }));
+    check('a welcome that says admin: the own row has the word ADMIN at once', texts(adm.panel(), 'pl-badge').join() === 'admin' && cls(one(adm.panel(), 'pl-badge')).indexOf('pl-badge-admin') !== -1);
 }
 
 console.log('players list: ' + checks + ' checks, ' + failures + ' failed');

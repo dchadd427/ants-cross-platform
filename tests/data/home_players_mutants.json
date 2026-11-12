@@ -133,7 +133,7 @@
   {
    "id": "the_groups_are_not_sorted",
    "file": "web/home/players.js",
-   "old": "GROUPS.forEach(function (g) { out[g[0]].sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id; }); });",
+   "old": "GROUPS.forEach(function (g) { out[g[0]].sort(function (a, b) { return (b.role === 'admin') - (a.role === 'admin') || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id); }); });       // (the admins first, then by name)",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -632,6 +632,76 @@
    "file": "web/home/players.js",
    "old": "if (!empty) {                                                // (alone:",
    "new": "if (true) {                                                // (alone:",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "admins_are_not_first",
+   "file": "web/home/players.js",
+   "old": "(b.role === 'admin') - (a.role === 'admin') || ",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_admin_has_the_word_mod",
+   "file": "web/home/players.js",
+   "old": "row.role === 'admin' ? TEXT.admin : TEXT.mod",
+   "new": "TEXT.mod",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_admin_is_not_red",
+   "file": "web/home/players.js",
+   "old": "(row.role === 'admin' ? ' pl-badge-admin' : '')",
+   "new": "''",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_role_word_without_mod_is_a_role",
+   "file": "web/home/players.js",
+   "old": "return mod !== true ? 'none' : raw === 'admin' ? 'admin' : 'mod'; }",
+   "new": "return raw === 'admin' ? 'admin' : mod === true ? 'mod' : 'none'; }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_live_role_is_not_read",
+   "file": "web/home/players.js",
+   "old": "} else if (kind === 'you') {",
+   "new": "} else if (kind === 'you-is-not-read') {",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_own_row_is_not_made_again_for_a_role",
+   "file": "web/home/players.js",
+   "old": "mine = you ? { name: you.name, mod: you.mod, role: you.role, doing: doing }",
+   "new": "mine = you ? { name: you.name, mod: you.mod, doing: doing }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_rows_role_does_not_make_the_list_again",
+   "file": "web/home/players.js",
+   "old": "return [r.id, r.name, r.at, r.mod, r.role, r.pub,",
+   "new": "return [r.id, r.name, r.at, r.mod, r.pub,",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_welcomes_role_is_not_read",
+   "file": "web/home/players.js",
+   "old": "role: m.you.role === 'admin' || m.you.role === 'mod' ? m.you.role : m.you.mod === true ? 'mod' : 'none' }",
+   "new": "role: m.you.mod === true ? 'mod' : 'none' }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_own_row_has_no_role",
+   "file": "web/home/players.js",
+   "old": "at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pub:",
+   "new": "at: doing ? doing.at : 'look', mod: you.mod, pub:",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_red_of_the_players_admin_is_the_gold",
+   "file": "web/home/players.css",
+   "old": ".pl-badge-admin { color: var(--cream); background: #9d0d17;",
+   "new": ".pl-badge-admin { color: var(--cream); background: var(--gold);",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

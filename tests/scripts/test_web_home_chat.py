@@ -208,7 +208,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertIn("slot.hidden = !(live && you && login && menuOn);", self.js, "the account's dropdown: the welcome names the visitor, the hub has a login, and the chip has opened it; nothing else shows it")
         self.assertIn("chip.hidden = !(live && login);", self.js, "the bar's chip: only where the hub offers a login, and not while the hub is not there")
         self.assertIn("var ask = live && !you && login;", self.js, "the field is off and asks for the login only where one is offered")
-        self.assertIn("send.hidden = !you; enter.hidden = !!you;", self.js, "Send for a named visitor, Log in for the others, never both")
+        self.assertIn("send.hidden = !you || barred; enter.hidden = !!you;", self.js, "Send for a named visitor who may write, Log in for the others, never both")
         self.assertEqual(self.code.count("login = m.login === true;"), 1, "whether there is a login is what the hub says, nothing else")
 
     def test_the_log_and_the_controls_have_their_names_and_the_dock_its_focus_handling(self):
@@ -341,6 +341,124 @@ class TheStyle(unittest.TestCase):
         self.assertRegex(self.rule(".gc-badge"), r"background: var\(--gold\);")
 
 
+def luminance(color):
+    channels = [int(color.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    channels = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def contrast(a, b):
+    high, low = sorted((luminance(a), luminance(b)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+class TheRoles(unittest.TestCase):
+    """the page's side of the roles (docs/HUB.md "Roles" and "Moderation"): what it reads, what it draws, the words, and what it never does with a person's text; the behavior is run in
+    tests/scripts/web_home_chat_check.js (the fake clock) and web_home_chat_hub_check.js (a real socket)"""
+    @classmethod
+    def setUpClass(cls):
+        cls.js = read("web", "home", "chat.js")
+        cls.code = code_of(cls.js)
+        cls.css = read("web", "home", "chat.css")
+        cls.players_css = read("web", "home", "players.css")
+        cls.home_css = read("web", "home", "home.css")
+        cls.lobby = read("web", "lobby.html")
+
+    def rule(self, css, selector):
+        rules = re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", css, flags=re.S))
+        return next(body for sel, body in rules if " ".join(sel.split()) == selector)
+
+    def token(self, name):
+        return re.search(r"--%s: (#[0-9a-f]{6})" % name, self.lobby).group(1)
+
+    def test_the_red_is_the_red_of_the_leave_buttons_and_the_gold_is_the_pages_gold(self):
+        leave = re.search(r"\.leave \{[^}]*var\(--sheen\) #([0-9a-f]{6})", self.home_css).group(1)
+        for css, selector in ((self.css, ".gc-badge-admin"), (self.css, ".gc-cr-admin"), (self.players_css, ".pl-badge-admin")):
+            self.assertIn("background: #%s;" % leave, self.rule(css, selector), selector)
+        for css, selector in ((self.css, ".gc-badge"), (self.css, ".gc-cr"), (self.players_css, ".pl-badge, .pl-tag")):
+            self.assertIn("background: var(--gold);", self.rule(css, selector), selector)
+        self.assertEqual(self.token("gold"), "#f6d058")
+
+    def test_the_words_on_the_marks_can_be_read_the_color_is_never_the_only_sign(self):
+        red = re.search(r"\.leave \{[^}]*var\(--sheen\) #([0-9a-f]{6})", self.home_css).group(1)
+        self.assertGreaterEqual(contrast(self.token("cream"), "#" + red), 4.5, "ADMIN: the cream word on the red")
+        self.assertGreaterEqual(contrast("#1a1405", self.token("gold")), 4.5, "MOD: the dark word on the gold")
+        for css, selector in ((self.css, ".gc-badge-admin"), (self.css, ".gc-cr-admin"), (self.players_css, ".pl-badge-admin")):
+            self.assertIn("color: var(--cream);", self.rule(css, selector), selector)
+            self.assertIn("box-shadow: ", self.rule(css, selector), selector + ": a light edge, because the red alone is dim against the dark panels")
+        self.assertGreaterEqual(contrast("#e0707a", "#0a1016"), 3, "the edge of the red against the log")
+        for css, selector in ((self.css, ".gc-badge"), (self.css, ".gc-cr"), (self.players_css, ".pl-badge, .pl-tag")):
+            self.assertIn("text-transform: uppercase;", self.rule(css, selector), selector)
+        for word in ("admin: 'admin'", "mod: 'mod'"):
+            self.assertIn(word, self.js)
+        self.assertIn("(admin ? TEXT.admin : TEXT.mod) + ' '", self.js, "a line's mark is a word")
+        self.assertIn("chipRole.textContent = has ? (you.role === 'admin' ? TEXT.admin : TEXT.mod) : '';", self.js, "the chip's mark is a word")
+
+    def test_the_quiet_line_and_the_private_answers_have_text_that_can_be_read(self):
+        self.assertGreaterEqual(contrast("#9cc0b3", "#0a1016"), 4.5, "the hub's own line on the log")
+        for color in ("#f4ece2", "#a8cfc0", "#b9d9cc"):
+            self.assertGreaterEqual(contrast(color, "#0e1c18"), 4.5, color + " on the private answer")
+        self.assertGreaterEqual(contrast("#f4ece2", "#1c140c"), 4.5, "the notice of a removal")
+        self.assertIn("font-style: italic;", self.rule(self.css, ".gc-event"))
+        self.assertIn("border-left: 3px solid", self.rule(self.css, ".gc-private"), "a private answer is set apart by more than its color")
+
+    def test_the_role_is_the_hubs_word_read_in_two_places_and_nothing_else_makes_one(self):
+        self.assertIn("function roleOf(role, mod) {", self.js)
+        self.assertIn("return mod !== true ? 'none' : role === 'admin' ? 'admin' : 'mod';", self.js, "admin only where the hub also says moderator; any other word is mod, never admin")
+        self.assertIn("var name = nameOf(y.name), role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none';", self.js)
+        self.assertIn("you = youOf(m.you);", self.js)
+        self.assertEqual(self.code.count("var sys = "), 0)
+        self.assertIn("sys = m.sys === true;", self.js, "the hub's own line is the hub's flag, exactly true")
+        self.assertNotRegex(self.code, r"['\"]system['\"]", "no name makes a line the hub's: the page never names `system`")
+        self.assertNotRegex(self.code, r"\bwas (kicked|banned)\b", "no text makes a line the hub's: the page never reads the words of the hub's line")
+        self.assertIn("e.own = !e.sys && mine(e);", self.js)
+        self.assertEqual(self.code.count("e.own = !e.sys && mine(e)"), 2, "the hub's own line is nobody's own line, in the history and live")
+
+    def test_the_new_frames_are_read_and_the_live_one_reaches_the_players_list(self):
+        for part in ("else if (m.t === 'you') onYou(m);", "else if (m.t === 'ok') onOk(m);", "else if (m.t === 'bans') onBans(m);", "else if (m.t === 'bye') onBye(m);", "tapped('you', m);",
+                     "var next = you ? youOf(m.you) : null;", "you.role = next.role; you.mod = next.mod;", "SAID.indexOf(m.code) !== -1 || ABOUT.indexOf(m.code) !== -1"):
+            self.assertIn(part, self.js, part)
+        self.assertIn("var ABOUT = ['power', 'role', 'who'];", self.js)
+        self.assertNotIn("'power'", re.search(r"var SAID = \[(.*?)\];", self.code).group(1), "a line is never refused with a command's code")
+        self.assertIn("kind === 'you'", read("web", "home", "players.js"))
+
+    def test_help_is_the_pages_own_and_the_commands_are_the_hubs(self):
+        self.assertIn("if (word === '/help') { answer(helpOf(you.role)); return ''; }", self.js, "answered before anything is sent")
+        send_at, help_at = self.js.index("sock.send(JSON.stringify({ t: 'say', text: text }))"), self.js.index("answer(helpOf(you.role))")
+        self.assertLess(help_at, send_at)
+        self.assertEqual(self.code.count("sock.send("), 3, "a ping, a line, and what the players list sends through out(): an answer is never sent")
+        body = re.search(r"function answer\(lines\) \{.*?\n        \}", self.code, re.S).group(0)
+        self.assertNotRegex(body, r"send|\.out\(|sock", "a private answer is a line of this screen only")
+        words = re.findall(r"\['(/\w+)', ([12]), '", self.js)
+        self.assertEqual(words, [("/mute", "1"), ("/unmute", "1"), ("/del", "1"), ("/kick", "1"), ("/ban", "2"), ("/unban", "2"), ("/bans", "2")], "the hub's seven commands and the rank of each (docs/HUB.md, Moderation)")
+
+    def test_a_name_or_an_argument_is_never_markup_or_a_selector(self):
+        self.assertNotRegex(self.code, r"querySelector|getElementsBy|getElementById|\.matches\(|new RegExp|RegExp\(", "no name and no argument is used to find an element or to make a pattern")
+        self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|\beval\b|new Function")
+        for kind in ("answer(", "bansOf(", "helpOf("):
+            self.assertIn(kind, self.js)
+
+    def test_the_words_are_the_agreed_ones(self):
+        for words in ("You are not allowed to do that", "Could not confirm your role, try again in a moment", "Nobody by that name is here", "You are going too fast, try again in a moment", "That command is not right. Type /help to see the commands.",
+                      "A moderator removed you from the chat. You can log in again.", "You are banned from the chat. You can still read it.", "Commands you can use. Only you can see this.", "There are no chat commands for you.",
+                      "You are a moderator", "You are an admin", "Only you", "Nobody is banned.", "People who are banned"):
+            self.assertIn(words, self.js, words)
+        for word in ("let", "class", "import"):
+            self.assertNotRegex(self.code, r"'[^']*\b%s\b[^']*'" % word, "the plain-ES5 test reads these words: keep them out of the texts")
+
+    def test_a_removed_person_is_not_reconnected_by_a_loop_of_the_pages_own(self):
+        self.assertEqual(self.code.count("new Socket("), 1)
+        self.assertEqual(self.code.count("setTimeout(guard(go)"), 1, "the one retry is the usual one, with its backoff: a `bye` has none of its own")
+        body = re.search(r"function onBye\(m\) \{.*?\n        \}", self.code, re.S).group(0)
+        self.assertNotRegex(body, r"go\(|setTimeout|new Socket|lost\(|drop\(", "a bye only notes the removal: the hub closes the socket and the page's one retry does the rest")
+
+    def test_the_chip_has_a_place_for_the_mark_and_the_style_hides_it_where_there_is_none(self):
+        self.assertIn(".gc-yr[hidden], .gc-cr[hidden] { display: none; }", self.css)
+        self.assertIn("chipRole = el('span', 'gc-cr'); chipRole.hidden = true;", self.js)
+        self.assertIn("put(chip, [chipMark, chipAv, chipName, chipRole]);", self.js)
+        self.assertIn(".pl-badge-admin", self.players_css)
+
+
 class TheWayIntoTheImage(unittest.TestCase):
     def test_the_dockerfile_copies_the_whole_folder(self):
         self.assertIn("COPY web/home/ /usr/share/nginx/html/home/\n", read("Dockerfile"))
@@ -440,7 +558,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

@@ -97,7 +97,7 @@ The list of the front page's players ([HOME_SCREEN.md](HOME_SCREEN.md#the-player
 
 ## Moderation
 
-**Not for the site before the page is ready.** The page does not yet read the new frames and codes (`ok`, `bans`, `bye`, `power`, `role`, `who`): a moderator gets no answer to a refused command and no list of bans, and the named line shows as a line from `system`. This change must not reach the site before the page change that reads them.
+**The page.** The front page's chat reads all of these ([HOME_SCREEN.md](HOME_SCREEN.md#the-chat-dock)): the role in `you` and the `you` frame, `/help` (the page's own, never sent), a private answer in words for `ok`, `bans` and each of `power`, `role`, `who`, `rate` and `bad`, the hub's own line (only `sys: true` makes one), and a plain notice for `bye`. The marks of other people read `mod` (gold) for both roles until a line or a row of the list carries `role` (`admin` or `mod`, only where `mod` is true), which the page draws red for an admin when the hub sends it.
 
 Mutes, bans and deletions are kept by account id in `hub.db`, so they survive a restart, a new session and a rename. A banned account can still read. Change bans and mutes only with `hub.admin` or the chat commands: a writer that does not raise the counter in `meta` (see Data) may go unseen by a running hub until the next counted change or a restart.
 

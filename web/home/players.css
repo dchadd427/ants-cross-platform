@@ -37,6 +37,7 @@
 .pl-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 1.25; color: #9fe0b8; }
 .pl-meta { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.25; color: #a8cfc0; }
 .pl-badge, .pl-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.pl-badge-admin { color: var(--cream); background: #9d0d17; box-shadow: 0 0 0 1px #e0707a; }       /* (the red of the Leave buttons, with the word ADMIN; the gold of a moderator's word is the page's gold) */
 .pl-tag { margin: 0 0 0 6px; padding: 0 6px; }
 .pl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .pl-join { flex: none; min-height: 44px; min-width: 60px; padding: 6px 12px; font-size: 15px; }

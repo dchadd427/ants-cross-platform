@@ -113,6 +113,7 @@ function rig(o) {
     r.rows = () => r.log().children.slice(1);
     r.rowTexts = () => r.rows().map((x) => x.textContent);
     r.note = () => one(dock.root, 'gc-note').textContent;
+    r.answers = () => r.rows().filter((x) => cls(x).indexOf('gc-private') !== -1).map((x) => x.children.slice(1).map((c) => c.textContent).join('\n'));       // (the private answers of the screen: the lines of each, after its "Only you" tag)
     r.pill = () => { const p = one(dock.root, 'gc-unread'); return p.hidden ? '' : p.textContent; };
     r.on = () => one(dock.root, 'gc-on').textContent;
     r.fold = () => one(dock.root, 'gc-fold');
@@ -140,7 +141,7 @@ function rig(o) {
         P.parse('{"t":"x"}') !== null && P.parse(5) === null && P.parse(new ArrayBuffer(4)) === null && P.parse('x'.repeat(P.LIMIT.frame + 1)) === null && P.parse('{') === null && P.parse('[1]') === null && P.parse('3') === null
         && P.parse('null') === null && P.parse('{}') === null && P.parse('{"t":5}') === null && P.parse('{"t":"a","__proto__":{"x":1}}') !== null && P.parse('{"t":"ok"}'.padEnd(P.LIMIT.frame, ' ')) !== null);
     same('count: whole numbers from 0 only', [P.count(0), P.count(7), P.count(-1), P.count(1.5), P.count('3'), P.count(null), P.count(NaN), P.count(Infinity), P.count(1e12)], [0, 7, null, null, null, null, null, null, null]);
-    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true, k: '', u: '' }, false, 0]);
+    same('lineOf: a good line is cleaned, the mod flag is a boolean true only', [P.lineOf({ id: 4, who: 'a', text: ' hi  there ', mod: true }), P.lineOf({ id: 4, who: 'a', text: 'x', mod: 'yes' }).mod, P.lineOf({ id: 0, who: 'a', text: 'x' }).id], [{ id: 4, who: 'a', text: 'hi there', mod: true, role: 'mod', sys: false, k: '', u: '' }, false, 0]);
     same('lineOf: not a line when the id is not a whole number, the name or text is not a string, or nothing is left of the text',
         [{ who: 'a', text: 'x' }, { id: '4', who: 'a', text: 'x' }, { id: -1, who: 'a', text: 'x' }, { id: 1.5, who: 'a', text: 'x' }, { id: 4, who: 5, text: 'x' }, { id: 4, who: 'a', text: 5 }, { id: 4, who: 'a', text: ' \u202e \u200b ' }, null, 'x', []].map((m) => P.lineOf(m)),
         [null, null, null, null, null, null, null, null, null, null]);
@@ -274,7 +275,7 @@ function rig(o) {
     Object.keys(words).forEach((code) => {
         const r = rig(); r.live(W({ you: YOU, login: true })); r.dock.say('hello');
         r.s().recv({ t: 'err', code });
-        check('err ' + code + ': "' + words[code] + '" in the note, which goes after a few seconds', r.note() === words[code] && (r.clock.advance(5900), r.note() === words[code]) && (r.clock.advance(200), r.note() === ''));
+        check('err ' + code + ': "' + words[code] + '" in the note, which goes after a few seconds', r.note() === words[code] && (r.clock.advance(5900), r.note() === words[code]) && (r.clock.advance(200), r.note() === (code === 'banned' ? 'You are banned from the chat. You can still read it.' : '')));       // (a refusal for a ban is the one that stays: the person is banned, and the field is off)
     });
     const a = rig(); a.live(W({ you: YOU, login: true })); a.dock.say('hello'); a.s().recv({ t: 'err', code: 'login' });
     const b = rig(); b.live(W({ you: YOU, login: false })); b.dock.say('hello'); b.s().recv({ t: 'err', code: 'login' });
@@ -288,9 +289,9 @@ function rig(o) {
     const lateErr = rig(); lateErr.live(W({ you: YOU })); lateErr.dock.say('hello'); lateErr.clock.advance(9000); lateErr.s().recv({ t: 'err', code: 'rate' });
     same('(a line that had no answer for 8 s is not waited for: a late err is nobody\'s)', [lateErr.note(), lateErr.field().value], ['', '']);
     const badCommand = rig(); badCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); badCommand.dock.say('/mute nobody 5'); badCommand.s().recv({ t: 'err', code: 'bad' });
-    same('a moderator\'s command that the hub refuses is told, with nothing put in the field, no code of the dock throws, and the dock stays live: it is in flight for a few seconds', [badCommand.note(), badCommand.field().value, badCommand.dock.state(), badCommand.errors.length], ['That line could not be sent', '', 'live', 0]);
+    same('a moderator\'s command that the hub refuses is answered privately (a line of this screen that nobody else is sent, and no note), with nothing put in the field, no code of the dock throws, and the dock stays live: it is in flight for a few seconds', [badCommand.answers(), badCommand.note(), badCommand.field().value, badCommand.dock.state(), badCommand.errors.length], [['That command is not right. Type /help to see the commands.'], '', '', 'live', 0]);
     const oldCommand = rig(); oldCommand.live(W({ you: { name: 'maple.leaf', mod: true } })); oldCommand.dock.say('/mute nobody 5'); oldCommand.clock.advance(9000); oldCommand.s().recv({ t: 'err', code: 'bad' });
-    same('... and not 8 s later', oldCommand.note(), '');
+    same('... and not 8 s later', [oldCommand.note(), oldCommand.answers()], ['', []]);
     const d = rig(); d.live(W({ you: YOU })); d.dock.say('hello'); d.s().recv({ t: 'err', code: 'rate' });
     check('a line that the hub refused comes back into the field (nothing typed is lost)', d.field().value === 'hello');
     d.field().value = 'new words'; d.dock.say('again'); d.s().recv({ t: 'err', code: 'bad' });
@@ -451,7 +452,7 @@ function rig(o) {
     const together = rig(); together.live(W({ you: MOD }));
     together.dock.say('/mute nobody 5'); together.dock.say('hello');
     together.s().recv({ t: 'err', code: 'bad' });
-    same('a command and a line sent within one round trip, and the hub says `bad` to the command: the note is the command\'s, and nothing is put in the field (the line was taken)', [together.note(), together.field().value], ['That line could not be sent', '']);
+    same('a command and a line sent within one round trip, and the hub says `bad` to the command: the private answer is the command\'s, and nothing is put in the field (the line was taken)', [together.answers(), together.field().value], [['That command is not right. Type /help to see the commands.'], '']);
     together.s().recv(L(90, 'maple.leaf', 'hello'));
     same('... the line is shown once, as the line that it is, and the field is still empty', [together.rowTexts().filter((t) => t === 'maple.leaf: hello').length, together.field().value], [1, '']);
     together.clock.advance(2500); together.dock.say('again'); together.s().recv({ t: 'err', code: 'rate' });
@@ -461,7 +462,7 @@ function rig(o) {
     lineFirst.s().recv({ t: 'err', code: 'rate' });
     const lineBack = lineFirst.field().value;
     lineFirst.s().recv({ t: 'err', code: 'bad' });
-    same('a line and then a command, both refused (`rate` for the line, `bad` for the command): the line comes back, and the command does not take its place in the field', [lineBack, lineFirst.field().value, lineFirst.note()], ['hello', 'hello', 'That line could not be sent']);
+    same('a line and then a command, both refused (`rate` for the line, `bad` for the command): the line comes back, and the command does not take its place in the field', [lineBack, lineFirst.field().value, lineFirst.answers()], ['hello', 'hello', ['That command is not right. Type /help to see the commands.']]);
     const muted = rig(); muted.live(W({ you: MOD }));
     muted.dock.say('/mute nobody 5'); muted.dock.say('hello');
     muted.s().recv({ t: 'err', code: 'muted' });
@@ -471,7 +472,7 @@ function rig(o) {
     same('a command and a line, both refused with a code that is for either (muted): a code that is not `bad` is the line\'s first, then the command\'s, which is not put in the field', [mutedBack, muted.field().value, muted.note()], ['hello', '', 'You cannot chat for a while']);
     const alone = rig(); alone.live(W({ you: MOD }));
     alone.dock.say('/mute nobody 5'); alone.s().recv({ t: 'err', code: 'rate' });
-    same('a command that waits alone is the refusal\'s whatever the code (a hub whose database failed says `rate` for it): the note is told, nothing is put in the field', [alone.note(), alone.field().value], ['Slow down a little', '']);
+    same('a command that waits alone is the refusal\'s whatever the code (a hub whose database failed says `rate` for it): the answer is told privately, nothing is put in the field', [alone.answers(), alone.note(), alone.field().value], [['You are going too fast, try again in a moment'], '', '']);
     const refusedCommand = rig(); refusedCommand.live(W({ you: MOD }));
     refusedCommand.dock.say('/mute nobody 5'); refusedCommand.s().recv({ t: 'err', code: 'bad' }); refusedCommand.clock.advance(2500);
     const takenCommand = rig(); takenCommand.live(W({ you: MOD }));
@@ -485,7 +486,7 @@ function rig(o) {
     inTime.dock.say('/mute nobody 5'); inTime.clock.advance(7999); inTime.s().recv({ t: 'err', code: 'bad' });
     const tooLate = rig(); tooLate.live(W({ you: MOD }));
     tooLate.dock.say('/mute nobody 5'); tooLate.clock.advance(8000); tooLate.s().recv({ t: 'err', code: 'bad' });
-    same('a command that nobody answers is waited for for 8 s: a `bad` 7,999 ms after it was sent is its answer, and one 8,000 ms after it is nobody\'s', [inTime.note(), tooLate.note()], ['That line could not be sent', '']);
+    same('a command that nobody answers is waited for for 8 s: a `bad` 7,999 ms after it was sent is its answer, and one 8,000 ms after it is nobody\'s', [inTime.answers(), tooLate.answers()], [['That command is not right. Type /help to see the commands.'], []]);
     const lostCommand = rig(); lostCommand.live(W({ you: MOD }));
     lostCommand.dock.say('/mute nobody 5'); lostCommand.s().fail(); lostCommand.clock.advance(2500); lostCommand.s().open().recv(W({ you: MOD }));
     lostCommand.s().recv({ t: 'err', code: 'bad' });
@@ -993,7 +994,7 @@ function bring(env) {                                     // the two files arriv
     check('before the hub has spoken the chip is hidden (a page that cannot reach the hub offers no login), and so is the account line', r.chip.hidden === true && r.dock.slot.hidden === true);
     r.live(W({ login: true, you: null }));
     check('login:true and nobody named: the chip is shown, with the mark of Discord and "Log in" (not the circle), and says what it does', r.chip.hidden === false && one(r.chip, 'gc-dc').hidden === false && one(r.chip, 'gc-av').hidden === true && one(r.chip, 'gc-cn').textContent === 'Log in'
-          && r.chip.getAttribute('aria-label') === 'Log in with Discord' && r.chip.children.length === 3);
+          && r.chip.getAttribute('aria-label') === 'Log in with Discord' && r.chip.children.length === 4);       // (the mark, the circle, the name, and the role's word, which is hidden for a person who holds none)
     r.chip.click();
     same('a press on the chip is a navigation of the page to /hub/login?next=home (a full page, not a request): the one address, once; no socket message, nothing else', [r.went, r.sockets.length, r.s().sent.length, r.fetches.length], [['/hub/login?next=home'], 1, 0, 0]);
     one(r.root, 'gc-login').click();
@@ -1192,7 +1193,7 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     const P = Pure;
     same('lineOf: the key and the username of the author, cleaned like a name', [P.lineOf({ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }), P.lineOf({ id: 4, who: 'a', text: 'x', k: 5, u: 5 }), P.lineOf({ id: 4, who: 'a', text: 'x', k: null, u: [] }),
         P.lineOf({ id: 4, who: 'a', text: 'x', u: '<b>x</b> \u202eevil\u202c \u200b' }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: 'u'.repeat(60) }).u, P.lineOf({ id: 4, who: 'a', text: 'x', u: '\u3164\u2800' }).u],
-        [{ id: 4, who: 'Maple Leaf', text: 'x', mod: false, k: MINE, u: 'maple.leaf' }, { id: 4, who: 'a', text: 'x', mod: false, k: '', u: '' }, { id: 4, who: 'a', text: 'x', mod: false, k: '', u: '' }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
+        [{ id: 4, who: 'Maple Leaf', text: 'x', mod: false, role: 'none', sys: false, k: MINE, u: 'maple.leaf' }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '' }, { id: 4, who: 'a', text: 'x', mod: false, role: 'none', sys: false, k: '', u: '' }, '<b>x</b> evil', 'u'.repeat(32) + '\u2026', '']);
     same('the words of the switch', [P.TEXT.shows, P.TEXT.names, P.TEXT.use], ['Chat shows your ', ['display name', 'username'], 'Show my ']);
     check('the names of other scripts are fine as they are: cleaned for display they come out whole, and are not cut at 32 code points', NAMED.every((n) => P.plain(n, true) === n && P.clip(n, 32) === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).who === n && P.lineOf({ id: 1, who: n, text: 'x', u: n }).u === n));
 }
@@ -1326,6 +1327,200 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
         check('a name in another script comes through whole (' + name + '): the line (no username drawn), the account line, the chip, the button', r.rows()[0].textContent === name + ': hello' && one(r.dock.slot, 'gc-an').textContent === name && one(r.chip, 'gc-cn').textContent === name
               && one(r.dock.slot, 'gc-pick').textContent === 'Show my username: ' + name + '.x' && cls(r.rows()[0]).indexOf('gc-me') !== -1 && r.errors.length === 0);
     });
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 9. The roles (docs/HUB.md "Roles", "Moderation"): the role of the visitor and its live change, the marks, /help and the private answers, the hub's own line, being removed
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+const ME = { name: 'maple.leaf', k: MINE };
+const asRole = (role) => Object.assign({}, ME, { role, mod: role !== 'none' });
+const sentSays = (r) => r.said().map((m) => m.text);
+const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : null;
+{   // the pure parts
+    const P = Pure;
+    same('roleOf: admin or mod only where the hub says moderator; any other word, a string "true" or nothing is none', [P.roleOf('admin', true), P.roleOf('mod', true), P.roleOf(undefined, true), P.roleOf('root', true), P.roleOf('admin', false), P.roleOf('admin', 'true'), P.roleOf('admin', undefined), P.roleOf('mod', 1)], ['admin', 'mod', 'mod', 'mod', 'none', 'none', 'none', 'none']);
+    same('youOf: role where the hub says it, an older hub\'s `mod` only is a moderator, a word that is none of the three is no role, a visitor with no name is nobody',
+        [P.youOf({ name: 'a', mod: true, role: 'admin' }).role, P.youOf({ name: 'a', mod: true }).role, P.youOf({ name: 'a', mod: false }).role, P.youOf({ name: 'a', role: 'mod' }).mod, P.youOf({ name: 'a', mod: true, role: 'root' }).role, P.youOf({ name: 'a', mod: true, role: 'none' }).role,
+         P.youOf({ name: 'a', role: ['admin'] }).role, P.youOf({ name: '', role: 'admin' }), P.youOf(null), P.youOf('admin'), P.youOf({ name: 'a', mod: 'true' }).role], ['admin', 'mod', 'none', true, 'mod', 'none', 'none', null, null, null, 'none']);
+    same('lineOf: the hub\'s own line is a line whose flag `sys` is true and nothing else (not the name, not the text, not "true", not 1); it is no moderator\'s line whatever else it says',
+        [P.lineOf({ id: 1, who: 'system', text: 'a was kicked.', sys: true }).sys, P.lineOf({ id: 1, who: 'system', text: 'a was kicked.' }).sys, P.lineOf({ id: 1, who: 'x', text: 'y', sys: 'true' }).sys, P.lineOf({ id: 1, who: 'x', text: 'y', sys: 1 }).sys, P.lineOf({ id: 1, who: 'x', text: 'y', sys: {} }).sys,
+         P.lineOf({ id: 1, who: 'system', text: 'a was kicked.', sys: true, mod: true, role: 'admin' }).mod, P.lineOf({ id: 1, who: 'system', text: 'a was kicked.', sys: true, mod: true, role: 'admin' }).role], [true, false, false, false, false, false, 'none']);
+    same('lineOf: the role of a line is the hub\'s `role` where `mod` is true; an admin that is not a moderator is none', [P.lineOf({ id: 1, who: 'x', text: 'y', mod: true, role: 'admin' }).role, P.lineOf({ id: 1, who: 'x', text: 'y', mod: true }).role, P.lineOf({ id: 1, who: 'x', text: 'y', mod: false, role: 'admin' }).role, P.lineOf({ id: 1, who: 'x', text: 'y', mod: true, role: 'ADMIN' }).role], ['admin', 'mod', 'none', 'mod']);
+    same('wordOfCommand: the slash word in lower case, only where a space or the end follows (a path, a shrug with no word and a line that has a slash inside are no command word)', [P.wordOfCommand('/MUTE bob 5'), P.wordOfCommand('/bans'), P.wordOfCommand('/help me'), P.wordOfCommand('/mute'), P.wordOfCommand('hello /mute'), P.wordOfCommand('/mute\u00e9 x'), P.wordOfCommand('/a/b'), P.wordOfCommand('/'), P.wordOfCommand('')], ['/mute', '/bans', '/help', '/mute', '', '', '', '', '']);
+    same('helpOf: a moderator is told four commands, an admin seven (the three more are the admin\'s: ban, unban, bans), anybody else that there are none; each is how it is typed and what it does',
+        [P.helpOf('mod').slice(1).map((l) => l[0]), P.helpOf('admin').slice(1).map((l) => l[0]), P.helpOf('none'), P.helpOf('root'), P.helpOf('mod')[0]], [['/mute name minutes', '/unmute name', '/del number', '/kick name'], ['/mute name minutes', '/unmute name', '/del number', '/kick name', '/ban name', '/unban name', '/bans'],
+         ['There are no chat commands for you.'], ['There are no chat commands for you.'], 'Commands you can use. Only you can see this.']);
+    check('helpOf: every line of it has words for what the command does', P.helpOf('admin').slice(1).every((l) => l.length === 2 && l[1].length >= 10));
+    same('bansOf: a heading and a line for each person (the name and the day, UTC), "(no name)" for a row with none; nobody banned; not a list, a list of more than the hub sends, a row that is no object, a time that is no time',
+        [P.bansOf({ rows: [{ u: 'bob', at: 1700000000 }, { u: '', at: 1700086400 }, { u: '<b>x</b>', at: -1 }, 5, null] }), P.bansOf({ rows: [] }), P.bansOf({ rows: 'x' }), P.bansOf({ rows: new Array(51).fill({ u: 'a', at: 1 }) }), P.bansOf(null), P.bansOf({ rows: [{ u: 'a', at: 'x' }, { u: 'a', at: 1e12 }, { u: 'a', at: 1.5 }] })],
+        [['People who are banned', ['bob', '2023-11-14'], ['(no name)', '2023-11-15'], ['<b>x</b>', '']], ['Nobody is banned.'], null, null, null, ['People who are banned', ['a', ''], ['a', ''], ['a', '']]]);
+}
+{   // the role of the visitor, from the welcome
+    const of = (you) => { const r = rig({ chip: true }); r.live(W({ login: true, you })); return r.root.getAttribute('data-role') + '/' + r.chip.getAttribute('aria-label'); };
+    same('the welcome\'s role is the dock\'s: none, mod and admin (the chip says it too, in words); an older hub that says `mod` only is a moderator; a role that is not one of the three is none; a reader has none',
+        [of(asRole('none')), of(asRole('mod')), of(asRole('admin')), of({ name: 'maple.leaf', mod: true }), of({ name: 'maple.leaf', mod: false, role: 'root' }), of(null)],
+        ['none/Chatting as maple.leaf', 'mod/Chatting as maple.leaf, moderator', 'admin/Chatting as maple.leaf, admin', 'mod/Chatting as maple.leaf, moderator', 'none/Chatting as maple.leaf', 'none/Log in with Discord']);
+}
+{   // the marks: the chip, the dropdown, the lines
+    const r = menuOf(rig({ chip: true }));
+    r.live(W({ login: true, you: asRole('admin'), history: [Object.assign(L(1, 'boss', 'hello', true), { role: 'admin' }), L(2, 'clover', 'a room', true), L(3, 'juniper', 'hi'), Object.assign(L(4, 'pebble', 'not a moderator', false), { role: 'admin' })].map((m) => { delete m.t; return m; }) }));
+    const word = (e) => e.textContent;
+    check('the chip of an admin has the word ADMIN (as text, so the color is not the only sign) and the mark of red; the dropdown says "You are an admin" with the same mark', one(r.chip, 'gc-cr').hidden === false && word(one(r.chip, 'gc-cr')) === 'admin' && cls(one(r.chip, 'gc-cr')).indexOf('gc-cr-admin') !== -1
+          && r.dock.slot.hidden === false && one(r.dock.slot, 'gc-yr').hidden === false && word(one(r.dock.slot, 'gc-badge')) === 'admin' && cls(one(r.dock.slot, 'gc-badge')).indexOf('gc-badge-admin') !== -1 && one(r.dock.slot, 'gc-yt').textContent === ' You are an admin');
+    same('in the log an admin\'s line has the word admin (the red mark), a moderator\'s the word mod (the gold one), a line of nobody none, and `role: admin` on a line whose `mod` is false marks nobody', r.rows().map((x) => [one(x, 'gc-badge') ? one(x, 'gc-badge').textContent : '', one(x, 'gc-badge') ? cls(one(x, 'gc-badge')).indexOf('gc-badge-admin') !== -1 : false]),
+        [['admin ', true], ['mod ', false], ['', false], ['', false]]);
+    same('... and the line texts are the names and the lines, with the word before them', r.rowTexts(), ['admin boss: hello', 'mod clover: a room', 'juniper: hi', 'pebble: not a moderator']);
+    const m = menuOf(rig({ chip: true }));
+    m.live(W({ login: true, you: asRole('mod') }));
+    check('a moderator\'s chip says MOD with the gold mark and no red', word(one(m.chip, 'gc-cr')) === 'mod' && cls(one(m.chip, 'gc-cr')).indexOf('gc-cr-admin') === -1 && one(m.dock.slot, 'gc-yt').textContent === ' You are a moderator');
+    const n = menuOf(rig({ chip: true }));
+    n.live(W({ login: true, you: asRole('none') }));
+    check('a person who holds no role has no mark on the chip and no role line in the dropdown', one(n.chip, 'gc-cr').hidden === true && one(n.chip, 'gc-cr').textContent === '' && one(n.dock.slot, 'gc-yr').hidden === true);
+}
+{   // the role changes while the page is open
+    const r = menuOf(rig({ chip: true }));
+    const seenBy = [];
+    r.live(W({ login: true, you: asRole('none') }));
+    r.dock.tap((kind, m) => seenBy.push(kind + ':' + (m && m.you ? m.you.role : '')));
+    r.s().recv({ t: 'you', you: asRole('mod') });
+    check('a `you` frame that makes a person a moderator: the chip, the data-role and the dropdown follow at once, nobody reloads; the players list hears of it (tap kind `you`)', r.root.getAttribute('data-role') === 'mod' && one(r.chip, 'gc-cr').hidden === false && one(r.chip, 'gc-cr').textContent === 'mod' && r.errors.length === 0 && seenBy.join() === 'live:none,you:mod');
+    r.dock.say('/help');
+    same('... and /help lists the moderator\'s four commands', r.answers(), ['Commands you can use. Only you can see this.\n/mute name minutes stop a person writing for 1 to 10080 minutes\n/unmute name allow a muted person to write again\n/del number take one line off the screen of everybody (by its number)\n/kick name remove a person from the chat (they can log in again)']);
+    r.s().recv({ t: 'you', you: asRole('admin') });
+    r.clock.advance(2600); r.dock.say('/help');
+    check('... an admin\'s seven', r.answers().length === 2 && r.answers()[1].split('\n').length === 8 && r.root.getAttribute('data-role') === 'admin' && one(r.chip, 'gc-cr').textContent === 'admin');
+    r.s().recv({ t: 'you', you: asRole('none') });
+    r.clock.advance(2600); r.dock.say('/help'); r.dock.say('/kick bob');
+    same('... and a removal: the marks go, and the commands go with them (a command word is refused here, nothing is sent)', [r.root.getAttribute('data-role'), one(r.chip, 'gc-cr').hidden, r.answers().slice(2), r.s().sent.filter((x) => /kick/.test(x)).length], ['none', true, ['There are no chat commands for you.', 'You are not allowed to do that'], 0]);
+    const other = rig({}); other.live(W({ login: true, you: asRole('none') }));
+    ['x', null, 5, [], {}, { you: null }, { you: 'admin' }, { you: { name: '', role: 'admin' } }, { you: { role: 'admin' } }].forEach((f) => other.s().recv(typeof f === 'object' && f !== null && !Array.isArray(f) && f.you !== undefined ? Object.assign({ t: 'you' }, f) : { t: 'you', you: f }));
+    check('a `you` frame that is not a visitor with a name is ignored (nothing changes, nothing throws)', other.root.getAttribute('data-role') === 'none' && other.errors.length === 0);
+    const reader = rig({}); reader.live(W({ login: true, you: null }));
+    reader.s().recv({ t: 'you', you: asRole('admin') });
+    check('a reader is told nothing of a role: a `you` frame does not make a visitor of a reader (the hub names a visitor in the welcome only)', reader.root.getAttribute('data-you') === 'no' && reader.form().hidden === false && reader.field().disabled === true);
+    const name = rig({}); name.live(W({ login: true, you: asRole('mod') }));
+    name.s().recv({ t: 'you', you: Object.assign({}, asRole('admin'), { name: 'someone.else', k: OTHERS }) });
+    name.s().recv(Object.assign(L(5, 'maple.leaf', 'mine'), { k: MINE }));
+    check('who the visitor is does not change on a socket: a `you` frame with another name or key changes the role only, and the lines of the visitor are still the visitor\'s', cls(name.rows()[0]).indexOf('gc-me') !== -1 && name.root.getAttribute('data-role') === 'admin');
+    const first = rig({}); first.s().open();
+    first.s().recv({ t: 'you', you: asRole('admin') });
+    check('a `you` frame before the welcome is ignored like every frame before it', first.root.getAttribute('data-role') === 'none' && first.errors.length === 0);
+}
+{   // /help is the page's own and a command word of a person with no role is not a line
+    const r = rig({}); r.live(W({ login: true, you: asRole('mod') }));
+    r.dock.say('/help'); r.clock.advance(2600); r.dock.say('/HELP please'); r.clock.advance(2600); r.dock.say('/helpme');
+    check('/help is never sent, in any case and with words after it; it is no line and nobody is sent anything; /helpme is not /help (it is sent, as every command of a moderator is, and the hub answers it)', r.said().map((m) => m.text).join() === '/helpme' && r.answers().length === 2 && tagOf(r.rows()[0]) === 'Only you' && r.rows().every((x) => !/^maple/.test(x.textContent)));
+    const none = rig({}); none.live(W({ login: true, you: asRole('none') }));
+    ['/mute bob 5', '/UNMUTE bob', '/del 3', '/kick bob', '/ban bob', '/unban bob', '/bans'].forEach((c, i) => { none.clock.advance(2600); none.dock.say(c); });
+    none.clock.advance(2600); none.dock.say('/shrug'); none.clock.advance(2600); none.dock.say('/helpful tip'); none.clock.advance(2600); none.dock.say('hello');
+    same('a person who holds no role: the seven command words are answered "You are not allowed to do that" here and never sent (the hub would refuse them and never post them); any other line that begins with a slash is a line', [none.answers().length, none.answers()[0], sentSays(none)], [7, 'You are not allowed to do that', ['/shrug', '/helpful tip', 'hello']]);
+    const field = rig({}); field.live(W({ login: true, you: asRole('none') }));
+    field.submit('/ban bob');
+    same('the field is emptied by an answer of the page (the text is not kept to be sent again)', [field.field().value, field.answers().length], ['', 1]);
+    const reader = rig({}); reader.live(W({ login: true, you: null }));
+    same('a reader has no /help: it says why not (the field is off)', [reader.dock.say('/help'), reader.answers().length], ['readonly', 0]);
+    const off = rig({}); off.live(W({ login: true, you: asRole('mod') })); off.s().fail();
+    same('/help is the page\'s own: it works while the link is down', [off.dock.say('/help'), off.answers().length, off.s().sent.length >= 0], ['', 1, true]);
+}
+{   // each reply of the hub, in plain words, to the sender only
+    const MODE = asRole('mod');
+    const reply = (command, frame) => { const r = rig({}); r.live(W({ login: true, you: MODE })); if (command) r.dock.say(command); r.s().recv(frame); return r; };
+    const WORDS = { power: 'You are not allowed to do that', role: 'Could not confirm your role, try again in a moment', who: 'Nobody by that name is here', rate: 'You are going too fast, try again in a moment', bad: 'That command is not right. Type /help to see the commands.' };
+    Object.keys(WORDS).forEach((code) => {
+        const r = reply('/kick bob', { t: 'err', code });
+        check('err ' + code + ' to a command: "' + WORDS[code] + '", a private line, nothing in the note, nothing in the field, nothing sent but the command', eq(r.answers(), [WORDS[code]]) && r.note() === '' && r.field().value === '' && sentSays(r).join() === '/kick bob' && tagOf(r.rows()[0]) === 'Only you');
+    });
+    ['power', 'role', 'who'].forEach((code) => {
+        const late = reply('/kick bob', { t: 'err', code }); late.dock.say('hello');
+        const alone = rig({}); alone.live(W({ login: true, you: MODE })); alone.clock.advance(1); alone.s().recv({ t: 'err', code });
+        const gone = rig({}); gone.live(W({ login: true, you: MODE })); gone.dock.say('/kick bob'); gone.clock.advance(9000); gone.s().recv({ t: 'err', code });
+        const line = rig({}); line.live(W({ login: true, you: MODE })); line.dock.say('/kick bob'); line.dock.say('hello'); line.s().recv({ t: 'err', code });
+        same('err ' + code + ' is only ever a command\'s: told where the command was forgotten or none was sent, and it never takes a line\'s place (the line still waits for its own answer, and is not put back)', [alone.answers(), gone.answers(), line.answers(), line.field().value, (line.s().recv({ t: 'err', code: 'rate' }), line.field().value)], [[WORDS[code]], [WORDS[code]], [WORDS[code]], '', 'hello']);
+    });
+    const ok = (c, command) => reply(command, { t: 'ok', c });
+    same('ok: one plain line for each of the six commands, to the sender only', ['mute', 'unmute', 'del', 'kick', 'ban', 'unban'].map((c) => ok(c, '/' + c + ' x').answers()[0]),
+        ['Done: the person is muted.', 'Done: the person can write again.', 'Done: the line is gone.', 'Done: the person was removed.', 'Done: the person is banned.', 'Done: the ban is lifted.']);
+    same('ok answers the command that waits (the next refusal is for the next send), and a word that is no command ("constructor", "__proto__", a number, nothing) says nothing', [(() => { const r = ok('mute', '/mute x 5'); r.clock.advance(2600); r.dock.say('hello'); r.s().recv({ t: 'err', code: 'rate' }); return r.field().value; })(),
+        ['constructor', '__proto__', 5, null, undefined, '', 'hasOwnProperty'].map((c) => reply('/mute x 5', { t: 'ok', c }).answers().length)], ['hello', [0, 0, 0, 0, 0, 0, 0]]);
+    same('a refusal that is not a command\'s is a line\'s as it was (the note), and a command is never put back in the field', [(() => { const r = rig({}); r.live(W({ login: true, you: MODE })); r.dock.say('hello'); r.s().recv({ t: 'err', code: 'rate' }); return [r.note(), r.field().value, r.answers()]; })()], [['Slow down a little', 'hello', []]]);
+    const bans = (frame, command) => { const r = rig({}); r.live(W({ login: true, you: asRole('admin') })); if (command) r.dock.say(command); r.s().recv(frame); return r; };
+    const list = bans({ t: 'bans', rows: [{ u: 'bob', at: 1700000000 }, { u: 'carol.x', at: 1700086400 }] }, '/bans');
+    same('bans: the heading and a line for each person, a name and a day; private; the command that waited for it is answered', [list.answers(), one(list.rows()[0], 'gc-cmd') ? one(list.rows()[0], 'gc-cmd').tagName : null, (list.clock.advance(2600), list.dock.say('hello'), list.s().recv({ t: 'err', code: 'rate' }), list.field().value)],
+        [['People who are banned\nbob 2023-11-14\ncarol.x 2023-11-15'], 'bdi', 'hello']);
+    same('bans: nobody; a frame that is not a list says nothing; a name that is markup is only text', [bans({ t: 'bans', rows: [] }).answers(), bans({ t: 'bans', rows: 7 }).answers(), bans({ t: 'bans' }).answers(), (() => { const r = bans({ t: 'bans', rows: [{ u: '<img src=x onerror=alert(1)>', at: 1 }] }); return [r.answers(), r.env.innerHTMLWrites.length, r.log().all().every((e) => ['div', 'p', 'span', 'bdi'].indexOf(e.tagName) !== -1)]; })()],
+        [['Nobody is banned.'], [], [], [['People who are banned\n<img src=x onerror=alert(1)> 1970-01-01'], 0, true]]);
+    const kept = rig({}); kept.live(W({ login: true, you: MODE })); kept.dock.say('/kick bob'); kept.s().recv({ t: 'err', code: 'who' });
+    kept.s().fail(); kept.clock.advance(2600); kept.s().open().recv(W({ login: true, you: MODE }));
+    check('a private answer is a line of this screen only: a new link\'s welcome makes the screen again from the hub\'s history, and it is gone', kept.answers().length === 0);
+    const room = rig({}); room.live(W({ login: true, you: MODE })); room.dock.shown(false); room.dock.say('/help'); room.dock.shown(true);
+    check('an answer that comes while the screen is away is there when it is back (the log is made again from the model)', room.answers().length === 1);
+    const cap = rig({}); cap.live(W({ login: true, you: MODE }));
+    for (let i = 0; i < 130; i++) { cap.dock.say('/help'); cap.clock.advance(2600); }
+    check('the answers are lines like the others: at most 100 lines are kept, the oldest go first', cap.rows().length === 100 && cap.errors.length === 0);
+    const unread = rig({}); unread.live(W({ login: true, you: MODE })); unread.dock.open(false); unread.dock.say('/help');
+    check('an answer to the visitor is not "unread" (it is what they asked for)', unread.pill() === '');
+}
+{   // the hub's own line
+    const r = rig({});
+    const sys = (id, text, extra) => Object.assign(L(id, 'system', text, false), { k: '', sys: true }, extra);
+    r.live(W({ login: true, you: ME, history: [Object.assign(sys(1, 'alice was kicked.'), { k: MINE }), L(2, 'system', 'carol was banned.')].map((m) => { delete m.t; return m; }) }));
+    r.s().recv(sys(3, 'bob was banned.'));
+    r.s().recv(sys(4, 'maple.leaf was kicked.'));
+    r.s().recv(sys(5, 'x was kicked.', { mod: true, role: 'admin', k: MINE }));
+    const k = r.rows();
+    check('a line with the flag is drawn quietly as the hub\'s own: a line that names the person and has no author, no mark, no ": " (class gc-event), never the visitor\'s own (even where its key is the visitor\'s)', k.length === 5 && [0, 2, 3, 4].every((i) => cls(k[i]).indexOf('gc-event') !== -1 && cls(k[i]).indexOf('gc-me') === -1 && one(k[i], 'gc-badge') === null && one(k[i], 'gc-who') === null && one(k[i], 'gc-sep') === null)
+          && k[0].textContent === 'alice was kicked.' && k[2].textContent === 'bob was banned.' && k[3].textContent === 'maple.leaf was kicked.' && k[4].textContent === 'x was kicked.' && !cls(k[4]).includes('gc-mod') && !cls(k[4]).includes('gc-admin'));
+    check('a line from the name "system" without the flag is a line of a person (the name does not make it the hub\'s): author, ": ", no event class', cls(k[1]).indexOf('gc-event') === -1 && k[1].textContent === 'system: carol was banned.' && one(k[1], 'gc-who') !== null);
+    const odd = rig({}); odd.live(W({ login: true, you: ME }));
+    odd.s().recv(Object.assign(L(1, 'carol', 'dave was kicked.'), { sys: 'true' })); odd.s().recv(Object.assign(L(2, 'carol', 'dave was banned.'), { sys: 1 })); odd.s().recv(Object.assign(L(3, 'carol', 'a moderator removed dave'), { sys: false }));
+    check('a person who writes what the hub\'s line says, even under a name that looks like it, draws a line of a person; only `sys: true` of a frame is the hub\'s', odd.rows().every((x) => cls(x).indexOf('gc-event') === -1 && one(x, 'gc-who') !== null));
+    const text = rig({}); text.live(W({ login: true, you: ME }));
+    text.s().recv(sys(1, '<img src=x onerror=alert(1)> \u202e was kicked.'));
+    check('the text of the hub\'s line is text (no markup, the invisible characters out) in a <bdi>', text.env.innerHTMLWrites.length === 0 && text.rows()[0].textContent === '<img src=x onerror=alert(1)> was kicked.' && one(text.rows()[0], 'gc-text').tagName === 'bdi');
+    const unread = rig({}); unread.live(W({ login: true, you: ME })); unread.dock.open(false); unread.s().recv(sys(1, 'bob was kicked.'));
+    check('the hub\'s line is news like any line that comes while the dock is folded', unread.pill() === '1');
+    const del = rig({}); del.live(W({ login: true, you: ME })); del.s().recv(sys(7, 'bob was kicked.')); del.s().recv({ t: 'del', id: 7 });
+    check('and goes with a `del` like any other', del.rows().length === 0);
+}
+{   // being removed: a plain notice, the field off where the hub's state needs it, no reconnect loop
+    const KICK = 'A moderator removed you from the chat. You can log in again.', BAN = 'You are banned from the chat. You can still read it.';
+    const k = rig({ chip: true }); k.live(W({ login: true, you: ME }));
+    k.s().recv({ t: 'bye', why: 'kicked' });
+    check('bye kicked: the notice (plain words) is there at once and stays (not for a few seconds)', k.note() === KICK && (k.clock.advance(20000), k.note() === KICK) && k.errors.length === 0);
+    const first = k.sockets.length;
+    k.s().fail();
+    check('... the hub closes the socket: the page connects again once, after its wait (1 s at the least), as it does after any close, and the notice is there while it does', k.sockets.length === first && k.note() === KICK && (k.clock.advance(1600), k.sockets.length === first + 1));
+    k.s().open().recv(W({ login: true, you: null }));
+    check('the hub ended the login: the new welcome names nobody, the field is off and the Log in button is there, and the notice stays so that the person knows why', k.field().disabled === true && one(k.root, 'gc-login').hidden === false && k.note() === KICK && k.chip.getAttribute('aria-label') === 'Log in with Discord');
+    k.s().fail(); k.clock.advance(5000); k.s().open().recv(W({ login: true, you: ME }));
+    check('a welcome that names a visitor again (a login in another tab) ends the notice of a kick', k.note() === '' && k.field().disabled === false);
+    const b = rig({ chip: true }); b.live(W({ login: true, you: ME }));
+    b.s().recv({ t: 'bye', why: 'banned' });
+    check('bye banned: the notice says that the person can still read', b.note() === BAN);
+    b.s().fail(); b.clock.advance(1600); b.s().open().recv(W({ login: true, you: ME, history: HISTORY }));
+    check('a banned person reads on: the new welcome shows the history, the field is OFF (and says why), Send is gone, and so is the Log in button, and the notice stays', b.rows().length === 3 && b.field().disabled === true && b.field().getAttribute('placeholder') === 'You are banned from the chat' && one(b.root, 'gc-send').hidden === true && one(b.root, 'gc-login').hidden === true && b.note() === BAN);
+    same('... a line cannot be sent (say() says banned, nothing goes out), and a /help is still answered', [b.dock.say('hello'), sentSays(b), (b.dock.say('/help'), b.answers().length)], ['banned', [], 1]);
+    const again = rig({}); again.live(W({ login: true, you: ME })); again.dock.say('hello'); again.s().recv({ t: 'err', code: 'banned' });
+    check('a ban that the page learns from the hub\'s refusal of a line (a page that was loaded after it) is the same: the notice, and the field off', again.note() === 'You cannot chat here' && (again.clock.advance(6100), again.note() === BAN) && again.field().disabled === true);
+    const out = rig({}); out.live(W({ login: true, you: ME })); out.s().recv({ t: 'bye', why: 'banned' }); out.s().fail(); out.clock.advance(1600); out.s().open().recv(W({ login: true, you: null }));
+    check('a banned person who is logged out is nobody here: the notice goes (it is the account\'s, not the page\'s)', out.note() === 'Chat is read-only for now' || out.note() === '');
+    const odd = rig({}); odd.live(W({ login: true, you: ME }));
+    ['x', null, 5, '', 'banned ', 'KICKED', ['kicked'], { why: 'kicked' }].forEach((why) => odd.s().recv({ t: 'bye', why }));
+    check('a `bye` that is not one of the two words says nothing', odd.note() === '' && odd.field().disabled === false);
+    const early = rig({}); early.s().open(); early.s().recv({ t: 'bye', why: 'banned' });
+    check('a `bye` before the welcome is ignored', early.note() === '' && early.errors.length === 0);
+    // no loop: a hub that welcomes and says bye again and again is met with the growing wait of any failing link, not with a storm
+    const storm = rig({ random: () => 0.5 }); let tries = 0;
+    for (let t = 0; t < 600; t += 1) {
+        if (storm.s() && storm.sockets.length > tries) { tries = storm.sockets.length; storm.s().open().recv(W({ login: true, you: ME })); storm.s().recv({ t: 'bye', why: 'kicked' }); storm.s().fail(); }
+        storm.clock.advance(1000);
+    }
+    check('a hub that says bye to every socket at once: 10 minutes make a few tries (the wait doubles to a minute), not a try a second', storm.sockets.length >= 8 && storm.sockets.length <= 20, storm.sockets.length);
+    const logout = rig({}); logout.live(W({ login: true, you: ME })); logout.s().recv({ t: 'bye', why: 'banned' });
+    check('(the notice is the page\'s and the hub does not keep it: it is in memory only)', logout.note() === BAN);
+}
+{   // the source of the dock names no role and no command in a selector or in markup (a name or an argument is text)
+    check('the dock never builds markup or a selector from what a person types or what the hub says: no innerHTML, no querySelector, no "new Function"', !/innerHTML|outerHTML|insertAdjacentHTML|querySelector|new Function|\beval\b/.test(chatSource.replace(/\/\/.*/g, '')));
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');
