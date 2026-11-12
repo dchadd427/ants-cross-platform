@@ -49,8 +49,8 @@ is_light() {    # is_light PATH: 0 when the path is one of the light kinds and n
         web/front/lobby_rules.js | web/front/preview_*.png) return 1 ;;
         # the server script of the macOS job (tests/scripts/test_ants_server.sh): it reads the two pages, web_fill_check.js runs their code, and web_lobby_server_check.js and
         # web_lobby_handoff_check.js run the lobby page against the real server and the native game, in the fake browser of web_page_harness.js (shapes.js; the scripts of front/ and home/ that the
-        # harness loads: the codec of the protocol, the name of the person, the chat, the rematch strip, the game modes and types, the map picker, Home and the Games list)
-        web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;
+        # harness loads: the seat-key reader, the codec of the protocol, the name of the person, the chat, the rematch strip, the game modes and types, the map picker, Home and the Games list)
+        web/lobby.html | web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;
         web/front/lobby_net.js | web/front/lobby_chat.js | web/front/player_name.js | web/front/rematch.js | web/front/game_modes.js | web/front/game_type.js | web/front/map_picker.js) return 1 ;;
         web/home/home.js | web/home/games.js) return 1 ;;
         tests/scripts/web_fill_check.js | tests/scripts/web_lobby_server_check.js | tests/scripts/web_lobby_handoff_check.js | tests/scripts/web_page_harness.js) return 1 ;;

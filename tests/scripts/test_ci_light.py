@@ -44,6 +44,7 @@ NATIVE_READS = {
     "web/lobby.html": "test_ants_server.sh (a grep, web_fill_check.js, the page harness)",
     "web/shell.html": "test_ants_server.sh (a grep, web_fill_check.js)",
     "web/shapes.js": "test_ants_server.sh: web_lobby_server_check.js",
+    "web/rejoin_key.js": "test_ants_server.sh: the page harness (web_name_check.js and the lobby checks load it as the page does)",
     LOBBY_NET_JS: "test_ants_server.sh: web_lobby_server_check.js, web_lobby_handoff_check.js, the page harness",
     "web/front/player_name.js": "test_ants_server.sh: the page harness",
     "web/front/lobby_chat.js": "test_ants_server.sh: the page harness",
@@ -489,7 +490,7 @@ class TheSkippedJobsReadNoLightFile(unittest.TestCase):
         with open(os.path.join(HERE, "web_page_harness.js"), encoding="utf-8") as f:
             harness = f.read()
         found |= {"web/front/" + n for n in re.findall(r"loadFront\('([a-z_]+\.js)'", harness)}
-        found |= {"web/" + n for n in re.findall(r"loadFile\('((?:home|front)/[a-z_]+\.js)'", harness)}
+        found |= {"web/" + n for n in re.findall(r"loadFile\('((?:(?:home|front)/[a-z_]+|rejoin_key)\.js)'", harness)}
         found |= {"web/" + n for n in re.findall(r"'(home/[a-z_]+\.js)'", harness)}
         for name in ("web_lobby_server_check.js", "web_lobby_handoff_check.js", "web_fill_check.js"):         # (the node checks that the script suite runs, and what they load)
             with open(os.path.join(HERE, name), encoding="utf-8") as f:
