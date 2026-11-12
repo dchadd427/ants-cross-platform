@@ -585,7 +585,7 @@ jobs:
           if [ "$EVENT" = pull_request ]; then
             changed=$(git diff --name-only "$PR_BASE_SHA" HEAD)
             echo "$changed"
-            if echo "$changed" | grep -Eq '^(Dockerfile|Dockerfile\.server|docker/emsdk_warm\.cpp|tools/image_files_diff\.sh|tools/image_manifest\.py|tools/link_inputs\.sh|tools/relink_outputs\.sh)$'; then run=true; fi
+            if echo "$changed" | grep -Eq '^(Dockerfile|Dockerfile\.server|docker/emsdk_warm\.cpp|tools/image_files_diff\.sh|tools/image_manifest\.py|tools/link_inputs\.py|tools/relink_outputs\.sh)$'; then run=true; fi
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "compare the images: $run"

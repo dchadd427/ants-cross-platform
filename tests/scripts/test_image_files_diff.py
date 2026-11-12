@@ -5,7 +5,7 @@ The script builds the images from the Dockerfile of a base revision and from thi
 
   - the manifest: every entry with type, mode, owner, size, link target and sha256; the stamps of the pages (the build time and the build date) are replaced before the hash, in the listed files only
   - the files that a link makes (the WebAssembly programs and their JavaScript: two links of the same objects do not always give the same bytes, which CI showed): the final image keeps only their type,
-    mode, owner and a size within one percent; what they are made of is compared as the link's inputs, listed inside the builder stage of both builds (tools/link_inputs.sh: objects, archives, libraries,
+    mode, owner and a size within one percent; what they are made of is compared as the link's inputs, listed inside the builder stage of both builds (tools/link_inputs.py: objects, archives, libraries,
     link command lines), and, when the recipe holds, as the programs of a link made deterministic (tools/relink_outputs.sh)
   - the comparison: the same files are the same; a changed byte, a changed mode or owner, a file on one side only, a link that points elsewhere, a stamp that appears or goes, a stamp in a file
     that is not listed, and a changed configuration (user, entrypoint, command, ports, environment) are each a difference with exit status 1; an empty export is refused
@@ -29,6 +29,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 import image_manifest as im  # noqa: E402
+import link_inputs as li  # noqa: E402
 
 HTML = "usr/share/nginx/html/"
 
@@ -282,7 +283,92 @@ class TheListingsOfTheLinksInputsAndOutputs(unittest.TestCase):
             self.assertEqual(run("relink", os.path.join(tmp, "a"), os.path.join(tmp, "b")).returncode, 2, "an inputs listing is no listing of programs")
 
 
-@unittest.skipUnless(shutil.which("sh") and shutil.which("sha256sum") and shutil.which("find"), "needs sh and the GNU tools")
+def leb(value):
+    out = bytearray()
+    while True:
+        byte = value & 0x7F
+        value >>= 7
+        out.append(byte | (0x80 if value else 0))
+        if not value:
+            return bytes(out)
+
+
+def section(number, payload):
+    return bytes([number]) + leb(len(payload)) + payload
+
+
+def custom(name, payload):
+    return section(0, leb(len(name)) + name.encode("ascii") + payload)
+
+
+def wasm_object(code, debug, reloc_debug=b"\1"):
+    """A small WebAssembly object: a code section and the sections of its debug information (the folder of the compile is in the debug strings), a producers section that is kept."""
+    return (b"\0asm\1\0\0\0" + section(10, code) + custom("producers", b"clang 19") + custom("reloc.CODE", b"\0") + custom(".debug_info", debug) + custom(".debug_str", debug)
+            + custom("reloc..debug_info", reloc_debug))
+
+
+def archive(members, long_names=False, symbols=b"symbols"):
+    """An `ar` archive (GNU names) of [(name, bytes)] with a symbol table member, as llvm-ar makes it."""
+    def member(name, body):
+        return ("%-16s%-12s%-6s%-6s%-8s%-10d`\n" % (name, "0", "0", "0", "644", len(body))).encode("ascii") + body + (b"\n" if len(body) & 1 else b"")
+    out = b"!<arch>\n" + member("/", symbols)
+    table = b""
+    entries = []
+    for name, body in members:
+        if long_names and len(name) > 15:
+            entries.append(("/%d" % len(table), body))
+            table += name.encode("ascii") + b"/\n"
+        else:
+            entries.append((name + "/", body))
+    if table:
+        out += member("//", table)
+    return out + b"".join(member(name, body) for name, body in entries)
+
+
+class TheLibrariesOfEmscriptensCache(unittest.TestCase):
+    """The ports are compiled with debug information that holds the folder of their compile: a library is compared without it, and with nothing else left out."""
+
+    def test_two_libraries_that_differ_in_their_debug_information_only_are_the_same(self):
+        one = archive([("a.c.o", wasm_object(b"code a", b"debug /warm/aaa")), ("b.c.o", wasm_object(b"code b", b"debug /warm"))], symbols=b"symbols at 100")
+        two = archive([("a.c.o", wasm_object(b"code a", b"debug /src/build_web/src/ants_app/aaa", reloc_debug=b"\2\3")), ("b.c.o", wasm_object(b"code b", b"debug /src/build_web/src/ants_app"))], symbols=b"symbols at 140")
+        self.assertNotEqual(one, two)
+        self.assertEqual(li.library_digest(one), li.library_digest(two))
+
+    def test_a_library_that_differs_in_code_or_names_or_members_is_not_the_same(self):
+        base = archive([("a.c.o", wasm_object(b"code a", b"d")), ("b.c.o", wasm_object(b"code b", b"d"))])
+        for what, other in (("code", archive([("a.c.o", wasm_object(b"code A", b"d")), ("b.c.o", wasm_object(b"code b", b"d"))])),
+                            ("a name", archive([("a.c.o", wasm_object(b"code a", b"d")), ("c.c.o", wasm_object(b"code b", b"d"))])),
+                            ("a member less", archive([("a.c.o", wasm_object(b"code a", b"d"))])),
+                            ("the order", archive([("b.c.o", wasm_object(b"code b", b"d")), ("a.c.o", wasm_object(b"code a", b"d"))]))):
+            with self.subTest(what):
+                self.assertNotEqual(li.library_digest(base), li.library_digest(other))
+
+    def test_the_producers_section_and_the_linking_data_are_kept(self):
+        one = wasm_object(b"code", b"d")
+        two = one.replace(b"clang 19", b"clang 20")
+        self.assertNotEqual(li.library_digest(archive([("a.o", one)])), li.library_digest(archive([("a.o", two)])))
+
+    def test_long_names_and_objects_that_are_not_webassembly_are_read(self):
+        one = archive([("a_long_member_name_of_a_port.c.o", wasm_object(b"c", b"d"))], long_names=True)
+        two = archive([("a_long_member_name_of_a_port.c.o", wasm_object(b"c", b"e"))], long_names=True)
+        self.assertEqual(li.library_digest(one), li.library_digest(two))
+        self.assertEqual([n for n, _ in li.archive_members(one)], ["a_long_member_name_of_a_port.c.o"])
+        self.assertNotEqual(li.library_digest(archive([("x.o", b"BC bitcode 1")])), li.library_digest(archive([("x.o", b"BC bitcode 2")])), "other objects are compared as they are")
+
+    def test_a_file_that_is_no_archive_is_hashed_whole(self):
+        self.assertNotEqual(li.library_digest(b"not an archive 1"), li.library_digest(b"not an archive 2"))
+
+    def test_the_debug_sections_are_the_only_ones_dropped(self):
+        data = wasm_object(b"code", b"debug")
+        kept = li.object_without_debug(data)
+        self.assertIn(b"producers", kept)
+        self.assertIn(b"reloc.CODE", kept)
+        self.assertNotIn(b".debug_info", kept)
+        self.assertNotIn(b"reloc..debug_info", kept)
+        self.assertEqual(li.object_without_debug(b"BC\xc0\xde"), b"BC\xc0\xde")
+
+
+@unittest.skipUnless(shutil.which("sh") and shutil.which("sha256sum"), "needs sh and sha256sum")
 class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="ants_inputs_")
@@ -311,16 +397,16 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
         self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "flags.make"), b"flags")
         self.put(os.path.join(self.src, "build_web", "generated", "ants_app", "version.hpp"), b'"v0.16.0"')
         self.put(os.path.join(self.src, "build_web", "src", "ants_app", "index.wasm"), b"the program: not an input")
-        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "libSDL2.a"), b"sdl")
-        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "lto", "libc.a"), b"libc")
+        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "libSDL2.a"), archive([("SDL.c.o", wasm_object(b"code", b"debug of /warm"))]))
+        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "lto", "libc.a"), archive([("bitcode.o", b"BC\xc0\xde bitcode")]))
         self.put(os.path.join(self.cache, "sysroot", "include", "x.h"), b"header: not an input")
 
     def run_script(self, name, **env):
-        return subprocess.run(["sh", os.path.join(REPO, "tools", name)], env=dict(self.env, **env), capture_output=True, text=True, timeout=60)
+        return subprocess.run([sys.executable if name.endswith(".py") else "sh", os.path.join(REPO, "tools", name)], env=dict(self.env, **env), capture_output=True, text=True, timeout=60)
 
     def test_link_inputs_lists_objects_archives_flags_the_header_and_the_cache_libraries_and_the_command_lines(self):
         self.tree()
-        done = self.run_script("link_inputs.sh")
+        done = self.run_script("link_inputs.py")
         self.assertEqual(done.returncode, 0, done.stderr)
         files = [l.split("\t")[1] for l in done.stdout.splitlines() if l.startswith("file\t")]
         self.assertEqual(files, sorted(files))
@@ -331,26 +417,28 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
             self.assertFalse(any(f.endswith(unwanted) for f in files), unwanted)
         self.assertEqual(len([l for l in done.stdout.splitlines() if l.startswith("link\t")]), 2)
         self.assertIn("link\tbuild_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt\tem++ -O3 -o index.html f0.o", done.stdout)
+        sdl = [l for l in done.stdout.splitlines() if l.endswith("libSDL2.a") or "libSDL2.a\t" in l][0].split("\t")[2]
+        self.assertEqual(sdl, li.library_digest(archive([("SDL.c.o", wasm_object(b"code", b"debug of /src/build_web"))])), "a library of the cache is listed without its debug information")
         for line in done.stdout.splitlines():
             if line.startswith("file\t"):
                 self.assertRegex(line.split("\t")[2], r"^[0-9a-f]{64}$")
 
     def test_the_same_tree_gives_the_same_listing_and_a_changed_object_or_command_line_does_not(self):
         self.tree()
-        first = self.run_script("link_inputs.sh").stdout
-        self.assertEqual(first, self.run_script("link_inputs.sh").stdout)
+        first = self.run_script("link_inputs.py").stdout
+        self.assertEqual(first, self.run_script("link_inputs.py").stdout)
         self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "f1.cpp.o"), b"object 1, other")
-        second = self.run_script("link_inputs.sh").stdout
+        second = self.run_script("link_inputs.py").stdout
         self.assertNotEqual(first, second)
         self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "f1.cpp.o"), b"object 1")
         self.put(os.path.join(self.src, "build_web", "lvl_core", "CMakeFiles", "lvl_core.dir", "link.txt"), b"em++ -O2 -o lvl_core.js\n")
-        self.assertNotEqual(first, self.run_script("link_inputs.sh").stdout)
+        self.assertNotEqual(first, self.run_script("link_inputs.py").stdout)
 
     def test_link_inputs_without_a_build_folder_or_a_cache_is_status_2(self):
-        self.assertEqual(self.run_script("link_inputs.sh").returncode, 2)
+        self.assertEqual(self.run_script("link_inputs.py").returncode, 2)
         self.tree()
         shutil.rmtree(os.path.join(self.cache, "sysroot"))
-        self.assertEqual(self.run_script("link_inputs.sh", PATH=self.bin + os.pathsep + os.environ["PATH"]).returncode, 2)
+        self.assertEqual(self.run_script("link_inputs.py", PATH=self.bin + os.pathsep + os.environ["PATH"]).returncode, 2)
 
     def fake_cmake(self, makes=True):
         """What cmake does here: an output that is not there is made, one that is there is up to date and left alone."""
@@ -392,8 +480,8 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
         self.assertEqual(self.run_script("relink_outputs.sh").returncode, 2, "a failed link is a failure even when it left files")
 
     def test_the_scripts_have_the_modes_and_the_syntax_of_scripts(self):
-        for name in ("link_inputs.sh", "relink_outputs.sh"):
-            self.assertEqual(subprocess.run(["sh", "-n", os.path.join(REPO, "tools", name)]).returncode, 0, name)
+        self.assertEqual(subprocess.run(["sh", "-n", os.path.join(REPO, "tools", "relink_outputs.sh")]).returncode, 0)
+        for name in ("link_inputs.py", "relink_outputs.sh"):
             self.assertTrue(os.stat(os.path.join(REPO, "tools", name)).st_mode & stat.S_IXUSR, name)
 
 
@@ -487,7 +575,7 @@ class TheScript(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="ants_imgdiff_")
         self.repo = os.path.join(self.tmp, "repo")
         os.makedirs(os.path.join(self.repo, "tools"))
-        for name in ("image_files_diff.sh", "image_manifest.py", "link_inputs.sh", "relink_outputs.sh"):
+        for name in ("image_files_diff.sh", "image_manifest.py", "link_inputs.py", "relink_outputs.sh"):
             shutil.copy(os.path.join(REPO, "tools", name), os.path.join(self.repo, "tools", name))
         self.state = os.path.join(self.tmp, "state")
         os.makedirs(self.state)
@@ -709,7 +797,7 @@ class TheCiJob(unittest.TestCase):
         self.assertNotIn("origin/main", "\n".join(self.code()), "a pull request into another branch is compared with its own base")
 
     def test_the_trigger_is_the_whole_pattern_of_the_files_that_the_images_depend_on(self):
-        self.assertIn("            if echo \"$changed\" | grep -Eq '^(Dockerfile|Dockerfile\\.server|docker/emsdk_warm\\.cpp|tools/image_files_diff\\.sh|tools/image_manifest\\.py|tools/link_inputs\\.sh|tools/relink_outputs\\.sh)$'; then run=true; fi\n", self.job)
+        self.assertIn("            if echo \"$changed\" | grep -Eq '^(Dockerfile|Dockerfile\\.server|docker/emsdk_warm\\.cpp|tools/image_files_diff\\.sh|tools/image_manifest\\.py|tools/link_inputs\\.py|tools/relink_outputs\\.sh)$'; then run=true; fi\n", self.job)
         self.assertNotIn("Dockerfile\\.hub", self.job, "the hub's image is not part of the check")
         self.assertIn('          run=false\n', self.job)
         self.assertIn('          echo "run=$run" >> "$GITHUB_OUTPUT"\n', self.job)

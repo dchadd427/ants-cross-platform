@@ -64,6 +64,7 @@ class Stages:
         raise AssertionError("no step: " + what)
 
 
+LINUX_ONLY = unittest.skipUnless(sys.platform.startswith("linux"), "the Dockerfile's shell lines use GNU stat: they run as the image runs them, on Linux")
 STUB = "999.999.999"                    # the version of the stubs: a number that no release has, so that a guard can tell it from the real one
 
 
@@ -222,7 +223,7 @@ class TheWebImage(unittest.TestCase):
         self.assertEqual(len(re.findall(r"(?m)^ENTRYPOINT ", text)), 0)
         self.assertEqual([s.op for s in self.runner if s.op in ("ARG", "ENV")], [], "the runner takes no build argument")
 
-    # The checks after the link look at the product. The part of the link's RUN after the build is run here, with sh, on small stand-ins of the files that the build makes.
+    # The checks after the link look at the product. The part of the link's RUN after the build is run here, with sh, on small stand-ins of the files that the build makes (GNU stat, as in the image: Linux).
     def guard_after_the_link(self):
         run = [r for r in raw_runs(self.docker.text) if "cmake --build build_web" in r][1]
         run = re.sub(r"\s+", " ", run)
@@ -243,28 +244,34 @@ class TheWebImage(unittest.TestCase):
                     f.write(b"\0" * data_size)
             return subprocess.run(["sh", "-c", self.guard_after_the_link()], cwd=tmp, capture_output=True, text=True, timeout=60).returncode
 
+    @LINUX_ONLY
     def test_the_guard_after_the_link_passes_the_real_product(self):
         self.assertEqual(self.run_guard(), 0)
         self.assertEqual(self.run_guard(version="12.3.4"), 0)
 
+    @LINUX_ONLY
     def test_the_guard_stops_a_program_that_still_has_the_stubs_version(self):
         self.assertNotEqual(self.run_guard(wasm=b"v" + STUB.encode("ascii")), 0)
         self.assertNotEqual(self.run_guard(wasm=b"v0.16.0 and v" + STUB.encode("ascii")), 0)
 
+    @LINUX_ONLY
     def test_the_guard_stops_a_program_that_does_not_hold_the_real_version(self):
         self.assertNotEqual(self.run_guard(wasm=b"v0.15.9"), 0)
         self.assertNotEqual(self.run_guard(wasm=b"no version at all"), 0)
 
+    @LINUX_ONLY
     def test_the_guard_stops_a_data_package_that_is_a_stub(self):
         self.assertNotEqual(self.run_guard(data_size=5), 0, "`test -s` passes a five byte stub")
         self.assertNotEqual(self.run_guard(data_size=1000000), 0)
         self.assertEqual(self.run_guard(data_size=1000001), 0)
 
+    @LINUX_ONLY
     def test_the_guard_stops_a_page_that_is_the_stub_template(self):
         self.assertNotEqual(self.run_guard(page=b"<script></script>"), 0)
         self.assertNotEqual(self.run_guard(page=b"<html>@@GAME_VERSION@@</html>"), 0)
         self.assertNotEqual(self.run_guard(page=b"<html>@@DATA_SIZE@@</html>"), 0)
 
+    @LINUX_ONLY
     def test_the_guard_stops_when_a_file_is_missing(self):
         self.assertNotEqual(self.run_guard(files=False), 0)
 

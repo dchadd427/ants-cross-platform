@@ -4,7 +4,7 @@
 usage: image_manifest.py manifest < image.tar > manifest.json        the tar is `docker export CONTAINER`; the manifest lists every entry with its type, mode, owner, size, link target and sha256
        image_manifest.py config < inspect.json > config.json         the part of `docker image inspect IMAGE` that decides how the image runs (user, entrypoint, command, ports, environment, ...)
        image_manifest.py compare BASE NEW [--label TEXT]             two manifests (or two configs): lists every difference, exit status 1 when there is one, 0 when there is none, 2 when a file cannot be read
-       image_manifest.py inputs BASE NEW [--label TEXT]              two listings made by tools/link_inputs.sh (what the web build's link reads): the same, exit status 1 for a difference
+       image_manifest.py inputs BASE NEW [--label TEXT]              two listings made by tools/link_inputs.py (what the web build's link reads): the same, exit status 1 for a difference
        image_manifest.py relink BASE NEW [--label TEXT]              two listings made by tools/relink_outputs.sh (the programs that a deterministic link of those inputs makes)
 
 Two kinds of file are not compared byte for byte, and only these (the lists are STAMPED and LINKED below):

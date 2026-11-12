@@ -6,7 +6,8 @@
 #
 # The linked WebAssembly programs and their JavaScript are the exception: two links of the very same objects do not always give the same bytes (the linker and the optimizer depend on the address
 # space layout and on thread timing), so a comparison of those files could only say "the two builds hit the same variant". For the web image they are compared where it is exact:
-#   1. the link's inputs, from the builder stage of both builds (tools/link_inputs.sh: every object file, archive and library that the link reads, and the link command lines), byte for byte;
+#   1. the link's inputs, from the builder stage of both builds (tools/link_inputs.py: every object file, archive and library that the link reads, and the link command lines), byte for byte (a library of Emscripten's cache by its members without their debug information:
+#      the ports' debug information holds the folder of their compile, which differs between the two Dockerfiles and which the link drops);
 #   2. the programs of a link that is made deterministic inside the check only (tools/relink_outputs.sh: no address randomization, one linker thread, one optimizer thread), unless --no-relink; if
 #      two such links of one image differ here the recipe does not hold on this machine, which is said, and only the first comparison counts.
 # The image's own files of those programs keep their type, mode, owner and a size within one percent. Production links as it always did.
@@ -78,7 +79,7 @@ web_link() {
         [ "$which" = base ] && dockerfile="$work/$file.base"
         echo "== the builder stage of the $which Dockerfile"
         docker build -f "$dockerfile" --target builder --build-arg ANTS_BUILD_ID=image-diff -t "$tag-web-builder-$which" . > /dev/null || { echo "image_files_diff: the builder stage of the $which Dockerfile could not be built" >&2; return 2; }
-        docker run --rm -i "$tag-web-builder-$which" sh -s < tools/link_inputs.sh > "$work/web-inputs-$which.txt" || { echo "image_files_diff: the link inputs of the $which build could not be listed" >&2; return 2; }
+        docker run --rm -i "$tag-web-builder-$which" python3 - < tools/link_inputs.py > "$work/web-inputs-$which.txt" || { echo "image_files_diff: the link inputs of the $which build could not be listed" >&2; return 2; }
     done
     rc=0
     python3 tools/image_manifest.py inputs "$work/web-inputs-base.txt" "$work/web-inputs-new.txt" --label "web link inputs" || rc=$?
