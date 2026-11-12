@@ -44,7 +44,6 @@
 .gemtitle { margin: 0; font-size: 22px; line-height: 1.2; }
 .gemline { margin: 0 0 4px; font-size: 15px; line-height: 1.35; color: #a8cfc0; }
 .gemhost { min-height: 48px; margin-top: 8px; }
-.btn.ghostbtn { margin-top: 6px; }
 .gcodelink { appearance: none; -webkit-appearance: none; flex: none; min-width: 44px; min-height: 44px; margin: -12px 0; padding: 0 2px; font: inherit; font-size: 16px; color: var(--gold); background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .gcodelink[aria-expanded="true"] { color: var(--cream); }
 .gcodelink:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
