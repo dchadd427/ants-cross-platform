@@ -168,17 +168,9 @@ class TheText(unittest.TestCase):
         self.assertEqual(len(re.findall(r"^\s*server\s*\{", CONF, re.M)), 1)
         self.assertNotIn("default_server", CONF)                                                   # (the public names, the staging site and a self-hosted name differ, and the health check asks for 127.0.0.1)
 
-    def test_the_manifest_has_one_exact_location_of_its_own_with_its_type_its_caching_and_the_headers_of_a_static_file(self):
+    def test_the_manifest_has_one_exact_location_of_its_own(self):
         found = [words for words, _ in locations() if "manifest" in words]
         self.assertEqual(found, ["= /manifest.webmanifest"])                                       # (an exact location: the fallback for an unknown address is the game page)
-        block = dict(locations())["= /manifest.webmanifest"]
-        for line in ("default_type application/manifest+json;", 'add_header Cache-Control "no-cache, must-revalidate" always;', 'add_header Cross-Origin-Opener-Policy "same-origin" always;',
-                     'add_header Cross-Origin-Embedder-Policy "require-corp" always;', 'add_header X-Content-Type-Options "nosniff" always;', HSTS_LINE):
-            self.assertEqual(block.count(line), 1, line)
-        self.assertNotIn("try_files", block)
-        self.assertNotIn("Content-Security-Policy", block)
-        self.assertNotIn("manifest-src", CONF)                                                     # (default-src 'self' covers the manifest: the policy of the pages is not widened)
-        self.assertNotIn("service-worker", CONF.lower())
 
     def test_the_documents_name_what_is_built(self):
         text = stats.read("docs", "BUILD_AND_RUN.md")

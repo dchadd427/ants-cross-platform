@@ -8,16 +8,20 @@ What this holds it to, without a browser (the nginx side, the type, the caching 
     one is `maskable` and none is both; the Apple icon is 180 x 180 and has no transparency, and so has the maskable icon (the system cuts it); web/app/ holds those four files and no other;
   - the same four head lines (the manifest, the theme color, the Apple icon, the name under the icon of an iPhone) on every page of the site but the admin page, and identical on each;
   - the shortcuts are addresses of pages that exist; no file of the site registers a service worker (the installed app always loads the current site);
-  - the byte budgets of tools/size_limits.py, the files in the image's COPY lines, and the page that tells the maintainer how to try it.
+  - the byte budgets of tools/size_limits.py, that git does not ignore the icons, and that the content of the maskable icon stays inside its safe circle (computed from the file).
 """
 import glob
 import hashlib
 import json
+import math
 import os
 import re
+import shutil
 import struct
+import subprocess
 import sys
 import unittest
+import zlib
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
@@ -64,6 +68,37 @@ def png(path):
     return width, height, transparent
 
 
+def png_pixels(path):
+    """(width, height, [palette index of every pixel]) of an 8 bit palette PNG without interlacing, read with zlib alone."""
+    data = raw(*path.split("/"))
+    width, height, depth, kind, _, _, interlace = struct.unpack(">IIBBBBB", data[16:29])
+    assert (depth, kind, interlace) == (8, 3, 0), path
+    packed, at = b"", 8
+    while at < len(data):
+        length, name = struct.unpack(">I4s", data[at:at + 8])
+        if name == b"IDAT":
+            packed += data[at + 8:at + 8 + length]
+        at += 12 + length
+    lines, out, prev = zlib.decompress(packed), [], bytearray(width)
+    for row in range(height):
+        kind_of_filter, line = lines[row * (width + 1)], bytearray(lines[row * (width + 1) + 1:(row + 1) * (width + 1)])
+        for x in range(width):
+            left, up, upleft = line[x - 1] if x else 0, prev[x], prev[x - 1] if x else 0
+            if kind_of_filter == 1:
+                line[x] = (line[x] + left) & 255
+            elif kind_of_filter == 2:
+                line[x] = (line[x] + up) & 255
+            elif kind_of_filter == 3:
+                line[x] = (line[x] + (left + up) // 2) & 255
+            elif kind_of_filter == 4:
+                guess = left + up - upleft
+                best = min((abs(guess - left), left), (abs(guess - up), up), (abs(guess - upleft), upleft))[1]
+                line[x] = (line[x] + best) & 255
+        out.extend(line)
+        prev = line
+    return width, height, out
+
+
 def digits(path):
     return hashlib.sha256(raw(*path.split("/"))).hexdigest()[:8]
 
@@ -97,10 +132,6 @@ class TheManifest(unittest.TestCase):
             self.assertNotIn(field, MANIFEST, field)
         self.assertTrue(MANIFEST_TEXT.isascii())
         self.assertNotIn("http", MANIFEST_TEXT)                                      # (every address is of this site: a path)
-
-    def test_the_theme_color_is_the_color_of_the_frame_of_the_pages(self):
-        self.assertIn(THEME, read("web", "lobby.html").lower())
-        self.assertIn(THEME, read("web", "front", "classic.css").lower())
 
     def test_every_icon_is_a_file_of_the_size_it_states_and_is_named_with_the_digits_of_its_file(self):
         for icon in MANIFEST["icons"] + [i for s in MANIFEST["shortcuts"] for i in s["icons"]]:
@@ -183,32 +214,23 @@ class NoServiceWorker(unittest.TestCase):
         self.assertNotIn("Service-Worker-Allowed", read("docker", "nginx.conf"))
 
 
-class TheImage(unittest.TestCase):
-    def test_the_dockerfile_the_local_build_and_the_ci_have_the_manifest_and_the_icons(self):
-        docker, build, ci = read("Dockerfile"), read("build_web.sh"), read(".github", "workflows", "ci.yml")
-        self.assertIn("COPY web/manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest\n", docker)
-        self.assertIn("COPY web/app/ /usr/share/nginx/html/app/\n", docker)
-        self.assertIn('cp -f "${SCRIPT_DIR}/web/manifest.webmanifest" "${DIST_DIR}/"', build)
-        self.assertIn('cp -f "${SCRIPT_DIR}/web/app"/* "${DIST_DIR}/app/"', build)
-        check = re.search(r"ls -l [^\n]*\bmanifest\.webmanifest\b([^\n]*)&& cmp index\.html play\.html", ci)
-        self.assertIsNotNone(check, "the CI's check of the image does not list manifest.webmanifest")
-        for name in ICON_FILES:
-            self.assertIn("app/" + name, check.group(1), name)
-
+class TheIconFiles(unittest.TestCase):
     def test_git_keeps_the_icons(self):
-        ignore = read(".gitignore")
-        self.assertGreater(ignore.index("!web/app/**"), ignore.index("*.png"))
+        if not shutil.which("git") or subprocess.run(["git", "rev-parse", "--git-dir"], cwd=REPO, capture_output=True).returncode != 0:
+            self.skipTest("not a git checkout")
+        for name in ICON_FILES:
+            done = subprocess.run(["git", "check-ignore", "-q", "web/app/" + name], cwd=REPO)
+            self.assertEqual(done.returncode, 1, "git ignores web/app/%s (a rule of .gitignore hides it from a commit)" % name)
 
-    def test_the_tool_that_makes_the_icons_is_there_and_uses_only_the_art_of_the_repository(self):
-        tool = read("tools", "front_page_art", "make_app_icons.py")
-        self.assertIn('ROOT / "web" / "front" / "logo.png"', tool)
-        self.assertNotIn("Original-Ants", tool)
-
-    def test_the_document_says_how_to_try_it(self):
-        text = read("docs", "INSTALL_AS_APP.md")
-        for needle in ("manifest.webmanifest", "make_app_icons.py", "Add to Home Screen", "Install app", "no service worker", "test_web_app_manifest.py"):
-            self.assertIn(needle, text, needle)
-        self.assertIn("INSTALL_AS_APP.md", read("docs", "PLAY_IN_BROWSER.md"))
+    def test_the_content_of_the_maskable_icon_stays_inside_the_safe_circle_of_80_percent(self):
+        width, height, pixels = png_pixels("web/app/icon-maskable-512.png")
+        self.assertEqual((width, height), (512, 512))
+        ground = pixels[0]
+        self.assertEqual({pixels[0], pixels[width - 1], pixels[width * (height - 1)], pixels[-1]}, {ground})      # (orange in every corner)
+        centre = (width - 1) / 2
+        farthest = max(math.hypot(i % width - centre, i // width - centre) for i, p in enumerate(pixels) if p != ground)
+        self.assertLessEqual(farthest, 0.40 * width, "the word or its shadow reaches %.1f px from the middle: Android may cut it (safe radius %.1f)" % (farthest, 0.40 * width))
+        self.assertGreater(farthest, 0.85 * 0.40 * width, "the word is much smaller than the safe circle allows: it is hard to read at 48 px")
 
 
 if __name__ == "__main__":

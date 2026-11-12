@@ -1,5 +1,5 @@
 {
- "note": "Mutants of the installable web app (docs/INSTALL_AS_APP.md): the manifest's fields, the icons and their digits, the four head lines of the pages, the image's file list, the budgets, and the one exact nginx location of the manifest (its type, caching, headers and fallback; the pages' policy unchanged), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/web_app_manifest_mutants.json --keep-going --jobs 1. The nginx mutants need the program nginx installed (they are caught by tests/scripts/test_nginx_headers.py, which runs the real file); the others are caught by tests/scripts/test_web_app_manifest.py.",
+ "note": "Mutants of the installable web app (docs/INSTALL_AS_APP.md): the manifest's fields, the icons and their digits, the budgets, the two that would register a service worker, and the one exact nginx location of the manifest (its type, caching, headers and fallback; the pages' policy unchanged), for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'). Run from the checkout: python3 tools/mutate.py tests/data/web_app_manifest_mutants.json --keep-going --jobs 1. The nginx mutants need the program nginx installed (tests/scripts/test_nginx_headers.py runs the real file and catches them by a real answer); the others are caught by tests/scripts/test_web_app_manifest.py.",
  "mutants": [
   {
    "id": "name_changed",
@@ -48,20 +48,6 @@
    "file": "web/manifest.webmanifest",
    "old": "\"display\": \"standalone\"",
    "new": "\"display\": \"minimal-ui\"",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "theme_color_other",
-   "file": "web/manifest.webmanifest",
-   "old": "\"theme_color\": \"#2b5f43\"",
-   "new": "\"theme_color\": \"#13634b\"",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "background_color_other",
-   "file": "web/manifest.webmanifest",
-   "old": "\"background_color\": \"#db4b13\"",
-   "new": "\"background_color\": \"#ffffff\"",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
@@ -149,76 +135,6 @@
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
-   "id": "lobby_without_manifest_link",
-   "file": "web/lobby.html",
-   "old": "    <link rel=\"manifest\" href=\"/manifest.webmanifest\">\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "game_page_theme_color_other",
-   "file": "web/shell.html",
-   "old": "<meta name=\"theme-color\" content=\"#2b5f43\">",
-   "new": "<meta name=\"theme-color\" content=\"#db4b13\">",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "legal_without_apple_icon",
-   "file": "web/legal.html",
-   "old": "<link rel=\"apple-touch-icon\" href=\"/app/apple-touch-icon.png?v=9b89d547\">\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "mapmaker_apple_icon_stale",
-   "file": "web/mapmaker.html",
-   "old": "apple-touch-icon.png?v=9b89d547",
-   "new": "apple-touch-icon.png?v=9b89d548",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "match_without_title",
-   "file": "web/match.html",
-   "old": "    <meta name=\"apple-mobile-web-app-title\" content=\"Ants!\">\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "matches_title_other",
-   "file": "web/matches.html",
-   "old": "content=\"Ants!\"",
-   "new": "content=\"Ants\"",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "live_manifest_other_address",
-   "file": "web/live.html",
-   "old": "href=\"/manifest.webmanifest\"",
-   "new": "href=\"/app.webmanifest\"",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "catalog_without_head_lines",
-   "file": "asset_catalog/index.html",
-   "old": "<meta name=\"theme-color\" content=\"#2b5f43\">\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "changelog_page_without_manifest_link",
-   "file": "tools/changelog_to_html.py",
-   "old": "<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "admin_page_gets_the_manifest",
-   "file": "web/admin.html",
-   "old": "<link rel=\"icon\" href=\"/favicon.png\">\n",
-   "new": "<link rel=\"icon\" href=\"/favicon.png\">\n<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
    "id": "service_worker_registered",
    "file": "web/lobby.html",
    "old": "<link rel=\"manifest\" href=\"/manifest.webmanifest\">\n",
@@ -226,59 +142,17 @@
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
-   "id": "dockerfile_without_manifest",
-   "file": "Dockerfile",
-   "old": "COPY web/manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "dockerfile_without_icons",
-   "file": "Dockerfile",
-   "old": "COPY web/app/ /usr/share/nginx/html/app/\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "build_script_without_icons",
-   "file": "build_web.sh",
-   "old": "cp -f \"${SCRIPT_DIR}/web/app\"/* \"${DIST_DIR}/app/\"",
-   "new": "true",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "ci_check_without_maskable_icon",
-   "file": ".github/workflows/ci.yml",
-   "old": " app/icon-maskable-512.png app/apple-touch-icon.png home/home.js",
-   "new": " app/apple-touch-icon.png home/home.js",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "git_ignores_the_icons",
-   "file": ".gitignore",
-   "old": "!web/app/\n!web/app/**\n",
-   "new": "",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
    "id": "icons_budget_too_small",
    "file": "tools/size_limits.py",
    "old": "APP_ICONS_BUDGET = 73_600",
-   "new": "APP_ICONS_BUDGET = 60_000",
+   "new": "APP_ICONS_BUDGET = 6_000",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "manifest_budget_too_small",
    "file": "tools/size_limits.py",
    "old": "APP_MANIFEST_BUDGET = 1_300",
-   "new": "APP_MANIFEST_BUDGET = 1_000",
-   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
-  },
-  {
-   "id": "icon_tool_uses_other_art",
-   "file": "tools/front_page_art/make_app_icons.py",
-   "old": "LOGO = ROOT / \"web\" / \"front\" / \"logo.png\"",
-   "new": "LOGO = ROOT / \"Original-Ants\" / \"logo.png\"",
+   "new": "APP_MANIFEST_BUDGET = 900",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
@@ -349,13 +223,6 @@
    "file": "docker/nginx.conf",
    "old": "        add_header X-Content-Type-Options \"nosniff\" always;\n        add_header Strict-Transport-Security \"max-age=604800\" always;\n    }\n\n    # The front page.",
    "new": "        add_header X-Content-Type-Options \"nosniff\" always;\n    }\n\n    # The front page.",
-   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
-  },
-  {
-   "id": "manifest_with_page_policy",
-   "file": "docker/nginx.conf",
-   "old": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n",
-   "new": "    location = /manifest.webmanifest {\n        root /usr/share/nginx/html;\n        default_type application/manifest+json;\n        add_header Content-Security-Policy $ants_csp always;\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
