@@ -665,6 +665,11 @@ function bringPlayers(env) {
     same('the Moderators group has both, the admins first, then by name; each has its word (the admin\'s with the class for red, the moderator\'s for gold), and a person with no role has none', [r.groups()[0].names, badgeOf('boss'), badgeOf('amy'), badgeOf('zed'), badgeOf('sage')], [['boss', 'amy', 'zed'], ['admin', true], ['mod', false], ['mod', false], null]);
     r.who({ t: 'who', full: false, n: 5, g: 0, more: 0, rows: [row(2, 'zed', 'look', { mod: true, role: 'admin' })], gone: [] });
     same('a change that makes a moderator an admin is drawn at once (the word, the class, the place in the group)', [r.groups()[0].names, badgeOf('zed')], [['boss', 'zed', 'amy'], ['admin', true]]);
+    const inPlace = rig(); inPlace.live(W({ you: { name: 'maple', mod: false, role: 'none' } }));
+    inPlace.who(FULL([row(3, 'boss', 'look', { mod: true, role: 'admin' }), row(2, 'zed', 'look', { mod: true, role: 'mod' })], { n: 3 }));
+    inPlace.who({ t: 'who', full: false, n: 3, g: 0, more: 0, rows: [row(2, 'zed', 'look', { mod: true, role: 'admin' })], gone: [] });
+    const zed = byClass(inPlace.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === 'zed');
+    same('... also where nothing moves (a moderator who is in place becomes an admin: the word and the class change)', [inPlace.groups()[0].names, one(zed, 'pl-badge').textContent, cls(one(zed, 'pl-badge')).indexOf('pl-badge-admin') !== -1], [['boss', 'zed'], 'admin', true]);
     r.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'admin' } });
     same('the visitor\'s own row follows a live `you` at once: the word ADMIN with the red class, and "you"; then MOD, then nothing', [(() => { const b = one(one(r.panel(), 'pl-you'), 'pl-badge'); return b ? [b.textContent, cls(b).indexOf('pl-badge-admin') !== -1] : null; })(),
         (r.emit('you', { t: 'you', you: { name: 'maple', mod: true, role: 'mod' } }), (() => { const b = one(one(r.panel(), 'pl-you'), 'pl-badge'); return b ? [b.textContent, cls(b).indexOf('pl-badge-admin') !== -1] : null; })()),

@@ -1442,11 +1442,15 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
         ['Done: the person is muted.', 'Done: the person can write again.', 'Done: the line is gone.', 'Done: the person was removed.', 'Done: the person is banned.', 'Done: the ban is lifted.']);
     same('ok answers the command that waits (the next refusal is for the next send), and a word that is no command ("constructor", "__proto__", a number, nothing) says nothing', [(() => { const r = ok('mute', '/mute x 5'); r.clock.advance(2600); r.dock.say('hello'); r.s().recv({ t: 'err', code: 'rate' }); return r.field().value; })(),
         ['constructor', '__proto__', 5, null, undefined, '', 'hasOwnProperty'].map((c) => reply('/mute x 5', { t: 'ok', c }).answers().length)], ['hello', [0, 0, 0, 0, 0, 0, 0]]);
+    const afterOk = ok('mute', '/mute x 5'); afterOk.s().recv({ t: 'err', code: 'bad' });
+    same('ok answers the command that waited: a `bad` after it is nobody\'s (no second answer)', afterOk.answers(), ['Done: the person is muted.']);
     same('a refusal that is not a command\'s is a line\'s as it was (the note), and a command is never put back in the field', [(() => { const r = rig({}); r.live(W({ login: true, you: MODE })); r.dock.say('hello'); r.s().recv({ t: 'err', code: 'rate' }); return [r.note(), r.field().value, r.answers()]; })()], [['Slow down a little', 'hello', []]]);
     const bans = (frame, command) => { const r = rig({}); r.live(W({ login: true, you: asRole('admin') })); if (command) r.dock.say(command); r.s().recv(frame); return r; };
     const list = bans({ t: 'bans', rows: [{ u: 'bob', at: 1700000000 }, { u: 'carol.x', at: 1700086400 }] }, '/bans');
     same('bans: the heading and a line for each person, a name and a day; private; the command that waited for it is answered', [list.answers(), one(list.rows()[0], 'gc-cmd') ? one(list.rows()[0], 'gc-cmd').tagName : null, (list.clock.advance(2600), list.dock.say('hello'), list.s().recv({ t: 'err', code: 'rate' }), list.field().value)],
         [['People who are banned\nbob 2023-11-14\ncarol.x 2023-11-15'], 'bdi', 'hello']);
+    const stray = bans({ t: 'bans', rows: [] }, '/bans'); stray.s().recv({ t: 'err', code: 'bad' });
+    same('bans answers the /bans that waited: a `bad` after it is nobody\'s (no second answer)', stray.answers(), ['Nobody is banned.']);
     same('bans: nobody; a frame that is not a list says nothing; a name that is markup is only text', [bans({ t: 'bans', rows: [] }).answers(), bans({ t: 'bans', rows: 7 }).answers(), bans({ t: 'bans' }).answers(), (() => { const r = bans({ t: 'bans', rows: [{ u: '<img src=x onerror=alert(1)>', at: 1 }] }); return [r.answers(), r.env.innerHTMLWrites.length, r.log().all().every((e) => ['div', 'p', 'span', 'bdi'].indexOf(e.tagName) !== -1)]; })()],
         [['Nobody is banned.'], [], [], [['People who are banned\n<img src=x onerror=alert(1)> 1970-01-01'], 0, true]]);
     const kept = rig({}); kept.live(W({ login: true, you: MODE })); kept.dock.say('/kick bob'); kept.s().recv({ t: 'err', code: 'who' });

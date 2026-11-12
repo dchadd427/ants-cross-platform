@@ -159,6 +159,12 @@ class TheStyle(unittest.TestCase):
     def rule(self, selector):
         return next(body for sel, body in self.rules if sel.strip() == selector)
 
+    def test_the_admin_mark_is_the_red_of_the_leave_buttons_with_the_cream_word_and_an_edge(self):
+        body = self.rule(".pl-badge-admin")
+        self.assertIn("background: #9d0d17;", body, "the red of the Leave buttons (home.css .leave)")
+        self.assertIn("color: var(--cream);", body)
+        self.assertIn("box-shadow: 0 0 0 1px #e0707a;", body, "the red alone is dim against the dark panel: a light edge")
+
     def test_the_panel_is_always_docked_a_column_of_homes_grid_or_the_phones_view(self):
         for name in ("WIDE", "docked(", "data-sheet", "pl-scrim", "pl-btn", "pl-bar", "pl-close", "tabbable"):
             self.assertNotIn(name, self.js, "there is no sheet, drawer or button to open the panel: " + name)

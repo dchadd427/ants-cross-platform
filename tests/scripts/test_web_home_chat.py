@@ -395,7 +395,8 @@ class TheRoles(unittest.TestCase):
         self.assertIn("chipRole.textContent = has ? (you.role === 'admin' ? TEXT.admin : TEXT.mod) : '';", self.js, "the chip's mark is a word")
 
     def test_the_quiet_line_and_the_private_answers_have_text_that_can_be_read(self):
-        self.assertGreaterEqual(contrast("#9cc0b3", "#0a1016"), 4.5, "the hub's own line on the log")
+        event = re.search(r"color: (#[0-9a-f]{6})", self.rule(self.css, ".gc-event")).group(1)
+        self.assertGreaterEqual(contrast(event, "#0a1016"), 4.5, "the hub's own line on the log")
         for color in ("#f4ece2", "#a8cfc0", "#b9d9cc"):
             self.assertGreaterEqual(contrast(color, "#0e1c18"), 4.5, color + " on the private answer")
         self.assertGreaterEqual(contrast("#f4ece2", "#1c140c"), 4.5, "the notice of a removal")
