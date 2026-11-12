@@ -211,7 +211,22 @@ def check_reachable(root, files, start="README.md"):
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 ATX_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 INLINE_CODE = re.compile(r"(`+)(.+?)\1")
-HTML_COMMENT = re.compile(r"<!--.*?-->")
+
+
+def without_comments(line):
+    """(the line without its HTML comments, whether a comment is still open at its end). A comment mark inside inline code is text, not a mark."""
+    mask = INLINE_CODE.sub(lambda c: "x" * len(c.group(0)), line)
+    out, at = [], 0
+    while True:
+        start = mask.find("<!--", at)
+        if start < 0:
+            out.append(line[at:])
+            return "".join(out), False
+        out.append(line[at:start])
+        end = line.find("-->", start + 4)
+        if end < 0:
+            return "".join(out), True
+        at = end + 3
 
 
 def prose_lines(text):
@@ -231,9 +246,7 @@ def prose_lines(text):
         if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
             fence = m.group(1)
             continue
-        line = HTML_COMMENT.sub("", line)
-        if "<!--" in line:
-            line, comment = line.split("<!--", 1)[0], True
+        line, comment = without_comments(line)
         yield n, line
 
 

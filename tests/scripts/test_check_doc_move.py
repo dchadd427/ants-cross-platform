@@ -2,6 +2,7 @@
 """Tests of tools/check_doc_move.py (the proof that a split of a document is a pure move), on small repositories made for each test: a good split passes, and every way of losing,
 changing or breaking something fails."""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -33,7 +34,7 @@ README = "[big](docs/BIG.md) [other](docs/OTHER.md)\n"
 
 INDEX = """# Big
 
-This page is an index.
+This page is an index of [the parts](big/two.md).
 
 Intro line.
 
@@ -97,7 +98,7 @@ class Move(unittest.TestCase):
         code, out, err = self.run_tool()
         self.assertEqual((code, out), (0, ""), out + err)
         self.assertIn("split: docs/BIG.md into 1 part(s): docs/big/two.md", err)
-        self.assertIn("+ This page is an index.", err)
+        self.assertIn("+ docs/BIG.md:3: This page is an index of", err)
         self.assertNotIn("+ Second text.", err)
 
     def test_a_lost_line_fails(self):
@@ -201,7 +202,7 @@ code line two
 RULES_OTHER = "# Other\n\n## X\n\ntext [r](RULES.md#allowed)\n\nmore\n"
 RULES_INDEX = """# Rules
 
-This page is an index.
+This page is an index of [the parts](rules/p.md).
 
 Intro.
 
@@ -275,7 +276,7 @@ class Strict(unittest.TestCase):
         assert old in RULES_PART, old
         return RULES_PART.replace(old, new)
 
-    def attack(self, old, new, expect):
+    def changed_copy_fails(self, old, new, expect):
         code, out, err = self.run_split(part=self.changed(old, new))
         self.assertEqual(code, 1, "it passed: " + err)
         self.assertIn(expect, out)
@@ -285,8 +286,8 @@ class Strict(unittest.TestCase):
         self.assertEqual((code, out), (0, ""), out + err)
 
     def test_two_lines_swapped_inside_a_section_fail(self):
-        self.attack("- one\n- two\n", "- two\n- one\n", '"## Allowed"')
-        self.attack("- one\n- two\n", "- two\n- one\n", "the first difference, old / new: '- one' / '- two'")
+        self.changed_copy_fails("- one\n- two\n", "- two\n- one\n", '"## Allowed"')
+        self.changed_copy_fails("- one\n- two\n", "- two\n- one\n", "the first difference, old / new: '- one' / '- two'")
 
     def test_a_line_moved_into_the_next_section_fails(self):
         code, out, _ = self.run_split(part=RULES_PART.replace("- two\n\n|", "\n|").replace("- three\n", "- two\n- three\n"))
@@ -309,7 +310,7 @@ class Strict(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_a_line_moved_out_of_its_code_fence_fails(self):
-        self.attack("code line one\ncode line two\n```", "code line one\n```\ncode line two", '"### Limits"')
+        self.changed_copy_fails("code line one\ncode line two\n```", "code line one\n```\ncode line two", '"### Limits"')
 
     def test_table_rows_in_another_order_fail(self):
         code, out, _ = self.run_split(part=RULES_PART.replace("|---|---|\n| 1 | 2 |", "| 1 | 2 |\n|---|---|"))
@@ -332,10 +333,10 @@ class Strict(unittest.TestCase):
         self.assertIn("more than once", out)
 
     def test_a_removed_blank_line_fails(self):
-        self.attack("- two\n\n| a | b |", "- two\n| a | b |", '"## Allowed"')
+        self.changed_copy_fails("- two\n\n| a | b |", "- two\n| a | b |", '"## Allowed"')
 
     def test_two_paragraphs_joined_fail(self):
-        self.attack("Second limits text.\nhandlers", "Second limits text.\n\nhandlers", '"### Limits"')
+        self.changed_copy_fails("Second limits text.\nhandlers", "Second limits text.\n\nhandlers", '"### Limits"')
 
     def test_a_blank_line_removed_from_another_page_fails(self):
         code, out, _ = self.run_split(other=RULES_OTHER_NEW.replace("\n\nmore", "\nmore"))
@@ -343,23 +344,23 @@ class Strict(unittest.TestCase):
         self.assertIn("(b) docs/OTHER2.md", out)
 
     def test_the_targets_of_two_links_swapped_fail(self):
-        self.attack("[first](p.md#limits), [second](p.md#limits-1)", "[first](p.md#limits-1), [second](p.md#limits)", '"### Limits"')
+        self.changed_copy_fails("[first](p.md#limits), [second](p.md#limits-1)", "[first](p.md#limits-1), [second](p.md#limits)", '"### Limits"')
 
     def test_a_link_aimed_at_the_other_of_two_equal_headings_fails(self):
-        self.attack("[second](p.md#limits-1)", "[second](p.md#limits)", '"### Limits"')
+        self.changed_copy_fails("[second](p.md#limits-1)", "[second](p.md#limits)", '"### Limits"')
 
     def test_a_changed_outside_address_fails(self):
-        self.attack("https://example.org/a", "https://example.org/b", '"### Limits"')
+        self.changed_copy_fails("https://example.org/a", "https://example.org/b", '"### Limits"')
 
     def test_the_arguments_of_a_call_that_looks_like_a_link_are_not_blanked(self):
-        self.attack("handlers[i](first, second)", "handlers[i](second, first)", '"### Limits"')
+        self.changed_copy_fails("handlers[i](first, second)", "handlers[i](second, first)", '"### Limits"')
 
     def test_a_link_in_another_page_that_names_a_section_that_is_not_there_fails(self):
         code, out, _ = self.run_split(other=RULES_OTHER)
         self.assertEqual(code, 1)
 
     def test_a_heading_of_another_level_fails(self):
-        self.attack("### Limits", "## Limits", '"### Limits"')
+        self.changed_copy_fails("### Limits", "## Limits", '"### Limits"')
 
     def test_an_old_page_that_is_deleted_fails_with_that_message(self):
         self.put("docs/rules/p.md", RULES_PART)
@@ -388,8 +389,265 @@ class Strict(unittest.TestCase):
     def test_the_lines_that_are_new_are_shown_and_a_table_rule_is_not_a_duplicate(self):
         code, out, err = self.run_split()
         self.assertEqual(code, 0)
-        self.assertIn("+ This page is an index.", err)
-        self.assertIn("+ | Rules | [p](<(split) file>) |", err)
+        self.assertIn("+ docs/RULES.md:3: This page is an index of", err)
+        self.assertIn("+ docs/RULES.md:9: | Rules | [p](rules/p.md) |", err)
+
+
+TREE = """# Net
+
+Intro.
+
+## About
+
+About text.
+
+## Server
+
+Server intro.
+
+### Sizes
+
+Server sizes text.
+
+### Timeouts
+
+Server timeouts text.
+
+## Client
+
+Client intro.
+
+### Sizes
+
+Client sizes text.
+
+### Timeouts
+
+Client timeouts text.
+
+## Notes
+
+Notes text.
+"""
+TREE_INDEX = "# Net\n\nIntro.\n\nSee [the parts](net/p.md).\n\n## About\n\nAbout text.\n"
+TREE_PART = "# Net, the parts\n\nSee [the index](../NET.md).\n\n" + TREE[TREE.index("## Server"):]
+SIZES_SERVER = "### Sizes\n\nServer sizes text.\n\n"
+SIZES_CLIENT = "### Sizes\n\nClient sizes text.\n\n"
+TIMEOUTS_SERVER = "### Timeouts\n\nServer timeouts text.\n\n"
+TIMEOUTS_CLIENT = "### Timeouts\n\nClient timeouts text.\n\n"
+NAV = "See [the index](../NET.md)."
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
+class Tree(unittest.TestCase):
+    """Sections that keep their order and their parent heading, and the few lines that a split may add."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.addCleanup(self._tmp.cleanup)
+        self.git("init", "-q")
+        self.put("README.md", "[n](docs/NET.md)\n")
+        self.put("docs/NET.md", TREE)
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.org", "commit", "-q", "-m", "base")
+        self.base = self.git("rev-parse", "HEAD").strip()
+
+    git = Move.git
+    put = Move.put
+
+    def run_split(self, index=TREE_INDEX, part=TREE_PART, extra=None):
+        self.put("docs/NET.md", index)
+        self.put("docs/net/p.md", part)
+        for rel, text in (extra or {}).items():
+            self.put(rel, text)
+        done = subprocess.run([sys.executable, TOOL, self.base, "--root", self.root], capture_output=True, text=True)
+        return done.returncode, done.stdout, done.stderr
+
+    def fails(self, expect, index=TREE_INDEX, part=TREE_PART, extra=None):
+        code, out, err = self.run_split(index, part, extra)
+        self.assertEqual(code, 1, "it passed: " + err)
+        self.assertIn(expect, out)
+
+    def in_part(self, old, new):
+        assert old in TREE_PART, old
+        return TREE_PART.replace(old, new)
+
+    def test_the_good_split_passes_and_so_do_two_parts(self):
+        code, out, err = self.run_split()
+        self.assertEqual((code, out), (0, ""), out + err)
+        cut = TREE_PART.index("## Client")
+        code, out, err = self.run_split(part=TREE_PART[:cut], extra={"docs/net/q.md": "# Net, more\n\n" + NAV + "\n\n" + TREE_PART[cut:]})
+        self.assertEqual((code, out), (0, ""), out + err)
+
+    def test_two_subsections_swapped_between_their_parents_fail(self):
+        self.fails("stands before the section", part=self.in_part(SIZES_SERVER, "@@").replace(SIZES_CLIENT, SIZES_SERVER).replace("@@", SIZES_CLIENT).replace(
+            "Server sizes text.\n\n### Timeouts\n\nServer timeouts", "Client sizes text.\n\n### Timeouts\n\nServer timeouts"))
+
+    def test_a_subsection_moved_to_the_other_parent_fails(self):
+        self.fails("is not under its parent", part=self.in_part(TIMEOUTS_CLIENT, "").replace(TIMEOUTS_SERVER, TIMEOUTS_SERVER + TIMEOUTS_CLIENT))
+
+    def test_a_subsection_moved_to_the_end_under_the_last_section_fails(self):
+        self.fails("is not under its parent", part=self.in_part(TIMEOUTS_SERVER, "") + "\n" + TIMEOUTS_SERVER)
+
+    def test_a_section_with_its_intro_moved_up_leaves_its_neighbors_under_it_fails(self):
+        self.fails("is not under its parent", part=self.in_part("## Client\n\nClient intro.\n\n", "").replace(SIZES_SERVER, "## Client\n\nClient intro.\n\n" + SIZES_SERVER))
+
+    def test_the_sections_of_a_part_in_reverse_order_fail(self):
+        head, *chunks = re.split(r"(?m)^(?=## )", TREE_PART)
+        self.fails("stands before the section", part=head + "\n".join(c.rstrip("\n") + "\n" for c in reversed(chunks)))
+
+    def test_the_text_before_the_first_heading_moved_under_a_heading_fails(self):
+        self.put("docs/PRE.md", "Preface line.\n\n# Pre\n\n## S1\n\ntext one\n\n## S2\n\ntext two\n")
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.org", "commit", "-q", "-m", "pre")
+        self.base = self.git("rev-parse", "HEAD").strip()
+        self.put("docs/pre/s2.md", "# Part\n\n## S2\n\ntext two\n")
+        self.put("docs/PRE.md", "# Pre\n\nPreface line.\n\n## S1\n\ntext one\n")
+        done = subprocess.run([sys.executable, TOOL, self.base, "--root", self.root, "--doc", "docs/PRE.md"], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("the section before the first heading (line 1", done.stdout)
+
+    def test_a_sentence_under_a_heading_fails(self):
+        self.fails("net/p.md:", part=self.in_part("## Server\n\nServer intro.", "## Server\n\nEverything below is out of date.\n\nServer intro."))
+
+    def test_a_sentence_after_a_body_fails(self):
+        self.fails("inside a part", part=self.in_part("Server intro.\n", "Server intro.\n\nNext words.\n"))
+        self.fails("inside a part", part=TREE_PART + "\nA last sentence.\n")
+
+    def test_a_navigation_line_after_a_moved_body_in_a_part_fails(self):
+        self.fails("inside a part", part=TREE_PART + "\n" + NAV + "\n")
+
+    def test_a_new_heading_above_a_moved_one_fails(self):
+        self.fails("a heading that is not", part=self.in_part("## Server", "## Deprecated\n\n" + NAV + "\n\n## Server"))
+
+    def test_a_new_section_in_a_part_fails(self):
+        self.fails("net/p.md:", part=TREE_PART + "\n## Extra\n\nMore text.\n")
+
+    def test_a_body_wrapped_in_a_comment_or_a_fence_or_details_fails(self):
+        self.fails("a fence, comment or details mark", part=self.in_part("Notes text.", "<!--\nNotes text.\n-->"))
+        self.fails("a fence, comment or details mark", part=self.in_part("Notes text.", "```text\nNotes text.\n```"))
+        self.fails("a fence, comment or details mark", part=self.in_part("Notes text.", "<details>\nNotes text.\n</details>"))
+
+    def test_a_mark_on_a_line_that_looks_like_navigation_fails(self):
+        for mark in ("<!-- %s -->" % NAV, "```" + NAV, "<details>" + NAV, "<summary>" + NAV):
+            self.fails("a fence, comment or details mark", part=self.in_part("## Server", mark + "\n\n## Server") if False else TREE_PART + "\n" + mark + "\n")
+
+    def test_a_navigation_line_at_the_top_of_a_part_passes_and_a_bad_one_fails(self):
+        code, out, err = self.run_split(part=self.in_part(NAV, NAV + "\n\n- [back](../NET.md#about)"))
+        self.assertEqual((code, out), (0, ""), out + err)
+        self.fails("text that is not a title", part=self.in_part(NAV, NAV + " " + "More words. " * 30))
+        self.fails("text that is not a title", part=self.in_part(NAV, "See [nowhere](../NOPE.md)."))
+        self.fails("text that is not a title", part=self.in_part(NAV, "See [a site](https://example.org/x)."))
+        self.fails("text that is not a title", part=self.in_part(NAV, "A sentence with no link."))
+
+    def test_a_second_title_in_a_part_fails(self):
+        self.fails("a heading that is not", part=self.in_part(NAV, NAV + "\n\n# A second title"))
+
+    def test_a_new_page_that_is_no_part_of_the_move_fails(self):
+        self.fails("docs/EXTRA.md:", extra={"docs/EXTRA.md": "# Extra\n\nSome new sentence.\n"})
+
+    def test_the_index_may_add_a_moved_to_line_a_table_and_a_name_for_it(self):
+        moved = TREE_INDEX + "\nServer and the rest moved to [the part](net/p.md).\n"
+        self.assertEqual(self.run_split(index=moved)[0], 0)
+        table = "\n## Where it went\n\n| Part | Where |\n|---|---|\n| <a id=\"server\"></a>Server | [p](net/p.md#server) |\n| Notes | [p](net/p.md#notes) |\n"
+        code, out, err = self.run_split(index=TREE_INDEX + table)
+        self.assertEqual((code, out), (0, ""), out + err)
+        self.assertIn("+ docs/NET.md:", err)
+
+    def test_the_index_fails_for_a_sentence_a_bad_table_or_a_lone_heading(self):
+        self.fails("text that is not a title", index=TREE_INDEX + "\nThe rest is out of date.\n")
+        self.fails("a table that is not", index=TREE_INDEX + "\n| Part | Where |\n|---|---|\n| Server | nowhere |\n")
+        self.fails("a table that is not", index=TREE_INDEX + "\n| Part | Where |\n| Server | [p](net/p.md) |\n")
+        self.fails("a heading that is not", index=TREE_INDEX + "\n## Deprecated\n")
+        self.fails("a heading that is not", index=TREE_INDEX + "\n# A second title\n\n| Part | Where |\n|---|---|\n| Server | [p](net/p.md) |\n")
+        self.fails("a table that is not", index=TREE_INDEX + "\n| Part | Where |\n| Server | [p](net/p.md) |\n| Notes | [p](net/p.md) |\n")
+        self.fails("a table in a part", part=TREE_PART.replace(NAV, NAV + "\n\n| Part | Where |\n|---|---|\n| Server | [i](../NET.md) |"))
+
+    def test_the_index_fails_for_a_line_between_a_kept_heading_and_its_body(self):
+        self.fails("between a heading and its body", index=TREE_INDEX.replace("## About\n\n", "## About\n\nMoved: [the part](net/p.md).\n\n"))
+        self.fails("between a heading and its body", index=TREE_INDEX.replace("## About\n\n", "## About\n\n| Part | Where |\n|---|---|\n| S | [p](net/p.md) |\n\n"))
+
+
+ALIKE = """# Lim
+
+## A
+
+### The limits
+
+| what | number |
+|---|---|
+| a | 1 |
+
+## B
+
+### The limits
+
+| what | number |
+|---|---|
+| b | 2 |
+
+## C
+
+See [a](#the-limits) and [b](#the-limits-1).
+"""
+ALIKE_OTHER = "# Other\n\nSee [a](LIM.md#the-limits) and [b](LIM.md#the-limits-1) and [c](SAME.md#s-1).\n"
+SAME = "# Same\n\n## S\n\nfirst words\n\n## S\n\nsecond words\n"
+ALIKE_OTHER_NEW = ALIKE_OTHER.replace("LIM.md", "lim/p.md")
+ALIKE_INDEX = "# Lim\n\nSee [the part](lim/p.md).\n"
+ALIKE_PART = "# Lim, the part\n\nSee [the index](../LIM.md).\n\n" + ALIKE[ALIKE.index("## A"):]
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
+class Alike(unittest.TestCase):
+    """Two headings with the same text that begin alike: a link to one is not a link to the other."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.addCleanup(self._tmp.cleanup)
+        self.git("init", "-q")
+        self.put("README.md", "[l](docs/LIM.md) [o](docs/OTHER.md)\n")
+        self.put("docs/LIM.md", ALIKE)
+        self.put("docs/OTHER.md", ALIKE_OTHER)
+        self.put("docs/SAME.md", SAME)
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@example.org", "commit", "-q", "-m", "base")
+        self.base = self.git("rev-parse", "HEAD").strip()
+
+    git = Move.git
+    put = Move.put
+
+    def run_split(self, part=ALIKE_PART, other=ALIKE_OTHER_NEW):
+        self.put("docs/LIM.md", ALIKE_INDEX)
+        self.put("docs/lim/p.md", part)
+        self.put("docs/OTHER.md", other)
+        done = subprocess.run([sys.executable, TOOL, self.base, "--root", self.root], capture_output=True, text=True)
+        return done.returncode, done.stdout, done.stderr
+
+    def test_the_good_split_passes(self):
+        code, out, err = self.run_split()
+        self.assertEqual((code, out), (0, ""), out + err)
+
+    def test_two_targets_swapped_in_a_moved_line_fail(self):
+        code, out, _ = self.run_split(part=ALIKE_PART.replace("[a](#the-limits) and [b](#the-limits-1)", "[a](#the-limits-1) and [b](#the-limits)"))
+        self.assertEqual(code, 1)
+        self.assertIn('"## C"', out)
+
+    def test_a_link_aimed_at_the_other_one_fails(self):
+        code, out, _ = self.run_split(part=ALIKE_PART.replace("[b](#the-limits-1)", "[b](#the-limits)"))
+        self.assertEqual(code, 1)
+        self.assertIn('"## C"', out)
+
+    def test_a_link_to_the_second_of_two_equal_headings_of_a_page_that_stays_is_read_for_its_body(self):
+        code, out, _ = self.run_split(other=ALIKE_OTHER_NEW.replace("SAME.md#s-1", "SAME.md#s"))
+        self.assertEqual(code, 1)
+        self.assertIn("(b) docs/OTHER.md", out)
+
+    def test_a_link_of_another_page_aimed_at_the_other_one_fails(self):
+        code, out, _ = self.run_split(other=ALIKE_OTHER_NEW.replace("p.md#the-limits-1", "p.md#the-limits"))
+        self.assertEqual(code, 1)
+        self.assertIn("(b) docs/OTHER.md", out)
 
 
 if __name__ == "__main__":

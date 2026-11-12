@@ -305,8 +305,15 @@
   {
    "id": "a_comment_inside_a_line_hides_nothing",
    "file": "tools/check_hygiene.py",
-   "old": "        line = HTML_COMMENT.sub(\"\", line)\n",
-   "new": "",
+   "old": "        line, comment = without_comments(line)\n",
+   "new": "        comment = False\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "a_comment_mark_in_inline_code_opens_a_comment",
+   "file": "tools/check_hygiene.py",
+   "old": "    mask = INLINE_CODE.sub(lambda c: \"x\" * len(c.group(0)), line)",
+   "new": "    mask = line",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
   },
   {
