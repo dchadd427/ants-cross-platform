@@ -56,8 +56,36 @@ class TheGlue(unittest.TestCase):
 
     def test_the_states_are_the_state_machines_and_the_zone_reads_the_picture_not_an_element(self):
         self.assertIn("var zone = R.barZone({", self.glue)
-        self.assertIn("zone: function () { var c = $('canvas'), r = c.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, bottom: r.bottom, height: r.height, rows: c.height } : null; }", self.glue)
+        self.assertIn("zone: function () { var c = $('canvas'), r = c.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, bottom: r.bottom, height: r.height, rows: (function () { try { var n = Module._ants_probe(41); return n > 0 ? n : c.height; } catch (e) { return c.height; } })() } : null; }", self.glue)
         self.assertIn("busy: function () { return dragging || !$('picpop').hidden; }", self.glue)
+
+    @unittest.skipUnless(NODE, "node is needed")
+    def test_the_zone_gives_the_games_logical_height_not_the_canvas_pixels(self):
+        """The canvas of the real game holds device pixels (1080, 1440, 2160 high) while the game's picture is 540 rows: the glue asks the game (probe 41), and the bottom gap then follows the scale."""
+        start = self.glue.index("zone: function () {") + len("zone: ")
+        end = self.glue.index(", bar: function () {", start)
+        script = """
+const R = require(process.argv[1]);
+const zoneSource = process.argv[2];
+function run(pixels, probe) {
+    const canvas = { height: pixels, getBoundingClientRect: () => ({ width: pixels * 16 / 9, left: 0, right: pixels * 16 / 9, bottom: pixels, height: pixels }) };
+    const Module = probe === undefined ? {} : { _ants_probe: probe };
+    const $ = () => canvas;
+    const z = eval('(' + zoneSource + ')')();
+    return { rows: z.rows, gap: R.gapOf(z) };
+}
+const out = {
+    p1080: run(1080, (w) => (w === 41 ? 540 : -1)), p1440: run(1440, (w) => (w === 41 ? 540 : -1)), p2160: run(2160, (w) => (w === 41 ? 540 : -1)),
+    none: run(2160), bad: run(2160, () => -1), thrown: run(1440, () => { throw new Error('x'); }),
+};
+console.log(JSON.stringify(out));
+"""
+        done = subprocess.run([NODE, "-e", script, os.path.join(REPO, "web", "replay_page.js"), self.glue[start:end]], capture_output=True, text=True, cwd=REPO, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        got = json.loads(done.stdout)
+        self.assertEqual([got[k]["rows"] for k in ("p1080", "p1440", "p2160")], [540, 540, 540])      # (not 1080, 1440, 2160)
+        self.assertEqual([got[k]["gap"] for k in ("p1080", "p1440", "p2160")], [12, 16, 22])          # (a rest 13 to 20 px above the edge at 4K is no longer in the game's scroll strip)
+        self.assertEqual([got[k]["rows"] for k in ("none", "bad", "thrown")], [2160, 2160, 1440])     # (a game that does not answer: the canvas, as before)
 
     def test_a_hidden_bar_is_not_woken_by_the_mouse_a_key_or_a_click(self):
         self.assertIn("if (bar.classList.contains('over') && zone.mode() === 'hidden') { syncEdge(); return; }", self.glue)           # (wake is what every move, key and press calls)
