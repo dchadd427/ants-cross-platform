@@ -88,11 +88,11 @@ CODE="E2E-ROOM-$RANDOM"
 CTL="http://127.0.0.1:$CTL_PORT"
 # A match opens with the "Get ready to play!" dialog and its simulation waits for it (network protocol 12): the referee seals the first turn 5 s after the match began, so a room that is
 # "running" has ticked nothing yet and its `ticks` count from the end of the dialog. ticks_of ROOM [CONTROL-URL] prints the referee's ticks; wait_ticks ROOM [CONTROL-URL [SECONDS]] polls
-# until the room has ticked at all and prints the ticks (0 when it had not within SECONDS, 20 by default). Every check that measures the referee's clock, or cuts a link, starts from there.
+# until the room has ticked at all and prints the ticks (0 when it had not within SECONDS, 60 by default). Every check that measures the referee's clock, or cuts a link, starts from there.
 ticks_of() { curl -s -m 3 -H "Authorization: Bearer $SECRET" "${2:-$CTL}/rooms/$1" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("ticks", 0))' 2> /dev/null; }
 wait_ticks() {
     local t
-    for _ in $(seq 1 $(( ${3:-20} * 5 ))); do
+    for _ in $(seq 1 $(( ${3:-$((60 * TIME_SCALE))} * 5 ))); do
         t="$(ticks_of "$1" "${2:-$CTL}")"
         if [ "${t:-0}" -gt 0 ] 2> /dev/null; then echo "$t"; return; fi
         sleep 0.2
@@ -327,7 +327,13 @@ check "--help names --community-maps" "$("$SERVER" --help 2>&1 | grep -q -- '--c
 CM_PORT="$(free_port)"
 ANTS_SERVER_SECRET=x "$SERVER" --maps "$ROOT/Original-Ants/Maps" --community-maps "$ROOT/Community-Maps" --port "$(free_port)" --replay-port "$CM_PORT" --no-db > "$WORK/cm.log" 2>&1 &
 CM_PID=$!
-for _ in $(seq 1 50); do grep -q 'public replays on port' "$WORK/cm.log" 2> /dev/null && break; kill -0 "$CM_PID" 2> /dev/null || break; sleep 0.1; done
+CM_UP=1
+for _ in $(seq 1 $((300 * TIME_SCALE))); do      # (30 s: the parts run side by side on a busy machine; a server that is up is seen at once)
+    if grep -q 'public replays on port' "$WORK/cm.log" 2> /dev/null; then CM_UP=0; break; fi
+    kill -0 "$CM_PID" 2> /dev/null || break
+    sleep 0.1
+done
+if [ "$CM_UP" != "0" ]; then fail_note "the server with --community-maps did not log its public door within $((30 * TIME_SCALE)) s ($(kill -0 "$CM_PID" 2> /dev/null && echo "it still runs" || echo "it ended")); its log: $(tail -n 5 "$WORK/cm.log" 2> /dev/null | tr '\n' '|')"; fi
 check "a server with --community-maps lists them: GET /maps on the public door is maps.json after the six originals, with no play counts (no database), and a query or a path below it is a 404" "$(curl -s -m 5 "http://127.0.0.1:$CM_PORT/maps" | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
@@ -1308,7 +1314,14 @@ check "a pause cap of 59 s is refused by the control interface: 400" "$([ "$(cod
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":3,\"code\":\"$RC_STOP_CODE\",\"seed\":6}" "$RC_URL/rooms"
 python3 "$ROOT/tests/scripts/flaky_proxy.py" "$RC_PROXY_PORT" "$RC_PORT" 3600 > "$WORK/proxy.log" 2>&1 &
 PROXY_PID=$!
-for _ in $(seq 1 50); do grep -q listening "$WORK/proxy.log" 2> /dev/null && break; sleep 0.1; done
+RC_PROXY_UP=1
+for _ in $(seq 1 $((300 * TIME_SCALE))); do      # (30 s: a proxy that is up is seen at once; one that is not up refuses the Victim and the room never has its three)
+    if grep -q listening "$WORK/proxy.log" 2> /dev/null; then RC_PROXY_UP=0; break; fi
+    kill -0 "$PROXY_PID" 2> /dev/null || break
+    sleep 0.1
+done
+[ "$RC_PROXY_UP" = "0" ] || fail_note "reconnect: the proxy on port $RC_PROXY_PORT was not listening within $((30 * TIME_SCALE)) s ($(kill -0 "$PROXY_PID" 2> /dev/null && echo "it still runs" || echo "it ended")); its log: $(tail -n 5 "$WORK/proxy.log" 2> /dev/null | tr '\n' '|')"
+check "the proxy for the Victim is listening" "$RC_PROXY_UP"
 RC_PIDS=""
 "$GAME" --headless --no-lan --name Holder1 --join "127.0.0.1:$RC_PORT" --room "$RC_CODE" --screenshot "$WORK/h1.png" --frames 4000000 > "$WORK/h1.log" 2>&1 &
 RC_PIDS="$!"
@@ -1318,16 +1331,21 @@ RC_PIDS="$RC_PIDS $!"
 RC_VICTIM_PID="$!"
 RC_PIDS="$RC_PIDS $RC_VICTIM_PID"
 RC_RUNNING=1
-for _ in $(seq 1 150); do
+for _ in $(seq 1 $((450 * TIME_SCALE))); do      # (90 s: three headless programs start side by side with the other parts on a busy machine; a room that is running is seen at once)
     [ "$(rc_field "$RC_CODE" state)" = "running" ] && { RC_RUNNING=0; break; }
     sleep 0.2
 done
+[ "$RC_RUNNING" = "0" ] || fail_note "reconnect: the room $RC_CODE was not running after $((90 * TIME_SCALE)) s (state $(rc_field "$RC_CODE" state)); the clients' logs end: $(tail -qn 2 "$WORK/h1.log" "$WORK/h2.log" "$WORK/hv.log" 2> /dev/null | tr '\n' '|' | cut -c1-600)"
 check "three clients (one of them behind the proxy) joined and the match runs" "$RC_RUNNING"
 RC_T0="$(wait_ticks "$RC_CODE" "$RC_URL")"      # (the first turn is sealed 5 s after the match began: the pause below is tested in a match that plays)
 check "the status says that nobody waits: not paused, nobody absent, no vote, the log is being kept" "$([ "$(rc_field "$RC_CODE" paused)" = "false" ] && [ "$(rc_field "$RC_CODE" absent)" = "[]" ] && [ "$(rc_field "$RC_CODE" vote)" = "null" ] && [ "$(rc_field "$RC_CODE" log.usable)" = "true" ] && [ "$(rc_field "$RC_CODE" log.turns)" -gt 0 ]; echo $?)"
-sleep 2
-RC_T1="$(rc_field "$RC_CODE" ticks)"
-check "the referee's clock runs before the cut (ticks $RC_T0, then $RC_T1 two seconds later)" "$([ "${RC_T0:-0}" -gt 0 ] && [ "${RC_T1:-0}" -gt "${RC_T0:-0}" ]; echo $?)"
+RC_T1="$RC_T0"
+for _ in $(seq 1 100); do      # (it ticks 20 times a second: a reading above the first one comes at once, and 10 s is the wait of a stalled runner)
+    sleep 0.2
+    RC_T1="$(rc_field "$RC_CODE" ticks)"
+    [ "${RC_T1:-0}" -gt "${RC_T0:-0}" ] 2> /dev/null && break
+done
+check "the referee's clock runs before the cut (ticks $RC_T0, then $RC_T1 later)" "$([ "${RC_T0:-0}" -gt 0 ] && [ "${RC_T1:-0}" -gt "${RC_T0:-0}" ]; echo $?)"
 
 # the second room: a client that is stopped (a machine that hangs: its link stays open and says nothing)
 "$GAME" --headless --no-lan --name Steady1 --join "127.0.0.1:$RC_PORT" --room "$RC_STOP_CODE" --screenshot "$WORK/s1.png" --frames 4000000 > "$WORK/s1.log" 2>&1 &
@@ -1338,10 +1356,11 @@ RC_PIDS="$RC_PIDS $!"
 RC_FROZEN_PID="$!"
 RC_PIDS="$RC_PIDS $RC_FROZEN_PID"
 RC_STOP_RUNNING=1
-for _ in $(seq 1 150); do
+for _ in $(seq 1 $((450 * TIME_SCALE))); do
     [ "$(rc_field "$RC_STOP_CODE" state)" = "running" ] && { RC_STOP_RUNNING=0; break; }
     sleep 0.2
 done
+[ "$RC_STOP_RUNNING" = "0" ] || fail_note "reconnect: the room $RC_STOP_CODE was not running after $((90 * TIME_SCALE)) s (state $(rc_field "$RC_STOP_CODE" state))"
 check "the second room runs with its three clients" "$RC_STOP_RUNNING"
 wait_ticks "$RC_STOP_CODE" "$RC_URL" > /dev/null      # (its dialog's 5 s first: the client below is stopped in a match that plays)
 sleep 2
@@ -1350,7 +1369,7 @@ sleep 2
 kill -USR1 "$PROXY_PID"
 RC_CUT_AT="$(python3 -c 'import time; print(time.time())')"
 RC_PAUSED=1
-for _ in $(seq 1 50); do
+for _ in $(seq 1 150); do
     [ "$(rc_field "$RC_CODE" paused)" = "true" ] && { RC_PAUSED=0; break; }
     sleep 0.1
 done

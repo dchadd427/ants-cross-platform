@@ -489,7 +489,7 @@ void run_room_bot_tests() {
             for (size_t at = log.find("are a team now!"); at != std::string::npos; at = log.find("are a team now!", at + 1)) ++told;
             ASSERT_EQ(told, size_t{2});
             ASSERT_TRUE(app.bots()->stats(2).decisions > 0 && app.bots()->stats(3).decisions > 0);
-            ASSERT_TRUE(duo.until([&]() { return app.sim().current_tick() == bob.sim.current_tick(); }, 4000));
+            ASSERT_TRUE(duo.peer_level());                                                                // (the guest catches up with the host's ticks; the hashes below say it stands at the host's state)
             ASSERT_TRUE(app.sim().state_hash() == bob.sim.state_hash());
             ASSERT_FALSE(app.net()->desynced() || bob.net.desynced());
             for (uint8_t seat = 0; seat < 4; ++seat) ASSERT_EQ(app.sim().alliance_of(seat), static_cast<uint8_t>(seat == 0 ? 2 : seat == 1 ? 3 : seat == 2 ? 0 : 1));       // (the standard bots never broke a team)
