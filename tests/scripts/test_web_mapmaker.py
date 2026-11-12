@@ -1651,11 +1651,6 @@ class TheImageCarriesThePage(unittest.TestCase):
         for name in ALL_SCRIPTS + ("mapmaker.css",):
             self.assertTrue(os.path.isfile(os.path.join(FRONT, name)), name)
 
-    def test_no_file_is_over_the_line_ceiling_of_the_hygiene_check(self):
-        for name in ALL_SCRIPTS + ("mapmaker.css",):
-            self.assertLess(len(read("web", "front", name).splitlines()), 1500, name)
-        self.assertLess(len(read("web", "mapmaker.html").splitlines()), 1500)
-
     def test_the_opt_in_browser_check_is_there_and_says_what_it_covers(self):
         script = read("tests", "scripts", "test_web_mapmaker.sh")
         self.assertIn("OPT-IN, not part of ./run_tests.sh", script)

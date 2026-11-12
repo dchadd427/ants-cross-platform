@@ -1,5 +1,5 @@
 {
- "note": "Mutants of tools/check_hygiene.py for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): the names check (the names of private files kept as digests, looked for in the text and in the path of every tracked file), the size policy (the target, the split line and the safety cap; the names that wait in SPLIT_PENDING), the long lines, the reachability of every page of docs/ and the check of the links to headings. Each breaks one rule on purpose and a test of tests/scripts/test_hygiene.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hygiene_mutants.json --keep-going --jobs 1.",
+ "note": "Mutants of tools/check_hygiene.py for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): the names check (the names of private files kept as digests, looked for in the text and in the path of every tracked file), the size policy (the target, the split line and the safety cap; the names that wait in SPLIT_PENDING), the long lines, the reachability of every page of docs/ the check of the links to headings, and the warnings that reach the pull request (the check's order and count, the runner that prints them). Each breaks one rule on purpose and a test of tests/scripts/test_hygiene.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hygiene_mutants.json --keep-going --jobs 1.",
  "baseline": [
   {
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hygiene.Forbidden"
@@ -27,6 +27,12 @@
   },
   {
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hygiene.Cli"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_run_python_tests.Wrapper"
+  },
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_hygiene.ReachableAsAReaderSees"
   }
  ],
  "mutants": [
@@ -103,22 +109,22 @@
   {
    "id": "no_warning_from_the_split_line",
    "file": "tools/check_hygiene.py",
-   "old": "        elif size >= at[\"split\"] or (kind == \"document\" and size > at[\"target\"]):",
-   "new": "        elif kind == \"document\" and size > at[\"target\"]:",
+   "old": "        elif size >= at[\"split\"]:",
+   "new": "        elif False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.CodeSize"
   },
   {
    "id": "a_document_does_not_warn_from_its_target",
    "file": "tools/check_hygiene.py",
-   "old": " or (kind == \"document\" and size > at[\"target\"]):",
-   "new": ":",
+   "old": "        elif kind == \"document\" and size > at[\"target\"]:",
+   "new": "        elif False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.DocSize"
   },
   {
    "id": "code_warns_from_its_target",
    "file": "tools/check_hygiene.py",
-   "old": "(kind == \"document\" and size > at[\"target\"])",
-   "new": "(size > at[\"target\"])",
+   "old": "        elif kind == \"document\" and size > at[\"target\"]:",
+   "new": "        elif size > at[\"target\"]:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.CodeSize"
   },
   {
@@ -215,8 +221,8 @@
   {
    "id": "headings_in_code_count",
    "file": "tools/check_hygiene.py",
-   "old": "        if fence:\n            if m and m.group(1) == fence:",
-   "new": "        if False:\n            if m and m.group(1) == fence:",
+   "old": "        if fence:\n            if m and m.group(1)[0] == fence[0]",
+   "new": "        if False:\n            if m and m.group(1)[0] == fence[0]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
   },
   {
@@ -229,8 +235,8 @@
   {
    "id": "links_in_inline_code_are_checked",
    "file": "tools/check_hygiene.py",
-   "old": "            line = INLINE_CODE.sub(\"\", line)\n            for target in LINK.findall(line) + REFDEF.findall(line):\n                if re.match(r\"^[a-zA-Z][a-zA-Z0-9+.-]*:\", target) or \"#\" not in target:",
-   "new": "            for target in LINK.findall(line) + REFDEF.findall(line):\n                if re.match(r\"^[a-zA-Z][a-zA-Z0-9+.-]*:\", target) or \"#\" not in target:",
+   "old": "            line = INLINE_CODE.sub(\"\", line)\n            for target in LINK.findall(line) + REFDEF.findall(line):\n                if re.match(r\"^[a-zA-Z][a-zA-Z0-9+.-]*:\", target) or target.startswith(\"?\"):",
+   "new": "            for target in LINK.findall(line) + REFDEF.findall(line):\n                if re.match(r\"^[a-zA-Z][a-zA-Z0-9+.-]*:\", target) or target.startswith(\"?\"):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
   },
   {
@@ -267,6 +273,139 @@
    "old": "    for line in warning_lines(warnings):\n        print(line, file=sys.stderr)",
    "new": "    for line in warning_lines(warnings):\n        print(line)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Cli"
+  },
+  {
+   "id": "a_link_to_a_missing_markdown_file_passes",
+   "file": "tools/check_hygiene.py",
+   "old": "                if path.endswith(\".md\") and path not in fileset:",
+   "new": "                if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "an_underscore_at_a_word_edge_always_goes",
+   "file": "tools/check_hygiene.py",
+   "old": "re.sub(r\"(?<!\\w)(_{1,3})(?=\\S)(.+?)(?<=\\S)\\1(?!\\w)\", r\"\\2\", ",
+   "new": "re.sub(r\"(?<!\\w)_|_(?!\\w)\", \"\", ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "an_entity_in_a_heading_is_not_its_character",
+   "file": "tools/check_hygiene.py",
+   "old": "html.unescape(heading)",
+   "new": "heading",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "a_comment_over_several_lines_hides_nothing",
+   "file": "tools/check_hygiene.py",
+   "old": "        if comment:\n            if \"-->\" not in line:\n                continue",
+   "new": "        if False:\n            if \"-->\" not in line:\n                continue",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "a_comment_inside_a_line_hides_nothing",
+   "file": "tools/check_hygiene.py",
+   "old": "        line = HTML_COMMENT.sub(\"\", line)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "a_fence_closes_with_any_fence_line",
+   "file": "tools/check_hygiene.py",
+   "old": "len(m.group(1)) >= len(fence) and not m.group(2).strip()",
+   "new": "True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "a_byte_order_mark_hides_the_first_heading",
+   "file": "tools/check_hygiene.py",
+   "old": "text.lstrip(\"\\ufeff\").splitlines(), 1)",
+   "new": "text.splitlines(), 1)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Anchors"
+  },
+  {
+   "id": "reachability_follows_links_in_code",
+   "file": "tools/check_hygiene.py",
+   "old": "        line = INLINE_CODE.sub(\"\", line)\n        for target in LINK.findall(line) + REFDEF.findall(line):\n            if re.match(r\"^[a-zA-Z][a-zA-Z0-9+.-]*:\", target) or target.startswith(\"#\"):",
+   "new": "        for target in LINK.findall(line) + REFDEF.findall(line):\n            if re.match(r\"^[a-zA-Z][a-zA-Z0-9+.-]*:\", target) or target.startswith(\"#\"):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.ReachableAsAReaderSees"
+  },
+  {
+   "id": "a_document_over_its_target_is_told_to_split_now",
+   "file": "tools/check_hygiene.py",
+   "old": "warnings.append((rel, \"%s: %s\" % (what, later), \"target\", pct))",
+   "new": "warnings.append((rel, \"%s: %s\" % (what, now), \"target\", pct))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.DocSize"
+  },
+  {
+   "id": "all_the_warnings_are_printed_on_the_pull_request",
+   "file": "tools/check_hygiene.py",
+   "old": "    shown = sized if len(sized) <= room else sized[:room - 1]",
+   "new": "    shown = sized",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Warnings"
+  },
+  {
+   "id": "the_warnings_are_not_counted",
+   "file": "tools/check_hygiene.py",
+   "old": "    if len(shown) < len(sized):",
+   "new": "    if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Warnings"
+  },
+  {
+   "id": "the_warnings_are_not_in_order",
+   "file": "tools/check_hygiene.py",
+   "old": "    ordered = sorted(warnings, key=lambda w: (WARNING_ORDER[w[2]], -w[3], w[0]))",
+   "new": "    ordered = list(warnings)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Warnings"
+  },
+  {
+   "id": "the_waiting_files_come_first",
+   "file": "tools/check_hygiene.py",
+   "old": "WARNING_ORDER = {\"split\": 0, \"target\": 1, \"pending\": 2, \"long\": 3}",
+   "new": "WARNING_ORDER = {\"split\": 3, \"target\": 2, \"pending\": 0, \"long\": 1}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Warnings"
+  },
+  {
+   "id": "the_long_lines_are_counted_by_document",
+   "file": "tools/check_hygiene.py",
+   "old": "% (sum(f[1] for f in found), len(found), num(limit)",
+   "new": "% (len(found), len(found), num(limit)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Warnings"
+  },
+  {
+   "id": "the_long_lines_are_a_warning",
+   "file": "tools/check_hygiene.py",
+   "old": "    return out + [\"::notice file=%s::%s\" % (w[0], w[1]) for w in notices]",
+   "new": "    return out + [\"::warning file=%s::%s\" % (w[0], w[1]) for w in notices]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hygiene.Warnings"
+  },
+  {
+   "id": "a_passing_group_keeps_its_annotations_to_itself",
+   "file": "tests/scripts/run_python_tests.py",
+   "old": "    for line in annotations(results):\n        print(line)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_run_python_tests.Wrapper"
+  },
+  {
+   "id": "a_failed_group_prints_its_annotations_twice",
+   "file": "tests/scripts/run_python_tests.py",
+   "old": "        if r[\"status\"] == 0:\n            for line in ANNOTATION",
+   "new": "        if True:\n            for line in ANNOTATION",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_run_python_tests.Wrapper"
+  },
+  {
+   "id": "an_annotation_is_printed_for_each_group_that_has_it",
+   "file": "tests/scripts/run_python_tests.py",
+   "old": "                if line not in seen:",
+   "new": "                if True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_run_python_tests.Wrapper"
+  },
+  {
+   "id": "an_indented_line_is_an_annotation",
+   "file": "tests/scripts/run_python_tests.py",
+   "old": "ANNOTATION = re.compile(r\"^::(?:warning|notice)\\b.*$\", re.M)",
+   "new": "ANNOTATION = re.compile(r\"^\\s*::(?:warning|notice)\\b.*$\", re.M)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_run_python_tests.Wrapper"
   }
  ]
 }

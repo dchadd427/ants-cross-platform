@@ -66,6 +66,25 @@ class Wrapper(unittest.TestCase):
         self.assertIn("Ran 4 tests in 2 groups", result.stdout)
         self.assertTrue(result.stdout.rstrip().endswith("OK"))
 
+    def test_the_annotations_of_a_passing_group_are_passed_on_once_and_other_output_is_not(self):
+        talk = ("import sys, unittest\nclass %s(unittest.TestCase):\n    def test_x(self):\n        print('::warning file=docs/A.md::95,000 B, 93%%', file=sys.stderr)\n"
+                "        print('::notice::a note')\n        print('plain words of a passing test')\n        print('  ::warning not at the start of a line')\n")
+        self.add("test_a.py", talk % "One")
+        self.add("test_b.py", talk % "Two")
+        self.add("test_bad.py", FAILING)
+        result = self.run_tool()
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines.count("::warning file=docs/A.md::95,000 B, 93%"), 1)
+        self.assertEqual(lines.count("::notice::a note"), 1)
+        self.assertNotIn("plain words of a passing test", result.stdout)
+        self.assertEqual(sorted(l for l in lines if l.startswith("::")), ["::notice::a note", "::warning file=docs/A.md::95,000 B, 93%"])      # (and not the one that is indented)
+        self.assertNotIn("::warning not at the start of a line", result.stdout)                                                                      # (GitHub reads a command at the start of a line)
+
+    def test_the_annotations_of_a_failed_group_are_not_passed_on_twice(self):
+        self.add("test_bad.py", "import sys, unittest\nclass Bad(unittest.TestCase):\n    def test_it_fails(self):\n        print('::warning::from a failing group')\n        self.fail('x')\n")
+        result = self.run_tool()
+        self.assertEqual(result.stdout.splitlines().count("::warning::from a failing group"), 1)
+
     def test_a_failing_test_fails_the_run_shows_its_output_and_the_others_still_run(self):
         self.add("test_a.py", PASSING)
         self.add("test_bad.py", FAILING)
@@ -248,6 +267,23 @@ class TheRealTests(unittest.TestCase):
         self.assertEqual(grouped - found, set(), "the runner would run a group that unittest does not find")
         # a class with tests that is only in the loader's list would be left out by the runner
         self.assertEqual(found - grouped, set(), "the runner would leave these classes out: " + ", ".join(sorted(found - grouped)))
+
+    def test_the_size_warnings_of_the_hygiene_check_reach_the_log_of_a_passing_run(self):
+        old = os.environ.get("GITHUB_ACTIONS")
+        os.environ["GITHUB_ACTIONS"] = "true"                                           # (what CI sets: the check then prints annotations of the pull request)
+        try:
+            result = rpt.run_unit("test_hygiene.RealRepository", "tests.scripts.test_hygiene.RealRepository", os.path.abspath(os.path.join(HERE, "..", "..")))
+        finally:
+            if old is None:
+                os.environ.pop("GITHUB_ACTIONS", None)
+            else:
+                os.environ["GITHUB_ACTIONS"] = old
+        self.assertEqual(result["status"], 0, result["output"])
+        lines = rpt.annotations([result])
+        self.assertTrue(lines, "the hygiene check of the real repository warns about files near their limits: the runner prints nothing of it")
+        self.assertTrue(all(l.startswith(("::warning", "::notice")) for l in lines))
+        self.assertTrue(any("split it by topic" in l for l in lines))
+        self.assertLessEqual(len([l for l in lines if l.startswith("::warning")]), 10, "GitHub shows ten warnings of a step")
 
     def test_the_costs_name_classes_that_exist_and_the_long_ones_start_first(self):
         grouped = {label for label, _ in rpt.units(HERE, "tests.scripts")}

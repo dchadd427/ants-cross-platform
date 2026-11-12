@@ -9,26 +9,6 @@
  },
  "mutants": [
   {
-   "id": "a_lost_line_is_accepted",
-   "old": "    lost = old - new\n",
-   "new": "    lost = collections.Counter()\n"
-  },
-  {
-   "id": "a_line_is_accepted_when_it_is_there_once",
-   "old": "    lost = old - new\n",
-   "new": "    lost = collections.Counter(set(old) - set(new))\n"
-  },
-  {
-   "id": "a_changed_link_target_is_a_changed_line",
-   "old": "    return TARGET.sub(\"]()\", line)",
-   "new": "    return line"
-  },
-  {
-   "id": "another_page_may_change",
-   "old": "        if lines_of(text_at_base(root, base, p)) != lines_of(text_now(root, p)):",
-   "new": "        if False:"
-  },
-  {
    "id": "a_lost_link_is_accepted",
    "old": "    for (src, dst, text), n in sorted(((k, v) for k, v in (before - after).items()), key=str):",
    "new": "    for (src, dst, text), n in []:"
@@ -49,9 +29,84 @@
    "new": "\"ls-files\", \"-z\", \"--cached\""
   },
   {
+   "id": "the_order_of_the_lines_of_a_section_is_not_checked",
+   "old": "                if new_lines[f][i:i + len(body)] != body or any(used[f][i:i + len(body)]):",
+   "new": "                if sorted(new_lines[f][i:i + len(body)]) != sorted(body) or any(used[f][i:i + len(body)]):"
+  },
+  {
+   "id": "blank_lines_are_not_checked",
+   "old": "                if new_lines[f][i:i + len(body)] != body or any(used[f][i:i + len(body)]):",
+   "new": "                if [x for x in new_lines[f][i:i + 2 * len(body)] if x.strip()][:len([x for x in body if x.strip()])] != [x for x in body if x.strip()] or any(used[f][i:i + len(body)]):"
+  },
+  {
+   "id": "a_section_need_not_sit_under_its_own_heading",
+   "old": "                    if k < 0 or new_lines[f][new_heads[f][k]] != heading or used[f][new_heads[f][k]]:",
+   "new": "                    if k < 0:"
+  },
+  {
+   "id": "a_duplicated_line_is_accepted",
+   "old": "if not problems else []      # (when a section did not fit",
+   "new": "if False else []      # (when a section did not fit"
+  },
+  {
+   "id": "a_section_may_be_in_two_places",
+   "old": "                for j in range(i, i + len(body)):\n                    used[f][j] = True\n                return True",
+   "new": "                return True"
+  },
+  {
+   "id": "a_link_is_not_read_for_the_section_it_names",
+   "old": "        if anchor:\n            anchor = urllib.parse.unquote(anchor.split(\"?\")[0]).lower()\n            if path.endswith(\".md\"):",
+   "new": "        if False:\n            anchor = urllib.parse.unquote(anchor.split(\"?\")[0]).lower()\n            if path.endswith(\".md\"):"
+  },
+  {
+   "id": "the_sections_are_told_apart_by_their_heading_only",
+   "old": "hashlib.sha1(\"\\n\".join(body).encode(\"utf-8\")).hexdigest()[:12]",
+   "new": "\"\""
+  },
+  {
+   "id": "an_outside_address_is_not_compared",
+   "old": "        if not target or OUTSIDE.match(target):\n            return written",
+   "new": "        if not target or OUTSIDE.match(target):\n            return \"\""
+  },
+  {
+   "id": "a_target_that_is_no_tracked_file_is_not_compared",
+   "old": "        if path not in self.fileset:\n            return written",
+   "new": "        if path not in self.fileset:\n            return \"\""
+  },
+  {
+   "id": "the_call_that_looks_like_a_link_is_blanked",
+   "old": "            piece = TARGET.sub(lambda m: \"](\" + self.meaning(rel, m.group(1)) + \")\", piece)",
+   "new": "            piece = TARGET.sub(\"]()\", piece)"
+  },
+  {
+   "id": "another_page_may_lose_a_blank_line",
+   "old": "        a, b = old.parsed(p)[1], new.parsed(p)[1]",
+   "new": "        a, b = [x for x in old.parsed(p)[1] if x.strip()], [x for x in new.parsed(p)[1] if x.strip()]"
+  },
+  {
+   "id": "another_page_may_change",
+   "old": "        if a != b:\n            n = next(",
+   "new": "        if False:\n            n = next("
+  },
+  {
+   "id": "a_deleted_page_is_not_noticed",
+   "old": "p.endswith(\".md\") and p not in set(now)]",
+   "new": "p.endswith(\".md\") and False]"
+  },
+  {
+   "id": "a_section_that_was_in_the_old_page_is_not_counted_against_the_new_set",
+   "old": "    spoken = {l for l in old_lines if l.strip() and has_text(l)}",
+   "new": "    spoken = set()"
+  },
+  {
    "id": "a_part_is_not_in_the_new_set",
-   "old": "    for p in [doc] + parts:\n        new.update(lines_of(text_now(root, p)))",
-   "new": "    for p in [doc]:\n        new.update(lines_of(text_now(root, p)))"
+   "old": "    files = [doc] + parts\n    new_lines",
+   "new": "    files = [doc]\n    new_lines"
+  },
+  {
+   "id": "a_text_before_the_first_heading_is_not_checked",
+   "old": "    out = [(None, trimmed(lines[:cuts[0]]), 1)] if cuts[0] else []",
+   "new": "    out = []"
   }
  ]
 }
