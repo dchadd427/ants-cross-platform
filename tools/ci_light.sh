@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Decides whether a pull request needs all of CI or only the light checks (the first job of .github/workflows/ci.yml, `changes`). Tested by tests/scripts/test_ci_light.py.
 #
-#   EVENT=pull_request BASE_SHA=<commit> HEAD_SHA=<commit> tools/ci_light.sh
+#   EVENT=pull_request BASE_REF=<base branch name> BASE_SHA=<commit> HEAD_SHA=<commit> tools/ci_light.sh
 #
 # The decision is `light` when EVERY file that the pull request changes (git diff against the merge base of its head and its base, renames taken apart so that both names count) is:
 #   web/**                      the pages of the site, except the files named below
@@ -11,17 +11,18 @@
 #   tests/scripts/test_web_*, tests/scripts/web_*      the tests of the pages and their checks (a file in a folder below tests/scripts is not one), except the files named below
 # Anything else makes it `full`: VERSION, CMakeLists.txt, cmake/, src/, include/, tools/, hub/, the Dockerfiles and compose files, .github/, third_party/, Community-Maps/, Original-Ants/,
 # run_tests.*, the C++ tests, the other tests of tests/scripts (the macOS job runs most of them and the two shell suites), and every path not listed. Unknown is full. A run that is not a
-# pull request (a push to main or staging, a manual run), a commit that is not a full commit id, a history without a merge base with the base, a failing git and a pull request with no
-# changed file are full too.
+# pull request (a push to main, a manual run), a commit that is not a full commit id, a history without a merge base with the base, a failing git and a pull request with no
+# changed file are full too. So is every pull request whose base branch is main, whatever it changes, and one whose base branch is not named (BASE_REF empty or with a character that a branch
+# name of this repository does not use): the full checks are the gate of main, and the light checks are for the branches that feed it.
 #
-# The base is the pull request's own: the commit that its base branch is at in the run (the workflow passes github.event.pull_request.base.sha), whatever that branch is (main, home-next, staging).
+# The base is the pull request's own: the commit that its base branch is at in the run (the workflow passes github.event.pull_request.base.sha), whatever that branch is (but main: see above).
 # A pull request that gets another base branch is judged again: the workflow's `pull_request` trigger has the type `edited`, which a change of base is one of, and the run that starts has the new base commit.
 #
 # Light means: the macOS job and both Windows jobs have nothing to build (the Linux jobs and the web job run as always). Those jobs build the game and run the C++ tests (ctest, on all three
 # systems), the tool self-tests, the E2E runner and, on macOS, the two shell suites; the files of the light kinds that THESE read or run are the exceptions in is_light below, so that no light
 # file is read by a program or a shell suite of the skipped jobs (a test, tests/scripts/test_ci_light.py, finds the C++ tests and the shell suites that name a file of web/ or docs/ and fails when
 # one is not in that list). What macOS also reads is checked by its python tests (the document, version and spec checks read every document, page and list of mutants; the page tests read the
-# pages): Linux runs all of the python tests in a light run too, and the next push to main runs them on macOS (docs/WORKFLOW.md, "Light checks for web and document pull requests").
+# pages): Linux runs all of the python tests in a light run too, and the next full run (a pull request into main, a push to main) runs them on macOS (docs/WORKFLOW.md, "Light checks for web and document pull requests").
 # The decision and every changed file are printed (the paths in a quoted form, so that no line of the log can begin with a workflow command), and `light=true` or `light=false` is appended to
 # the file that GITHUB_OUTPUT names. The commit ids come from the environment (never from an argument or a command line built from text of the pull request); the exit status is 0 whatever
 # the decision.
@@ -97,6 +98,10 @@ check_changes() {   # check_changes LABEL MERGE_BASE: prints the files that the 
 if [ "${EVENT:-}" != pull_request ]; then
     finish false "not a pull request: the light checks are for pull requests only"
 fi
+case "${BASE_REF:-}" in
+    main) finish false "the pull request is into main: a pull request into main always gets the full checks" ;;
+    "" | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) finish false "the base branch of the pull request is not named in a plain form" ;;
+esac
 base="${BASE_SHA:-}"
 head="${HEAD_SHA:-}"
 if ! is_commit_id "$base" || ! is_commit_id "$head"; then

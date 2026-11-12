@@ -188,7 +188,9 @@ const FIRST = 'Type or paste the code first.';
     ['a'.repeat(32), 'a'.repeat(32)], ['ab '.repeat(16), 'ab'.repeat(16)], ['A'.repeat(32), 'a'.repeat(32)],
     ['a'.repeat(33), null, TYPED_WHY], ['ab '.repeat(16) + 'c', null, TYPED_WHY], ['a'.repeat(100), null, TYPED_WHY],
     ['', null, FIRST], ['   ', null, FIRST], ['\n', null, FIRST], ['\t  ', null, FIRST], [null, null, FIRST], [undefined, null, FIRST], [42, null, FIRST], [{}, null, FIRST], [['k7m2xq'], null, FIRST],
-    ['k7m.2xq', null, TYPED_WHY], ['k7m/2xq', null, TYPED_WHY], ['../x', null, TYPED_WHY], ['k7m2xq?', null, TYPED_WHY], ['?room=k7m2xq', null, TYPED_WHY], ['beta.playants.org/?room=k7m2xq', null, TYPED_WHY],
+    ['k7m.2xq', null, TYPED_WHY], ['k7m/2xq', null, TYPED_WHY], ['../x', null, TYPED_WHY], ['k7m2xq?', null, TYPED_WHY], ['?room=k7m2xq', 'k7m2xq'], ['beta.playants.org/?room=k7m2xq', 'k7m2xq'], ['https://beta.playants.org/?room=k7m2xq', 'k7m2xq'], ['  https://beta.playants.org/?room=K7M2XQ \n', 'k7m2xq'],
+    ['https://beta.playants.org/?join=x1&room=k7m2xq', 'k7m2xq'], ['https://beta.playants.org/?room=k7m2xq&join=x1', 'k7m2xq'], ['https://beta.playants.org/?room=k7m2xq#top', 'k7m2xq'], ['room=k7m%202xq', null, TYPED_WHY], ['room=k7m2xq%', null, TYPED_WHY],
+    ['https://beta.playants.org/?room=', null, FIRST], ['https://beta.playants.org/?room=a/b', null, TYPED_WHY], ['https://beta.playants.org/?room=' + 'a'.repeat(33), null, TYPED_WHY], ['https://beta.playants.org/?x=k7m2xq', null, TYPED_WHY],
     ['ké', null, TYPED_WHY], ['ｋ7m2xq', null, TYPED_WHY], ['🐜', null, TYPED_WHY], ['k7m​2xq', null, TYPED_WHY], ['k7m\u00002xq', null, TYPED_WHY], ['<b>', null, TYPED_WHY],
     ['a%20b', null, TYPED_WHY], ['a+b', null, TYPED_WHY], ['k7m,2xq', null, TYPED_WHY], ['k7m\'2xq', null, TYPED_WHY], ['k7m;2xq', null, TYPED_WHY], ['k7m:2xq', null, TYPED_WHY], ['"k7m2xq"', null, TYPED_WHY]
 ].forEach(([typed, code, why]) => {

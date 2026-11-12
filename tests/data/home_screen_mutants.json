@@ -417,14 +417,14 @@
   {
    "id": "menu_matches_wrong_address",
    "file": "web/home/home.js",
-   "old": "['Matches', '/matches.html']",
-   "new": "['Matches', '/match.html']",
+   "old": "['Matches', '/matches']",
+   "new": "['Matches', '/match']",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
    "id": "menu_footer_link_missing",
    "file": "web/home/home.js",
-   "old": "['Legal', '/legal.html']];",
+   "old": "['Legal', '/legal']];",
    "new": "];",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },

@@ -245,7 +245,7 @@
             if (!go.ok || started) return;
             started = true;                                                          // (a second call opens no second tab)
             var rec = { id: randomId(win), name: m.name, bytes: m.bytes.slice() };
-            var tab = win.open(mode === 'friends' ? '/lobby.html?testroom=' + rec.id : '/play.html?testmap=' + rec.id + '&seats=' + code(choice), '_blank');
+            var tab = win.open(mode === 'friends' ? '/?testroom=' + rec.id : '/play?testmap=' + rec.id + '&seats=' + code(choice), '_blank');
             if (!tab) {
                 ctl.close();
                 return dialogs.message('The test game could not open', 'Your browser did not open a new tab for it. Allow pop-ups for this site and try again. Your map was not changed.');

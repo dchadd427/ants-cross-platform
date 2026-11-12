@@ -2,7 +2,7 @@
 """The CI workflow (.github/workflows/ci.yml) keeps its promises (run by ./run_tests.sh --fast and by the CI).
 
 main is protected: a change merges only through a pull request whose five checks pass, and the checks are named by their JOB NAMES. A renamed or split job would make every
-pull request unmergeable, and a deploy job that echoes its secret or runs after a failed job would be worse. Read as text (no YAML library is needed; with PyYAML the structure
+pull request unmergeable. Read as text (no YAML library is needed; with PyYAML the structure
 is checked too):
 
   - the five required job names (each is a small job: linux, macos, windows_2022, windows_2026, web), MSVC 2022 for pull requests, pushes to main and manual runs and MSVC 2026 always, the
@@ -14,9 +14,7 @@ is checked too):
   - the image of the Linux jobs: Ubuntu 24.04 for the legs and for the small job behind "Linux (GCC)" (so that the compiler under the required check changes only with the workflow)
   - the light checks of a pull request that changes pages, documents and page tests only: what skips (the macOS and Windows legs, at job level; their small jobs report the names), what does
     not (Linux, the web legs, a push, a manual run), and that no text of a pull request reaches a script
-  - the deploy job: after every other job, only for a push to main or staging, secrets only in `env:` and never in an argument or a message, the file filter and the webhook
-    script of tools/ are what it calls; it waits for an idle game server first (tools/deploy_wait.py, its variables, a job limit above the longest wait, a concurrency group of
-    its own that lets a newer deploy replace a waiting one)
+  - CI does not deploy: no deploy job, no secret and no repository variable in the workflow, and no concurrency group of a job (only the workflow's own)
   - the same suites as ./run_tests.sh: every test program of its table is registered with ctest (which Linux, macOS and Windows run), its other suites (tool self-tests, script
     suites, E2E runner, repository checks) are steps of the legs of the Linux and macOS test jobs, and ctest has no test that the table lacks
   - the players' maps: the Linux and macOS step that sweeps Community-Maps and runs `tools/community_maps.py verify` (and suite 2.18.1 of the runner) is run here against made-up
@@ -74,24 +72,12 @@ class RequiredChecks(unittest.TestCase):
         self.assertEqual(names["windows_2026"], "Windows (MSVC 2026)")
         self.assertEqual(names["web"], "Web (Emscripten, Docker image)")
         self.assertEqual(names["windows_tests"], "Windows tests (${{ matrix.name }})")                  # (the legs do not carry a required name)
-        matrix_lines = [l for l in job_block("windows_tests") if "fromJSON(" in l]
-        self.assertEqual(len(matrix_lines), 1)
-        self.assertIn('{"name":"MSVC 2022","os":"windows-2022"}', matrix_lines[0])
-        self.assertIn('{"name":"MSVC 2026","os":"windows-latest"}', matrix_lines[0])
 
-    def test_msvc_2022_runs_for_pull_requests_main_and_manual_runs_and_2026_always(self):
-        expression = [l for l in job_block("windows_tests") if "fromJSON(" in l][0]
-        lists = re.findall(r"'(\[\{.*?\}\])'", expression)
-        self.assertEqual(len(lists), 2)
-        only_2026, both = lists
-        self.assertIn('"MSVC 2026"', only_2026)
-        self.assertNotIn("MSVC 2022", only_2026)
-        self.assertIn("MSVC 2022", both)
-        self.assertIn("MSVC 2026", both)
-        # the short list is chosen for a push to a branch that is not main, and for nothing else
-        self.assertIn("github.event_name == 'push'", expression)
-        self.assertIn("github.ref != 'refs/heads/main'", expression)
-        self.assertRegex(expression, r"fromJSON\(github\.event_name == 'push' && github\.ref != 'refs/heads/main' && '\[")
+    def test_both_msvc_compilers_run_for_every_event_so_that_neither_name_passes_without_its_compiler(self):
+        block = "\n".join(job_block("windows_tests"))
+        self.assertNotIn("fromJSON", block)
+        self.assertIn("        include:\n          - name: MSVC 2022\n            os: windows-2022\n          - name: MSVC 2026\n            os: windows-latest\n", block)
+        self.assertEqual(len(re.findall(r"(?m)^          - name: ", block)), 2)
 
     def test_every_job_has_a_time_limit_and_the_matrices_do_not_stop_at_the_first_failure(self):
         for job in job_ids():
@@ -101,104 +87,31 @@ class RequiredChecks(unittest.TestCase):
 
     def test_triggers(self):
         head = "\n".join(LINES[:LINES.index("jobs:")])
-        self.assertRegex(head, r"(?m)^on:\n  pull_request:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, edited\]\n  push:\n    branches: \[main, staging\]\n  workflow_dispatch:\n")
+        self.assertRegex(head, r"(?m)^on:\n  pull_request:\n(?:    #.*\n)*    types: \[opened, synchronize, reopened, edited\]\n  push:\n    branches: \[main\]\n  workflow_dispatch:\n")
         self.assertNotRegex(head, r"(?m)^  push:\s*$\n  pull_request")                   # no bare `push:` (every branch)
         self.assertIn("cancel-in-progress: true", head)
 
 
-class Deploy(unittest.TestCase):
-    def test_it_waits_for_every_other_job_and_only_runs_for_a_push_to_main_or_staging(self):
-        block = job_block("deploy")
-        needs = next(re.match(r"^    needs: \[(.*)\]$", l).group(1) for l in block if l.startswith("    needs:"))
-        self.assertEqual(sorted(n.strip() for n in needs.split(",")), sorted(j for j in job_ids() if j != "deploy"))
-        condition = next(l for l in block if l.startswith("    if:"))
-        self.assertIn("github.event_name == 'push'", condition)
-        self.assertIn("refs/heads/main", condition)
-        self.assertIn("refs/heads/staging", condition)
-        self.assertNotIn("always()", condition)                                           # no status function: it only runs when the jobs it needs succeeded
-        self.assertNotIn("failure()", condition)
-        self.assertEqual(job_ids()[-1], "deploy")
+class NoDeploy(unittest.TestCase):
+    """CI does not deploy: the site follows main through the host's own automatic update (docs/WORKFLOW.md)."""
 
-    def test_secrets_are_only_in_env_and_only_the_two_webhooks(self):
-        lines = [(i, l) for i, l in enumerate(LINES) if "secrets." in l and not l.lstrip().startswith("#")]
-        self.assertEqual(len(lines), 2, lines)
-        names = set()
-        for i, line in lines:
-            m = re.match(r"^      ([A-Z_]+): \$\{\{ .*secrets\.(PORTAINER_[A-Z_]*WEBHOOK_URL) .*\}\}$", line)
-            self.assertIsNotNone(m, "a secret outside the `env:` of the deploy job: " + line)
-            names.add(m.group(2))
-            above = [l for l in LINES[:i] if re.match(r"^    env:\s*$", l)]
-            self.assertTrue(above, "the secret is not under an env: key")
-        self.assertEqual(names, {"PORTAINER_WEBHOOK_URL", "PORTAINER_STAGING_WEBHOOK_URL"})
-        self.assertTrue(all(i >= LINES.index("  deploy:") for i, _ in lines), "the secrets are used by the deploy job only")
+    def test_there_is_no_deploy_job_no_secret_and_no_repository_variable(self):
+        self.assertNotIn("deploy", job_ids())
+        self.assertEqual(job_ids()[-1], "web")
+        code = "\n".join(l for l in LINES if not l.lstrip().startswith("#"))
+        self.assertNotIn("secrets.", code)
+        self.assertNotIn("vars.", code)
+        self.assertNotIn("webhook", code.lower())
+        self.assertNotIn("deploy", code.lower())
 
-    def test_each_webhook_variable_holds_its_secret_on_its_own_branch_only(self):
-        production = next(l for l in LINES if l.lstrip().startswith("PRODUCTION_WEBHOOK:"))
-        staging = next(l for l in LINES if l.lstrip().startswith("STAGING_WEBHOOK:"))
-        self.assertIn("github.ref == 'refs/heads/main' && secrets.PORTAINER_WEBHOOK_URL || ''", production)
-        self.assertIn("github.ref == 'refs/heads/staging' && secrets.PORTAINER_STAGING_WEBHOOK_URL || ''", staging)       # (never `main ? A : B`: an empty A would fall to B)
-
-    def test_the_webhook_variables_are_never_printed_or_given_to_a_command_as_an_argument(self):
-        block = "\n".join(job_block("deploy"))
-        for line in job_block("deploy"):
-            if "WEBHOOK" in line and "secrets." not in line:
-                allowed = ('[ -z "${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" ]' in line or 'WEBHOOK_URL="${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" bash tools/deploy_webhook.sh "$site"' in line
-                           or re.match(r"^\s+(PRODUCTION|STAGING)_WEBHOOK: ", line) or line.lstrip().startswith("#") or "tools/deploy_webhook.sh" in line)
-                self.assertTrue(allowed, "the webhook variable is used in a way that could print it: " + line)
-        self.assertNotRegex(block, r"(?m)^\s*(echo|printf)\b.*WEBHOOK")
-        self.assertNotIn("curl", block)                                                    # the call is tools/deploy_webhook.sh's, which keeps the address off every command line
-        self.assertNotIn("set -x", block)
-        self.assertNotIn("xtrace", block)
-        self.assertIn("deploy secret not set: skipped", block)
-
-    def test_it_uses_the_filter_and_the_webhook_script_and_checks_the_tip(self):
-        block = "\n".join(job_block("deploy"))
-        self.assertIn("python3 tools/deploy_filter.py --base", block)
-        self.assertIn("--github-output", block)
-        self.assertIn("docker-compose.staging.yml", block)
-        self.assertIn("bash tools/deploy_webhook.sh", block)
-        self.assertIn("fetch-depth: 0", block)
-        self.assertIn("git ls-remote origin", block)
-        self.assertIn("actions: read", block)
-        self.assertIn("gh run list --workflow ci.yml", block)
-        for script in ("tools/deploy_filter.py", "tools/deploy_webhook.sh"):
-            self.assertTrue(os.path.isfile(os.path.join(REPO, script)), script)
-        # the webhook call needs all three answers: a secret, a change that counts, the tip of the branch
-        call = block[block.index("name: Call the deploy webhook"):]
-        self.assertIn("steps.secret.outputs.present == 'true'", call)
-        self.assertIn("steps.filter.outputs.deploy == 'true'", call)
-        self.assertIn("steps.tip.outputs.tip == 'true'", call)
-
-    def test_it_waits_for_an_idle_game_server_before_the_tip_is_checked_and_the_webhook_is_called(self):
-        block = "\n".join(job_block("deploy"))
-        order = [block.index("name: " + name) for name in ("Is the deploy secret set?", "Did the push change what the site serves or runs?", "Wait for an idle game server",
-                                                           "Is this push still the tip of the branch?", "Call the deploy webhook")]
-        self.assertEqual(order, sorted(order))                                             # the tip is checked after the wait, which may have taken hours
-        wait = block[block.index("name: Wait for an idle game server"):block.index("name: Is this push still the tip of the branch?")]
-        self.assertIn("if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'", wait)
-        self.assertIn("PRODUCTION_BUSY_URL: ${{ vars.DEPLOY_BUSY_URL || 'https://beta.playants.org/busy' }}", wait)
-        self.assertIn("STAGING_BUSY_URL: ${{ vars.STAGING_BUSY_URL }}", wait)
-        self.assertIn("MAX_WAIT_MINUTES: ${{ vars.DEPLOY_MAX_WAIT_MINUTES || '180' }}", wait)
-        self.assertIn('python3 tools/deploy_wait.py --label "$site" --url "$url" --max-wait-minutes "$MAX_WAIT_MINUTES"', wait)
-        self.assertNotIn("secrets.", wait)                                                 # the addresses are the sites' own: variables, not secrets
-        self.assertNotIn("WEBHOOK", wait)
-        self.assertTrue(os.path.isfile(os.path.join(REPO, "tools", "deploy_wait.py")))
-
-    def test_the_job_limit_is_above_the_longest_wait_so_that_the_deploy_is_never_cut_off_by_the_limit(self):
-        cap = float(re.search(r"^MAX_WAIT_CAP_MINUTES = ([\d.]+)", read(os.path.join(REPO, "tools", "deploy_wait.py")), re.M).group(1))
-        limit = int(next(re.match(r"^    timeout-minutes: (\d+)$", l).group(1) for l in job_block("deploy") if l.startswith("    timeout-minutes:")))
-        self.assertGreaterEqual(limit, cap + 20)                                           # the wait, the checkout, the filter and the call
-        self.assertLessEqual(limit, 360)                                                   # (what a hosted runner allows a job)
-
-    def test_only_the_deploy_job_has_a_concurrency_group_and_it_cancels_a_job_that_waits(self):
+    def test_only_the_workflow_has_a_concurrency_group_and_it_is_the_runs_own(self):
         for job in job_ids():
-            has = any(l == "    concurrency:" for l in job_block(job))
-            self.assertEqual(has, job == "deploy", job)
-        block = "\n".join(job_block("deploy"))
-        self.assertIn("    concurrency:\n      group: deploy-${{ github.ref }}\n      cancel-in-progress: true\n", block)
+            self.assertFalse(any(l == "    concurrency:" for l in job_block(job)), job)
         workflow_group = re.search(r"(?m)^concurrency:\n  group: (.+)\n", TEXT).group(1)
-        self.assertNotEqual(workflow_group.split("-")[0], "deploy")                        # (the same group would cancel the run that the job is in)
         self.assertTrue(workflow_group.startswith("ci-"))
+        # one run per pull request (two pull requests of one branch, into two bases, must not cancel each other), per ref for a push or a manual run, and a newer one cancels the older
+        self.assertEqual(workflow_group, "ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}")
+        self.assertIn("  cancel-in-progress: true\n", TEXT)
 
 
 class SameSuitesAsTheRunner(unittest.TestCase):
@@ -254,15 +167,14 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         self.assertIn("lvl_tool\" --selftest", self.runner)
         self.assertIn("e2e_runner", self.runner)
 
-    def test_the_web_legs_build_the_three_images_and_check_the_stacks_and_the_label(self):
+    def test_the_web_legs_build_the_three_images_and_check_the_stack_file(self):
         image, stack = "\n".join(job_block("web_image")), "\n".join(job_block("web_stack"))
         block = image + "\n" + stack
-        for needle in (" -t ants-beta ", " -f Dockerfile.server -t ants-server ", " -f Dockerfile.hub -t ants-hub .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet",
-                       "docker compose -f docker-compose.staging.yml config --quiet", "--build-arg ANTS_SITE_LABEL=staging", "(staging)</title>", "! grep -qi staging"):
+        for needle in (" -t ants-beta ", " -f Dockerfile.server -t ants-server ", " -f Dockerfile.hub -t ants-hub .", "nginx -t", "docker compose -f docker-compose.stack.yml config --quiet", ):
             self.assertIn(needle, block)
         self.assertNotIn("--target", block)          # (the images are built whole: the server is the last stage of Dockerfile.server, see the next test)
         # the legs split the work and neither does the other's
-        for needle in ("-t ants-beta ", "nginx -t", "ANTS_SITE_LABEL=staging", "web_routes_check.py", "lvl_core_check.js"):
+        for needle in ("-t ants-beta ", "nginx -t", "web_routes_check.py", "lvl_core_check.js"):
             self.assertIn(needle, image)
             self.assertNotIn(needle, stack)
         for needle in ("Dockerfile.server", "Dockerfile.hub", "docker compose"):
@@ -276,7 +188,7 @@ class SameSuitesAsTheRunner(unittest.TestCase):
         for job, folder, dockerfile, key_files in (("web_image", "web", "", ("'Dockerfile'", "'web/**'", "'src/**'", "'CMakeLists.txt'", "'VERSION'", "'cmake/**'", "'include/**'", "'Original-Ants/**'")),
                                                    ("web_stack", "server", "-f Dockerfile.server ", ("'Dockerfile.server'", "'src/**'", "'tools/**'", "'third_party/**'", "'CMakeLists.txt'", "'VERSION'", "'cmake/**'", "'include/**'"))):
             block = "\n".join(job_block(job))
-            self.assertIn("docker buildx create --name ants-builder --driver docker-container --use", block, job)
+            self.assertIn("docker buildx create --name ants-builder --driver docker-container --driver-opt image=moby/buildkit:v0.19.0 --use", block, job)      # (a release of the builder, not a moving tag)
             self.assertIn("uses: actions/cache@v6", block, job)
             self.assertIn("path: /tmp/docker-cache/%s\n" % folder, block, job)
             self.assertIn("restore-keys: docker-%s-\n" % folder, block, job)
@@ -298,7 +210,7 @@ class SameSuitesAsTheRunner(unittest.TestCase):
     def test_the_server_is_the_last_stage_of_its_dockerfile_because_the_ci_and_the_stacks_build_it_without_a_target(self):
         stages = re.findall(r"(?m)^FROM\s+\S+\s+AS\s+(\S+)\s*$", read(os.path.join(REPO, "Dockerfile.server")))
         self.assertEqual(stages[-1], "runner")
-        for name in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+        for name in ("docker-compose.stack.yml",):
             code = "\n".join(l for l in read(os.path.join(REPO, name)).splitlines() if not l.lstrip().startswith("#"))
             self.assertNotIn("target:", code, name)
 
@@ -660,7 +572,7 @@ class LightChecks(unittest.TestCase):
         self.assertIn("      light: ${{ steps.decide.outputs.light }}", block)
         step = block[block.index("      - name: Light checks or all of them?"):]
         self.assertIn("        id: decide\n", step)
-        self.assertIn("          EVENT: ${{ github.event_name }}\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n          HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n        run:", step)
+        self.assertIn("          EVENT: ${{ github.event_name }}\n          BASE_REF: ${{ github.base_ref }}\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}\n          HEAD_SHA: ${{ github.event.pull_request.head.sha }}\n        run:", step)
         self.assertNotIn("MAIN_REF", block)              # (the change is judged against the base of the pull request and nothing else: a retarget is an `edited` run with the new base commit)
         self.assertNotIn("origin/main", block)
         self.assertIn("        run: bash tools/ci_light.sh\n", step)
@@ -674,8 +586,10 @@ class LightChecks(unittest.TestCase):
                 self.assertNotIn("${{", line, "%s: an expression inside a script (put it in `env:` and read the variable): %s" % (job, line))
         code = "\n".join(l for l in LINES if not l.lstrip().startswith("#"))
         events = sorted(set(re.findall(r"github\.event\.[A-Za-z_.]+", code)))
-        self.assertEqual(events, ["github.event.before", "github.event.pull_request.base.sha", "github.event.pull_request.head.sha"])
-        for name in ("github.head_ref", "github.base_ref", "pull_request.title", "pull_request.body", "head.ref", "head_commit", "head.label"):
+        self.assertEqual(events, ["github.event.pull_request.base.sha", "github.event.pull_request.head.sha", "github.event.pull_request.number"])      # (the number: in the group of the concurrency only)
+        self.assertEqual([l.strip() for l in code.splitlines() if "github.base_ref" in l], ["BASE_REF: ${{ github.base_ref }}"], "the name of the base branch reaches the script through one variable, which the script compares with a literal")
+        self.assertEqual([l for l in code.splitlines() if "pull_request.number" in l], ["  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"])
+        for name in ("github.head_ref", "pull_request.title", "pull_request.body", "head.ref", "head_commit", "head.label"):
             self.assertEqual([l for l in code.splitlines() if name in l and not l.startswith("  group: ")], [], name)       # (the group of the concurrency is the one place for the branch's name)
         self.assertNotIn("pull_request_target", TEXT)
         self.assertNotIn("workflow_run", TEXT)
@@ -687,10 +601,10 @@ class LightChecks(unittest.TestCase):
             self.assertIn("    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.light != 'true' }}", block, job)       # (they do not run when `changes` failed)
             self.assertEqual("\n".join(block).count("needs.changes.outputs.light"), 1, job + ": no step of a leg looks at the decision again")
         self.assertEqual([l for l in job_block("windows_tests") if l.startswith("    runs-on:")], ["    runs-on: ${{ matrix.os }}"])
-        for job in ("linux_tests", "web_image", "web_stack", "deploy"):
+        for job in ("linux_tests", "web_image", "web_stack"):
             block = "\n".join(l for l in job_block(job) if not l.lstrip().startswith("#"))
             self.assertNotIn("light", block, job)
-            self.assertNotIn("needs.changes", block, job)                                            # (deploy only waits for it, in `needs`)
+            self.assertNotIn("needs.changes", block, job)
 
     def test_the_windows_legs_have_no_step_that_is_there_for_a_skipped_job(self):
         """The legs are skipped as a whole (the small jobs carry the names), so no step needs a condition on the decision, and every step that runs a test waits for the build."""
@@ -725,7 +639,6 @@ class Documents(unittest.TestCase):
         cls.workflow = read(os.path.join(REPO, "docs", "WORKFLOW.md"))
         cls.agents = read(os.path.join(REPO, "AGENTS.md"))
         cls.testing = read(os.path.join(REPO, "docs", "TESTING.md"))
-        cls.staging = read(os.path.join(REPO, "docker-compose.staging.yml"))
 
     def test_the_required_checks_are_named_where_a_person_decides_about_merging(self):
         for name in ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)"):
@@ -734,25 +647,10 @@ class Documents(unittest.TestCase):
         for name in ("Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)", "Web (Emscripten, Docker image)"):   # (the table of docs/TESTING.md has a row for each)
             self.assertIn("| " + name + " |", self.testing)
 
-    def test_the_deploy_and_its_skip_are_explained(self):
-        for needle in ("deploy secret not set: skipped", "the operator's own notes", "docker-compose.staging.yml"):    # (the secrets and variables are named in the workflow file, not in the documents)
-            self.assertIn(needle, self.workflow)
-        self.assertIn("deploy hook", self.testing)
-
-    def test_the_wait_is_explained_and_the_variables_of_the_workflow_are_known(self):
-        variables = set(re.findall(r"\bvars\.([A-Z_]+)\b", TEXT))
-        self.assertEqual(variables, {"DEPLOY_BUSY_URL", "STAGING_BUSY_URL", "DEPLOY_MAX_WAIT_MINUTES"})
-        for needle in ("repository variable", "/busy", "tools/deploy_wait.py", "DEPLOYING ANYWAY", "deploy-<branch>", "cancel-in-progress", "five minutes", "180"):
-            self.assertIn(needle, self.workflow)
-        self.assertIn("/busy", self.testing)
-
-    def test_the_staging_ports_of_the_document_are_those_of_the_compose_file(self):
-        defaults = re.findall(r"\$\{ANTS_STAGING_[A-Z_]+:-(\d+)\}", self.staging)
-        self.assertEqual(sorted(defaults), ["19981", "4003", "4004", "4011"])
-        for port in defaults:
-            self.assertIn(port, self.workflow)
-        for variable in re.findall(r"\$\{(ANTS_STAGING_[A-Z_]+):-", self.staging):
-            self.assertIn(variable, self.workflow)
+    def test_the_documents_say_that_ci_does_not_deploy(self):
+        self.assertIn("CI does not deploy", self.workflow)
+        self.assertIn("automatic update", self.workflow)
+        self.assertNotIn("deploy hook", self.testing)
 
     def test_the_agents_rules_say_what_the_workflow_says(self):
         for needle in ("pull request", "CI is the full gate", "merge commit", "tools/mutate.py", "`./run_tests.sh --asan`, CI has none", "Documents and comments say what and why, briefly"):
@@ -780,33 +678,13 @@ class Structure(unittest.TestCase):
         cls.doc = yaml.safe_load(TEXT)
 
     def test_it_parses_and_the_jobs_are_these(self):
-        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web", "deploy"])
-        self.assertEqual(self.doc["jobs"]["deploy"]["needs"], ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web"])      # (every other job: the legs too)
-        self.assertEqual(self.doc["jobs"]["deploy"]["permissions"], {"contents": "read", "actions": "read"})
+        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web"])
 
     def test_the_triggers(self):
         on = self.doc[True] if True in self.doc else self.doc["on"]                       # (YAML 1.1 reads `on` as true)
         self.assertEqual(sorted(on), ["pull_request", "push", "workflow_dispatch"])
         self.assertEqual(on["pull_request"], {"types": ["opened", "synchronize", "reopened", "edited"]})
-        self.assertEqual(on["push"], {"branches": ["main", "staging"]})
-
-    def test_the_deploy_job_waits_cancels_and_has_a_limit_above_the_longest_wait(self):
-        job = self.doc["jobs"]["deploy"]
-        self.assertEqual(job["concurrency"], {"group": "deploy-${{ github.ref }}", "cancel-in-progress": True})
-        self.assertGreaterEqual(job["timeout-minutes"], 320)
-        for other in self.doc["jobs"]:
-            if other != "deploy":
-                self.assertNotIn("concurrency", self.doc["jobs"][other])
-        names = [step.get("name") for step in job["steps"]]
-        self.assertEqual(names.index("Wait for an idle game server") + 1, names.index("Is this push still the tip of the branch?"))
-        self.assertGreater(names.index("Wait for an idle game server"), names.index("Did the push change what the site serves or runs?"))
-
-    def test_every_step_of_the_deploy_job_that_needs_the_secret_depends_on_the_answer_of_the_first_step(self):
-        steps = self.doc["jobs"]["deploy"]["steps"]
-        self.assertEqual(steps[0]["id"], "secret")
-        self.assertNotIn("if", steps[0])
-        for step in steps[1:]:
-            self.assertIn("steps.secret.outputs.present == 'true'", step.get("if", ""), step.get("name", step.get("uses")))
+        self.assertEqual(on["push"], {"branches": ["main"]})
 
 
 # ---- the legs of the test jobs, run in the head ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -902,13 +780,13 @@ def expand(template, leg):
 
 
 def legs_of(job, event="pull_request"):
-    """The legs of a job: the dictionaries of its matrix, [{}] for a job without one (the Windows jobs choose the list in an expression: the list of a pull request, or of a push to staging)."""
+    """The legs of a job: the dictionaries of its matrix, [{}] for a job without one (the Windows jobs choose the list in an expression: the list of a pull request, or of a push to another branch)."""
     include = (job.get("strategy") or {}).get("matrix", {}).get("include")
     if include is None:
         return [{}]
     if isinstance(include, str):
         lists = re.findall(r"'(\[\{.*?\}\])'", include)
-        return json.loads(lists[0] if event == "push to staging" else lists[1])
+        return json.loads(lists[0] if event == "push to another branch" else lists[1])
     return include
 
 
@@ -1107,7 +985,7 @@ def problems_of_the_light_checks(doc):
     """What the first job's answer does, for what it can say: light (the macOS and Windows legs are skipped and their small jobs say so), not light (everything runs), nothing (the job failed: no
     leg of macOS or Windows runs, and the small jobs run to fail; the legs that do not depend on it run). The small jobs and the other legs run for every answer."""
     problems = []
-    jobs = [job for job in doc["jobs"] if job != "deploy"]
+    jobs = list(doc["jobs"])
     for light, changes in (("true", "success"), ("false", "success"), ("", "failure"), ("", "cancelled"), ("", "skipped")):
         said = "%r with the result %s" % (light, changes)
         for job_id in ("macos_tests", "windows_tests"):
@@ -1138,7 +1016,34 @@ def problems_of_ctest(doc):
     return problems
 
 
-CHECKS_OF_THE_WORKFLOW = (problems_of_the_legs, problems_of_the_names, problems_of_the_aggregates, problems_of_ctest, problems_of_the_light_checks)
+def problems_of_swallowed_failures(doc):
+    """A failure that cannot fail anything: `continue-on-error` (on a job, a leg or a step: on the single step of a small job it would make a required name pass for every result), a test command
+    followed by `|| true` or `|| :`, a script that turns the exit on `set +e`, and a script that keeps a status (`status=0`) and does not end by exiting with it or has a test command that does not set it."""
+    problems = []
+    for job_id, job in doc["jobs"].items():
+        if "continue-on-error" in job:
+            problems.append("%s: continue-on-error on the job" % job_id)
+        for step in job.get("steps", []):
+            if "continue-on-error" in step:
+                problems.append("%s: %r has continue-on-error" % (job_id, title(step)))
+            script = str(step.get("run", ""))
+            lines = [l.strip() for l in script.splitlines() if l.strip() and not l.strip().startswith("#")]
+            if re.search(r"\bset\s+\+e\b", script):
+                problems.append("%s: %r turns the exit on error off" % (job_id, title(step)))
+            tests = [l for l in lines if TEST_COMMAND.search(l)]
+            for line in tests:
+                if re.search(r"\|\|\s*(true|:)(\s|;|$)|;\s*(true|:)\s*$", line):
+                    problems.append("%s: %r swallows the failure of a test command: %s" % (job_id, title(step), line))
+            if "status=0" in lines:
+                if lines[-1] != "exit $status":
+                    problems.append("%s: %r keeps a status and does not end with `exit $status`" % (job_id, title(step)))
+                for line in tests:
+                    if "status=1" not in line:
+                        problems.append("%s: %r runs a test command that does not set the status: %s" % (job_id, title(step), line))
+    return problems
+
+
+CHECKS_OF_THE_WORKFLOW = (problems_of_the_legs, problems_of_the_names, problems_of_the_aggregates, problems_of_ctest, problems_of_the_light_checks, problems_of_swallowed_failures)
 
 
 @unittest.skipUnless(yaml, "PyYAML is needed")
@@ -1181,6 +1086,19 @@ class TheLegsRunTheirTests(unittest.TestCase):
     def test_the_small_jobs_pass_for_exactly_the_results_that_the_rule_lets_through(self):
         self.assertEqual(problems_of_how_the_aggregates_decide(self.doc), [])
 
+    def test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate(self):
+        self.assertEqual(problems_of_swallowed_failures(self.doc), [])
+        self.assertNotIn("continue-on-error", TEXT)                                       # (not even in a comment: the word is searched for in the text)
+        # the python tests of both systems are such steps: the status is kept, set by the runner and the version check, and the step exits with it
+        for job in ("linux_tests", "macos_tests"):
+            steps = [s for s in self.doc["jobs"][job]["steps"] if "run_python_tests.py" in str(s.get("run", ""))]
+            self.assertEqual(len(steps), 1, job)
+            lines = [l.strip() for l in steps[0]["run"].splitlines()]
+            self.assertEqual(lines[0], "status=0")
+            self.assertEqual(lines[-1], "exit $status")
+            self.assertTrue(any(l.startswith("python3 tests/scripts/run_python_tests.py") and l.endswith("|| status=1") for l in lines), job)
+            self.assertTrue(any(l == "python3 tools/check_version_consistency.py || status=1" for l in lines), job)
+
     def test_no_ctest_passes_with_no_test_run(self):
         self.assertEqual(problems_of_ctest(self.doc), [])
         calls = sum(len(re.findall(r"\bctest\b", str(step.get("run", "")))) for job in self.doc["jobs"].values() for step in job.get("steps", []))
@@ -1190,7 +1108,7 @@ class TheLegsRunTheirTests(unittest.TestCase):
         self.assertEqual(problems_of_the_light_checks(self.doc), [])
         windows = self.doc["jobs"]["windows_tests"]
         self.assertEqual([leg["name"] for leg in legs_of(windows)], ["MSVC 2022", "MSVC 2026"])
-        self.assertEqual([leg["name"] for leg in legs_of(windows, "push to staging")], ["MSVC 2026"])
+        self.assertEqual([leg["os"] for leg in legs_of(windows)], ["windows-2022", "windows-latest"])        # (both compilers for every event: a name never passes without its compiler)
 
 
 @unittest.skipUnless(yaml, "PyYAML is needed")
@@ -1284,6 +1202,16 @@ class TheChecksCanFail(unittest.TestCase):
             with self.subTest(word):
                 problems = self.judged(old, new, lambda doc: problems_of_how_the_aggregates_decide(doc, thorough=False))
                 self.assertTrue(any(p.startswith(word) for p in problems), (word, problems[:3]))
+
+    def test_a_swallowed_failure_is_found(self):
+        for old, new, word in (
+                ("    name: Windows tests (${{ matrix.name }})\n", "    name: Windows tests (${{ matrix.name }})\n    continue-on-error: true\n", "windows_tests: continue-on-error on the job"),
+                ("      - name: Did both web jobs pass?\n", "      - name: Did both web jobs pass?\n        continue-on-error: true\n", "web: 'Did both web jobs pass?' has continue-on-error"),
+                ('python3 tests/scripts/run_python_tests.py --shard "$SLICE" || status=1', 'python3 tests/scripts/run_python_tests.py --shard "$SLICE" || true', "linux_tests: 'Repository checks"),
+                ("          exit $status\n\n      - name: Keep the test logs of a failed run\n        if: failure()\n        uses: actions/upload-artifact@v7\n        with:\n          name: macos-test-logs", "          true\n\n      - name: Keep the test logs of a failed run\n        if: failure()\n        uses: actions/upload-artifact@v7\n        with:\n          name: macos-test-logs", "macos_tests: ")):
+            with self.subTest(word):
+                problems = self.judged(old, new, problems_of_swallowed_failures)
+                self.assertTrue(any(p.startswith(word) for p in problems), (word, problems))
 
     def test_a_ctest_that_may_find_nothing_is_found(self):
         flag = " --no-tests=error"

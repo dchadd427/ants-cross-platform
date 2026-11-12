@@ -233,6 +233,30 @@
    "new": "merge_base=$(git merge-base \"${MAIN_REF:-refs/remotes/origin/main}\" \"$head\" 2> /dev/null)",
    "test": "python3 tests/scripts/test_ci_light.py",
    "expect": "test_the_change_is_judged_against_its_own_base_only"
+  },
+  {
+   "id": "a_pull_request_into_main_may_be_light",
+   "file": "tools/ci_light.sh",
+   "old": "    main) finish false \"the pull request is into main: a pull request into main always gets the full checks\" ;;\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_pull_request_into_main_is_always_full_and_the_name_of_the_base_is_read_strictly"
+  },
+  {
+   "id": "an_unnamed_base_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "    \"\" | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) finish false \"the base branch of the pull request is not named in a plain form\" ;;\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_pull_request_into_main_is_always_full_and_the_name_of_the_base_is_read_strictly"
+  },
+  {
+   "id": "the_base_name_may_have_any_character",
+   "file": "tools/ci_light.sh",
+   "old": "    \"\" | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*) finish false",
+   "new": "    \"\" | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-]*x) finish false",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_pull_request_into_main_is_always_full_and_the_name_of_the_base_is_read_strictly"
   }
  ]
 }

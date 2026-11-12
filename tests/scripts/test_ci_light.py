@@ -152,7 +152,7 @@ class Decision(unittest.TestCase):
 
     def decide(self, head, base=None, **env):
         """(light?, the output, the lines of GITHUB_OUTPUT) of the script run for a pull request from `base` (default: the first commit) to `head`"""
-        environment = dict(GIT_ENV, EVENT="pull_request", BASE_SHA=base or self.base, HEAD_SHA=head, GITHUB_OUTPUT=self.out_file)
+        environment = dict(GIT_ENV, EVENT="pull_request", BASE_REF="home-next", BASE_SHA=base or self.base, HEAD_SHA=head, GITHUB_OUTPUT=self.out_file)
         environment.update(env)
         for name in [n for n, v in environment.items() if v is None]:
             del environment[name]
@@ -258,31 +258,31 @@ class Decision(unittest.TestCase):
         self.assertFalse(self.decide(self.pull_request({"src/a.cpp": "int mine;\n"}), base=moved)[0])
 
     def test_the_change_is_judged_against_its_own_base_only(self):
-        """A pull request against staging, which holds code that main does not, is light when it adds a document to staging. Judged again against main (a retarget starts an `edited` run with the new
+        """A pull request against feature, which holds code that main does not, is light when it adds a document to feature. Judged again against main (a retarget starts an `edited` run with the new
         base commit) it is full: the same head, another base."""
-        staging = self.pull_request({"src/a.cpp": "int staging;\n", "VERSION": "9.9.9\n"})
-        head = self.commit(staging, {"docs/a.md": "mine\n"})
-        light, out, _ = self.decide(head, base=staging)
+        feature = self.pull_request({"src/a.cpp": "int feature;\n", "VERSION": "9.9.9\n"})
+        head = self.commit(feature, {"docs/a.md": "mine\n"})
+        light, out, _ = self.decide(head, base=feature)
         self.assertTrue(light, out)
         self.assertEqual(self.classes(out), {"docs/a.md": "light"}, out)
-        self.assertIn("pull request: " + staging[:12] + " (merge base)", out)
+        self.assertIn("pull request: " + feature[:12] + " (merge base)", out)
         self.assertNotIn("against main", out)
         light, out, _ = self.decide(head, base=self.base)                                    # (retargeted to main, which is the first commit here)
         self.assertFalse(light, out)
         self.assertEqual(self.classes(out), {"docs/a.md": "light", "src/a.cpp": "FULL", "VERSION": "FULL"}, out)
         # what main is, and whether it is there, changes nothing
         moved = self.pull_request({"src/a.cpp": "int moved;\n"})
-        for main in (moved, staging, self.commit(None, {"f": "1\n"}, "unrelated"), None):
+        for main in (moved, feature, self.commit(None, {"f": "1\n"}, "unrelated"), None):
             if main is None:
                 self.git("update-ref", "-d", "refs/remotes/origin/main")
             else:
                 self.git("update-ref", "refs/remotes/origin/main", main)
-            light, out, _ = self.decide(head, base=staging)
+            light, out, _ = self.decide(head, base=feature)
             self.assertTrue(light, out)
             self.assertEqual(self.classes(out), {"docs/a.md": "light"})
-            light, out, _ = self.decide(head, base=staging, MAIN_REF="refs/remotes/origin/not-a-branch")      # (the variable of the old rule is not read)
+            light, out, _ = self.decide(head, base=feature, MAIN_REF="refs/remotes/origin/not-a-branch")      # (the variable of the old rule is not read)
             self.assertTrue(light, out)
-        self.assertFalse(self.decide(self.commit(staging, {}), base=staging)[0], "no changed file against its base")
+        self.assertFalse(self.decide(self.commit(feature, {}), base=feature)[0], "no changed file against its base")
 
     def test_a_pull_request_of_several_commits_is_judged_as_a_whole(self):
         first = self.pull_request({"src/a.cpp": "int b;\n"})
@@ -366,6 +366,28 @@ class Decision(unittest.TestCase):
             with self.subTest(name):
                 got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}))
                 self.assertEqual(got, light, name + "\n" + out)
+                # the same change in a pull request into main is full, whatever it changes
+                got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}), BASE_REF="main")
+                self.assertFalse(got, "into main: " + name + "\n" + out)
+                self.assertIn("a pull request into main always gets the full checks", out)
+
+    def test_a_pull_request_into_main_is_always_full_and_the_name_of_the_base_is_read_strictly(self):
+        for files in (["docs/a.md"], ["web/a.js"], ["README.md", "CHANGELOG.md"], ["tests/scripts/test_web_x.py"]):
+            head = self.pull_request({path: "changed\n" for path in files})
+            self.assertTrue(self.decide(head)[0], files)                                       # (light against home-next)
+            self.assertTrue(self.decide(head, BASE_REF="release/v1.0")[0], files)           # (and against any branch that is not main)
+            light, out, _ = self.decide(head, BASE_REF="main")
+            self.assertFalse(light, files)
+            self.assertNotIn("light  ", out)                                                   # (no file list: it decided before it looked)
+        head = self.pull_request({"docs/a.md": "changed\n"})
+        for bad in (None, "", "ma in", "main\n", "$(touch pwned)", "a;b", "x\u00e9", "a b", "main`x`"):
+            light, out, _ = self.decide(head, BASE_REF=bad)
+            self.assertFalse(light, repr(bad))
+            self.assertIn("is not named in a plain form", out, repr(bad))
+            self.assertNotIn("pwned", out)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "pwned")))
+        for name in ("push", "workflow_dispatch"):                                            # (a push and a manual run are never light, whatever BASE_REF says)
+            self.assertFalse(self.decide(head, EVENT=name, BASE_REF="home-next")[0], name)
 
     @unittest.skipUnless(yaml, "PyYAML is needed")
     def test_the_jobs_that_run_for_each_kind_of_change(self):
@@ -373,9 +395,7 @@ class Decision(unittest.TestCase):
         import test_ci_workflow as workflow
         with open(workflow.WORKFLOW, encoding="utf-8") as f:
             doc = yaml.safe_load(f)
-        every = [job for job in doc["jobs"] if job != "deploy"]                                # (deploy is for a push to main or staging only)
-        self.assertFalse(workflow.job_runs(doc, "deploy", "true", "success"))
-        self.assertFalse(workflow.job_runs(doc, "deploy", "false", "success"))
+        every = list(doc["jobs"])
         for name, files, light in CHANGE_TYPES:
             with self.subTest(name):
                 got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}))
@@ -387,6 +407,9 @@ class Decision(unittest.TestCase):
                     self.assertIn(job, running, name)
                 self.assertEqual("macos_tests" in running, not light, name)
                 self.assertEqual("windows_tests" in running, not light, name)
+                # into main every job runs, whatever the change is
+                got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}), BASE_REF="main")
+                self.assertEqual([job for job in every if not workflow.job_runs(doc, job, "true" if got else "false", "success")], [], "into main: " + name)
 
 
 LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"')

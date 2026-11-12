@@ -59,7 +59,7 @@
   },
   {
    "id": "a_test_builds_the_stdlib_server",
-   "file": "tests/scripts/test_deploy_wait.py",
+   "file": "tests/scripts/test_measure_tick_rate.py",
    "old": "quick_http.QuickThreadingHTTPServer((",
    "new": "http.server.ThreadingHTTPServer((",
    "test": "env PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=$(mktemp -d) python3 -m unittest tests.scripts.test_quick_http",

@@ -18,7 +18,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -202,7 +201,7 @@ class TheDocument(unittest.TestCase):
         has(self, "## A file of your own", text)
         part = text[text.index("## A file of your own"):]
         part = part[:part.index("\n## ", 5)] if "\n## " in part[5:] else part
-        for needle in ("play.html?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts", "kMaxEmbeddedPlantWaypointPairs", "1,000,000", "fits_a_replay", "WHICHEVER copy"):
+        for needle in ("play?local=", "IndexedDB", "Nothing is uploaded", "2,097,164", "web/replay_page.js", "tests/data/replay_bots_tiny.antsrep", "ownfile", "test_web_replay_open.sh", "8,000", "kMaxEmbeddedStartAnts", "kMaxEmbeddedPlantWaypointPairs", "1,000,000", "fits_a_replay", "WHICHEVER copy"):
             has(self, needle, part)
 
     def test_the_tree_of_the_sources_lists_the_fuzz_script(self):

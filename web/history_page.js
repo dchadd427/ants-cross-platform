@@ -182,14 +182,14 @@
         st.page = isFinite(page) && page >= 1 && page <= 100000 ? page : 1;
         return st;
     }
-    // The address of a page of the list (matches.html?...: the same words as the server's, so that a link can be shared and read)
+    // The address of a page of the list (matches?...: the same words as the server's, so that a link can be shared and read)
     function urlOf(st, page) {
         var d = defaults(), parts = [];
         ['who', 'format', 'result', 'rec', 'color', 'mode', 'sort'].forEach(function (k) { if (st[k] !== d[k]) parts.push(k + '=' + st[k]); });
         if (st.q) parts.push('q=' + encodeQuery(st.q));
         var p = page === undefined ? st.page : page;
         if (p > 1) parts.push('page=' + p);
-        return 'matches.html' + (parts.length ? '?' + parts.join('&') : '');
+        return '/matches' + (parts.length ? '?' + parts.join('&') : '');
     }
     // Every byte of a query is one that docker/nginx.conf lets through (letters, digits, _ = & % + . -): encodeURIComponent leaves ! ' ( ) * ~ alone, which the site's nginx refuses, so they are escaped too
     function encodeQuery(s) {
@@ -365,7 +365,7 @@
             var dm = null;
             try { dm = env.deathMap && typeof env.deathMap.card === 'function' ? env.deathMap.card(rec, { compact: true }) : null; } catch (e) { dm = null; }      // (the card is one more thing: whatever it does, the numbers stay)
             if (dm) box.appendChild(dm);
-            var mf = mk('div', 'mf'), a = mk('a', '', 'Open the match page \u203a'); mf.appendChild(mk('span', '', 'The final numbers of the match.')); a.href = '/match.html?id=' + encodeURIComponent(rec.id); mf.appendChild(a); box.appendChild(mf);
+            var mf = mk('div', 'mf'), a = mk('a', '', 'Open the match page \u203a'); mf.appendChild(mk('span', '', 'The final numbers of the match.')); a.href = '/match?id=' + encodeURIComponent(rec.id); mf.appendChild(a); box.appendChild(mf);
             return box;
         }
         function mount(rec) {

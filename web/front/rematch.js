@@ -133,7 +133,7 @@
         }
         return '';
     }
-    function statsHref(id) { return id ? '/match.html?id=' + encodeURIComponent(id) : '/matches.html'; }
+    function statsHref(id) { return id ? '/match?id=' + encodeURIComponent(id) : '/matches'; }
 
     // ---- the browser's platform (what the Hello tells the room: web/lobby.html's rule) ----
     function platformOf(nav) {
@@ -349,7 +349,7 @@
                     if (!win) return;
                     try { if (win.opener && !win.opener.closed && typeof win.opener.antsTestGameBack === 'function') win.opener.antsTestGameBack(handoffId); } catch (e) {}
                     try { win.close(); } catch (e) {}
-                    env.later(function () { try { if (!win.closed && win.location) win.location.assign('/mapmaker.html'); } catch (e) {} }, 300);
+                    env.later(function () { try { if (!win.closed && win.location) win.location.assign('/mapmaker'); } catch (e) {} }, 300);
                 });
                 b.appendChild(btn);
             }

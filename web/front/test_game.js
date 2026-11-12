@@ -1,5 +1,5 @@
 // The game page's side of the map maker's "Play this map" (docs/MAP_EDITOR.md, "Play this map"; docs/PLAY_IN_BROWSER.md): a test game on the map that is open in the map maker, against bots, in a tab of
-// its own. The address says only which hand-over to take and who sits where (play.html?testmap=<id>&seats=<four letters>); the map itself never travels in an address: the map maker's tab keeps
+// its own. The address says only which hand-over to take and who sits where (play?testmap=<id>&seats=<four letters>); the map itself never travels in an address: the map maker's tab keeps
 // the bytes and this page asks it for them (window.opener.antsTestGameHandoff), writes them where the game looks for maps and starts the game. Everything the page shows of the map's name is
 // put in with textContent. A plain ES5 script that a page and node can load.
 (function (root, factory) {
@@ -14,7 +14,7 @@
     var TEAMS = ['Green', 'Red', 'Blue', 'Black'];             // by the game's seat numbers
     var LEVELS = { e: 'easy', m: 'medium', h: 'hard' };
     var WORDS = { e: 'Easy', m: 'Medium', h: 'Hard' };
-    var EDITOR = '/mapmaker.html';
+    var EDITOR = '/mapmaker';
     var LOOK = 'font-family:inherit;color:#f4ece2;';
 
     // The arguments of the game for an address: the hand-over's id (6 to 32 letters and digits, lower case) and the four seats in the game's order (Green, Red, Blue, Black), each y (you: exactly one),

@@ -1,6 +1,6 @@
 // Runs the matches IN PROGRESS of the Games list (web/home/games.js, docs/HOME_SCREEN.md "The Games list", docs/REPLAYS.md "Live") in the fake browser of tests/scripts/web_page_harness.js, against a fake GET /lobbies and a fake GET /live:
 //   1. the pure parts: a match of the door's answer on a table (the id's shape, the map, the players' words, markup and look-alike characters in a name), the list (50 at the most, an id once, not a list), the waits (10 s at the least);
-//   2. the rows: a red Live mark, the map, who plays, how long it has run, Watch = /play.html?live=<id> in a NEW tab, the head "N open, M in progress", the Games button that counts the open rooms only, the empty line;
+//   2. the rows: a red Live mark, the map, who plays, how long it has run, Watch = /play?live=<id> in a NEW tab, the head "N open, M in progress", the Games button that counts the open rooms only, the empty line;
 //   3. the looks at /live: never faster than 10 s apart, none while the list is not shown (a closed popover, a hidden tab, the Room, after the hand-off), a server with no live door (404) or a failed look hides the
 //      section with no error and the list goes on;
 //   4. no switch and nothing kept: the rows always show, an old stored word is ignored and left as it was, a blocked storage changes nothing.
@@ -78,7 +78,7 @@ const M = 'TREASURE.LVL';
     same('... who plays and for how long', rows.map((li) => [first(li, 'gwho').textContent, first(li, 'glen').textContent]), [['Ann, Bot (Medium)', '2:05 so far'], ['Cy, Black', '0:07 so far']]);
     same('... a dot of each player\'s color: a person is a filled dot, a computer player (the door writes "Bot (Medium)") a ring, as in the open rooms', rows.map((li) => find(li, 'gdot').map((d) => d.className.replace('gdot ', ''))), [['player c0', 'bot c1'], ['player c2', 'player c3']]);
     const w = watchOf(rows[0]);
-    same('Watch is a link to the player on that match, in a NEW tab (the seat in a room stays), with no opener', [w.tagName, w.getAttribute('href'), w.getAttribute('target'), w.getAttribute('rel')], ['a', '/play.html?live=TREASURE-20261109-120000Z', '_blank', 'noopener']);
+    same('Watch is a link to the player on that match, in a NEW tab (the seat in a room stays), with no opener', [w.tagName, w.getAttribute('href'), w.getAttribute('target'), w.getAttribute('rel')], ['a', '/play?live=TREASURE-20261109-120000Z', '_blank', 'noopener']);
     check('... and its name for a screen reader says the match', /^Watch the match on Treasure, Ann, Bot \(Medium\), 2:05 so far$/.test(w.getAttribute('aria-label')));
     check('a row in progress has no Join (nobody can take a seat of a running match)', rows.every((li) => !li.findAll((e) => e.tagName === 'button').length && !first(li, 'gjoin')));
     check('the heading of the list says how many are open and how many are in progress', headOf(env) === '1 open, 2 in progress', headOf(env));
@@ -100,7 +100,7 @@ const M = 'TREASURE.LVL';
     const env = await livePage({ rows: markup });
     const li = liveRows(env)[0];
     same('names are text: the markup of a name is shown as it was typed and nothing is made of it', first(li, 'gwho').textContent, '<img src=x onerror=alert(1)>, ' + 'W'.repeat(60) + ', a "b" & \'c\' <\/script>');
-    check('... nothing was written as markup, the row holds no element that a name could make, and the one address is the id\'s', env.innerHTMLWrites.length === 0 && li.all().every((e) => ['li', 'span', 'a', 'i', 'img'].indexOf(e.tagName) !== -1) && watchOf(li).getAttribute('href') === '/play.html?live=Pop_Corn-20261109-120000Z');
+    check('... nothing was written as markup, the row holds no element that a name could make, and the one address is the id\'s', env.innerHTMLWrites.length === 0 && li.all().every((e) => ['li', 'span', 'a', 'i', 'img'].indexOf(e.tagName) !== -1) && watchOf(li).getAttribute('href') === '/play?live=Pop_Corn-20261109-120000Z');
     check('a map of the players: its name without the ending, and a picture only where the page has the picker\'s rule', first(li, 'gname').textContent === 'Pop Corn' && first(li, 'gmap').findAll((e) => e.tagName === 'img').every((img) => /^\/maps\/previews\/Pop%20Corn\.webp$/.test(img.src.replace(/^.*(?=\/maps)/, ''))));
 }
 {   // nothing in progress; nothing open

@@ -51,6 +51,5 @@
 .pl-note { margin: 18px 6px 0; text-align: center; }
 .pl-note p { margin: 0 0 12px; font-size: 17px; line-height: 1.35; color: var(--cream); }
 .pl-note p.small { font-size: 14px; color: #a8cfc0; }
-.pl-host { min-height: 48px; }
 
 @media (max-height: 500px) and (orientation: landscape) { .pl-head { min-height: 52px; } .pl-card { min-height: 44px; } .pl-card.has-sub { min-height: 48px; } .pl-you .pl-card { min-height: 46px; } .pl-div { margin: 6px 2px 0; } .pl-gh { margin: 8px 0 4px; } .pl-guests { min-height: 40px; margin-top: 4px; padding-top: 6px; } .pl-guests.in-list { display: flex; } .pl-guests.pinned { display: none; } }

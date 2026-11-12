@@ -254,7 +254,7 @@ def main():
 
             # START alone on a map of the players hands the page over to the game page's own game for one, with the map's file in its address (it fetches the file from the site)
             v.ev("document.getElementById('start').click()")
-            check(bool(wait_for(lambda: (v.ev("window.location.pathname") or "").endswith("/play.html"), 20)), "START alone leaves for the game page")
+            check(bool(wait_for(lambda: (v.ev("window.location.pathname") or "").endswith("/play"), 20)), "START alone leaves for the game page")
             query = urllib.parse.parse_qs((v.ev("window.location.search") or "").lstrip("?"))
             check(query.get("mapfile") == [top[0]["file"]] and "map" not in query and "bots" not in query, "the game page is asked for a game for one on that map's file (%s)" % query)
 

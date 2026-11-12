@@ -332,9 +332,11 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         const rail = node('rail', bar, { tag: 'div' });
         const ground = node('ground', bar, { tag: 'div' });
         const picture = node('picture', null, { tag: 'canvas' });
+        const handle = node('handle', null, { tag: 'button', hidden: true });
+        const handleIcon = node('handleicon', handle, { tag: 'svg' });
         const made = [];
         const place = { x: 0, y: 0, edge: false, el: picture, locked: true };
-        const doc = { getElementById: (id) => (id === 'rbar' ? bar : null), elementFromPoint: () => place.el,
+        const doc = { getElementById: (id) => (id === 'rbar' ? bar : id === 'b-handle' ? handle : null), elementFromPoint: () => place.el,
                       createElement: () => { const m = { style: {}, attrs: {}, kids: [], setAttribute(k, v) { this.attrs[k] = v; }, appendChild(x) { this.kids.push(x); } }; made.push(m); return m; },
                       createElementNS: () => ({ style: {}, attrs: {}, kids: [], setAttribute(k, v) { this.attrs[k] = v; }, appendChild(x) { this.kids.push(x); } }) };
         const stage = { appended: [], appendChild(x) { this.appended.push(x); } };
@@ -345,7 +347,7 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         const state = { handing: false };
         const api = R.barPointer({ doc, win, stage, canvas: picture, PointerEvent, MouseEvent, replayMode: () => replayMode, handing: () => state.handing,
                                    cursorAt: () => (place.locked ? { x: place.x, y: place.y, edge: place.edge } : null), leave: () => left.push('leave') });
-        return { api, log, classes, bar, play, icon, rew, rewIcon, rail, ground, picture, place, made, stage, left, handlers, state };
+        return { api, log, classes, bar, handle, handleIcon, play, icon, rew, rewIcon, rail, ground, picture, place, made, stage, left, handlers, state };
     }
     const ev = (type, extra) => { const e = Object.assign({ type, button: 0, isTrusted: true, target: null, stopped: 0, prevented: 0, stopPropagation() { this.stopped++; }, preventDefault() { this.prevented++; } }, extra); return e; };
     const last = (t) => t.log[t.log.length - 1];
@@ -416,6 +418,21 @@ same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ l
         // other buttons: swallowed over the bar, no pointer press
         t.log.length = 0; t.place.el = t.rail;
         same('bar: a right button over the bar is the bar\'s and makes no press', [t.api.button('mousedown', 2), t.api.button('mouseup', 2), t.log.length], [true, true, 0]);
+        // the handle of a hidden bar (or of a peeking one) is a button of its own: a locked mouse presses it; a hidden handle is not there
+        {
+            const h = make(true);
+            h.classes.gone = true; h.place.x = 640; h.place.y = 790; h.place.el = h.handleIcon;
+            same('handle: not shown (hidden): the cursor is the game\'s', [h.api.move(0), h.api.mode()], [false, false]);
+            h.handle.hidden = false;
+            same('handle: shown while the bar is hidden: the cursor is the bar\'s', [h.api.move(0), h.api.mode()], [true, true]);
+            h.api.button('mousedown', 0);
+            same('handle: a press and a release on it click it once', [h.api.button('mouseup', 0), h.handle.clicks, last(h)], [true, 1, 'click handle']);
+            h.api.button('click', 0);
+            h.place.el = h.icon;
+            same('handle: the hidden bar itself is still not there to be hit', h.api.move(0), false);
+            h.classes.over = false; h.place.el = h.handleIcon;
+            same('handle: outside fullscreen (no bar over the picture) it is not there either', h.api.move(0), false);
+        }
         // the picture's outermost pixels are the game's even where the bar lies
         t.place.edge = true;
         same('bar: at the picture\'s edge a move, a press, a release and a click are the game\'s', [t.api.move(0), t.api.button('mousedown', 0), t.api.button('mouseup', 0), t.api.button('click', 0)], [false, false, false, false]);

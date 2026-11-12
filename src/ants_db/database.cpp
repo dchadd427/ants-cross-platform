@@ -271,12 +271,6 @@ Error Statement::reset() {
     return Error();
 }
 
-Error Statement::clear_bindings() {
-    ANTS_DB_NEED_STATEMENT("clear_bindings");
-    sqlite3_clear_bindings(stmt_);
-    return Error();
-}
-
 int Statement::column_count() const { return stmt_ != nullptr ? sqlite3_column_count(stmt_) : 0; }
 
 // (a column outside the result, or a statement without a row: the same answers as SQLite's own, NULL, 0 and "")
