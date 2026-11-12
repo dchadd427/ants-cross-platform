@@ -194,8 +194,10 @@ def inputs_listing(**changes):
     for name in ("build_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt", "build_web/lvl_core/CMakeFiles/lvl_core.dir/link.txt", "build_web/src/ants_app/CMakeFiles/ants_app.dir/flags.make",
                  "build_web/lvl_core/CMakeFiles/lvl_core.dir/flags.make", "build_web/generated/ants_app/version.hpp"):
         lines[name] = "c"
-    for name in ("libSDL2.a", "libSDL2_ttf.a", "libfreetype.a", "libharfbuzz.a"):
+    for name in ("libSDL2.a", "libSDL2_ttf.a", "libfreetype.a", "libharfbuzz.a", "crt1.o", "crt1_reactor.o"):
         lines["/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/" + name] = "d"
+    for name in ("build_web/src/ants_app/CMakeFiles/ants_app.dir/objects1.rsp", "build_web/src/ants_app/CMakeFiles/ants_app.dir/linkLibs.rsp", "build_web/lvl_core/CMakeFiles/lvl_core.dir/objects1.rsp"):
+        lines[name] = "e"
     out = []
     links = {"build_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt": "em++ -O3 -o index.html a.o b.a", "build_web/lvl_core/CMakeFiles/lvl_core.dir/link.txt": "em++ -Oz -o lvl_core.js c.o"}
     for path, value in changes.items():
@@ -252,7 +254,9 @@ class TheListingsOfTheLinksInputsAndOutputs(unittest.TestCase):
         full = inputs_listing()
         for what, text in (("a line that is none", full + "garbage\n"), ("a hash that is none", full + "file\tbuild_web/x.o\tnothex\n"), ("an empty command line", full + "link\tbuild_web/y/link.txt\t \n"),
                            ("nothing", ""), ("too few objects", "\n".join(l for l in full.splitlines() if "/o0" not in l and "/o1" not in l)),
-                           ("no SDL2_ttf", "\n".join(l for l in full.splitlines() if "libSDL2_ttf" not in l)), ("no link lines", "\n".join(l for l in full.splitlines() if not l.startswith("link\t")))):
+                           ("no SDL2_ttf", "\n".join(l for l in full.splitlines() if "libSDL2_ttf" not in l)),
+                           ("no response files", "\n".join(l for l in full.splitlines() if ".rsp" not in l)), ("two response files only", "\n".join(l for l in full.splitlines() if "linkLibs.rsp" not in l)),
+                           ("no crt1.o", "\n".join(l for l in full.splitlines() if "/crt1.o" not in l)), ("no crt1_reactor.o", "\n".join(l for l in full.splitlines() if "crt1_reactor.o" not in l)), ("no link lines", "\n".join(l for l in full.splitlines() if not l.startswith("link\t")))):
             with self.subTest(what):
                 with self.assertRaises(ValueError):
                     im.listing(text, "inputs")
@@ -334,6 +338,10 @@ class TheLibrariesOfEmscriptensCache(unittest.TestCase):
         self.assertNotEqual(one, two)
         self.assertEqual(li.library_digest(one), li.library_digest(two))
 
+    def test_an_object_of_the_cache_is_the_same_without_its_debug_information_and_not_the_same_in_its_code(self):
+        self.assertEqual(li.object_digest(wasm_object(b"start", b"debug /warm")), li.object_digest(wasm_object(b"start", b"debug /src/build_web", reloc_debug=b"\2\3")))
+        self.assertNotEqual(li.object_digest(wasm_object(b"start", b"d")), li.object_digest(wasm_object(b"START", b"d")))
+
     def test_a_library_that_differs_in_code_or_names_or_members_is_not_the_same(self):
         base = archive([("a.c.o", wasm_object(b"code a", b"d")), ("b.c.o", wasm_object(b"code b", b"d"))])
         for what, other in (("code", archive([("a.c.o", wasm_object(b"code A", b"d")), ("b.c.o", wasm_object(b"code b", b"d"))])),
@@ -396,7 +404,12 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
         self.put(os.path.join(self.src, "build_web", "lvl_core", "CMakeFiles", "lvl_core.dir", "link.txt"), b"em++ -Oz -o lvl_core.js\n")
         self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "flags.make"), b"flags")
         self.put(os.path.join(self.src, "build_web", "generated", "ants_app", "version.hpp"), b'"v0.16.0"')
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "objects1.rsp"), b"f0.cpp.o f1.cpp.o\n")
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "linkLibs.rsp"), b"-lwebsocket.js libants_app.a\n")
+        self.put(os.path.join(self.src, "build_web", "lvl_core", "CMakeFiles", "lvl_core.dir", "objects1.rsp"), b"core.o\n")
         self.put(os.path.join(self.src, "build_web", "src", "ants_app", "index.wasm"), b"the program: not an input")
+        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "crt1.o"), wasm_object(b"start", b"debug of /warm"))
+        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "crt1_reactor.o"), wasm_object(b"reactor", b"debug of /warm"))
         self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "libSDL2.a"), archive([("SDL.c.o", wasm_object(b"code", b"debug of /warm"))]))
         self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "lto", "libc.a"), archive([("bitcode.o", b"BC\xc0\xde bitcode")]))
         self.put(os.path.join(self.cache, "sysroot", "include", "x.h"), b"header: not an input")
@@ -410,8 +423,8 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         files = [l.split("\t")[1] for l in done.stdout.splitlines() if l.startswith("file\t")]
         self.assertEqual(files, sorted(files))
-        self.assertEqual(len(files), 10)
-        for wanted in ("f0.cpp.o", "libants_app.a", "ants_app.dir/link.txt", "lvl_core.dir/link.txt", "flags.make", "version.hpp", "wasm32-emscripten/libSDL2.a", "lto/libc.a"):
+        self.assertEqual(len(files), 15)
+        for wanted in ("f0.cpp.o", "libants_app.a", "ants_app.dir/link.txt", "lvl_core.dir/link.txt", "flags.make", "version.hpp", "wasm32-emscripten/libSDL2.a", "lto/libc.a", "ants_app.dir/objects1.rsp", "ants_app.dir/linkLibs.rsp", "lvl_core.dir/objects1.rsp", "wasm32-emscripten/crt1.o", "wasm32-emscripten/crt1_reactor.o"):
             self.assertTrue(any(f.endswith(wanted) for f in files), wanted)
         for unwanted in ("index.wasm", "x.h"):
             self.assertFalse(any(f.endswith(unwanted) for f in files), unwanted)
@@ -522,8 +535,14 @@ class TheCommandLine(unittest.TestCase):
 FAKE_DOCKER = r'''#!/usr/bin/env python3
 """A stand-in for docker: builds nothing; `create` names the image, `export` writes the tar that the test chose (FAKE_STATE/<image>.tar), `image inspect` the configuration that it chose, `run` the listing of the
 link's inputs (or, with setarch, of the programs of a link) that it chose for the builder stage of the image."""
-import json, os, sys
+import hashlib, io, json, os, sys, tarfile
 state = os.environ["FAKE_STATE"]
+SIX = ("index.js", "index.js.gz", "index.wasm", "index.wasm.gz", "lvl_core.js", "lvl_core.wasm")
+
+
+def file_of_image(which, name):
+    with tarfile.open(os.path.join(state, which + ".tar")) as t:
+        return t.extractfile("usr/share/nginx/html/" + name).read()
 args = sys.argv[1:]
 with open(os.path.join(state, "calls.log"), "a") as log:
     log.write(" ".join(args) + "\n")
@@ -538,6 +557,14 @@ if args[0] == "build":
         f.write(which)
 elif args[0] == "create":
     print(args[1])
+elif args[0] == "cp":
+    cid, path = args[1].split(":", 1)
+    if os.environ.get("FAKE_FAIL_CP") and os.environ["FAKE_FAIL_CP"] in path:
+        sys.exit(1)
+    with open(os.path.join(state, cid + ".which")) as f:
+        which = f.read().strip()
+    with open(args[2], "wb") as f:
+        f.write(file_of_image(which, os.path.basename(path)))
 elif args[0] == "export":
     with open(os.path.join(state, args[1] + ".which")) as f:
         which = f.read().strip()
@@ -549,6 +576,13 @@ elif args[0] == "run":
         sys.exit(1)
     with open(os.path.join(state, tag + ".which")) as f:
         which = f.read().strip()
+    if args[-2] == "-c" and "sha256sum" in args[-1]:        # the six link outputs of the builder stage (the same bytes as the image's, unless a test says otherwise)
+        for name in SIX:
+            data = file_of_image(which, name)
+            if os.environ.get("FAKE_BUILT_WRONG") == name:
+                data += b"!"
+            print("%s\t%s" % (name, hashlib.sha256(data).hexdigest()))
+        sys.exit(0)
     sys.stdin.read()
     if "setarch" in args:
         with open(os.path.join(state, "calls.log")) as f:
@@ -611,6 +645,8 @@ class TheScript(unittest.TestCase):
     def write_images(self, base_files=None, new_files=None, new_config=None):
         self.write_listings()
         files = {HTML + "index.html": page(0, 1), "usr/local/bin/ants_server": (b"binary", 0o755, 0)}
+        for name in ("index.js", "index.js.gz", "index.wasm", "index.wasm.gz", "lvl_core.js", "lvl_core.wasm"):
+            files[HTML + name] = (b"linked " + name.encode("ascii")) * 40
         for which, extra, config in (("base", base_files, self.config), ("new", new_files, new_config or self.config)):
             with open(os.path.join(self.state, which + ".tar"), "wb") as f:
                 f.write(tar_of(dict(files, **(extra or {}))) if which == "base" else tar_of(dict(files, **(extra or {}), **{HTML + "index.html": page(900, 7)})))
@@ -624,6 +660,8 @@ class TheScript(unittest.TestCase):
         done = self.run_script()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("the images are the same", done.stdout)
+        self.assertNotIn("::warning", done.stdout)
+        self.assertNotIn("NOT compared", done.stdout)
         calls = open(os.path.join(self.state, "calls.log"), encoding="utf-8").read()
         self.assertEqual(calls.count("build -f"), 6, "the base and the new image of both Dockerfiles, and the builder stage of the two web images")
         self.assertEqual(calls.count("--target builder"), 2)
@@ -631,7 +669,8 @@ class TheScript(unittest.TestCase):
         self.assertIn("build -f Dockerfile.server --build-arg", calls)                                      # (the new one is the working tree's own file, the context is the folder that the script runs in)
         self.assertIn("Dockerfile.server.base --build-arg", calls)                                          # (the base one is a copy of the base revision's file in a scratch folder)
         self.assertEqual(calls.count(" -t ants-image-diff-"), 6)
-        self.assertEqual(calls.count("\nrun "), 5, "two listings of the link's inputs and three deterministic links (the base, the new one and the new one again)")
+        self.assertEqual(calls.count("\nrun "), 7, "two listings of the link's inputs, two listings of the link outputs of the builder stage and three deterministic links (the base, the new one and the new one again)")
+        self.assertEqual(calls.count("\ncp "), 12, "the six linked files of each web image")
         self.assertEqual(calls.count("setarch x86_64 -R sh -s"), 3)
         self.assertEqual(calls.count("--security-opt seccomp=unconfined -e BINARYEN_CORES=1 -e EMCC_CFLAGS=-Wl,--threads=1"), 3, "the recipe of the deterministic link, in the check only")
         self.assertEqual(calls.count("\nimage rm -f "), 1, "the images are removed at the end")
@@ -706,10 +745,29 @@ class TheScript(unittest.TestCase):
         done = self.run_script("--web", FAKE_RELINK_NOISE="1")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("WARNING: two deterministic links of one image gave different programs", done.stdout)
+        self.assertRegex(done.stdout, r"(?m)^::warning title=The deterministic link did not hold::")           # (an annotation: it shows on the page of the run, not only in the log)
+        self.assertIn("link outputs were NOT compared", done.stdout.splitlines()[-1])
         self.assertNotIn("web link outputs: 4 entries compared", done.stdout)
         self.write_listings(new_inputs=inputs_listing(**{self.OBJECT: "e"}))
         done = self.run_script("--web", FAKE_RELINK_NOISE="1")
         self.assertEqual(done.returncode, 1, "the inputs are compared whatever the links do")
+
+    def test_a_linked_file_of_the_image_that_is_not_the_builder_stages_output_fails(self):
+        """The six linked files of the final image are the builder stage's own link outputs, byte for byte: a file of about the same size that is not fails the check."""
+        for name in ("index.wasm", "index.js.gz", "lvl_core.js"):
+            with self.subTest(name):
+                done = self.run_script("--web", FAKE_BUILT_WRONG=name)
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertIn("are not the builder stage's link outputs", done.stdout)
+                self.assertIn(name, done.stdout)
+        done = self.run_script("--web")
+        self.assertIn("the six linked files of the base web image are the builder stage's link outputs, byte for byte", done.stdout)
+        self.assertIn("the six linked files of the new web image are the builder stage's link outputs, byte for byte", done.stdout)
+
+    def test_a_linked_file_that_cannot_be_taken_out_of_the_image_is_status_2(self):
+        done = self.run_script("--web", FAKE_FAIL_CP="lvl_core.wasm")
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertNotIn("the images are the same", done.stdout)
 
     def test_no_relink_leaves_out_the_deterministic_link(self):
         self.write_listings(new_relink=RELINK.replace("2" * 64, "9" * 64))

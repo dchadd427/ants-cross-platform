@@ -156,6 +156,15 @@ class TheWebImage(unittest.TestCase):
         self.assertIn("build_web/generated/ants_app/version.hpp", text)
         self.assertIn("test -s build_web/src/ants_app/index.wasm", text)
 
+    def test_after_the_link_only_the_gzip_step_names_a_linked_file(self):
+        """The image check ties the six linked files of the final image to the builder stage's link outputs (tools/image_files_diff.sh); that holds only while no step after the link edits one: the
+        gzip step reads three of them (-k keeps them) and writes the .gz copies, and every other step after the link leaves the programs and their scripts alone."""
+        link = self.compile_index(1)
+        named = [s for s in self.builder[link + 1:] if s.op == "RUN" and re.search(r"index\.wasm|index\.js\b(?!\?)|lvl_core", s.text)]
+        self.assertEqual(len(named), 1, [s.text[:80] for s in named])
+        self.assertIn("gzip -9 -n -k", named[0].text)
+        self.assertNotRegex(named[0].text, r"\bsed\b|\bmv\b|\brm\b|\bcp\b|\btee\b|\btruncate\b|\bdd\b")
+
     def test_the_pages_the_stamps_the_build_id_and_the_rest_come_after_the_link(self):
         link = self.compile_index(1)
         late = self.builder[link + 1:]

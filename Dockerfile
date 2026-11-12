@@ -25,7 +25,7 @@ RUN cd /warm && \
 # The layers of this stage are ordered by how often their input changes, so that a release that changes no C++ does not compile the game again:
 #   1. the build files and the sources: the compile reads nothing else (CMakeLists.txt, cmake/, include/, src/; the web build has no third_party/ and no tools/ in it);
 #   2. the file VERSION, web/shell.html and Original-Ants/: only the link reads them (the page's template and the data package). They are stubs in layer 1, which compiles and links with them, and the
-#      real ones replace them here: the version is a constant in a header that CMake generates from VERSION, so the few files that include it (src/ants_app/application*.cpp and main.cpp) are compiled again,
+#      real ones replace them here: the version is a constant in a header that CMake generates from VERSION, so the few files that include it (the four files src/ants_app/application*.cpp, and the generated build id file) are compiled again,
 #      then the game is linked again (the map core is not: nothing of it reads these);
 #   3. everything else (the pages, the stamps, the changelog), below.
 # ccache (a BuildKit cache mount, kept by the host between builds and never part of the image; `RUN --mount` needs BuildKit: docs/BUILD_AND_RUN.md) makes a compile of unchanged sources a copy.

@@ -6,11 +6,14 @@
 #
 # The linked WebAssembly programs and their JavaScript are the exception: two links of the very same objects do not always give the same bytes (the linker and the optimizer depend on the address
 # space layout and on thread timing), so a comparison of those files could only say "the two builds hit the same variant". For the web image they are compared where it is exact:
-#   1. the link's inputs, from the builder stage of both builds (tools/link_inputs.py: every object file, archive and library that the link reads, and the link command lines), byte for byte (a library of Emscripten's cache by its members without their debug information:
-#      the ports' debug information holds the folder of their compile, which differs between the two Dockerfiles and which the link drops);
+#   1. the link's inputs, from the builder stage of both builds (tools/link_inputs.py: every object file, archive, response file (the lists of objects and libraries that the link command lines
+#      name) and library that the link reads, the start-up objects of Emscripten's cache, and the link command lines), byte for byte (a library or object of Emscripten's cache by its members
+#      without their debug information: the ports' debug information holds the folder of their compile, which differs between the two Dockerfiles and which the link drops);
 #   2. the programs of a link that is made deterministic inside the check only (tools/relink_outputs.sh: no address randomization, one linker thread, one optimizer thread), unless --no-relink; if
 #      two such links of one image differ here the recipe does not hold on this machine, which is said, and only the first comparison counts.
-# The image's own files of those programs keep their type, mode, owner and a size within one percent. Production links as it always did.
+# The image's own files of those programs keep their type, mode, owner and a size within one percent, and each of the six (index.js, index.wasm, their two .gz copies, lvl_core.js, lvl_core.wasm) is
+# the builder stage's own link output, byte for byte (a copy of it: nothing after the link may have edited it, and a stub link's file of about the same size cannot stand in). Production links as it
+# always did.
 #
 #   tools/image_files_diff.sh [--base REV] [--web] [--server] [--diagnose] [--no-relink]      (both images when neither is named; REV: any revision that has Dockerfile and Dockerfile.server, default origin/main)
 #   --diagnose: when the web images differ, also show how the differing files differ
@@ -55,6 +58,7 @@ trap cleanup EXIT
 
 status=0
 fail=0
+relink_held=1
 
 # show_diff A B: how two files differ (byte count, the first bytes, the text that they hold)
 show_diff() {
@@ -71,6 +75,30 @@ diagnose_web() {
     done
 }
 
+# tie_outputs WHICH: the six linked files of the final image are the builder stage's own link outputs, byte for byte (the final image's copies come from the builder stage by COPY, so this holds
+# unless a step after the link edited one, or the Dockerfile copies another file)
+tie_outputs() {
+    which="$1"
+    cid="$base_cid"
+    [ "$which" = new ] && cid="$new_cid"
+    docker run --rm "$tag-web-builder-$which" sh -c 'cd /src/build_web && for f in src/ants_app/index.js src/ants_app/index.js.gz src/ants_app/index.wasm src/ants_app/index.wasm.gz lvl_core/lvl_core.js lvl_core/lvl_core.wasm; do printf "%s\t%s\n" "$(basename "$f")" "$(sha256sum < "$f" | cut -d " " -f 1)"; done' > "$work/web-built-$which.txt" \
+        || { echo "image_files_diff: the link outputs of the $which builder stage could not be listed" >&2; return 2; }
+    mkdir -p "$work/final-$which"
+    : > "$work/web-final-$which.txt"
+    for f in index.js index.js.gz index.wasm index.wasm.gz lvl_core.js lvl_core.wasm; do
+        docker cp "$cid:/usr/share/nginx/html/$f" "$work/final-$which/$f" || { echo "image_files_diff: $f could not be taken out of the $which web image" >&2; return 2; }
+        printf '%s\t%s\n' "$f" "$(sha256sum < "$work/final-$which/$f" | cut -d ' ' -f 1)" >> "$work/web-final-$which.txt"
+    done
+    if ! cmp -s "$work/web-built-$which.txt" "$work/web-final-$which.txt"; then
+        echo "web link outputs: the six linked files of the $which web image are not the builder stage's link outputs (builder stage on the left, image on the right):"
+        diff "$work/web-built-$which.txt" "$work/web-final-$which.txt"
+        fail=1
+    else
+        echo "web link outputs: the six linked files of the $which web image are the builder stage's link outputs, byte for byte"
+    fi
+    return 0
+}
+
 # web_link FILE-NAME: the link's inputs of the base's and of this tree's builder stage (a build that the layer cache answers), then the programs of a deterministic link of each
 web_link() {
     file="$1"
@@ -81,11 +109,12 @@ web_link() {
         docker build -f "$dockerfile" --target builder --build-arg ANTS_BUILD_ID=image-diff -t "$tag-web-builder-$which" . > /dev/null || { echo "image_files_diff: the builder stage of the $which Dockerfile could not be built" >&2; return 2; }
         docker run --rm -i "$tag-web-builder-$which" python3 - < tools/link_inputs.py > "$work/web-inputs-$which.txt" || { echo "image_files_diff: the link inputs of the $which build could not be listed" >&2; return 2; }
     done
+    for which in base new; do tie_outputs "$which" || return 2; done
     rc=0
     python3 tools/image_manifest.py inputs "$work/web-inputs-base.txt" "$work/web-inputs-new.txt" --label "web link inputs" || rc=$?
     [ "$rc" -ge 2 ] && return 2
     if [ "$rc" = 1 ]; then fail=1; fi
-    [ "$relink" = 1 ] || { echo "web link outputs: not compared (--no-relink)"; return 0; }
+    [ "$relink" = 1 ] || { relink_held=0; echo "web link outputs: not compared (--no-relink)"; return 0; }
     # one image linked twice first: when the two disagree the recipe does not hold on this machine, and the inputs are all that is compared
     for which in base new new2; do
         image="$tag-web-builder-${which%2}"
@@ -94,7 +123,9 @@ web_link() {
             || { echo "image_files_diff: the deterministic link of the $which build failed" >&2; return 2; }
     done
     if ! cmp -s "$work/web-relink-new.txt" "$work/web-relink-new2.txt"; then
+        relink_held=0
         echo "web link outputs: WARNING: two deterministic links of one image gave different programs on this machine, so the recipe does not hold here; not compared (the link inputs above are)"
+        echo "::warning title=The deterministic link did not hold::Two deterministic links of the new web image gave different programs, so the programs were not compared; the link inputs, the other files and the tie of the six linked files to the builder stage were."
         diff "$work/web-relink-new.txt" "$work/web-relink-new2.txt"
         return 0
     fi
@@ -141,5 +172,6 @@ if [ "$want_web" = 1 ]; then compare web Dockerfile || status=2; fi
 if [ "$want_server" = 1 ]; then compare server Dockerfile.server || status=2; fi
 if [ "$status" != 0 ]; then echo "image_files_diff: could not finish" >&2; exit 2; fi
 if [ "$fail" != 0 ]; then echo "image_files_diff: the images DIFFER (listed above)" >&2; exit 1; fi
-echo "image_files_diff: the images are the same (every file and the configuration, the web image's link inputs and, where it held, its link outputs), apart from the build time stamps of the pages"
+if [ "$want_web" = 1 ] && [ "$relink_held" = 0 ]; then link_note="the web image's link outputs were NOT compared (see the warning above)"; else link_note="the web image's link outputs"; fi
+echo "image_files_diff: the images are the same (every file and the configuration, the web image's link inputs and $link_note), apart from the build time stamps of the pages"
 exit 0

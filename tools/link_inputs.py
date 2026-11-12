@@ -4,8 +4,10 @@
     docker run --rm -i IMAGE python3 - < tools/link_inputs.py
 
 One line per file, sorted by path, fields separated by a tab:
-  file  PATH  SHA256   every object file, archive, link command file and compile flags file of the CMake build folder and every generated file, by the sha256 of the file; and every library
-                      archive in Emscripten's cache (system libraries and ports) by the sha256 of its members with the debug information left out (see library_digest)
+  file  PATH  SHA256   every object file, archive, response file (the lists of objects and libraries that the link command lines name: @...objects1.rsp, @...linkLibs.rsp), link command file and
+                      compile flags file of the CMake build folder and every generated file, by the sha256 of the file; and every library archive and every object file (crt1.o, crt1_reactor.o: the
+                      start-up code of the two programs) in Emscripten's cache (system libraries and ports) by the sha256 of its members, or of the object, with the debug information left out
+                      (see library_digest)
   link  PATH  TEXT     each link command file again, with the command line itself, so that a difference is readable
 Two builds that give the same listing link the same objects and libraries with the same command lines. (ANTS_SRC names another source folder than /src: for the tests.)
 
@@ -98,6 +100,11 @@ def file_digest(path):
         return hashlib.sha256(f.read()).hexdigest()
 
 
+def object_digest(data):
+    """sha256 of an object file of the cache with the debug information left out."""
+    return hashlib.sha256(object_without_debug(data)).hexdigest()
+
+
 def emscripten_cache():
     try:
         cache = subprocess.run(["em-config", "CACHE"], capture_output=True, text=True, timeout=60).stdout.strip().splitlines()[-1]
@@ -122,11 +129,11 @@ def main():
     if not os.path.isdir(os.path.join(cache, "sysroot", "lib")):
         print("link_inputs: no Emscripten cache folder", file=sys.stderr)
         return 2
-    builds = walk("build_web", lambda n: n.endswith((".o", ".a")) or n in ("link.txt", "flags.make")) + walk("build_web/generated", lambda n: True)
+    builds = walk("build_web", lambda n: n.endswith((".o", ".a", ".rsp")) or n in ("link.txt", "flags.make")) + walk("build_web/generated", lambda n: True)
     entries = [(path, file_digest(path)) for path in sorted(set(builds))]
-    for path in walk(os.path.join(cache, "sysroot", "lib"), lambda n: n.endswith(".a")):
+    for path in walk(os.path.join(cache, "sysroot", "lib"), lambda n: n.endswith((".a", ".o"))):
         with open(path, "rb") as f:
-            entries.append((path, library_digest(f.read())))
+            entries.append((path, library_digest(f.read()) if path.endswith(".a") else object_digest(f.read())))
     lines = ["file\t%s\t%s" % entry for entry in sorted(entries)]
     for path in walk("build_web", lambda n: n == "link.txt"):
         with open(path, encoding="utf-8", errors="replace") as f:

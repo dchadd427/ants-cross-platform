@@ -606,8 +606,8 @@ jobs:
       - uses: actions/checkout@v7
 
       # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
-      # the compile layers read (the Dockerfile, the build files and the sources; a change of the pages, VERSION, web/shell.html or Original-Ants/ does not change it, because the Dockerfile copies them
-      # after the compile). A run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own. The BuildKit cache mounts of the
+      # the compile layers read (the Dockerfile, the build files, the sources and third_party/; a change of VERSION or of tools/ does not change it: the Dockerfile copies VERSION after the first compile and
+      # not tools/ at all, and the image has no page). A run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own. The BuildKit cache mounts of the
       # Dockerfile (ccache) are not part of this cache: they are empty in every run here. The image is the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
       # The builder image is pinned to a release (the default is a moving tag).
       - name: Restore the Docker layer cache of the server image

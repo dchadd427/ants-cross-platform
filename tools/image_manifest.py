@@ -106,7 +106,7 @@ def differences(base, new, label=""):
 
 HEX = re.compile(r"[0-9a-f]{64}$")
 REQUIRED = {                            # what a listing must hold, or it is an empty one and a comparison of two of them would pass for nothing
-    "inputs": {"objects": (".o", 40), "archives": (".a", 4), "command lines": ("link.txt", 2), "flags": ("flags.make", 2), "the version header": ("version.hpp", 1),
+    "inputs": {"objects": (".o", 40), "archives": (".a", 4), "command lines": ("link.txt", 2), "response files": (".rsp", 3), "the game's start-up object": ("crt1.o", 1), "the map core's start-up object": ("crt1_reactor.o", 1), "flags": ("flags.make", 2), "the version header": ("version.hpp", 1),
                "SDL2": ("libSDL2.a", 1), "SDL2_ttf": ("libSDL2_ttf.a", 1), "FreeType": ("libfreetype.a", 1), "HarfBuzz": ("libharfbuzz.a", 1)},
     "relink": {"the game's script": ("index.js", 1), "the game's program": ("index.wasm", 1), "the map core's script": ("lvl_core.js", 1), "the map core's program": ("lvl_core.wasm", 1)},
 }
