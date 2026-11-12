@@ -17,7 +17,6 @@ Where an nginx program is installed the blocks are RUN: the real text in front o
 (the headers and cookies), and with real access and error logs that are read for the canaries.
 """
 import http.server
-import json
 import os
 import re
 import shutil

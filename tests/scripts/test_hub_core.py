@@ -5,7 +5,6 @@ history that is kept 7 days and then deleted for good, the moderators' commands 
 The chat is driven with plain fake peers and a fake clock, so every limit is tested at its edge in no time. The sockets, the timers and the real process are tests/scripts/test_hub_server.py.
 """
 import asyncio
-import collections
 import dataclasses
 import io
 import json

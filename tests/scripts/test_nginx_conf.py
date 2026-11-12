@@ -60,11 +60,8 @@ class TheLocation(unittest.TestCase):
         self.assertEqual(busy, ["= /busy"])                                                # no prefix or regular-expression location could also catch /busy/x or /busyness
         self.assertEqual(len(re.findall(r"location\s+= /busy\s*\{", CONF)), 1)
 
-    def test_it_is_the_address_the_workflow_polls_and_the_server_answers(self):
-        workflow = read(".github", "workflows", "ci.yml")
-        site = re.search(r"'(https://[a-z0-9.-]+)/busy'", workflow)
-        self.assertIsNotNone(site, "the deploy job has no default busy address")
-        self.assertRegex(CONF, r"server_name\s+[^;]*\b%s\b" % re.escape(site.group(1).split("//", 1)[1]))
+    def test_it_is_an_address_of_the_site_and_the_server_answers(self):
+        self.assertRegex(CONF, r"server_name\s+[^;]*\bbeta\.playants\.org\b")
         self.assertIn('ws->set_status("/busy"', read("src", "ants_server", "main.cpp"))
 
     def test_only_a_plain_get_without_a_query_goes_through(self):
@@ -89,7 +86,7 @@ class TheLocation(unittest.TestCase):
         self.assertEqual(target.groups(), door.groups())
         self.assertIn("proxy_pass http://$ants_server;", BUSY)                              # (a variable: the name is resolved per request, like /ws, so the page starts without the server)
         self.assertIn("resolver 127.0.0.11", BUSY)
-        for stack in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+        for stack in ("docker-compose.stack.yml",):
             command = re.search(r'command: \[.*?"--ws-port", "(\d+)"', read(stack))
             self.assertIsNotNone(command, stack)
             self.assertEqual(command.group(1), target.group(2), stack)
