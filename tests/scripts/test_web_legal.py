@@ -16,6 +16,7 @@ import sys
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+DISCORD = "https://discord.gg/WaWrXQnKPj"                                             # (the Discord button of the site bar)
 GITHUB = "https://github.com/dchadd427/ants-cross-platform"
 LEGAL_URL = "https://beta.playants.org/legal.html"
 
@@ -64,7 +65,7 @@ def addresses_that_leave_the_site(page):
         for address in ([part.split()[0] for part in value.split(",") if part.strip()] if name == "srcset" else [value]):
             if address.startswith("/") and not address.startswith("//") or address.startswith("#"):
                 continue
-            if address == GITHUB or address.startswith(GITHUB + "/"):
+            if address == GITHUB or address.startswith(GITHUB + "/") or address == DISCORD:
                 continue
             found.append(address)
     for style in re.findall(r"<style[^>]*>(.*?)</style>", page, re.S):
@@ -105,9 +106,11 @@ class TheLegalPage(unittest.TestCase):
         self.assertTrue(self.page.startswith("<!DOCTYPE html>"))
         self.assertIn("<title>Ants (1998) - Legal</title>", self.page)
         self.assertIn('<link rel="stylesheet" href="/front/classic.css">', self.page)
-        self.assertIn('<h1 class="banner gold">Legal</h1>', self.page)
-        self.assertEqual(re.findall(r'class="btn sm" href="([^"]*)"', self.page), ["/", GITHUB])                 # the header's two buttons, as the changelog page's
-        self.assertNotIn("<script", self.page)
+        self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
+        self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
+        self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">'])               # (the site bar's Menu: no other script)
+        self.assertIn('<header class="sb" data-live="menu">', self.page)
+        self.assertEqual(re.findall(r'<nav aria-label="Pages">(.*?)</nav>', self.page, re.S)[0].count('aria-current'), 0)      # (Legal is not one of the bar's five: it is in the Menu)
         self.assertNotIn("@@", self.page)                                                                         # (the page is copied as it is: nothing in it is filled in by the build)
         for blank in re.findall(r"<a [^>]*target=\"_blank\"[^>]*>", self.page):
             self.assertIn('rel="noopener noreferrer"', blank)
