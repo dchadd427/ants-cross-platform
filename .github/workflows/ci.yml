@@ -71,8 +71,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # The decision and every changed file are printed. The commit ids come through the environment; no text of the pull request (title, branch, body) is read by this job. The change is judged
-      # against the base of the pull request (the commit that its base branch is at in this run: an `edited` run, which a new base branch starts, has the new one) A pull request into main is always full (the script compares BASE_REF with the literal main and prints nothing of it).
+      # The decision and every changed file are printed. The commit ids and the name of the base branch come through the environment; no other text of the pull request (title, head branch, body) is read by this job, and the base name is only compared with a literal, never evaluated or printed by the script. The change is judged
+      # against the base of the pull request (the commit that its base branch is at in this run: an `edited` run, which a new base branch starts, has the new one). A pull request into main is always full (the script compares BASE_REF with the literal main and prints nothing of it).
       - name: Light checks or all of them?
         id: decide
         env:

@@ -5,7 +5,7 @@ main is protected: a change merges only through a pull request whose five checks
 pull request unmergeable. Read as text (no YAML library is needed; with PyYAML the structure
 is checked too):
 
-  - the five required job names (each is a small job: linux, macos, windows_2022, windows_2026, web), MSVC 2022 for pull requests, pushes to main and manual runs and MSVC 2026 always, the
+  - the five required job names (each is a small job: linux, macos, windows_2022, windows_2026, web), MSVC 2022 and MSVC 2026 for every event, the
     triggers (no push to other branches; a pull request is also judged again when it is edited)
   - the small jobs behind the five names: each passes only when the job `changes` succeeded and every job behind it passed, or (macOS, the two Windows names) when `changes` said the change needs
     none of them and they were skipped; they are RUN here in bash against every combination of results (a failed, cancelled or skipped job, a failed `changes`, a light answer that is not true)
@@ -779,14 +779,11 @@ def expand(template, leg):
     return re.sub(r"\$\{\{\s*([^}]*?)\s*\}\}", one, str(template))
 
 
-def legs_of(job, event="pull_request"):
-    """The legs of a job: the dictionaries of its matrix, [{}] for a job without one (the Windows jobs choose the list in an expression: the list of a pull request, or of a push to another branch)."""
+def legs_of(job):
+    """The legs of a job: the dictionaries of its matrix, [{}] for a job without one (every matrix is a plain list: the test at the top forbids an expression that chooses it)."""
     include = (job.get("strategy") or {}).get("matrix", {}).get("include")
     if include is None:
         return [{}]
-    if isinstance(include, str):
-        lists = re.findall(r"'(\[\{.*?\}\])'", include)
-        return json.loads(lists[0] if event == "push to another branch" else lists[1])
     return include
 
 
@@ -1016,27 +1013,56 @@ def problems_of_ctest(doc):
     return problems
 
 
+# The only lines of a script that may end in `|| true` on purpose (a version banner, and the statistics and the stop of the compiler cache: they report, they test nothing)
+MAY_END_IN_TRUE = ("cl 2>&1 | head -1 || true", "sccache --show-stats || true", "sccache --stop-server || true")
+# The only step that has a shell of its own: PowerShell, for a download whose checksum is compared (the step throws), and it runs no test
+STEPS_WITH_A_SHELL = {"Install sccache 0.14.0": "pwsh"}
+SWALLOWS = re.compile(r"\|\|\s*(true|:|echo\b|printf\b|exit\s+0)(\s|;|$)|;\s*(true|:)\s*$|&&\s*(echo|printf|true|:)(\s|;|$)")
+ERREXIT_OFF = re.compile(r"\bset\s+(\+\w*e\w*\b|\+o\s+errexit\b)")
+NOT_A_PLAIN_COMMAND = re.compile(r"^(if|elif|while|until)\b|^!")
+
+
 def problems_of_swallowed_failures(doc):
-    """A failure that cannot fail anything: `continue-on-error` (on a job, a leg or a step: on the single step of a small job it would make a required name pass for every result), a test command
-    followed by `|| true` or `|| :`, a script that turns the exit on `set +e`, and a script that keeps a status (`status=0`) and does not end by exiting with it or has a test command that does not set it."""
+    """A failure that cannot fail anything. In the workflow: a default shell that is not bash (GitHub's bash stops at the first failure); in a job: `continue-on-error`; in a step:
+    `continue-on-error`, a shell of its own (one without `-e` goes on after a failure), and, on the single step of a small job that carries a required name, an `if` (a skipped step leaves the
+    name green for every result). In a script of bash (every line of every `run` of every job: the legs, the web legs, the small jobs): `|| true`, `|| :`, `; true`, `|| echo ...`, `|| exit 0`,
+    `&& echo ...` (a failure inside `&&` does not stop bash), a test command or a check under `if`, `while` or a leading `!`, `set +e` and `set +o errexit`; and a script that keeps a status
+    (`status=0`) and does not end by exiting with it or has a test command that does not set it, or that sets a status and has no `status=0` and `exit $status`."""
     problems = []
+    if (doc.get("defaults") or {}).get("run", {}).get("shell") != "bash":
+        problems.append("the workflow does not pin its default shell to bash")
     for job_id, job in doc["jobs"].items():
         if "continue-on-error" in job:
             problems.append("%s: continue-on-error on the job" % job_id)
+        if "defaults" in job:
+            problems.append("%s: defaults of its own (a shell?)" % job_id)
+        if job_id in AGGREGATES:
+            for step in job.get("steps", []):
+                for key in ("if", "shell"):
+                    if key in step:
+                        problems.append("%s: the step %r has `%s` (a skipped step leaves the name green, a shell of its own may not stop on error)" % (job_id, title(step), key))
         for step in job.get("steps", []):
             if "continue-on-error" in step:
                 problems.append("%s: %r has continue-on-error" % (job_id, title(step)))
+            if "shell" in step and STEPS_WITH_A_SHELL.get(title(step)) != step["shell"]:
+                problems.append("%s: %r has a shell of its own: %s" % (job_id, title(step), step["shell"]))
+            if "shell" in step:
+                continue                                                                       # (not a script of bash)
             script = str(step.get("run", ""))
             lines = [l.strip() for l in script.splitlines() if l.strip() and not l.strip().startswith("#")]
-            if re.search(r"\bset\s+\+e\b", script):
+            if ERREXIT_OFF.search(script):
                 problems.append("%s: %r turns the exit on error off" % (job_id, title(step)))
+            for line in lines:
+                if SWALLOWS.search(line) and not line.endswith(MAY_END_IN_TRUE):
+                    problems.append("%s: %r swallows a failure: %s" % (job_id, title(step), line))
+                if NOT_A_PLAIN_COMMAND.search(line):
+                    problems.append("%s: %r tests under `if`, `while` or `!`, which the shell does not stop on: %s" % (job_id, title(step), line))
             tests = [l for l in lines if TEST_COMMAND.search(l)]
-            for line in tests:
-                if re.search(r"\|\|\s*(true|:)(\s|;|$)|;\s*(true|:)\s*$", line):
-                    problems.append("%s: %r swallows the failure of a test command: %s" % (job_id, title(step), line))
+            if re.search(r"\bstatus=", script) and "status=0" not in lines:
+                problems.append("%s: %r sets a status and does not start it with `status=0`" % (job_id, title(step)))
+            if re.search(r"\bstatus=", script) and lines[-1] != "exit $status":
+                problems.append("%s: %r keeps a status and does not end with `exit $status`" % (job_id, title(step)))
             if "status=0" in lines:
-                if lines[-1] != "exit $status":
-                    problems.append("%s: %r keeps a status and does not end with `exit $status`" % (job_id, title(step)))
                 for line in tests:
                     if "status=1" not in line:
                         problems.append("%s: %r runs a test command that does not set the status: %s" % (job_id, title(step), line))
@@ -1208,7 +1234,26 @@ class TheChecksCanFail(unittest.TestCase):
                 ("    name: Windows tests (${{ matrix.name }})\n", "    name: Windows tests (${{ matrix.name }})\n    continue-on-error: true\n", "windows_tests: continue-on-error on the job"),
                 ("      - name: Did both web jobs pass?\n", "      - name: Did both web jobs pass?\n        continue-on-error: true\n", "web: 'Did both web jobs pass?' has continue-on-error"),
                 ('python3 tests/scripts/run_python_tests.py --shard "$SLICE" || status=1', 'python3 tests/scripts/run_python_tests.py --shard "$SLICE" || true', "linux_tests: 'Repository checks"),
-                ("          exit $status\n\n      - name: Keep the test logs of a failed run\n        if: failure()\n        uses: actions/upload-artifact@v7\n        with:\n          name: macos-test-logs", "          true\n\n      - name: Keep the test logs of a failed run\n        if: failure()\n        uses: actions/upload-artifact@v7\n        with:\n          name: macos-test-logs", "macos_tests: ")):
+                ("          exit $status\n\n      - name: Keep the test logs of a failed run\n        if: failure()\n        uses: actions/upload-artifact@v7\n        with:\n          name: macos-test-logs", "          true\n\n      - name: Keep the test logs of a failed run\n        if: failure()\n        uses: actions/upload-artifact@v7\n        with:\n          name: macos-test-logs", "macos_tests: "),
+                ('python3 tests/scripts/run_python_tests.py --shard "$SLICE" || status=1', 'python3 tests/scripts/run_python_tests.py --shard "$SLICE" || :', "linux_tests: 'Repository checks"),
+                ('build/lvl_tool.exe --selftest || status=1', 'build/lvl_tool.exe --selftest || echo "failed"', "windows_tests: 'Tool self-tests"),
+                ('build/lvl_tool.exe --selftest || status=1', 'build/lvl_tool.exe --selftest || exit 0', "windows_tests: 'Tool self-tests"),
+                ('build/lvl_tool.exe --selftest || status=1', 'if ! build/lvl_tool.exe --selftest; then :; fi', "windows_tests: 'Tool self-tests"),
+                ('build/lvl_tool.exe --selftest || status=1', 'build/lvl_tool.exe --selftest && echo passed', "windows_tests: 'Tool self-tests"),
+                ('build/lvl_tool.exe --selftest || status=1', '! build/lvl_tool.exe --selftest', "windows_tests: 'Tool self-tests"),
+                ("          status=0\n          build/map_sweep.exe --selftest", "          build/map_sweep.exe --selftest", "windows_tests: 'Tool self-tests"),
+                ("build/lvl_tool.exe --selftest || status=1\n          exit $status\n", "build/lvl_tool.exe --selftest || status=1\n", "windows_tests: 'Tool self-tests"),
+                ('node tests/scripts/lvl_core_check.js --module lvl_core_from_image --require', 'node tests/scripts/lvl_core_check.js --module lvl_core_from_image --require || true', 'web_image: "Run the map core'),
+                ('docker run --rm ants-beta nginx -t', 'docker run --rm ants-beta nginx -t || true', 'web_image: "Check the image'),
+                ('docker compose -f docker-compose.stack.yml config --quiet', 'docker compose -f docker-compose.stack.yml config --quiet || :', "web_stack: 'Check the stack file"),
+                ('python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || {', 'python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/ || true; {', 'web_image: "Check the routes'),
+                ("      - name: Did both web jobs pass?\n", "      - name: Did both web jobs pass?\n        if: ${{ failure() }}\n", "web: the step 'Did both web jobs pass?' has `if`"),
+                ("      - name: Did every Linux job pass?\n", "      - name: Did every Linux job pass?\n        if: ${{ github.event_name == 'push' }}\n", "linux: the step 'Did every Linux job pass?' has `if`"),
+                ("      - name: Did every macOS job pass (or was it right to skip them)?\n", "      - name: Did every macOS job pass (or was it right to skip them)?\n        if: ${{ github.event_name == 'push' }}\n", "macos: the step"),
+                ("build/lvl_tool.exe --selftest || status=1\n", "build/lvl_tool.exe --selftest || status=1\n          set +o errexit\n", "windows_tests: 'Tool self-tests"),
+                ("defaults:\n  run:\n    shell: bash\n", "defaults:\n  run:\n    shell: bash {0}\n", "the workflow does not pin"),
+                ("      - name: Did both web jobs pass?\n", "      - name: Did both web jobs pass?\n        shell: bash --noprofile --norc {0}\n", "web: the step 'Did both web jobs pass?' has `shell`"),
+                ("      - name: Check the stack file\n", "      - name: Check the stack file\n        shell: bash --noprofile --norc {0}\n", "web_stack: 'Check the stack file' has a shell of its own")):
             with self.subTest(word):
                 problems = self.judged(old, new, problems_of_swallowed_failures)
                 self.assertTrue(any(p.startswith(word) for p in problems), (word, problems))

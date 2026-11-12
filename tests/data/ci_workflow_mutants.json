@@ -527,7 +527,7 @@
    "old": "  web_stack:\n    name: Web leg (the server and hub images, the stack files)\n    runs-on: ubuntu-latest\n",
    "new": "  web_stack:\n    name: Web leg (the server and hub images, the stack files)\n    needs: web_image\n    runs-on: ubuntu-latest\n",
    "test": "python3 tests/scripts/test_ci_workflow.py",
-   "expect": "test_the_web_legs_build_the_three_images_and_check_the_stacks_and_the_label"
+   "expect": "test_the_web_legs_build_the_three_images_and_check_the_stack_file"
   },
   {
    "id": "a_leg_may_fail_without_failing",
@@ -550,6 +550,110 @@
    "file": ".github/workflows/ci.yml",
    "old": "python3 tests/scripts/run_python_tests.py --shard \"$SLICE\" || status=1",
    "new": "python3 tests/scripts/run_python_tests.py --shard \"$SLICE\" || true",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_gate_step_is_skipped_by_an_if",
+   "file": ".github/workflows/ci.yml",
+   "old": "      - name: Did both web jobs pass?\n",
+   "new": "      - name: Did both web jobs pass?\n        if: ${{ failure() }}\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "the_macos_gate_step_is_skipped_by_an_if",
+   "file": ".github/workflows/ci.yml",
+   "old": "      - name: Did every macOS job pass (or was it right to skip them)?\n",
+   "new": "      - name: Did every macOS job pass (or was it right to skip them)?\n        if: ${{ github.event_name == 'push' }}\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_web_check_swallows_the_failure",
+   "file": ".github/workflows/ci.yml",
+   "old": "node tests/scripts/lvl_core_check.js --module lvl_core_from_image --require\n",
+   "new": "node tests/scripts/lvl_core_check.js --module lvl_core_from_image --require || true\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "the_stack_file_check_swallows_the_failure",
+   "file": ".github/workflows/ci.yml",
+   "old": "docker compose -f docker-compose.stack.yml config --quiet\n",
+   "new": "docker compose -f docker-compose.stack.yml config --quiet || :\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_test_command_only_says_that_it_failed",
+   "file": ".github/workflows/ci.yml",
+   "old": "build/lvl_tool.exe --selftest || status=1",
+   "new": "build/lvl_tool.exe --selftest || echo \"failed\"",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_test_command_exits_0_when_it_fails",
+   "file": ".github/workflows/ci.yml",
+   "old": "build/lvl_tool.exe --selftest || status=1",
+   "new": "build/lvl_tool.exe --selftest || exit 0",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_test_command_is_under_an_if",
+   "file": ".github/workflows/ci.yml",
+   "old": "build/lvl_tool.exe --selftest || status=1\n",
+   "new": "if ! build/lvl_tool.exe --selftest; then echo failed; fi\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_test_command_hides_its_status_behind_an_and",
+   "file": ".github/workflows/ci.yml",
+   "old": "build/lvl_tool.exe --selftest || status=1",
+   "new": "build/lvl_tool.exe --selftest && echo passed",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_status_is_kept_and_never_used",
+   "file": ".github/workflows/ci.yml",
+   "old": "          status=0\n          build/map_sweep.exe --selftest || status=1\n          build/bot_arena.exe --selftest || status=1\n          build/replay_tool.exe --selftest || status=1\n          build/lvl_tool.exe --selftest || status=1\n          exit $status\n",
+   "new": "          build/map_sweep.exe --selftest || status=1\n          build/bot_arena.exe --selftest || status=1\n          build/replay_tool.exe --selftest || status=1\n          build/lvl_tool.exe --selftest || status=1\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_step_turns_the_exit_on_error_off_by_its_long_name",
+   "file": ".github/workflows/ci.yml",
+   "old": "build/lvl_tool.exe --selftest || status=1\n          exit $status\n",
+   "new": "build/lvl_tool.exe --selftest || status=1\n          set +o errexit\n          exit $status\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "a_gate_step_has_a_shell_that_does_not_stop",
+   "file": ".github/workflows/ci.yml",
+   "old": "      - name: Did both web jobs pass?\n",
+   "new": "      - name: Did both web jobs pass?\n        shell: bash --noprofile --norc {0}\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "the_stack_file_step_has_a_shell_that_does_not_stop",
+   "file": ".github/workflows/ci.yml",
+   "old": "      - name: Check the stack file\n",
+   "new": "      - name: Check the stack file\n        shell: bash --noprofile --norc {0}\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "the_default_shell_does_not_stop_on_error",
+   "file": ".github/workflows/ci.yml",
+   "old": "defaults:\n  run:\n    shell: bash\n",
+   "new": "defaults:\n  run:\n    shell: bash {0}\n",
    "test": "python3 tests/scripts/test_ci_workflow.py",
    "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
   },
