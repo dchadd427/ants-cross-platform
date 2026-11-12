@@ -1026,7 +1026,7 @@
   {
    "id": "mod_lines_not_marked",
    "file": "web/home/chat.js",
-   "old": "if (e.mod) r.appendChild(el('span', 'gc-badge' + (admin ? ' gc-badge-admin' : ''), (admin ? TEXT.admin : TEXT.mod) + ' '));",
+   "old": "if (e.mod) { r.appendChild(el('span', 'gc-sr', wordOfRole(e.role) + ' ')); name.setAttribute('title', wordOfRole(e.role)); }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -1255,10 +1255,10 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "mod_badge_touches_the_name",
+   "id": "the_hidden_word_touches_the_name",
    "file": "web/home/chat.js",
-   "old": "(admin ? TEXT.admin : TEXT.mod) + ' '",
-   "new": "(admin ? TEXT.admin : TEXT.mod)",
+   "old": "el('span', 'gc-sr', wordOfRole(e.role) + ' ')",
+   "new": "el('span', 'gc-sr', wordOfRole(e.role))",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2615,8 +2615,8 @@
   {
    "id": "the_username_is_drawn_again",
    "file": "web/home/chat.js",
-   "old": "            put(r, [el('bdi', 'gc-who', e.who)]);\n",
-   "new": "            put(r, [el('bdi', 'gc-who', e.who)]);\n            if (e.u) r.appendChild(el('bdi', 'gc-u', e.u));\n",
+   "old": "if (tools() && e.u) put(",
+   "new": "if (e.u) put(",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2706,29 +2706,29 @@
   {
    "id": "an_admins_line_says_mod",
    "file": "web/home/chat.js",
-   "old": "(admin ? TEXT.admin : TEXT.mod) + ' '",
-   "new": "TEXT.mod + ' '",
+   "old": "return role === 'admin' ? TEXT.administrator : TEXT.moderator; }",
+   "new": "return TEXT.moderator; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "an_admins_line_is_not_red",
    "file": "web/home/chat.js",
-   "old": "'gc-badge' + (admin ? ' gc-badge-admin' : ''), (admin",
-   "new": "'gc-badge', (admin",
+   "old": "(admin ? ' gc-admin' : '')",
+   "new": "''",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "the_chip_shows_no_role",
    "file": "web/home/chat.js",
-   "old": "chipRole.hidden = !has;",
-   "new": "chipRole.hidden = true;",
+   "old": "chipName.className = 'gc-cn' + rc;",
+   "new": "chipName.className = 'gc-cn';",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "the_chip_says_nothing_of_the_role",
    "file": "web/home/chat.js",
-   "old": "+ (has ? (you.role === 'admin' ? TEXT.asAdmin : TEXT.asModerator) : '')",
-   "new": "+ ''",
+   "old": "(has ? ', ' + wordOfRole(you.role) : '')",
+   "new": "''",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3042,21 +3042,21 @@
   {
    "id": "the_red_of_the_admin_is_the_gold",
    "file": "web/home/chat.css",
-   "old": ".gc-badge-admin { color: var(--cream); background: #9d0d17;",
-   "new": ".gc-badge-admin { color: var(--cream); background: var(--gold);",
+   "old": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }",
+   "new": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: var(--gold); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_word_on_the_red_is_dark",
+   "id": "the_chip_plate_is_the_chips_teal",
    "file": "web/home/chat.css",
-   "old": ".gc-badge-admin { color: var(--cream);",
-   "new": ".gc-badge-admin { color: #1a1405;",
+   "old": ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod { padding: 1px 9px; background: #0b1a17;",
+   "new": ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod { padding: 1px 9px; background: #2b6357;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_chip_mark_is_not_hidden_for_nobody",
+   "id": "the_role_line_shows_for_nobody",
    "file": "web/home/chat.css",
-   "old": ".gc-yr[hidden], .gc-cr[hidden] { display: none; }",
+   "old": ".gc-yr[hidden] { display: none; }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3065,6 +3065,125 @@
    "file": "web/home/chat.css",
    "old": "font-style: italic; text-align: center; color: #9cc0b3;",
    "new": "font-style: italic; text-align: center; color: #3a5a50;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "numbers_for_everybody",
+   "file": "web/home/chat.js",
+   "old": "function tools() { return !!you && you.role !== 'none'; }",
+   "new": "function tools() { return true; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "numbers_for_moderators_only_not_administrators",
+   "file": "web/home/chat.js",
+   "old": "function tools() { return !!you && you.role !== 'none'; }",
+   "new": "function tools() { return !!you && you.role === 'mod'; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_number_is_off_by_one",
+   "file": "web/home/chat.js",
+   "old": "' #' + e.id",
+   "new": "' #' + (e.id + 1)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_number_is_the_row_not_the_id",
+   "file": "web/home/chat.js",
+   "old": "' #' + e.id",
+   "new": "' #' + feed.indexOf(e)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_number_has_no_title",
+   "file": "web/home/chat.js",
+   "old": "no.setAttribute('title', TEXT.number);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_promotion_does_not_make_the_log_again",
+   "file": "web/home/chat.js",
+   "old": "if (was !== tools()) stale = true;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_names_title_is_missing",
+   "file": "web/home/chat.js",
+   "old": "name.setAttribute('title', wordOfRole(e.role));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_chips_title_is_missing",
+   "file": "web/home/chat.js",
+   "old": "if (has) chipName.setAttribute('title', wordOfRole(you.role)); else chipName.removeAttribute('title');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_dropdowns_name_has_no_role_class",
+   "file": "web/home/chat.js",
+   "old": "acctName.className = 'gc-an' + roleClass(you ? you.role : 'none');",
+   "new": "acctName.className = 'gc-an';",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_avatar_has_no_role_class",
+   "file": "web/home/chat.js",
+   "old": "chipAv.className = 'gc-av' + rc;",
+   "new": "chipAv.className = 'gc-av';",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_help_of_del_does_not_say_where_the_number_is",
+   "file": "web/home/chat.js",
+   "old": "'take one line off the screen of everybody (use the number beside the line)'",
+   "new": "'take one line off the screen of everybody (by its number)'",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_whole_line_is_yellow",
+   "file": "web/home/chat.css",
+   "old": ".gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }",
+   "new": ".gc-line.gc-mod, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_red_is_the_leave_red",
+   "file": "web/home/chat.css",
+   "old": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }",
+   "new": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #9d0d17; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_role_class_is_missing_from_the_avatar_style",
+   "file": "web/home/chat.css",
+   "old": ".gc-av.gc-r-admin { color: #ff5f66; border-color: #ff5f66; }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_faint_number_is_too_faint",
+   "file": "web/home/chat.css",
+   "old": ".gc-no { font-size: 12px; color: #7f9c92;",
+   "new": ".gc-no { font-size: 12px; color: #2a3f38;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_hidden_word_is_display_none",
+   "file": "web/home/chat.css",
+   "old": ".gc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }",
+   "new": ".gc-sr { display: none; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_administrators_line_is_yellow_the_rules_in_the_other_order",
+   "file": "web/home/chat.css",
+   "old": ".gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }\n.gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }\n",
+   "new": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }\n.gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }\n",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

@@ -123,13 +123,14 @@ class Store(StoreBase):
 
     def add_line(self, account, name, text, mod):
         at = int(self.clock())
+        mark = 2 if mod == 2 else 1 if mod else 0       # (the column `mod` holds the author's role: 0 none, 1 moderator, 2 administrator; an earlier hub reads any of them as true, so a rollback shows the line as a moderator's: no schema step)
         with self.transaction():
-            cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)", (at, account, name, text, 1 if mod else 0))
+            cur = self.db.execute("INSERT INTO lines (at, account, name, text, mod) VALUES (?, ?, ?, ?, ?)", (at, account, name, text, mark))
             over = self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) ORDER BY id LIMIT ?)",
                                    (self.max_lines, TRIM_ROWS)).rowcount      # (a few rows: a file that holds a long backlog is cut down by the purge, a chunk at a time, never by one chat line)
         if over:
             self.unsettled = True                   # (the lines past the newest max_lines are in the log file until it is cut: the hub's clock cuts it at its next look)
-        return Line(cur.lastrowid, at, account, name, text, 1 if mod else 0)
+        return Line(cur.lastrowid, at, account, name, text, mark)
 
     def recent_lines(self, count):
         """The last `count` lines that are not deleted, not past their time and among the newest `max_lines` kept, oldest first."""

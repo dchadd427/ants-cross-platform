@@ -52,7 +52,7 @@ async function main() {
         const hub = await startHub({ login: false, you: null, history: HISTORY, online: 7 });
         const v = dockFor(hub);
         check('the dock opens one socket to /hub/ws of the page\'s own host', await until(() => hub.upgrades === 1 && v.dock.state() === 'live'));
-        check('the welcome is shown: the history as "name: text", the mod marked, the count, the read-only words, and no field', JSON.stringify(v.rows()) === JSON.stringify(['pebble: anyone up for Islands?', 'mod clover: I have a room open', 'juniper: joining!']) && v.on() === '7 here now'
+        check('the welcome is shown: the history as "name: text", the mod marked, the count, the read-only words, and no field', JSON.stringify(v.rows()) === JSON.stringify(['pebble: anyone up for Islands?', 'moderator clover: I have a room open', 'juniper: joining!']) && v.on() === '7 here now'
               && v.note() === 'Chat is read-only for now' && v.form().hidden === true && hub.received.length === 0);
         hub.say('pebble', 'a new line'); hub.say('x'.repeat(40), 'long name');
         check('a line that the hub sends is a line, a long name is cut', await until(() => v.rows().length === 5) && v.rows()[3] === 'pebble: a new line' && v.rows()[4] === 'x'.repeat(32) + '…: long name');

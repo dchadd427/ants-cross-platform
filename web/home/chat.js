@@ -28,17 +28,17 @@
     var TEXT = {
         title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
         offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
-        fold: 'Fold chat', open: 'Open chat', mod: 'mod', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
+        fold: 'Fold chat', open: 'Open chat', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', sure: 'Are you sure? Press again', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my ',
-        admin: 'admin', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an admin' }, asModerator: ', moderator', asAdmin: ', admin',
+        administrator: 'administrator', moderator: 'moderator', only: 'Only you', youAre: { mod: 'You are a moderator', admin: 'You are an administrator' }, number: 'line number',
         helpHead: 'Commands you can use. Only you can see this.', helpNone: 'There are no chat commands for you.', cmdBad: 'That command is not right. Type /help to see the commands.', cmdRate: 'You are going too fast, try again in a moment', bansHead: 'People who are banned', bansNone: 'Nobody is banned.', noName: '(no name)',
         kicked: 'A moderator removed you from the chat. You can log in again.', banned: 'You are banned from the chat. You can still read it.', banField: 'You are banned from the chat'
     };
     var RANK = { none: 0, mod: 1, admin: 2 };                            // (the hub's own table: docs/HUB.md, "Moderation")
     var COMMANDS = [                                                     // [the word, the rank that may use it, how it is typed, what it does]: what /help lists; the hub decides what is done
         ['/mute', 1, '/mute name minutes', 'stop a person writing for 1 to 10080 minutes'], ['/unmute', 1, '/unmute name', 'allow a muted person to write again'],
-        ['/del', 1, '/del number', 'take one line off the screen of everybody (by its number)'], ['/kick', 1, '/kick name', 'remove a person from the chat (they can log in again)'],
+        ['/del', 1, '/del number', 'take one line off the screen of everybody (use the number beside the line)'], ['/kick', 1, '/kick name', 'remove a person from the chat (they can log in again)'],
         ['/ban', 2, '/ban name', 'stop a person writing until the ban is lifted (they can still read)'], ['/unban', 2, '/unban name', 'lift a ban'], ['/bans', 2, '/bans', 'list the people who are banned']
     ];
     var DONE = { mute: 'Done: the person is muted.', unmute: 'Done: the person can write again.', del: 'Done: the line is gone.', kick: 'Done: the person was removed.', ban: 'Done: the person is banned.', unban: 'Done: the ban is lifted.' };
@@ -102,6 +102,8 @@
         var text = clip(plain(m.text.slice(0, LIMIT.line * 4)), LIMIT.line), sys = m.sys === true;
         return shows(text) ? { id: m.id, who: nameOf(m.who) || '?', text: text, mod: !sys && m.mod === true, role: sys ? 'none' : roleOf(m.role, m.mod), sys: sys, k: nameOf(m.k), u: nameOf(m.u) } : null;
     }
+    function wordOfRole(role) { return role === 'admin' ? TEXT.administrator : TEXT.moderator; }
+    function roleClass(role) { return role === 'admin' ? ' gc-r-admin' : role === 'mod' ? ' gc-r-mod' : ''; }       // (the name in red or yellow: chat.css)
     function wordOfCommand(text) {                                       // the command word that a text starts with, in lower case ('/mute'), or '': the hub reads them in any case
         var m = /^(\/[a-z]+)(?: |$)/i.exec(text);
         return m ? m[1].toLowerCase() : '';
@@ -187,10 +189,10 @@
         var acct = el('div', 'gc-acct'), acctName = el('bdi', 'gc-an'), outBtn = el('button', 'btn gc-out', TEXT.logout), forgetBtn = el('button', 'gc-forget', TEXT.forget), pickNote = el('p', 'gc-pn'), pickBtn = el('button', 'btn gc-pick');
         outBtn.type = 'button'; forgetBtn.type = 'button'; pickBtn.type = 'button';
         put(acct, [el('i', 'gc-dc'), el('span', 'gc-as', TEXT.chatting), acctName]);
-        var yr = el('p', 'gc-yr'), yrBadge = el('span', 'gc-badge'), yrText = el('span', 'gc-yt'); yr.hidden = true; put(yr, [yrBadge, yrText]);       // (the role, in words, in the dropdown of the account)
+        var yr = el('p', 'gc-yr'); yr.hidden = true;       // (the role, in words, in the dropdown of the account)
         put(slot, [acct, yr, pickNote, pickBtn, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
-        var chipMark = null, chipAv = null, chipName = null, chipRole = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
-        if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chipRole = el('span', 'gc-cr'); chipRole.hidden = true; chip.textContent = ''; put(chip, [chipMark, chipAv, chipName, chipRole]); }
+        var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
+        if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
         put(body, [log, note, news, form, guest]);
         put(box, [head, body]);
         host.appendChild(box); if (chip && chip.parentNode && chip.parentNode.insertBefore) chip.parentNode.insertBefore(slot, chip.nextSibling); else (doc.body || host).appendChild(slot);       // (right after the chip: the Tab order and the bar's inert follow)
@@ -208,11 +210,15 @@
             }
             if (e.sys) return put(el('div', 'gc-line gc-event'), [el('bdi', 'gc-text', e.text)]);       // (a line of the hub's own, drawn quietly; it names the person in its words, and has no author)
             r = el('div', 'gc-line' + (e.mod ? ' gc-mod' : '') + (admin ? ' gc-admin' : '') + (e.own ? ' gc-me' : ''));
-            if (e.mod) r.appendChild(el('span', 'gc-badge' + (admin ? ' gc-badge-admin' : ''), (admin ? TEXT.admin : TEXT.mod) + ' '));
-            put(r, [el('bdi', 'gc-who', e.who)]);
+            var name = el('bdi', 'gc-who', e.who);
+            if (e.mod) { r.appendChild(el('span', 'gc-sr', wordOfRole(e.role) + ' ')); name.setAttribute('title', wordOfRole(e.role)); }       // (the name is red or yellow: the word is in the accessible name too, so that color is never the only sign)
+            put(r, [name]);
+            if (tools() && e.u) put(r, [el('bdi', 'gc-u', ' (' + e.u + ')')]);       // (a moderator is shown the username where it differs from the name; nobody else ever is)
             put(r, [el('span', 'gc-sep', ': '), el('bdi', 'gc-text', e.text)]);
+            if (tools()) { var no = el('span', 'gc-no', ' #' + e.id); no.setAttribute('title', TEXT.number); r.appendChild(no); }       // (the number that /del takes: a moderator's only)
             return r;
         }
+        function tools() { return !!you && you.role !== 'none'; }                // (a moderator or an administrator: the line numbers and the usernames are for them)
         function mine(e) { return !!you && (you.k ? e.k === you.k : e.who === you.name); }       // (by the hub's key; a hub that sends none: by the name)
         function atBottom() { var h = log.scrollHeight; return typeof h !== 'number' || h - log.scrollTop - log.clientHeight < 48; }
         function settle(force) {                                                 // one scroll to the newest line for a whole burst, and only when the reader was at the bottom (a log that is made again is read from the bottom)
@@ -264,8 +270,8 @@
             note.textContent = notice || (removed ? TEXT[removed] : state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');       // (the notice of a removal stays until the person is somebody else)
             note.setAttribute('data-removed', removed && !notice ? removed : '');
             slot.hidden = !(live && you && login && menuOn); acctName.textContent = you ? you.name : '';
-            yr.hidden = !(you && you.role !== 'none');       // (the role in words, with its mark)
-            if (!yr.hidden) { yrBadge.className = 'gc-badge' + (you.role === 'admin' ? ' gc-badge-admin' : ''); yrBadge.textContent = you.role === 'admin' ? TEXT.admin : TEXT.mod; yrText.textContent = ' ' + TEXT.youAre[you.role]; }
+            acctName.className = 'gc-an' + roleClass(you ? you.role : 'none'); if (you && you.role !== 'none') acctName.setAttribute('title', wordOfRole(you.role)); else acctName.removeAttribute('title');
+            yr.hidden = !(you && you.role !== 'none'); yr.textContent = yr.hidden ? '' : TEXT.youAre[you.role];       // (the role in words, as well as in the color of the name)
             if (slot.hidden && chip && slot.contains && slot.contains(doc.activeElement)) { if (live && login) chip.focus(); else refocus = true; }       // (the dropdown goes under the focus: a Log out, a Forget me: the focus goes to the chip, not to nowhere; a name that is picked closes the socket and hides the chip too, so the focus waits for the dropdown to come back)
             outBtn.disabled = forgetBtn.disabled = busy;
             pickNote.hidden = pickBtn.hidden = !(you && you.other);
@@ -278,9 +284,9 @@
                 chip.hidden = !(live && login);
                 chipAv.hidden = !you; chipMark.hidden = !!you;
                 chipAv.textContent = you ? initial(you.name) : ''; chipName.textContent = you ? you.name : TEXT.login;
-                var has = !!you && you.role !== 'none';
-                chipRole.hidden = !has; chipRole.className = 'gc-cr' + (has && you.role === 'admin' ? ' gc-cr-admin' : ''); chipRole.textContent = has ? (you.role === 'admin' ? TEXT.admin : TEXT.mod) : '';       // (the mark on the chip: the word, so that the color is never the only sign)
-                chip.setAttribute('aria-label', you ? TEXT.chatting + you.name + (has ? (you.role === 'admin' ? TEXT.asAdmin : TEXT.asModerator) : '') : TEXT.loginWith);
+                var has = !!you && you.role !== 'none', rc = roleClass(you ? you.role : 'none');
+                chipName.className = 'gc-cn' + rc; chipAv.className = 'gc-av' + rc; if (has) chipName.setAttribute('title', wordOfRole(you.role)); else chipName.removeAttribute('title');       // (the name is red or yellow; the word is in the label and the title too)
+                chip.setAttribute('aria-label', you ? TEXT.chatting + you.name + (has ? ', ' + wordOfRole(you.role) : '') : TEXT.loginWith);
                 if (you) { chip.setAttribute('aria-haspopup', 'true'); chip.setAttribute('aria-controls', slot.id); chip.setAttribute('aria-expanded', menuOn ? 'true' : 'false'); } else { chip.removeAttribute('aria-haspopup'); chip.removeAttribute('aria-controls'); chip.removeAttribute('aria-expanded'); }
             }
             if (stale && seen()) repaint();
@@ -397,7 +403,9 @@
         function onYou(m) {                                                      // the role changed (a promotion, a removal, a role that ran out): the marks and the commands follow at once; who the visitor is does not change on a socket
             var next = you ? youOf(m.you) : null;
             if (!next) return;
+            var was = tools();
             you.role = next.role; you.mod = next.mod;
+            if (was !== tools()) stale = true;                                   // (the numbers and the usernames come or go with the role: the log is made again)
             render();
             tapped('you', m);
         }
@@ -521,5 +529,5 @@
         };
     }
 
-    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, youOf: youOf, roleOf: roleOf, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
+    return { PATH: PATH, LIMIT: LIMIT, MS: MS, PACE: PACE, TEXT: TEXT, ERR: ERR, plain: plain, points: points, clip: clip, parse: parse, count: count, lineOf: lineOf, youOf: youOf, roleOf: roleOf, wordOfRole: wordOfRole, helpOf: helpOf, bansOf: bansOf, wordOfCommand: wordOfCommand, wordOf: wordOf, delayOf: delayOf, addressOf: addressOf, mount: mount };
 });

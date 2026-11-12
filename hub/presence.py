@@ -67,9 +67,12 @@ def bare(where):
 
 
 def row_of(ident, name, mod, where):
+    """`mod` is False, True, or the role's word (`mod`, `admin`): a moderator's row says `mod` (for both roles, as it always did) and, with the word, `role`."""
     row = {"i": ident, "name": name, "at": where.at if where else "look"}
     if mod:
         row["mod"] = True
+        if mod in ("mod", "admin"):
+            row["role"] = mod
     if where is not None and where.pub:
         row["pub"] = True
         for key, value in (("map", where.map), ("n", where.n), ("of", where.of), ("code", where.code)):
@@ -192,12 +195,13 @@ class Presence:
         for account in banned.intersection(best):
             del best[account]
             guests += 1
-        mods = {account for account in best if self.chat.is_mod(account)}
+        mods = {account: self.chat.roles.role_of(account) for account in best}
+        mods = {account: role for account, role in mods.items() if role != "none"}
         order = sorted(best.items(), key=lambda item: (item[0] not in mods, RANK[item[1][2].at if item[1][2] else "look"], item[1][1], item[0]))
         rows = {}
         for account, (_, name, where, young) in order[:self.limits.who_rows_max]:
             ident = self.row_id(account)
-            rows[ident] = row_of(ident, name, account in mods, bare(where) if where is not None and (young or account in muted) else where)
+            rows[ident] = row_of(ident, name, mods.get(account, False), bare(where) if where is not None and (young or account in muted) else where)
         return {"n": len(best) + guests, "g": guests, "more": max(0, len(best) - self.limits.who_rows_max), "rows": rows}
 
     def frame(self, view, previous):

@@ -1092,8 +1092,8 @@
   {
    "id": "line_write_error_cuts_the_socket",
    "file": "hub/chat.py",
-   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except StoreError as e:",
-   "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, mod)\n        except ZeroDivisionError as e:",
+   "old": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except StoreError as e:",
+   "new": "        try:\n            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)\n        except ZeroDivisionError as e:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {

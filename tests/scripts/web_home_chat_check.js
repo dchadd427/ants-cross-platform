@@ -174,7 +174,7 @@ function rig(o) {
         && r.fold().type === 'button' && r.fold().getAttribute('aria-controls') === 'gchat-body' && r.fold().getAttribute('aria-label') === 'Fold chat' && r.fold().getAttribute('aria-expanded') === 'true' && r.field().getAttribute('autocomplete') === 'off');
     check('before the welcome: "connecting…", no form, no online count, no note, the dock is open on a desktop', box.getAttribute('data-state') === 'connecting' && r.on() === 'connecting…' && r.form().hidden === true && r.note() === '' && box.getAttribute('data-open') === 'true' && r.rows().length === 0);
     r.live(W({ login: false, you: null, online: 7, history: HISTORY }));
-    check('the welcome shows the history oldest first as "name: text", the mod\'s line marked, and how many are here', eq(r.rowTexts(), ['pebble: anyone up for Islands?', 'mod clover: I have a room open', 'juniper: joining!']) && one(r.rows()[1], 'gc-badge').textContent === 'mod '
+    check('the welcome shows the history oldest first as "name: text", the mod\'s line marked, and how many are here', eq(r.rowTexts(), ['pebble: anyone up for Islands?', 'moderator clover: I have a room open', 'juniper: joining!']) && one(r.rows()[1], 'gc-sr').textContent === 'moderator '
           && cls(r.rows()[1]).indexOf('gc-mod') !== -1 && cls(r.rows()[0]).indexOf('gc-mod') === -1 && r.on() === '7 here now' && box.getAttribute('data-state') === 'live');
     check('a name and a line each sit in a <bdi> (the right-to-left letters of one do not reorder the other)', eq(r.rows()[0].children.map((c) => c.tagName), ['bdi', 'span', 'bdi']));
     check('login:false and nobody named: "Chat is read-only for now" and the guest line; NO field, NO Send, NO login button (the only button on the screen is the fold button; the login\'s place is hidden)',
@@ -454,7 +454,7 @@ function rig(o) {
     together.s().recv({ t: 'err', code: 'bad' });
     same('a command and a line sent within one round trip, and the hub says `bad` to the command: the private answer is the command\'s, and nothing is put in the field (the line was taken)', [together.answers(), together.field().value], [['That command is not right. Type /help to see the commands.'], '']);
     together.s().recv(L(90, 'maple.leaf', 'hello'));
-    same('... the line is shown once, as the line that it is, and the field is still empty', [together.rowTexts().filter((t) => t === 'maple.leaf: hello').length, together.field().value], [1, '']);
+    same('... the line is shown once, as the line that it is, and the field is still empty', [together.rowTexts().filter((t) => t.indexOf('maple.leaf: hello') !== -1).length, together.field().value], [1, '']);
     together.clock.advance(2500); together.dock.say('again'); together.s().recv({ t: 'err', code: 'rate' });
     same('... and the next refusal of a line is for that line', together.field().value, 'again');
     const lineFirst = rig(); lineFirst.live(W({ you: MOD }));
@@ -994,7 +994,7 @@ function bring(env) {                                     // the two files arriv
     check('before the hub has spoken the chip is hidden (a page that cannot reach the hub offers no login), and so is the account line', r.chip.hidden === true && r.dock.slot.hidden === true);
     r.live(W({ login: true, you: null }));
     check('login:true and nobody named: the chip is shown, with the mark of Discord and "Log in" (not the circle), and says what it does', r.chip.hidden === false && one(r.chip, 'gc-dc').hidden === false && one(r.chip, 'gc-av').hidden === true && one(r.chip, 'gc-cn').textContent === 'Log in'
-          && r.chip.getAttribute('aria-label') === 'Log in with Discord' && r.chip.children.length === 4);       // (the mark, the circle, the name, and the role's word, which is hidden for a person who holds none)
+          && r.chip.getAttribute('aria-label') === 'Log in with Discord' && r.chip.children.length === 3);
     r.chip.click();
     same('a press on the chip is a navigation of the page to /hub/login?next=home (a full page, not a request): the one address, once; no socket message, nothing else', [r.went, r.sockets.length, r.s().sent.length, r.fetches.length], [['/hub/login?next=home'], 1, 0, 0]);
     one(r.root, 'gc-login').click();
@@ -1313,8 +1313,13 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     r.live(W({ login: true, you: Object.assign({}, TWO, { mod: true }), history }));
     r.s().recv(Object.assign(L(3, 'Maple Leaf', 'live'), { k: OTHERS, u: 'bbb.two' }));
     const rows = r.rows();
-    check('a line is drawn with the name only: no username, not even in a moderator\'s copy (the hub still sends it; the page keeps it in its model and does not draw it)', rows.length === 3 && rows.every((x) => one(x, 'gc-u') === null)
-          && rows[0].textContent === 'Maple Leaf: hello' && rows[1].textContent === 'pebble: a line that shows the username' && rows[2].textContent === 'Maple Leaf: live' && Pure.lineOf({ id: 1, who: 'a', text: 'x', u: 'aaa.one' }).u === 'aaa.one');
+    const none = rig({});
+    none.live(W({ login: true, you: TWO, history }));
+    none.s().recv(Object.assign(L(3, 'Maple Leaf', 'live'), { k: OTHERS, u: 'bbb.two' }));
+    check('a person who holds no role is shown the name only: no username, no line number, even where the hub sent a username (it never does: the page does not draw it for them)', none.rows().length === 3 && none.rows().every((x) => one(x, 'gc-u') === null && one(x, 'gc-no') === null)
+          && none.rows()[0].textContent === 'Maple Leaf: hello' && none.rows()[1].textContent === 'pebble: a line that shows the username' && none.rows()[2].textContent === 'Maple Leaf: live' && Pure.lineOf({ id: 1, who: 'a', text: 'x', u: 'aaa.one' }).u === 'aaa.one');
+    check('a moderator is shown the username where the hub sent one (it differs from the name) and the number of every line, which is the hub\'s own id (what /del takes)', rows.length === 3 && one(rows[0], 'gc-u').textContent === ' (aaa.one)' && one(rows[1], 'gc-u') === null && one(rows[2], 'gc-u').textContent === ' (bbb.two)'
+          && rows.map((x) => one(x, 'gc-no').textContent).join() === ' #1, #2, #3' && rows[0].textContent === 'Maple Leaf (aaa.one): hello #1' && rows[1].textContent === 'pebble: a line that shows the username #2' && rows[2].textContent === 'Maple Leaf (bbb.two): live #3');
     const odd = rig({});
     odd.live(W({ login: true, you: TWO, history: [{ id: 1, at: 1, who: 'a', text: 'x', mod: false, u: '<i>x</i> \u202eevil\u202c \u200b' }, { id: 2, at: 2, who: 'a', text: 'y', mod: false, u: 'u'.repeat(80) }, { id: 3, at: 3, who: 'a', text: 'z', mod: false, u: { x: 1 } }] }));
     check('a username from the hub in any shape is not drawn and breaks nothing (markup, invisible characters, a long one, an object)', odd.rows().every((x) => one(x, 'gc-u') === null) && odd.rows()[0].textContent === 'a: x'
@@ -1359,23 +1364,40 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     const of = (you) => { const r = rig({ chip: true }); r.live(W({ login: true, you })); return r.root.getAttribute('data-role') + '/' + r.chip.getAttribute('aria-label'); };
     same('the welcome\'s role is the dock\'s: none, mod and admin (the chip says it too, in words); an older hub that says `mod` only is a moderator; a role that is not one of the three is none; a reader has none',
         [of(asRole('none')), of(asRole('mod')), of(asRole('admin')), of({ name: 'maple.leaf', mod: true }), of({ name: 'maple.leaf', mod: false, role: 'root' }), of(null)],
-        ['none/Chatting as maple.leaf', 'mod/Chatting as maple.leaf, moderator', 'admin/Chatting as maple.leaf, admin', 'mod/Chatting as maple.leaf, moderator', 'none/Chatting as maple.leaf', 'none/Log in with Discord']);
+        ['none/Chatting as maple.leaf', 'mod/Chatting as maple.leaf, moderator', 'admin/Chatting as maple.leaf, administrator', 'mod/Chatting as maple.leaf, moderator', 'none/Chatting as maple.leaf', 'none/Log in with Discord']);
 }
-{   // the marks: the chip, the dropdown, the lines
+{   // the role is the color of the NAME: the chip, the dropdown, the lines; the words are in the accessible name
     const r = menuOf(rig({ chip: true }));
     r.live(W({ login: true, you: asRole('admin'), history: [Object.assign(L(1, 'boss', 'hello', true), { role: 'admin' }), L(2, 'clover', 'a room', true), L(3, 'juniper', 'hi'), Object.assign(L(4, 'pebble', 'not a moderator', false), { role: 'admin' })].map((m) => { delete m.t; return m; }) }));
-    const word = (e) => e.textContent;
-    check('the chip of an admin has the word ADMIN (as text, so the color is not the only sign) and the mark of red; the dropdown says "You are an admin" with the same mark', one(r.chip, 'gc-cr').hidden === false && word(one(r.chip, 'gc-cr')) === 'admin' && cls(one(r.chip, 'gc-cr')).indexOf('gc-cr-admin') !== -1
-          && r.dock.slot.hidden === false && one(r.dock.slot, 'gc-yr').hidden === false && word(one(r.dock.slot, 'gc-badge')) === 'admin' && cls(one(r.dock.slot, 'gc-badge')).indexOf('gc-badge-admin') !== -1 && one(r.dock.slot, 'gc-yt').textContent === ' You are an admin');
-    same('in the log an admin\'s line has the word admin (the red mark), a moderator\'s the word mod (the gold one), a line of nobody none, and `role: admin` on a line whose `mod` is false marks nobody', r.rows().map((x) => [one(x, 'gc-badge') ? one(x, 'gc-badge').textContent : '', one(x, 'gc-badge') ? cls(one(x, 'gc-badge')).indexOf('gc-badge-admin') !== -1 : false]),
-        [['admin ', true], ['mod ', false], ['', false], ['', false]]);
-    same('... and the line texts are the names and the lines, with the word before them', r.rowTexts(), ['admin boss: hello', 'mod clover: a room', 'juniper: hi', 'pebble: not a moderator']);
+    check('the chip of an admin: the name has the class of red and the title and label say administrator (no tag, no extra element: the chip is the mark, the circle and the name)', r.chip.children.length === 3 && cls(one(r.chip, 'gc-cn')).indexOf('gc-r-admin') !== -1 && one(r.chip, 'gc-cn').getAttribute('title') === 'administrator'
+          && cls(one(r.chip, 'gc-av')).indexOf('gc-r-admin') !== -1 && r.chip.getAttribute('aria-label') === 'Chatting as maple.leaf, administrator' && one(r.chip, 'gc-cn').textContent === 'maple.leaf');
+    check('the dropdown: the name is red with the title, and the role is said in words', r.dock.slot.hidden === false && cls(one(r.dock.slot, 'gc-an')).indexOf('gc-r-admin') !== -1 && one(r.dock.slot, 'gc-an').getAttribute('title') === 'administrator' && one(r.dock.slot, 'gc-yr').hidden === false && one(r.dock.slot, 'gc-yr').textContent === 'You are an administrator'
+          && one(r.dock.slot, 'gc-badge') === null);
+    same('in the log an administrator\'s line has the class for red and the word in its accessible name (a hidden word and the title of the name), a moderator\'s the class for yellow and its word, a line of nobody none; `role: admin` on a line whose `mod` is false marks nobody; no line has a tag',
+        r.rows().map((x) => [cls(x).filter((c) => c === 'gc-admin' || c === 'gc-mod').join('+'), one(x, 'gc-sr') ? one(x, 'gc-sr').textContent : '', one(x, 'gc-who').getAttribute('title'), one(x, 'gc-badge') === null]),
+        [['gc-mod+gc-admin', 'administrator ', 'administrator', true], ['gc-mod', 'moderator ', 'moderator', true], ['', '', null, true], ['', '', null, true]]);
+    same('... the text of a line is the text (it has its own class and no role class: its color is the page\'s)', r.rows().map((x) => [one(x, 'gc-text').textContent, cls(one(x, 'gc-text')).join(' ')]), [['hello', 'gc-text'], ['a room', 'gc-text'], ['hi', 'gc-text'], ['not a moderator', 'gc-text']]);
     const m = menuOf(rig({ chip: true }));
     m.live(W({ login: true, you: asRole('mod') }));
-    check('a moderator\'s chip says MOD with the gold mark and no red', word(one(m.chip, 'gc-cr')) === 'mod' && cls(one(m.chip, 'gc-cr')).indexOf('gc-cr-admin') === -1 && one(m.dock.slot, 'gc-yt').textContent === ' You are a moderator');
+    check('a moderator\'s chip: yellow (the class), the title and label say moderator, and the dropdown says it', cls(one(m.chip, 'gc-cn')).indexOf('gc-r-mod') !== -1 && cls(one(m.chip, 'gc-cn')).indexOf('gc-r-admin') === -1 && one(m.chip, 'gc-cn').getAttribute('title') === 'moderator' && m.chip.getAttribute('aria-label') === 'Chatting as maple.leaf, moderator' && one(m.dock.slot, 'gc-yt') === null && one(m.dock.slot, 'gc-yr').textContent === 'You are a moderator');
     const n = menuOf(rig({ chip: true }));
     n.live(W({ login: true, you: asRole('none') }));
-    check('a person who holds no role has no mark on the chip and no role line in the dropdown', one(n.chip, 'gc-cr').hidden === true && one(n.chip, 'gc-cr').textContent === '' && one(n.dock.slot, 'gc-yr').hidden === true);
+    check('a person who holds no role has plain names: no class, no title, no role line', one(n.chip, 'gc-cn').className === 'gc-cn' && one(n.chip, 'gc-cn').getAttribute('title') === null && one(n.chip, 'gc-av').className === 'gc-av' && one(n.dock.slot, 'gc-an').className === 'gc-an' && one(n.dock.slot, 'gc-yr').hidden === true);
+}
+{   // the numbers and the usernames of a moderator, and nobody else's
+    const hist = [Object.assign(L(7, 'Maple Leaf', 'one'), { k: OTHERS, u: 'aaa.one' }), L(8, 'pebble', 'two'), { id: 9, at: 9, who: 'system', text: 'x was kicked.', mod: false, k: '', sys: true }].map((x) => { const y = Object.assign({}, x); delete y.t; return y; });
+    const rowsOf = (role) => { const r = rig({}); r.live(W({ login: true, you: asRole(role), history: hist })); return r; };
+    const mod = rowsOf('mod'), admin = rowsOf('admin'), none = rowsOf('none');
+    check('a moderator and an administrator see the number of each line of a person (not the hub\'s own line) and the username where the hub sent one; the number is the line\'s id', [mod, admin].every((q) => q.rows().slice(0, 2).map((x) => one(x, 'gc-no').textContent).join() === ' #7, #8' && one(q.rows()[2], 'gc-no') === null && one(q.rows()[0], 'gc-u').textContent === ' (aaa.one)' && one(q.rows()[1], 'gc-u') === null) && mod.rows()[0].textContent === 'Maple Leaf (aaa.one): one #7');
+    check('nobody else ever sees one: a person with no role, a reader, a hub that says nothing of a role', [none, (() => { const q = rig({}); q.live(W({ login: true, you: null, history: hist })); return q; })(), (() => { const q = rig({}); q.live(W({ login: false, you: null, history: hist })); return q; })(), (() => { const q = rig({}); q.live(W({ login: true, you: { name: 'maple.leaf', mod: false }, history: hist })); return q; })()].every((q) => q.rows().every((x) => one(x, 'gc-no') === null && one(x, 'gc-u') === null) && q.rowTexts()[0] === 'Maple Leaf: one'));
+    const live = rig({}); live.live(W({ login: true, you: asRole('mod') })); live.s().recv(Object.assign(L(31, 'pebble', 'live line'), { u: 'peb.ble' }));
+    check('a live line is numbered the same way', live.rows().length === 1 && one(live.rows()[0], 'gc-no').textContent === ' #31' && one(live.rows()[0], 'gc-u').textContent === ' (peb.ble)' && one(live.rows()[0], 'gc-no').getAttribute('title') === 'line number');
+    const change = rig({}); change.live(W({ login: true, you: asRole('none'), history: hist }));
+    check('before a promotion nothing is shown; when the `you` frame comes, the log is made again with the numbers (no reload), and when the role goes, they go', change.rows().every((x) => one(x, 'gc-no') === null) && (change.s().recv({ t: 'you', you: asRole('mod') }), change.rows().slice(0, 2).every((x) => one(x, 'gc-no') !== null))
+          && (change.s().recv({ t: 'you', you: asRole('none') }), change.rows().every((x) => one(x, 'gc-no') === null && one(x, 'gc-u') === null)));
+    const hostile = rig({}); hostile.live(W({ login: true, you: asRole('mod'), history: [{ id: 5, at: 1, who: 'a', text: 'x', mod: false, u: '<img src=x onerror=alert(1)> ‮' }] }));
+    check('the username is text (markup stays markup, the bidirectional controls go) in a <bdi>', hostile.env.innerHTMLWrites.length === 0 && hostile.rows()[0].textContent === 'a (<img src=x onerror=alert(1)>): x #5' && one(hostile.rows()[0], 'gc-u').tagName === 'bdi');
+    check('the help line for /del says to use the number beside the line', Pure.helpOf('mod').filter((l) => l[0] === '/del number')[0][1].indexOf('number beside the line') !== -1);
 }
 {   // the role changes while the page is open
     const r = menuOf(rig({ chip: true }));
@@ -1383,15 +1405,15 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     r.live(W({ login: true, you: asRole('none') }));
     r.dock.tap((kind, m) => seenBy.push(kind + ':' + (m && m.you ? m.you.role : '')));
     r.s().recv({ t: 'you', you: asRole('mod') });
-    check('a `you` frame that makes a person a moderator: the chip, the data-role and the dropdown follow at once, nobody reloads; the players list hears of it (tap kind `you`)', r.root.getAttribute('data-role') === 'mod' && one(r.chip, 'gc-cr').hidden === false && one(r.chip, 'gc-cr').textContent === 'mod' && r.errors.length === 0 && seenBy.join() === 'live:none,you:mod');
+    check('a `you` frame that makes a person a moderator: the chip, the data-role and the dropdown follow at once, nobody reloads; the players list hears of it (tap kind `you`)', r.root.getAttribute('data-role') === 'mod' && cls(one(r.chip, 'gc-cn')).indexOf('gc-r-mod') !== -1 && r.errors.length === 0 && seenBy.join() === 'live:none,you:mod');
     r.dock.say('/help');
-    same('... and /help lists the moderator\'s four commands', r.answers(), ['Commands you can use. Only you can see this.\n/mute name minutes stop a person writing for 1 to 10080 minutes\n/unmute name allow a muted person to write again\n/del number take one line off the screen of everybody (by its number)\n/kick name remove a person from the chat (they can log in again)']);
+    same('... and /help lists the moderator\'s four commands', r.answers(), ['Commands you can use. Only you can see this.\n/mute name minutes stop a person writing for 1 to 10080 minutes\n/unmute name allow a muted person to write again\n/del number take one line off the screen of everybody (use the number beside the line)\n/kick name remove a person from the chat (they can log in again)']);
     r.s().recv({ t: 'you', you: asRole('admin') });
     r.clock.advance(2600); r.dock.say('/help');
-    check('... an admin\'s seven', r.answers().length === 2 && r.answers()[1].split('\n').length === 8 && r.root.getAttribute('data-role') === 'admin' && one(r.chip, 'gc-cr').textContent === 'admin');
+    check('... an admin\'s seven', r.answers().length === 2 && r.answers()[1].split('\n').length === 8 && r.root.getAttribute('data-role') === 'admin' && cls(one(r.chip, 'gc-cn')).indexOf('gc-r-admin') !== -1);
     r.s().recv({ t: 'you', you: asRole('none') });
     r.clock.advance(2600); r.dock.say('/help'); r.dock.say('/kick bob');
-    same('... and a removal: the marks go, and the commands go with them (a command word is refused here, nothing is sent)', [r.root.getAttribute('data-role'), one(r.chip, 'gc-cr').hidden, r.answers().slice(2), r.s().sent.filter((x) => /kick/.test(x)).length], ['none', true, ['There are no chat commands for you.', 'You are not allowed to do that'], 0]);
+    same('... and a removal: the marks go, and the commands go with them (a command word is refused here, nothing is sent)', [r.root.getAttribute('data-role'), one(r.chip, 'gc-cn').className, r.answers().slice(2), r.s().sent.filter((x) => /kick/.test(x)).length], ['none', 'gc-cn', ['There are no chat commands for you.', 'You are not allowed to do that'], 0]);
     const other = rig({}); other.live(W({ login: true, you: asRole('none') }));
     ['x', null, 5, [], {}, { you: null }, { you: 'admin' }, { you: { name: '', role: 'admin' } }, { you: { role: 'admin' } }].forEach((f) => other.s().recv(typeof f === 'object' && f !== null && !Array.isArray(f) && f.you !== undefined ? Object.assign({ t: 'you' }, f) : { t: 'you', you: f }));
     check('a `you` frame that is not a visitor with a name is ignored (nothing changes, nothing throws)', other.root.getAttribute('data-role') === 'none' && other.errors.length === 0);

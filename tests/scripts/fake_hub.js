@@ -8,7 +8,7 @@
 // The roles (docs/HUB.md "Roles", "Moderation"): `you.role` is none, mod or admin (`mod` is true for both); `hub.you(you)` changes it and tells every socket with a `you` frame; a moderator's command in a `say`
 // is read as the hub reads it (the seven words, any case; a role of none gets `bad` and nothing is posted; a role that may not gets `power`; a name that is nobody's in `people` ({ name: role }) gets `who`; a
 // person of the same or a higher rank, or oneself, gets `power`; `o.roleDown` makes every command `role`; a done one is answered `ok`, a kick and a ban also make the hub's own line `<name> was kicked.` with
-// `sys: true`, and /bans answers the private `bans` frame from `o.bans`); `hub.bye(why)` sends the `bye` frame and closes the sockets (a kick also ends the login: the next welcome names nobody).
+// `sys: true`, a line of a moderator or an administrator carries `role`, and /bans answers the private `bans` frame from `o.bans`); `hub.bye(why)` sends the `bye` frame and closes the sockets (a kick also ends the login: the next welcome names nobody).
 //   const hub = await startHub({ you: { name: 'maple.leaf', mod: false }, login: true, history: [line(1, 'pebble', 'hello')] });  hub.url; hub.say('pebble', 'hi'); hub.drop(); await hub.close();
 'use strict';
 const http = require('http');
@@ -96,7 +96,7 @@ function startHub(options) {
         if ([...m.text].length > 200) { hub.send(peer, { t: 'err', code: 'long' }); return; }
         if (w.said.has(m.text) || w.tokens < 1) { hub.rateRefusals = (hub.rateRefusals || 0) + 1; hub.send(peer, { t: 'err', code: 'rate' }); return; }
         w.tokens -= 1; w.said.set(m.text, now);
-        hub.say(o.you.name, m.text, o.you.mod, o.you.k ? { k: o.you.k } : undefined);
+        hub.say(o.you.name, m.text, o.you.mod, Object.assign(o.you.k ? { k: o.you.k } : {}, o.you.role === 'mod' || o.you.role === 'admin' ? { role: o.you.role } : {}));       // (a line says the role that its author has, as the hub's does)
     }
     const RANK = { none: 0, mod: 1, admin: 2 }, NEEDS = { mute: 1, unmute: 1, del: 1, kick: 1, ban: 2, unban: 2, bans: 2 }, ARGS = { mute: 2, unmute: 1, del: 1, kick: 1, ban: 1, unban: 1, bans: 0 };
     function command(peer, text) {                      // a moderator's command, as the hub answers it

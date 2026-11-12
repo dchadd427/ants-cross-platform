@@ -390,7 +390,7 @@ class TheList(WorldTest):
         self.w.join(MOD)
         page = self.w.watch(a).update()
         rows = sorted(page.rows.values(), key=lambda r: r["name"])
-        self.assertEqual([{k: v for k, v in r.items() if k != "i"} for r in rows], [{"name": "alice", "at": "look"}, {"name": "moddy", "at": "look", "mod": True}])
+        self.assertEqual([{k: v for k, v in r.items() if k != "i"} for r in rows], [{"name": "alice", "at": "look"}, {"name": "moddy", "at": "look", "mod": True, "role": "mod"}])
         self.assertNotIn("1001", json.dumps(a.frames()))
         self.assertNotIn("9001", json.dumps(a.frames()))
 

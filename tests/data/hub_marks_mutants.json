@@ -1,0 +1,134 @@
+{
+ "note": "Mutants of the role that a line and a row of the players list carry (hub/chat.py `line_of`, hub/presence.py `row_of`, hub/store/sqlite.py `add_line`; docs/HUB.md 'Moderation' and 'Presence') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): no role, the same role for everyone, a flag where the role is stored (the history would lose it), the role of now instead of the role at writing, a schema step that the roles on lines do not need, a row that forgets it; every one must be caught (python3 tools/mutate.py tests/data/hub_marks_mutants.json --keep-going --jobs 1).",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+ },
+ "mutants": [
+  {
+   "id": "a_line_says_no_role",
+   "file": "hub/chat.py",
+   "old": "        if line.mod:\n            out[\"role\"] = \"admin\" if line.mod >= RANK[\"admin\"] else \"mod\"",
+   "new": "        if False:\n            out[\"role\"] = \"admin\" if line.mod >= RANK[\"admin\"] else \"mod\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "every_role_on_a_line_is_admin",
+   "file": "hub/chat.py",
+   "old": "\"admin\" if line.mod >= RANK[\"admin\"] else \"mod\"",
+   "new": "\"admin\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "every_role_on_a_line_is_mod",
+   "file": "hub/chat.py",
+   "old": "\"admin\" if line.mod >= RANK[\"admin\"] else \"mod\"",
+   "new": "\"mod\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "an_admin_needs_more_than_the_rank",
+   "file": "hub/chat.py",
+   "old": "line.mod >= RANK[\"admin\"]",
+   "new": "line.mod > RANK[\"admin\"]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "a_line_of_nobody_says_a_role",
+   "file": "hub/chat.py",
+   "old": "        if line.mod:\n            out[\"role\"] = \"admin\" if line.mod >= RANK[\"admin\"] else \"mod\"",
+   "new": "        if True:\n            out[\"role\"] = \"admin\" if line.mod >= RANK[\"admin\"] else \"mod\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_flag_goes_with_the_role",
+   "file": "hub/chat.py",
+   "old": "\"mod\": bool(line.mod), \"k\"",
+   "new": "\"mod\": line.mod >= RANK[\"admin\"], \"k\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "a_line_is_stored_as_a_flag",
+   "file": "hub/chat.py",
+   "old": "self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))",
+   "new": "self.store.add_line(who.account_id, who.name, line, mod)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_role_is_the_current_one_not_the_one_at_writing",
+   "file": "hub/chat.py",
+   "old": "        if line.mod:\n            out[\"role\"] = \"admin\" if line.mod >= RANK[\"admin\"] else \"mod\"",
+   "new": "        if line.mod:\n            out[\"role\"] = \"admin\" if self.roles.role_of(line.account) == \"admin\" else \"mod\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_store_keeps_a_flag",
+   "file": "hub/store/sqlite.py",
+   "old": "mark = 2 if mod == 2 else 1 if mod else 0",
+   "new": "mark = 1 if mod else 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_store_keeps_any_number",
+   "file": "hub/store/sqlite.py",
+   "old": "mark = 2 if mod == 2 else 1 if mod else 0",
+   "new": "mark = mod",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_store_returns_a_flag",
+   "file": "hub/store/sqlite.py",
+   "old": "return Line(cur.lastrowid, at, account, name, text, mark)",
+   "new": "return Line(cur.lastrowid, at, account, name, text, 1 if mod else 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_store_writes_a_flag",
+   "file": "hub/store/sqlite.py",
+   "old": "(at, account, name, text, mark))",
+   "new": "(at, account, name, text, 1 if mod else 0))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_schema_takes_a_step",
+   "file": "hub/store/sqlite.py",
+   "old": "SCHEMA = 4",
+   "new": "SCHEMA = 5",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "a_row_says_no_role",
+   "file": "hub/presence.py",
+   "old": "        if mod in (\"mod\", \"admin\"):\n            row[\"role\"] = mod",
+   "new": "        if False:\n            row[\"role\"] = mod",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "a_row_says_mod_for_every_role",
+   "file": "hub/presence.py",
+   "old": "row[\"role\"] = mod",
+   "new": "row[\"role\"] = \"mod\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "a_row_of_an_admin_loses_the_flag",
+   "file": "hub/presence.py",
+   "old": "        row[\"mod\"] = True\n        if mod in",
+   "new": "        row[\"mod\"] = mod != \"admin\"\n        if mod in",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_list_forgets_the_role",
+   "file": "hub/presence.py",
+   "old": "row_of(ident, name, mods.get(account, False), bare(",
+   "new": "row_of(ident, name, account in mods, bare(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_list_asks_the_chat_for_a_flag",
+   "file": "hub/presence.py",
+   "old": "mods = {account: self.chat.roles.role_of(account) for account in best}",
+   "new": "mods = {account: (\"mod\" if self.chat.is_mod(account) else \"none\") for account in best}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  }
+ ]
+}

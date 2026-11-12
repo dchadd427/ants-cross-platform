@@ -319,10 +319,14 @@ class TheStyle(unittest.TestCase):
             self.assertNotIn(gone + " {", self.css, "the account line of the panel and its More button are gone: " + gone)
         self.assertIn("-webkit-mask: var(--dc) no-repeat center / contain; mask: var(--dc) no-repeat center / contain;", self.css, "the mark takes the color of the text around it")
 
-    def test_the_switch_is_a_target_and_the_username_of_a_line_is_not_drawn(self):
+    def test_the_switch_is_a_target_and_the_username_and_number_of_a_line_are_a_moderators_alone(self):
         self.assertRegex(self.rule(".gc-pick"), r"min-height: (4[4-9]|[5-9]\d)px;")
-        self.assertNotRegex(self.css, r"\.gc-u\b", "the username of a moderator's copy is not drawn: no style for it")
-        self.assertNotIn("'gc-u'", read("web", "home", "chat.js"), "... and no element for it")
+        js = read("web", "home", "chat.js")
+        self.assertIn("if (tools() && e.u) put(r, [el('bdi', 'gc-u', ' (' + e.u + ')')]);", js, "the username is drawn only where the visitor holds a role")
+        self.assertIn("if (tools()) { var no = el('span', 'gc-no', ' #' + e.id);", js, "so is the number that /del takes")
+        self.assertEqual(js.count("'gc-u'"), 1)
+        self.assertEqual(js.count("'gc-no'"), 1)
+        self.assertIn("function tools() { return !!you && you.role !== 'none'; }", js)
 
     def test_the_hidden_parts_are_hidden_even_where_the_style_gives_them_a_display(self):
         self.assertIn(".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }", self.css)
@@ -336,9 +340,10 @@ class TheStyle(unittest.TestCase):
     def test_a_link_that_is_down_dims_the_log(self):
         self.assertIn('.gc[data-state="offline"] .gc-log { filter: saturate(.5) brightness(.94); }', self.css)
 
-    def test_the_mod_mark_and_the_visitor_s_own_name_are_seen(self):
+    def test_the_visitor_s_own_name_is_gold_and_nobody_s_name_has_a_tag(self):
         self.assertIn(".gc-me .gc-who { color: var(--gold); }", self.css)
-        self.assertRegex(self.rule(".gc-badge"), r"background: var\(--gold\);")
+        self.assertNotIn(".gc-badge", self.css, "the role is the color of the name: no tag")
+        self.assertNotIn("gc-badge", read("web", "home", "chat.js"))
 
 
 def luminance(color):
@@ -371,28 +376,61 @@ class TheRoles(unittest.TestCase):
     def token(self, name):
         return re.search(r"--%s: (#[0-9a-f]{6})" % name, self.lobby).group(1)
 
-    def test_the_red_is_the_red_of_the_leave_buttons_and_the_gold_is_the_pages_gold(self):
-        leave = re.search(r"\.leave \{[^}]*var\(--sheen\) #([0-9a-f]{6})", self.home_css).group(1)
-        for css, selector in ((self.css, ".gc-badge-admin"), (self.css, ".gc-cr-admin"), (self.players_css, ".pl-badge-admin")):
-            self.assertIn("background: #%s;" % leave, self.rule(css, selector), selector)
-        for css, selector in ((self.css, ".gc-badge"), (self.css, ".gc-cr"), (self.players_css, ".pl-badge, .pl-tag")):
-            self.assertIn("background: var(--gold);", self.rule(css, selector), selector)
+    def background(self, css, selector):
+        return re.search(r"background: (#[0-9a-f]{6});", self.rule(css, selector)).group(1)
+
+    def test_the_two_colors_are_read_as_text_on_every_background_a_name_sits_on(self):
+        red = re.search(r"\.gc-line\.gc-admin \.gc-who, \.gc-an\.gc-r-admin, \.gc-cn\.gc-r-admin \{ color: (#[0-9a-f]{6}); \}", self.css).group(1)
+        for css, selector in ((self.css, ".gc-av.gc-r-admin"), (self.players_css, ".pl-card.r-admin .pl-av"), (self.players_css, ".pl-card.r-admin .pl-nm")):
+            self.assertIn("color: %s;" % red, self.rule(css, selector), selector)
+        gold = self.token("gold")
+        for css, selector in ((self.css, ".gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod"), (self.players_css, ".pl-card.r-mod .pl-nm")):
+            self.assertIn("color: var(--gold);", self.rule(css, selector), selector)
+        grounds = {"the chat log": self.background(self.css, ".gc-log"), "a card of the players list": self.background(self.players_css, ".pl-card"), "the visitor's own row": self.background(self.players_css, ".pl-you .pl-card"),
+                   "the chip's dark plate": self.background(self.css, ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod"), "the account's dropdown": self.background(self.css, ".gc-slot")}
+        lowest = {}
+        for name, ground in grounds.items():
+            for color, word in ((red, "red"), (gold, "gold")):
+                ratio = contrast(color, ground)
+                lowest[word] = min(ratio, lowest.get(word, 99))
+                self.assertGreaterEqual(ratio, 4.5, "%s %s on %s %s is %.2f to 1" % (word, color, name, ground, ratio))
+        self.assertGreaterEqual(lowest["red"], 6.0, "measured: the red (#ff5f66) is 6.03 to 1 at the lowest, 6.45 on the chat log; the Leave buttons' #9d0d17 is far too dark as text")
+        self.assertGreaterEqual(lowest["gold"], 11.9, "measured: the gold is 11.99 to 1 at the lowest")
+        self.assertGreater(contrast("#9d0d17", grounds["the chat log"]), 0)
+        self.assertLess(contrast("#9d0d17", grounds["the chat log"]), 4.5, "the Leave buttons' red cannot be the text color: it is the family, not the value")
         self.assertEqual(self.token("gold"), "#f6d058")
 
-    def test_the_words_on_the_marks_can_be_read_the_color_is_never_the_only_sign(self):
-        red = re.search(r"\.leave \{[^}]*var\(--sheen\) #([0-9a-f]{6})", self.home_css).group(1)
-        self.assertGreaterEqual(contrast(self.token("cream"), "#" + red), 4.5, "ADMIN: the cream word on the red")
-        self.assertGreaterEqual(contrast("#1a1405", self.token("gold")), 4.5, "MOD: the dark word on the gold")
-        for css, selector in ((self.css, ".gc-badge-admin"), (self.css, ".gc-cr-admin"), (self.players_css, ".pl-badge-admin")):
-            self.assertIn("color: var(--cream);", self.rule(css, selector), selector)
-            self.assertIn("box-shadow: ", self.rule(css, selector), selector + ": a light edge, because the red alone is dim against the dark panels")
-        self.assertGreaterEqual(contrast("#e0707a", "#0a1016"), 3, "the edge of the red against the log")
-        for css, selector in ((self.css, ".gc-badge"), (self.css, ".gc-cr"), (self.players_css, ".pl-badge, .pl-tag")):
-            self.assertIn("text-transform: uppercase;", self.rule(css, selector), selector)
-        for word in ("admin: 'admin'", "mod: 'mod'"):
-            self.assertIn(word, self.js)
-        self.assertIn("(admin ? TEXT.admin : TEXT.mod) + ' '", self.js, "a line's mark is a word")
-        self.assertIn("chipRole.textContent = has ? (you.role === 'admin' ? TEXT.admin : TEXT.mod) : '';", self.js, "the chip's mark is a word")
+    def test_an_administrators_line_is_red_not_yellow_the_red_rule_is_the_last(self):
+        css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        self.assertLess(css.index(".gc-line.gc-mod .gc-who"), css.index(".gc-line.gc-admin .gc-who"), "an administrator's line has both classes (gc-mod is the hub's `mod`, true for both roles): the later rule of the same weight wins")
+
+    def test_the_chip_is_dark_under_the_name_because_its_face_is_teal(self):
+        self.assertGreater(contrast("#ff5f66", "#2b6357"), 0)
+        self.assertLess(contrast("#ff5f66", "#2b6357"), 4.5, "on the chip's own teal the red would not be readable")
+        self.assertIn("padding: 1px 9px;", self.rule(self.css, ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod"))
+
+    def test_the_role_is_in_the_accessible_name_and_no_tag_is_drawn(self):
+        for part in ("el('span', 'gc-sr', wordOfRole(e.role) + ' ')", "name.setAttribute('title', wordOfRole(e.role));", "chipName.className = 'gc-cn' + rc;", "chipName.setAttribute('title', wordOfRole(you.role))",
+                     "chip.setAttribute('aria-label', you ? TEXT.chatting + you.name + (has ? ', ' + wordOfRole(you.role) : '') : TEXT.loginWith);", "acctName.setAttribute('title', wordOfRole(you.role))"):
+            self.assertIn(part, self.js, part)
+        players = read("web", "home", "players.js")
+        self.assertIn("name.appendChild(el('span', 'pl-sr', word + ' '));", players)
+        self.assertIn("nm.setAttribute('title', word);", players)
+        self.assertNotRegex(self.code + code_of(players), r"badge", "no tag")
+        self.assertNotIn("badge", self.css + self.players_css)
+        self.assertIn(".gc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }", self.css, "visually hidden, read by a screen reader")
+        self.assertNotRegex(self.rule(self.css, ".gc-sr"), r"display: *none|visibility: *hidden")
+        self.assertIn(".pl-sr { position: absolute;", self.players_css)
+
+    def test_the_text_of_a_message_keeps_its_color(self):
+        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", self.css + self.players_css, flags=re.S)):
+            if "gc-text" in selector:
+                self.assertNotIn("color", body, selector + ": the message is not colored by the role")
+        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)):
+            if re.search(r"(?<![-\w])color:", body):
+                for part in selector.split(","):
+                    if "gc-admin" in part or "gc-mod" in part:
+                        self.assertIn("gc-who", part, "the line is not colored by the role: only the name (%s)" % part.strip())
 
     def test_the_quiet_line_and_the_private_answers_have_text_that_can_be_read(self):
         event = re.search(r"color: (#[0-9a-f]{6})", self.rule(self.css, ".gc-event")).group(1)
@@ -400,6 +438,8 @@ class TheRoles(unittest.TestCase):
         for color in ("#f4ece2", "#a8cfc0", "#b9d9cc"):
             self.assertGreaterEqual(contrast(color, "#0e1c18"), 4.5, color + " on the private answer")
         self.assertGreaterEqual(contrast("#f4ece2", "#1c140c"), 4.5, "the notice of a removal")
+        for selector in (".gc-u", ".gc-no"):
+            self.assertGreaterEqual(contrast(re.search(r"color: (#[0-9a-f]{6})", self.rule(self.css, selector)).group(1), "#0a1016"), 4.5, selector + ": faint, and still readable")
         self.assertIn("font-style: italic;", self.rule(self.css, ".gc-event"))
         self.assertIn("border-left: 3px solid", self.rule(self.css, ".gc-private"), "a private answer is set apart by more than its color")
 
@@ -453,11 +493,9 @@ class TheRoles(unittest.TestCase):
         body = re.search(r"function onBye\(m\) \{.*?\n        \}", self.code, re.S).group(0)
         self.assertNotRegex(body, r"go\(|setTimeout|new Socket|lost\(|drop\(", "a bye only notes the removal: the hub closes the socket and the page's one retry does the rest")
 
-    def test_the_chip_has_a_place_for_the_mark_and_the_style_hides_it_where_there_is_none(self):
-        self.assertIn(".gc-yr[hidden], .gc-cr[hidden] { display: none; }", self.css)
-        self.assertIn("chipRole = el('span', 'gc-cr'); chipRole.hidden = true;", self.js)
-        self.assertIn("put(chip, [chipMark, chipAv, chipName, chipRole]);", self.js)
-        self.assertIn(".pl-badge-admin", self.players_css)
+    def test_the_chip_keeps_its_three_parts(self):
+        self.assertIn("put(chip, [chipMark, chipAv, chipName]); }", self.js)
+        self.assertIn(".gc-yr[hidden] { display: none; }", self.css)
 
 
 class TheWayIntoTheImage(unittest.TestCase):

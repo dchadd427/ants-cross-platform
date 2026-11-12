@@ -266,8 +266,8 @@
   {
    "id": "a_name_in_a_span_not_a_bdi",
    "file": "web/home/players.js",
-   "old": "name.appendChild(el('bdi', 'pl-nm', row.name));",
-   "new": "name.appendChild(el('span', 'pl-nm', row.name));",
+   "old": "var nm = el('bdi', 'pl-nm', row.name),",
+   "new": "var nm = el('span', 'pl-nm', row.name),",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -644,15 +644,15 @@
   {
    "id": "an_admin_has_the_word_mod",
    "file": "web/home/players.js",
-   "old": "row.role === 'admin' ? TEXT.admin : TEXT.mod",
-   "new": "TEXT.mod",
+   "old": "word = row.role === 'admin' ? TEXT.administrator : TEXT.moderator;",
+   "new": "word = TEXT.moderator;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "an_admin_is_not_red",
    "file": "web/home/players.js",
-   "old": "(row.role === 'admin' ? ' pl-badge-admin' : '')",
-   "new": "''",
+   "old": "li.className += row.role === 'admin' ? ' r-admin' : ' r-mod';",
+   "new": "li.className += ' r-mod';",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -700,8 +700,36 @@
   {
    "id": "the_red_of_the_players_admin_is_the_gold",
    "file": "web/home/players.css",
-   "old": ".pl-badge-admin { color: var(--cream); background: #9d0d17;",
-   "new": ".pl-badge-admin { color: var(--cream); background: var(--gold);",
+   "old": ".pl-card.r-admin .pl-nm { color: #ff5f66; }",
+   "new": ".pl-card.r-admin .pl-nm { color: var(--gold); }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_word_is_not_in_the_accessible_name",
+   "file": "web/home/players.js",
+   "old": "name.appendChild(el('span', 'pl-sr', word + ' '));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_name_has_no_title",
+   "file": "web/home/players.js",
+   "old": "nm.setAttribute('title', word);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_players_red_is_the_leave_red",
+   "file": "web/home/players.css",
+   "old": ".pl-card.r-admin .pl-nm { color: #ff5f66; }",
+   "new": ".pl-card.r-admin .pl-nm { color: #9d0d17; }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_own_row_is_not_coloured_for_a_moderator",
+   "file": "web/home/players.css",
+   "old": ".pl-card.r-mod .pl-nm { color: var(--gold); }",
+   "new": "",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

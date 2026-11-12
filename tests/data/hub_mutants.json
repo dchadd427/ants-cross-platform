@@ -462,7 +462,7 @@
   {
    "id": "line_never_says_mod",
    "file": "hub/chat.py",
-   "old": "entry = self.store.add_line(who.account_id, who.name, line, mod)",
+   "old": "entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))",
    "new": "entry = self.store.add_line(who.account_id, who.name, line, False)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -1939,8 +1939,8 @@
   {
    "id": "store_a_line_counts_as_a_restriction",
    "file": "hub/store/sqlite.py",
-   "old": "        at = int(self.clock())\n        with self.transaction():\n            cur = self.db.execute(\"INSERT INTO lines",
-   "new": "        at = int(self.clock())\n        with self.transaction():\n            self.count_restriction()\n            cur = self.db.execute(\"INSERT INTO lines",
+   "old": "        at = int(self.clock())\n        mark = 2 if mod == 2 else 1 if mod else 0       # (the column `mod` holds the author's role: 0 none, 1 moderator, 2 administrator; an earlier hub reads any of them as true, so a rollback shows the line as a moderator's: no schema step)\n        with self.transaction():\n            cur = self.db.execute(\"INSERT INTO lines",
+   "new": "        at = int(self.clock())\n        mark = 2 if mod == 2 else 1 if mod else 0       # (the column `mod` holds the author's role: 0 none, 1 moderator, 2 administrator; an earlier hub reads any of them as true, so a rollback shows the line as a moderator's: no schema step)\n        with self.transaction():\n            self.count_restriction()\n            cur = self.db.execute(\"INSERT INTO lines",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {

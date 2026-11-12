@@ -55,7 +55,7 @@ class StoreBase:
     # ---- lines ----
 
     def add_line(self, account, name, text, mod):
-        """Keep a line and return it as a Line. The lines past the newest `max_lines` are deleted in the same step, so the store never holds more."""
+        """Keep a line and return it as a Line. `mod` is the role that its author had when it wrote it: 0 (none), 1 (a moderator) or 2 (an administrator); a bool is 0 or 1. It is a mark for the pages, never a reason to allow anything. The lines past the newest `max_lines` are deleted in the same step, so the store never holds more."""
         raise NotImplementedError
 
     def recent_lines(self, count):
