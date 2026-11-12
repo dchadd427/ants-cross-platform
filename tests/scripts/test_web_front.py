@@ -55,7 +55,7 @@ MAPMAKER_LAZY = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 sys.path.insert(0, os.path.join(REPO, "tools"))
-from size_limits import FRONT_BUDGET as BUDGET, ANTS_BUDGET, ANTS_GZIP_BUDGET, PICKUP_BUDGET, PICKUP_GZIP_BUDGET, CONVERT_BUDGET, CONVERT_GZIP_BUDGET, PLAY_BUDGET, PLAY_GZIP_BUDGET, GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET, SHAPES_BUDGET, SHAPES_GZIP_BUDGET, PICKER_BUDGET, PICKER_GZIP_BUDGET, GAME_BUDGET, GAME_GZIP_BUDGET, SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET, EDITOR_BUDGET, EDITOR_GZIP_BUDGET, LAZY_BUDGET, LAZY_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
+from size_limits import FRONT_BUDGET as BUDGET, ANTS_BUDGET, ANTS_GZIP_BUDGET, PICKUP_BUDGET, PICKUP_GZIP_BUDGET, CONVERT_BUDGET, CONVERT_GZIP_BUDGET, PLAY_BUDGET, PLAY_GZIP_BUDGET, GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET, SHAPES_BUDGET, SHAPES_GZIP_BUDGET, REJOIN_KEY_BUDGET, REJOIN_KEY_GZIP_BUDGET, PICKER_BUDGET, PICKER_GZIP_BUDGET, GAME_BUDGET, GAME_GZIP_BUDGET, SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET, EDITOR_BUDGET, EDITOR_GZIP_BUDGET, LAZY_BUDGET, LAZY_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 ANTS_LAZY = ("mapmaker_ants.js", "mapmaker_ants.css")        # the map maker's Ants tool box (docs/MAP_EDITOR.md, "Ants: one at a time, group, mix"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadAnts)
 PICKUP_LAZY = ("mapmaker_pickup.js", "mapmaker_pickup.css")        # the map maker's Pick up tool (docs/MAP_EDITOR.md, "Pick up"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadPick)
 CONVERT_LAZY = ("mapmaker_convert.js", "mapmaker_crop.js")        # the map maker's Copy, Save as a new map, Start an Extended map / Make a Classic map and Crop to fit (docs/MAP_EDITOR.md): the two scripts are loaded together the first time one is used (web/front/mapmaker_app.js, convertOr); apart from the editor's budget
@@ -348,6 +348,15 @@ class TheFolder(unittest.TestCase):
         self.assertNotIn(SHAPES_FILE, os.listdir(FRONT), "the table is not in web/front, whose folder has its own cap")
         for page in ("shell.html", "lobby.html"):
             self.assertIn('<script src="%s"></script>' % SHAPES_FILE, read("web", page), "both pages load it, as a script of their own")
+
+    def test_the_seat_key_reader_is_one_small_script_with_a_cap_of_its_own(self):
+        import gzip
+        data = read_bytes("web", "rejoin_key.js")
+        self.assertLess(len(data), REJOIN_KEY_BUDGET, "the seat-key reader's script is %d bytes" % len(data))
+        self.assertLess(len(gzip.compress(data, 9)), REJOIN_KEY_GZIP_BUDGET, "and %d bytes gzipped" % len(gzip.compress(data, 9)))
+        self.assertNotIn("rejoin_key.js", os.listdir(FRONT), "the reader is not in web/front, whose folder has its own cap")
+        for page in ("shell.html", "lobby.html"):
+            self.assertIn('<script src="rejoin_key.js"></script>', read("web", page), "both pages load it, as a script of their own")
 
     def test_the_pictures_picker_is_one_small_script_for_the_game_page_only(self):
         import gzip
@@ -774,7 +783,7 @@ class ThePageUsesTheArt(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_site(self):
         scripts = re.findall(r'<script[^>]*\bsrc="([^"]*)"', self.page)
-        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
+        self.assertEqual(scripts, ["rejoin_key.js"] + ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the seat-key reader (web/rejoin_key.js), the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
         self.assertEqual(len(re.findall(r"<script\b", self.page)), len(scripts) + 1)       # (and the one inline script that is the page's)
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:

@@ -137,7 +137,7 @@ class MapMakerLink(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/map_maker_link_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the
     checks above fail, and the copy with nothing changed must pass"""
-    FILES = ("web/lobby.html", "web/front/map_maker_link.js", "tests/scripts/test_web_map_maker_link.py")
+    FILES = ("web/lobby.html", "web/rejoin_key.js", "web/front/map_maker_link.js", "tests/scripts/test_web_map_maker_link.py")
 
     @classmethod
     def setUpClass(cls):

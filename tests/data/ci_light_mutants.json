@@ -35,24 +35,32 @@
   {
    "id": "the_lobby_page_is_light",
    "file": "tools/ci_light.sh",
-   "old": "web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;",
-   "new": "web/shell.html | web/shapes.js) return 1 ;;",
+   "old": "web/lobby.html | web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;",
+   "new": "web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py",
    "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
   },
   {
    "id": "the_game_page_is_light",
    "file": "tools/ci_light.sh",
-   "old": "web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;",
-   "new": "web/lobby.html | web/shapes.js) return 1 ;;",
+   "old": "web/lobby.html | web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;",
+   "new": "web/lobby.html | web/shapes.js | web/rejoin_key.js) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py",
    "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
   },
   {
    "id": "the_shape_table_is_light",
    "file": "tools/ci_light.sh",
-   "old": "web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;",
-   "new": "web/lobby.html | web/shell.html) return 1 ;;",
+   "old": "web/lobby.html | web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;",
+   "new": "web/lobby.html | web/shell.html | web/rejoin_key.js) return 1 ;;",
+   "test": "python3 tests/scripts/test_ci_light.py",
+   "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
+  },
+  {
+   "id": "the_seat_key_reader_is_light",
+   "file": "tools/ci_light.sh",
+   "old": "web/lobby.html | web/shell.html | web/shapes.js | web/rejoin_key.js) return 1 ;;",
+   "new": "web/lobby.html | web/shell.html | web/shapes.js) return 1 ;;",
    "test": "python3 tests/scripts/test_ci_light.py",
    "expect": "test_a_page_that_the_skipped_jobs_read_makes_a_pull_request_full_whatever_else_it_changes"
   },

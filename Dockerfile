@@ -206,6 +206,8 @@ COPY web/death_map.css /usr/share/nginx/html/death_map.css
 COPY web/death_map.js /usr/share/nginx/html/death_map.js
 COPY web/replay_stats.css /usr/share/nginx/html/replay_stats.css
 
+# The keys of the seats that this browser holds, read in one place for the front page's Rejoin strip and the game page's name step (rejoin_key.js)
+COPY web/rejoin_key.js /usr/share/nginx/html/rejoin_key.js
 # The shapes of the picture, one table for the game page, the front page and the settings menu (docs/PLAY_IN_BROWSER.md "Four shapes"; shapes.js)
 COPY web/shapes.js /usr/share/nginx/html/shapes.js
 # ... and the control that the game page and the settings menu choose a shape with (a button and a list made by the page: a native list does not open under the fullscreen mouse lock; shape_picker.js)

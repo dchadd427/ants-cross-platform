@@ -236,7 +236,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/lobby_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make a check
     fail (a command that exits non-zero), and the copy with nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/game_type.css", "web/lobby.html", "tests/scripts/web_lobby_chat_check.js",
+    FILES = ("web/front/lobby_chat.js", "web/front/lobby_chat.css", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_net.js", "web/front/map_picker.css", "web/front/game_modes.js", "web/front/game_type.js", "web/front/game_type.css", "web/lobby.html", "web/rejoin_key.js", "tests/scripts/web_lobby_chat_check.js",
              "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/test_web_lobby_chat.py", "tests/data/lobby_messages.txt",
              "include/ants_net/flood.hpp")      # (the client check reads the server's limits from the header)
 
