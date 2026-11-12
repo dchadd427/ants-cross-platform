@@ -4,18 +4,20 @@
 The script builds the images from the Dockerfile of a base revision and from this tree's, exports their file systems and compares them. There is no Docker daemon here, so:
 
   - the manifest: every entry with type, mode, owner, size, link target and sha256; the stamps of the pages (the build time and the build date) are replaced before the hash, in the listed files only
-  - the files of two builds of one Dockerfile that are never the same (the linked WebAssembly programs and their JavaScript: CI built the old Dockerfile twice and they differed): only a signature is
-    compared (a wasm's data section, its sections and size; the JavaScript with its numbers made one), and a change of what a program holds or says is found
+  - the files that a link makes (the WebAssembly programs and their JavaScript: two links of the same objects do not always give the same bytes, which CI showed): the final image keeps only their type,
+    mode, owner and a size within one percent; what they are made of is compared as the link's inputs, listed inside the builder stage of both builds (tools/link_inputs.sh: objects, archives, libraries,
+    link command lines), and, when the recipe holds, as the programs of a link made deterministic (tools/relink_outputs.sh)
   - the comparison: the same files are the same; a changed byte, a changed mode or owner, a file on one side only, a link that points elsewhere, a stamp that appears or goes, a stamp in a file
     that is not listed, and a changed configuration (user, entrypoint, command, ports, environment) are each a difference with exit status 1; an empty export is refused
-  - the CI job: a job of its own (not one of the five required checks, waited for by the deploy like every job, which it passes at once on a push) that runs for a pull request that changes a Dockerfile, the program of the pre-warming or this check
+  - the CI job: a job of its own (not one of the five required checks, and nothing waits for it) that runs for a pull request that changes a Dockerfile, the program of the pre-warming or this check, against the pull request's base,
+    cannot be made to pass by `|| true` or `continue-on-error`, and has the trigger that it has
   - the script, run against a stand-in `docker` (a small program that builds nothing and exports the files that the test chose) and a real git repository: the same images pass, a difference of one
-    byte in either image fails and names the file, a difference of the configuration fails, a failed build is status 2, and the base is read from git
+    byte in either image fails and names the file, so does a link input or a link command line that differs, a difference of the configuration fails, a failed build is status 2, and the base is read from git
 """
-import gzip
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -136,60 +138,38 @@ class TheManifest(unittest.TestCase):
             self.assertTrue(im.differences(kept, im.config(changed)), key)
 
 
-def leb128(value):
-    out = bytearray()
-    while True:
-        byte = value & 0x7F
-        value >>= 7
-        out.append(byte | (0x80 if value else 0))
-        if not value:
-            return bytes(out)
-
-
-def wasm(code, data=b"strings of the program v0.16.0", extra_section=None):
-    """A small WebAssembly file: a type section, a code section made of `code` (any bytes: the order of the functions) and a data section."""
-    def section(number, payload):
-        return bytes([number]) + leb128(len(payload)) + payload
-    parts = [b"\0asm\1\0\0\0", section(1, b"\1\x60\0\0"), section(10, code), section(11, data)]
-    if extra_section:
-        parts.append(section(*extra_section))
-    return b"".join(parts)
-
-
-class TheProgramsThatNoBuildRepeats(unittest.TestCase):
+class TheLinkedFilesAreNotComparedByContent(unittest.TestCase):
     def files(self, **by_name):
         return {HTML + name.replace("lvl_core", "lvl-core").replace("_", ".").replace("lvl-core", "lvl_core"): value for name, value in by_name.items()}
 
-    def test_the_same_program_with_its_functions_in_another_order_is_the_same_and_one_with_other_text_is_not(self):
-        one = manifest(self.files(index_wasm=wasm(b"AAAA" + b"B" * 300), lvl_core_wasm=wasm(b"CC")))
-        two = manifest(self.files(index_wasm=wasm(b"B" * 300 + b"AAAA" + b"x" * 5), lvl_core_wasm=wasm(b"C" * 40)))
+    def test_the_list_is_short_and_has_only_what_a_link_makes(self):
+        self.assertEqual(sorted(p[len(HTML):] for p in im.LINKED), ["index.js", "index.js.gz", "index.wasm", "index.wasm.gz", "lvl_core.js", "lvl_core.wasm"])
+        self.assertTrue(set(im.LINKED).isdisjoint(im.STAMPED))
+        self.assertEqual(im.SIZE_PERCENT, 1)
+
+    def test_the_same_program_in_another_variant_is_the_same_here(self):
+        """Three variants of one link differ by a few bytes (3,894,642 / 647 / 653 in CI) and by their content: that is judged on the link's inputs, not here."""
+        one = manifest(self.files(index_wasm=b"A" * 3894642, index_js=b"x" * 90000, lvl_core_wasm=b"C" * 200000))
+        two = manifest(self.files(index_wasm=b"B" * 3894653, index_js=b"y" * 90006, lvl_core_wasm=b"D" * 200000))
         self.assertEqual(im.differences(one, two), [])
-        other = manifest(self.files(index_wasm=wasm(b"B" * 300 + b"AAAA", data=b"strings of the program v0.0.0"), lvl_core_wasm=wasm(b"CC")))
-        found = im.differences(one, other)
-        self.assertEqual(len(found), 1)
-        self.assertIn("index.wasm differs in signature", found[0])
 
-    def test_a_program_that_grew_or_gained_a_section_is_found(self):
-        base = manifest(self.files(index_wasm=wasm(b"A" * 100)))
-        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=wasm(b"A" * 100 + b"B" * 70)))))
-        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=wasm(b"A" * 100, extra_section=(0, b"\4name"))))))
+    def test_a_program_that_is_far_bigger_or_smaller_or_gone_is_found(self):
+        base = manifest(self.files(index_wasm=b"A" * 100000, index_js=b"x" * 5000))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=b"A" * 102000, index_js=b"x" * 5000))))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=b"A" * 98000, index_js=b"x" * 5000))))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=b"A" * 100000))))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=b"A" * 100000, index_js=b"x" * 5000, lvl_core_js=b"z"))))
+        self.assertEqual(im.differences(base, manifest(self.files(index_wasm=b"A" * 100900, index_js=b"x" * 5000))), [])
 
-    def test_a_compressed_copy_is_read_through_and_a_file_that_is_no_program_is_not_ignored(self):
-        one = manifest(self.files(index_wasm_gz=gzip.compress(wasm(b"AA"), mtime=1), index_js_gz=gzip.compress(b"f(12)", mtime=1)))
-        two = manifest(self.files(index_wasm_gz=gzip.compress(wasm(b"A" * 9), mtime=2), index_js_gz=gzip.compress(b"f(99)", mtime=2)))
-        self.assertEqual(im.differences(one, two), [])
-        broken = manifest(self.files(index_wasm=b"not a program", lvl_core_wasm=wasm(b"A")))
-        self.assertTrue(im.differences(broken, manifest(self.files(index_wasm=b"not a program either", lvl_core_wasm=wasm(b"A")))))
+    def test_the_mode_and_the_owner_of_a_linked_file_still_count(self):
+        base = manifest(self.files(index_wasm=b"A" * 1000))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=(b"A" * 1000, 0o600, 0)))))
+        self.assertTrue(im.differences(base, manifest(self.files(index_wasm=(b"A" * 1000, 0o644, 7)))))
 
-    def test_the_javascript_is_the_same_apart_from_its_numbers(self):
-        one = manifest(self.files(index_js=b"var a=f(1234,5);g('index.wasm')"))
-        self.assertEqual(im.differences(one, manifest(self.files(index_js=b"var a=f(98,76543);g('index.wasm')"))), [])
-        self.assertTrue(im.differences(one, manifest(self.files(index_js=b"var a=f(1234,5);g('index.data')"))))
-        self.assertTrue(im.differences(one, manifest(self.files(index_js=b"var a=f(1234,5);g('index.wasm');"))), "a longer file is another file")
-
-    def test_the_list_is_short_and_has_only_the_linked_programs_and_their_script(self):
-        self.assertEqual(sorted(p[len(HTML):] for p in im.LOOSE), ["index.js", "index.js.gz", "index.wasm", "index.wasm.gz", "lvl_core.js", "lvl_core.wasm"])
-        self.assertTrue(set(im.LOOSE).isdisjoint(im.STAMPED))
+    def test_the_files_that_are_not_made_by_a_link_are_compared_byte_for_byte(self):
+        base = manifest(self.files(index_data=b"D" * 1000, index_data_gz=b"G" * 100, index_html=b"<p>"))
+        self.assertTrue(im.differences(base, manifest(self.files(index_data=b"E" * 1000, index_data_gz=b"G" * 100, index_html=b"<p>"))))
+        self.assertTrue(im.differences(base, manifest(self.files(index_data=b"D" * 1000, index_data_gz=b"H" * 100, index_html=b"<p>"))))
 
     def test_the_minified_game_page_is_read_too(self):
         text = b"<script>var ANTS_BUILD_VER=\"%d\";var x='index.js?v=%d'</script><span id=game-build-date>(2026-11-10 %02d:57 PT)</span>"
@@ -197,6 +177,219 @@ class TheProgramsThatNoBuildRepeats(unittest.TestCase):
         two = manifest({HTML + "index.html": text % (1731000999, 1731000998, 22)})
         self.assertEqual(im.differences(one, two), [])
         self.assertEqual(one[HTML + "index.html"]["stamps"], 3)
+
+
+def hashed(name, character="a"):
+    return "file\t%s\t%s" % (name, character * 64)
+
+
+def inputs_listing(**changes):
+    """A listing that has what `listing(..., "inputs")` asks for; `changes` {path: sha character, or None to drop it, or 'link:<text>' for a command line}."""
+    lines = {}
+    for i in range(45):
+        lines["build_web/CMakeFiles/o%02d.o" % i] = "a"
+    for name in ("build_web/src/ants_app/libants_app.a", "build_web/lib/libb.a", "build_web/lib/libc.a"):
+        lines[name] = "b"
+    for name in ("build_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt", "build_web/lvl_core/CMakeFiles/lvl_core.dir/link.txt", "build_web/src/ants_app/CMakeFiles/ants_app.dir/flags.make",
+                 "build_web/lvl_core/CMakeFiles/lvl_core.dir/flags.make", "build_web/generated/ants_app/version.hpp"):
+        lines[name] = "c"
+    for name in ("libSDL2.a", "libSDL2_ttf.a", "libfreetype.a", "libharfbuzz.a"):
+        lines["/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/" + name] = "d"
+    out = []
+    links = {"build_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt": "em++ -O3 -o index.html a.o b.a", "build_web/lvl_core/CMakeFiles/lvl_core.dir/link.txt": "em++ -Oz -o lvl_core.js c.o"}
+    for path, value in changes.items():
+        if isinstance(value, str) and value.startswith("link:"):
+            links[path] = value[5:]
+        elif value is None:
+            lines.pop(path, None)
+        else:
+            lines[path] = value
+    for path in sorted(lines):
+        out.append(hashed(path, lines[path]))
+    for path in sorted(links):
+        out.append("link\t%s\t%s" % (path, links[path]))
+    return "\n".join(out) + "\n"
+
+
+RELINK = "".join(hashed(name, character) + "\n" for name, character in (("index.js", "1"), ("index.wasm", "2"), ("lvl_core.js", "3"), ("lvl_core.wasm", "4")))
+
+
+class TheListingsOfTheLinksInputsAndOutputs(unittest.TestCase):
+    OBJECT = "build_web/CMakeFiles/o07.o"
+    LINK = "build_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt"
+
+    def differences(self, **changes):
+        return im.listing_differences(im.listing(inputs_listing(), "inputs"), im.listing(inputs_listing(**changes), "inputs"), "web link inputs")
+
+    def test_the_same_listing_is_the_same(self):
+        self.assertEqual(self.differences(), [])
+
+    def test_a_changed_object_is_named(self):
+        found = self.differences(**{self.OBJECT: "e"})
+        self.assertEqual(len(found), 1)
+        self.assertIn("web link inputs: " + self.OBJECT + " differs: sha256", found[0])
+
+    def test_an_object_that_is_only_on_one_side_is_found(self):
+        self.assertIn("only in the base build: " + self.OBJECT, self.differences(**{self.OBJECT: None})[0])
+        self.assertIn("only in the new build: build_web/CMakeFiles/extra.o", self.differences(**{"build_web/CMakeFiles/extra.o": "a"})[0])
+
+    def test_a_changed_library_of_emscriptens_cache_is_found(self):
+        self.assertTrue(self.differences(**{"/emsdk/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/libSDL2.a": "f"}))
+
+    def test_a_changed_link_command_line_is_shown(self):
+        found = self.differences(**{self.LINK: "link:em++ -O2 -o index.html a.o b.a"})
+        self.assertEqual(len(found), 1)
+        self.assertIn("the link command line differs", found[0])
+        self.assertIn("-O3", found[0])
+        self.assertIn("-O2", found[0])
+
+    def test_the_generated_header_and_the_flags_are_inputs_too(self):
+        self.assertTrue(self.differences(**{"build_web/generated/ants_app/version.hpp": "e"}))
+        self.assertTrue(self.differences(**{"build_web/src/ants_app/CMakeFiles/ants_app.dir/flags.make": "e"}))
+
+    def test_a_listing_that_is_malformed_or_too_small_is_refused_not_compared(self):
+        full = inputs_listing()
+        for what, text in (("a line that is none", full + "garbage\n"), ("a hash that is none", full + "file\tbuild_web/x.o\tnothex\n"), ("an empty command line", full + "link\tbuild_web/y/link.txt\t \n"),
+                           ("nothing", ""), ("too few objects", "\n".join(l for l in full.splitlines() if "/o0" not in l and "/o1" not in l)),
+                           ("no SDL2_ttf", "\n".join(l for l in full.splitlines() if "libSDL2_ttf" not in l)), ("no link lines", "\n".join(l for l in full.splitlines() if not l.startswith("link\t")))):
+            with self.subTest(what):
+                with self.assertRaises(ValueError):
+                    im.listing(text, "inputs")
+
+    def test_the_outputs_of_the_relink_are_compared_and_the_listing_must_hold_all_four(self):
+        base = im.listing(RELINK, "relink")
+        self.assertEqual(im.listing_differences(base, im.listing(RELINK, "relink"), "web link outputs"), [])
+        other = im.listing(RELINK.replace("2" * 64, "9" * 64), "relink")
+        found = im.listing_differences(base, other, "web link outputs")
+        self.assertEqual(len(found), 1)
+        self.assertIn("index.wasm differs", found[0])
+        with self.assertRaises(ValueError):
+            im.listing("\n".join(RELINK.splitlines()[:3]), "relink")
+
+    def test_the_command_line_compares_two_listings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, text in (("a", inputs_listing()), ("b", inputs_listing()), ("c", inputs_listing(**{self.OBJECT: "e"})), ("small", "file\tx\t" + "a" * 64 + "\n")):
+                with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+                    f.write(text)
+            def run(*args):
+                return subprocess.run([sys.executable, os.path.join(REPO, "tools", "image_manifest.py"), *args], capture_output=True, text=True, timeout=60)
+            self.assertEqual(run("inputs", os.path.join(tmp, "a"), os.path.join(tmp, "b")).returncode, 0)
+            different = run("inputs", os.path.join(tmp, "a"), os.path.join(tmp, "c"), "--label", "web link inputs")
+            self.assertEqual(different.returncode, 1)
+            self.assertIn("web link inputs: " + self.OBJECT + " differs", different.stdout)
+            self.assertEqual(run("inputs", os.path.join(tmp, "a"), os.path.join(tmp, "small")).returncode, 2)
+            self.assertEqual(run("inputs", os.path.join(tmp, "a"), os.path.join(tmp, "nothing")).returncode, 2)
+            self.assertEqual(run("relink", os.path.join(tmp, "a"), os.path.join(tmp, "b")).returncode, 2, "an inputs listing is no listing of programs")
+
+
+@unittest.skipUnless(shutil.which("sh") and shutil.which("sha256sum") and shutil.which("find"), "needs sh and the GNU tools")
+class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="ants_inputs_")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.src = os.path.join(self.tmp, "src")
+        self.cache = os.path.join(self.tmp, "cache")
+        self.bin = os.path.join(self.tmp, "bin")
+        for path in (self.bin, os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "lto")):
+            os.makedirs(path)
+        with open(os.path.join(self.bin, "em-config"), "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\necho '%s'\n" % self.cache)
+        os.chmod(os.path.join(self.bin, "em-config"), 0o755)
+        self.env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"], ANTS_SRC=self.src)
+
+    def put(self, path, data):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+
+    def tree(self):
+        for i in range(3):
+            self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "f%d.cpp.o" % i), b"object %d" % i)
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "libants_app.a"), b"archive")
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "link.txt"), b"em++ -O3 -o index.html f0.o\n")
+        self.put(os.path.join(self.src, "build_web", "lvl_core", "CMakeFiles", "lvl_core.dir", "link.txt"), b"em++ -Oz -o lvl_core.js\n")
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "flags.make"), b"flags")
+        self.put(os.path.join(self.src, "build_web", "generated", "ants_app", "version.hpp"), b'"v0.16.0"')
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "index.wasm"), b"the program: not an input")
+        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "libSDL2.a"), b"sdl")
+        self.put(os.path.join(self.cache, "sysroot", "lib", "wasm32-emscripten", "lto", "libc.a"), b"libc")
+        self.put(os.path.join(self.cache, "sysroot", "include", "x.h"), b"header: not an input")
+
+    def run_script(self, name, **env):
+        return subprocess.run(["sh", os.path.join(REPO, "tools", name)], env=dict(self.env, **env), capture_output=True, text=True, timeout=60)
+
+    def test_link_inputs_lists_objects_archives_flags_the_header_and_the_cache_libraries_and_the_command_lines(self):
+        self.tree()
+        done = self.run_script("link_inputs.sh")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        files = [l.split("\t")[1] for l in done.stdout.splitlines() if l.startswith("file\t")]
+        self.assertEqual(files, sorted(files))
+        self.assertEqual(len(files), 10)
+        for wanted in ("f0.cpp.o", "libants_app.a", "ants_app.dir/link.txt", "lvl_core.dir/link.txt", "flags.make", "version.hpp", "wasm32-emscripten/libSDL2.a", "lto/libc.a"):
+            self.assertTrue(any(f.endswith(wanted) for f in files), wanted)
+        for unwanted in ("index.wasm", "x.h"):
+            self.assertFalse(any(f.endswith(unwanted) for f in files), unwanted)
+        self.assertEqual(len([l for l in done.stdout.splitlines() if l.startswith("link\t")]), 2)
+        self.assertIn("link\tbuild_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt\tem++ -O3 -o index.html f0.o", done.stdout)
+        for line in done.stdout.splitlines():
+            if line.startswith("file\t"):
+                self.assertRegex(line.split("\t")[2], r"^[0-9a-f]{64}$")
+
+    def test_the_same_tree_gives_the_same_listing_and_a_changed_object_or_command_line_does_not(self):
+        self.tree()
+        first = self.run_script("link_inputs.sh").stdout
+        self.assertEqual(first, self.run_script("link_inputs.sh").stdout)
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "f1.cpp.o"), b"object 1, other")
+        second = self.run_script("link_inputs.sh").stdout
+        self.assertNotEqual(first, second)
+        self.put(os.path.join(self.src, "build_web", "src", "ants_app", "CMakeFiles", "ants_app.dir", "f1.cpp.o"), b"object 1")
+        self.put(os.path.join(self.src, "build_web", "lvl_core", "CMakeFiles", "lvl_core.dir", "link.txt"), b"em++ -O2 -o lvl_core.js\n")
+        self.assertNotEqual(first, self.run_script("link_inputs.sh").stdout)
+
+    def test_link_inputs_without_a_build_folder_or_a_cache_is_status_2(self):
+        self.assertEqual(self.run_script("link_inputs.sh").returncode, 2)
+        self.tree()
+        shutil.rmtree(os.path.join(self.cache, "sysroot"))
+        self.assertEqual(self.run_script("link_inputs.sh", PATH=self.bin + os.pathsep + os.environ["PATH"]).returncode, 2)
+
+    def fake_cmake(self, makes=True):
+        """What cmake does here: an output that is not there is made, one that is there is up to date and left alone."""
+        make = "".join("[ -e %s ] || echo %s > %s\n" % (f, name, f) for f, name in (("build_web/src/ants_app/index.js", "js"), ("build_web/src/ants_app/index.wasm", "wasm"), ("build_web/src/ants_app/index.data", "data"),
+                                                                                  ("build_web/src/ants_app/index.html", "page"), ("build_web/lvl_core/lvl_core.js", "core"), ("build_web/lvl_core/lvl_core.wasm", "corewasm")))
+        self.put(os.path.join(self.bin, "cmake"), ("#!/bin/sh\n" + (make if makes else "exit 0\n")).encode("ascii"))
+        os.chmod(os.path.join(self.bin, "cmake"), 0o755)
+
+    def test_relink_removes_the_outputs_links_again_and_prints_the_hashes_of_four_files(self):
+        self.tree()
+        for name in ("index.html", "index.js", "index.data"):
+            self.put(os.path.join(self.src, "build_web", "src", "ants_app", name), b"old")
+        self.put(os.path.join(self.src, "build_web", "lvl_core", "lvl_core.js"), b"old")
+        self.put(os.path.join(self.src, "build_web", "lvl_core", "lvl_core.wasm"), b"old")
+        self.fake_cmake()
+        done = self.run_script("relink_outputs.sh")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        names = [l.split("\t")[1] for l in done.stdout.splitlines()]
+        self.assertEqual(names, ["index.js", "index.wasm", "lvl_core.js", "lvl_core.wasm"])
+        listing = im.listing(done.stdout, "relink")
+        self.assertEqual(len(listing), 4)
+        with open(os.path.join(self.src, "build_web", "src", "ants_app", "index.js"), "rb") as f:
+            self.assertEqual(f.read(), b"js\n", "the old output was removed and made again")
+
+    def test_relink_that_makes_nothing_or_fails_is_status_2(self):
+        self.tree()
+        self.fake_cmake(makes=False)
+        for name in ("index.js", "index.data", "index.html"):
+            self.put(os.path.join(self.src, "build_web", "src", "ants_app", name), b"old")
+        self.put(os.path.join(self.src, "build_web", "lvl_core", "lvl_core.js"), b"old")
+        done = self.run_script("relink_outputs.sh")
+        self.assertEqual(done.returncode, 2, "an output that is not there after the link is not a hash of nothing")
+        self.put(os.path.join(self.bin, "cmake"), b"#!/bin/sh\nexit 1\n")
+        self.assertEqual(self.run_script("relink_outputs.sh").returncode, 2)
+
+    def test_the_scripts_have_the_modes_and_the_syntax_of_scripts(self):
+        for name in ("link_inputs.sh", "relink_outputs.sh"):
+            self.assertEqual(subprocess.run(["sh", "-n", os.path.join(REPO, "tools", name)]).returncode, 0, name)
+            self.assertTrue(os.stat(os.path.join(REPO, "tools", name)).st_mode & stat.S_IXUSR, name)
 
 
 class TheCommandLine(unittest.TestCase):
@@ -234,7 +427,8 @@ class TheCommandLine(unittest.TestCase):
 
 
 FAKE_DOCKER = r'''#!/usr/bin/env python3
-"""A stand-in for docker: builds nothing; `create` names the image, `export` writes the tar that the test chose (FAKE_STATE/<image>.tar), `image inspect` the configuration that it chose."""
+"""A stand-in for docker: builds nothing; `create` names the image, `export` writes the tar that the test chose (FAKE_STATE/<image>.tar), `image inspect` the configuration that it chose, `run` the listing of the
+link's inputs (or, with setarch, of the programs of a link) that it chose for the builder stage of the image."""
 import json, os, sys
 state = os.environ["FAKE_STATE"]
 args = sys.argv[1:]
@@ -256,6 +450,24 @@ elif args[0] == "export":
         which = f.read().strip()
     with open(os.path.join(state, which + ".tar"), "rb") as f:
         sys.stdout.buffer.write(f.read())
+elif args[0] == "run":
+    tag = [a for a in args if a.startswith("ants-image-diff-")][0]
+    if os.environ.get("FAKE_FAIL") and os.environ["FAKE_FAIL"] in tag:
+        sys.exit(1)
+    with open(os.path.join(state, tag + ".which")) as f:
+        which = f.read().strip()
+    sys.stdin.read()
+    if "setarch" in args:
+        with open(os.path.join(state, "calls.log")) as f:
+            earlier = sum(1 for line in f if "setarch" in line) - 1
+        with open(os.path.join(state, which + ".relink")) as f:
+            text = f.read()
+        if os.environ.get("FAKE_RELINK_NOISE") and earlier == 2:
+            text = text.replace("1", "7", 1)
+        sys.stdout.write(text)
+    else:
+        with open(os.path.join(state, which + ".inputs")) as f:
+            sys.stdout.write(f.read())
 elif args[:2] == ["image", "inspect"]:
     with open(os.path.join(state, args[2] + ".which")) as f:
         which = f.read().strip()
@@ -270,7 +482,7 @@ class TheScript(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="ants_imgdiff_")
         self.repo = os.path.join(self.tmp, "repo")
         os.makedirs(os.path.join(self.repo, "tools"))
-        for name in ("image_files_diff.sh", "image_manifest.py"):
+        for name in ("image_files_diff.sh", "image_manifest.py", "link_inputs.sh", "relink_outputs.sh"):
             shutil.copy(os.path.join(REPO, "tools", name), os.path.join(self.repo, "tools", name))
         self.state = os.path.join(self.tmp, "state")
         os.makedirs(self.state)
@@ -290,13 +502,21 @@ class TheScript(unittest.TestCase):
         for name in ("Dockerfile", "Dockerfile.server"):
             with open(os.path.join(self.repo, name), "w", encoding="utf-8") as f:
                 f.write("new\n")
+        self.inputs, self.relink = inputs_listing(), RELINK
         self.config = json.dumps([{"Config": {"User": "ants", "Entrypoint": ["/x"], "Cmd": ["--a"], "ExposedPorts": {"80/tcp": {}}, "Env": ["A=1"]}}])
         self.write_images()
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
+    def write_listings(self, base_inputs=None, new_inputs=None, base_relink=None, new_relink=None):
+        for name, text in (("base.inputs", self.inputs if base_inputs is None else base_inputs), ("new.inputs", self.inputs if new_inputs is None else new_inputs),
+                           ("base.relink", self.relink if base_relink is None else base_relink), ("new.relink", self.relink if new_relink is None else new_relink)):
+            with open(os.path.join(self.state, name), "w", encoding="utf-8") as f:
+                f.write(text)
+
     def write_images(self, base_files=None, new_files=None, new_config=None):
+        self.write_listings()
         files = {HTML + "index.html": page(0, 1), "usr/local/bin/ants_server": (b"binary", 0o755, 0)}
         for which, extra, config in (("base", base_files, self.config), ("new", new_files, new_config or self.config)):
             with open(os.path.join(self.state, which + ".tar"), "wb") as f:
@@ -312,11 +532,15 @@ class TheScript(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("the images are the same", done.stdout)
         calls = open(os.path.join(self.state, "calls.log"), encoding="utf-8").read()
-        self.assertEqual(calls.count("build -f"), 4, "the base and the new image of both Dockerfiles")
-        self.assertEqual(calls.count("--build-arg ANTS_BUILD_ID=image-diff"), 4, "the same build id for all four")
+        self.assertEqual(calls.count("build -f"), 6, "the base and the new image of both Dockerfiles, and the builder stage of the two web images")
+        self.assertEqual(calls.count("--target builder"), 2)
+        self.assertEqual(calls.count("--build-arg ANTS_BUILD_ID=image-diff"), 6, "the same build id for all six")
         self.assertIn("build -f Dockerfile.server --build-arg", calls)                                      # (the new one is the working tree's own file, the context is the folder that the script runs in)
         self.assertIn("Dockerfile.server.base --build-arg", calls)                                          # (the base one is a copy of the base revision's file in a scratch folder)
-        self.assertEqual(calls.count(" -t ants-image-diff-"), 4)
+        self.assertEqual(calls.count(" -t ants-image-diff-"), 6)
+        self.assertEqual(calls.count("\nrun "), 5, "two listings of the link's inputs and three deterministic links (the base, the new one and the new one again)")
+        self.assertEqual(calls.count("setarch x86_64 -R sh -s"), 3)
+        self.assertEqual(calls.count("--security-opt seccomp=unconfined -e BINARYEN_CORES=1 -e EMCC_CFLAGS=-Wl,--threads=1"), 3, "the recipe of the deterministic link, in the check only")
         self.assertEqual(calls.count("\nimage rm -f "), 1, "the images are removed at the end")
 
     def test_a_changed_byte_fails_and_names_the_file(self):
@@ -342,8 +566,90 @@ class TheScript(unittest.TestCase):
         done = self.run_script("--web")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         calls = open(os.path.join(self.state, "calls.log"), encoding="utf-8").read()
-        self.assertEqual(calls.count("build -f"), 2)
+        self.assertEqual(calls.count("build -f"), 4)
         self.assertNotIn("Dockerfile.server", calls)
+
+    OBJECT = "build_web/CMakeFiles/o07.o"
+    LINK = "build_web/src/ants_app/CMakeFiles/ants_app.dir/link.txt"
+
+    def test_programs_that_differ_in_content_but_not_in_what_the_link_read_pass(self):
+        """The three variants of one link: the files of the two images differ in bytes (and by a few in size), the inputs and the deterministic link do not."""
+        self.write_images(base_files={HTML + "index.wasm": b"A" * 5000, HTML + "index.js": b"x" * 900}, new_files={HTML + "index.wasm": b"B" * 5006, HTML + "index.js": b"y" * 900})
+        done = self.run_script("--web")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("web link inputs: ", done.stdout)
+        self.assertIn("web link outputs: ", done.stdout)
+
+    def test_a_changed_link_input_fails_and_names_it(self):
+        self.write_listings(new_inputs=inputs_listing(**{self.OBJECT: "e"}))
+        done = self.run_script("--web")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("web link inputs: " + self.OBJECT + " differs", done.stdout)
+        self.assertIn("DIFFER", done.stderr)
+
+    def test_a_changed_link_command_line_fails_and_shows_both(self):
+        self.write_listings(new_inputs=inputs_listing(**{self.LINK: "link:em++ -O2 -o index.html a.o b.a"}))
+        done = self.run_script("--web")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("the link command line differs", done.stdout)
+        self.assertIn("-O3", done.stdout)
+        self.assertIn("-O2", done.stdout)
+
+    def test_a_link_input_that_is_only_in_one_build_fails(self):
+        self.write_listings(base_inputs=inputs_listing(**{"build_web/CMakeFiles/stale_stub.o": "a"}))
+        done = self.run_script("--web")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("only in the base build: build_web/CMakeFiles/stale_stub.o", done.stdout)
+
+    def test_programs_of_the_deterministic_link_that_differ_fail(self):
+        self.write_listings(new_relink=RELINK.replace("2" * 64, "9" * 64))
+        done = self.run_script("--web")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn("web link outputs: index.wasm differs", done.stdout)
+
+    def test_a_recipe_that_does_not_hold_on_the_machine_is_said_and_only_the_inputs_count(self):
+        """The new image linked twice gives two results: the recipe is no recipe here, and the programs are not compared (the inputs are, and they differ nowhere)."""
+        self.write_listings(base_relink=RELINK.replace("2" * 64, "9" * 64))
+        done = self.run_script("--web", FAKE_RELINK_NOISE="1")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("WARNING: two deterministic links of one image gave different programs", done.stdout)
+        self.assertNotIn("web link outputs: 4 entries compared", done.stdout)
+        self.write_listings(new_inputs=inputs_listing(**{self.OBJECT: "e"}))
+        done = self.run_script("--web", FAKE_RELINK_NOISE="1")
+        self.assertEqual(done.returncode, 1, "the inputs are compared whatever the links do")
+
+    def test_no_relink_leaves_out_the_deterministic_link(self):
+        self.write_listings(new_relink=RELINK.replace("2" * 64, "9" * 64))
+        done = self.run_script("--web", "--no-relink")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("not compared (--no-relink)", done.stdout)
+        calls = open(os.path.join(self.state, "calls.log"), encoding="utf-8").read()
+        self.assertNotIn("setarch", calls)
+
+    def test_a_builder_stage_or_a_listing_that_cannot_be_made_is_status_2(self):
+        done = self.run_script("--web", FAKE_FAIL="-builder-new")
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertNotIn("the images are the same", done.stdout)
+        self.write_listings(new_inputs="")
+        done = self.run_script("--web")
+        self.assertEqual(done.returncode, 2, "an empty listing must not pass for the same listing")
+        self.assertNotIn("the images are the same", done.stdout)
+        self.write_listings()
+        done = self.run_script("--web", FAKE_FAIL="web-builder-new")
+        self.assertEqual(done.returncode, 2)
+
+    def test_a_deterministic_link_that_fails_is_status_2(self):
+        self.write_listings(new_relink="")
+        done = self.run_script("--web")
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertNotIn("the images are the same", done.stdout)
+
+    def test_the_server_image_has_no_link_listing(self):
+        done = self.run_script("--server")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotIn("the builder stage", done.stdout)
+        calls = open(os.path.join(self.state, "calls.log"), encoding="utf-8").read()
+        self.assertNotIn("--target builder", calls)
 
     def test_a_build_that_fails_is_status_2_and_no_comparison_passes(self):
         done = self.run_script(FAKE_FAIL="-new")
@@ -364,6 +670,7 @@ class TheScript(unittest.TestCase):
         self.assertTrue(text.startswith("#!/usr/bin/env bash\n"))
         self.assertIn('git show "$base:$file"', text)
         self.assertIn("docker export", text)
+        self.assertIn("export DOCKER_BUILDKIT=1\n", text)
 
 
 class TheCiJob(unittest.TestCase):
@@ -372,25 +679,61 @@ class TheCiJob(unittest.TestCase):
         with open(os.path.join(REPO, ".github", "workflows", "ci.yml"), encoding="utf-8") as f:
             text = f.read()
         start = text.index("\n  image_files:\n")
-        cls.job = text[start:text.index("\n  deploy:\n", start)]
+        cls.job = text[start:]
         cls.text = text
+        cls.lines = cls.job.splitlines()
 
-    def test_it_runs_the_script_against_origin_main_when_a_dockerfile_or_the_check_changed(self):
-        self.assertIn("bash tools/image_files_diff.sh --base origin/main", self.job)
-        self.assertIn("if: steps.decide.outputs.run == 'true'", self.job)
+    def code(self):
+        return [l for l in self.lines if not l.lstrip().startswith("#")]
+
+    def test_it_is_the_last_job_and_nothing_waits_for_it(self):
+        self.assertEqual(re.findall(r"(?m)^  ([a-z0-9_-]+):\s*$", self.job), ["image_files"], "no job after it")
+        needing = [l for l in self.text.splitlines() if re.match(r"^\s+needs:", l)]
+        for line in needing:
+            self.assertNotIn("image_files", line, "a required check must not wait for the image check")
+            self.assertNotIn("deploy", line, "there is no deploy job any more")
+        self.assertNotIn("\n  deploy:\n", self.text)
+
+    def test_it_runs_the_script_against_the_base_of_the_pull_request_when_a_dockerfile_or_the_check_changed(self):
+        self.assertIn("      - name: Build the images from the pull request's base Dockerfiles and from this tree's, and compare their files\n        if: steps.decide.outputs.run == 'true'\n"
+                      "        env:\n          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}\n        run: bash tools/image_files_diff.sh --base \"$PR_BASE_SHA\" --diagnose\n", self.job + "\n")
+        self.assertIn("        env:\n          EVENT: ${{ github.event_name }}\n          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}\n", self.job)
+        self.assertIn('changed=$(git diff --name-only "$PR_BASE_SHA" HEAD)', self.job)
         self.assertIn('[ "$EVENT" = pull_request ]', self.job)
-        self.assertIn("fetch-depth: 0", self.job)                  # (origin/main must be there)
-        for path in ("Dockerfile", "Dockerfile\\.server", "docker/emsdk_warm\\.cpp", "tools/image_files_diff\\.sh", "tools/image_manifest\\.py"):
-            self.assertIn(path, self.job)
-        self.assertNotIn("Dockerfile\\.hub", self.job, "the hub's image is not part of the check")
+        self.assertIn("fetch-depth: 0", self.job)                  # (the base commit must be there)
+        self.assertNotIn("origin/main", "\n".join(self.code()), "a pull request into another branch is compared with its own base")
 
-    def test_it_is_not_a_required_check_and_the_deploy_waits_for_it_like_for_every_job(self):
+    def test_the_trigger_is_the_whole_pattern_of_the_files_that_the_images_depend_on(self):
+        self.assertIn("            if echo \"$changed\" | grep -Eq '^(Dockerfile|Dockerfile\\.server|docker/emsdk_warm\\.cpp|tools/image_files_diff\\.sh|tools/image_manifest\\.py|tools/link_inputs\\.sh|tools/relink_outputs\\.sh)$'; then run=true; fi\n", self.job)
+        self.assertNotIn("Dockerfile\\.hub", self.job, "the hub's image is not part of the check")
+        self.assertIn('          run=false\n', self.job)
+        self.assertIn('          echo "run=$run" >> "$GITHUB_OUTPUT"\n', self.job)
+
+    def test_it_cannot_be_made_to_pass(self):
+        code = "\n".join(self.code())
+        self.assertNotIn("continue-on-error", code)
+        self.assertNotIn("|| true", code)
+        self.assertNotIn("|| :", code)
+        self.assertNotIn("set +e", code)
+        self.assertNotIn("exit 0", code)
+        self.assertNotRegex(code, r"(?m)^\s+if: .*(always|failure|cancelled)\(\)")
+        runs = [l for l in self.code() if l.strip().startswith("run:")]
+        self.assertEqual(len(runs), 2, runs)
+        self.assertIn("        run: bash tools/image_files_diff.sh --base \"$PR_BASE_SHA\" --diagnose", self.code())
+
+    def test_it_is_not_a_required_check_and_has_a_time_limit(self):
         self.assertIn("name: Image files unchanged by a Dockerfile change", self.job)
         header = self.text[:self.text.index("\njobs:\n")]
         self.assertNotIn("Image files unchanged", header)
-        deploy = self.text[self.text.index("\n  deploy:\n"):]
-        self.assertIn("web, image_files]", deploy)               # (on a push it only says that nothing changed)
-        self.assertIn("timeout-minutes:", self.job)
+        self.assertIn("    timeout-minutes: 60\n", self.job)
+        self.assertIn("    runs-on: ubuntu-latest\n", self.job)
+
+    def test_the_docs_say_what_the_job_is_for_and_that_a_new_copy_line_makes_it_red(self):
+        with open(os.path.join(REPO, "docs", "TESTING.md"), encoding="utf-8") as f:
+            testing = f.read()
+        self.assertIn('A sixth job, "Image files unchanged by a Dockerfile change", is not required', testing)
+        self.assertIn("a `COPY` line", testing)
+        self.assertIn("red for it by design", testing)
 
 
 if __name__ == "__main__":

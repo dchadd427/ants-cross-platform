@@ -11,7 +11,7 @@ The tool replays the Dockerfile on this machine and serves the result with nginx
   - the replay of small Dockerfiles: COPY (files, folders, patterns, --from), the folders that are moved (nothing is written to this machine's /src), ARG and --build-arg (with the quotes
     of a value taken out), ENV, WORKDIR, and the errors: a path that is not moved, a COPY flag that the tool would leave out, an unbalanced quote
   - the replay of the REAL Dockerfile with a fake compiler (Linux): every step but the compile runs as in the image, so the pages have what CI's checks of the image look for (the version,
-    the build id, no placeholder left, the staging label, the changelog page, the files of the runner stage)
+    the build id, no placeholder left, the site placeholders, the changelog page, the files of the runner stage)
   - the emsdk: the version that is there is taken as it is when its install was finished, another one or a strange folder is an error, a missing one or one that a cut-short run left half
     way is cloned, installed and activated, and one whose environment has no emcc is an error
   - the ports that Emscripten would download (read from the port files of the installed Emscripten) and how they are put in its cache, from a git tag or from the mirror (an answer that is
@@ -251,6 +251,30 @@ class TheReplay(Scratch):
         with open(self.seen(fs, "src/out.txt"), encoding="utf-8") as f:
             self.assertEqual(f.read(), "[][the ants][x][hello world][big][ant][value with spaces]")
 
+    def test_the_ccache_folder_of_the_dockerfile_is_a_private_folder_and_never_the_machines_own(self):
+        """ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G of the Dockerfile must not reach this machine's own compiler cache (it would be trimmed to 1 GB) or need /root (a user who is not root has none)."""
+        envs = [step.text for step in wd.parse_dockerfile(read("Dockerfile")) if step.op == "ENV" and "CCACHE_DIR" in step.text]
+        self.assertTrue(envs, "the Dockerfile sets CCACHE_DIR")
+        fs, _ = self.play("FROM a\n" + "".join("ENV %s\n" % text for text in envs) + "WORKDIR /src\nRUN printf '%s|%s' \"$CCACHE_DIR\" \"$CCACHE_MAXSIZE\" > /src/out.txt\n", env={"PATH": os.environ["PATH"], "CCACHE_DIR": "/home/someone/.ccache"})
+        with open(self.seen(fs, "src/out.txt"), encoding="utf-8") as f:
+            folder, size = f.read().split("|")
+        self.assertNotIn("/root", folder)
+        self.assertNotEqual(folder, "/home/someone/.ccache")
+        self.assertTrue(folder.startswith(self.path("")), "the folder is in this run's scratch space: " + folder)
+        self.assertTrue(os.path.isdir(folder))
+        self.assertEqual(size, "1G", "the size limit is kept: it applies to the private folder")
+
+    def test_an_env_path_that_is_moved_is_moved_and_one_that_is_not_is_an_error(self):
+        fs, _ = self.play("FROM a\nENV WHERE=/src/x NAME=plain\nWORKDIR /src\nRUN printf '%s|%s' \"$WHERE\" \"$NAME\" > /src/out.txt\n")
+        with open(self.seen(fs, "src/out.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "%s|plain" % os.path.join(fs, "src", "x"))
+        for text in ("ENV CACHE=/var/cache/x", "ENV CACHE /var/cache/x", "ENV A=b CACHE=/home/me"):
+            with self.subTest(text):
+                with self.assertRaises(wd.ToolError) as caught:
+                    self.play("FROM a\n%s\n" % text)
+                self.assertIn("ENV CACHE is /", str(caught.exception))
+                self.assertIn("does not move", str(caught.exception))
+
     def test_a_path_that_is_not_moved_is_an_error_before_the_command_runs_and_the_harmless_ones_are_not(self):
         self.play("FROM a\nRUN test -d /src && true > /dev/null && echo '</strong>' > /dev/null && test -d /usr/share/nginx/html && /bin/sh -c true\n")
         outside = self.path("outside.txt")
@@ -293,12 +317,12 @@ class TheRealDockerfileReplayed(Scratch):
         write(os.path.join(cls.base, "bin", "cmake"),
               "#!/bin/sh\nout=build_web/src/ants_app\nmkdir -p \"$out\"\n"
               "sed 's|{{{ SCRIPT }}}|<script async type=\"text/javascript\" src=\"index.js\"></script>|' web/shell.html > \"$out/index.html\"\n"
-              "echo game > \"$out/index.js\"; echo wasm > \"$out/index.wasm\"; head -c 4096 /dev/zero > \"$out/index.data\"\n"
+              "echo game > \"$out/index.js\"; echo \"wasm v$(head -n 1 VERSION)\" > \"$out/index.wasm\"; head -c 1100000 /dev/zero > \"$out/index.data\"\n"
               "mkdir -p build_web/lvl_core; echo core > build_web/lvl_core/lvl_core.js; echo wasm > build_web/lvl_core/lvl_core.wasm\n", 0o755)
         env = dict(os.environ, PATH=os.path.join(cls.base, "bin") + os.pathsep + os.environ["PATH"])
         steps = wd.parse_dockerfile(read("Dockerfile"))
         cls.site, cls.said = {}, {}
-        for label, build_args in (("plain", {"ANTS_BUILD_ID": "abc1234"}), ("staging", {"ANTS_SITE_LABEL": "staging"})):
+        for label, build_args in (("plain", {"ANTS_BUILD_ID": "abc1234"}), ("noarg", {})):
             fs = os.path.join(cls.base, label)
             os.makedirs(fs)
             with open(os.path.join(cls.base, label + ".log"), "w+", encoding="utf-8") as log:
@@ -341,25 +365,26 @@ class TheRealDockerfileReplayed(Scratch):
             self.assertRegex(text, r'id="?game-build-date"?>\(\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT\)<', name)
             self.assertNotIn("@@", text, name)
             self.assertNotIn("site-label", text, name)
-            self.assertNotIn("(staging)", text, name)
-            self.assertNotIn("staging", text.lower(), name)
 
     def test_the_build_id_comes_from_the_build_argument_else_from_the_checkout_else_from_the_date(self):
         self.assertIn("build id from the build argument", self.said["plain"])
-        self.assertRegex(self.said["staging"], r"build id from the (git commit|build date)")
-        self.assertNotIn("build id from the build argument", self.said["staging"])
+        self.assertRegex(self.said["noarg"], r"build id from the (git commit|build date)")
+        self.assertNotIn("build id from the build argument", self.said["noarg"])
 
     def test_the_game_page_has_the_cache_buster_once_and_the_size_of_the_data(self):
         text = self.page("plain", "index.html")
         self.assertEqual(len(re.findall(r'<script[^>]* src="?index\.js\?v=\d+"?', text)), 1)
         self.assertNotRegex(text, r"index\.js\?v=\d+\?v=")
-        self.assertIn("parseInt('4096', 10)", text)
+        self.assertIn("parseInt('1100000', 10)", text)
 
-    def test_the_staging_label_is_in_the_title_and_the_footer(self):
-        for name in ("index.html", "play.html", "lobby.html"):
-            text = self.page("staging", name)
-            self.assertIn("(staging)</title>", text, name)
-            self.assertIn('id="site-label">staging<', text, name)
+    def test_the_site_placeholders_become_nothing_in_the_titles_and_the_footers(self):
+        self.assertIn("<title>Ants (1998)</title>", self.page("plain", "lobby.html"))
+        self.assertIn("<title>Ants (1998) \u2014 beta.playants.org</title>", self.page("plain", "index.html"))
+        for name in ("index.html", "play.html", "lobby.html", "matches.html", "match.html", "live.html"):
+            if os.path.exists(self.html("plain", name)):
+                text = self.page("plain", name)
+                self.assertNotIn("@@SITE_", text, name)
+                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)
 
     def test_the_changelog_page_is_made_from_the_changelog_and_is_the_only_one(self):
         page = self.page("plain", "changelog.html")

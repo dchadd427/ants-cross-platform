@@ -109,7 +109,6 @@ public:
 
     Step step();                            // Failed: see error()
     Error reset();                          // runs the statement again from the start; the bindings stay
-    Error clear_bindings();
     const Error& error() const { return last_; }
 
     int column_count() const;

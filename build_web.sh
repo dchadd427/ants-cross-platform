@@ -51,6 +51,8 @@ for PAGE in matches match live; do                                # the pages of
     sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/${PAGE}.html" > "${DIST_DIR}/${PAGE}.html"
 done
 cp -f "${SCRIPT_DIR}/web/matches.css" "${DIST_DIR}/"                                                                                                                                                # ... their stylesheet
+cp -f "${SCRIPT_DIR}/web/site_nav.css" "${DIST_DIR}/"                                                                                                                                              # the bar at the top of every page (its style and its Menu)
+cp -f "${SCRIPT_DIR}/web/site_nav.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/replay_page.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers they share with the game page
 cp -f "${SCRIPT_DIR}/web/history_page.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/match_stats.js" "${DIST_DIR}/"

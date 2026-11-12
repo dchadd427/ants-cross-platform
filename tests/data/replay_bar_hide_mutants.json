@@ -1,0 +1,357 @@
+{
+ "note": "Mutants of the hiding of the fullscreen replay bar (docs/REPLAYS.md \"Hiding the bar\") for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the state machine in web/replay_page.js against tests/scripts/web_replay_bar_check.js (node, a fake clock) and the glue, the style and the docs against tests/scripts/test_web_replay_bar.py. Run from the checkout: python3 tools/mutate.py tests/data/replay_bar_hide_mutants.json --keep-going --jobs 1 --timeout 300. Every mutant must be caught; the same test file runs the list in the quick tier on a copy. Each `why` names what the mutant loses.",
+ "mutants": [
+  {
+   "id": "zone_rest_is_shorter",
+   "file": "web/replay_page.js",
+   "old": "ZONE_DWELL_MS = 150",
+   "new": "ZONE_DWELL_MS = 20",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a mouse passing the bottom edge would open the bar at once"
+  },
+  {
+   "id": "leave_time_is_shorter",
+   "file": "web/replay_page.js",
+   "old": "ZONE_LEAVE_MS = 700",
+   "new": "ZONE_LEAVE_MS = 70",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a peeking bar would go while the pointer is still on its way back"
+  },
+  {
+   "id": "zone_is_thinner",
+   "file": "web/replay_page.js",
+   "old": "ZONE_PX = 48",
+   "new": "ZONE_PX = 8",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "the bottom band would be too thin to find"
+  },
+  {
+   "id": "zone_opens_with_a_button_down",
+   "file": "web/replay_page.js",
+   "old": "if (at && !at.buttons && inZone()) {\n                    if (dwell && anchor && (Math.abs(at.x - anchor.x) > ZONE_REST_PX || Math.abs(at.y - anchor.y) > ZONE_REST_PX)) { env.clearTimeout(dwell); dwell = 0; }       // (a rest: a pointer that goes on moving starts the delay again)\n                    if (!dwell) { anchor = { x: at.x, y: at.y }; dwell = env.setTimeout(function () { dwell = 0; if (mode === 'hidden' && at && !at.buttons && inZone()) set('peek'); }",
+   "new": "if (at && inZone()) {\n                    if (dwell && anchor && (Math.abs(at.x - anchor.x) > ZONE_REST_PX || Math.abs(at.y - anchor.y) > ZONE_REST_PX)) { env.clearTimeout(dwell); dwell = 0; }       // (a rest: a pointer that goes on moving starts the delay again)\n                    if (!dwell) { anchor = { x: at.x, y: at.y }; dwell = env.setTimeout(function () { dwell = 0; if (mode === 'hidden' && at && inZone()) set('peek'); }",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a drag along the bottom edge would open the bar"
+  },
+  {
+   "id": "button_down_is_not_on_the_bar",
+   "file": "web/replay_page.js",
+   "old": "!(inZone() || inBar() || at.buttons || env.busy())",
+   "new": "!(inZone() || inBar() || env.busy())",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a drag of the timeline that leaves the bar would hide it under the pointer"
+  },
+  {
+   "id": "busy_bar_is_not_on_the_bar",
+   "file": "web/replay_page.js",
+   "old": "!(inZone() || inBar() || at.buttons || env.busy())",
+   "new": "!(inZone() || inBar() || at.buttons)",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "the open Picture window would be hidden with the bar"
+  },
+  {
+   "id": "the_bar_is_not_a_place_of_the_pointer",
+   "file": "web/replay_page.js",
+   "old": "return !!(at && b && at.x >= b.left",
+   "new": "return !!(false && b && at.x >= b.left",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a peeking bar would go while the pointer is on it"
+  },
+  {
+   "id": "settle_keeps_a_peek",
+   "file": "web/replay_page.js",
+   "old": "settle: function () { if (mode === 'peek') set('hidden'); },",
+   "new": "settle: function () { },",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a peek would outlive fullscreen"
+  },
+  {
+   "id": "set_keeps_the_rest_timer",
+   "file": "web/replay_page.js",
+   "old": "            env.clearTimeout(dwell); env.clearTimeout(leave); dwell = 0; leave = 0;\n",
+   "new": "            env.clearTimeout(leave); leave = 0;\n",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a hide during the 150 ms would still open"
+  },
+  {
+   "id": "held_peek_is_not_looked_at_again",
+   "file": "web/replay_page.js",
+   "old": "else if (!inZone() && !inBar()) arm(); }",
+   "new": "}",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a peek that a button held would stay until the next move"
+  },
+  {
+   "id": "leaving_the_page_is_not_leaving",
+   "file": "web/replay_page.js",
+   "old": "gone: function () { at = null; look(); }",
+   "new": "gone: function () { }",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a peek would stay when the mouse leaves the page"
+  },
+  {
+   "id": "zone_ignores_the_sides",
+   "file": "web/replay_page.js",
+   "old": "at.x >= z.left && at.x <= z.right && ",
+   "new": "",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "the black bars beside a narrow picture would open the bar"
+  },
+  {
+   "id": "open_is_a_peek",
+   "file": "web/replay_page.js",
+   "old": "open: function () { set('open'); },",
+   "new": "open: function () { set('peek'); },",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "the handle would not pin the bar"
+  },
+  {
+   "id": "locked_cursor_hits_a_hidden_bar",
+   "file": "web/replay_page.js",
+   "old": "bar.classList.contains('idle') || bar.classList.contains('gone')) return null;",
+   "new": "bar.classList.contains('idle')) return null;",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a locked cursor could press buttons of a bar that is not there"
+  },
+  {
+   "id": "wake_calls_a_hidden_bar",
+   "file": "web/shell.html",
+   "old": "if (bar.classList.contains('over') && zone.mode() === 'hidden') { syncEdge(); return; }",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a mouse move, a key or a click would bring a hidden bar back"
+  },
+  {
+   "id": "a_peek_fades_by_itself",
+   "file": "web/shell.html",
+   "old": "zone.mode() === 'open' && get(VALUE.state) === STATE.playing) idleTimer",
+   "new": "get(VALUE.state) === STATE.playing) idleTimer",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the idle fade would race the leave time"
+  },
+  {
+   "id": "chevron_opens",
+   "file": "web/shell.html",
+   "old": "$('b-tab').addEventListener('click', function () { zone.hide(); });",
+   "new": "$('b-tab').addEventListener('click', function () { zone.open(); });",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the chevron would not hide the bar"
+  },
+  {
+   "id": "b_key_is_x",
+   "file": "web/shell.html",
+   "old": "if ((ev.key === 'b' || ev.key === 'B' || ev.code === 'KeyB') &&",
+   "new": "if ((ev.key === 'x' || ev.key === 'X' || ev.code === 'KeyX') &&",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "there would be no key"
+  },
+  {
+   "id": "b_key_goes_to_the_game",
+   "file": "web/shell.html",
+   "old": "ev.preventDefault(); ev.stopImmediatePropagation(); if (!ev.repeat) toggleBar(); return;",
+   "new": "if (!ev.repeat) toggleBar(); return;",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the game would get the B key too"
+  },
+  {
+   "id": "handle_is_narrow",
+   "file": "web/shell.html",
+   "old": "width: 44px; height: 14px; padding: 0;",
+   "new": "width: 30px; height: 14px; padding: 0;",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the handle would be too small to hit"
+  },
+  {
+   "id": "handle_has_no_hit_area",
+   "file": "web/shell.html",
+   "old": "top: -30px; bottom: 0; }",
+   "new": "top: -2px; bottom: 0; }",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a finger would have to hit 14 px"
+  },
+  {
+   "id": "hidden_bar_is_visible",
+   "file": "web/shell.html",
+   "old": "opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-50%) translateY(14px);",
+   "new": "opacity: 0; visibility: visible; pointer-events: none; transform: translateX(-50%) translateY(14px);",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a hidden bar would keep its focus stops"
+  },
+  {
+   "id": "slide_in_reduced_motion",
+   "file": "web/shell.html",
+   "old": "@media (prefers-reduced-motion: reduce) { .rbar.over, .rbar.over.gone { transition: none; } }",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the bar would slide for a viewer who asked for none"
+  },
+  {
+   "id": "finger_peeks",
+   "file": "web/shell.html",
+   "old": "if (ev.pointerType !== 'touch' && !isLocked() &&",
+   "new": "if (!isLocked() &&",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a finger moving along the bottom would open the bar"
+  },
+  {
+   "id": "locked_mouse_cannot_peek",
+   "file": "web/shell.html",
+   "old": "if (ANTS_REPLAY_MODE && window.antsReplayZone) window.antsReplayZone(rect.left + lockCursor.x, rect.top + lockCursor.y, e.buttons); ",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a locked mouse could not call the bar at all"
+  },
+  {
+   "id": "strip_under_a_hidden_bar",
+   "file": "web/shell.html",
+   "old": "bar.classList.contains('idle') && !gone);",
+   "new": "bar.classList.contains('idle'));",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a finger would get a strip and a handle both"
+  },
+  {
+   "id": "fullscreen_end_keeps_the_peek",
+   "file": "web/shell.html",
+   "old": "zone.settle(); wake(); }",
+   "new": "wake(); }",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a peek would come back with the next fullscreen"
+  },
+  {
+   "id": "handle_press_keeps_the_focus_behind",
+   "file": "web/shell.html",
+   "old": "if (focus || from) $('b-tab').focus();",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a keyboard viewer would lose the focus when the bar comes up"
+  },
+  {
+   "id": "handle_has_no_state",
+   "file": "web/shell.html",
+   "old": "id=\"b-handle\" aria-label=\"Show the bar\" aria-controls=\"rbar\" aria-expanded=\"false\"",
+   "new": "id=\"b-handle\" aria-label=\"Show the bar\" aria-controls=\"rbar\"",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a screen reader would not hear the state"
+  },
+  {
+   "id": "docs_forget_the_key",
+   "file": "docs/REPLAYS.md",
+   "old": "or the **B** key: the bar is not there at all",
+   "new": "or a key: the bar is not there at all",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "the docs would not name the key"
+  },
+  {
+   "id": "zone_reaches_the_scroll_strip",
+   "file": "web/replay_page.js",
+   "old": "at.y < z.bottom - gapOf(z)",
+   "new": "at.y < z.bottom + 1",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a pointer resting in the game's edge scroll strip would bring the bar up over the picture while the map scrolls"
+  },
+  {
+   "id": "zone_gap_is_thin",
+   "file": "web/replay_page.js",
+   "old": "ZONE_GAP = 12",
+   "new": "ZONE_GAP = 2",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "the least gap would shrink: a picture at its own size would call the bar from the game's scroll strip"
+  },
+  {
+   "id": "zone_gap_ignores_the_scale",
+   "file": "web/replay_page.js",
+   "old": "Math.ceil(5 * z.height / z.rows) + 2",
+   "new": "0",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "on a 1440p or 4K screen the game's scroll strip is wider than 12 px and a pointer resting in it would bring the bar up"
+  },
+  {
+   "id": "a_sweep_is_a_rest",
+   "file": "web/replay_page.js",
+   "old": "if (dwell && anchor && (Math.abs(at.x - anchor.x) > ZONE_REST_PX || Math.abs(at.y - anchor.y) > ZONE_REST_PX)) { env.clearTimeout(dwell); dwell = 0; }",
+   "new": "",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a quick sweep along the band would open the bar as if the pointer had rested"
+  },
+  {
+   "id": "a_tremor_is_not_a_rest",
+   "file": "web/replay_page.js",
+   "old": "ZONE_REST_PX = 4",
+   "new": "ZONE_REST_PX = 0",
+   "test": "node tests/scripts/web_replay_bar_check.js web/replay_page.js",
+   "why": "a hand that trembles by a pixel would never open the bar"
+  },
+  {
+   "id": "handle_is_not_under_a_locked_cursor",
+   "file": "web/replay_page.js",
+   "old": "function reach(cx, cy) { return under(cx, cy) || handleUnder(cx, cy); }",
+   "new": "function reach(cx, cy) { return under(cx, cy); }",
+   "test": "node tests/scripts/web_replay_check.js web/replay_page.js",
+   "why": "a locked mouse could not press the handle or keep a peeking bar open"
+  },
+  {
+   "id": "hidden_handle_is_hit",
+   "file": "web/replay_page.js",
+   "old": "if (!bar || !h || h.hidden || !bar.classList.contains('over')) return null;",
+   "new": "if (!bar || !h || !bar.classList.contains('over')) return null;",
+   "test": "node tests/scripts/web_replay_check.js web/replay_page.js",
+   "why": "a locked cursor would press a handle that is not shown"
+  },
+  {
+   "id": "chevron_is_not_the_bar",
+   "file": "web/shell.html",
+   "old": "return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) };",
+   "new": "return a;",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a peeking bar would leave while the pointer rests on its chevron or its handle"
+  },
+  {
+   "id": "b_key_works_behind_a_dialog",
+   "file": "web/shell.html",
+   "old": " && !document.querySelector('[role=\"dialog\"]:not([hidden]), [role=\"alertdialog\"]:not([hidden])') && $('picpop').hidden) {",
+   "new": ") {",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "B would toggle the bar behind the settings menu or the Picture window"
+  },
+  {
+   "id": "no_swipe_up_on_the_handle",
+   "file": "web/shell.html",
+   "old": "handleFrom.y - ev.clientY >= EDGE_SWIPE",
+   "new": "handleFrom.y - ev.clientY >= 100000",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a finger could not bring a hidden bar back with a swipe up"
+  },
+  {
+   "id": "no_hint_after_a_swipe_hides",
+   "file": "web/shell.html",
+   "old": "if (touchSeen && !noteShown) { noteShown = true; $('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back'; $('rnote').hidden = false; clearTimeout(noteTimer); noteTimer = setTimeout(function () { $('rnote').hidden = true; }, 3000); }       // (a finger is told once how to bring it back)",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a finger would not be told how to bring a hidden bar back"
+  },
+  {
+   "id": "handle_shows_over_a_shown_bar",
+   "file": "web/shell.html",
+   "old": "$('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() === 'hidden');",
+   "new": "$('b-handle').hidden = !(bar.classList.contains('over') && zone.mode() !== 'open');",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a peeking bar would have a second arrow and a handle that lies over its controls"
+  },
+  {
+   "id": "focus_is_lost_with_the_handle",
+   "file": "web/shell.html",
+   "old": "if (m !== 'hidden' && fromHandle) $('b-tab').focus();",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs",
+   "why": "a keyboard user whose handle goes away when the bar shows would lose the focus"
+  },
+  {
+   "id": "hidden_hint_names_the_edge",
+   "file": "web/shell.html",
+   "old": "$('rnote').textContent = 'Tap the handle, or swipe it up, to bring the bar back';",
+   "new": "",
+   "test": "python3 -m unittest tests.scripts.test_web_replay_bar.TheStyleAndTheMarkup tests.scripts.test_web_replay_bar.TheGlue tests.scripts.test_web_replay_bar.TheDocs tests.scripts.test_web_replay",
+   "why": "a finger that hid the bar would be told to swipe up from an edge strip that is not there while the bar is hidden"
+  }
+ ]
+}

@@ -1,4 +1,4 @@
-# Continuous integration: every pull request, every push to main and to staging, and every manual run is built and tested on Windows (MSVC), macOS (Apple clang) and Linux (GCC),
+# Continuous integration: every pull request, every push to main, and every manual run is built and tested on Windows (MSVC), macOS (Apple clang) and Linux (GCC),
 # and the web image (Emscripten, the beta site's Docker build) and the game server's image are built once. main is protected: it takes a change only through a pull request whose five
 # checks pass, and these five checks are the jobs "Linux (GCC)", "macOS (Apple clang)", "Windows (MSVC 2022)", "Windows (MSVC 2026)" and "Web (Emscripten, Docker image)": rename or split
 # none of them without changing the branch protection in the same release (tests/scripts/test_ci_workflow.py keeps the names). What runs where is listed in docs/TESTING.md ("Continuous
@@ -17,20 +17,16 @@
 # The suites are the ones run_tests.sh runs (a test compares the two lists): ctest runs every test program that the CMake project registers (assets, simulation, network, server, bots,
 # application), then the self-tests of the four tools (map_sweep, bot_arena, replay_tool, lvl_tool; bot_watch and gen_food_footprints are only built, so that no change breaks them unseen; on Linux and macOS also a sweep of Community-Maps, checked by tools/community_maps.py), the opaque-box E2E runner and, where bash and python3 exist (macOS, Linux), the two script suites
 # (start_game.sh --dry-run; ants_server with headless clients, its six parts, five at a time) and the repository checks (the version and changelog consistency check and the python
-# tests of tests/scripts). The web job also builds the game server's image and checks the staging label of the pages. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
+# tests of tests/scripts). The web job also builds the game server's image. There is no sanitizer job (AddressSanitizer and UBSan: ./run_tests.sh
 # --asan, locally) and the browser-based checks are opt-in (docs/TESTING.md).
 #
-# The last job, `deploy`, runs for a push to main (a merged pull request) or to staging, after every other job of the run passed, and only when the push changed what an image contains
-# or the stack file (tools/deploy_filter.py). A deploy restarts the game server and ends the matches that run, so the job first waits for an idle server (the site's public GET /busy,
-# tools/deploy_wait.py: at most DEPLOY_MAX_WAIT_MINUTES, 180 by default), then calls the Portainer webhook that the repository secret PORTAINER_WEBHOOK_URL (staging:
-# PORTAINER_STAGING_WEBHOOK_URL) holds (tools/deploy_webhook.sh). Without the secret it says so and does nothing, so nothing is deployed from here until it is set
-# (docs/WORKFLOW.md: the steps).
+# CI does not deploy: the site follows main through the host's own automatic update (docs/WORKFLOW.md, "Deploy").
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [main, staging]
+    branches: [main]
   workflow_dispatch:
 
 # One run per branch (or pull request): a newer push cancels the run of the older one.
@@ -387,7 +383,7 @@ jobs:
       fail-fast: false
       matrix:
         # Visual Studio 2022 (MSVC 19.4x) is what developers build with (windows-2022); windows-latest (and windows-2025) have Visual Studio 2026, the newest compiler.
-        # MSVC 2026 runs for every pull request and push; MSVC 2022 for pull requests, pushes to main and manual runs (not for a push to staging), which is what the matrix
+        # MSVC 2026 runs for every pull request and push; MSVC 2022 for pull requests, pushes to main and manual runs (not for a push to any other branch), which is what the matrix
         # below says: the list is chosen here, because a job's own `if` cannot see its matrix.
         include: ${{ fromJSON(github.event_name == 'push' && github.ref != 'refs/heads/main' && '[{"name":"MSVC 2026","os":"windows-latest"}]' || '[{"name":"MSVC 2022","os":"windows-2022"},{"name":"MSVC 2026","os":"windows-latest"}]') }}
     env:
@@ -504,7 +500,7 @@ jobs:
       - name: Check the image (nginx accepts its configuration, the game's files are in it, the page names the version and the build)
         run: |
           docker run --rm ants-beta nginx -t
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html live.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_minimap.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/mapmaker_store.js front/mapmaker_mine.js front/mapmaker_submit.js front/test_game.js home/home.js home/home.css home/chat.js home/chat.css home/games.js home/games.css home/players.js home/players.css home/talk.js home/talk.css mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css && cmp index.html play.html'
+          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ls -l index.html play.html lobby.html matches.html match.html live.html matches.css history_page.js replay_stats.css replay_page.js map_files.js index.js index.wasm index.data match_stats.js match_stats.css countdown_button.js changelog.html site_nav.css site_nav.js death_map.js death_map.css front/logo.png front/LibreFranklin-Medium.ttf front/ants.png front/lobby_rules.js front/lobby_net.js front/lobby_chat.js front/lobby_chat.css front/map_picker.css front/classic.css front/rematch.js front/rematch.css front/game_modes.js front/game_type.js front/game_type.css mapmaker.html front/mapmaker.css front/mapmaker_file.js front/mapmaker_tiles.js front/mapmaker_solid.js front/mapmaker_palette.js front/mapmaker_edit.js front/mapmaker_blocks.js front/mapmaker_objects.js front/mapmaker_view.js front/mapmaker_sizes.js front/mapmaker_checks.js front/mapmaker_dialog.js front/mapmaker_props.js front/mapmaker_crop.js front/mapmaker_convert.js front/mapmaker_minimap.js front/mapmaker_canvas.js front/mapmaker_tools.js front/mapmaker_app.js front/mapmaker_ground.js front/mapmaker_sprites.js front/mapmaker_edges.js front/mapmaker_ants.js front/mapmaker_ants.css front/mapmaker_pickup.js front/mapmaker_pickup.css front/mapmaker_play.js front/mapmaker_play.css front/mapmaker_store.js front/mapmaker_mine.js front/mapmaker_submit.js front/test_game.js home/home.js home/home.css home/chat.js home/chat.css home/games.js home/games.css home/players.js home/players.css home/talk.js home/talk.css mapmaker_atlas/atlas.json mapmaker_atlas/ground.png mapmaker_atlas/objects.png asset_catalog/sprites/sprite_0726.png lvl_core.js lvl_core.wasm lvl_core_api.js shapes.js shape_picker.js admin.html admin.css admin_page.js game_menu.js game_menu.css && cmp index.html play.html'
           docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html matches.html match.html live.html; do grep -Eo "id=.?game-version.?>[^<]*<" $page && grep -Eo "id=.?game-build-id.?>[^<]*<" $page && grep -Eo "id=.?game-build-date.?>[^<]*<" $page && ! grep -q "@@" $page || exit 1; done'
 
       # The map core's module (docs/MAP_FORMAT.md, "In the browser"), taken out of the image that was just built and run in node on the library's maps: its answers are the native core's, byte
@@ -561,18 +557,14 @@ jobs:
           docker rm -f ants-hub-check
           docker volume rm ants-hub-check-data
 
-      # The two stacks (docker-compose.stack.yml and docker-compose.staging.yml) must render, and the build argument ANTS_SITE_LABEL of the staging stack must put "staging" in the
-      # title and the footer of the pages, while the production pages do not have the word. (The second image reuses the layers of the first: only its last layers are built.)
-      - name: Check the stack files and the staging label of the pages
+      # The stack file (docker-compose.stack.yml) must render.
+      - name: Check the stack file
         run: |
           docker compose -f docker-compose.stack.yml config --quiet
-          docker compose -f docker-compose.staging.yml config --quiet
-          docker build --build-arg ANTS_SITE_LABEL=staging -t ants-beta-staging .
-          docker run --rm ants-beta-staging sh -c 'cd /usr/share/nginx/html && for page in index.html play.html lobby.html matches.html match.html live.html; do grep -q "(staging)</title>" $page && grep -q "id=\"site-label\">staging<" $page || exit 1; done'
-          docker run --rm ants-beta sh -c 'cd /usr/share/nginx/html && ! grep -qi staging index.html play.html lobby.html matches.html match.html live.html'
 
-  # Not one of the five required checks: it runs for a pull request that changes a Dockerfile or this check, and proves that the images' files did not change with it (tools/image_files_diff.sh builds the
-  # web image and the game server's image from origin/main's Dockerfiles and from this tree's, with one build context and one build id, and compares every file and the image's configuration; about 20 minutes).
+  # Not one of the five required checks: it runs for a pull request that changes a Dockerfile or this check, and proves that the images did not change with it (tools/image_files_diff.sh builds the web image and the
+  # game server's image from the pull request's base Dockerfiles and from this tree's, with one build context and one build id, and compares every file and the image's configuration, and for the web image what its
+  # link reads; about 25 minutes).
   image_files:
     name: Image files unchanged by a Dockerfile change
     runs-on: ubuntu-latest
@@ -587,109 +579,19 @@ jobs:
         id: decide
         env:
           EVENT: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           run=false
           if [ "$EVENT" = pull_request ]; then
-            changed=$(git diff --name-only "$BASE_SHA" HEAD)
+            changed=$(git diff --name-only "$PR_BASE_SHA" HEAD)
             echo "$changed"
-            if echo "$changed" | grep -Eq '^(Dockerfile|Dockerfile\.server|docker/emsdk_warm\.cpp|tools/image_files_diff\.sh|tools/image_manifest\.py)$'; then run=true; fi
+            if echo "$changed" | grep -Eq '^(Dockerfile|Dockerfile\.server|docker/emsdk_warm\.cpp|tools/image_files_diff\.sh|tools/image_manifest\.py|tools/link_inputs\.sh|tools/relink_outputs\.sh)$'; then run=true; fi
           fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "compare the images: $run"
 
-      - name: Build the images from origin/main's Dockerfiles and from this tree's, and compare their files
+      - name: Build the images from the pull request's base Dockerfiles and from this tree's, and compare their files
         if: steps.decide.outputs.run == 'true'
-        run: bash tools/image_files_diff.sh --base origin/main --diagnose
-
-  deploy:
-    name: Deploy (Portainer webhook)
-    needs: [changes, linux_tests, linux, macos_tests, macos, windows, web, image_files]
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') }}
-    runs-on: ubuntu-latest
-    # The job may wait for a quiet server for hours (tools/deploy_wait.py waits 300 minutes at the most, whatever DEPLOY_MAX_WAIT_MINUTES says): its limit is above that.
-    timeout-minutes: 330
-    # One deploy per branch, and a newer one replaces an older one that still waits (the group is not the workflow's, which would cancel the run this job is in).
-    concurrency:
-      group: deploy-${{ github.ref }}
-      cancel-in-progress: true
-    permissions:
-      contents: read
-      actions: read
-    env:
-      # The webhook addresses are secrets: they are read from the environment by tools/deploy_webhook.sh and never printed, never put in an argument and never in a log line.
-      # Each variable holds its secret on its own branch only, so that a missing production secret can never be replaced by the staging one.
-      PRODUCTION_WEBHOOK: ${{ github.ref == 'refs/heads/main' && secrets.PORTAINER_WEBHOOK_URL || '' }}
-      STAGING_WEBHOOK: ${{ github.ref == 'refs/heads/staging' && secrets.PORTAINER_STAGING_WEBHOOK_URL || '' }}
-      BRANCH: ${{ github.ref_name }}
-    steps:
-      - name: Is the deploy secret set?
-        id: secret
-        run: |
-          if [ -z "${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" ]; then
-            echo "deploy secret not set: skipped"
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: actions/checkout@v7
-        if: steps.secret.outputs.present == 'true'
-        with:
-          fetch-depth: 0
-
-      # What changed since the last run of this workflow that passed on this branch (so that a push whose run was cancelled by a newer push is not forgotten), else since the
-      # push's own "before". A push of documents, CI files and tests only is skipped: a deploy restarts the site and ends the matches that are running.
-      - name: Did the push change what the site serves or runs?
-        if: steps.secret.outputs.present == 'true'
-        id: filter
         env:
-          GH_TOKEN: ${{ github.token }}
-          BEFORE: ${{ github.event.before }}
-        run: |
-          base=$(gh run list --workflow ci.yml --branch "$BRANCH" --event push --status success --limit 1 --json headSha --jq '.[0].headSha' 2> /dev/null || true)
-          [ -n "$base" ] || base="$BEFORE"
-          compose=docker-compose.stack.yml
-          [ "$BRANCH" = staging ] && compose=docker-compose.staging.yml
-          echo "comparing ${base:0:12} with ${GITHUB_SHA:0:12}"
-          python3 tools/deploy_filter.py --base "$base" --head "$GITHUB_SHA" --compose "$compose" --github-output "$GITHUB_OUTPUT"
-
-      # A deploy recreates the game server and ends every match that runs, so it waits for a quiet moment: the site's public GET /busy ({"matches": N, "players": M}) is polled every minute
-      # and the deploy goes on when no match runs, after DEPLOY_MAX_WAIT_MINUTES (a repository variable, 180 by default) whatever runs, or when the address has not answered for five
-      # minutes (the first deploy of a site that has no /busy yet). The addresses are the sites' own, public, so they are variables and not secrets: DEPLOY_BUSY_URL (the production
-      # site's address, the public beta site's by default) and STAGING_BUSY_URL (none by default: the staging site is deployed without a wait). A newer push cancels a job that waits.
-      - name: Wait for an idle game server
-        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
-        env:
-          PRODUCTION_BUSY_URL: ${{ vars.DEPLOY_BUSY_URL || 'https://beta.playants.org/busy' }}
-          STAGING_BUSY_URL: ${{ vars.STAGING_BUSY_URL }}
-          MAX_WAIT_MINUTES: ${{ vars.DEPLOY_MAX_WAIT_MINUTES || '180' }}
-        run: |
-          site=production
-          url="$PRODUCTION_BUSY_URL"
-          if [ "$BRANCH" = staging ]; then
-            site=staging
-            url="$STAGING_BUSY_URL"
-          fi
-          python3 tools/deploy_wait.py --label "$site" --url "$url" --max-wait-minutes "$MAX_WAIT_MINUTES"
-
-      # The webhook makes Portainer pull the branch as it is now: a push that is not the tip any more (a newer one is on its way, its own run decides) is not deployed from here. This is
-      # checked after the wait, which may have taken hours.
-      - name: Is this push still the tip of the branch?
-        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true'
-        id: tip
-        run: |
-          tip=$(git ls-remote origin "refs/heads/$BRANCH" | cut -f1)
-          if [ "$tip" = "$GITHUB_SHA" ]; then
-            echo "tip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "a newer push is on the branch: its run decides; nothing is called"
-            echo "tip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Call the deploy webhook
-        if: steps.secret.outputs.present == 'true' && steps.filter.outputs.deploy == 'true' && steps.tip.outputs.tip == 'true'
-        run: |
-          site=production
-          [ "$BRANCH" = staging ] && site=staging
-          WEBHOOK_URL="${PRODUCTION_WEBHOOK}${STAGING_WEBHOOK}" bash tools/deploy_webhook.sh "$site"
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash tools/image_files_diff.sh --base "$PR_BASE_SHA" --diagnose

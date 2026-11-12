@@ -14,7 +14,7 @@ It serves the pages and starts no game server (nginx answers the list of maps, /
 
   --context DIR  the tree to build (default: the tree of this script; a git worktree of a branch works)     --work DIR  where everything goes (default: CONTEXT/scratch/web_without_docker)
   --emsdk DIR    the emsdk (default: $EMSDK when it has the right version, else ~/.cache/ants-web/emsdk-VERSION, made there when it is not)     --port N  nginx's port (0: a free one)
-  --build-arg    NAME=VALUE for an ARG of the Dockerfile (ANTS_BUILD_ID, ANTS_SITE_LABEL)     --keep  leave nginx running     --stop  stop it
+  --build-arg    NAME=VALUE for an ARG of the Dockerfile (ANTS_BUILD_ID)     --keep  leave nginx running     --stop  stop it
   --reuse        serve what an earlier run built (a run that was cut short is not taken)
 
 The RUN lines of the Dockerfile get the work folder's path as it is, so a path with a space or a character that a shell reads apart is refused: give --work a plain one.
@@ -310,14 +310,27 @@ class Replay:
             self.declared.add(name)
             self.args[name] = self.build_args.get(name, value if has_value else "")
 
+    def private(self, step, name, value):
+        """The value that an ENV puts in the environment of the replayed commands. The Dockerfile's own folders are moved like those of a RUN; the ccache folder (a cache of the image's build, in the image's
+        /root) becomes a folder of this run's scratch space, so that the replay neither trims nor fills the machine's own compiler cache (its size limit, CCACHE_MAXSIZE, then applies to that folder only) and
+        does not need /root; any other value that is a path this tool does not move is an error, like the path of a RUN."""
+        if name == "CCACHE_DIR":
+            folder = os.path.join(os.path.dirname(self.fs), "ccache")
+            os.makedirs(folder, exist_ok=True)
+            return folder
+        value = self.remap(value)
+        if value.startswith("/") and not value.startswith(self.fs) and value not in HARMLESS_PATHS and not self.virtual_ok(value):
+            raise ToolError("Dockerfile line %d: ENV %s is %s, a path that this tool does not move (a command would use this machine's folder): add the folder to VIRTUAL_ROOTS or the path to HARMLESS_PATHS, with a test, or build with Docker" % (step.line, name, value))
+        return value
+
     def do_env(self, step):
         words = self.shell_words(step)
         if words and "=" not in words[0]:
-            self.envs[words[0]] = self.substitute(" ".join(words[1:]))
+            self.envs[words[0]] = self.private(step, words[0], self.substitute(" ".join(words[1:])))
             return
         for word in words:
             name, _, value = word.partition("=")
-            self.envs[name] = self.substitute(value)
+            self.envs[name] = self.private(step, name, self.substitute(value))
 
     def do_workdir(self, step):
         self.workdir = posixpath.normpath(posixpath.join(self.workdir, self.substitute(step.text.strip())))

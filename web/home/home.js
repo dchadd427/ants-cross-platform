@@ -23,7 +23,7 @@
         players: 'Players', chat: 'Chat', views: 'Home views'
     };
     // The Menu's links: the footer's and the header's (test_web_home_screen.py keeps them equal), and the page's How it works (no address)
-    var MENU_MAIN = [['Matches', '/matches'], ['Live now', '/live-now'], ['Map maker', '/mapmaker'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
+    var MENU_MAIN = [['Home', '/'], ['Matches', '/matches'], ['Live now', '/live-now'], ['Map maker', '/mapmaker'], ['How it works', ''], ['Discord server', 'https://discord.gg/WaWrXQnKPj']];
     var MENU_SMALL = [['Sprites and sounds', '/asset_catalog/'], ['Changelog', '/changelog'], ['GitHub', 'https://github.com/dchadd427/ants-cross-platform'], ['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ['Legal', '/legal']];
     var TABS = [['games', 'Games'], ['players', 'Players'], ['chat', 'Chat']];      // the phone's strip (a window up to 700 px wide): one view at a time
     var PHONE = '(max-width: 700px)';
@@ -53,7 +53,7 @@
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
+        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, liveN = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -126,6 +126,8 @@
                 var item;
                 if (m[1]) item = link(m[0], m[1], 'mitem');
                 else { item = el('button', 'mitem', m[0]); item.type = 'button'; item.addEventListener('click', function () { var back = menuFor; closeMenu(); if (back && back.focus) back.focus(); page.how(); }); }      // (the page's list gives the focus back to what had it: the Menu's button)
+                if (m[1] === '/') { item.setAttribute('aria-current', 'page'); item.addEventListener('click', function (e) { e.preventDefault(); show('home', 'push'); }); }      // (this page: the Room's Home goes back to the front page's own screen)
+                if (m[1] === '/live-now') { liveN = el('span', 'mn'); item.appendChild(liveN); }
                 menuBox.appendChild(item);
             });
             var small = el('p', 'msmall');
@@ -152,6 +154,8 @@
             menuFor = btn; menuOpen = true;
             var lines = facts();
             factsBox.textContent = lines.join('\n'); factsBox.hidden = !lines.length;
+            var sl = doc.getElementById('stats-live'), nl = sl && /^[1-9]\d*/.exec(sl.textContent);      // the count of live matches that the footer's line already has
+            liveN.textContent = nl ? nl[0] : '';
             menuBox.hidden = false;
             placeMenu();
             btn.setAttribute('aria-expanded', 'true');

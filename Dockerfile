@@ -39,8 +39,8 @@ COPY cmake/ ./cmake/
 COPY include/ ./include/
 COPY src/ ./src/
 
-# The stubs of what only the link reads (CMake checks the format of VERSION; emcc wants {{{ SCRIPT }}} in the template)
-RUN echo 0.0.0 > VERSION && mkdir -p web Original-Ants && echo '{{{ SCRIPT }}}' > web/shell.html && echo stub > Original-Ants/stub.txt
+# The stubs of what only the link reads (CMake checks the format of VERSION, and the stub is a number that no release has, so that the guard below can tell it from the real one; emcc wants {{{ SCRIPT }}} in the template)
+RUN echo 999.999.999 > VERSION && mkdir -p web Original-Ants && echo '{{{ SCRIPT }}}' > web/shell.html && echo stub > Original-Ants/stub.txt
 
 # Configure and compile using default Makefiles
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
@@ -51,7 +51,9 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
     cmake --build build_web -j$(nproc) && \
     (ccache -s || true)
 
-# The real version, template of the game page and data package: the link's outputs are removed so that CMake links again (it does not know that these three are inputs of the link)
+# The real version, template of the game page and data package: the link's outputs are removed so that CMake links again (it does not know that these three are inputs of the link). The checks after the link look at
+# the product and not only at the header: the program holds the real version text and not the stub's, the data package is the real one (about 14 MB; the stub's is a few bytes) and the page is the real template (it still has the placeholders
+# that the stamps below fill in).
 RUN rm -rf VERSION web Original-Ants
 COPY VERSION ./VERSION
 COPY web/shell.html ./web/shell.html
@@ -64,7 +66,11 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web \
         -DBUILD_TESTS=OFF && \
     grep -q "\"v$(head -n 1 VERSION | tr -d '[:space:]')\"" build_web/generated/ants_app/version.hpp && \
     cmake --build build_web -j$(nproc) && \
-    test -s build_web/src/ants_app/index.html && test -s build_web/src/ants_app/index.wasm && test -s build_web/src/ants_app/index.data && \
+    test -s build_web/src/ants_app/index.html && test -s build_web/src/ants_app/index.wasm && \
+    [ "$(stat -c %s build_web/src/ants_app/index.data)" -gt 1000000 ] && \
+    grep -a -q -F "v$(head -n 1 VERSION | tr -d '[:space:]')" build_web/src/ants_app/index.wasm && \
+    ! grep -a -q -F "v999.999.999" build_web/src/ants_app/index.wasm && \
+    grep -q '@@DATA_SIZE@@' build_web/src/ants_app/index.html && grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html && \
     (ccache -s || true)
 
 # The three big files of the game are compressed once, here, and nginx sends the compressed copy to a browser that accepts gzip (gzip_static in docker/nginx.conf; the plain files stay, for a browser that does not): compressing
@@ -104,7 +110,6 @@ RUN BUILD_TIME=$(date +%s) && \
 # (`COPY VERSION .git* ...` copies VERSION, the two files .gitattributes / .gitignore and, when the context has a .git folder, the three entries that .dockerignore lets through; it works with and without a .git folder.)
 # docker/resolve_build_id.sh says which one it used in the build log.
 ARG ANTS_BUILD_ID=
-ARG ANTS_SITE_LABEL=
 COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
 COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
@@ -121,16 +126,11 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
         grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/${LISTED}.html && grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" /src/web/${LISTED}.html || exit 1; \
     done
 
-# The site label (the build argument ANTS_SITE_LABEL, empty for the production site, "staging" for the staging stack: docker-compose.staging.yml): a non-empty label is put in the title
-# and in the footer of the game page and of the front page (the lobby), so that nobody takes the staging site for the production one. Empty, the two placeholders become nothing and the
-# pages are the same as ever (the same layer as the build id: the compile layers above do not depend on it). A label may hold letters, digits, dot, dash and underscore only.
-RUN SITE_LABEL="${ANTS_SITE_LABEL}" && \
-    case "${SITE_LABEL}" in *[!A-Za-z0-9._-]*) echo "ANTS_SITE_LABEL may hold letters, digits, dot, dash and underscore only: ${SITE_LABEL}" >&2; exit 1 ;; esac && \
-    if [ -n "${SITE_LABEL}" ]; then SITE_TITLE=" (${SITE_LABEL})"; SITE_FOOTER="<strong id=\"site-label\">${SITE_LABEL}</strong>\&#8197;\&bull;\&#8197;"; if [ -f /src/web/mapmaker.html ]; then sed -i "s|<span id=\"mapmaker-site\"></span>|<span id=\"mapmaker-site\">${SITE_FOOTER}</span>|" /src/web/mapmaker.html; fi; else SITE_TITLE=""; SITE_FOOTER=""; fi && \
-    cp /src/web/lobby.html /src/lobby.html && \
+# The pages carry two placeholders for a site label, which the production site does not use: they become nothing (the same layer as the build id: the compile layers above do not depend on it).
+RUN cp /src/web/lobby.html /src/lobby.html && \
     cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/live.html /src/live.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
     for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html /src/live.html; do \
-        sed -i "s|@@SITE_TITLE@@|${SITE_TITLE}|g; s|@@SITE_FOOTER@@|${SITE_FOOTER}|g" "$PAGE" || exit 1; \
+        sed -i "s|@@SITE_TITLE@@||g; s|@@SITE_FOOTER@@||g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
     done
 
@@ -196,6 +196,8 @@ COPY --from=builder /src/matches.html /usr/share/nginx/html/matches.html
 COPY --from=builder /src/match.html /usr/share/nginx/html/match.html
 COPY --from=builder /src/live.html /usr/share/nginx/html/live.html
 COPY web/matches.css /usr/share/nginx/html/matches.css
+COPY web/site_nav.css /usr/share/nginx/html/site_nav.css
+COPY web/site_nav.js /usr/share/nginx/html/site_nav.js
 COPY web/match_stats.css /usr/share/nginx/html/match_stats.css
 COPY web/replay_page.js /usr/share/nginx/html/replay_page.js
 COPY web/history_page.js /usr/share/nginx/html/history_page.js

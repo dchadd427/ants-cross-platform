@@ -150,12 +150,12 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual(self.result.returncode, 0, self.result.stderr)
         self.assertTrue(self.text.startswith("<!DOCTYPE html>"))
 
-    def test_the_header_has_play_and_github_buttons_and_the_logo_goes_to_the_front_page(self):
+    def test_the_header_is_the_site_bar_and_the_logo_goes_to_the_front_page(self):
         header = part(self.text, "header")
-        self.assertRegex(header, r'<a class="btn sm" href="/">Play</a>')                         # back to the game: the front page
-        self.assertRegex(header, r'<a class="btn sm" href="%s" target="_blank" rel="noopener noreferrer">GitHub</a>' % re.escape(GITHUB))
-        self.assertEqual(re.findall(r'class="btn sm" href="([^"]*)"', header), ["/", GITHUB])         # the two buttons, in this order, and no button for another changelog page
-        self.assertIn('<a class="logo" href="/"', header)                                          # and the logo goes to the front page too
+        self.assertIn('<header class="sb" data-live="menu">', header)                                # (web/site_nav.css and web/site_nav.js make the bar; this page is in its Menu: Changelog)
+        self.assertEqual(re.findall(r'<nav aria-label="Pages">.*?</nav>', header, re.S)[0].count("<a "), 5)
+        self.assertIn('<a class="sblogo" href="/"', header)                                          # and the logo goes to the front page too
+        self.assertIn('<div class="pt"><h1>', self.text)
 
     def test_version_and_build_id_are_in_the_footer_with_the_front_pages_ids(self):
         footer = part(self.text, "footer")
@@ -248,15 +248,16 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual(page.errors, [])
         self.assertEqual(page.stack, [])
         self.assertEqual([(l.get("rel"), l.get("href")) for l in page.links],
-                         [("icon", "/favicon.png"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css")])
+                         [("icon", "/favicon.png"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css"), ("stylesheet", "/site_nav.css")])
         self.assertEqual([i.get("src") for i in page.imgs], ["/front/logo.png"])
-        self.assertEqual(page.scripts, ["script"])                                                 # (the one inline script that makes the pages: TheScript, below)
+        self.assertEqual(page.scripts, ["script", "script"])                                       # (the one inline script that makes the pages: TheScript, below, and the site bar's file at the end)
+        self.assertIn('</div>\n<script src="/site_nav.js"></script>\n</body>', self.text)
         style = re.search(r"<style>(.*?)</style>", self.text, re.S).group(1)
         self.assertNotIn("@import", style)
         self.assertNotIn("url(", style)
         self.assertNotRegex(style, r"--(?:clay|teal|gold|inset|frame|edge|shadow|cream)\s*:")      # (the tokens are the stylesheet's: the page does not make its own)
         self.assertLess(len(style), 8000)
-        for needle in ('<div class="screen">', '<h1 class="banner gold">', '<footer class="bar">', '<details class="versions panel" id="versions" open><summary>Jump to a version</summary><nav aria-label="Versions">'):
+        for needle in ('<div class="screen">', '<div class="pt"><h1>', '<footer class="bar">', '<details class="versions panel" id="versions" open><summary>Jump to a version</summary><nav aria-label="Versions">'):
             self.assertIn(needle, self.text)
         self.assertEqual(self.text.count("<h1"), 1)
         self.assertEqual(self.text.count("<main>"), 1)
@@ -269,7 +270,7 @@ class MadeUpFiles(unittest.TestCase):
         result = run_tool(md, out, "https://example.com/a\"b/blob/main/", "--version", "<v>", "--build-id", "x&y", "--build-date", "d<t")
         self.assertEqual(result.returncode, 0, result.stderr)
         page = read_text(out)
-        for needle in ('<h1 class="banner gold">A &lt;b&gt;title&lt;/b&gt; &amp; more</h1>', '&lt;i&gt;x&lt;/i&gt; &amp; "y"', '<span id="game-version">&lt;v&gt;</span>', '<span id="game-build-id">x&amp;y</span>',
+        for needle in ('<h1>A &lt;b&gt;title&lt;/b&gt; &amp; more</h1>', '&lt;i&gt;x&lt;/i&gt; &amp; "y"', '<span id="game-version">&lt;v&gt;</span>', '<span id="game-build-id">x&amp;y</span>',
                        '<span id="game-build-date">(d&lt;t)</span>', 'href="https://example.com/a&quot;b"', "Generated from escape.md when"):
             self.assertIn(needle, page, needle)
         self.assertEqual(walk(page).errors, [])
@@ -277,7 +278,7 @@ class MadeUpFiles(unittest.TestCase):
         self.assertNotIn("<i>", page)
 
     def test_the_github_buttons_go_to_the_repository_and_its_issues(self):
-        self.assertEqual(self.text.count('href="%s"' % GITHUB), 2)                                       # the header button and the footer link
+        self.assertEqual(self.text.count('href="%s"' % GITHUB), 1)                                       # the footer link (the site bar's Menu has its own, made by its script)
         self.assertIn('href="%s/issues"' % GITHUB, part(self.text, "footer"))
 
     def test_the_footer_links_end_with_the_legal_page_in_a_new_tab(self):
@@ -340,8 +341,8 @@ class RealFile(unittest.TestCase):
         self.assertEqual(re.findall(r'<a href="#([^"]+)">', nav), sections, "the list of releases is the sections, in order")
         self.assertEqual(len(re.findall(r'<span class="rel">v', text)), len(versions), "every release heading has its version plate")
         header = part(text, "header")
-        self.assertEqual(re.findall(r'<a class="btn sm" href="([^"]*)"[^>]*>([^<]*)</a>', header), [("/", "Play"), (GITHUB, "GitHub")])
-        self.assertEqual(re.search(r"<h1 [^>]*>(.*?)</h1>", text).group(1), re.search(r"^# (.*)$", self.md, re.M).group(1))
+        self.assertEqual(re.findall(r'<a class="btn[a-z ]*" href="([^"]*)"', re.search(r"<nav.*?</nav>", header, re.S).group(0)), ["/", "/matches", "/live-now", "/mapmaker", "https://discord.gg/WaWrXQnKPj"])
+        self.assertEqual(re.search(r"<h1>(.*?)</h1>", text).group(1), re.search(r"^# (.*)$", self.md, re.M).group(1))
         footer = part(text, "footer")
         self.assertIn("Generated from CHANGELOG.md when the site image is built", footer)
         self.assertIn('id="game-version">v1.2.0<', footer)
@@ -361,6 +362,8 @@ class RealFile(unittest.TestCase):
                 self.assertTrue(os.path.exists(os.path.join(REPO, path)), "a link of the changelog names %s, which the repository does not have" % path)
             elif href.startswith("https://"):
                 self.assertNotIn(" ", href)
+            elif href in ("/matches", "/live-now", "/mapmaker") or href == "https://discord.gg/WaWrXQnKPj":
+                pass                                                                                   # (the site bar's pages: the site's own addresses)
             elif href == "/legal":
                 self.assertTrue(os.path.exists(os.path.join(REPO, "web", "legal.html")), "the footer links the Legal page, which the site does not have")
             else:
@@ -453,7 +456,7 @@ class ThePagesOfThePage(unittest.TestCase):
     def test_without_the_script_the_page_is_the_whole_list(self):
         for page in (self.real, self.long, self.short):
             bare = re.sub(r"<script>.*?</script>", "", re.sub(r"<style>.*?</style>", "", page, flags=re.S), flags=re.S)
-            self.assertNotRegex(bare, r"<[^>]*\shidden[\s>=]")                                         # (no release is hidden by the page: only the script hides, and only when it runs)
+            self.assertNotRegex(bare.replace('<a class="btn sblive" href="/live-now" hidden>', ""), r"<[^>]*\shidden[\s>=]")                                         # (no release is hidden by the page: only the script hides, and only when it runs)
             self.assertNotRegex(bare, r"pager|pages-top|class=\"tab|class=\"foot")             # (the tabs and the Newer / Older bar are made by the script)
             self.assertIn('<details class="versions panel" id="versions" open>', bare)         # (the list of versions is open: it is all that a visitor without JavaScript has to jump with)
             sections = re.findall(r'<section id="([^"]+)" class="panel">', bare)
@@ -462,11 +465,11 @@ class ThePagesOfThePage(unittest.TestCase):
 
     def test_one_inline_script_after_the_releases_and_before_the_footer(self):
         for page in (self.real, self.long, self.short):
-            self.assertEqual(page.count("<script"), 1)
-            self.assertEqual(page.count("</script>"), 1)
+            self.assertEqual(page.count("<script"), 2)                                               # (the page's own, and the site bar's file after the footer)
+            self.assertEqual(page.count("</script>"), 2)
             self.assertIn("</main>\n<script>\n(function () {", page)
             self.assertLess(page.index("</script>"), page.index("<footer"))
-            self.assertNotRegex(page, r"<script[^>]*\b(src|type|defer|async)=")
+            self.assertNotRegex(page.replace('<script src="/site_nav.js"></script>', ""), r"<script[^>]*\b(src|type|defer|async)=")
             self.assertNotIn("@", script_of(page))                                           # (every placeholder of the template was filled)
 
     def test_the_script_is_the_same_for_every_changelog(self):

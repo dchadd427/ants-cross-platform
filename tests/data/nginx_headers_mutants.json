@@ -557,36 +557,36 @@
   {
    "id": "permissions_policy_empty",
    "file": "docker/nginx.conf",
-   "old": "    ~. \"camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), interest-cohort=()\";\n",
+   "old": "    ~. \"camera=(), microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=(), hid=(), midi=(), magnetometer=(), gyroscope=(), accelerometer=(), display-capture=(), interest-cohort=()\";\n",
    "new": "    ~. \"interest-cohort=()\";\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "permissions_policy_allows_the_camera",
    "file": "docker/nginx.conf",
-   "old": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
-   "new": "microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "old": "camera=(), microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=()",
+   "new": "microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=()",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "permissions_policy_allows_the_location",
    "file": "docker/nginx.conf",
-   "old": "microphone=(), geolocation=(), payment=(), usb=(), serial=()",
-   "new": "microphone=(), payment=(), usb=(), serial=()",
+   "old": "microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=()",
+   "new": "microphone=$ants_microphone, payment=(), usb=(), serial=()",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "permissions_policy_allows_the_camera_to_this_site",
    "file": "docker/nginx.conf",
-   "old": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
-   "new": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "old": "camera=(), microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=()",
+   "new": "camera=(self), microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=()",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
    "id": "permissions_policy_forbids_fullscreen",
    "file": "docker/nginx.conf",
-   "old": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
-   "new": "camera=(), fullscreen=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()",
+   "old": "camera=(), microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=()",
+   "new": "camera=(), fullscreen=(), microphone=$ants_microphone, geolocation=(), payment=(), usb=(), serial=()",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {
@@ -608,6 +608,34 @@
    "file": "docker/nginx.conf",
    "old": "display-capture=(), interest-cohort=()\";\n}",
    "new": "display-capture=(), gamepad=(), interest-cohort=()\";\n}",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "the_front_page_has_the_microphone_off_again",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/lobby\\.html\\z\" \"(self)\";\n",
+   "new": "    \"~^/lobby\\.html\\z\" \"()\";\n",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "the_microphone_is_open_on_every_page",
+   "file": "docker/nginx.conf",
+   "old": "    default \"()\";\n    \"~^/lobby",
+   "new": "    default \"(self)\";\n    \"~^/lobby",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "the_microphone_is_open_to_any_frame_of_the_front_page",
+   "file": "docker/nginx.conf",
+   "old": "\"~^/lobby\\.html\\z\" \"(self)\";",
+   "new": "\"~^/lobby\\.html\\z\" \"*\";",
+   "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "the_microphone_is_open_on_the_matches_page_too",
+   "file": "docker/nginx.conf",
+   "old": "    \"~^/lobby\\.html\\z\" \"(self)\";\n",
+   "new": "    \"~^/(?:lobby|matches)\\.html\\z\" \"(self)\";\n",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
   },
   {

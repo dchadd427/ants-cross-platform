@@ -64,6 +64,9 @@ class Stages:
         raise AssertionError("no step: " + what)
 
 
+STUB = "999.999.999"                    # the version of the stubs: a number that no release has, so that a guard can tell it from the real one
+
+
 def raw_runs(text):
     """The text of every RUN of a Dockerfile as written, continued lines joined, comment lines dropped (the cache mount flag is still in it)."""
     return [t for _, t in wd.logical_lines(text) if re.match(r"RUN\s", t)]
@@ -122,14 +125,16 @@ class TheWebImage(unittest.TestCase):
                         self.assertFalse(source.startswith(forbidden), "%s is copied before the compile" % source)
 
     def test_the_stubs_are_made_after_the_sources_and_before_the_compile_and_hold_what_the_link_needs(self):
-        stubs = self.docker.index(self.builder, lambda s: s.op == "RUN" and "echo 0.0.0 > VERSION" in s.text, "the stubs")
+        stubs = self.docker.index(self.builder, lambda s: s.op == "RUN" and "echo %s > VERSION" % STUB in s.text, "the stubs")
         self.assertLess(self.docker.index(self.builder, lambda s: s.op == "COPY" and s.words[0] == "src/", "COPY src/"), stubs)
         self.assertLess(stubs, self.compile_index(0))
         text = self.builder[stubs].text
         self.assertIn("web/shell.html", text)
         self.assertIn("{{{ SCRIPT }}}", text)                          # (emcc stops without it in the template)
         self.assertIn("Original-Ants", text)
-        self.assertRegex("0.0.0", r"^[0-9]+\.[0-9]+\.[0-9]+$")          # (the first line of VERSION must be MAJOR.MINOR.PATCH: CMakeLists.txt stops otherwise)
+        self.assertRegex(STUB, r"^[0-9]+\.[0-9]+\.[0-9]+$")            # (the first line of VERSION must be MAJOR.MINOR.PATCH: CMakeLists.txt stops otherwise)
+        self.assertGreater(int(STUB.split(".")[0]), int(read("VERSION").split(".")[0]) + 100, "no release has the version of the stubs")
+        self.assertNotIn("ANTS_SITE_LABEL", self.docker.text, "the site label is gone")
 
     def test_version_the_template_and_the_data_come_after_the_compile_and_before_the_link_that_reads_them(self):
         first, second = self.compile_index(0), self.compile_index(1)
@@ -158,10 +163,9 @@ class TheWebImage(unittest.TestCase):
                                 ("the stamps", lambda s: s.op == "RUN" and "@@BUILD_TIMESTAMP@@" in s.text),
                                 ("the cache buster", lambda s: s.op == "RUN" and "@@DATA_SIZE@@" in s.text),
                                 ("ARG ANTS_BUILD_ID", lambda s: s.op == "ARG" and s.text.startswith("ANTS_BUILD_ID")),
-                                ("ARG ANTS_SITE_LABEL", lambda s: s.op == "ARG" and s.text.startswith("ANTS_SITE_LABEL")),
                                 ("COPY .git*", lambda s: s.op == "COPY" and s.words[0] == "VERSION" and s.words[1] == ".git*"),
                                 ("the build id", lambda s: s.op == "RUN" and "resolve_build_id.sh" in s.text),
-                                ("the site label", lambda s: s.op == "RUN" and "ANTS_SITE_LABEL" in s.text and "SITE_TITLE" in s.text),
+                                ("the site placeholders", lambda s: s.op == "RUN" and "SITE_TITLE" in s.text),
                                 ("the changelog", lambda s: s.op == "COPY" and s.words[0] == "CHANGELOG.md"),
                                 ("the atlas", lambda s: s.op == "RUN" and "map_atlas.py" in s.text)):
             self.docker.index(late, predicate, what + " is after the link")
@@ -172,7 +176,7 @@ class TheWebImage(unittest.TestCase):
             ("the cache buster", lambda s: s.op == "RUN" and "@@DATA_SIZE@@" in s.text),
             ("ARG ANTS_BUILD_ID", lambda s: s.op == "ARG" and s.text.startswith("ANTS_BUILD_ID")),
             ("the build id", lambda s: s.op == "RUN" and "resolve_build_id.sh" in s.text),
-            ("the site label", lambda s: s.op == "RUN" and "SITE_TITLE" in s.text and "ANTS_SITE_LABEL" in s.text),
+            ("the site placeholders", lambda s: s.op == "RUN" and "SITE_TITLE" in s.text),
             ("the changelog", lambda s: s.op == "COPY" and s.words[0] == "CHANGELOG.md"),
             ("the atlas", lambda s: s.op == "RUN" and "map_atlas.py" in s.text))]
         self.assertEqual(order, sorted(order))
@@ -201,7 +205,7 @@ class TheWebImage(unittest.TestCase):
             self.assertTrue(run.startswith("RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-web "), run[:80])
             self.assertIn('EM_COMPILER_WRAPPER="$(command -v ccache)"', run, "Emscripten runs the wrapper with execv: a full path, not a name that the PATH would resolve")
             self.assertIn("command -v ccache", run, "the build must work where ccache is not installed (the tool that replays the Dockerfile on a machine)")
-        self.assertIn("CCACHE_DIR=/root/.ccache", self.docker.text)
+        self.assertIn("ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G\n", self.docker.text, "the cache has a size limit (ccache's own default is 5 GB)")
         self.assertTrue(self.docker.text.startswith("# syntax=docker/dockerfile:1\n"))
         self.assertIn("ccache", self.warm[1].text, "ccache is installed in the stage that is reused")
 
@@ -217,6 +221,56 @@ class TheWebImage(unittest.TestCase):
         self.assertIn("CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1", text)
         self.assertEqual(len(re.findall(r"(?m)^ENTRYPOINT ", text)), 0)
         self.assertEqual([s.op for s in self.runner if s.op in ("ARG", "ENV")], [], "the runner takes no build argument")
+
+    # The checks after the link look at the product. The part of the link's RUN after the build is run here, with sh, on small stand-ins of the files that the build makes.
+    def guard_after_the_link(self):
+        run = [r for r in raw_runs(self.docker.text) if "cmake --build build_web" in r][1]
+        run = re.sub(r"\s+", " ", run)
+        start = run.index("cmake --build build_web -j$(nproc) && ") + len("cmake --build build_web -j$(nproc) && ")
+        return run[start:run.index(" (ccache -s")].rstrip(" &")
+
+    def run_guard(self, version="0.16.0", wasm=None, data_size=2000000, page=b"<html>@@GAME_VERSION@@ @@DATA_SIZE@@ @@BUILD_TIMESTAMP@@</html>", files=True):
+        with tempfile.TemporaryDirectory(prefix="ants_guard_") as tmp:
+            out = os.path.join(tmp, "build_web", "src", "ants_app")
+            os.makedirs(out)
+            write(os.path.join(tmp, "VERSION"), version + "\n")
+            if files:
+                with open(os.path.join(out, "index.html"), "wb") as f:
+                    f.write(page)
+                with open(os.path.join(out, "index.wasm"), "wb") as f:
+                    f.write(b"\0asm\1\0\0\0 some strings " + (wasm if wasm is not None else b"v" + version.encode("ascii")) + b" more bytes")
+                with open(os.path.join(out, "index.data"), "wb") as f:
+                    f.write(b"\0" * data_size)
+            return subprocess.run(["sh", "-c", self.guard_after_the_link()], cwd=tmp, capture_output=True, text=True, timeout=60).returncode
+
+    def test_the_guard_after_the_link_passes_the_real_product(self):
+        self.assertEqual(self.run_guard(), 0)
+        self.assertEqual(self.run_guard(version="12.3.4"), 0)
+
+    def test_the_guard_stops_a_program_that_still_has_the_stubs_version(self):
+        self.assertNotEqual(self.run_guard(wasm=b"v" + STUB.encode("ascii")), 0)
+        self.assertNotEqual(self.run_guard(wasm=b"v0.16.0 and v" + STUB.encode("ascii")), 0)
+
+    def test_the_guard_stops_a_program_that_does_not_hold_the_real_version(self):
+        self.assertNotEqual(self.run_guard(wasm=b"v0.15.9"), 0)
+        self.assertNotEqual(self.run_guard(wasm=b"no version at all"), 0)
+
+    def test_the_guard_stops_a_data_package_that_is_a_stub(self):
+        self.assertNotEqual(self.run_guard(data_size=5), 0, "`test -s` passes a five byte stub")
+        self.assertNotEqual(self.run_guard(data_size=1000000), 0)
+        self.assertEqual(self.run_guard(data_size=1000001), 0)
+
+    def test_the_guard_stops_a_page_that_is_the_stub_template(self):
+        self.assertNotEqual(self.run_guard(page=b"<script></script>"), 0)
+        self.assertNotEqual(self.run_guard(page=b"<html>@@GAME_VERSION@@</html>"), 0)
+        self.assertNotEqual(self.run_guard(page=b"<html>@@DATA_SIZE@@</html>"), 0)
+
+    def test_the_guard_stops_when_a_file_is_missing(self):
+        self.assertNotEqual(self.run_guard(files=False), 0)
+
+    def test_the_real_data_package_is_far_above_the_size_that_the_guard_asks_for(self):
+        total = sum(os.path.getsize(os.path.join(root, name)) for root, _, names in os.walk(os.path.join(REPO, "Original-Ants")) for name in names)
+        self.assertGreater(total, 5000000, "index.data is the folder Original-Ants/ packed; the guard's 1,000,000 bytes is far below it and far above a stub")
 
 
 class TheServerImage(unittest.TestCase):
@@ -244,7 +298,7 @@ class TheServerImage(unittest.TestCase):
 
     def test_the_version_comes_after_the_first_compile_and_before_the_build_id(self):
         first, second = self.compiles()
-        stub = self.docker.index(self.builder, lambda s: s.op == "RUN" and s.text == "echo 0.0.0 > VERSION", "the stub version")
+        stub = self.docker.index(self.builder, lambda s: s.op == "RUN" and s.text == "echo %s > VERSION" % STUB, "the stub version")
         real = self.docker.index(self.builder, lambda s: s.op == "COPY" and s.words == ["VERSION", "./VERSION"], "COPY VERSION")
         arg = self.docker.index(self.builder, lambda s: s.op == "ARG" and s.text.startswith("ANTS_BUILD_ID"), "ARG ANTS_BUILD_ID")
         gitinfo = self.docker.index(self.builder, lambda s: s.op == "COPY" and s.words[:2] == ["VERSION", ".git*"], "COPY VERSION .git*")
@@ -266,7 +320,7 @@ class TheServerImage(unittest.TestCase):
         for run in runs[:2]:
             self.assertTrue(run.startswith("RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-server "), run[:80])
         self.assertIn("ccache", self.builder[0].text if self.builder[0].op == "RUN" else self.builder[1].text)
-        self.assertIn("CCACHE_DIR=/root/.ccache", self.docker.text)
+        self.assertIn("ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G\n", self.docker.text, "the cache has a size limit (ccache's own default is 5 GB)")
         self.assertTrue(self.docker.text.startswith("# syntax=docker/dockerfile:1\n"))
         web = read("Dockerfile")
         self.assertNotEqual(re.findall(r"id=(ants-ccache-\w+)", web)[0], re.findall(r"id=(ants-ccache-\w+)", self.docker.text)[0], "each image has its own cache")
@@ -280,6 +334,37 @@ class TheServerImage(unittest.TestCase):
         self.assertIn('exec 3<>/dev/tcp/127.0.0.1/4001', text)
         self.assertEqual(len(re.findall(r"(?m)^ENTRYPOINT \[", text)), 1)
         self.assertEqual(re.findall(r"(?m)^CMD .*$", text), ['CMD ["--port", "4001", "--ws-port", "4002", "--ctl-port", "4010"]'])
+
+    # The last step runs the program and compares what it says with the file VERSION as the build id's layer copied it. The part of that RUN after the build is run here, with sh, on a stand-in program.
+    def run_guard(self, says, real="0.16.0"):
+        run = re.sub(r"\s+", " ", [r for r in raw_runs(self.docker.text) if "resolve_build_id.sh" in r][0])
+        start = run.index('SHOWN="$(')
+        fragment = run[start:] + " && true"
+        with tempfile.TemporaryDirectory(prefix="ants_guard_") as tmp:
+            program = os.path.join(tmp, "ants_server")
+            write(program, "#!/bin/sh\necho '%s'\n" % says)
+            os.chmod(program, 0o755)
+            write(os.path.join(tmp, "gitinfo", "VERSION"), real + "\n")
+            write(os.path.join(tmp, "VERSION"), STUB + "\n")                          # (the version layer's copy: the stub when its COPY is lost)
+            fragment = fragment.replace("/src/build/src/ants_server/ants_server", program).replace("/src/gitinfo/VERSION", os.path.join(tmp, "gitinfo", "VERSION")).replace("/src/VERSION", os.path.join(tmp, "VERSION"))
+            return subprocess.run(["sh", "-c", fragment], capture_output=True, text=True, timeout=60).returncode
+
+    def test_the_last_step_passes_the_program_that_says_the_real_version(self):
+        self.assertEqual(self.run_guard("ants_server v0.16.0 build abc1234 (network protocol 3)"), 0)
+        self.assertEqual(self.run_guard("ants_server v12.3.4 build unknown (network protocol 3)", real="12.3.4"), 0)
+
+    def test_the_last_step_stops_a_program_that_still_has_the_stubs_version(self):
+        """If COPY VERSION of the version layer were lost, the file VERSION would still be the stub and the program would agree with it: the truth is the copy of the build id's layer."""
+        self.assertNotEqual(self.run_guard("ants_server v%s build abc1234 (network protocol 3)" % STUB), 0)
+
+    def test_the_last_step_stops_a_program_that_says_another_version_or_nothing(self):
+        self.assertNotEqual(self.run_guard("ants_server v0.15.9 build abc1234 (network protocol 3)"), 0)
+        self.assertNotEqual(self.run_guard("ants_server v0.16.01 build abc1234"), 0)
+        self.assertNotEqual(self.run_guard(""), 0)
+        self.assertNotEqual(self.run_guard("something v0.16.0 build x"), 0)
+
+    def test_the_stub_is_a_version_that_no_release_has(self):
+        self.assertIn("echo %s > VERSION" % STUB, self.docker.text)
 
 
 class TheFlagsOfThePreWarming(unittest.TestCase):

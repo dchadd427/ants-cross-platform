@@ -23,7 +23,7 @@ ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G
 
 # The layers of this stage are ordered by how often their input changes, so that a release that changes no C++ does not compile it again: (1) the sources and the build files, which are all that the
 # compile reads (ANTS_BUILD_TOOLS=OFF: CMake does not look for the programs of tools/, so that folder is not copied at all); (2) the file VERSION; (3) the build id. Only the first compiles the
-# whole server. It does so with a version of 0.0.0, which the second replaces: the version is a constant in a header that CMake generates from VERSION, and the one program file that includes it
+# whole server. It does so with a version of 999.999.999 (a number that no release has), which the second replaces: the version is a constant in a header that CMake generates from VERSION, and the one program file that includes it
 # (src/ants_server/main.cpp, besides the build id's own file) is the only one that the second layer compiles again before it links.
 WORKDIR /src
 COPY CMakeLists.txt ./
@@ -32,7 +32,7 @@ COPY include/ ./include/
 COPY src/ ./src/
 COPY third_party/ ./third_party/
 
-RUN echo 0.0.0 > VERSION
+RUN echo 999.999.999 > VERSION
 RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-server \
     ccache -z > /dev/null && \
     cmake -B build -DCMAKE_BUILD_TYPE=Release -DANTS_BUILD_APP=OFF -DBUILD_TESTS=OFF -DANTS_BUILD_TOOLS=OFF && \
@@ -49,7 +49,8 @@ RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-server \
 # Which build this is (`ants_server --version` and the first line of the log say it), found AFTER the compile and after the version so that a new commit recompiles one tiny file and links again instead
 # of building the server again. The first of: the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) -f Dockerfile.server .; a compose
 # file's build.args), the commit named by the HEAD and refs files of the repository's .git folder (a stack that a deployment tool builds from a clone has them: .dockerignore lets only
-# these three through, never .git/config), the UTC build time. docker/resolve_build_id.sh says which one it used in the build log.
+# these three through, never .git/config), the UTC build time. docker/resolve_build_id.sh says which one it used in the build log. The last step runs the program and stops the build unless it says the version of
+# the file VERSION as this layer copied it (not the file of the version layer above: a lost copy there would leave the stub, and the program would agree with it).
 # (`COPY VERSION .git* ...` copies VERSION, the two files .gitattributes / .gitignore and, when the context has a .git folder, the three entries that .dockerignore lets through; it works with and without a .git folder.)
 ARG ANTS_BUILD_ID=
 COPY docker/resolve_build_id.sh /src/docker/resolve_build_id.sh
@@ -57,7 +58,9 @@ COPY VERSION .git* /src/gitinfo/
 RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitinfo)" && \
     cmake -B build "-DANTS_BUILD_ID=${BUILD_ID}" && \
     cmake --build build -j"$(nproc)" --target ants_server && \
-    /src/build/src/ants_server/ants_server --version
+    SHOWN="$(/src/build/src/ants_server/ants_server --version)" && \
+    echo "${SHOWN}" && \
+    case "${SHOWN}" in "ants_server v$(head -n 1 /src/gitinfo/VERSION | tr -d '[:space:]') build "*) ;; *) echo "the server does not say the version of the file VERSION" >&2; exit 1 ;; esac
 
 # =============================================================================
 # The runtime image: the program and nothing else, run by an unprivileged user
