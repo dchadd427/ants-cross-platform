@@ -1377,13 +1377,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
   },
   {
-   "id": "staging_secret_has_a_value",
-   "file": "docker-compose.staging.yml",
-   "old": "ANTS_HUB_DISCORD_CLIENT_SECRET: ${ANTS_HUB_DISCORD_CLIENT_SECRET:-}",
-   "new": "ANTS_HUB_DISCORD_CLIENT_SECRET: hunter2hunter2",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_stack"
-  },
-  {
    "id": "stack_client_id_has_a_value",
    "file": "docker-compose.stack.yml",
    "old": "ANTS_HUB_DISCORD_CLIENT_ID: ${ANTS_HUB_DISCORD_CLIENT_ID:-}",

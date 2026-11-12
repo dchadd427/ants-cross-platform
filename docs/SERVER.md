@@ -227,7 +227,7 @@ Besides the upgrade to a WebSocket, the WebSocket port answers `GET /busy`, `GET
 - `matches` is the number of rooms whose match is loading or running with a person in it. A room that only waits for players is not a match. A room that a restart of the server brought back counts for its first five minutes, whether or not its players are back.
 - `players` is the number of people in rooms that wait or load, and who are there in a match. Bots are no people. Somebody who has not yet said Hello is in no room and is not counted. A room that a restart brought back also counts its held seats for its first five minutes.
 - `docker/nginx.conf` forwards `https://<site>/busy` to it like `/ws`: an exact location, GET only, no query, one request a second per address with a burst of 5, a 3-second connect timeout and 5-second read and send timeouts.
-- The deploy job of CI polls it and restarts the site when no match runs (after three hours at the most by default), so that a deploy does not end games that people are playing: [`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site).
+- It is for whoever watches the site: CI does not poll it, and the update of the site does not wait for it ([`WORKFLOW.md`](WORKFLOW.md#deploy)).
 
 ### The site statistics, `GET /stats` and `POST /stats/local`
 
@@ -371,9 +371,9 @@ The service joins the external network `proxy-network`, which must exist: for a 
 
 ### One stack for the site and the server
 
-`docker-compose.stack.yml` holds both services, `ants-beta` (the web game) and `ants-server`, on the network `proxy-network`, which must already exist on the host (it is declared `external`). `docker-compose.staging.yml` is a second copy of it with its own names, ports, volumes and network, for trying finished work ([`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site)).
+`docker-compose.stack.yml` holds both services, `ants-beta` (the web game) and `ants-server`, on the network `proxy-network`, which must already exist on the host (it is declared `external`).
 
-Create the stack from this repository with the compose file `docker-compose.stack.yml` (any tool that builds a stack from a Git repository will do, or `docker compose -f docker-compose.stack.yml up -d --build` on the host). How CI redeploys it after the tests pass and the server is idle: [`WORKFLOW.md`](WORKFLOW.md#deploy-from-ci-and-the-staging-site).
+Create the stack from this repository with the compose file `docker-compose.stack.yml` (any tool that builds a stack from a Git repository will do, or `docker compose -f docker-compose.stack.yml up -d --build` on the host). How the site follows `main`: [`WORKFLOW.md`](WORKFLOW.md#deploy).
 
 Nothing else has to be set. The server uses the maps of the image (a volume `ants-maps`, filled the first time, for the six; the players' maps are read from the image itself), makes its control secret, and allows the demo rooms of `web/lobby.html`: 48 at a time, each waiting up to ten minutes for its players and each with a turn log of at most 4 MiB (`--log-mb 4`, so that the rooms cannot use up the 256 MiB that all the logs share). The page chooses the map among the six of the original, and every match that its card starts takes a demo room, a game against bots only too (since v0.8.0). The server also keeps the matches that ran 30 seconds or more, the demo rooms' too, for 30 days and 100 MiB together, and the site lists them and gives them out: `/replays` is public and read only, and the names that the players typed are in it ("Replays").
 
@@ -396,7 +396,7 @@ Optional environment variables, set in the stack's "Environment variables" (they
 | `ANTS_SERVER_WS_PORT`, `ANTS_SERVER_CTL_PORT` | 4002, 4010 | The host ports of the WebSocket port and the control interface, both on the host's loopback address only. |
 | `ANTS_BUILD_ID` | the commit of the clone's git files, else the UTC build time | The build id that the page's footer, the changelog page and `ants_server --version` show. |
 
-The server's container is given **15 s to stop** (`stop_grace_period`, in the staging stack and the example service too; docker's default is 10 s). On `SIGTERM` it makes the restart records of its running rooms durable and exits within a moment. A redeploy recreates the container, and the server that starts again brings the matches back. **Keep the volume `ants-server-results`**, which holds the restart records, the replays and the control secret: a stack that is removed with its volumes loses them.
+The server's container is given **15 s to stop** (`stop_grace_period`, in the example service too; docker's default is 10 s). On `SIGTERM` it makes the restart records of its running rooms durable and exits within a moment. A redeploy recreates the container, and the server that starts again brings the matches back. **Keep the volume `ants-server-results`**, which holds the restart records, the replays and the control secret: a stack that is removed with its volumes loses them.
 
 The server container is read-only, with no capabilities and no new privileges, and it may run at most 64 processes (`ants-beta` also runs with `no-new-privileges:true` and `pids_limit: 256`): it needs nothing but its sockets and the results folder. The WebSocket port is reached by the site's nginx over `proxy-network` (`/ws`, `/busy`, `/stats` and `/stats/local`), and so is the replay port (`/replays`).
 

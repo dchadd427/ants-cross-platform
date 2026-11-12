@@ -226,18 +226,26 @@ class TheStyle(unittest.TestCase):
         self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
         self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 
+    def test_have_a_code_is_a_disclosure_button_in_the_heading(self):
+        js = read("web", "home", "games.js")
+        self.assertIn("popHead.appendChild(codeLink);", js.replace("popHead.appendChild(popTitle); popHead.appendChild(popCount); ", ""), "the button is in the heading")
+        self.assertIn("codeLink.setAttribute('aria-expanded', 'false'); codeLink.setAttribute('aria-controls', 'gc-box');", js)
+        self.assertIn("codeLink.setAttribute('aria-expanded', on ? 'true' : 'false');", js, "the state is told every time it changes")
+        self.assertIn("else if (codeOpen && pop.contains(doc.activeElement)) setCode(false, true);", js, "Escape shuts the box first and puts the focus back on the button")
+        self.assertIn(".gcode[hidden] { display: none; }", self.css, "a shut box takes no room")
+
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".gjoin", ".gcode .gcgo", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
+        for selector in (".gjoin", ".gcodelink", ".gcode .gcgo", ".gcode .gcx", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
         self.assertIn(".gjoining[hidden] { display: none; }", self.css, "a Join that is not on its way shows no line (and no Cancel)")
-        for selector in (r"\.gjoin", r"\.gcode \.gcgo", r"\.gjoining \.btn"):
+        for selector in (r"\.gjoin", r"\.gcodelink", r"\.gcode \.gcgo", r"\.gcode \.gcx", r"\.gjoining \.btn"):
             self.assertGreaterEqual(int(re.search(selector + r" \{[^}]*min-width: (\d+)px", self.css).group(1)), 44, selector)
         self.assertNotRegex(self.css, r"(?<!min-)height: [1-3]\d px; *}", "no fixed height under 40 px on a control")
 

@@ -165,7 +165,7 @@ One line for each event on standard output: `<time> <event> key=value ...`. A li
 
 ## The stack and the site's nginx
 
-`ants-hub` is the third service of `docker-compose.stack.yml` and `docker-compose.staging.yml` (own volume, own container name in staging): built from `Dockerfile.hub` (slim Python, a non-root user, bytecode made at build time), `read_only`, `cap_drop: [ALL]`, `no-new-privileges`, `pids_limit: 32`, `mem_limit: 192m`, a tmpfs at `/tmp`, a health check (`python -m hub.health`), no published port. It has no `ANTS_BUILD_ID` argument: an image depends on `hub/` only, so a deploy that changes nothing there builds the same image and the chat is not restarted. `tools/deploy_filter.py` counts `hub/` and `Dockerfile.hub`.
+`ants-hub` is the third service of `docker-compose.stack.yml` (own volume): built from `Dockerfile.hub` (slim Python, a non-root user, bytecode made at build time), `read_only`, `cap_drop: [ALL]`, `no-new-privileges`, `pids_limit: 32`, `mem_limit: 192m`, a tmpfs at `/tmp`, a health check (`python -m hub.health`), no published port. It has no `ANTS_BUILD_ID` argument: an image depends on `hub/` only, so a deploy that changes nothing there builds the same image and the chat is not restarted.
 
 ### The site's nginx
 
@@ -181,7 +181,7 @@ An address group is a /64 for IPv6. The hub keeps at most 500 sockets in all and
 
 ### Deploys
 
-A push that changes `hub/`, `Dockerfile.hub`, `docker/nginx.conf` or a stack file counts for the deploy job (`tools/deploy_filter.py`), like any file an image copies: the job waits for a moment with no match running on the game server (`/busy`), then calls the stack's webhook. The webhook rebuilds the stack from the clone, and every image of the page and of the game server carries the build id of the commit (`docker/resolve_build_id.sh`: the commit named by the clone's `.git`), so **a hub-only change also rebuilds and recreates the page and the game server**, after the wait for an idle server (the game server brings its matches back from the restart records; the page is away for a moment). The hub has no build id: its container is recreated only when `hub/` or `Dockerfile.hub` changed, so a deploy for something else does not restart the chat. There is no way to deploy one service of the stack from the webhook; a change that must not touch the game server waits for a deploy that would happen anyway (documents, tests and the other tools are never deployed).
+The host's own update rebuilds the stack from the clone of `main` ([`WORKFLOW.md`](WORKFLOW.md), "Deploy"), and every image of the page and of the game server carries the build id of the commit (`docker/resolve_build_id.sh`: the commit named by the clone's `.git`), so **a hub-only change also rebuilds and recreates the page and the game server** (the game server brings its matches back from the restart records; the page is away for a moment). The hub has no build id: its container is recreated only when `hub/` or `Dockerfile.hub` changed, so an update for something else does not restart the chat. There is no way to update one service of the stack alone; a change that must not touch the game server waits for an update that would happen anyway.
 
 CI builds the image in the Web job, starts it with the stack's flags, waits for `healthy`, runs the command line against its volume and checks that a socket from another site gets 403.
 
