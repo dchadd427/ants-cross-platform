@@ -449,6 +449,9 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     def setUpClass(cls):
         with open(os.path.join(REPO, "tests", "data", "home_chat_mutants.json"), encoding="utf-8") as f:
             cls.spec = json.load(f)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import mutant_shard                     # (here and not at the top: the copies in which the mutants run have this file but not that one, and run the other classes)
+        cls.mutants = mutant_shard.from_environment(cls.spec["mutants"])     # (all of them, or the units of tests/scripts/run_python_tests.py: ANTS_MUTANT_SHARD=K/N)
         cls.folder = tempfile.mkdtemp(prefix="ants_home_chat_mutants.")
         for name in cls.FILES:
             os.makedirs(os.path.dirname(os.path.join(cls.folder, *name.split("/"))), exist_ok=True)
@@ -463,7 +466,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         return done.returncode, done.stdout + done.stderr
 
     def test_the_copy_with_nothing_changed_passes(self):
-        for command in sorted({m["test"] for m in self.spec["mutants"]}):
+        for command in sorted({m["test"] for m in self.mutants}):
             status, out = self.run_command(command)
             self.assertEqual(status, 0, command + "\n" + out[-3000:])
 
@@ -471,7 +474,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         missed = []
-        for m in self.spec["mutants"]:
+        for m in self.mutants:
             path = os.path.join(self.folder, *m["file"].split("/"))
             with open(path, encoding="utf-8", newline="") as f:
                 text = f.read()

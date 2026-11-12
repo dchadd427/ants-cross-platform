@@ -198,6 +198,11 @@ def free_port():
     return port
 
 
+# A port where a connect is refused at once, on Linux and macOS alike: nothing listens on port 1 of the loopback, and a test that runs beside this one cannot be given it (below 1024). A port held by a
+# socket that never listens is refused on Linux but makes macOS wait for the timeout (as tests/scripts/test_deploy_webhook.py says), and a free port that was given back can be taken by another test's server.
+DEAD_PORT = 1
+
+
 class Stand(quick_http.QuickThreadingHTTPServer):
     """A server that records the headers of what arrives and answers {"ok":true}."""
 
@@ -317,7 +322,7 @@ class TheBlocksRun(unittest.TestCase):
         self.stand = Stand()
         self.addCleanup(self.stand.server_close)
         self.addCleanup(self.stand.shutdown)
-        self.dead = free_port()
+        self.dead = DEAD_PORT
         site_port = free_port()
         self.site = "http://127.0.0.1:%d" % site_port
         self.fake = fd.FakeDiscord(self.site + "/hub/callback")
