@@ -814,7 +814,8 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertEqual([m[1] for m in maps], [key.capitalize() for key in MAP_KEYS])
         for key in MAP_KEYS:
             self.assertIn("preview_%s.png" % key, os.listdir(FRONT))
-        self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.page)      # (the drop-down is the rules' list)
+        self.assertIn("room: function () { return model ? model.mapFile : ''; }, originals: Rules.MAPS });", self.page)      # (the map list's fallback, when the server's list cannot be had, is the rules' list of the six)
+        self.assertNotIn("'map-other'", self.page)                                                                        # (and the drop-down, the arrows and their code are gone: one map card)
         default = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", self.rules).group(1)
         self.assertIn(default, MAP_KEYS)
         self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s"' % (default, default.capitalize()), self.page)       # (the picture that the page opens with is the default map's)
@@ -926,7 +927,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn(".slot .grip { position: static;", self.phone)
 
     def test_the_media_rules_come_in_the_order_that_lets_the_narrower_ones_win_and_the_two_sides_of_a_break_agree(self):
-        order = [self.style.index("@media (%s)" % query) for query in ("max-width: 1040px", "max-width: 720px", "max-width: 374px", "max-width: 339px")]
+        order = [self.style.index("@media (%s)" % query) for query in ("max-width: 1040px", "max-width: 720px", "max-width: 374px")]
         self.assertEqual(order, sorted(order), "the narrower rules come later: they win")
         self.assertIn("@media (min-width: 1041px) and (min-height: 880px)", self.style)                         # (1040 and 1041: the same break, seen from both sides)
         self.assertIn(".share { display: none; }", media(self.style, "(min-width: 721px)"))                    # (720 and 721: the Share button is for phones, and the script shows it only where a share sheet exists)
@@ -941,7 +942,8 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn("viewport-fit=cover", self.page)
         self.assertIn(".plan-long { display: none; } .plan-short { display: inline; }", self.phone)             # (the line under START is one short line, so that START and the line stay a small bar)
         self.assertIn(".go .plan { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }", self.phone)
-        self.assertIn(".info { text-align: left; grid-column: 2; }", self.phone)
+        self.assertIn(".info { text-align: left; }", self.phone)
+        self.assertIn(".mapcard { justify-items: start; text-align: left;", self.phone)                        # (the map card's name, chips, line and button sit left of the picture, in its column)
 
     def test_the_invitation_and_the_line_to_join_wrap_on_a_phone_and_never_scroll_sideways(self):
         self.assertEqual(self.sheet.value(".invite", "grid-template-columns"), "minmax(0, 1fr) auto auto")        # (the link, Copy, Share)
@@ -968,13 +970,14 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertEqual(self.sheet.value(".pname input", "width"), "100%")
 
     def test_a_narrow_phone_keeps_the_maps_name_whole(self):
-        # the map's name (Gauntlet, Treasure) is not cut off at 320 px: under 375 px a smaller picture and smaller arrows, and under 340 px a smaller name (a browser measures it)
+        # the map's name (Gauntlet, Treasure) is not cut off at 320 px: under 375 px a smaller picture and a smaller name (a browser measures it)
         narrow = media(self.style, "(max-width: 374px)")
         self.assertIn(".side .maprow { grid-template-columns: 96px minmax(0, 1fr);", narrow)
         self.assertIn(".tv { width: 96px; }", narrow)
-        self.assertIn(".maprow .pick { grid-template-columns: 36px minmax(0, 1fr) 36px; gap: 4px; }", narrow)
-        self.assertIn(".pick select { font-size: 16px; padding-left: 6px; padding-right: 26px;", narrow)
-        self.assertIn(".pick select { font-size: 15px; padding-left: 4px; }", media(self.style, "(max-width: 339px)"))
+        self.assertIn(".map-name { font-size: 21px; }", narrow)
+        self.assertEqual(self.sheet.value(".map-name", "overflow-wrap"), "anywhere")                                 # (a long name of a players' map wraps)
+        self.assertEqual(self.sheet.value(".change", "min-height"), "44px")                                      # (the one button of the card is a full touch target)
+        self.assertIn(".change { min-width: 0; padding: 4px 16px; }", self.phone)
         self.assertGreater(int(re.search(r"\.tv \{[^}]*(?<![-\w])width: (\d+)px;", self.phone).group(1)), 96)           # (a phone of 375 px or more keeps the bigger one)
 
 
@@ -1033,7 +1036,8 @@ class TheColors(unittest.TestCase):
             ("cream text in the code's field", (".joinbox input", "color"), (".joinbox input", "background")),
             ("cream text in the name step's field", (".name-step input", "color"), (".name-step input", "background")),
             ("cream text of a color's mode", (".mode", "color"), (".mode", "background")),
-            ("cream text of the map's drop-down", (".pick select", "color"), (".pick select", "background")),
+            ("cream text of the map card's chips", (".map-facts span", "color"), (".map-facts span", "background")),
+            ("the map card's kind chip", (".map-facts .tag", "color"), (".map-facts .tag", "background")),
             ("the room code", (".code", "color"), (".panel", "background")),
             ("the room code's box", (".code b", "color"), (".code b", "background")),
             ("the note under the link", (".invite-note", "color"), (".panel", "background")),

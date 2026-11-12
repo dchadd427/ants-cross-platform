@@ -63,7 +63,7 @@ SHARD_ENV = "ANTS_MUTANT_SHARD"
 # timers, the watchdog of a node that does not end in test_web_mapmaker_play, the long output of a node through a pipe in test_web_mapmaker.TheCodeRuns, file names and paths, bash 3.2, compilers).
 # test_run_python_tests allows page tests only in this list, and a group that is new runs on macOS until it is named here.
 LINUX_ONLY = {
-    "test_web_home_games.TheChecksAreNotVacuous", "test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_screen.TheChecksAreNotVacuous", "test_web_lobby.TheCheckIsNotVacuous",
+    "test_web_home_games.TheChecksAreNotVacuous", "test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_screen.TheChecksAreNotVacuous", "test_web_home_screen.TheMapCardChecksAreNotVacuous", "test_web_lobby.TheCheckIsNotVacuous",
     "test_web_lobby_chat.TheChecksAreNotVacuous", "test_web_lobby_net.TheBudgetChecksAreNotVacuous", "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous",
     "test_web_lobby_rules.TheCheckIsNotVacuous", "test_web_rematch.TheChecksAreNotVacuous", "test_web_map_maker_link.TheChecksAreNotVacuous", "test_web_game_menu.TheMutants",
     "test_web_shapes.TheMutantsOfTheTable", "test_web_shapes.TheMutantsOfThePicker", "test_bot_names.TheMutants", "test_web_mapmaker.TheGroundAndTheSprites", "test_web_mapmaker.ThePage",
