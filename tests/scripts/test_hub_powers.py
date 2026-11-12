@@ -449,19 +449,35 @@ class TheNamedLine(Powers):
         self.say(self.mod, "/kick bob")
         self.assertEqual([l.text for l in self.w.store.recent_lines(10)], ["line 1", "line 2", "bob was kicked."])
 
-    def test_a_moderator_who_kicks_and_bans_over_and_over_has_a_few_lines_and_the_rest_are_refused_privately(self):
-        self.w.chat.named_limits = limitmod.RateByAccount(5, 10.0)
+    def test_a_moderator_who_kicks_and_bans_over_and_over_does_all_of_it_and_has_only_a_few_lines(self):
+        limits = limitmod.Limits()                                                                   # (the default numbers, read from where they are set: the chat of this class has them)
+        self.assertEqual((limits.named_lines_burst, limits.named_lines_refill_seconds), (5, 10.0))
         for n in range(30):
-            peer = self.w.join(BOB)
+            self.w.join(BOB)
             self.say(self.admin, "/ban bob")
             self.say(self.admin, "/unban bob")
-        self.assertEqual(len(system(self.reader)), 5)
-        self.assertEqual(self.admin.codes().count("rate"), 25)
-        self.assertEqual(len(self.w.store.recent_lines(200)), 5)
-        self.assertEqual(len(self.rows()), 10)                                                       # (the five bans and their unbans: a refused ban leaves no row)
-        self.assertEqual((self.admin.strikes, self.admin.charges), (self.admin.codes().count("bad"), 25))      # (a refusal of the budget is not the client's doing: it costs a frame, not a mistake; the unbans of a ban that was refused are `bad`)
-        self.say(self.mod, "/kick alice")                                                            # (another moderator has its own)
-        self.assertEqual(len(system(self.reader)), 6)
+        self.assertEqual(self.admin.codes(), [])                                                     # (every ban and every unban was done)
+        self.assertEqual([m["c"] for m in self.admin.kinds("ok")].count("ban"), 30)
+        self.assertEqual(len(self.rows()), 60)                                                       # (and has its row in the log)
+        self.assertEqual(len(system(self.reader)), limits.named_lines_burst)                         # (the lines for everybody are the budget)
+        self.assertEqual(len(self.w.store.recent_lines(200)), limits.named_lines_burst)
+        self.say(self.mod, "/kick alice")                                                            # (another moderator has its own budget)
+        self.assertEqual(len(system(self.reader)), limits.named_lines_burst + 1)
+        self.w.wall.now += 100
+        self.w.clock.now += 100
+        self.w.join(BOB)
+        self.say(self.admin, "/ban bob")                                                             # (and the budget comes back with time)
+        self.assertEqual(len(system(self.reader)), limits.named_lines_burst + 2)
+
+    def test_a_ban_that_is_refused_or_a_duplicate_spends_nothing_of_the_budget(self):
+        self.say(self.admin, "/ban bob")
+        for n in range(20):
+            self.say(self.admin, "/ban bob")                                                         # (banned already: `bad`)
+            self.say(self.admin, "/ban boss.two")                                                    # (an administrator: `power`)
+            self.say(self.admin, "/ban nobody")                                                      # (nobody: `who`)
+        for name in ("alice", "moddy", "other.mod"):
+            self.say(self.admin, "/ban " + name)
+        self.assertEqual(len(system(self.reader)), 4)                                                # (all four bans have their line: nothing was spent by the refused ones)
 
     def test_a_refused_command_makes_no_line_at_all(self):
         for text in ("/kick nobody", "/ban boss.two", "/kick boss.one", "/ban bob extra", "/kick boss.two"):
@@ -507,6 +523,8 @@ class FreshBase(unittest.IsolatedAsyncioTestCase):
         self.roles = rolesmod.Roles(cfg, self.limits, self.clock, self.log, client=self.stub, rng=lambda: 0.5)
         self.w.chat.roles = self.roles
         self.roles.connected, self.roles.changed = self.w.chat.accounts, self.w.chat.role_changed
+        self.w.chat.wait_limits = limitmod.RateByAccount(self.limits.roles_urgent_actor_burst, self.limits.roles_urgent_actor_refill_seconds)      # (the budgets of one moderator, as this test's limits have them)
+        self.w.chat.named_limits = limitmod.RateByAccount(self.limits.named_lines_burst, self.limits.named_lines_refill_seconds)
         self.roles.start()
         self.addCleanup(self.roles.stop)
         self.mod, self.admin, self.alice, self.bob = (self.w.join(i) for i in (MODERATOR, ADMIN1, ALICE, BOB))
@@ -720,6 +738,7 @@ class TheFreshCheck(FreshBase):
     async def test_the_numbers_are_the_ones_the_document_gives(self):
         d = limitmod.Limits()
         self.assertEqual((d.roles_action_fresh_seconds, d.roles_urgent_seconds, d.roles_urgent_burst, d.roles_urgent_refill_seconds), (60.0, 3.0, 10, 1.0))
+        self.assertEqual((d.roles_urgent_actor_burst, d.roles_urgent_actor_refill_seconds, d.named_lines_burst, d.named_lines_refill_seconds), (3, 5.0, 5, 10.0))
 
     async def test_a_moderator_who_asks_for_many_lookups_gets_their_share_and_is_then_refused_and_the_people_s_own_checks_go_on(self):
         for n in range(40):
@@ -741,7 +760,8 @@ class TheFreshCheck(FreshBase):
         await self.until(lambda: any(a == "1001" for _, a in self.stub.calls))
 
     async def test_one_moderator_on_many_sockets_has_a_share_of_their_own_and_the_others_keep_theirs(self):
-        self.w.chat.wait_limits = limitmod.RateByAccount(3, 5.0)                                     # (the real numbers: a burst of 3, one more every 5 seconds)
+        real = limitmod.Limits()                                                                     # (the default numbers, read from where they are set)
+        self.w.chat.wait_limits = limitmod.RateByAccount(real.roles_urgent_actor_burst, real.roles_urgent_actor_refill_seconds)
         for n in range(12):
             self.w.store.set_profile("20%02d" % n, "user.%d" % n, "", 100)
             self.members["20%02d" % n] = []
@@ -751,9 +771,9 @@ class TheFreshCheck(FreshBase):
             self.w.say(peer, "/mute user.%d 5" % n)
             await self.settle()
         codes = [c for p in sockets for c in p.codes()]
-        self.assertEqual(codes.count("role"), len(sockets) - 3)
+        self.assertEqual(codes.count("rate"), len(sockets) - 3)                                      # (`rate`: too fast; `role` is the answer of a role that could not be confirmed)
         self.assertEqual(len(self.w.store.mutes()), 3)                                           # (three commands waited for lookups; the others were refused at the door)
-        self.assertGreater(sum(p.strikes for p in sockets), 0)                                       # (and a refusal of the share is a mistake of the socket)
+        self.assertEqual(sum(p.strikes for p in sockets), len(sockets) - 3)                          # (and a refusal of the share is a mistake of the socket)
         asked_before = len(self.stub.calls)
         self.w.say(self.admin, "/mute user.11 5")                                                    # (another moderator: its own share is whole, and so is the hub's)
         await self.settle()
@@ -763,15 +783,19 @@ class TheFreshCheck(FreshBase):
     async def test_a_command_that_the_share_refuses_makes_no_entry_and_evicts_nobody(self):
         self.members["1010"] = []
         self.w.store.set_profile("1010", "dora.d", "", 100)
+        self.roles.limits = dataclasses.replace(self.roles.limits, roles_entries_max=len(self.roles.entries) + 3)
+        for n in range(3):
+            self.roles.entries["3%03d" % n] = rolesmod.Entry(self.clock())                           # (people who left, and whose entries fill the table to its cap)
+            self.roles.entries["3%03d" % n].seen = self.clock() - 5 - n
+        before = set(self.roles.entries)
         self.roles.urgent_bucket.tokens = 0.0
         self.roles.urgent_bucket.at = self.clock()
-        before = dict(self.roles.entries)
-        self.age(0.0)
         for account in ("9101", "1002"):
             self.roles.entries[account].ok_at = self.clock() - 100.0
         self.w.say(self.admin, "/mute dora.d 5")
         await self.settle()
-        self.assertEqual((self.admin.codes(), "1010" in self.roles.entries, set(self.roles.entries) == set(before)), (["role"], False, True))
+        self.assertEqual(self.admin.codes(), ["role"])
+        self.assertEqual(set(self.roles.entries), before)                                            # (no entry for the person, and none of those that left was evicted for it)
 
     async def test_the_share_of_the_actions_comes_back_with_time(self):
         def stale():
@@ -1142,6 +1166,8 @@ class TheIdIsLikeAPassword(unittest.IsolatedAsyncioTestCase):
         self.roles = rolesmod.Roles(cfg, self.limits, self.clock, self.real, client=self.stub, rng=lambda: 0.5)
         self.w.chat.roles = self.roles
         self.roles.connected, self.roles.changed = self.w.chat.accounts, self.w.chat.role_changed
+        self.w.chat.wait_limits = limitmod.RateByAccount(self.limits.roles_urgent_actor_burst, self.limits.roles_urgent_actor_refill_seconds)      # (the budgets of one moderator, as this test's limits have them)
+        self.w.chat.named_limits = limitmod.RateByAccount(self.limits.named_lines_burst, self.limits.named_lines_refill_seconds)
         self.w.chat.on_store_error = lambda e: self.real.event("error", kind=type(e).__name__, where="store")
         self.w.chat.on_command_error = lambda e: self.real.event("error", kind=type(e).__name__, where="command")
         self.roles.start()

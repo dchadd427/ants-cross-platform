@@ -325,8 +325,8 @@ class Chat:
             return self.mistake(peer, refusal)
         if self.roles.fresh(accounts):
             return self.carry_out(peer, job)
-        if not self.wait_limits.take(peer.identity.account_id, self.clock()):
-            return self.mistake(peer, "role")                       # (a moderator who asks for too many lookups at once: refused here, before the hub's share is touched, and counted as a mistake)
+        if not self.wait_limits.take(self.key_of(peer.identity.account_id), self.clock()):
+            return self.mistake(peer, "rate")                       # (a moderator who asks for too many lookups at once: refused here, before the hub's share is touched, and counted as a mistake; the buckets are keyed by the run's key of the account, not the id)
         task = asyncio.ensure_future(self.wait_and_carry_out(peer, job, accounts))
         self.busy[peer] = task
         task.add_done_callback(lambda done, peer=peer: self.finished(peer, done))
@@ -385,8 +385,6 @@ class Chat:
             return self.mistake(peer, "role", count=False)         # (no longer a moderator: the answer is fresh, and it says none)
         if not allowed(name, actor, self.roles.role_of(target) if target is not None else None, target == me.account_id):
             return self.mistake(peer, "power")
-        if name in ("kick", "ban") and not self.named_limits.take(me.account_id, self.clock()):
-            return self.mistake(peer, "rate", count=False)         # (a line for everybody at every one: a moderator has a few at once, and the refused ones stay private)
         by, whom = self.ref(me.account_id), self.ref(target) if target is not None else ""
         if name == "mute":
             self.store.mute(target, minutes, by, arg, note=(by, "mute", whom, str(minutes)))
@@ -409,14 +407,14 @@ class Chat:
             shown = sockets[0].identity.name
             self.store.end_sessions(target, note=(by, "kick", whom, ""))
             self.remove(sockets, "kicked")
-            self.announce("%s was kicked." % shown)
+            self.announce("%s was kicked." % shown, me)
         else:
             if self.store.is_banned(target):
                 return self.mistake(peer, "bad")
             shown = self.shown_name(target) or arg
             self.store.ban(target, by, arg, note=(by, "ban", whom, ""))
             self.remove(self.sockets_of(target), "banned")
-            self.announce("%s was banned." % shown)
+            self.announce("%s was banned." % shown, me)
         peer.send_text(dumps({"t": "ok", "c": name}))
 
     def sockets_of(self, account):
@@ -438,9 +436,12 @@ class Chat:
             return None
         return profile.display if profile.pick == "display" and profile.display else profile.username
 
-    def announce(self, text):
+    def announce(self, text, by):
         """A line of the hub's own to everybody (and into the history, like any line: the same time to live, the same count among the newest 200): the account is "" and the name `system`, a name that no
-        account can have. A database that refuses it costs the line, not the action, which was done already."""
+        account can have. A database that refuses it costs the line, not the action, which was done already; so does a moderator `by` whom too many were made (a burst of `named_lines_burst`, then
+        one every `named_lines_refill_seconds`): the kick or the ban is done, its `ok` and its row of the log are there, and the line is not made, so that the history is not pushed out."""
+        if not self.named_limits.take(self.key_of(by.account_id), self.clock()):
+            return
         try:
             entry = self.store.add_line("", SYSTEM, text, False)
         except StoreError as e:
