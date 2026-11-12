@@ -42,7 +42,7 @@ class ThePage(unittest.TestCase):
 
     def test_the_markup_has_the_host_of_the_control_after_the_map_and_the_tag_by_the_rooms_name(self):
         self.assertEqual(self.page.count('<div id="gtype"></div>'), 1)
-        self.assertLess(self.page.index('id="browse"'), self.page.index('id="gtype"'))
+        self.assertLess(self.page.index('id="change-map"'), self.page.index('id="gtype"'))
         self.assertLess(self.page.index('id="gtype"'), self.page.index('id="shape-row"'), "the field sits under the map and above the picture's shape, as the approved picture shows")
         self.assertIn('<span class="hl"><h2 id="room-h">Your room</h2><span class="modetag" id="mode-tag" hidden></span></span>', self.page)
 

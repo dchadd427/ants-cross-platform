@@ -108,7 +108,7 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         page = read(LOBBY)
         side = page[page.index('<aside class="side"'):page.index('</aside>')]
         footer = page[page.index('<footer class="bar" id="footer-bar">'):page.index("</footer>")]
-        self.assertLess(side.index('id="map"'), side.index('<div class="shape" id="shape-row">'))
+        self.assertLess(side.index('id="change-map"'), side.index('<div class="shape" id="shape-row">'))
         self.assertLess(side.index('id="info"'), side.index('<div class="shape" id="shape-row">'))
         self.assertLess(side.index('<div class="shape" id="shape-row">'), side.index('id="start"'))
         self.assertIn('<label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note"', side)

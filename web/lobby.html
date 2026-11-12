@@ -163,11 +163,10 @@
     .maprow { display: grid; gap: 14px; }
     .tv { margin: 4px auto 6px; width: 300px; max-width: 100%; border: 3px solid var(--edge); background: var(--edge); box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow); }
     .tv img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
-    .pick { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 10px; align-items: center; }
-    .pick select { appearance: none; -webkit-appearance: none; width: 100%; min-height: 44px; padding: 6px 44px 6px 14px; font-size: 18px; color: var(--cream); cursor: pointer; text-align: center; text-align-last: center;
-        background: var(--inset) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22'%3E%3Crect x='1' y='1' width='20' height='20' rx='2' fill='%232b6357' stroke='%23050a08' stroke-width='2'/%3E%3Cpath d='M6 9l5 5 5-5' fill='none' stroke='%23f4ece2' stroke-width='2.4'/%3E%3C/svg%3E") no-repeat right 8px center;
-        border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
-    .pick select:disabled { background-image: none; padding-right: 14px; cursor: default; }
+    .mapcard { display: grid; gap: 8px; justify-items: center; min-width: 0; text-align: center; }
+    .map-name { font-size: 28px; line-height: 1.1; overflow-wrap: anywhere; } .map-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; } .map-facts:empty { display: none; }
+    .map-facts span { padding: 1px 9px; font-size: 14px; color: var(--cream); background: #0f1820; border: 1px solid #28493e; border-radius: 10px; } .map-facts .tag { color: #1a1405; background: var(--gold); border-color: var(--gold); text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
+    .change { min-height: 44px; min-width: 160px; }
     .info { text-align: center; font-size: 15px; color: var(--cream); }
     .go { display: grid; gap: 10px; }
     .go .plan { font-size: 15px; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
@@ -237,10 +236,8 @@
         .side { display: contents; }
         .side .maprow { grid-row: auto; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 4px 14px; }
         .tv { margin: 0; width: 112px; box-shadow: 0 0 0 2px var(--frame), 0 0 0 4px var(--edge), 3px 4px 0 4px var(--shadow); border-width: 2px; }
-        .maprow .pick { grid-template-columns: 40px minmax(0, 1fr) 40px; gap: 6px; }
-        .maprow .pick .btn.square { min-width: 40px; min-height: 40px; }
-        .pick select { font-size: 17px; min-height: 40px; padding-left: 8px; padding-right: 34px; background-position: right 5px center; box-shadow: 0 0 0 2px var(--edge), 2px 3px 0 1px var(--shadow); }
-        .info { text-align: left; grid-column: 2; }
+        .mapcard { justify-items: start; text-align: left; gap: 6px; } .map-facts { justify-content: flex-start; } .map-name { font-size: 24px; }
+        .info { text-align: left; }
         .go { position: sticky; bottom: 0; z-index: 20; margin: 0 -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--clay) var(--tile); border-top: 3px solid var(--frame); box-shadow: 0 -4px 0 rgba(157, 13, 23, .9); gap: 6px; }
         .btn.big { min-height: 58px; font-size: 26px; }
         .plan-long { display: none; } .plan-short { display: inline; }
@@ -248,16 +245,13 @@
         .bar { padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
         .share { display: inline-flex; }
         .toast { bottom: 150px; }
-        .maprow .browse { grid-column: 2; justify-self: start; }
+        .change { min-width: 0; padding: 4px 16px; }
     }
     @media (max-width: 374px) {
         .mode { font-size: 15px; padding: 6px 28px 6px 6px; background-position: right 4px center; } .pname, .pname input { font-size: 19px; } .teamset button { padding: 3px 4px; font-size: 14px; }
-        /* a narrow phone: a smaller picture and arrows, so the map's name (Gauntlet, Treasure) is not cut off */
-        .side .maprow { grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; } .tv { width: 96px; }
-        .maprow .pick { grid-template-columns: 36px minmax(0, 1fr) 36px; gap: 4px; } .maprow .pick .btn.square { min-width: 36px; min-height: 40px; }
-        .pick select { font-size: 16px; padding-left: 6px; padding-right: 26px; background-position: right 4px center; }
+        /* a narrow phone: a smaller picture, so the map's name and its button are not cut off */
+        .side .maprow { grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; } .tv { width: 96px; } .map-name { font-size: 21px; }
     }
-    @media (max-width: 339px) { .pick select { font-size: 15px; padding-left: 4px; } }
     @media (min-width: 721px) { .share { display: none; } }
     @media (pointer: coarse) { .grip { width: 44px; height: 44px; right: 2px; top: 8px; } }
     /* ---- the pieces that the page has and the pictures do not draw ---- */
@@ -315,9 +309,8 @@
         <aside class="side" aria-label="The match">
             <div class="maprow">
                 <figure class="tv"><img id="preview" src="front/preview_treasure.png" alt="The map: Treasure" width="300" height="300"></figure>
-                <div class="pick"><button class="btn square" type="button" id="prev" aria-label="Previous map">&#8249;</button><select id="map" aria-label="Map"><option id="map-other" value="*" hidden></option></select><button class="btn square" type="button" id="next" aria-label="Next map">&#8250;</button></div>
-                <p class="info" id="info" aria-live="polite"></p>
-                <button class="btn sm browse" type="button" id="browse" aria-haspopup="dialog" hidden>Browse all maps</button>
+                <div class="mapcard" role="group" aria-labelledby="map-name"><p class="map-name" id="map-name"></p><p class="map-facts" id="map-facts"></p><p class="info" id="info" aria-live="polite"></p>
+                <button class="btn change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button></div>
             </div>
             <div id="gtype"></div>
             <div class="shape" id="shape-row"><label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture"></select></span><span class="fit-note" id="fit-note" hidden></span></div>
@@ -800,11 +793,11 @@
                 $('preview').alt = 'The map: ' + side.mapName;
                 $('preview').setAttribute('data-map', shownMap);
             }
-            paintSelect(side);
+            paintMapCard(side);
             if (side.mapFile) { warmMap(side.mapFile); if (window.AntsMapPicker && (!picker || picker.status() !== 'ready')) ensurePicker().load(); }
             setText($('info'), side.mapInfo);
             if (side.mapDisabled && picker && picker.isOpen()) picker.close();       // (the room changed hands, or START was pressed, while the list was open)
-            $('browse').disabled = side.mapDisabled; $('map').disabled = side.mapDisabled; $('prev').disabled = side.mapDisabled; $('next').disabled = side.mapDisabled;
+            $('change-map').disabled = side.mapDisabled; $('change-map').hidden = !model || !!model.guest;      // (a guest sees the card without the button)
             var start = $('start');
             start.disabled = side.startDisabled;
             start.setAttribute('aria-busy', String(side.startBusy));
@@ -1012,28 +1005,13 @@
             return client.setPlan(Rules.planWith(Rules.withMode(client.room, pendingMode), Rules.modelOf(client.room), change));
         }
         var gameType = GameType.create({ doc: document, host: $('gtype'), modes: Modes, onChoose: function (id) { Modes.remember(storage, id); if (sendPlan({ mode: id })) pendingMode = id; else render(); } });      // (front/game_type.js)
-        function setMap(step) {                          // the next or the previous original; from a map of the players the first or the last
-            var list = Rules.MAPS, at = mapIndex();
-            var key = list[at < 0 ? (step > 0 ? 0 : list.length - 1) : (at + step + list.length) % list.length].key;
-            if (!sendPlan({ map: key })) render();
-        }
-        $('prev').addEventListener('click', function () { if (model) setMap(-1); });
-        $('next').addEventListener('click', function () { if (model) setMap(1); });
-        $('map').addEventListener('change', function () { if ($('map').value === '*' || !sendPlan({ map: $('map').value })) render(); });
-        function mapIndex() {
-            var list = Rules.MAPS, key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;
-            if (model && !model.map && model.mapFile) return -1;          // a map of the players is none of the six
-            for (var i = 0; i < list.length; i++) if (list[i].key === key) return i;
-            return 0;
-        }
-        Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });
-
-        // ---- the map list (front/map_picker.js): the selector's prev, next and drop-down stay; "Browse all maps" opens the list of the server's maps, the players' ones too ----
+        // ---- the map card and the map list (front/map_picker.js): the card shows the room's map, and its Change map button (the host's) opens the list: the six originals first, then the players' maps ----
         var picker = null, warmed = {};
         function ensurePicker() {
             if (!picker) picker = AntsMapPicker.create({ host: $('picker-panel'), doc: document, fetch: function (u, i) { return window.fetch(u, i); }, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(),
                 AbortController: window.AbortController, matchMedia: function (q) { return window.matchMedia(q); }, canOpen: isHost, canChoose: isHost, onChoose: chooseMap, onList: render,
-                onOpen: function () { inert(true); }, onClose: function () { inert(false); $('browse').focus(); } });
+                onOpen: function () { inert(true); }, onClose: function () { inert(false); $('change-map').focus(); },
+                room: function () { return model ? model.mapFile : ''; }, originals: Rules.MAPS });
             return picker;
         }
         function isHost() { return !!(model && !model.guest && !model.starting); }
@@ -1045,14 +1023,23 @@
             if (known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })) render();
             else if (!known) warmMap(entry.file);
         }
-        function paintSelect(side) {                     // a map of the players is the drop-down's own extra line (hidden for an original)
-            var other = $('map-other');
-            other.hidden = !!side.mapKey;
-            if (side.mapKey) { if ($('map').value !== side.mapKey) $('map').value = side.mapKey; return; }
-            setText(other, side.mapName); $('map').value = '*';
+        function paintMapCard(side) {                    // the map card's name and its chips (what the list knows of the map, once it has the list)
+            var e = picker && model && model.mapFile && !side.mapKey ? picker.find(model.mapFile) : null;       // (an original shows its kind only, with or without the list)
+            setText($('map-name'), side.mapName);
+            if (!window.AntsMapPicker) return;
+            var facts = $('map-facts'), now = AntsMapPicker.factsOf(e, !side.mapKey);
+            if (facts.getAttribute('data-facts') === now.join('|')) return;
+            facts.setAttribute('data-facts', now.join('|')); facts.textContent = '';
+            now.forEach(function (t, i) { facts.appendChild(el('span', i ? '' : 'tag', t)); });
         }
-        if (window.fetch && window.AntsMapPicker) $('browse').hidden = false;
-        $('browse').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });
+        function changeMap() {            // (the list; when front/map_picker.js did not load, the next of the six originals)
+            if (!isHost()) return;
+            if (window.AntsMapPicker) { ensurePicker().open(model.mapFile); return; }
+            var at = Rules.MAPS.indexOf(Rules.mapOfFile(model.mapFile));
+            chooseMap(Rules.MAPS[(at + 1) % Rules.MAPS.length]);
+        }
+        $('change-map').addEventListener('click', changeMap);
+        $('preview').addEventListener('click', changeMap);       // (a tap on the picture does the same; the button is the keyboard's and the screen reader's way)
 
         $('start').addEventListener('click', function () {
             if (!client || !model || model.guest || model.starting || offline) return;

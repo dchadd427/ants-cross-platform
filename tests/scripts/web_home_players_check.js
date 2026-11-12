@@ -621,7 +621,7 @@ function bringPlayers(env) {
     check('(the list is there and takes presses)', !!box && !box.hasAttribute('inert'));
     env.home('mine').click();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
-    env.$('browse').click();
+    env.$('change-map').click();
     check('a dialog over the page makes the list inert with the bars and the dock', box.hasAttribute('inert') && env.home('hbar').hasAttribute('inert'));
     const late = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(late); late.advance(0); bringChat(late);
