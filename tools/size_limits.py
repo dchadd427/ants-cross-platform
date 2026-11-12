@@ -34,3 +34,32 @@ SPLIT_PENDING = frozenset({
     "web/shell.html",
     "tools/map_sweep.cpp",
 })
+
+# Web byte budgets (tests/scripts/test_web_*). A budget is a promise about what a player downloads, so it stays an exact failure: a file over it fails its test.
+# The rule: the measured size plus about 10%, rounded up (to 50,000 from 1,000,000, to 5,000 from 100,000, to 500 from 10,000, else to 100). A raise is a one-number edit with
+# its reason in the commit message; no story is kept here.
+# the whole of web/front/ (pictures, font, scripts, style) and the map maker's own scripts and style, apart from the pictures
+FRONT_BUDGET = 1_650_000
+EDITOR_BUDGET, EDITOR_GZIP_BUDGET = 430_000, 125_000
+# scripts that load on first use (raw bytes, gzipped; both files of a pair together unless a script is named alone)
+LAZY_BUDGET, LAZY_GZIP_BUDGET = 66_000, 21_500          # the three lazy map maker scripts together
+SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET = 35_000, 11_000      # mapmaker_submit.js
+ANTS_BUDGET, ANTS_GZIP_BUDGET = 46_500, 14_000          # the Ants tool
+CONVERT_BUDGET, CONVERT_GZIP_BUDGET = 33_500, 10_500    # Copy, convert and Crop
+PICKUP_BUDGET, PICKUP_GZIP_BUDGET = 83_000, 23_500      # the Pick up tool
+PLAY_BUDGET, PLAY_GZIP_BUDGET = 36_500, 10_500          # Play this map
+# the game page
+GAME_BUDGET, GAME_GZIP_BUDGET = 12_000, 4_600           # the game page's side of Play this map
+GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 45_000, 13_000  # the settings menu
+SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 8_100, 3_100        # the one table of the picture's shapes
+PICKER_BUDGET, PICKER_GZIP_BUDGET = 15_500, 5_000       # the picture's dropdown
+# the front page (web/home/, web/front/player_name.js)
+HOME_BUDGET, HOME_GZIP_BUDGET = 44_000, 13_500
+GAMES_BUDGET, GAMES_GZIP_BUDGET = 98_000, 28_000
+PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 33_000, 10_500
+CHAT_BUDGET, CHAT_GZIP_BUDGET = 56_500, 18_000
+TALK_BUDGET, TALK_GZIP_BUDGET = 24_500, 8_800
+SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
+# the bar at the top of every page (web/site_nav.css, web/site_nav.js)
+NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 5_900, 1_900
+NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 4_400, 1_800

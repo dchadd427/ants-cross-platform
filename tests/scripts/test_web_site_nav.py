@@ -19,8 +19,8 @@ DISCORD = "https://discord.gg/WaWrXQnKPj"
 ROW = ["/", "/matches", "/live-now", "/mapmaker", DISCORD]
 SMALL = [("Sprites and sounds", "/asset_catalog/"), ("Changelog", "/changelog"), ("GitHub", "https://github.com/dchadd427/ants-cross-platform"),
          ("Feedback", "https://github.com/dchadd427/ants-cross-platform/issues"), ("Legal", "/legal")]
-CSS_BUDGET, CSS_GZIP_BUDGET = 5600, 1800            # bytes, raw and gzipped (about 5,350 and 1,730: the button row, the phone bar, the Menu and the title block, with their comments; the plan said 1,700 and 730 and the comments and the forced-colors rules are the difference)
-JS_BUDGET, JS_GZIP_BUDGET = 4300, 1800               # (about 3,960 and 1,590)
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import NAV_CSS_BUDGET as CSS_BUDGET, NAV_CSS_GZIP_BUDGET as CSS_GZIP_BUDGET, NAV_JS_BUDGET as JS_BUDGET, NAV_JS_GZIP_BUDGET as JS_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(*parts):
