@@ -646,6 +646,131 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.store.lines(10), [])
 
 
+    # ---- the hub's secret and the moderators' log ----
+
+    REF_A, REF_B = "0123456789abcdef", "fedcba9876543210"
+
+    def test_the_secret_is_32_bytes_the_same_every_time_and_not_the_same_in_two_stores(self):
+        self.assertEqual((type(self.store.secret()), len(self.store.secret())), (bytes, 32))
+        self.assertEqual(self.store.secret(), self.store.secret())
+        other = self.make_store(self.clock)
+        self.addCleanup(other.close)
+        self.assertNotEqual(other.secret(), self.store.secret())
+
+    def test_an_action_with_a_note_leaves_a_row_in_the_same_step_and_one_without_leaves_none(self):
+        A, B = self.REF_A, self.REF_B
+        self.say(1)
+        self.store.mute("1002", 5, "me", "bob")
+        self.store.ban("1002", "me", "bob")
+        self.assertEqual(self.store.actions(), [])
+        self.store.mute("1002", 5, A, "bob", note=(A, "mute", B, "5"))
+        self.clock.now += 1
+        self.store.mute("1002", 0, A, "", note=(A, "unmute", B, ""))
+        self.clock.now += 1
+        self.store.ban("1002", A, "bob", note=(A, "ban", B, ""))
+        self.clock.now += 1
+        self.assertTrue(self.store.unban("1002", note=(A, "unban", B, "")))
+        self.clock.now += 1
+        self.assertTrue(self.store.delete_line(1, A, note=(A, "del", B, "1")))
+        self.clock.now += 1
+        self.assertEqual(self.store.end_sessions("1002", note=(A, "kick", B, "")), 0)
+        rows = self.store.actions()
+        self.assertEqual([(r.action, r.actor, r.target, r.detail) for r in rows], [("kick", A, B, ""), ("del", A, B, "1"), ("unban", A, B, ""), ("ban", A, B, ""), ("unmute", A, B, ""), ("mute", A, B, "5")])
+        self.assertEqual([r.at for r in rows], sorted((r.at for r in rows), reverse=True))
+        self.assertTrue(all(isinstance(r.id, int) for r in rows))
+        self.assertEqual(self.store.actions(since=rows[3].at)[-1].action, "ban")            # (from a time on)
+        self.assertEqual(len(self.store.actions(limit=2)), 2)
+
+    def test_a_note_is_written_only_for_an_action_that_was_done(self):
+        A, B = self.REF_A, self.REF_B
+        self.assertFalse(self.store.unban("1002", note=(A, "unban", B, "")))                # (nobody was banned)
+        self.assertEqual(self.store.mute("1002", 0, A, "", note=(A, "unmute", B, "")), 0)   # (nobody was muted)
+        self.assertFalse(self.store.delete_line(99, A, note=(A, "del", B, "99")))           # (no such line)
+        self.assertEqual(self.store.actions(), [])
+
+    def test_a_note_that_is_not_a_note_is_refused_and_the_action_is_undone(self):
+        A, B = self.REF_A, self.REF_B
+        for note in ((A, "mute", "1002", "5"), ("1001", "mute", B, "5"), (A, "frobnicate", B, ""), (A, "mute", B, "5 minutes please"), (A, "mute", "73110000000000000099", "5"), ("1" * 19, "ban", B, ""),
+                     (A, "mute", B, "x" * 13), (A, "mute", "A" * 16, "5")):
+            with self.assertRaises(ValueError, msg=note):
+                self.store.ban("1002", A, "bob", note=note)
+            self.assertFalse(self.store.is_banned("1002"), note)                             # (the ban was in the same step: nothing is left of it)
+        self.assertEqual((self.store.actions(), self.store.last_restriction()), ([], 0))
+        self.store.ban("1002", A, "bob", note=("terminal", "ban", "", ""))                   # (the command line is an actor; an action may have no target)
+        self.assertEqual(self.store.actions()[0].actor, "terminal")
+
+    def test_a_refused_write_leaves_no_row_and_no_action(self):
+        A, B = self.REF_A, self.REF_B
+        self.store.ban("1002", A, "bob", note=(A, "ban", B, ""))
+        with self.refusing_writes(self.store):
+            for write in (lambda: self.store.mute("1002", 5, A, "bob", note=(A, "mute", B, "5")), lambda: self.store.unban("1002", note=(A, "unban", B, "")),
+                          lambda: self.store.end_sessions("1002", note=(A, "kick", B, "")), lambda: self.store.ban("1003", A, "carol", note=(A, "ban", B, ""))):
+                with self.assertRaises(base.StoreError):
+                    write()
+        self.assertEqual([r.action for r in self.store.actions()], ["ban"])
+        self.assertTrue(self.store.is_banned("1002"))
+        self.assertFalse(self.store.is_banned("1003"))
+
+    def test_the_log_keeps_30_days_and_10000_rows_and_the_purge_does_both(self):
+        A, B = self.REF_A, self.REF_B
+        self.store.max_modlog = 10 ** 9
+        for n in range(5):
+            self.store.mute("1002", 5, A, "bob", note=(A, "mute", B, str(n)))
+            self.clock.now += 10 * DAY
+        self.assertEqual(len(self.store.actions()), 5)
+        self.store.purge()
+        self.assertEqual([r.detail for r in self.store.actions()], ["4", "3", "2"])         # (the two that are older than 30 days are gone: 50 and 40 days)
+        self.store.max_modlog = 2
+        self.store.purge()
+        self.assertEqual([r.detail for r in self.store.actions()], ["4", "3"])               # (and the rows past the newest 2)
+        self.assertEqual(base.MODLOG_DAYS, 30)
+        self.assertEqual(base.MODLOG_ROWS, 10000)
+        self.assertEqual((self.store.modlog_days, self.store.max_modlog), (30, 2))
+
+    def test_the_log_never_holds_more_than_its_cap_even_between_two_purges(self):
+        A, B = self.REF_A, self.REF_B
+        self.store.max_modlog = 20
+        for n in range(60):
+            self.store.mute("1002", 5, A, "bob", note=(A, "mute", B, str(n)))
+        self.assertLessEqual(len(self.store.actions()), 20)
+        self.assertEqual(self.store.actions()[0].detail, "59")
+
+    def test_forget_and_a_purge_of_profiles_do_not_take_the_log_away(self):
+        A, B = self.REF_A, self.REF_B
+        self.store.set_profile("1002", "bob", "", 100)
+        self.store.ban("1002", A, "bob", note=(A, "ban", B, ""))
+        self.store.forget("1002")
+        self.assertEqual([r.action for r in self.store.actions()], ["ban"])
+
+    def test_references_are_found_by_their_profile_and_by_the_accounts_that_the_data_knows(self):
+        from hub import pseudo
+        secret = self.store.secret()
+        self.store.set_profile("1001", "alice", "", 100)
+        self.say(1, account="1003", name="carol")
+        self.store.ban("1004", "me", "dave")
+        refs = {a: pseudo.reference(secret, a) for a in ("1001", "1003", "1004", "1009")}
+        self.assertEqual(self.store.usernames_by_reference(list(refs.values())), {refs["1001"]: "alice"})
+        self.assertEqual(self.store.usernames_by_reference([]), {})
+        self.assertEqual([self.store.account_of_reference(refs[a]) for a in ("1001", "1003", "1004", "1009")], ["1001", "1003", "1004", None])
+        self.assertIsNone(self.store.account_of_reference("0" * 16))
+
+    def test_end_sessions_ends_every_login_of_the_account_and_no_other(self):
+        self.store.add_session("k1", "1001", "alice", 60, 10, 100)
+        self.store.add_session("k2", "1001", "alice", 60, 10, 100)
+        self.store.add_session("k3", "1002", "bob", 60, 10, 100)
+        self.assertEqual(self.store.end_sessions("1001"), 2)
+        self.assertEqual((self.store.session("k1"), self.store.session("k2")), (None, None))
+        self.assertIsNotNone(self.store.session("k3"))
+        self.assertEqual(self.store.end_sessions("1001"), 0)
+
+    def test_no_representation_of_a_line_shows_the_account(self):
+        line = self.say(1, account="73110000000000009901")
+        for text in (repr(line), str(line), "%r" % (line,), repr([line])):
+            self.assertNotIn("7311", text)
+            self.assertNotIn("9901", text)
+        self.assertEqual(line.account, "73110000000000009901")
+
+
 class SqliteContract(Contract):
     """The default backend: one file."""
 
@@ -695,13 +820,13 @@ class SqliteContract(Contract):
 
 
     def test_the_profiles_are_an_additive_table_that_no_version_of_the_schema_came_with(self):
-        self.assertEqual(storemod.SCHEMA, 3)
-        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(storemod.SCHEMA, 4)                           # (version 4 came with the hub's secret and the moderators' log; the profiles were made before it, without a version)
+        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 4)
         self.assertEqual(self.store.db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'profiles'").fetchone(), ("profiles",))
         self.assertEqual([r[1] for r in self.store.db.execute("PRAGMA table_info(profiles)")], ["account", "username", "display", "pick", "updated"])
         self.store.set_profile("1001", "alice", "Alice A", 100)
         self.say(1)
-        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 3)       # (nothing that the hub does with profiles moves it: an earlier hub opens the file)
+        self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 4)       # (nothing that the hub does with profiles moves it)
 
     def test_a_file_that_an_earlier_hub_made_gets_the_table_and_loses_nothing_and_opening_again_changes_nothing(self):
         path = os.path.join(os.path.dirname(self.path), "earlier.db")
@@ -722,9 +847,12 @@ class SqliteContract(Contract):
             INSERT INTO sessions (id, account, name, created, expires) VALUES ('k1', '1001', 'alice', %d, %d);
             INSERT INTO bans (account, at, by, name) VALUES ('1002', 1, 'cli', 'bob');""" % (int(self.clock.now), int(self.clock.now), int(self.clock.now) + 1000))
         db.close()
+        secrets = []
         for opening in range(3):
             store = storemod.Store(path, clock=self.clock, busy_ms=50)
-            self.assertEqual(store.db.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(store.db.execute("PRAGMA user_version").fetchone()[0], 4)         # (the file of version 3 is migrated: the secret and the log are made, and nothing else is touched)
+            secrets.append(store.secret())
+            self.assertEqual(store.actions(), [])
             self.assertEqual([l.text for l in store.recent_lines(10)], ["a line from before"])
             self.assertEqual(tuple(store.session("k1"))[:2], ("1001", "alice"))
             self.assertTrue(store.is_banned("1002"))
@@ -734,6 +862,7 @@ class SqliteContract(Contract):
             else:
                 self.assertEqual(tuple(store.profile("1001")), ("alice", "Alice A", "display"))      # (opening again keeps what is in the table)
             store.close()
+        self.assertEqual((len(secrets[0]), len(set(secrets))), (32, 1))                                # (the secret is made once and is the same at every opening)
 
     def test_a_file_that_is_from_a_newer_hub_is_still_refused_and_the_table_does_not_make_the_file_look_newer(self):
         self.store.set_profile("1001", "alice", "Alice A", 100)

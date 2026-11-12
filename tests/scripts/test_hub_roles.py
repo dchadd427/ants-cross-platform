@@ -162,7 +162,7 @@ class TheMapping(SetupTest):
         s.mode = lambda account: (404, {"message": "Unknown User", "code": 10013}, {})
         s.connect("1006")
         s.run(5)
-        self.assertEqual((s.roles.entries["1006"].fails, s.log.events, s.roles.known_none("1006")), (0, [], True))
+        self.assertEqual((s.roles.entries["1006"].fails, s.log.events, s.role("1006"), s.roles.fresh(["1006"])), (0, [], "none", True))
 
     def test_a_person_who_is_not_in_the_server_is_an_answer_and_not_a_failure(self):
         s = self.setup()
@@ -271,68 +271,6 @@ class TheChatAsksTheRoles(unittest.TestCase):
         self.assertGreater(self.w.store.muted_until("1001"), 0)
         self.assertEqual(self.bob.codes(), [])
 
-    def test_a_command_is_done_only_to_a_person_whose_role_is_known(self):
-        self.w.roles.set("1001", "mod")
-        self.w.say(self.bob, "hello")
-        self.w.roles.unknown.add("1002")
-        self.w.say(self.alice, "/mute bob 5")
-        self.assertEqual((self.w.store.muted_until("1002"), self.alice.codes()), (0, ["bad"]))
-        self.w.roles.unknown.clear()
-        self.w.clock.now += 3
-        self.w.say(self.alice, "/mute bob 5")
-        self.assertGreater(self.w.store.muted_until("1002"), 0)
-
-    def test_a_line_is_deleted_by_a_moderator_only_if_its_author_is_known_to_hold_no_role(self):
-        self.w.roles.set("1001", "mod")
-        self.w.say(self.bob, "from bob")
-        self.w.say(self.alice, "from alice")
-        self.w.clock.now += 3
-        self.w.roles.set("1002", "admin")
-        self.w.say(self.alice, "/del 1")
-        self.assertEqual((self.alice.codes(), self.w.store.account_of_line(1)), (["bad"], "1002"))            # (an administrator's line)
-        self.w.roles.set("1002", "none")
-        self.w.roles.unknown.add("1002")
-        self.w.clock.now += 3
-        self.w.say(self.alice, "/del 1")
-        self.assertEqual((self.alice.codes(), self.w.store.account_of_line(1)), (["bad", "bad"], "1002"))     # (a role that is not known)
-        self.w.roles.unknown.clear()
-        self.w.clock.now += 3
-        self.w.say(self.alice, "/del 1")
-        self.assertIsNone(self.w.store.account_of_line(1))
-        self.w.clock.now += 3
-        self.w.say(self.alice, "/del 2")                                           # (a moderator's own line)
-        self.assertIsNone(self.w.store.account_of_line(2))
-        self.w.say(self.alice, "/del 99")
-        self.assertEqual(self.alice.codes()[-1], "bad")
-
-    def test_with_the_real_roles_nobody_is_muted_who_is_offline_or_new_or_after_a_refusal(self):
-        s = Setup(members={"1001": [MOD], "1002": [ADMIN], "1003": []})
-        self.addCleanup(s.close)
-        w = World(mods=())
-        self.addCleanup(w.close)
-        w.chat.roles = s.roles
-        s.roles.connected, s.roles.changed = w.chat.accounts, w.chat.role_changed
-        w.store.set_profile("1002", "bob", "", 100)                               # (an administrator who is offline, with a profile: the command line addresses by it)
-        w.store.set_profile("1004", "dave", "", 100)
-        a, c = w.join(ALICE), w.join(session_identity("1003", "carol"))
-        s.here.update({"1001", "1003"})
-        w.chat.welcome(a), w.chat.welcome(c)
-        s.run(5)
-        s.clock.t = w.clock.now = 1000.0 + 5
-        w.say(a, "/mute bob 5")                                                   # (offline: not known)
-        w.clock.now += 3
-        w.say(a, "/mute dave 5")                                                  # (offline, never asked: not known)
-        self.assertEqual((w.store.mutes(), a.codes()), ([], ["bad", "bad"]))
-        w.clock.now += 3
-        w.say(a, "/mute carol 5")                                                 # (here, asked, none: known)
-        self.assertEqual([m[0] for m in w.store.mutes()], ["1003"])
-        s.mode = lambda account: (401, {"code": 0}, {})                            # (the token is refused: nobody's role is known, and nobody is muted)
-        s.members["1003"] = []
-        s.run(300)
-        w.clock.now += 3
-        w.say(a, "/mute carol 9")
-        self.assertEqual(a.codes()[-1], "bad")
-
     def test_both_roles_are_a_moderator_for_the_lines_the_list_and_the_username(self):
         for role in ("mod", "admin"):
             self.w.roles.set("1001", role)
@@ -350,38 +288,7 @@ class TheChatAsksTheRoles(unittest.TestCase):
         w.say(b, "hello")
         w.say(a, "/mute bob 5")
         self.assertEqual(w.store.muted_until("1002"), 0)                         # (a moderator's command on an account with a role is refused)
-        self.assertEqual(a.codes(), ["bad"])
-
-
-class TheKnownNone(SetupTest):
-    """A moderator's command is done only to a person who is POSITIVELY known to hold no role."""
-
-    def test_only_a_young_answer_of_none_is_known(self):
-        s = self.setup(owner=OWNER, members={"1001": [MOD], "1002": [], "1004": [ADMIN]})
-        self.assertEqual([s.roles.known_none(a) for a in ("1001", "1002", "1003", OWNER)], [False, False, False, False])          # (nobody has been asked yet)
-        s.connect("1001", "1002", "1004")
-        self.assertFalse(s.roles.known_none("1002"))                             # (asked for, not answered)
-        s.run(5)
-        self.assertEqual([s.roles.known_none(a) for a in ("1001", "1002", "1003", "1004", OWNER)], [False, True, False, False, False])
-        s.here.discard("1002")                                                   # (it leaves; the answer stands for the grace only)
-        s.clock.t = s.roles.entries["1002"].ok_at + s.roles.grace
-        self.assertTrue(s.roles.known_none("1002"))
-        s.clock.t += 1.0
-        self.assertFalse(s.roles.known_none("1002"))
-        self.assertFalse(s.roles.known_none("1003"))
-
-    def test_an_answer_that_ran_out_or_was_taken_back_is_not_known(self):
-        s = self.setup(members={"1002": []})
-        s.connect("1002")
-        s.run(5)
-        self.assertTrue(s.roles.known_none("1002"))
-        s.mode = lambda a: (401, {"code": 0}, {})
-        s.run(300)
-        self.assertFalse(s.roles.known_none("1002"))
-
-    def test_without_the_settings_everybody_but_the_owner_account_is_known_to_hold_no_role(self):
-        roles = rolesmod.Roles(config.load({"ANTS_HUB_OWNER": OWNER}), limitmod.Limits(), Clock(), Log())
-        self.assertEqual((roles.known_none("1001"), roles.known_none(OWNER)), (True, False))
+        self.assertEqual(a.codes(), ["power"])
 
 
 class TheLookup(unittest.TestCase):
@@ -1009,7 +916,7 @@ class TheLiveRoles(LiveTest):
         victim, _ = self.connect("1003:victim")
         self.wait_role(mod, "mod")
         victim.say("hello")
-        self.assertTrue(self.wait_for(lambda: self.rig.call(lambda: self.rig.hub.chat.roles.known_none("1003")), 8.0))          # (the victim's role is known: it was asked)
+        self.assertTrue(self.wait_for(lambda: self.rig.call(lambda: self.rig.hub.chat.roles.fresh(["1003"])), 8.0))          # (the victim's role is known: it was asked)
         mod.say("/mute victim 5")
         time.sleep(0.4)
         victim.drain(0.2)

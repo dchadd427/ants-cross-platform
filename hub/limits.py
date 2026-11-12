@@ -74,6 +74,14 @@ class Limits:
     roles_retry_max_seconds: float = 60.0
     roles_hold_max_seconds: float = 60.0        # the longest that one answer of Discord ("wait this long") can stop the lookups
     roles_log_seconds: float = 600.0    # a line in the log for a Discord that does not answer: this seldom at the most
+    roles_action_fresh_seconds: float = 60.0    # a moderator's action needs the answer of Discord about the one who acts and the one acted on to be no older than this, else an urgent lookup of both is made first ...
+    roles_urgent_seconds: float = 3.0           # ... and waited for this long at the most (an action whose lookups did not answer in time is refused)
+    roles_urgent_burst: int = 10                # the lookups that actions may ask for at once, and then one every `roles_urgent_refill_seconds` for the whole hub: an action that cannot have its lookups is refused (`role`), so that a moderator who asks for many ...
+    roles_urgent_refill_seconds: float = 1.0    # ... cannot use the whole of the two lookups a second, which everybody's role holds on to (half of them are the people's own)
+    roles_urgent_actor_burst: int = 3           # the commands of one moderator (across all its sockets) that may wait for lookups at once, and then one every `roles_urgent_actor_refill_seconds`: what a moderator may ask of the hub's share ...
+    roles_urgent_actor_refill_seconds: float = 5.0      # ... so that one moderator cannot spend the share that every moderator's actions use
+    named_lines_burst: int = 5          # the lines "<name> was kicked." and "<name> was banned." that one moderator may have made at once (each is a line for everybody), and then one every `named_lines_refill_seconds`; a kick or a ban over it is done all the same, and only its line is not made
+    named_lines_refill_seconds: float = 10.0
     roles_entries_max: int = 2000       # people whose role is kept in memory: those with a socket open and a few that left (at most `sockets_total` are open)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
 
@@ -191,7 +199,7 @@ class RateByAddress:
 
 
 class RateByAccount(RateByAddress):
-    """The same table of token buckets, one for each account id (the key is the id, not an address): what an account may do however many tabs it has open. A bucket that is full again is
+    """The same table of token buckets, one for each account (the key is whatever the caller names the account by: the account id for the switch of the name, the hub's own key of the account, never the id, for the moderators' budgets): what an account may do however many tabs it has open. A bucket that is full again is
     forgotten by forget_idle()."""
 
 

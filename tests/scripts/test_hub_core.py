@@ -21,7 +21,7 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.join(REPO, "tests", "scripts"))
 import hub_rig  # noqa: E402  (FakeRoles: the roles without Discord)
-from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, session, store as storemod  # noqa: E402
+from hub import admin, chat as chatmod, config, limits as limitmod, log as logmod, pseudo, session, store as storemod  # noqa: E402
 
 LIMITS = limitmod.Limits()
 ALICE = session.Identity("1001", "alice", False)
@@ -475,7 +475,7 @@ class TheModerators(WorldTest):
         first, second = self.w.join(session.Identity("1010", "sam", False)), self.w.join(session.Identity("1011", "sam", False))
         self.w.say(first, "hi")
         self.w.say(self.mod, "/mute sam 5")
-        self.assertEqual(self.mod.codes(), ["bad"])
+        self.assertEqual(self.mod.codes(), ["who"])
         self.assertEqual(self.w.store.mutes(), [])
         self.w.chat.peers.discard(second)                               # with one of them gone it is clear who is meant
         self.w.say(self.mod, "/mute sam 5")
@@ -588,11 +588,12 @@ class TheModerators(WorldTest):
 
     def test_the_minutes_and_the_arguments_are_checked(self):
         self.w.say(self.alice, "hi")
-        for command in ("/mute alice", "/mute alice 0", "/mute alice -5", "/mute alice 10081", "/mute alice x", "/mute alice 5 6", "/mute nobody 5", "/mute", "/mute alice 1.5",
-                        "/mute alice 99999999999", "/ban alice", "/del", "/del x", "/del 1 2", "/del 99", "/mute moddy 5", "/"):
+        for command, code in (("/mute alice", "bad"), ("/mute alice 0", "bad"), ("/mute alice -5", "bad"), ("/mute alice 10081", "bad"), ("/mute alice x", "bad"), ("/mute alice 5 6", "bad"),
+                              ("/mute nobody 5", "who"), ("/mute", "bad"), ("/mute alice 1.5", "bad"), ("/mute alice 99999999999", "bad"), ("/ban alice", "power"), ("/del", "bad"),
+                              ("/del x", "bad"), ("/del 1 2", "bad"), ("/del 99", "bad"), ("/mute moddy 5", "power"), ("/", "bad")):
             before = len(self.mod.codes())
             self.w.say(self.mod, command)
-            self.assertEqual(self.mod.codes()[before:], ["bad"], command)
+            self.assertEqual(self.mod.codes()[before:], [code], command)
         self.assertEqual(self.w.store.mutes(), [])
         self.w.say(self.mod, "/mute alice 10080")
         self.assertEqual(len(self.w.store.mutes()), 1)
@@ -604,7 +605,7 @@ class TheModerators(WorldTest):
         a, b = w.join(MOD), w.join(other)
         w.say(b, "hi")
         w.say(a, "/mute other.mod 5")
-        self.assertEqual(a.codes(), ["bad"])
+        self.assertEqual(a.codes(), ["power"])
         self.assertEqual(w.store.mutes(), [])
 
     def test_del_takes_the_line_off_every_screen_and_out_of_the_history(self):
@@ -737,19 +738,19 @@ class TheNamesAreNotKeys(WorldTest):
         for command in ("/mute Maple 5", "/mute maple 5", "/mute maple.leaf 5", "/mute Maple_Leaf 5", "/mute 1101 5"):
             before = len(self.mod.codes())
             self.w.say(self.mod, command)
-            self.assertEqual(self.mod.codes()[before:], ["bad"], command)
+            self.assertEqual(self.mod.codes()[before:], ["who"], command)
         self.assertEqual(self.w.store.mutes(), [])
 
     def test_two_accounts_here_with_one_username_and_two_profiles_with_one_are_no_target(self):
         first, second = self.w.join(session.Identity("1301", "sam", False)), self.w.join(session.Identity("1302", "sam", False))
         self.w.say(self.mod, "/mute sam 5")
-        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["bad"], []))
+        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["who"], []))
         self.w.chat.peers.discard(first)
         self.w.chat.peers.discard(second)
         self.w.store.set_profile("1301", "sam", "", 100)
         self.w.store.set_profile("1302", "sam", "", 100)                                         # (a name that was given up and taken: each profile is as old as its last login)
         self.w.say(self.mod, "/mute sam 5")
-        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["bad", "bad"], []))
+        self.assertEqual((self.mod.codes(), self.w.store.mutes()), (["who", "who"], []))
 
     def test_the_username_is_in_a_moderators_copy_of_a_line_and_in_the_bytes_of_nobody_else(self):
         self.w.say(self.a, "hello")
@@ -1477,6 +1478,13 @@ class TheCommandLine(unittest.TestCase):
         self.store.set_profile("2002", "12345", "", 100)
         self.store.close()
 
+    def ref(self, account):
+        store = storemod.Store(self.db)
+        try:
+            return pseudo.reference(store.secret(), account)
+        finally:
+            store.close()
+
     def run_admin(self, *args):
         out, err = io.StringIO(), io.StringIO()
         status = admin.run(["--db", self.db] + list(args), out, err)
@@ -1485,7 +1493,7 @@ class TheCommandLine(unittest.TestCase):
     def test_mute_ban_unban_by_id_and_by_name(self):
         status, out, _ = self.run_admin("mute", "alice", "30")
         self.assertEqual(status, 0)
-        self.assertIn("1001 muted until", out)
+        self.assertIn("%s muted until" % self.ref("1001"), out)
         store = storemod.Store(self.db)
         self.addCleanup(store.close)
         self.assertGreater(store.muted_until("1001"), 0)
@@ -1511,7 +1519,7 @@ class TheCommandLine(unittest.TestCase):
     def test_unknown_names_and_bad_arguments(self):
         status, _, err = self.run_admin("mute", "nobody", "5")
         self.assertEqual(status, 1)
-        self.assertIn("account id", err)
+        self.assertIn("reference", err)
         self.assertEqual(self.run_admin("mute", "Bad Name!", "5")[0], 1)
         self.assertEqual(self.run_admin("mute", "alice", "-1")[0], 2)
         self.assertEqual(self.run_admin("mute", "alice", "525601")[0], 2)
@@ -1560,7 +1568,7 @@ class TheCommandLine(unittest.TestCase):
         for command in (("list",), ("ban", "1001"), ("del", "1"), ("mute", "1001", "5")):
             out, err = io.StringIO(), io.StringIO()
             self.assertEqual(admin.run(["--db", path] + list(command), out, err), 1, command)
-            self.assertRegex(err.getvalue(), r"^hub\.admin: the database refused it \(\w+\)\n$", command)
+            self.assertRegex(err.getvalue(), r"^hub\.admin: the database (refused it|cannot be opened) \(\w+\)\n$", command)
 
     def test_del(self):
         status, out, _ = self.run_admin("del", "1")
@@ -1577,8 +1585,8 @@ class TheCommandLine(unittest.TestCase):
         self.run_admin("del", "2")
         status, out, _ = self.run_admin("list")
         self.assertEqual(status, 0)
-        self.assertIn("1001 alice since", out)
-        self.assertIn("2002 12345 until", out)
+        self.assertIn("%s alice since" % self.ref("1001"), out)
+        self.assertIn("%s 12345 until" % self.ref("2002"), out)
         self.assertIn("1  ", out)
         self.assertIn("2x ", out)                                     # deleted lines are marked
         self.assertIn("alice: hello there", out)
@@ -1599,9 +1607,9 @@ class TheCommandLine(unittest.TestCase):
     def test_the_module_runs_as_a_program_and_reads_its_database_from_the_environment(self):
         env = dict(os.environ, ANTS_HUB_DB=self.db, PYTHONDONTWRITEBYTECODE="1")
         done = subprocess.run([sys.executable, "-m", "hub.admin", "ban", "alice"], cwd=REPO, env=env, capture_output=True, text=True)
-        self.assertEqual((done.returncode, done.stdout), (0, "1001 banned\n"), done.stderr)
+        self.assertEqual((done.returncode, done.stdout), (0, "%s banned\n" % self.ref("1001")), done.stderr)
         done = subprocess.run([sys.executable, "-m", "hub.admin", "list"], cwd=REPO, env=env, capture_output=True, text=True)
-        self.assertIn("1001 alice since", done.stdout)
+        self.assertIn("%s alice since" % self.ref("1001"), done.stdout)
 
     def test_a_name_is_a_username_and_never_a_name_that_was_shown(self):
         store = storemod.Store(self.db)
@@ -1631,7 +1639,7 @@ class TheCommandLine(unittest.TestCase):
         store.add_line("5005", "ghost", "from before profiles were kept", False)
         status, _, err = self.run_admin("mute", "ghost", "5")
         self.assertEqual(status, 1)
-        self.assertIn("account id", err)
+        self.assertIn("reference", err)
         self.assertEqual(self.run_admin("mute", "5005", "5")[0], 0)
         self.assertEqual([tuple(m)[:2] for m in store.mutes()], [("5005", "ghost")])
 
@@ -1651,9 +1659,9 @@ class TheCommandLine(unittest.TestCase):
         store.add_line("3003", "carol", "a line of the username", False)
         status, out, _ = self.run_admin("list")
         self.assertEqual(status, 0)
-        self.assertIn("3003 Carol C (carol): a line of a display name", out)
-        self.assertIn("3003 carol: a line of the username", out)
-        self.assertIn("1001 alice: hello there", out)
+        self.assertIn("%s Carol C (carol): a line of a display name" % self.ref("3003"), out)
+        self.assertIn("%s carol: a line of the username" % self.ref("3003"), out)
+        self.assertIn("%s alice: hello there" % self.ref("1001"), out)
 
 
 if __name__ == "__main__":

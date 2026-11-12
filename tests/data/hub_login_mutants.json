@@ -532,15 +532,15 @@
   {
    "id": "forget_keeps_the_logins",
    "file": "hub/store/sqlite.py",
-   "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
-   "new": "self.db.execute(\"SELECT 1\")",
+   "old": "            self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM profiles",
+   "new": "            self.db.execute(\"SELECT 1\")\n            self.db.execute(\"DELETE FROM profiles",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
    "id": "forget_ends_every_login",
    "file": "hub/store/sqlite.py",
-   "old": "self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))",
-   "new": "self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,))",
+   "old": "            self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM profiles",
+   "new": "            self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,))\n            self.db.execute(\"DELETE FROM profiles",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheForget"
   },
   {
@@ -1113,8 +1113,8 @@
   {
    "id": "failed_line_is_a_mistake",
    "file": "hub/chat.py",
-   "old": "        self.mistake(peer, code, count=False)\n\n    def on_say",
-   "new": "        self.mistake(peer, code)\n\n    def on_say",
+   "old": "        self.mistake(peer, code, count=False)\n\n    def ref(self, account):",
+   "new": "        self.mistake(peer, code)\n\n    def ref(self, account):",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheDatabaseThatCannotBeUsed tests.scripts.test_hub_server.TheLockedDatabaseOnTheWire"
   },
   {

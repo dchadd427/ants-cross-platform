@@ -434,8 +434,8 @@
   {
    "id": "a_moderator_can_mute_a_moderator",
    "file": "hub/chat.py",
-   "old": "if target is None or not self.roles.known_none(target):",
-   "new": "if target is None:",
+   "old": "    return RANK[target] < RANK[actor]",
+   "new": "    return RANK[target] <= RANK[actor]",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -546,7 +546,7 @@
   {
    "id": "mute_zero_does_not_lift",
    "file": "hub/store/sqlite.py",
-   "old": "            if minutes <= 0:\n                self.db.execute(\"DELETE FROM mutes WHERE account = ?\", (account,))\n                return 0",
+   "old": "            if minutes <= 0:\n                if self.db.execute(\"DELETE FROM mutes WHERE account = ?\", (account,)).rowcount == 1:\n                    self.write_note(note)\n                return 0",
    "new": "            if minutes <= 0:\n                return 0",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -560,8 +560,8 @@
   {
    "id": "unban_does_nothing",
    "file": "hub/store/sqlite.py",
-   "old": "return self.db.execute(\"DELETE FROM bans WHERE account = ?\", (account,)).rowcount == 1",
-   "new": "return False",
+   "old": "done = self.db.execute(\"DELETE FROM bans WHERE account = ?\", (account,)).rowcount == 1",
+   "new": "done = False",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -581,14 +581,14 @@
   {
    "id": "admin_ban_only_mutes",
    "file": "hub/admin.py",
-   "old": "            store.ban(account, BY, name)",
+   "old": "            store.ban(account, BY, name, note=(TERMINAL, \"ban\", whom, \"\"))",
    "new": "            store.mute(account, 1, BY, name)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
    "id": "admin_del_deletes_nothing",
    "file": "hub/admin.py",
-   "old": "            if not store.delete_line(args.line_id, BY):",
+   "old": "            if not store.delete_line(args.line_id, BY, note=(TERMINAL, \"del\", ref(store, author) if author else \"\", str(args.line_id))):",
    "new": "            if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -1575,8 +1575,8 @@
   {
    "id": "a_shared_refusal_is_a_mistake_of_the_socket",
    "file": "hub/chat.py",
-   "old": "return self.mistake(peer, \"rate\", count=False)",
-   "new": "return self.mistake(peer, \"rate\")",
+   "old": "        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\", count=False)",
+   "new": "        if not self.global_limit.ready(now) or full:\n            return self.mistake(peer, \"rate\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
   {
@@ -1904,8 +1904,8 @@
   {
    "id": "store_an_unban_is_not_counted",
    "file": "hub/store/sqlite.py",
-   "old": "            self.count_restriction()\n            return self.db.execute(\"DELETE FROM bans",
-   "new": "            return self.db.execute(\"DELETE FROM bans",
+   "old": "            self.count_restriction()\n            done = self.db.execute(\"DELETE FROM bans",
+   "new": "            done = self.db.execute(\"DELETE FROM bans",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {
@@ -2268,7 +2268,7 @@
   {
    "id": "a_line_has_no_key",
    "file": "hub/chat.py",
-   "old": "\"mod\": bool(line.mod), \"k\": self.key_of(line.account)}",
+   "old": "\"mod\": bool(line.mod), \"k\": self.key_of(line.account) if line.account else \"\"}",
    "new": "\"mod\": bool(line.mod)}",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core tests.scripts.test_hub_stack"
   },
@@ -2471,8 +2471,8 @@
   {
    "id": "profiles_bump_the_schema",
    "file": "hub/store/sqlite.py",
-   "old": "SCHEMA = 3\n",
-   "new": "SCHEMA = 4\n",
+   "old": "SCHEMA = 4\n",
+   "new": "SCHEMA = 5\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_core.TheCommandLine"
   },
   {

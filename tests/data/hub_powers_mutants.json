@@ -1,0 +1,792 @@
+{
+ "note": "Mutants of the moderators' powers (hub/chat.py `allowed`, `command`, `carry_out`, hub/roles.py `fresh`, `confirm`, hub/pseudo.py, the moderators' log in hub/store/, hub/admin.py `log`, the ids that no representation prints; docs/HUB.md 'Moderation' and 'The moderators' log') for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose (a power that a role does not have, a person who may be acted on, a kick that does not end the login, a ban that does not close the sockets, a named line that names the moderator or is not kept, an action on an answer that is old, a lookup that is not waited for or not asked, a log row that is not written or holds an id, a reference that is not keyed, an id that a command prints), and a test of tests/scripts/test_hub_powers.py or test_hub_store_contract.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/hub_powers_mutants.json --keep-going --jobs 1 --baseline-every 40; every mutant must be caught.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest tests.scripts.test_hub_powers tests.scripts.test_hub_store_contract"
+ },
+ "mutants": [
+  {
+   "id": "a_moderator_may_do_what_only_an_administrator_may",
+   "file": "hub/chat.py",
+   "old": "    if RANK[actor] < NEEDS[command]:\n        return False",
+   "new": "    if False:\n        return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_moderator_may_ban",
+   "file": "hub/chat.py",
+   "old": "\"ban\": 2, \"unban\": 2, \"bans\": 2}",
+   "new": "\"ban\": 1, \"unban\": 2, \"bans\": 2}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_moderator_may_list_the_bans",
+   "file": "hub/chat.py",
+   "old": "\"ban\": 2, \"unban\": 2, \"bans\": 2}",
+   "new": "\"ban\": 2, \"unban\": 2, \"bans\": 1}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_person_may_act_on_themselves",
+   "file": "hub/chat.py",
+   "old": "    if same:\n        return command == \"del\"",
+   "new": "    if same:\n        return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "an_administrator_may_act_on_an_administrator",
+   "file": "hub/chat.py",
+   "old": "    return RANK[target] < RANK[actor]",
+   "new": "    return RANK[target] <= RANK[actor]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_moderator_may_act_on_an_administrator",
+   "file": "hub/chat.py",
+   "old": "    return RANK[target] < RANK[actor]",
+   "new": "    return RANK[actor] > 0",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_refused_power_is_bad",
+   "file": "hub/chat.py",
+   "old": "        if not allowed(name, actor, self.roles.role_of(target) if target is not None else None, target == me.account_id):\n            return self.mistake(peer, \"power\")",
+   "new": "        if not allowed(name, actor, self.roles.role_of(target) if target is not None else None, target == me.account_id):\n            return self.mistake(peer, \"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "an_unknown_person_is_bad",
+   "file": "hub/chat.py",
+   "old": "                return None, None, \"who\"",
+   "new": "                return None, None, \"bad\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_kick_of_a_person_who_is_not_here_goes_on",
+   "file": "hub/chat.py",
+   "old": "            if target is None or (name == \"kick\" and not self.sockets_of(target)):",
+   "new": "            if target is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_hubs_own_line_may_be_deleted_from_the_chat",
+   "file": "hub/chat.py",
+   "old": "            if target == \"\":\n                return None, None, \"power\"",
+   "new": "            if False:\n                return None, None, \"power\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_mute_that_is_not_there_is_lifted",
+   "file": "hub/chat.py",
+   "old": "            if not self.store.muted_until(target):\n                return self.mistake(peer, \"bad\")",
+   "new": "            if False:\n                return self.mistake(peer, \"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_ban_that_is_there_is_made_again",
+   "file": "hub/chat.py",
+   "old": "            if self.store.is_banned(target):\n                return self.mistake(peer, \"bad\")",
+   "new": "            if False:\n                return self.mistake(peer, \"bad\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_moderators_capital_letter_is_no_command",
+   "file": "hub/chat.py",
+   "old": "        name = words[0].lower()[1:]",
+   "new": "        name = words[0][1:]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_command_from_an_account_with_no_role_is_a_line",
+   "file": "hub/chat.py",
+   "old": "COMMANDS = frozenset((\"/mute\", \"/unmute\", \"/del\", \"/kick\", \"/ban\", \"/unban\", \"/bans\"))",
+   "new": "COMMANDS = frozenset((\"/mute\", \"/unmute\", \"/del\", \"/kick\", \"/ban\", \"/unban\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_good_command_is_not_answered_ok",
+   "file": "hub/chat.py",
+   "old": "        peer.send_text(dumps({\"t\": \"ok\", \"c\": name}))",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_kick_does_not_end_the_logins",
+   "file": "hub/chat.py",
+   "old": "            self.store.end_sessions(target, note=(by, \"kick\", whom, \"\"))",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_kick_does_not_close_the_sockets",
+   "file": "hub/chat.py",
+   "old": "            self.remove(sockets, \"kicked\")",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_ban_does_not_close_the_sockets",
+   "file": "hub/chat.py",
+   "old": "            self.remove(self.sockets_of(target), \"banned\")",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_ban_ends_the_logins",
+   "file": "hub/chat.py",
+   "old": "            self.remove(self.sockets_of(target), \"banned\")",
+   "new": "            self.store.end_sessions(target)\n            self.remove(self.sockets_of(target), \"banned\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_closed_socket_is_not_told_why",
+   "file": "hub/chat.py",
+   "old": "            peer.send_text(dumps({\"t\": \"bye\", \"why\": why}))",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_kick_leaves_a_ban",
+   "file": "hub/chat.py",
+   "old": "            self.store.end_sessions(target, note=(by, \"kick\", whom, \"\"))",
+   "new": "            self.store.end_sessions(target, note=(by, \"kick\", whom, \"\"))\n            self.store.ban(target, by, arg)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_kick_is_a_mute",
+   "file": "hub/chat.py",
+   "old": "            self.store.end_sessions(target, note=(by, \"kick\", whom, \"\"))",
+   "new": "            self.store.end_sessions(target, note=(by, \"kick\", whom, \"\"))\n            self.store.mute(target, 5, by, arg)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_line_names_the_moderator",
+   "file": "hub/chat.py",
+   "old": "            self.announce(\"%s was kicked.\" % shown, me)",
+   "new": "            self.announce(\"%s was kicked by %s.\" % (shown, me.name), me)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_line_is_not_kept_in_the_history",
+   "file": "hub/chat.py",
+   "old": "        self.ring.append(entry)\n        self.broadcast(dict({\"t\": \"line\"}, **self.line_of(entry)))",
+   "new": "        self.broadcast(dict({\"t\": \"line\"}, **self.line_of(entry)))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_line_is_not_kept_in_the_store",
+   "file": "hub/chat.py",
+   "old": "            entry = self.store.add_line(\"\", SYSTEM, text, False)",
+   "new": "            entry = __import__(\"hub.store.base\", fromlist=[\"Line\"]).Line(1, 0, \"\", SYSTEM, text, 0)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_line_is_a_moderators",
+   "file": "hub/chat.py",
+   "old": "            entry = self.store.add_line(\"\", SYSTEM, text, False)",
+   "new": "            entry = self.store.add_line(\"\", SYSTEM, text, True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_hubs_own_name_is_another",
+   "file": "hub/chat.py",
+   "old": "SYSTEM = \"system\"",
+   "new": "SYSTEM = \"hub\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_line_has_a_key",
+   "file": "hub/chat.py",
+   "old": "\"k\": self.key_of(line.account) if line.account else \"\"}",
+   "new": "\"k\": self.key_of(line.account)}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_line_is_not_marked",
+   "file": "hub/chat.py",
+   "old": "            out[\"sys\"] = True",
+   "new": "            pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_name_in_a_ban_line_is_the_username",
+   "file": "hub/chat.py",
+   "old": "            shown = self.shown_name(target) or arg",
+   "new": "            shown = arg",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_name_in_a_kick_line_is_the_username",
+   "file": "hub/chat.py",
+   "old": "            shown = sockets[0].identity.name",
+   "new": "            shown = sockets[0].identity.username",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_line_is_made_before_the_command_is_checked",
+   "file": "hub/chat.py",
+   "old": "        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"",
+   "new": "        self.announce(\"%s was banned.\" % arg) if name == \"ban\" else None\n        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "bans_shows_the_account",
+   "file": "hub/chat.py",
+   "old": "rows = [{\"u\": who, \"at\": at} for _, who, at, _ in reversed(self.store.bans())][:BANS_SHOWN]",
+   "new": "rows = [{\"u\": who, \"at\": at, \"a\": account} for account, who, at, _ in reversed(self.store.bans())][:BANS_SHOWN]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "bans_shows_the_oldest",
+   "file": "hub/chat.py",
+   "old": "for _, who, at, _ in reversed(self.store.bans())][:BANS_SHOWN]",
+   "new": "for _, who, at, _ in self.store.bans()][:BANS_SHOWN]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "bans_goes_to_everybody",
+   "file": "hub/chat.py",
+   "old": "            return peer.send_text(dumps({\"t\": \"bans\", \"rows\": rows}))",
+   "new": "            return self.broadcast({\"t\": \"bans\", \"rows\": rows})",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "an_unban_needs_the_profile",
+   "file": "hub/chat.py",
+   "old": "self.account_named(arg) or (self.ban_named(arg) if name == \"unban\" else None)",
+   "new": "self.account_named(arg)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "an_action_is_done_on_an_old_answer",
+   "file": "hub/chat.py",
+   "old": "        if self.roles.fresh(accounts):\n            return self.carry_out(peer, job)",
+   "new": "        if True:\n            return self.carry_out(peer, job)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "an_action_does_not_look_at_the_answers_again",
+   "file": "hub/chat.py",
+   "old": "        if not self.roles.fresh(accounts):\n            return self.mistake(peer, \"role\", count=False)\n        actor = ",
+   "new": "        actor = ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_demoted_account_acts",
+   "file": "hub/chat.py",
+   "old": "        if actor == \"none\":\n            return self.mistake(peer, \"role\", count=False)         # (no longer a moderator: the answer is fresh, and it says none)",
+   "new": "        if False:\n            return self.mistake(peer, \"role\", count=False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_refused_action_is_a_mistake_of_the_socket",
+   "file": "hub/chat.py",
+   "old": "            return self.mistake(peer, \"role\", count=False)         # (no longer a moderator",
+   "new": "            return self.mistake(peer, \"role\")         # (no longer a moderator",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_second_command_is_not_held",
+   "file": "hub/chat.py",
+   "old": "        if peer in self.busy:\n            return self.mistake(peer, \"rate\", count=False)",
+   "new": "        if False:\n            return self.mistake(peer, \"rate\", count=False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_command_that_waited_never_frees_the_socket",
+   "file": "hub/chat.py",
+   "old": "        self.busy.pop(peer, None)\n        if not task.cancelled()",
+   "new": "        if not task.cancelled()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_closed_socket_is_acted_for",
+   "file": "hub/chat.py",
+   "old": "            if getattr(peer, \"closed\", None):\n                return                                              # (the socket went",
+   "new": "            if False:\n                return                                              # (the socket went",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_muted_moderator_acts_after_the_wait",
+   "file": "hub/chat.py",
+   "old": "            if self.store.muted_until(who):\n                return self.mistake(peer, \"muted\")\n            self.carry_out(peer, job)",
+   "new": "            self.carry_out(peer, job)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_banned_moderator_acts_after_the_wait",
+   "file": "hub/chat.py",
+   "old": "            if self.store.is_banned(who):\n                return self.mistake(peer, \"banned\")\n            if self.store.muted_until(who):",
+   "new": "            if self.store.muted_until(who):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_bug_of_a_command_is_not_reported",
+   "file": "hub/chat.py",
+   "old": "        if not task.cancelled() and task.exception() is not None and self.on_command_error:\n            self.on_command_error(task.exception())",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_error_of_a_waiting_command_is_never_read",
+   "file": "hub/chat.py",
+   "old": "        if not task.cancelled() and task.exception() is not None and self.on_command_error:\n            self.on_command_error(task.exception())",
+   "new": "        if not task.cancelled() and self.on_command_error and False:\n            self.on_command_error(task.exception())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_roles_of_both_are_not_asked",
+   "file": "hub/roles.py",
+   "old": "        stale = [a for a in accounts if not (self.owner and a == self.owner)]",
+   "new": "        stale = [a for a in accounts if not self.fresh([a])]",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_owner_is_asked_about_itself",
+   "file": "hub/roles.py",
+   "old": "        stale = [a for a in accounts if not (self.owner and a == self.owner)]",
+   "new": "        stale = list(accounts)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "an_answer_is_young_for_the_whole_grace",
+   "file": "hub/roles.py",
+   "old": "if entry is None or entry.ok_at is None or now - entry.ok_at > self.limits.roles_action_fresh_seconds:",
+   "new": "if entry is None or entry.ok_at is None or now - entry.ok_at > self.grace:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_owner_account_needs_an_answer_about_itself",
+   "file": "hub/roles.py",
+   "old": "            if self.owner and account == self.owner:\n                continue\n            entry = self.entries.get(account)\n            if entry is None or entry.ok_at is None or now - entry.ok_at > self.limits.roles_action_fresh_seconds:",
+   "new": "            entry = self.entries.get(account)\n            if entry is None or entry.ok_at is None or now - entry.ok_at > self.limits.roles_action_fresh_seconds:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "roles_that_are_off_are_not_fresh",
+   "file": "hub/roles.py",
+   "old": "        if not self.on:\n            return True\n        now = self.clock()\n        for account in accounts:",
+   "new": "        if False:\n            return True\n        now = self.clock()\n        for account in accounts:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_actions_have_no_share_of_the_lookups",
+   "file": "hub/roles.py",
+   "old": "        if bucket.tokens < count:\n            return False\n        bucket.tokens -= count",
+   "new": "        if False:\n            return False\n        bucket.tokens -= count",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_share_of_the_actions_is_never_spent",
+   "file": "hub/roles.py",
+   "old": "        bucket.tokens -= count\n        return True",
+   "new": "        return True",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_share_of_the_actions_does_not_come_back",
+   "file": "hub/roles.py",
+   "old": "        bucket.ready(self.clock())                                         # (brings the tokens up to date)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_wait_for_a_lookup_has_no_end",
+   "file": "hub/roles.py",
+   "old": "timeout=self.limits.roles_urgent_seconds)",
+   "new": "timeout=60)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_lookup_for_an_action_is_not_first",
+   "file": "hub/roles.py",
+   "old": "        account = self.next_urgent()\n        urgent = account is not None",
+   "new": "        account = None\n        urgent = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_paused_roles_layer_is_waited_for",
+   "file": "hub/roles.py",
+   "old": "        if self.task is None or self.clock() < self.pause_until:\n            return False",
+   "new": "        if self.task is None:\n            return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_failed_lookup_counts_as_an_answer",
+   "file": "hub/roles.py",
+   "old": "        if entry is not None:\n            entry.fails += 1\n            entry.new = False",
+   "new": "        if entry is not None:\n            entry.ok_at = now\n            entry.fails += 1\n            entry.new = False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_refusal_does_not_tell_the_waiting_actions",
+   "file": "hub/roles.py",
+   "old": "        for account in list(self.urgent):\n            self.answered(account, False)",
+   "new": "        for account in []:\n            self.answered(account, False)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "an_offline_person_is_asked_with_the_wrong_account",
+   "file": "hub/roles.py",
+   "old": "            self.urgent.setdefault(account, []).append(future)",
+   "new": "            self.urgent.setdefault(account[:-1], []).append(future)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "what_is_kept_of_an_offline_person_stays_for_ever",
+   "file": "hub/roles.py",
+   "old": "            elif now - entry.seen > self.grace:\n                del self.entries[account]\n                continue",
+   "new": "            elif False:\n                del self.entries[account]\n                continue",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_waiting_task_is_not_held",
+   "file": "hub/chat.py",
+   "old": "        self.busy[peer] = task\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "an_action_leaves_no_row",
+   "file": "hub/chat.py",
+   "old": "            self.store.mute(target, minutes, by, arg, note=(by, \"mute\", whom, str(minutes)))",
+   "new": "            self.store.mute(target, minutes, by, arg)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_ban_leaves_no_row",
+   "file": "hub/chat.py",
+   "old": "            self.store.ban(target, by, arg, note=(by, \"ban\", whom, \"\"))",
+   "new": "            self.store.ban(target, by, arg)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_kick_leaves_no_row",
+   "file": "hub/chat.py",
+   "old": "            self.store.end_sessions(target, note=(by, \"kick\", whom, \"\"))",
+   "new": "            self.store.end_sessions(target)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "an_unban_leaves_no_row",
+   "file": "hub/chat.py",
+   "old": "            if not self.store.unban(target, note=(by, \"unban\", whom, \"\")):",
+   "new": "            if not self.store.unban(target):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_deletion_of_a_line_of_one_s_own_is_logged",
+   "file": "hub/chat.py",
+   "old": "note=None if target == me.account_id else (by, \"del\", whom, str(arg))",
+   "new": "note=(by, \"del\", whom, str(arg))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.ThePowerTable tests.scripts.test_hub_powers.ThePowersOfEveryRole tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_ban_keeps_the_id_of_the_moderator",
+   "file": "hub/chat.py",
+   "old": "            self.store.ban(target, by, arg, note=(by, \"ban\", whom, \"\"))",
+   "new": "            self.store.ban(target, me.account_id, arg, note=(by, \"ban\", whom, \"\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_mute_keeps_the_id_of_the_moderator",
+   "file": "hub/chat.py",
+   "old": "            self.store.mute(target, minutes, by, arg, note=(by, \"mute\", whom, str(minutes)))",
+   "new": "            self.store.mute(target, minutes, me.account_id, arg, note=(by, \"mute\", whom, str(minutes)))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_deletion_keeps_the_id_of_the_moderator",
+   "file": "hub/chat.py",
+   "old": "            if not self.store.delete_line(arg, by, note=",
+   "new": "            if not self.store.delete_line(arg, me.account_id, note=",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_note_is_written_for_an_unban_that_was_not_done",
+   "file": "hub/store/sqlite.py",
+   "old": "            if done:\n                self.write_note(note)",
+   "new": "            self.write_note(note)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_note_is_not_checked",
+   "file": "hub/store/sqlite.py",
+   "old": "        actor, action, target, detail = check_note(note)",
+   "new": "        actor, action, target, detail = note",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "an_id_is_a_reference",
+   "file": "hub/store/base.py",
+   "old": "REFERENCE = re.compile(r\"[0-9a-f]{16}\\Z\")",
+   "new": "REFERENCE = re.compile(r\"[0-9a-f]{1,20}\\Z\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_log_is_kept_for_ever",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM modlog WHERE at < ?\", (now - int(self.modlog_days * 86400),))",
+   "new": "            self.db.execute(\"SELECT 1\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_log_has_no_cap_in_the_purge",
+   "file": "hub/store/sqlite.py",
+   "old": "ORDER BY id DESC LIMIT -1 OFFSET ?)\", (self.max_modlog,))",
+   "new": "ORDER BY id DESC LIMIT -1 OFFSET ?)\", (self.max_modlog + 10 ** 9,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_log_has_no_cap_between_purges",
+   "file": "hub/store/sqlite.py",
+   "old": "OFFSET ?) ORDER BY id LIMIT ?)\", (self.max_modlog, TRIM_ROWS))",
+   "new": "OFFSET ?) ORDER BY id LIMIT ?)\", (self.max_modlog + 10 ** 9, TRIM_ROWS))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_log_keeps_30_days_but_the_constant_is_90",
+   "file": "hub/store/base.py",
+   "old": "MODLOG_DAYS = 30 ",
+   "new": "MODLOG_DAYS = 90 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_log_keeps_more_than_10000_rows",
+   "file": "hub/store/base.py",
+   "old": "MODLOG_ROWS = 10000 ",
+   "new": "MODLOG_ROWS = 100000 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "forget_takes_the_log_away",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM profiles WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
+   "new": "            self.db.execute(\"DELETE FROM profiles WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM modlog\")\n            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_secret_is_the_same_in_every_hub",
+   "file": "hub/store/sqlite.py",
+   "old": "(os.urandom(32),))      # (the key of the pseudonymous",
+   "new": "(b\"s\" * 32,))      # (the key of the pseudonymous",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_secret_is_short",
+   "file": "hub/store/sqlite.py",
+   "old": "(os.urandom(32),))      # (the key of the pseudonymous",
+   "new": "(os.urandom(8),))      # (the key of the pseudonymous",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_kick_ends_every_login_of_everybody",
+   "file": "hub/store/sqlite.py",
+   "old": "gone = self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,)).rowcount\n            self.write_note(note)",
+   "new": "gone = self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,)).rowcount\n            self.write_note(note)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "the_reference_has_no_key",
+   "file": "hub/pseudo.py",
+   "old": "hmac.new(secret, account.encode(\"utf-8\"), hashlib.sha256)",
+   "new": "hmac.new(b\"\", account.encode(\"utf-8\"), hashlib.sha256)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "the_reference_is_the_id",
+   "file": "hub/pseudo.py",
+   "old": "    return hmac.new(secret, account.encode(\"utf-8\"), hashlib.sha256).hexdigest()[:LENGTH]",
+   "new": "    return account",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "the_reference_is_long",
+   "file": "hub/pseudo.py",
+   "old": "LENGTH = 16",
+   "new": "LENGTH = 40",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "the_chat_uses_no_secret_of_the_hub",
+   "file": "hub/chat.py",
+   "old": "        return pseudo.reference(self.secret, account)",
+   "new": "        return pseudo.reference(b\"x\" * 32, account)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "list_prints_the_id_of_a_ban",
+   "file": "hub/admin.py",
+   "old": "        out.write(\"  %s %s since %s by %s\\n\" % (ref(store, account), name, when(at), by_of(store, by)))",
+   "new": "        out.write(\"  %s %s since %s by %s\\n\" % (account, name, when(at), by_of(store, by)))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "list_prints_the_id_of_a_mute",
+   "file": "hub/admin.py",
+   "old": "        out.write(\"  %s %s until %s by %s\\n\" % (ref(store, account), name, when(until), by_of(store, by)))",
+   "new": "        out.write(\"  %s %s until %s by %s\\n\" % (account, name, when(until), by_of(store, by)))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "list_prints_the_id_of_a_line",
+   "file": "hub/admin.py",
+   "old": "when(at), ref(store, account) if account else \"-\", name,",
+   "new": "when(at), account, name,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "an_id_that_made_a_mute_is_printed",
+   "file": "hub/admin.py",
+   "old": "    return ref(store, by) if by.isdigit() else by",
+   "new": "    return by",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_command_prints_the_id",
+   "file": "hub/admin.py",
+   "old": "            out.write(\"%s banned\\n\" % whom)",
+   "new": "            out.write(\"%s banned\\n\" % account)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "a_wrong_use_echoes_what_was_typed",
+   "file": "hub/admin.py",
+   "old": "        self.exit(2, \"hub.admin: wrong use (the commands are listed at the top of hub/admin.py)\\n\")",
+   "new": "        self.exit(2, \"hub.admin: %s\\n\" % message)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "the_command_line_is_not_logged",
+   "file": "hub/admin.py",
+   "old": "            store.ban(account, BY, name, note=(TERMINAL, \"ban\", whom, \"\"))",
+   "new": "            store.ban(account, BY, name)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "the_command_line_log_is_not_limited_to_30_days",
+   "file": "hub/admin.py",
+   "old": "show_log(store, max(1, min(args.days, 30)), max(0, min(args.lines, 1000)), out)",
+   "new": "show_log(store, max(1, args.days), max(0, min(args.lines, 1000)), out)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "the_log_of_the_command_line_has_no_names",
+   "file": "hub/admin.py",
+   "old": "    names = store.usernames_by_reference({r for row in rows for r in (row.actor, row.target)})",
+   "new": "    names = {}",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLog tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_powers.TheReference"
+  },
+  {
+   "id": "an_identity_prints_the_id",
+   "file": "hub/session.py",
+   "old": "    def __repr__(self):\n        return \"<Identity>\"             # (the default shows the account id and the session's key: the id is like a password, and is in no representation)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheIdIsLikeAPassword tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_line_prints_the_id",
+   "file": "hub/store/base.py",
+   "old": "Line.__repr__ = lambda self: \"<Line %d>\" % self.id ",
+   "new": "Line.__repr__ = lambda self: \"<Line %r>\" % (tuple(self),) ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheIdIsLikeAPassword tests.scripts.test_hub_powers.TheCommandLine tests.scripts.test_hub_store_contract"
+  },
+  {
+   "id": "a_bug_of_a_command_is_logged_with_its_text",
+   "file": "hub/server.py",
+   "old": "            self.log.event(\"error\", kind=type(error).__name__, where=\"command\")",
+   "new": "            self.log.event(\"error\", kind=str(error), where=\"command\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLiveHub"
+  },
+  {
+   "id": "a_waiting_command_is_not_stopped_with_the_hub",
+   "file": "hub/server.py",
+   "old": "        for task in list(self.chat.busy.values()):\n            task.cancel()\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheLiveHub"
+  },
+  {
+   "id": "a_moderator_has_no_share_of_their_own",
+   "file": "hub/chat.py",
+   "old": "        if not self.wait_limits.take(self.key_of(peer.identity.account_id), self.clock()):\n            return self.mistake(peer, \"rate\")",
+   "new": "        if False:\n            return self.mistake(peer, \"rate\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_share_of_a_moderator_is_the_share_of_the_hub",
+   "file": "hub/chat.py",
+   "old": "        if not self.wait_limits.take(self.key_of(peer.identity.account_id), self.clock()):",
+   "new": "        if not self.wait_limits.take(\"x\", self.clock()):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "a_refused_share_is_not_a_mistake",
+   "file": "hub/chat.py",
+   "old": "            return self.mistake(peer, \"rate\")                       # (a moderator who asks",
+   "new": "            return self.mistake(peer, \"rate\", count=False)                       # (a moderator who asks",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "an_entry_is_made_before_the_share_is_asked",
+   "file": "hub/roles.py",
+   "old": "        if not self.afford(len(stale)):\n            return False                                                   # (the actions have asked for more than their share of the lookups: this one is refused, and nothing is made or evicted for it)\n        for account in stale:\n            if account not in self.entries:\n                if len(self.entries) >= self.limits.roles_entries_max and not self.evict():\n                    return False                                           # (nowhere to keep an answer: the action is refused, which is the safe side)\n                self.entries[account] = Entry(self.clock())\n",
+   "new": "        for account in stale:\n            if account not in self.entries:\n                if len(self.entries) >= self.limits.roles_entries_max and not self.evict():\n                    return False                                           # (nowhere to keep an answer: the action is refused, which is the safe side)\n                self.entries[account] = Entry(self.clock())\n        if not self.afford(len(stale)):\n            return False                                                   # (the actions have asked for more than their share of the lookups: this one is refused, and nothing is made or evicted for it)\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "kicks_and_bans_have_no_budget",
+   "file": "hub/chat.py",
+   "old": "        if not self.named_limits.take(self.key_of(by.account_id), self.clock()):\n            return\n",
+   "new": "        if False:\n            return\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_budget_of_lines_is_the_hubs",
+   "file": "hub/chat.py",
+   "old": "not self.named_limits.take(self.key_of(by.account_id), self.clock())",
+   "new": "not self.named_limits.take(\"x\", self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_refused_ban_spends_the_budget",
+   "file": "hub/chat.py",
+   "old": "        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"\n",
+   "new": "        if name == \"ban\":\n            self.named_limits.take(self.key_of(me.account_id), self.clock())\n        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "a_refused_kick_spends_the_budget",
+   "file": "hub/chat.py",
+   "old": "        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"\n",
+   "new": "        if name == \"kick\":\n            self.named_limits.take(self.key_of(me.account_id), self.clock())\n        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_share_is_kept_by_the_id",
+   "file": "hub/chat.py",
+   "old": "self.wait_limits.take(self.key_of(peer.identity.account_id), self.clock())",
+   "new": "self.wait_limits.take(peer.identity.account_id, self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_budget_of_lines_is_kept_by_the_id",
+   "file": "hub/chat.py",
+   "old": "self.named_limits.take(self.key_of(by.account_id), self.clock())",
+   "new": "self.named_limits.take(by.account_id, self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_burst_of_named_lines_is_changed",
+   "file": "hub/limits.py",
+   "old": "    named_lines_burst: int = 5 ",
+   "new": "    named_lines_burst: int = 50 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_refill_of_a_moderators_share_is_changed",
+   "file": "hub/limits.py",
+   "old": "    roles_urgent_actor_refill_seconds: float = 5.0 ",
+   "new": "    roles_urgent_actor_refill_seconds: float = 0.5 ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  }
+ ]
+}

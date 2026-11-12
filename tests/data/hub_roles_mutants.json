@@ -91,21 +91,21 @@
   {
    "id": "a_refused_access_is_a_failed_check",
    "file": "hub/roles.py",
-   "old": "        elif status == 403:\n            return self.refused(\"access\", status, now)",
+   "old": "        elif status == 403:\n            self.refused(\"access\", status, now)\n            return False",
    "new": "        elif status == 403:\n            role = None",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheRefusals"
   },
   {
    "id": "a_wrong_server_is_a_failed_check",
    "file": "hub/roles.py",
-   "old": "        elif status == 404 and code == UNKNOWN_GUILD:\n            return self.refused(\"guild\", status, now)",
+   "old": "        elif status == 404 and code == UNKNOWN_GUILD:\n            self.refused(\"guild\", status, now)\n            return False",
    "new": "        elif status == 404 and code == UNKNOWN_GUILD:\n            role = None",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheRefusals"
   },
   {
    "id": "a_wrong_token_is_a_failed_check",
    "file": "hub/roles.py",
-   "old": "        elif status == 401:\n            return self.refused(\"token\", status, now)",
+   "old": "        elif status == 401:\n            self.refused(\"token\", status, now)\n            return False",
    "new": "        elif status == 401:\n            role = None",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheRefusals"
   },
@@ -182,8 +182,8 @@
   {
    "id": "the_memory_has_no_cap",
    "file": "hub/roles.py",
-   "old": "if len(self.entries) >= self.limits.roles_entries_max and not self.evict():",
-   "new": "if False:",
+   "old": "        if entry is None:\n            if len(self.entries) >= self.limits.roles_entries_max and not self.evict():",
+   "new": "        if entry is None:\n            if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheScheduler"
   },
   {
@@ -390,46 +390,11 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheGrace"
   },
   {
-   "id": "a_target_of_unknown_role_is_actable",
-   "file": "hub/chat.py",
-   "old": "if target is None or not self.roles.known_none(target):",
-   "new": "if target is None or self.is_mod(target):",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles tests.scripts.test_hub_roles.TheKnownNone"
-  },
-  {
-   "id": "an_old_answer_of_none_is_known",
-   "file": "hub/roles.py",
-   "old": "entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE",
-   "new": "entry.ok_at is not None and entry.role == NONE",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone"
-  },
-  {
-   "id": "a_person_who_was_not_asked_is_known_to_hold_none",
-   "file": "hub/roles.py",
-   "old": "return entry is not None and entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE",
-   "new": "return entry is None or (entry.ok_at is not None and self.clock() - entry.ok_at <= self.grace and entry.role == NONE)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone tests.scripts.test_hub_roles.TheChatAsksTheRoles"
-  },
-  {
-   "id": "the_owner_account_is_known_to_hold_none",
-   "file": "hub/roles.py",
-   "old": "        if self.owner and account == self.owner:\n            return False\n        if not self.on:",
-   "new": "        if False:\n            return False\n        if not self.on:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone"
-  },
-  {
    "id": "without_the_settings_nobody_is_known_to_hold_none",
    "file": "hub/roles.py",
    "old": "        if not self.on:\n            return True",
    "new": "        if not self.on:\n            return False",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheKnownNone"
-  },
-  {
-   "id": "the_author_of_a_line_is_not_looked_at",
-   "file": "hub/chat.py",
-   "old": "if author is None or (author != me.account_id and not self.roles.known_none(author)):",
-   "new": "if author is None:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles"
   },
   {
    "id": "a_command_from_a_person_with_no_role_is_posted",
@@ -525,8 +490,8 @@
   {
    "id": "a_moderator_s_capital_letter_is_no_command",
    "file": "hub/chat.py",
-   "old": "if words[0].lower() == \"/mute\"",
-   "new": "if words[0] == \"/mute\"",
+   "old": "        name = words[0].lower()[1:]",
+   "new": "        name = words[0][1:]",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_roles.TheChatAsksTheRoles"
   }
  ]

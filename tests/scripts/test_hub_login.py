@@ -1120,7 +1120,7 @@ class TheTwoNamesAndTheModerators(LoginTest):
         a, b, m = self.accounts()
         author, twin, mod = self.socket(a), self.socket(b), self.socket(m)
         mod.say("/mute Maple 5")
-        self.assertEqual(mod.recv_json(), {"t": "err", "code": "bad"})
+        self.assertEqual(mod.recv_json(), {"t": "err", "code": "who"})
         mod.say("/mute aaa.one 5")
         time.sleep(0.3)
         author.say("I was muted")
