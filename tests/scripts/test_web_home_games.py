@@ -6,7 +6,7 @@ script and a style that the page loads after its first paint, in the folder of t
 drawn as text only.
 
   - the page: what the script reads of web/lobby.html is there (the heading, the colors, the strips, the Rejoin button), the page hands it its small bridge (the client, the look at a room, a typed code, the name), the
-    page's probe leaves the old room only when the new one welcomes the page, and the page is still under its line limit;
+    page's probe leaves the old room only when the new one welcomes the page;
   - the folder: games.js and games.css, under their budgets (raw and gzipped), plain ES5, no markup written anywhere (no innerHTML and no neighbors of it), no address of another site, nothing kept in the browser, one
     address that is asked for (/lobbies, no query, no cookies);
   - the style: every target at least 44 px high and wide, a layout for a phone, a short window and a wide one, nothing loaded from another site, nothing that scrolls sideways;
@@ -35,7 +35,6 @@ CHECKS = [os.path.join(REPO, "tests", "scripts", n) for n in ("web_home_games_ch
 NODE = shutil.which("node")
 FILES = ("games.js", "games.css")
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 90 * 1000, 25500      # bytes, raw and gzipped, both files together (about 86,000 and 24,200; raised on purpose from 78,000 and 22,500 for the rows of the matches in progress with Watch, their switch, the parser of GET /live and its looks): they load after the first paint, and the list of the page's own files is another budget (web/home/home.js, home.css)
-LINES = 1500                                           # tools/check_hygiene.py: the page's line limit
 
 
 def read(*parts):
@@ -99,9 +98,6 @@ class ThePage(unittest.TestCase):
 
     def test_the_map_picker_comes_before_home_so_that_it_is_there_when_the_list_runs(self):
         self.assertLess(self.page.index('<script src="front/map_picker.js"></script>'), self.page.index('<script src="home/home.js"></script>'), "the list's script (loaded after the first paint) reads AntsMapPicker from the window")
-
-    def test_the_page_is_under_its_line_limit(self):
-        self.assertLessEqual(len(self.page.split("\n")) - 1, LINES, "tools/check_hygiene.py: the page's line limit")
 
     def test_the_card_of_a_code_that_was_typed_is_the_one_that_the_names_of_links_use(self):
         self.assertEqual(self.page.count("askName({"), 2, "a link and a typed code are the two things that ask for a name")
