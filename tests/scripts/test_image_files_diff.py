@@ -385,6 +385,11 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
         self.assertEqual(done.returncode, 2, "an output that is not there after the link is not a hash of nothing")
         self.put(os.path.join(self.bin, "cmake"), b"#!/bin/sh\nexit 1\n")
         self.assertEqual(self.run_script("relink_outputs.sh").returncode, 2)
+        self.fake_cmake()
+        self.put(os.path.join(self.bin, "cmake"), open(os.path.join(self.bin, "cmake"), "rb").read() + b"exit 1\n")      # (a link that made its files and still failed)
+        for name in ("index.js", "index.wasm", "index.data", "index.html"):
+            os.path.exists(os.path.join(self.src, "build_web", "src", "ants_app", name)) and os.remove(os.path.join(self.src, "build_web", "src", "ants_app", name))
+        self.assertEqual(self.run_script("relink_outputs.sh").returncode, 2, "a failed link is a failure even when it left files")
 
     def test_the_scripts_have_the_modes_and_the_syntax_of_scripts(self):
         for name in ("link_inputs.sh", "relink_outputs.sh"):
