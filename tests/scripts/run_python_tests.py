@@ -38,9 +38,9 @@ COSTS = {
     "test_web_lobby_net.TheBudgetChecksAreNotVacuous": 22, "test_web_rematch.TheChecksAreNotVacuous": 20, "test_e2e_deadlines.Waits": 18,
     "test_hub_login.TheCallbackWhenDiscordGoesWrong": 18, "test_run_tests.ParallelResources": 17, "test_web_shapes.TheMutantsOfTheTable": 16,
     "test_web_lobby_rules.TheCheckIsNotVacuous": 16, "test_web_lobby.TheCheckIsNotVacuous": 15, "test_nginx_live.TheBlocksRun": 15, "test_e2e_deadlines.Watchdog": 14,
-    "test_map_atlas.TheAtlas": 13, "test_web_without_docker.TheRealDockerfileReplayed": 13, "test_changelog_to_html.TheScriptRunByNode": 13, "test_deploy_wait.TheProgram": 12,
+    "test_map_atlas.TheAtlas": 13, "test_web_without_docker.TheRealDockerfileReplayed": 13, "test_changelog_to_html.TheScriptRunByNode": 13,
     "test_web_shapes.TheMutantsOfThePicker": 12, "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous": 12, "test_nginx_replays.TheBlocksRun": 11, "test_hub_ws.TheFuzz": 11,
-    "test_nginx_lobbies.TheCacheRuns": 10, "test_e2e_deadlines.TheScriptCounts": 10, "test_deploy_webhook.DeployWebhook": 10, "test_hub_login.TheCallback": 10,
+    "test_nginx_lobbies.TheCacheRuns": 10, "test_e2e_deadlines.TheScriptCounts": 10, "test_hub_login.TheCallback": 10,
     "test_hub_login.TheSocket": 10, "test_nginx_lobbies.TheServerHangsRuns": 10, "test_measure_tick_rate.Program": 10, "test_nginx_maps.TheBlocksRun": 8,
     "test_nginx_hub_login.TheBlocksRun": 8, "test_hub_login.TheForget": 8, "test_web_map_picker.ThePickersOwnCode": 8, "test_hub_login.TheProcess": 7,
     "test_web_home_chat.TheCodeRuns": 7, "test_nginx_lobbies.TheServerFailsRuns": 7, "test_hub_login.TheDiscordClient": 7, "test_hub_server.TheProcess": 7,
@@ -130,6 +130,22 @@ def run_unit(label, dotted, root, shim=None):
     return {"label": label, "status": done.returncode, "tests": int(ran.group(1)) if ran else 0, "seconds": time.monotonic() - started, "output": text}
 
 
+ANNOTATION = re.compile(r"^::(?:warning|notice)\b.*$", re.M)
+
+
+def annotations(results):
+    """The ::warning and ::notice lines (GitHub shows them on the pull request) of the groups that passed, once each: this runner keeps the output of a passing group to itself, and
+    the size warnings of tools/check_hygiene.py would never be seen. (A group that failed prints all its output, those lines too.)"""
+    seen, out = set(), []
+    for r in results:
+        if r["status"] == 0:
+            for line in ANNOTATION.findall(r["output"]):
+                if line not in seen:
+                    seen.add(line)
+                    out.append(line)
+    return out
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description="Runs the python tests of tests/scripts side by side (see the top of this file).")
     parser.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)), help="the folder of the test_*.py files (default: this script's folder)")
@@ -172,6 +188,8 @@ def main(argv):
         print("%-62s %s  %3d tests  %5.1fs" % (r["label"], "ok    " if r["status"] == 0 else "FAILED", r["tests"], r["seconds"]))
     for r in failed:
         print("\n===== %s =====\n%s" % (r["label"], r["output"].rstrip()))
+    for line in annotations(results):
+        print(line)
     which = (" of slice %d/%d" % shard) if shard else ""
     print("\nRan %d tests in %d groups%s in %.1fs (side by side; one after the other they take %.1fs)" % (
         sum(r["tests"] for r in results), len(results), which, time.monotonic() - started, sum(r["seconds"] for r in results)))

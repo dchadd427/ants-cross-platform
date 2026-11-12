@@ -404,7 +404,7 @@ class ThePlacesThatCarryIt(unittest.TestCase):
     def test_the_image_build_still_has_nothing_of_docs(self):
         lines = read(".dockerignore").splitlines()
         self.assertIn("docs", lines)
-        self.assertEqual([l for l in lines if l.startswith("!docs")], [], "the atlas reads the viewer's data, not docs/ (no image copies a document: tests/scripts/test_deploy_filter.py)")
+        self.assertEqual([l for l in lines if l.startswith("!docs")], [], "the atlas reads the viewer's data, not docs/ (no image copies a document)")
         self.assertNotRegex(read("Dockerfile"), r"(?m)^COPY\s+(--\S+\s+)*docs")
 
     def test_the_local_web_build_makes_the_atlas_and_nginx_revalidates_it(self):

@@ -1,10 +1,10 @@
-"""Every size number of the repository, in one place. Data only: tools/check_hygiene.py and the tests that need a limit import it.
+"""The size numbers of documents, code files and web downloads, in one place. Data only: tools/check_hygiene.py and the tests that need a limit import it.
 
 Documents and code files have a soft policy. A base size, and three fractions of it:
   target  (75%)   what a file aims at; only `check_hygiene.py --list` shows the files over it, and documents get a warning from here
   split   (90%)   a warning on the pull request: split the file by topic now
   cap     (125%)  the safety cap: the only fraction that fails the check
-A document is measured in bytes, a code file in lines. Nothing is a ledger: no file has a number of its own, and a file is never trimmed or joined to fit (docs/WORKFLOW.md).
+A document is measured in bytes, a code file in lines. Nothing is a ledger: no file has a number of its own, and a file is never trimmed or joined to fit (AGENTS.md, rule 10).
 """
 
 TARGET_PERCENT = 75
@@ -18,6 +18,9 @@ PRODUCTION_BASE_LINES = 1500
 TEST_BASE_LINES = 2500
 # code files warn from the split line only (from the target, about 50 files would be listed); documents warn from the target
 CODE_WARNS_FROM_PERCENT = SPLIT_PERCENT
+
+# GitHub shows at most 10 warning annotations of one step: the hygiene check prints at most this many (the worst files first)
+ANNOTATION_LIMIT = 10
 
 # why 2,000: agent readers may cut a line longer than this; a long line is a warning (reflow it in a change that moves no text)
 DOC_LINE_WARN_CHARACTERS = 2000

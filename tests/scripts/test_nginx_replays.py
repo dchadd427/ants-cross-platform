@@ -142,7 +142,7 @@ class TheLocations(unittest.TestCase):
             door = re.search(r"set \$ants_server ([a-z0-9.-]+):(\d+);", BUSY)
             self.assertEqual(target.group(1), door.group(1), what)                            # the same server (its name on the network of the stack) as /ws and /busy ...
             self.assertNotEqual(target.group(2), door.group(2), what)                         # ... and not the WebSocket port: a door of its own
-            for stack in ("docker-compose.stack.yml", "docker-compose.staging.yml"):
+            for stack in ("docker-compose.stack.yml",):
                 command = re.search(r'command: \[.*?"--replay-port", "\$\{ANTS_REPLAY_PORT:-(\d+)\}"', read(stack))
                 self.assertIsNotNone(command, stack)
                 self.assertEqual(command.group(1), target.group(2), stack)
@@ -209,10 +209,9 @@ class TheLocations(unittest.TestCase):
 
     def test_the_stack_gives_the_door_and_the_documents_say_so(self):
         stack = read("docker-compose.stack.yml")
-        staging = read("docker-compose.staging.yml")
-        for text in (stack, staging):
+        for text in (stack,):
             self.assertIn('"--replay-demo", "--replays-days", "${ANTS_REPLAY_DAYS:-30}", "--replays-max-mb", "${ANTS_REPLAY_MAX_MB:-100}", "--replay-port", "${ANTS_REPLAY_PORT:-4020}"]', text)
-        for name, text in (("docker-compose.stack.yml", stack), ("docker-compose.staging.yml", staging)):
+        for name, text in (("docker-compose.stack.yml", stack),):
             for line in published_port_lines(text):
                 self.assertNotIn("4020", line, name)                                          # (the replay port is not published on the host, whatever the way to write it)
         for variable in ("ANTS_REPLAY_DAYS", "ANTS_REPLAY_MAX_MB", "ANTS_REPLAY_PORT"):
@@ -232,8 +231,7 @@ class TheLocations(unittest.TestCase):
     def test_the_stack_plays_the_servers_own_hourly_match_of_computer_players_and_says_so(self):
         # the site's list of live matches always has one to watch because the game server plays one itself (--bot-match-every-min); no other container of the stack plays bots
         stack = read("docker-compose.stack.yml")
-        staging = read("docker-compose.staging.yml")
-        for text in (stack, staging):
+        for text in (stack,):
             self.assertRegex(text, r'"--bot-match-every-min", "\$\{ANTS_BOT_MATCH_EVERY_MIN:-60\}"')
             self.assertRegex(text.split("services:")[0], r"(?m)^#   ANTS_BOT_MATCH_EVERY_MIN")
         self.assertRegex(stack, r"(?m)^#   ANTS_BOT_MATCH_EVERY_MIN=60 ")
@@ -241,12 +239,11 @@ class TheLocations(unittest.TestCase):
         self.assertIn('"--bot-match-every-min"', read("src", "ants_server", "main.cpp"))
 
     def test_the_server_keeps_its_results_and_its_replays_folder_in_the_volume_that_the_stack_mounts(self):
-        # the image's ENTRYPOINT says --results-dir /results (the replays are /results/replays, the restart records /results/restart, the control secret /results/control-secret), and each stack mounts a
+        # the image's ENTRYPOINT says --results-dir /results (the replays are /results/replays, the restart records /results/restart, the control secret /results/control-secret), and the stack mounts a
         # volume of its own there: without the one or the other the matches and the records are lost with the container
         entry = re.findall(r"(?m)^ENTRYPOINT \[(.*)\]$", read("Dockerfile.server"))[-1]
         self.assertIn('"--results-dir", "/results"', entry)
         self.assertIn("      - ants-server-results:/results\n", read("docker-compose.stack.yml"))
-        self.assertIn("      - ants-staging-results:/results\n", read("docker-compose.staging.yml"))
 
     def test_the_pages_that_ask_for_a_name_tell_players_the_days_that_the_stack_keeps_the_matches(self):
         # decided on 2026-10-08 and worded again on 2026-10-15: the front page and the game page's name card say that online matches are recorded, that the recordings are kept for N days, and that the results
@@ -273,7 +270,6 @@ class TheLocations(unittest.TestCase):
     def test_the_stack_files_say_what_is_kept_which_port_to_leave_alone_and_who_can_reach_the_door(self):
         for name, needles in (("docker-compose.stack.yml", ("ran 30 seconds or more", "Leave it at 4020", "or set 0", "restarts again and again", "is not published on the host at all", "put only containers you trust on it")),
                               ("docker-compose.server.yml", ("ran 30 seconds or more", "put only containers you trust on it")),
-                              ("docker-compose.staging.yml", ("ANTS_REPLAY_PORT", "not published")),
                               ("Dockerfile.server", ("do not publish it either", "five-second cache"))):
             text = " ".join(re.sub(r"(?m)^\s*#\s?", "", read(name)).split())                    # (a comment broken over lines reads as one)
             for needle in needles:

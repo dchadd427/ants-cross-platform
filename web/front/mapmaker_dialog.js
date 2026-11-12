@@ -89,7 +89,7 @@
 
         function menu(items) {
             return open({
-                label: 'Menu', cls: 'narrow',
+                label: 'File', cls: 'narrow',
                 build: function (body) {
                     var list = el('div', 'menulist');
                     items.forEach(function (it) {

@@ -7,7 +7,7 @@ which are keyed on the address, and the X-Client-Address that the chat hub and t
   - the text of the shipped list: the six private and internal ranges and nothing else, X-Forwarded-For as the header, recursive; read with the ipaddress module against private, boundary and public
     addresses (no range of the Internet, nothing that matches everything). On every machine;
   - the wiring: the list is included once in the http block (the default of the site) and the operator's own folder once in the server block (a list there replaces the default); every address that a door
-    is told or that a zone counts comes from $remote_addr and never from a header; the image has the list; the three compose files mount ANTS_TRUSTED_PROXIES_FILE as a FULL path whose default is
+    is told or that a zone counts comes from $remote_addr and never from a header; the image has the list; the compose files mount ANTS_TRUSTED_PROXIES_FILE as a FULL path whose default is
     /dev/null (a path of the repository does not work in a stack that a deployment tool builds from a repository: its files are not on the host), into the folder that nginx includes;
   - where the program nginx is installed (a Linux machine has all of 127.0.0.0/8): the REAL file and the REAL docker/nginx.conf in front of stand-in doors and a real chat hub. Connections from different
     internal addresses, each with other X-Forwarded-For headers, are different visitors for the zones and for the X-Client-Address; a value that a visitor wrote himself, or in a header of another name, is
@@ -47,7 +47,7 @@ LIST = read("docker", "trusted-proxies.conf")
 CONF = sub.CONF
 DIRECTIVES = [l.strip() for l in strip_comments(LIST).splitlines() if l.strip()]
 RANGES = [re.fullmatch(r"set_real_ip_from (\S+);", l).group(1) for l in DIRECTIVES if l.startswith("set_real_ip_from ")]
-COMPOSE_FILES = ("docker-compose.stack.yml", "docker-compose.staging.yml", "docker-compose.yml")
+COMPOSE_FILES = ("docker-compose.stack.yml", "docker-compose.yml")
 MOUNT = "${ANTS_TRUSTED_PROXIES_FILE:-/dev/null}:/etc/nginx/ants-trusted-proxies.d/own.conf:ro"
 
 TRUSTED = ["127.0.0.1", "127.0.0.2", "127.255.255.255", "10.0.0.0", "10.1.2.3", "10.255.255.255", "172.16.0.0", "172.17.0.1", "172.18.0.5", "172.31.255.255", "192.168.0.0", "192.168.1.1", "192.168.255.255",
@@ -58,7 +58,7 @@ OUTSIDE = ["0.0.0.0", "1.1.1.1", "8.8.8.8", "9.255.255.255", "11.0.0.0", "100.64
 PRIVATE = ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7")
 
 
-WEB_PORTS = (("docker-compose.stack.yml", "ANTS_PORT", "19980"), ("docker-compose.staging.yml", "ANTS_STAGING_PORT", "19981"), ("docker-compose.yml", "ANTS_PORT", "19980"))
+WEB_PORTS = (("docker-compose.stack.yml", "ANTS_PORT", "19980"), ("docker-compose.yml", "ANTS_PORT", "19980"))
 
 
 def server_section():
@@ -198,7 +198,7 @@ class TheWiring(unittest.TestCase):
         for key in keys - {"$binary_remote_addr"}:
             self.assertLessEqual(map_values(key[1:]), {"$binary_remote_addr", '""'}, key)         # (a key is the address, or nothing)
 
-    def test_the_three_compose_files_mount_the_operators_list_by_a_full_path_with_nothing_as_the_default(self):
+    def test_the_compose_files_mount_the_operators_list_by_a_full_path_with_nothing_as_the_default(self):
         folder = re.search(r"include (/etc/nginx/ants-trusted-proxies\.d)/\*\.conf;", CONF).group(1)
         for name in COMPOSE_FILES:
             with open(os.path.join(REPO, name), encoding="utf-8") as f:
@@ -226,7 +226,7 @@ class TheWiring(unittest.TestCase):
                 self.assertEqual([(m["type"], m["source"], m["target"], m.get("read_only")) for m in mounts], [("bind", source, "/etc/nginx/ants-trusted-proxies.d/own.conf", True)], name)
 
     def test_the_documents_and_the_comments_do_not_say_that_the_list_is_empty_or_has_to_be_mounted(self):
-        for path in (("docker", "nginx.conf"), ("Dockerfile",), ("docker-compose.stack.yml",), ("docker-compose.staging.yml",), ("docs", "HUB.md"), ("docs", "SERVER.md"), ("docs", "MAP_SUBMISSIONS.md")):
+        for path in (("docker", "nginx.conf"), ("Dockerfile",), ("docker-compose.stack.yml",), ("docs", "HUB.md"), ("docs", "SERVER.md"), ("docs", "MAP_SUBMISSIONS.md")):
             text = read(*path)
             for old in ("image's empty file", "image's one file is all comments", "the image's file is all comments", "mount a file over /etc/nginx/ants-trusted-proxies/proxies.conf",
                         "none: the address of the connection counts"):
@@ -270,7 +270,6 @@ class TheWiring(unittest.TestCase):
         header = comment_words(read("docker-compose.stack.yml").split("\nservices:")[0])
         for words in ("Give the FULL path of a file on the host", "The path must name an existing FILE", "nginx stops with \"Is a directory\"", "ANTS_WEB_BIND_PREFIX=127.0.0.1:"):
             self.assertIn(words, header, words)
-        self.assertIn("an existing FILE", comment_words(read("docker-compose.staging.yml").split("\nservices:")[0]))
 
 
 class ThePublishedWebPort(unittest.TestCase):

@@ -566,14 +566,12 @@ class TheImageAndTheCi(PageCase):
         self.assertFalse("/src/four.html" in dockerfile or "web/four.html" in dockerfile, "the Dockerfile still builds the old page")
         self.assertIn("web/shell.html web/lobby.html", dockerfile)                           # the version goes into both pages
         self.assertIn('"$PAGE" /src/web/lobby.html', dockerfile)                             # and the build id
-        self.assertIn("cp /src/web/lobby.html /src/lobby.html", dockerfile)                  # the site label step runs on the lobby
+        self.assertIn("cp /src/web/lobby.html /src/lobby.html", dockerfile)                  # the site placeholder step runs on the lobby
 
-    def test_the_ci_checks_the_pages_of_the_image_the_label_and_the_routes(self):
+    def test_the_ci_checks_the_pages_of_the_image_and_the_routes(self):
         ci = read(".github", "workflows", "ci.yml")
         self.assertNotIn("four.html page", ci)
         self.assertIn("ls -l index.html play.html lobby.html", ci)
-        self.assertIn('for page in index.html play.html lobby.html matches.html match.html live.html; do grep -q "(staging)</title>" $page', ci)
-        self.assertIn("! grep -qi staging index.html play.html lobby.html", ci)
         self.assertIn("python3 tests/scripts/web_routes_check.py --web http://127.0.0.1:18080/", ci)
 
     def test_the_local_build_packs_the_lobby_and_the_game_page_s_own_path(self):

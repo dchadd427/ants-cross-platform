@@ -3,8 +3,9 @@
 
 usage: check_hygiene.py [--root DIR] [--list]
 
-Exit 0 when everything is in order, 1 when there are findings (one line each on stdout), 2 for a usage error. Warnings go to stderr and do not change the exit status (under GITHUB_ACTIONS
-they are ::warning lines, which show on the pull request). --list prints every file over its target size.
+Exit 0 when everything is in order, 1 when there are findings (one line each on stdout), 2 for a usage error. Warnings go to stderr and do not change the exit status. Under GITHUB_ACTIONS
+they are ::warning lines (at most ANNOTATION_LIMIT, the files closest to their limit first, the last one counting the rest; the long lines are one ::notice): GitHub shows them on the pull
+request when they reach the log of a step, which tests/scripts/run_python_tests.py does for a group that passes. --list prints every file over its target size.
 Run by the tools tier (tests/scripts/test_hygiene.py, so by ./run_tests.sh --tools and by CI). The checks:
   1. sizes (the numbers are all in tools/size_limits.py): a document (docs/**/*.md, root *.md) is measured in bytes, a test or production file in lines. Over 125% of its base a file
      fails; from 90% it warns (documents from 75%, the target): split it by topic. The files of SPLIT_PENDING are over the cap and wait for their split: they warn, and a name that is
@@ -21,6 +22,7 @@ A page that gets near its limit is split by topic as a pure move (tools/check_do
 """
 import argparse
 import hashlib
+import html
 import os
 import re
 import subprocess
@@ -104,7 +106,8 @@ def num(n):
 
 
 def check_sizes(root, files, pending=None):
-    """(errors, warnings): the sizes of every document and code file against tools/size_limits.py. A warning is (file, text)."""
+    """(errors, warnings): the sizes of every document and code file against tools/size_limits.py. A warning is (file, text, kind, percent), kind "split" (from the split line),
+    "target" (a document over its target) or "pending" (over the cap and waiting in SPLIT_PENDING)."""
     pending = size_limits.SPLIT_PENDING if pending is None else pending
     errors, warnings = [], []
     fileset = set(files)
@@ -115,16 +118,20 @@ def check_sizes(root, files, pending=None):
         kind, unit, size, base = got
         at = levels(base)
         what = "%s %s, %d%% of %s" % (num(size), unit, percent(size, base), num(base))
-        advice = "split it by topic (target %s)" % num(at["target"])
+        pct = percent(size, base)
+        now = "split it by topic now (target %s)" % num(at["target"])
+        later = "over its target %s: split it by topic before it reaches %s" % (num(at["target"]), num(at["split"]))
         if rel in pending:
             if size <= at["cap"]:
                 errors.append("%s: %s %s is no longer over the safety cap %s: remove it from SPLIT_PENDING (tools/size_limits.py)" % (rel, num(size), unit, num(at["cap"])))
             else:
-                warnings.append((rel, "%s: %s (over the safety cap %s: it waits in SPLIT_PENDING)" % (what, advice, num(at["cap"]))))
+                warnings.append((rel, "%s: %s (over the safety cap %s: it waits in SPLIT_PENDING)" % (what, now, num(at["cap"])), "pending", pct))
         elif size > at["cap"]:
-            errors.append("%s: %s %s is above the safety cap %s (split it by topic as a pure move: tools/check_doc_move.py)" % (rel, num(size), unit, num(at["cap"])))
-        elif size >= at["split"] or (kind == "document" and size > at["target"]):
-            warnings.append((rel, "%s: %s" % (what, advice)))
+            errors.append("%s: %s %s is above the safety cap %s (split it by topic%s)" % (rel, num(size), unit, num(at["cap"]), " as a pure move: tools/check_doc_move.py" if kind == "document" else ""))
+        elif size >= at["split"]:
+            warnings.append((rel, "%s: %s" % (what, now), "split", pct))
+        elif kind == "document" and size > at["target"]:
+            warnings.append((rel, "%s: %s" % (what, later), "target", pct))
     for rel in sorted(pending):
         if rel not in fileset:
             errors.append("%s: in SPLIT_PENDING but not a tracked file: remove it from the set (tools/size_limits.py)" % rel)
@@ -134,7 +141,7 @@ def check_sizes(root, files, pending=None):
 
 
 def check_long_lines(root, files, limit=None):
-    """Warnings (file, text): a document with lines over `limit` characters (agent readers may cut them)."""
+    """[(file, number of lines, characters of the longest, its line number)] of the documents with lines over `limit` characters (agent readers may cut them)."""
     limit = size_limits.DOC_LINE_WARN_CHARACTERS if limit is None else limit
     out = []
     for rel in files:
@@ -143,8 +150,18 @@ def check_long_lines(root, files, limit=None):
         long = [(len(line), n) for n, line in enumerate(read_bytes(root, rel).decode("utf-8", "replace").splitlines(), 1) if len(line) > limit]
         if long:
             top = max(long)
-            out.append((rel, "%d line(s) over %s characters (the longest has %s, line %d): a reader may cut them; reflow in a change that moves no text" % (len(long), num(limit), num(top[0]), top[1])))
+            out.append((rel, len(long), top[0], top[1]))
     return out
+
+
+def long_line_warning(found, limit=None):
+    """The one notice for all the documents of check_long_lines (a notice for each would crowd out the size warnings), or None."""
+    limit = size_limits.DOC_LINE_WARN_CHARACTERS if limit is None else limit
+    if not found:
+        return None
+    rel, _, size, n = max(found, key=lambda f: f[2])
+    return (rel, "%d line(s) in %d document(s) are over %s characters (the longest has %s, %s line %d): a reader may cut them; reflow in a change that moves no text (--list names them)"
+            % (sum(f[1] for f in found), len(found), num(limit), num(size), rel, n), "long", 0)
 
 
 LINK = re.compile(r"\]\(\s*<?([^)\s>]+)")
@@ -152,21 +169,21 @@ REFDEF = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s|$)", re.M)
 
 
 def links_of(root, rel, filesset):
-    text = read_bytes(root, rel).decode("utf-8", "replace")
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
     here = os.path.dirname(rel)
     found = set()
-    for target in LINK.findall(text) + REFDEF.findall(text):
-        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
-            continue
-        target = target.split("#")[0].split("?")[0]
-        if not target:
-            continue
-        path = os.path.normpath(os.path.join(here, target)).replace(os.sep, "/")
-        if path in filesset:
-            found.add(path)
-        elif path + "/README.md" in filesset:
-            found.add(path + "/README.md")
+    for _, line in prose_lines(read_bytes(root, rel).decode("utf-8", "replace")):      # (links as the page shows them: not in code, not in a comment)
+        line = INLINE_CODE.sub("", line)
+        for target in LINK.findall(line) + REFDEF.findall(line):
+            if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("#"):
+                continue
+            target = target.split("#")[0].split("?")[0]
+            if not target:
+                continue
+            path = os.path.normpath(os.path.join(here, target)).replace(os.sep, "/")
+            if path in filesset:
+                found.add(path)
+            elif path + "/README.md" in filesset:
+                found.add(path + "/README.md")
     return found
 
 
@@ -191,33 +208,42 @@ def check_reachable(root, files, start="README.md"):
     return out
 
 
-FENCE = re.compile(r"^ {0,3}(```|~~~)")
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 ATX_HEADING = re.compile(r"^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
 INLINE_CODE = re.compile(r"(`+)(.+?)\1")
+HTML_COMMENT = re.compile(r"<!--.*?-->")
 
 
 def prose_lines(text):
-    """(number, line) of the lines of a markdown text that are outside fenced code blocks."""
-    fence = None
-    for n, line in enumerate(text.splitlines(), 1):
+    """(number, line) of the lines of a markdown text that a reader sees as text: not in a fenced code block (a fence closes with its own mark, as long, and nothing after it) and not in
+    an HTML comment (the part of a line outside the comment stays)."""
+    fence, comment = None, False
+    for n, line in enumerate(text.lstrip("\ufeff").splitlines(), 1):
+        if comment:
+            if "-->" not in line:
+                continue
+            comment, line = False, line.split("-->", 1)[1]
         m = FENCE.match(line)
         if fence:
-            if m and m.group(1) == fence:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
                 fence = None
             continue
-        if m:
+        if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
             fence = m.group(1)
             continue
+        line = HTML_COMMENT.sub("", line)
+        if "<!--" in line:
+            line, comment = line.split("<!--", 1)[0], True
         yield n, line
 
 
 def slug_of(heading):
     """GitHub's anchor of a heading's text, before the -1, -2 of a repeated one: the rendered text, lower case, with punctuation removed and each space a hyphen."""
-    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", heading)      # a link or an image is its text
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", html.unescape(heading))      # a link or an image is its text; an entity is the character
     text = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", text)
 
-    def markup(piece):                                                 # (outside code: an HTML tag goes, `*` and an underscore that marks emphasis go, one inside a word stays)
-        return re.sub(r"(?<!\w)_|_(?!\w)", "", re.sub(r"<[^>]*>", "", piece).replace("*", ""))
+    def markup(piece):                                                 # (outside code: an HTML tag goes, `*` goes, a pair of underscores that marks emphasis goes; a lone one stays)
+        return re.sub(r"(?<!\w)(_{1,3})(?=\S)(.+?)(?<=\S)\1(?!\w)", r"\2", re.sub(r"<[^>]*>", "", piece).replace("*", ""))
     pieces, at = [], 0
     for m in INLINE_CODE.finditer(text):                               # (the text of a code span is kept as written)
         pieces += [markup(text[at:m.start()]), m.group(2).strip()]
@@ -255,11 +281,14 @@ def check_anchors(root, files):
         for n, line in prose_lines(read_bytes(root, rel).decode("utf-8", "replace")):
             line = INLINE_CODE.sub("", line)
             for target in LINK.findall(line) + REFDEF.findall(line):
-                if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or "#" not in target:
+                if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", target) or target.startswith("?"):
                     continue
-                name, anchor = target.split("#", 1)
+                name, _, anchor = target.partition("#")
                 anchor = urllib.parse.unquote(anchor.split("?")[0]).lower()
                 path = rel if not name else os.path.normpath(os.path.join(here, name.split("?")[0])).replace(os.sep, "/")
+                if path.endswith(".md") and path not in fileset:
+                    out.append("%s:%d: the link to %s names a .md file that is not tracked (check the path and its case)" % (rel, n, path))
+                    continue
                 if not anchor or path not in fileset or not path.endswith(".md"):
                     continue
                 if anchor not in anchors_of(path):
@@ -446,18 +475,34 @@ def check_spelling(root, files, skipped=SPELLING_SKIPPED, kept=None):
 
 
 def run_all(root):
-    """(errors, warnings) of every check; a warning is (file, text)."""
+    """(errors, warnings) of every check; a warning is (file, text, kind, percent)."""
     files = tracked_files(root)
     size_errors, warnings = check_sizes(root, files)
     errors = (size_errors + check_reachable(root, files) + check_anchors(root, files) + check_forbidden(root, files) + check_assert_true(root, files) + check_cmake(root, files)
               + check_build_folders(files) + check_spelling(root, files) + check_spelling_table(root, files))
-    return errors, warnings + check_long_lines(root, files)
+    long = long_line_warning(check_long_lines(root, files))
+    return errors, warnings + ([long] if long else [])
+
+
+WARNING_ORDER = {"split": 0, "target": 1, "pending": 2, "long": 3}      # (what a reader of the pull request should see first)
 
 
 def warning_lines(warnings, github=None):
-    """The lines that print the warnings: `warning: FILE: TEXT`, or a ::warning line (it shows on the pull request) under GITHUB_ACTIONS."""
+    """The lines that print the warnings, the files closest to their limit first. Plain: `warning: FILE: TEXT` for each, and `notice: ...` for the long lines. Under GITHUB_ACTIONS they are
+    annotations of the pull request, and GitHub shows only ANNOTATION_LIMIT warnings of a step: so at most that many are printed, the last one saying how many more there are (`--list`
+    has them all); the long lines are a ::notice, which has a count of its own."""
     github = bool(os.environ.get("GITHUB_ACTIONS")) if github is None else github
-    return [("::warning file=%s::%s" % (rel, text)) if github else ("warning: %s: %s" % (rel, text)) for rel, text in warnings]
+    ordered = sorted(warnings, key=lambda w: (WARNING_ORDER[w[2]], -w[3], w[0]))
+    sized = [w for w in ordered if w[2] != "long"]
+    notices = [w for w in ordered if w[2] == "long"]
+    if not github:
+        return ["warning: %s: %s" % (w[0], w[1]) for w in sized] + ["notice: %s: %s" % (w[0], w[1]) for w in notices]
+    room = size_limits.ANNOTATION_LIMIT
+    shown = sized if len(sized) <= room else sized[:room - 1]
+    out = ["::warning file=%s::%s" % (w[0], w[1]) for w in shown]
+    if len(shown) < len(sized):
+        out.append("::warning::%d more file(s) are over their target or split line: python3 tools/check_hygiene.py --list shows them all" % (len(sized) - len(shown)))
+    return out + ["::notice file=%s::%s" % (w[0], w[1]) for w in notices]
 
 
 def list_numbers(root):
@@ -473,6 +518,10 @@ def list_numbers(root):
         at = levels(base)
         state = "over the cap, waiting in SPLIT_PENDING" if rel in size_limits.SPLIT_PENDING else "over the cap" if size > at["cap"] else "split it now" if size >= at["split"] else "over the target"
         lines.append("  %9s %-5s %5d%%  %s  (%s)" % (num(size), unit, pct, rel, state))
+    long = check_long_lines(root, files)
+    if long:
+        lines.append("documents with lines over %s characters (a reader may cut them):" % num(size_limits.DOC_LINE_WARN_CHARACTERS))
+        lines += ["  %3d line(s), the longest %s characters (line %d)  %s" % (n, num(size), at, rel) for rel, n, size, at in sorted(long, key=lambda f: -f[2])]
     lines.append("ASSERT_TRUE definitions: %d (constant %d)" % (assert_true_count(root, files), ASSERT_TRUE_DEFINITIONS))
     return lines
 

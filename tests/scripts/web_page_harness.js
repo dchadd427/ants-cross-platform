@@ -118,7 +118,7 @@ class El {
     // A press, as a browser makes it: the document's capture listeners first, then the target's, then the listeners of every parent, then the document's (the path is that of the moment of the press:
     // a handler that takes the target out of the page does not stop the document from hearing the press, with the target in its hand)
     click() {
-        const ev = { target: this, detail: 1 }, path = [];
+        const ev = { target: this, detail: 1, preventDefault() { this.defaultPrevented = true; } }, path = [];
         for (let n = this.parent; n; n = n.parent) path.push(n);
         const top = path.length ? path[path.length - 1] : this, doc = this.env.doc;
         const attached = !!doc && (top === this.env.root || top === doc.body);

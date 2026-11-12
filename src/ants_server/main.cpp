@@ -645,7 +645,7 @@ int main(int argc, char** argv) {
                                     : std::string("lobby rooms off") + (o.demo_lobbies_given ? " (--demo-lobbies 0)" : !o.reconnect ? " (--no-reconnect)" : " (--max-rooms leaves no place for them beside --demo-rooms)"));
     }
 
-    if (ws) {                                                    // GET /busy on the WebSocket port: how many matches run (a deploy waits for none), no name, no code, no secret
+    if (ws) {                                                    // GET /busy on the WebSocket port: how many matches run, no name, no code, no secret
         ws->set_status("/busy", [&rooms]() {
             const ants::server::BusyCounts b = rooms.busy(now_ms());
             return "{\"matches\":" + std::to_string(b.matches) + ",\"players\":" + std::to_string(b.players) + "}";

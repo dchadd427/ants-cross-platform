@@ -12,7 +12,7 @@
 #   tests/scripts/test_web_*, tests/scripts/web_*      the tests of the pages and their checks (a file in a folder below tests/scripts is not one), except the files named below
 # Anything else makes it `full`: VERSION, CMakeLists.txt, cmake/, src/, include/, tools/, hub/, the Dockerfiles and compose files, .github/, third_party/, Community-Maps/, Original-Ants/,
 # run_tests.*, the C++ tests, the other tests of tests/scripts (the macOS job runs most of them and the two shell suites), and every path not listed. Unknown is full. A run that is not a
-# pull request (a push to main or staging, a manual run), a commit that is not a full commit id, a history without a merge base (with the base or with main), a main that is not there, a
+# pull request (a push to main, a manual run), a commit that is not a full commit id, a history without a merge base (with the base or with main), a main that is not there, a
 # failing git and a pull request with no changed file are full too.
 #
 # Why main too: a pull request that is retargeted starts no new run, so a verdict that depends on the base would stay as it was made. The change is therefore also judged against main (MAIN_REF,

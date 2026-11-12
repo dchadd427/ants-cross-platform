@@ -827,12 +827,14 @@ class ThePage(unittest.TestCase):
 
     def test_the_scripts_are_loaded_in_their_order_with_the_core_first_and_the_app_last(self):
         tags = re.findall(r'<script src="([^"]+)"></script>', self.page)
+        self.assertEqual(tags[-1], "site_nav.js", "the site bar's Menu comes after the editor's own scripts")
+        tags = tags[:-1]
         wanted = ["lvl_core.js", "lvl_core_api.js"] + ["front/" + name for name in SCRIPTS]
         self.assertEqual(sorted(tags), sorted(wanted), "the page loads these scripts and no other")
         order = [tags.index(name) for name in wanted]
         self.assertEqual(order, sorted(order), "the core first, then the helpers before the dialogs, the canvas and the app (the app last)")
         self.assertEqual(tags[-1], "front/mapmaker_app.js")
-        self.assertEqual(self.page.count("<script"), len(tags), "no inline script")
+        self.assertEqual(self.page.count("<script"), len(tags) + 1, "no inline script (and the site bar's)")
         self.assertLess(self.page.index("front/mapmaker_app.js"), self.page.index("</body>"))
 
     def test_every_id_that_the_code_asks_for_is_in_the_page_once(self):
@@ -1650,11 +1652,6 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertIn("COPY web/front/ /usr/share/nginx/html/front/", read("Dockerfile"))
         for name in ALL_SCRIPTS + ("mapmaker.css",):
             self.assertTrue(os.path.isfile(os.path.join(FRONT, name)), name)
-
-    def test_no_file_is_over_the_line_ceiling_of_the_hygiene_check(self):
-        for name in ALL_SCRIPTS + ("mapmaker.css",):
-            self.assertLess(len(read("web", "front", name).splitlines()), 1500, name)
-        self.assertLess(len(read("web", "mapmaker.html").splitlines()), 1500)
 
     def test_the_opt_in_browser_check_is_there_and_says_what_it_covers(self):
         script = read("tests", "scripts", "test_web_mapmaker.sh")

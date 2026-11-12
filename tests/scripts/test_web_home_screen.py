@@ -3,7 +3,7 @@
 
 The front page (web/lobby.html) is one page with one WebSocket: <body data-screen="home|room"> says whether Home (a top bar over the games, the players and the chat) or the Room (today's room card under a slim
 bar) shows, and going from one to the other is a class and one render of the page, never a request. Everything new is in web/home/ (home.js, home.css), whose size has a cap of its own because web/front/ is
-at its cap and web/lobby.html at its line limit.
+at its cap.
 
   - the page: the strips (the notices and the Rejoin button) are above both screens, Home's mount is before the Room, the stylesheet and the script are linked, the page opens on Home, a plain visit makes no
     room, the page calls Home from render(), from the hand-off to the game and from the dialog's inert;

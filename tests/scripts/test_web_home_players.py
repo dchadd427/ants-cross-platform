@@ -189,7 +189,7 @@ class TheStyle(unittest.TestCase):
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".pl-join", ".pl-host"):
+        for selector in (".pl-join",):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             if selector.startswith((".pl-card", ".pl-head", ".pl-you", ".pl-guests")):
