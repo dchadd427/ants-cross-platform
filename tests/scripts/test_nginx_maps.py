@@ -238,6 +238,13 @@ def free_port():
         return s.getsockname()[1]
 
 
+def dead_port():
+    """A port where nothing listens for as long as the returned socket is held: bound (nobody else can be given the port) and never listening, so a connect is refused. (socket, port)."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    return s, s.getsockname()[1]
+
+
 def start_nginx(work, write_conf, attempts=6, wait=15.0):
     """Start the program nginx on a free port and return (process, port) once THIS nginx listens there.
 
@@ -538,7 +545,8 @@ class TheListWithoutADoor(unittest.TestCase):
         try:
             for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp"):
                 os.makedirs(os.path.join(work, sub))
-            dead = free_port()
+            dead_sock, dead = dead_port()
+            self.addCleanup(dead_sock.close)
 
             def write_conf(port):
                 conf = os.path.join(work, "nginx.conf")

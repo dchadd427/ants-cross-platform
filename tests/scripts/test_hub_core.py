@@ -695,8 +695,10 @@ class TheNamesAreNotKeys(WorldTest):
         self.assertEqual([h["k"] for h in self.w.chat.welcome(self.reader)["history"]], [lines[0]["k"], lines[1]["k"]])
 
     def test_a_key_is_twelve_hex_digits_that_name_nobody_after_a_restart(self):
-        key = self.w.chat.key_of("1101")
+        self.w.chat.salt = b"test-salt-0"                       # (a fixed salt: the key is then one value, and "does not show the id" is a check of that value; with the random salt of a real start a key of hex digits
+        key = self.w.chat.key_of("1101")                        # could by chance hold the four digits of the id, which says nothing of whether the id can be read out of it)
         self.assertRegex(key, r"^[0-9a-f]{12}$")
+        self.assertEqual(key, "49a527f8f2b6")
         self.assertNotIn("1101", key)
         self.assertEqual(key, self.w.chat.key_of("1101"))
         self.assertNotEqual(key, self.w.chat.key_of("1102"))

@@ -760,11 +760,13 @@ void run_way_back_tests() {
         for (; away_ms < 4000; away_ms += 10) {
             w.run(10);
             if (away_ms >= 50) {
+                ASSERT_TRUE(w.wait_real([&]() { return b.net.pause_info().reconnecting; }));      // (the close of the link is read when the kernel hands it over, a pass or more later on a Mac: the game clock stands still until then)
                 ASSERT_FALSE(b.net.predicting());                                        // the machine knows that its link is gone: the confirmed engine is shown
                 ASSERT_TRUE(&b.net.view_engine() == &b.sim);
             }
             paused_ms = w.status("RJ-9").paused ? paused_ms + 10 : 0;
             if (paused_ms >= 200) {
+                ASSERT_TRUE(w.wait_real([&]() { return a.net.paused(); }));              // (the Presence that says it is read when the kernel hands it over: the game clock stands still until then)
                 ASSERT_FALSE(a.net.predicting());                                        // the others are told that a seat is missing: their runner is held
                 ASSERT_TRUE(&a.net.view_engine() == &a.sim);
             }
@@ -906,7 +908,10 @@ void run_way_back_tests() {
             });
             w.server.script_reason = net::RejectReason::BadRequest;
             w.server.door = Server::Door::Scripted;
+            const uint32_t scripted_before = w.server.scripted;
             ASSERT_TRUE(w.server.cut_newest());
+            ASSERT_TRUE(w.wait_real([&]() { return w.server.scripted > scripted_before; }));      // (the close is read, the way back's link is made and answered BadRequest in real time with the game clock standing still, and the machine is given the time to read the answer:
+            w.settle();                                                                  // a clock that ran meanwhile could make the second attempt, which is due two seconds on, before the answer is read)
             ASSERT_TRUE(w.run_until([&]() { return b.net.phase() == NetGame::Phase::Failed; }, 5000));
             ASSERT_EQ(calls, 2);
             ASSERT_TRUE(b.net.fail_reason() == NetGame::FailReason::Unreachable && b.saw(NetGame::Event::Type::Failed));
@@ -933,6 +938,7 @@ void run_way_back_tests() {
             return net::TcpConnection::connect("127.0.0.1", port);
         });
         ASSERT_TRUE(w.server.cut_newest());
+        ASSERT_TRUE(w.wait_real([&]() { return calls >= 1; }));                          // (the close is read when the kernel hands it over: the game clock stands still until then, so the attempt begins at the cut)
         w.run(1000);
         ASSERT_EQ(calls, 1);                                                             // the first attempt is at once
         w.run(1500);
@@ -1022,7 +1028,11 @@ void run_way_back_tests() {
             ASSERT_TRUE(w.run_until([&]() { return w.running({&a, &b}); }, 12000 + kPre));
             w.server.door = Server::Door::Refusing;
             ASSERT_TRUE(w.server.cut_newest());
-            ASSERT_TRUE(w.run_until([&]() { return w.server.refused >= 2; }, 8000));     // it tries again and again (every two seconds), and the door sees two of the links
+            ASSERT_TRUE(w.run_until([&]() { return w.server.refused >= 1; }, 5000));    // it tries again and again (every two seconds), and the door sees two of the links: each answer is read before the clock runs on to the next attempt
+            w.settle();                                                                  // (a machine that has not read the refusal is still at the Hello of its attempt, where the next one is not due)
+            w.run(2500);
+            ASSERT_TRUE(w.wait_real([&]() { return w.server.refused >= 2; }));
+            w.settle();
             ASSERT_TRUE(b.net.pause_info().reconnecting);
             const uint32_t made = b.net.pause_info().attempts;
             ASSERT_TRUE(w.wait_real([&]() { return w.server.refused >= made; }));        // (the door has seen every link that it made: the counts below start from there)

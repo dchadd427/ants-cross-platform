@@ -199,6 +199,14 @@ def free_port():
     return port
 
 
+def dead_port():
+    """A port where nothing listens, for as long as the caller holds the returned socket: it stays bound (so no other program can be given the port) but is never put in listen
+    state, so a connect to it is refused. Returns (socket, port); close the socket when done."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    return s, s.getsockname()[1]
+
+
 class Stand(quick_http.QuickThreadingHTTPServer):
     """A server that records the headers of what arrives and answers {"ok":true}."""
 
@@ -318,7 +326,8 @@ class TheBlocksRun(unittest.TestCase):
         self.stand = Stand()
         self.addCleanup(self.stand.server_close)
         self.addCleanup(self.stand.shutdown)
-        self.dead = free_port()
+        dead_sock, self.dead = dead_port()
+        self.addCleanup(dead_sock.close)
         site_port = free_port()
         self.site = "http://127.0.0.1:%d" % site_port
         self.fake = fd.FakeDiscord(self.site + "/hub/callback")
