@@ -199,7 +199,7 @@ class RateByAddress:
 
 
 class RateByAccount(RateByAddress):
-    """The same table of token buckets, one for each account id (the key is the id, not an address): what an account may do however many tabs it has open. A bucket that is full again is
+    """The same table of token buckets, one for each account (the key is whatever the caller names the account by: the account id for the switch of the name, the hub's own key of the account, never the id, for the moderators' budgets): what an account may do however many tabs it has open. A bucket that is full again is
     forgotten by forget_idle()."""
 
 

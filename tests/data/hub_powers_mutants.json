@@ -754,6 +754,27 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
   },
   {
+   "id": "a_refused_kick_spends_the_budget",
+   "file": "hub/chat.py",
+   "old": "        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"\n",
+   "new": "        if name == \"kick\":\n            self.named_limits.take(self.key_of(me.account_id), self.clock())\n        by, whom = self.ref(me.account_id), self.ref(target) if target is not None else \"\"\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
+   "id": "the_share_is_kept_by_the_id",
+   "file": "hub/chat.py",
+   "old": "self.wait_limits.take(self.key_of(peer.identity.account_id), self.clock())",
+   "new": "self.wait_limits.take(peer.identity.account_id, self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheFreshCheck tests.scripts.test_hub_powers.TheOfflineTarget"
+  },
+  {
+   "id": "the_budget_of_lines_is_kept_by_the_id",
+   "file": "hub/chat.py",
+   "old": "self.named_limits.take(self.key_of(by.account_id), self.clock())",
+   "new": "self.named_limits.take(by.account_id, self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_powers.TheNamedLine tests.scripts.test_hub_powers.TheCommands"
+  },
+  {
    "id": "the_burst_of_named_lines_is_changed",
    "file": "hub/limits.py",
    "old": "    named_lines_burst: int = 5 ",

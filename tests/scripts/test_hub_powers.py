@@ -461,6 +461,7 @@ class TheNamedLine(Powers):
         self.assertEqual(len(self.rows()), 60)                                                       # (and has its row in the log)
         self.assertEqual(len(system(self.reader)), limits.named_lines_burst)                         # (the lines for everybody are the budget)
         self.assertEqual(len(self.w.store.recent_lines(200)), limits.named_lines_burst)
+        self.assertEqual(set(self.w.chat.named_limits.buckets), {self.w.chat.key_of(ADMIN1.account_id)})   # (the budget is kept by the hub's key of the account, never by its id)
         self.say(self.mod, "/kick alice")                                                            # (another moderator has its own budget)
         self.assertEqual(len(system(self.reader)), limits.named_lines_burst + 1)
         self.w.wall.now += 100
@@ -478,6 +479,14 @@ class TheNamedLine(Powers):
         for name in ("alice", "moddy", "other.mod"):
             self.say(self.admin, "/ban " + name)
         self.assertEqual(len(system(self.reader)), 4)                                                # (all four bans have their line: nothing was spent by the refused ones)
+
+    def test_a_kick_that_is_refused_spends_nothing_of_the_budget(self):
+        for n in range(20):
+            self.say(self.admin, "/kick boss.two")                                                   # (an administrator: `power`)
+            self.say(self.admin, "/kick nobody")                                                     # (nobody: `who`)
+        for name in ("alice", "bob", "moddy", "other.mod", "boss.two"):
+            self.say(self.admin, "/kick " + name)
+        self.assertEqual(len(system(self.reader)), 4)                                                # (the four kicks that were done have their line; the 40 refused ones spent nothing)
 
     def test_a_refused_command_makes_no_line_at_all(self):
         for text in ("/kick nobody", "/ban boss.two", "/kick boss.one", "/ban bob extra", "/kick boss.two"):
@@ -774,6 +783,7 @@ class TheFreshCheck(FreshBase):
         self.assertEqual(codes.count("rate"), len(sockets) - 3)                                      # (`rate`: too fast; `role` is the answer of a role that could not be confirmed)
         self.assertEqual(len(self.w.store.mutes()), 3)                                           # (three commands waited for lookups; the others were refused at the door)
         self.assertEqual(sum(p.strikes for p in sockets), len(sockets) - 3)                          # (and a refusal of the share is a mistake of the socket)
+        self.assertEqual(set(self.w.chat.wait_limits.buckets), {self.w.chat.key_of(MODERATOR.account_id)})   # (the share is kept by the hub's key of the account, never by its id)
         asked_before = len(self.stub.calls)
         self.w.say(self.admin, "/mute user.11 5")                                                    # (another moderator: its own share is whole, and so is the hub's)
         await self.settle()
