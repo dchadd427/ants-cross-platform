@@ -18,6 +18,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -29,7 +30,8 @@ LOBBY = os.path.join(REPO, "web", "lobby.html")
 CHECK = os.path.join(SCRIPTS, "web_player_name_check.js")
 SPEC = os.path.join(REPO, "tests", "data", "player_name_mutants.json")
 NODE = shutil.which("node")
-SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 12500, 4300        # bytes, raw and gzipped (about 12,000 and 4,000): one script that all of the name needs, and nothing else belongs in it
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(path):
@@ -103,7 +105,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/player_name_mutants.json on a COPY of the files, one at a time: each must make its command fail (a command that exits non-zero), and the copy with nothing changed must
     pass, so that a failure is the change's. The whole list runs with tools/mutate.py; the quick tier runs the ones of QUICK (every rule has one) and keeps the list well made."""
 
-    FILES = ("web/front/player_name.js", "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js",
+    FILES = ("tools/size_limits.py", "web/front/player_name.js", "web/lobby.html", "web/shell.html", "web/front/lobby_rules.js", "web/front/lobby_net.js", "web/front/lobby_chat.js", "web/front/rematch.js", "web/front/game_modes.js", "web/front/game_type.js",
              "web/shapes.js", "web/home/home.js", "web/home/games.js", "tests/scripts/web_player_name_check.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js")
     QUICK = ("fit_without_nfkd", "fit_keeps_non_ascii", "fit_cuts_a_long_name", "fit_ignores_the_checker", "me_prefers_the_other_name", "me_guest_is_failed", "guest_five_digits", "guest_not_kept_in_storage",
              "login_not_asked_again", "guest_asked_again", "question_not_shared", "known_for_a_login", "no_limit_on_the_wait", "late_answer_is_heard", "not_found_is_a_failure", "request_without_the_cookie", "clock_called_as_a_method",
