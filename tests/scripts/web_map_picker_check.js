@@ -100,7 +100,7 @@ const RAW = {
 
 // ---- a small fake of the browser's DOM, enough for the picker ---------------------------------------------------------------------------------------------------------------------------------------
 class Node {
-    constructor(doc, tag) { this.doc = doc; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parentNode = null; this.className = ''; this.listeners = {}; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.offsetTop = 0; this.scrollTop = 0; this.isText = false; this.scrolled = 0; }
+    constructor(doc, tag) { this.doc = doc; this.tagName = tag.toUpperCase(); this.attrs = {}; this.children = []; this.parentNode = null; this.className = ''; this.listeners = {}; this._text = ''; this.hidden = false; this.disabled = false; this.value = ''; this.offsetTop = 0; this.offsetLeft = 0; this.scrollTop = 0; this.isText = false; this.scrolled = 0; }
     get textContent() { return this.isText ? this._text : this.children.map((c) => c.textContent).join(''); }
     set textContent(v) { this.children = []; if (String(v) !== '') { const t = this.doc.createTextNode(String(v)); t.parentNode = this; this.children.push(t); } }
     appendChild(c) { if (c.isFragment) { c.children.slice().forEach((k) => this.appendChild(k)); c.children = []; return c; } c.parentNode = this; this.children.push(c); return c; }
@@ -341,13 +341,28 @@ function rig(options) {
         const r = rig();
         r.picker.open('TINY.LVL'); await settle();
         r.btn('Thumbnails').dispatch('click');
-        r.rows().forEach((n, i) => { n.offsetTop = Math.floor(i / 3) * 100; });       // three in a row
+        r.rows().forEach((n, i) => { n.offsetTop = Math.floor(i / 3) * 100; n.offsetLeft = (i % 3) * 100; });       // three in a row
         r.rows()[0].dispatch('click');
         const key = (k) => r.out().dispatch('keydown', { key: k });
         key('ArrowRight'); same('ArrowRight in the grid goes to the next map', r.sel(), ['TREASURE.LVL']);
         key('ArrowDown'); same('ArrowDown goes down a row (three on)', r.sel(), ['Zebra.lvl']);
         key('ArrowLeft'); same('ArrowLeft goes back', r.sel(), ['apple.lvl']);
         key('ArrowUp'); same('ArrowUp goes up a row', r.sel(), ['TINY.LVL']);
+    }
+    // 5b. the grid under two headings: Up and Down keep the column across them (the rows of the two do not line up)
+    {
+        const r = rig();
+        r.picker.open('TINY.LVL'); await settle();
+        r.btn('Thumbnails').dispatch('click');
+        const at = [[0, 0], [0, 100], [100, 0], [100, 100], [100, 200], [200, 0], [200, 100]];       // Tiny Treasure | Mango apple Zebra | Alpha Dune
+        r.rows().forEach((n, i) => { n.offsetTop = at[i][0]; n.offsetLeft = at[i][1]; });
+        r.rows()[1].dispatch('click');
+        const key = (k) => r.out().dispatch('keydown', { key: k });
+        key('ArrowDown'); same('Down from the second original goes to the second of the next row (across the headings)', r.sel(), ['apple.lvl']);
+        key('ArrowDown'); same('Down again keeps the column', r.sel(), ['Dune.lvl']);
+        key('ArrowDown'); same('Down on the last row stays on the last map', r.sel(), ['Dune.lvl']);
+        key('ArrowUp'); key('ArrowUp'); same('Up goes back up through the headings by the column', r.sel(), ['TREASURE.LVL']);
+        key('ArrowUp'); same('Up on the first row goes to the first map', r.sel(), ['TINY.LVL']);
     }
     // 6. a list that cannot be had: the message, the way out, the retry
     {
@@ -518,6 +533,28 @@ function rig(options) {
         const coarse = rig({ coarse: true }); coarse.picker.open(''); await settle();
         check('on a touch screen the dialog has the focus and no keyboard comes up', coarse.doc.activeElement === coarse.host && coarse.doc.activeElement !== coarse.host.querySelector('.pk-q'));
     }
+    // 14b. the list is on its way (no answer yet): the six originals are there at once and can be chosen; the list, when it comes, keeps the pick
+    {
+        let come;
+        const r = rig({ room: 'Zebra.lvl', answer: () => new Promise((f) => { come = f; }) });
+        r.picker.open('Zebra.lvl'); await settle();
+        same('while the list loads the note and the six originals (the page\'s table) are shown, with no play counts', [/Loading the maps/.test(r.out().textContent), r.names(), r.rows().map((n) => !!n.querySelector('.pk-pl')), r.picker.status()], [true, ['Tiny', 'Treasure'], [false, false], 'loading']);
+        check('the list says what it is for a screen reader', r.out().querySelector('.pk-sec').attrs.role === 'listbox');
+        r.rows()[1].dispatch('click'); r.btn('Choose map').dispatch('click');
+        same('an original can be chosen while the list loads', [r.log.chosen, r.overlay.hidden], [['TREASURE.LVL'], true]);
+        r.picker.open('Zebra.lvl');
+        same('the room\'s own map, not among the six, is not picked and Choose map is off', [r.sel(), r.btn('Choose map').disabled], [[], true]);
+        come(response(RAW)); await settle();
+        same('when the list comes the room\'s map is picked again', [r.sel(), r.rows().length, r.picker.status()], [['Zebra.lvl'], 7, 'ready']);
+        const fine = rig({ room: 'Zebra.lvl' }); fine.picker.open('Zebra.lvl'); await settle();
+        check('a name reads with a space before the tag', fine.rows()[0].querySelector('.pk-nm').children.map((c) => c.textContent).join('') === 'Tiny Original', fine.rows()[0].querySelector('.pk-nm').children.map((c) => c.textContent).join('|'));
+    }
+    // 14c. Thumbnails of the six from the page's table carry no made-up play counts
+    {
+        const r = rig({ storage: { getItem: () => 'thumbs', setItem() {} }, answer: () => Promise.reject(new Error('offline')) });
+        r.picker.open(''); await settle();
+        same('Thumbnails of the fallback: the six, and no play count under them', [r.names(), r.rows().map((n) => !!n.querySelector('.pk-meta'))], [['Tiny', 'Treasure'], [false, false]]);
+    }
     // 15. one list for everything: the headings, the room's map marked, the preview of the picked map, the originals when the list cannot be had, the facts of the map card
     {
         const r = rig({ room: 'Zebra.lvl' });
@@ -540,6 +577,8 @@ function rig(options) {
         r.rows()[1].dispatch('click');
         same('and follows a pick: an original says it was shipped with the game', pane(), ['TreasureOriginal', 'Shipped with the game \u00b7 4 players \u00b7 10 min \u00b7 60\u00d760 \u00b7 90 plays', "One person's trash"]);
         same('its picture is the map\'s own', r.host.querySelector('.pk-pic').attrs.src, '/front/preview_treasure.png');
+        q.value = 'zzzz'; q.dispatch('input'); r.fire(120);
+        check('a search that finds nothing leaves the preview empty too', /pk-none/.test(r.host.querySelector('.pk-pane').className) && r.host.querySelector('.pk-pn').textContent === '');
         q.value = 'dune'; q.dispatch('input'); r.fire(120);
         check('a pick that a search hides leaves the preview empty', /pk-none/.test(r.host.querySelector('.pk-pane').className) && r.host.querySelector('.pk-pn').textContent === '' && r.host.querySelector('.pk-pic').attrs.src === undefined);
         // the list cannot be had: the six originals from the page's table can still be chosen

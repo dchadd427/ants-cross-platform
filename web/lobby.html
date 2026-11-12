@@ -797,7 +797,7 @@
             if (side.mapFile) { warmMap(side.mapFile); if (window.AntsMapPicker && (!picker || picker.status() !== 'ready')) ensurePicker().load(); }
             setText($('info'), side.mapInfo);
             if (side.mapDisabled && picker && picker.isOpen()) picker.close();       // (the room changed hands, or START was pressed, while the list was open)
-            $('change-map').disabled = side.mapDisabled; $('change-map').hidden = !window.AntsMapPicker || !model || !!model.guest;      // (a guest sees the card without the button)
+            $('change-map').disabled = side.mapDisabled; $('change-map').hidden = !model || !!model.guest;      // (a guest sees the card without the button)
             var start = $('start');
             start.disabled = side.startDisabled;
             start.setAttribute('aria-busy', String(side.startBusy));
@@ -1024,7 +1024,7 @@
             else if (!known) warmMap(entry.file);
         }
         function paintMapCard(side) {                    // the map card's name and its chips (what the list knows of the map, once it has the list)
-            var e = picker && model && model.mapFile ? picker.find(model.mapFile) : null;
+            var e = picker && model && model.mapFile && !side.mapKey ? picker.find(model.mapFile) : null;       // (an original shows its kind only, with or without the list)
             setText($('map-name'), side.mapName);
             if (!window.AntsMapPicker) return;
             var facts = $('map-facts'), now = AntsMapPicker.factsOf(e, !side.mapKey);
@@ -1032,8 +1032,14 @@
             facts.setAttribute('data-facts', now.join('|')); facts.textContent = '';
             now.forEach(function (t, i) { facts.appendChild(el('span', i ? '' : 'tag', t)); });
         }
-        $('change-map').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });
-        $('preview').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });       // (a tap on the picture does the same; the button is the keyboard's and the screen reader's way)
+        function changeMap() {            // (the list; when front/map_picker.js did not load, the next of the six originals)
+            if (!isHost()) return;
+            if (window.AntsMapPicker) { ensurePicker().open(model.mapFile); return; }
+            var at = Rules.MAPS.indexOf(Rules.mapOfFile(model.mapFile));
+            chooseMap(Rules.MAPS[(at + 1) % Rules.MAPS.length]);
+        }
+        $('change-map').addEventListener('click', changeMap);
+        $('preview').addEventListener('click', changeMap);       // (a tap on the picture does the same; the button is the keyboard's and the screen reader's way)
 
         $('start').addEventListener('click', function () {
             if (!client || !model || model.guest || model.starting || offline) return;

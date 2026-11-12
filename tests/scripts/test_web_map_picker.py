@@ -43,19 +43,21 @@ class ThePage(unittest.TestCase):
             self.assertFalse(gone in self.page, gone)
         self.assertTrue('aria-haspopup="dialog"' in self.page)
         self.assertTrue('role="dialog" aria-modal="true"></div></div>' in self.page)                        # (the picker names it by its heading: aria-labelledby)
-        self.assertTrue("$('change-map').disabled = side.mapDisabled; $('change-map').hidden = !window.AntsMapPicker || !model || !!model.guest;" in self.page)      # (START pressed or the connection lost: off; a guest sees the card without the button)
-        self.assertTrue("$('change-map').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });" in self.page)
-        self.assertTrue("$('preview').addEventListener('click', function () { if (isHost()) ensurePicker().open(model.mapFile); });" in self.page)      # (a tap on the picture does the same)
+        self.assertTrue("$('change-map').disabled = side.mapDisabled; $('change-map').hidden = !model || !!model.guest;" in self.page)      # (START pressed or the connection lost: off; a guest sees the card without the button)
+        self.assertTrue("$('change-map').addEventListener('click', changeMap);" in self.page)
+        self.assertTrue("$('preview').addEventListener('click', changeMap);" in self.page)      # (a tap on the picture does the same)
+        self.assertTrue("if (window.AntsMapPicker) { ensurePicker().open(model.mapFile); return; }" in self.page)      # (the script did not load: no ReferenceError, and the button steps through the six originals)
+        self.assertTrue("chooseMap(Rules.MAPS[(at + 1) % Rules.MAPS.length]);" in self.page)
 
     def test_the_card_says_the_kind_and_what_the_list_knows_of_the_map_and_nothing_more(self):
-        self.assertTrue("var e = picker && model && model.mapFile ? picker.find(model.mapFile) : null;" in self.page)
+        self.assertTrue("var e = picker && model && model.mapFile && !side.mapKey ? picker.find(model.mapFile) : null;" in self.page)      # (an original shows its kind only, with or without the list)
         self.assertTrue("now = AntsMapPicker.factsOf(e, !side.mapKey);" in self.page)
         self.assertTrue("if (!m) return [community ? \"Players' map\" : 'Original'];" in self.script)             # (no entry yet: only the kind)
         self.assertTrue("if (m.players) out.push(" in self.script and "if (m.minutes) out.push(" in self.script and "if (m.width && m.height) out.push(" in self.script)      # (a number the list does not have is not shown)
         self.assertTrue("room: function () { return model ? model.mapFile : ''; }, originals: Rules.MAPS });" in self.page)
 
     def test_the_list_has_two_headings_marks_the_rooms_map_and_has_a_preview_pane(self):
-        for needle in ("title: 'The six originals'", "title: \"Players' maps\"", "'In this room'", "'pk-badge pk-here'", "parts.pane = el('div', 'pk-pane')", "'The map picked'"):
+        for needle in ("title: 'The six originals'", "title: \"Players' maps\"", "'In this room'", "tag(' pk-here', 'In this room')", "parts.pane = el('div', 'pk-pane')", "'The map picked'"):
             self.assertIn(needle, self.script, needle)
         for needle in (".pk-pane { display: none; }", "@media (min-width: 721px), (min-width: 560px) and (max-height: 500px) {", ".pk-foot { display: contents; }", ".pk-pane.pk-none > * { visibility: hidden; }",
                        ".pk-badge.pk-here {", "@media (max-height: 500px) and (min-width: 560px) {"):
@@ -79,7 +81,7 @@ class ThePage(unittest.TestCase):
         self.assertTrue("known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })" in self.page)
         self.assertTrue("canOpen: isHost, canChoose: isHost" in self.page)
         self.assertTrue("AntsMapFiles.warm(window, file)" in self.page)
-        self.assertTrue("if (isHost()) ensurePicker().open(model.mapFile);" in self.page)
+        self.assertTrue("function changeMap() {" in self.page and "if (!isHost()) return;" in self.page)
 
     def test_the_list_is_fetched_once_and_a_failure_still_offers_the_six_originals(self):
         self.assertEqual(len(re.findall(r"opts\.fetch\('/maps/all'", self.script)), 1)
@@ -153,7 +155,17 @@ class ThePickersOwnCode(unittest.TestCase):
             "the preview does not follow a pick": ("            paintPane();\n        }\n        // the preview beside the list", "        }\n        // the preview beside the list"),
             "the preview shows a map that a search hides": ("var m = pickedIndex() >= 0 ? lookup(picked) : null;", "var m = lookup(picked);"),
             "the preview has no description": ("parts.pdesc.textContent = m ? m.description : '';", "parts.pdesc.textContent = '';"),
-            "the list that cannot be had shows no original": ("shown = fallback().slice(); if (!fb[picked]) picked = '';", "shown = []; picked = '';"),
+            "the list that cannot be had shows no original": ("shown = fallback().slice(); if (status === 'error' && !fb[picked]) picked = '';", "shown = []; picked = '';"),
+            "the six are not shown while the list loads": ("if (status !== 'ready') {      //", "if (status === 'error') {      //"),
+            "the six are not chosen while the list loads": ("(status !== 'ready' && fb && fb[file])", "(status === 'error' && fb && fb[file])"),
+            "the room's own map is dropped while the list loads": ("if (status === 'error' && !fb[picked]) picked = '';", "if (!fb[picked]) picked = '';"),
+            "the fallback list has no name for a screen reader": ("sectionsOf([{ title: '', items: shown }], 'The six originals');", "sectionsOf([{ title: '', items: shown }]);"),
+            "Thumbnails of the fallback show made-up plays": ("if (!m.bare) body.appendChild(el('div', 'pk-meta', playsText(m.plays)", "if (true) body.appendChild(el('div', 'pk-meta', playsText(m.plays)"),
+            "the preview keeps the old map when a search finds nothing": ("parts.out.appendChild(e); paintPane(); return; }", "parts.out.appendChild(e); return; }"),
+            "Down in the grid steps by a fixed count": ("i = grid ? across(i, 1) : i + 1;", "i += step;"),
+            "Up in the grid steps by a fixed count": ("i = grid ? across(i, -1) : i - 1;", "i -= step;"),
+            "the grid's next row is the nearest by the right edge": ("Math.abs(n[j].offsetLeft - c.offsetLeft) < Math.abs(n[b].offsetLeft - c.offsetLeft)", "n[j].offsetLeft > n[b].offsetLeft"),
+            "a tag runs into the name": ("nm.appendChild(doc.createTextNode(' ')); nm.appendChild(el('span', 'pk-badge' + cls, t));", "nm.appendChild(el('span', 'pk-badge' + cls, t));"),
             "a map of the fallback shows made-up plays": ("if (!m.bare) { var pl", "if (true) { var pl"),
             "the preview of the fallback shows made-up plays": ("if (!m.bare) facts.push(", "facts.push("),
             "a map of the fallback cannot be chosen": ("var m = lookup(picked);\n            if (!m) return;", "var m = byFile[picked];\n            if (!m) return;"),
@@ -173,14 +185,14 @@ class ThePickersOwnCode(unittest.TestCase):
             "the server's list is not asked": ("        if (list) {\n            var low = null;", "        if (false) {\n            var low = null;"),
             "the first spelling in another case beats the exact one": ("if (list[i].file.replace(/\\.lvl$/i, '') === base) return list[i].original ? '' : list[i].thumb;", "if (false) return '';"),
             "a map without a picture on the server gets a guessed address": ("return list[i].original ? '' : list[i].thumb;", "return list[i].thumb || previewPath(map);"),
-            "an Extended map has no badge": ("else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));", ""),
-            "a heavy map is not marked": ("if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));", ""),
-            "every map is marked as heavy": ("if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));", "nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));"),
+            "an Extended map has no badge": ("else if (m.kind === 'extended') tag(' pk-ext', 'Extended');", ""),
+            "a heavy map is not marked": ("else if (m.heavy) tag(' pk-heavy', HEAVY_TEXT);", ""),
+            "every map is marked as heavy": ("else if (m.heavy) tag(' pk-heavy', HEAVY_TEXT);", "else tag(' pk-heavy', HEAVY_TEXT);"),
             "the flag is not read from the list": ("heavy: m.heavy === true", "heavy: false"),
             "a map with no flag is heavy": ("heavy: m.heavy === true", "heavy: m.heavy !== false"),
             "the warning says the map is refused": ("var HEAVY_TEXT = 'Many ants: may run slowly';", "var HEAVY_TEXT = 'Too many ants for an online game';"),
-            "a map over the cap of ants is not marked": ("if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            else if (m.heavy)", "if (m.heavy)"),
-            "a map over the cap of ants has both chips": ("if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            else if (m.heavy)", "if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            if (m.heavy)"),
+            "a map over the cap of ants is not marked": ("if (m.tooManyAnts) tag(' pk-heavy', TOO_MANY_TEXT); else if (m.heavy)", "if (m.heavy)"),
+            "a map over the cap of ants has both chips": ("if (m.tooManyAnts) tag(' pk-heavy', TOO_MANY_TEXT); else if (m.heavy)", "if (m.tooManyAnts) tag(' pk-heavy', TOO_MANY_TEXT); if (m.heavy)"),
             "the reason is read without the refusal": ("m.online === false && m.online_why === 'ants'", "m.online_why === 'ants'"),
             "any refused map is marked as too many ants": ("m.online === false && m.online_why === 'ants'", "m.online === false"),
             "the chip says the game is slow": ("var TOO_MANY_TEXT = 'Too many ants to play online';", "var TOO_MANY_TEXT = 'Many ants: may run slowly';"),

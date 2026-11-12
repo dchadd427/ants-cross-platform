@@ -1,9 +1,7 @@
-// The front page's map picker (docs/PLAY_IN_BROWSER.md "Choosing a map"): the list of the maps that the game server offers (GET /maps: the six originals and the players' maps, with a preview picture and how
-// often each was played), shown as a Detail list or a Thumbnails grid, with a search over name and description and four sorts; in the default sort under two headings, The six originals and Players' maps, with
-// the room's map marked In this room, and on a wide screen next to a preview of the map that is picked. The page opens it from the map card's Change map button; choosing a map hands the entry to the page, which
-// sets the room's map. A list that cannot be had still shows the six originals, from the page's own table (opts.originals).
-//   * ES5 and no module system, as the site's other scripts: a page gets the global AntsMapPicker, node gets module.exports (tests/scripts/web_map_picker_check.js runs it, the pure functions on tables and the
-//     whole picker with a small fake of the browser's DOM).
+// The front page's map picker (docs/PLAY_IN_BROWSER.md "Choosing a map"): the maps that the game server offers (GET /maps/all), as a Detail list or a Thumbnails grid, with a search and four sorts, under two
+// headings by default, the room's map marked In this room, and on a wide screen a preview of the map that is picked. The map card's Change map button opens it; choosing a map hands the entry to the page. Until
+// the list is there, and when it cannot be had, the six originals are shown from the page's own table (opts.originals).
+//   * ES5 and no module system: a page gets the global AntsMapPicker, node gets module.exports (tests/scripts/web_map_picker_check.js).
 //   * Nothing a server says is ever written as markup: names, descriptions and addresses are set as text or as an attribute of an element made here.
 (function (root, factory) {
     var api = factory();
@@ -54,8 +52,7 @@
         if (!validMapFile(file) || ORIGINALS.test(file)) return '';
         return ownPath('/maps/previews/' + percentEncode(base) + '.webp');
     }
-    // The picture of the map that a match record names, from the list that parseList made (null while it is not known): the list's own entry says what the server serves (the record may spell the name in another
-    // case, and the server may have no picture for it: then none); a map the list does not hold has the address that its name makes
+    // The picture of the map that a match record names, from the list that parseList made (null while not known): the list's own entry says what the server serves; a map not in the list has the address its name makes
     function thumbFor(map, list) {
         if (typeof map !== 'string') return '';
         var base = map.replace(/\.lvl$/i, ''), file = base + '.lvl';
@@ -120,9 +117,9 @@
     var TOO_MANY_TEXT = 'Too many ants to play online';
     function playsText(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
     function metaText(m) { return m.original ? 'Shipped with the game' : m.players + ' players · ' + m.minutes + ' min · ' + m.width + '×' + m.height; }
-    // The Map Info line of a map of the players, as the selector shows it under the picture
+    // The Map Info line of a map of the players
     function infoText(m) { return (m.description ? m.description + ' ' : '') + '(' + m.minutes + ' min)'; }
-    // The chips of the map card and the facts of the preview: what kind of map it is, then the players, minutes and size that the list knows (an entry that is not known yet: only the kind; `community` says which)
+    // The chips of the map card and the facts of the preview: the kind, then the players, minutes and size that the list knows (no entry: only the kind)
     function factsOf(m, community) {
         if (!m) return [community ? "Players' map" : 'Original'];
         var out = [m.original ? 'Original' : m.kind === 'extended' ? 'Extended' : "Players' map"];
@@ -137,9 +134,8 @@
     }
     function remember(storage, v) { try { if (storage) storage.setItem(VIEW_KEY, v); } catch (e) { /* the choice is for this visit only */ } }
 
-    // opts: { host (the dialog's panel; its parent is the overlay that is shown and hidden), doc, fetch, storage, setTimeout, clearTimeout, AbortController, now, matchMedia,
-    //         canOpen() and canChoose() (the host of the room, START not pressed: asked when the list opens and again when a map is chosen), onChoose(entry), onList(), onOpen(), onClose(),
-    //         room() (the file of the room's map: it is marked In this room), originals (the page's table of the six: { key, name, file, info }, shown when the list cannot be had) }
+    // opts: { host (the dialog's panel; its parent is the overlay), doc, fetch, storage, setTimeout, clearTimeout, AbortController, now, matchMedia, canOpen() and canChoose() (the host, START not pressed:
+    //         asked when the list opens and when a map is chosen), onChoose(entry), onList(), onOpen(), onClose(), room() (the room's map file: marked In this room), originals (the page's six: { key, name, file, info }) }
     function create(opts) {
         var doc = opts.doc, host = opts.host;
         var later = opts.setTimeout || function (f, ms) { return setTimeout(f, ms); }, unlater = opts.clearTimeout || function (t) { clearTimeout(t); };
@@ -152,7 +148,7 @@
         // a file name as the list has it (the room may say it in another case)
         function canon(file) { return byFile[file] ? file : byLower[String(file || '').toLowerCase()] ? byLower[String(file).toLowerCase()].file : file; }
         function find(file) { return byFile[file] || byLower[String(file || '').toLowerCase()] || null; }
-        // the six originals as entries, from the page's own table: what the list shows when the server's list cannot be had (no play counts: the page has none)
+        // the six originals as entries, from the page's own table (no play counts: the page has none)
         function fallback() {
             if (!fb) {
                 fb = {};
@@ -163,7 +159,7 @@
             }
             return fbList;
         }
-        function lookup(file) { return byFile[file] || (status === 'error' ? fb && fb[file] : null) || null; }
+        function lookup(file) { return byFile[file] || (status !== 'ready' && fb && fb[file]) || null; }
 
         function build() {
             host.textContent = '';
@@ -235,9 +231,20 @@
             for (var i = 0; i < nodes.length && nodes[i].offsetTop === top; i++) n++;
             return Math.max(1, n);
         }
+        // Up and Down in the grid: the item of the next row whose left edge is nearest (the two headings' rows do not line up)
+        function across(i, d) {
+            var n = items(), c = n[i], b = -1, row = -1;
+            for (var j = i + d; c && j >= 0 && j < n.length; j += d) {
+                var t = n[j].offsetTop;
+                if (t === c.offsetTop) continue;
+                if (row < 0) row = t; else if (t !== row) break;
+                if (b < 0 || Math.abs(n[j].offsetLeft - c.offsetLeft) < Math.abs(n[b].offsetLeft - c.offsetLeft)) b = j;
+            }
+            return b < 0 ? (c && d > 0 ? n.length - 1 : 0) : b;
+        }
         function onListKey(e) {
-            var i = pickedIndex(), step = perRow(), k = e.key;
-            if (k === 'ArrowDown') i += step; else if (k === 'ArrowUp') i -= step;
+            var i = pickedIndex(), step = perRow(), k = e.key, grid = view === 'thumbs';
+            if (k === 'ArrowDown') i = grid ? across(i, 1) : i + 1; else if (k === 'ArrowUp') i = grid ? across(i, -1) : i - 1;
             else if (k === 'ArrowRight' && view === 'thumbs') i += 1; else if (k === 'ArrowLeft' && view === 'thumbs') i -= 1;
             else if (k === 'Home') i = 0; else if (k === 'End') i = shown.length - 1;
             else if (k === 'PageDown') i += 8 * step; else if (k === 'PageUp') i -= 8 * step;
@@ -281,11 +288,10 @@
             } else d.appendChild(el('span', 'pk-nopic'));
             var body = el('div', 'pk-body');
             var nm = el('div', 'pk-nm', m.name);
-            if (m.original) nm.appendChild(el('span', 'pk-badge', 'Original'));
-            else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));
-            if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));
-            else if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));
-            if (here && m.file === here) { nm.appendChild(el('span', 'pk-badge pk-here', 'In this room')); d.className += ' here'; }
+            function tag(cls, t) { nm.appendChild(doc.createTextNode(' ')); nm.appendChild(el('span', 'pk-badge' + cls, t)); }      // (a space before each, so a screen reader says "Treasure Original")
+            if (m.original) tag('', 'Original'); else if (m.kind === 'extended') tag(' pk-ext', 'Extended');
+            if (m.tooManyAnts) tag(' pk-heavy', TOO_MANY_TEXT); else if (m.heavy) tag(' pk-heavy', HEAVY_TEXT);
+            if (here && m.file === here) { tag(' pk-here', 'In this room'); d.className += ' here'; }
             body.appendChild(nm);
             if (!thumbs) {
                 body.appendChild(el('div', 'pk-meta', metaText(m)));
@@ -335,7 +341,7 @@
             if (frag !== parts.out) parts.out.appendChild(frag);
         }
 
-        // where the list stands afterwards: 'top' a search (a new list), 'picked' a sort or a view (the chosen row is brought into view, else the list stays where it was), '' nothing is moved
+        // afterwards: 'top' a search, 'picked' a sort or a view (the chosen row is brought into view), '' nothing is moved
         function paint(where) {
             var was = parts.out.scrollTop || 0;
             parts.vD.setAttribute('aria-pressed', String(view === 'detail')); parts.vT.setAttribute('aria-pressed', String(view === 'thumbs'));
@@ -344,13 +350,14 @@
             parts.out.removeAttribute('role'); parts.out.removeAttribute('aria-label');
             parts.out.className = 'pk-out';
             parts.go.disabled = true;
-            if (status === 'loading' || status === 'idle') { parts.out.appendChild(el('p', 'pk-note', 'Loading the maps\u2026')); parts.count.textContent = ''; shown = []; paintPane(); return; }
-            if (status === 'error') {
-                var p = el('div', 'pk-note pk-err');
-                p.appendChild(el('p', '', 'The full list of maps is not available right now. The six original maps can still be chosen here.'));
-                var r = button('btn sm', 'Try again'); r.setAttribute('data-retry', '1'); p.appendChild(r);
+            if (status !== 'ready') {      // (no list yet, or none to be had: the six originals are there at once, under the note)
+                var p = el('div', status === 'error' ? 'pk-note pk-err' : 'pk-note');
+                if (status === 'error') {
+                    p.appendChild(el('p', '', 'The full list of maps is not available right now. The six original maps can still be chosen here.'));
+                    var r = button('btn sm', 'Try again'); r.setAttribute('data-retry', '1'); p.appendChild(r);
+                } else p.appendChild(el('p', '', 'Loading the maps\u2026'));
                 parts.out.appendChild(p); parts.count.textContent = '';
-                shown = fallback().slice(); if (!fb[picked]) picked = '';
+                shown = fallback().slice(); if (status === 'error' && !fb[picked]) picked = '';
                 sectionsOf([{ title: '', items: shown }], 'The six originals');
                 parts.go.disabled = pickedIndex() < 0; paintPane(); return;
             }
@@ -373,8 +380,7 @@
             }
         }
 
-        // The list: asked for once for the visit. A try ends in 12 s at the latest (a stuck connection is a failure with Try again, never a list that loads for ever); `again` is a person's retry, a soft ask
-        // (the page needing the list for a map in the room) waits 15 s after a failure
+        // The list: asked for once for the visit; a try ends in 12 s at the latest (Try again); `again` is a person's retry, a soft ask waits 15 s after a failure
         function load(again) {
             if (status === 'ready' && !again) return;
             if (status === 'loading' && !again) return;

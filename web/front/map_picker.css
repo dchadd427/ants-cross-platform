@@ -34,7 +34,7 @@
 }
 @media (max-height: 500px) and (min-width: 560px) {      /* a phone on its side: everything above the list is one slim row each, and the picture is small */
     .pickhow .panel { padding: 8px 12px; grid-template-columns: minmax(0, 1fr) 170px; } .pickhow .panel > .head { margin-bottom: 4px; } .pickhow .panel h2 { font-size: 18px; margin: 0; }
-    .pickhow .panel > .pk-bar { flex-wrap: nowrap; margin-bottom: 4px; } .pk-q { flex-basis: 0; min-height: 40px; } .pk-bar .pk-chip, .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { margin-bottom: 4px; }
+    .pickhow .panel > .pk-bar { flex-wrap: nowrap; margin-bottom: 4px; } .pk-q { flex-basis: 0; min-height: 44px; } .pk-bar .pk-chip { min-height: 44px; } .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { margin-bottom: 4px; }
     .pickhow .panel > .pk-fine { margin: 2px 0 0; font-size: 12px; } .pk-count { margin-top: 4px; font-size: 13px; } .pk-foot .btn { margin-top: 4px; min-height: 44px; }
     .pk-pic { max-width: 96px; margin-bottom: 6px; } .pk-pn { font-size: 20px; } .pk-pd { font-size: 14px; } .pk-h { font-size: 12px; padding-top: 6px; }
 }

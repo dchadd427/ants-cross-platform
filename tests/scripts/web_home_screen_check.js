@@ -484,6 +484,22 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
         const c = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => now({ ok: true, json: () => list }) });
         c.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { map: 'BackYard.lvl' } });
         same('a players\' map: its name, its picture, and chips with what the list knows (kind, players, minutes, size)', [c.$('map-name').textContent, c.$('preview').src, c.$('map-facts').children.map((x) => x.textContent)], ['BackYard', '/maps/previews/BackYard.webp', ["Players' map", '4 players', '12 min', '60\u00d750']]);
+        // an original's chips are its kind only, whether or not this page has the list (the host who has opened it, a guest and the approved picture show the same card)
+        const known = { format: 2, maps: [{ file: 'TREASURE.LVL', original: true, width: 60, height: 60, minutes: 12, players: 4, description: 'x', plays: 3, thumb: '/front/preview_treasure.png' }, { file: 'BackYard.lvl', width: 60, height: 50, minutes: 12, players: 4, description: 'A yard', plays: 5, thumb: '/maps/previews/BackYard.webp' }] };
+        const o = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => now({ ok: true, json: () => known }) });
+        o.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        o.$('change-map').click();      // (the host opens the list, which is when the page gets it for a room on an original; then closes it with no choice)
+        o.doc.listeners.keydown.forEach((fn) => fn({ key: 'Escape', preventDefault() {} }));
+        same('an original with the list loaded: its kind only', [o.$('map-name').textContent, o.$('map-facts').children.map((x) => x.textContent)], ['Treasure', ['Original']]);
+        // the list's script did not load: no error, the button is there, and a press steps to the next of the six originals (Treasure, then Islands)
+        const n = runLobby('', { 'ants.name': 'Maya' }, {});
+        n.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        const before = n.last().sent.length;
+        let thrown = '';
+        try { n.$('change-map').click(); n.$('preview').click(); } catch (e) { thrown = String(e); }
+        const plans = n.last().sent.slice(before).filter((b) => b[0] === NET0.MSG.Plan);
+        same('without the list\'s script: the button is on and no error', [thrown, n.$('change-map').hidden, n.$('change-map').disabled], ['', false, false]);
+        check('and each press (the button, the picture) sends one Plan for Islands', plans.length === 2 && plans.every((b) => String.fromCharCode.apply(null, b.slice(2, 2 + b[1])).toLowerCase().indexOf('islands') !== -1), plans.map((b) => Array.from(b).join(',')).join(' | '));
     }
 }
 
