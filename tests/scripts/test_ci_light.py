@@ -9,8 +9,10 @@ The rules are the ones that docs/WORKFLOW.md states; what these tests hold:
     listed here with who reads them, and a scan of the sources finds a read that is not listed);
   - what is compared is the pull request's own change (against the MERGE BASE: a base that moved on, with a change of its own, does not make the pull request full), a renamed file counts under
     both names (a source file renamed into docs/ is full), a deleted file counts;
-  - the change is also compared with the branch main (the remote branch origin/main), whatever the base is: a pull request that is retargeted starts no new run, so a pull request against another
-    branch that carries code which main lacks must not come out light; no main to compare with is full;
+  - the change is compared with the pull request's OWN base only (the base commit that the run is given), not with main: a pull request against a branch that holds code which main lacks is judged
+    by what it adds to that branch; the workflow runs again when a pull request is edited (a new base branch is an edit), and the run then has the new base commit;
+  - a table of change types (documents, pages, the hub, python tests, nginx and compose files, C++ sources, CMake, the workflow and the tools) gives the answer for each and the jobs of the workflow
+    that run for it (TheChangeTypes);
   - anything that is not a pull request with two full commit ids and at least one changed file is full, and the script never fails (a failing git is full);
   - the log cannot be made to carry a workflow command (a path is printed quoted, after a word), and the commit ids are only taken from the environment.
 """
@@ -18,6 +20,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -64,6 +67,33 @@ FULL = ["VERSION", "CMakeLists.txt", "cmake/x.cmake", "src/ants_sim/a.cpp", "inc
         "tests/scripts/sub/test_web_x.py", "tests/scripts/README", "tests/scripts/test_web_x.txt.orig/y", "tests/data/pbkdf2_vectors.json", "tests/data/game_menu_match.json", "tests/data/x.csv",
         "tests/data/lvl_core/x_mutants.json", "tests/data/sub/x_mutants.json", "tests/data/mutants.json", "tests/data/x_mutants.json.bak", "webx/a.js", "docsx/a.md", "README.md.old",
         "CHANGELOG.md/x", "x/web/a.js", "x/docs/a.md", "Web/a.js", "DOCS/a.md", "asset_catalog/x.png", "tools/web/x.js", "tests/scripts/mini_websocket.js"] + sorted(NATIVE_READS)
+
+
+# What each kind of change does in the workflow: the files of a typical pull request of that kind, the answer of the script, and the jobs of the workflow that then do NOT run (the others run).
+# macos_tests and windows_tests are the only jobs that a light answer skips; their small jobs (macos, windows_2022, windows_2026) run and say so, and every other job of the workflow runs.
+SKIPPED_WHEN_LIGHT = ["macos_tests", "windows_tests"]
+CHANGE_TYPES = [
+    ("documents only", ["docs/WORKFLOW.md", "CHANGELOG.md"], True),
+    ("web pages only", ["web/home/chat.css", "web/home/chat.js", "web/front/mapmaker_app.js"], True),
+    ("page tests and their mutant lists only", ["tests/scripts/test_web_home_chat.py", "tests/data/home_chat_mutants.json"], True),
+    ("a page that the macOS script suite reads", ["web/lobby.html"], False),
+    ("the hub only", ["hub/server.py", "Dockerfile.hub"], False),
+    ("python tests only (not page tests)", ["tests/scripts/test_hub_login.py"], False),
+    ("nginx and compose files only", ["docker/nginx.conf", "docker-compose.stack.yml"], False),
+    ("C++ in src/", ["src/ants_app/main.cpp"], False),
+    ("C++ of the simulation", ["src/ants_sim/a.cpp", "include/ants_sim/a.hpp"], False),
+    ("CMake", ["CMakeLists.txt", "cmake/x.cmake"], False),
+    ("the workflow", [".github/workflows/ci.yml"], False),
+    ("the tools", ["tools/ci_light.sh", "tools/mutate.py"], False),
+    ("a document and one source file", ["docs/WORKFLOW.md", "src/a.cpp"], False),
+]
+
+
+try:
+    import yaml
+except ImportError:                                                                        # (macOS runners have no PyYAML: the table of the script alone is checked there)
+    yaml = None
+
 
 
 class Gitlink:
@@ -122,7 +152,7 @@ class Decision(unittest.TestCase):
 
     def decide(self, head, base=None, **env):
         """(light?, the output, the lines of GITHUB_OUTPUT) of the script run for a pull request from `base` (default: the first commit) to `head`"""
-        environment = dict(GIT_ENV, EVENT="pull_request", BASE_SHA=base or self.base, HEAD_SHA=head, GITHUB_OUTPUT=self.out_file)
+        environment = dict(GIT_ENV, EVENT="pull_request", BASE_REF="home-next", BASE_SHA=base or self.base, HEAD_SHA=head, GITHUB_OUTPUT=self.out_file)
         environment.update(env)
         for name in [n for n, v in environment.items() if v is None]:
             del environment[name]
@@ -227,64 +257,32 @@ class Decision(unittest.TestCase):
         # the other way round: a pull request that changes code is full whatever the base did
         self.assertFalse(self.decide(self.pull_request({"src/a.cpp": "int mine;\n"}), base=moved)[0])
 
-    def test_a_pull_request_against_another_branch_that_carries_code_main_lacks_is_full(self):
-        """A pull request against staging, which holds code that main does not, is light against its base and full against main. Retargeting it to main starts no run, so the verdict
-        must already hold for main."""
-        staging = self.pull_request({"src/a.cpp": "int staging;\n", "VERSION": "9.9.9\n"})
-        head = self.commit(staging, {"docs/a.md": "mine\n"})
-        light, out, _ = self.decide(head, base=staging)
+    def test_the_change_is_judged_against_its_own_base_only(self):
+        """A pull request against feature, which holds code that main does not, is light when it adds a document to feature. Judged again against main (a retarget starts an `edited` run with the new
+        base commit) it is full: the same head, another base."""
+        feature = self.pull_request({"src/a.cpp": "int feature;\n", "VERSION": "9.9.9\n"})
+        head = self.commit(feature, {"docs/a.md": "mine\n"})
+        light, out, _ = self.decide(head, base=feature)
+        self.assertTrue(light, out)
+        self.assertEqual(self.classes(out), {"docs/a.md": "light"}, out)
+        self.assertIn("pull request: " + feature[:12] + " (merge base)", out)
+        self.assertNotIn("against main", out)
+        light, out, _ = self.decide(head, base=self.base)                                    # (retargeted to main, which is the first commit here)
         self.assertFalse(light, out)
         self.assertEqual(self.classes(out), {"docs/a.md": "light", "src/a.cpp": "FULL", "VERSION": "FULL"}, out)
-        self.assertIn("against main: " + self.base[:12] + " (merge base)", out)
-        self.assertIn("pull request: " + staging[:12] + " (merge base)", out)
-        # once main has taken what staging holds, only the document is left, and there is one comparison again
-        self.git("update-ref", "refs/remotes/origin/main", staging)
-        light, out, _ = self.decide(head, base=staging)
-        self.assertTrue(light, out)
-        self.assertNotIn("against main", out)
-        # a pull request against main itself, and one against a branch that main contains, are one comparison too
-        light, out, _ = self.decide(self.commit(self.base, {"docs/a.md": "x\n"}), base=self.base)
-        self.assertNotIn("against main", out)
-        # the other way round: a light pull request against staging stays light for main only if it is light there as well
-        self.git("update-ref", "refs/remotes/origin/main", self.base)
-        self.assertFalse(self.decide(self.commit(staging, {}), base=staging)[0], "the same commit as staging: nothing against its base, code against main")
-
-    def test_a_main_that_moved_on_changes_nothing_and_a_main_that_is_not_there_is_full(self):
+        # what main is, and whether it is there, changes nothing
         moved = self.pull_request({"src/a.cpp": "int moved;\n"})
-        head = self.pull_request({"docs/a.md": "mine\n"})
-        self.git("update-ref", "refs/remotes/origin/main", moved)                            # (a change of code that the pull request does not have)
-        for base in (self.base, moved):
-            light, out, _ = self.decide(head, base=base)
+        for main in (moved, feature, self.commit(None, {"f": "1\n"}, "unrelated"), None):
+            if main is None:
+                self.git("update-ref", "-d", "refs/remotes/origin/main")
+            else:
+                self.git("update-ref", "refs/remotes/origin/main", main)
+            light, out, _ = self.decide(head, base=feature)
             self.assertTrue(light, out)
             self.assertEqual(self.classes(out), {"docs/a.md": "light"})
-        self.git("update-ref", "refs/remotes/origin/main", self.commit(None, {"f": "1\n"}, "unrelated"))        # (a root commit: no merge base with the head)
-        light, out, _ = self.decide(head)
-        self.assertFalse(light)
-        self.assertIn("no merge base of the pull request and main", out)
-        self.git("update-ref", "-d", "refs/remotes/origin/main")
-        light, out, _ = self.decide(head)
-        self.assertFalse(light)
-        self.assertIn("the branch main is not there", out)
-
-    def test_main_is_a_remote_branch_of_origin_of_plain_characters_and_nothing_else(self):
-        head = self.pull_request({"docs/a.md": "mine\n"})
-        self.git("update-ref", "refs/remotes/origin/probe-main", self.base)
-        self.git("update-ref", "refs/heads/main", self.pull_request({"src/a.cpp": "int local;\n"}))
-        light, out, _ = self.decide(head, MAIN_REF="refs/remotes/origin/probe-main")
-        self.assertTrue(light, out)
-        for bad in ("", "main", "origin/main", "refs/heads/main", "refs/remotes/upstream/main", "refs/remotes/origin/", "refs/remotes/origin/-x", "--output=x", "refs/remotes/origin/a b",
-                    "refs/remotes/origin/main;touch pwned", "refs/remotes/origin/$(touch pwned)", "refs/remotes/origin/main\nrefs/remotes/origin/probe-main", "refs/remotes/origin/ma*", "refs/remotes/origin/ma\u00efn", "refs/remotes/origin/\u00e9", "refs/remotes/origin/{a,b}",
-                    "refs/remotes/origin/a[b]", "refs/remotes/origin/a!b", "refs/remotes/origin/a@b"):
-            light, out, _ = self.decide(head, MAIN_REF=bad)
-            if bad == "":
-                self.assertTrue(light, "an empty MAIN_REF is the default: " + out)
-                continue
-            self.assertFalse(light, bad)
-            self.assertIn("MAIN_REF is not a branch of origin", out, bad)
-        self.assertFalse(os.path.exists(os.path.join(self.root, "pwned")))
-        light, out, _ = self.decide(head, MAIN_REF="refs/remotes/origin/nothing-here")
-        self.assertFalse(light)
-        self.assertIn("the branch main is not there", out)
+            light, out, _ = self.decide(head, base=feature, MAIN_REF="refs/remotes/origin/not-a-branch")      # (the variable of the old rule is not read)
+            self.assertTrue(light, out)
+        self.assertFalse(self.decide(self.commit(feature, {}), base=feature)[0], "no changed file against its base")
 
     def test_a_pull_request_of_several_commits_is_judged_as_a_whole(self):
         first = self.pull_request({"src/a.cpp": "int b;\n"})
@@ -362,6 +360,56 @@ class Decision(unittest.TestCase):
         done = subprocess.run(["bash", SCRIPT], cwd=self.root, env=dict(GIT_ENV, EVENT="pull_request", BASE_SHA=self.base, HEAD_SHA=head), capture_output=True, text=True, timeout=60)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn("decision: full checks", done.stdout)
+
+    def test_the_script_answers_each_kind_of_change(self):
+        for name, files, light in CHANGE_TYPES:
+            with self.subTest(name):
+                got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}))
+                self.assertEqual(got, light, name + "\n" + out)
+                # the same change in a pull request into main is full, whatever it changes
+                got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}), BASE_REF="main")
+                self.assertFalse(got, "into main: " + name + "\n" + out)
+                self.assertIn("a pull request into main always gets the full checks", out)
+
+    def test_a_pull_request_into_main_is_always_full_and_the_name_of_the_base_is_read_strictly(self):
+        for files in (["docs/a.md"], ["web/a.js"], ["README.md", "CHANGELOG.md"], ["tests/scripts/test_web_x.py"]):
+            head = self.pull_request({path: "changed\n" for path in files})
+            self.assertTrue(self.decide(head)[0], files)                                       # (light against home-next)
+            self.assertTrue(self.decide(head, BASE_REF="release/v1.0")[0], files)           # (and against any branch that is not main)
+            light, out, _ = self.decide(head, BASE_REF="main")
+            self.assertFalse(light, files)
+            self.assertNotIn("light  ", out)                                                   # (no file list: it decided before it looked)
+        head = self.pull_request({"docs/a.md": "changed\n"})
+        for bad in (None, "", "ma in", "main\n", "$(touch pwned)", "a;b", "x\u00e9", "a b", "main`x`"):
+            light, out, _ = self.decide(head, BASE_REF=bad)
+            self.assertFalse(light, repr(bad))
+            self.assertIn("is not named in a plain form", out, repr(bad))
+            self.assertNotIn("pwned", out)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "pwned")))
+        for name in ("push", "workflow_dispatch"):                                            # (a push and a manual run are never light, whatever BASE_REF says)
+            self.assertFalse(self.decide(head, EVENT=name, BASE_REF="home-next")[0], name)
+
+    @unittest.skipUnless(yaml, "PyYAML is needed")
+    def test_the_jobs_that_run_for_each_kind_of_change(self):
+        sys.path.insert(0, HERE)
+        import test_ci_workflow as workflow
+        with open(workflow.WORKFLOW, encoding="utf-8") as f:
+            doc = yaml.safe_load(f)
+        every = list(doc["jobs"])
+        for name, files, light in CHANGE_TYPES:
+            with self.subTest(name):
+                got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}))
+                running = [job for job in every if workflow.job_runs(doc, job, "true" if got else "false", "success")]
+                skipped = sorted(set(every) - set(running))
+                self.assertEqual(skipped, sorted(SKIPPED_WHEN_LIGHT) if light else [], name)
+                # the required names are all reported (by the small jobs, which run for every kind of change)
+                for job in ("changes", "linux", "macos", "windows_2022", "windows_2026", "web", "linux_tests", "web_image", "web_stack"):
+                    self.assertIn(job, running, name)
+                self.assertEqual("macos_tests" in running, not light, name)
+                self.assertEqual("windows_tests" in running, not light, name)
+                # into main every job runs, whatever the change is
+                got, out, _ = self.decide(self.pull_request({path: "changed\n" for path in files}), BASE_REF="main")
+                self.assertEqual([job for job in every if not workflow.job_runs(doc, job, "true" if got else "false", "success")], [], "into main: " + name)
 
 
 LITERAL = re.compile(r'"((?:[^"\\]|\\.)*)"')
@@ -466,7 +514,7 @@ class TheRulesAreWritten(unittest.TestCase):
             lines = f.read().splitlines()
         header = "\n".join(line for line in lines[:next(i for i, line in enumerate(lines) if not line.startswith("#"))])
         for needle in ("web/**", "docs/**", "CHANGELOG.md, README.md", "tests/data/*_mutants.json", "tests/scripts/test_web_*", "tests/scripts/web_*", "merge base", "Unknown is full", "ctest",
-                       "the two shell suites", "python tests", "MAIN_REF", "retargeted"):
+                       "the two shell suites", "python tests", "own", "base branch", "`edited`"):
             self.assertIn(needle, header)
 
     def test_the_script_is_executable_and_text(self):

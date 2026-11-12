@@ -59,8 +59,8 @@ same('the address of the Room is the hash #room', Home.HASH, '#room');
     const matches = /<a class="btn sm" href="([^"]+)" id="watch-top"/.exec(header)[1];
     const mapMaker = /link\.href = '([^']+)'/.exec(fs.readFileSync(path.join(lobbyDir, 'front', 'map_maker_link.js'), 'utf8'))[1];
     const want = (text) => links.filter((l) => l[0] === text).map((l) => l[1])[0];
-    same('the Menu has the links of the header and the footer, in the order of the picture: Matches, Live now, Map maker, How it works (a button), Discord server',
-        Home.MENU_MAIN, [['Matches', matches], ['Live now', want('Live')], ['Map maker', mapMaker], ['How it works', ''], ['Discord server', discord]].map((m) => (m[0] === 'Live now' ? ['Live now', want('Live now')] : m)));
+    same('the Menu has the links of the header and the footer, in the order of the picture: Home, Matches, Live now, Map maker, How it works (a button), Discord server',
+        Home.MENU_MAIN, [['Home', '/'], ['Matches', matches], ['Live now', want('Live')], ['Map maker', mapMaker], ['How it works', ''], ['Discord server', discord]].map((m) => (m[0] === 'Live now' ? ['Live now', want('Live now')] : m)));
     same('... and the small links are the footer\'s own, in its order', Home.MENU_SMALL, ['Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal'].map((t) => [t, want(t)]));
     check('... and the footer has a button for How it works (the Menu opens the page\'s own list)', /<button class="lnk" type="button" id="how-open">How it works<\/button>/.test(footer));
 }
@@ -294,22 +294,27 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     menuButton.click();
     const box = env.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
     check('the Menu opens under the bar, as a list of links named Menu, and the button says that it is open', !!box && box.hidden === false && menuButton.getAttribute('aria-expanded') === 'true' && box.getAttribute('aria-label') === 'Menu');
-    same('... Matches, Live now, Map maker, How it works, Discord server, then the small links', box.children.slice(0, 5).map((c) => c.textContent).concat(box.children[5].children.map((c) => c.textContent)),
-        ['Matches', 'Live now', 'Map maker', 'How it works', 'Discord server', 'Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal']);
-    same('... then the live numbers and the version, as the footer has them', box.children[6].textContent, '3 matches being played · 7 players online\nVersion v0.12.150');
-    check('the links of the Menu that leave the site open in a new tab without handing over the page; the ones of the site do not', box.children[4].getAttribute('target') === '_blank' && box.children[4].getAttribute('rel') === 'noopener noreferrer' && box.children[0].getAttribute('target') === null);
+    same('... Home, Matches, Live now (with the count of live matches), Map maker, How it works, Discord server, then the small links', box.children.slice(0, 6).map((c) => c.textContent).concat(box.children[6].children.map((c) => c.textContent)),
+        ['Home', 'Matches', 'Live now3', 'Map maker', 'How it works', 'Discord server', 'Sprites and sounds', 'Changelog', 'GitHub', 'Feedback', 'Legal']);
+    same('... then the live numbers and the version, as the footer has them', box.children[7].textContent, '3 matches being played · 7 players online\nVersion v0.12.150');
+    check('the links of the Menu that leave the site open in a new tab without handing over the page; the ones of the site do not', box.children[5].getAttribute('target') === '_blank' && box.children[5].getAttribute('rel') === 'noopener noreferrer' && box.children[1].getAttribute('target') === null);
+    check('Home is the first item and marks the page it is on; Live now carries the number of live matches that the footer has (3), and a count of none leaves the pill empty',
+        box.children[0].getAttribute('aria-current') === 'page' && box.children[1].getAttribute('aria-current') === null && box.children[2].children[0].textContent === '3');
+    env.$('stats-live').textContent = '0 matches being played \u00b7 7 players online'; menuButton.click(); menuButton.click();
+    check('... and none live: no number', box.children[2].children[0].textContent === '');
+    env.$('stats-live').textContent = '3 matches being played \u00b7 7 players online'; menuButton.click(); menuButton.click();
     env.doc.listeners.keydown.forEach((fn) => fn({ key: 'Escape' }));
     check('Escape puts the Menu away and the focus goes back to its button', box.hidden === true && menuButton.getAttribute('aria-expanded') === 'false' && env.focused === menuButton);
     menuButton.click();
     env.doc.listeners.click.forEach((fn) => fn({ target: env.$('start') }));
     check('a press anywhere else puts it away too, and a press on the button toggles it', box.hidden === true && (menuButton.click(), box.hidden === false) && (menuButton.click(), box.hidden === true));
     menuButton.click();
-    env.doc.listeners.click.forEach((fn) => fn({ target: box.children[0] }));
+    env.doc.listeners.click.forEach((fn) => fn({ target: box.children[1] }));
     check('a press inside the Menu is not "elsewhere" (the link takes it away itself)', box.hidden === false);
-    box.children[0].click();
+    box.children[1].click();
     check('a link of the Menu closes it', box.hidden === true);
     menuButton.click();
-    box.children[3].click();
+    box.children[4].click();
     check('How it works closes the Menu and opens the page\'s own list', box.hidden === true && env.$('how').hidden === false);
     const behind = () => ['banner', 'rejoin', 'lobby', 'footer-bar'].map((id) => env.$(id)).concat([env.home('hbar')], env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1));
     check('... and it is a dialog: while it is open the page behind it takes no key or tap (Home\'s bar, the Room\'s bar and the Room, the strips, the footer), as behind the map list', behind().length === 6 && behind().every((n) => n.hasAttribute('inert')) && !env.$('how').hasAttribute('inert'));
@@ -319,12 +324,14 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     const bare = runLobby('', {}, { stayHome: true });
     bare.$('home').findAll((e) => classes(e).indexOf('hmenu') !== -1)[0].click();
     const bareBox = bare.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
-    check('a page that has no numbers yet (and no build) says nothing under the links', bareBox.children[6].hidden === true && bareBox.children[6].textContent === '');
+    check('a page that has no numbers yet (and no build) says nothing under the links', bareBox.children[7].hidden === true && bareBox.children[7].textContent === '');
     // from the Room the Menu is the same box under the Room's bar
     const room = runLobby('', {});
     room.roomBar('hmenu').click();
     const roomBox = room.body.findAll((e) => classes(e).indexOf('hmenubox') !== -1)[0];
     check('the Menu of the Room is the same list, opened by the Room bar\'s button', !!roomBox && roomBox.hidden === false && room.roomBar('hmenu').getAttribute('aria-expanded') === 'true');
+    roomBox.children[0].click();
+    check('Home, the first item of the Menu in the Room, goes back to the front page\'s own screen and puts the Menu away (the page is not loaded again)', room.screen() === 'home' && roomBox.hidden === true);
     room.roomBar('rhome').click();
     check('going to Home puts the Menu away', roomBox.hidden === true);
 }

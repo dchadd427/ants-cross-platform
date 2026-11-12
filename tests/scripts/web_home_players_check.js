@@ -4,7 +4,7 @@
 //      under a name, and what the page tells the hub it is doing (looking, waiting, playing; a public room's details and never a private room's);
 //   2. the phases: nothing until the hub has said the list, nothing for a hub that has none, "off" for a hub that is gone, back by itself, the count (not for one person alone), the class that Home carries;
 //   3. what the page tells the hub: `here` (a named visitor) and `who` once for each socket, when the room changes and not oftener than every 3 seconds, again after a lost link, nothing for a guest;
-//   4. what is drawn: the groups in order with their counts, the visitor first and as the page knows it, the moderator mark, the guests, the empty note and its Host button, a Join where a public room waits
+//   4. what is drawn: the groups in order with their counts, the visitor first and as the page knows it, the moderator mark, the guests, nothing under the visitor when alone, a Join where a public room waits
 //      (the Games list's own Join does it, a list that is a popover is opened for it, a game that is gone is said), "and N more", every line as text;
 //   5. no fold: the panel has no minus button, no folded state, and Escape in it does nothing to it (it is always open);
 //   6. what the hub may send: unknown kinds, a wrong frame, an odd name, a flood of rows: nothing breaks, nothing becomes markup;
@@ -364,19 +364,11 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
 {   // empty: just the visitor
     const r = rig();
     r.live(); r.who(FULL([row(1, 'maple')], { n: 1 }));
-    same('just the visitor: the note and the button, and the visitor first', [texts(r.panel(), 'pl-note').join('|'), r.names(), r.groups().length], ['Just you here. Host a game!People who log in with Discord show up here by name.+ Host a game', ['maple'], 0]);
-    const host = one(r.panel(), 'pl-host');
-    check('... Host a game is Quick host\'s button pressed', host.textContent === '+ Host a game' && host.disabled === false);
-    host.click();
-    same('... and a press does what Quick host does', r.pressed, ['quick host']);
-    const off = rig({ noQuick: true });
-    off.live(); off.who(FULL([row(1, 'maple')], { n: 1 }));
-    check('Quick host is not lit (the Games list has not come): the button is off, and a press does nothing', one(off.panel(), 'pl-host').disabled === true);
-    off.quick.disabled = false; off.tick(1000);
-    check('... and it is lit when Quick host is', one(off.panel(), 'pl-host').disabled === false);
+    same('just the visitor: only the visitor\'s own row; no note, no button, no groups', [texts(r.panel(), 'pl-note').length, byClass(r.panel(), 'pl-host').length, r.panel().findAll((e) => e.tagName === 'button').length, r.names(), r.groups().length], [0, 0, 0, ['maple'], 0]);
+    same('... and nothing in the list under the row says anything', texts(one(r.panel(), 'pl-list'), 'pl-note').length + byClass(one(r.panel(), 'pl-list'), 'pl-card').length, 0);
     const guest = rig();
     guest.live(W({ you: null })); guest.who(FULL([], { n: 1, g: 1 }));
-    check('a guest alone: the note too, no row, no guests line', texts(guest.panel(), 'pl-note')[0].indexOf('Just you here') === 0 && byClass(guest.panel(), 'pl-card').length === 0 && byClass(guest.panel(), 'pl-guests').length === 0);
+    check('a guest alone: no note, no row, no guests line', texts(guest.panel(), 'pl-note').length === 0 && byClass(guest.panel(), 'pl-card').length === 0 && byClass(guest.panel(), 'pl-guests').length === 0);
 }
 {   // more people than rows, and a crowd
     const r = rig();

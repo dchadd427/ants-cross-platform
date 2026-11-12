@@ -6,7 +6,7 @@ Ants is a C++17 remake of the 1998 RTS (SDL2; native on macOS, Linux and Windows
 - Build: `cmake --build build -j8`. Run: `./start_game.sh`.
 - Quick tier, before every commit: `./run_tests.sh --fast` (about 25 seconds). Full suite: `./run_tests.sh` (CI runs it for every pull request).
 - Web page without Docker (cloud sessions): `tools/web_without_docker.py -- COMMAND` (it runs the Dockerfile's commands on this machine: use it only for code you wrote or have read). Docker build: `docker build -t ants-beta .` (CI does it too).
-- Branches, pull requests, releases, deploy and staging: `docs/WORKFLOW.md`.
+- Branches, pull requests, releases, deploy: `docs/WORKFLOW.md`.
 
 ## Rules that always apply
 1. **Branch, CI, merge.** Work on a branch, never on `main`; commit as soon as the quick tier passes. `main` takes a change only through a pull request whose five checks (Linux GCC, macOS Apple clang, Windows MSVC 2022, Windows MSVC 2026, Web) are green, merged with a merge commit. A merge that changes the game or build redeploys the beta and waits for a moment with no match running. CI is the full gate; run the full suite, a Docker build or the sanitizers (`./run_tests.sh --asan`, CI has none) locally only for what CI cannot show.

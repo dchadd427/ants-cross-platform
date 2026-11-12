@@ -532,7 +532,7 @@ async function settle() {
         const file = fakeFile(FIXTURE, 'ants-TREASURE-20261006-143209.antsrep');
         await chooseOne(w, file);
         const rec = w.idb.slot();
-        check('a file from the chooser is checked, kept for the player and the page goes to it at its own address', w.went.length === 1 && w.went[0] === '/play.html?local=' + (rec && rec.id) && /^\/play\.html\?local=[0-9a-f]{32}$/.test(w.went[0]), JSON.stringify(w.went));
+        check('a file from the chooser is checked, kept for the player and the page goes to it at its own address', w.went.length === 1 && w.went[0] === '/play?local=' + (rec && rec.id) && /^\/play\?local=[0-9a-f]{32}$/.test(w.went[0]), JSON.stringify(w.went));
         same('the chooser is emptied (the same file chosen again is a change)', w.input.value, '');
         check('what the player will find is the file', !!rec && sameBytes(rec.bytes, FIXTURE) && rec.name === 'ants-TREASURE-20261006-143209.antsrep');
     }
@@ -607,7 +607,7 @@ async function settle() {
         await settle();
         const rec = w.idb.slot();
         same('a drop: taken over (the browser must not leave for the file), the veil goes, the FIRST file is taken', [drop.defaultPrevented, w.veil.hidden, rec && rec.name, w.went.length], [true, true, 'dropped.antsrep', 1]);
-        check('... and the page goes to its record', w.went[0] === '/play.html?local=' + rec.id);
+        check('... and the page goes to its record', w.went[0] === '/play?local=' + rec.id);
     }
     {
         const w = stripWorld(); w.opener.wire();
@@ -710,20 +710,20 @@ async function settle() {
         const shape = (p) => ({ title: p.title, body: p.body.map((n) => kids(n)), buttons: p.buttons.map((b) => b.tag + ':' + b.textContent + (b.href ? '>' + b.href : '')) });
         same('older: the approved words, Open another file and All matches, and no download', shape(plan('older')), { title: 'Recorded by an older version',
             body: [['#text-less'].length ? ['This match was played on ', 'b:v0.11.0', '. The rules of the game have changed since, and a replay only plays on a version with the same rules, so this version (', 'b:v0.0.0', ') can\u2019t show it.'] : []],
-            buttons: ['button:Open another file', 'a:\u2039 All matches>/matches.html'] });
+            buttons: ['button:Open another file', 'a:\u2039 All matches>/matches'] });
         same('newer: Open another file, Load the page again, All matches', shape(plan('newer', { made: 'v0.14.2' })), { title: 'Recorded by a newer version', body: [['This match was played on ', 'b:v0.14.2', ', and this page is ', 'b:v0.0.0', '. Load the page again to get the newer version.']],
-            buttons: ['button:Open another file', 'a:Load the page again>#', 'a:\u2039 All matches>/matches.html'] });
+            buttons: ['button:Open another file', 'a:Load the page again>#', 'a:\u2039 All matches>/matches'] });
         const again = plan('newer').buttons[1];
         const click = again.fire('click');
         same('Load the page again reloads and does not follow the link', [click.defaultPrevented, w.reloads], [true, 1]);
         same('a map that the site has not: This site doesn\u2019t have the map, with the map\'s name', [plan('nomap').title, plan('nomap').body.map(words), plan('nomap').body.map(bolds), shape(plan('nomap')).buttons],
-             ['This site doesn\u2019t have the map', ['This match was played on the map Dune.lvl, and a replay needs the same map file. The site no longer has it (a map that was taken off, or one that was only on the recorder\u2019s own computer).'], [['Dune.lvl']], ['button:Open another file', 'a:\u2039 All matches>/matches.html']]);
+             ['This site doesn\u2019t have the map', ['This match was played on the map Dune.lvl, and a replay needs the same map file. The site no longer has it (a map that was taken off, or one that was only on the recorder\u2019s own computer).'], [['Dune.lvl']], ['button:Open another file', 'a:\u2039 All matches>/matches']]);
         same('a map of that name that is another file', [plan('changed').body.map(words), plan('changed').body.map(bolds)], [['This match was played on the map Dune.lvl, and a replay needs the same map file. The site has a map of that name, but it is not the same file (the map was changed after this match was played).'], [['Dune.lvl']]]);
         same('a map with no name still has its words', [plan('nomap', { map: '' }).body.map(words), plan('nomap', { map: '' }).body.map(bolds)], [['This match was played on a map, and a replay needs the same map file. The site no longer has it (a map that was taken off, or one that was only on the recorder\u2019s own computer).'], [[]]]);
         same('no record: choose the file again, a button for a file and All matches', shape(plan('again')), { title: 'Choose the replay file again', body: [['The file you opened is no longer here: this page keeps it for a day, and only one file at a time. Choose it again. It stays on this device: nothing is uploaded.']],
-            buttons: ['button:Open a replay file', 'a:\u2039 All matches>/matches.html'] });
+            buttons: ['button:Open a replay file', 'a:\u2039 All matches>/matches'] });
         same('the rest: This replay can\u2019t be played here, the reason as a sentence, no download', shape(plan('cant', { why: 'chunk CMDS: the checksum is wrong' })), { title: 'This replay can\u2019t be played here', body: [['The match could not be set up on this page.'], ['Chunk CMDS: the checksum is wrong.']],
-            buttons: ['button:Open another file', 'a:\u2039 All matches>/matches.html'] });
+            buttons: ['button:Open another file', 'a:\u2039 All matches>/matches'] });
         same('the reason keeps its own full stop and an empty one is left out', [kids(plan('cant', { why: 'it broke.' }).body[1]), plan('cant', { why: '' }).body.length], [['It broke.'], 1]);
         same('the game\'s words for a map that the folder has not are the site\'s missing-map card; every other reason of failure 4 is the game\'s own, said as it is (a carried map it refuses, a hash that is not the head\'s, a map that the seats cannot play)', [
             'the map Dune.lvl is not in Original-Ants/Maps (the replay needs it; --maps-dir says where the maps are)',
@@ -746,7 +746,7 @@ async function settle() {
         pick();
         same('... and used again', [input.clicks, w.doc.body.children.length], [2, 1]);
         input.files = [fakeFile(FIXTURE, 'new.antsrep')]; input.fire('change'); await settle();
-        check('a file from it: checked, kept, and the page goes to it (replace: the old card is not a place to come back to)', w.went.length === 1 && /^\/play\.html\?local=[0-9a-f]{32}$/.test(w.went[0]), JSON.stringify(w.went));
+        check('a file from it: checked, kept, and the page goes to it (replace: the old card is not a place to come back to)', w.went.length === 1 && /^\/play\?local=[0-9a-f]{32}$/.test(w.went[0]), JSON.stringify(w.went));
         const w6 = ownWorld(); w6.page.pick(); const in6 = w6.doc.body.children[0];
         in6.files = [fakeFile(text('no replay at all, only a text that is long enough to be looked at, as it is'), 'notes.txt')]; in6.fire('change'); await settle();
         same('a file that is refused from the player is a note and nothing else', [w6.said, w6.went.length], [['That file is not a readable replay.'], 0]);

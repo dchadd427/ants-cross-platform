@@ -111,7 +111,7 @@ inline constexpr size_t kDrawnRoomCodeChars = 6;
 bool draw_room_code(std::string& code, const RandomBytes& source);
 
 /// What a restart would interrupt (the public /busy answer): the rooms whose match is loading or running with a person in it (a room that a restart brought back also for its first minutes: Room::busy),
-/// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields (tools/deploy_wait.py accepts nothing else).
+/// and the people (bots are not people) in the rooms that wait, load or run. Plain counts: no name, no code; exactly these two fields: the answer is public.
 struct BusyCounts {
     uint32_t matches{0};
     uint32_t players{0};

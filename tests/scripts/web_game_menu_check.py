@@ -34,8 +34,8 @@ import web_aspect_check as aspect                                            # n
 from web_aspect_check import Browser, NotReachable, SHAPE_ENTRIES, Tab                # noqa: E402
 from web_hidden_check import find_browser                                    # noqa: E402
 
-LOCAL = "play.html?map=tiny&bots=easy,none,none"                             # a game for you and one computer player: Leave game is a forfeit
-ALONE = "play.html?map=tiny"                                                 # a game for one: Leave game ends the match
+LOCAL = "play?map=tiny&bots=easy,none,none"                             # a game for you and one computer player: Leave game is a forfeit
+ALONE = "play?map=tiny"                                                 # a game for one: Leave game ends the match
 
 STATE = r"""
 JSON.stringify((function () {
@@ -525,7 +525,7 @@ def computer(p, args, check):
     check(s["leave"] == 0 and tab.ev("(document.querySelector('.gm-ask-t') || {}).textContent") == "Leave the game?" and tab.ev("document.querySelector('.gm-ask-b').textContent") == "This match ends. Your game is not saved.",
           "Leave game in a game for one asks \"Leave the game?\" in the words of what happens (kind %s)" % s["leave"])
     p.click_text(".gm-ask-btns .btn", "Leave game")
-    gone = wait_for(lambda: tab.ev("location.pathname") != "/play.html", 15, 0.3)
+    gone = wait_for(lambda: tab.ev("location.pathname") != "/play", 15, 0.3)
     check(bool(gone), "...and the game leaves for the front page (%s)" % tab.ev("location.pathname"))
 
 
@@ -726,7 +726,7 @@ def recording(p, args, check):
     p.click_element("#settings-btn-bar")
     check(p.state()["open"], "the button in the bar opens it")
     p.click_element(".gm-leave")
-    gone = wait_for(lambda: tab.ev("location.pathname") != "/play.html", 15, 0.3)
+    gone = wait_for(lambda: tab.ev("location.pathname") != "/play", 15, 0.3)
     check(bool(gone) and not tab.ev("document.querySelector('.gm-ask')"), "Back to the matches asks nothing and leaves for the list (%s)" % tab.ev("location.pathname"))
 
     print("[web game menu] the frame of a match page (embed=1)")

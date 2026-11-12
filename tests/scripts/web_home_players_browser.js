@@ -6,7 +6,7 @@
 //      panel is the sidebar at the right of the Games list (a phone's width: the Players view), inside the window, no sideways scroll, the panel, the Games list and the chat dock do not meet, no Join (the list's or the panel's)
 //      and no field is under anything else, and the count of the list is the count of the chat;
 //   2. the phone's strip (Games, Players, Chat): one view at a time, the Players tab has the number, the chat is open on its own view and folded on the others;
-//   3. the states: nobody else (the note and the Host button), the hub gone ("Players list is off right now", the chat says it too) and back by itself, a person who comes, goes and changes what they do;
+//   3. the states: nobody else (just the visitor's row), the hub gone ("Players list is off right now", the chat says it too) and back by itself, a person who comes, goes and changes what they do;
 //   4. Join: the Games list's own Join of that room is pressed (from the panel, and from the phone's Players view);
 //   5. a hub that has no list (an older one): nothing shows, and Home is the same as with the list's two files not there at all, but for a few pixels at the edges of rounded buttons that Chromium draws either way (five sizes);
 //   6. the Room: the list is not on it, and it is back on Home;
@@ -190,7 +190,7 @@ const LAYOUT = () => {
         if (chat && (dock || pl)) out.push('the chat shows with another view');
     }
     if (pl && main && (pl.t < main.t - 0.5 || pl.b > main.b + 0.5)) out.push('the panel is not inside the body');
-    const covered = [...document.querySelectorAll('.gjoin, .pl-join, .gcode input, .pl-host')].filter((e) => {
+    const covered = [...document.querySelectorAll('.gjoin, .pl-join, .gcodelink')].filter((e) => {
         if (!e.getClientRects().length) return false;
         const q = e.getBoundingClientRect(), box = e.closest('.gpbody, .pl-list, .pl-body'), bq = box && box.getBoundingClientRect();
         if (bq && (q.top < bq.top - 0.5 || q.bottom > bq.bottom + 0.5)) return false;                  // (scrolled out of its own box: not on the screen)
@@ -249,7 +249,7 @@ async function main() {
                     await phoneChat(page, size[1], size[2]);
                     await showPlayers(page);
                     const others = people.length + guests;
-                    if (others) await listShows(page, people.length ? people[0][0].split(':')[1] : 'guest'); else await listShows(page, 'Just you here');
+                    if (others) await listShows(page, people.length ? people[0][0].split(':')[1] : 'guest'); else await listShows(page, 'maple');
                     await sleep(400);
                     const m = await page.evaluate(LAYOUT);
                     check(what + ', ' + size[0] + ' ' + size[1] + ' x ' + size[2] + ': the list is the sidebar at the right of the Games list (a phone: the Players view), in the window, no sideways scroll, nothing of the Games list, the chat dock or a Join is covered', m.out.length === 0 && m.hasPanel, JSON.stringify(m));
@@ -311,8 +311,8 @@ async function main() {
         if (want(3)) {
             await crowd(r, [], 0);
             const page = await openPage(r, SIZES[0], '1000_maple');
-            await listShows(page, 'Just you here');
-            check('alone: the note, the visitor first (as "you", looking), no count, and Host a game that is lit once Quick host is', await page.evaluate(() => { const p = document.getElementById('players'); const c = document.querySelector('.pl-count'); const h = p.querySelector('.pl-host'); return p.querySelector('.pl-you .pl-tag').textContent === 'you' && /Looking/.test(p.querySelector('.pl-you').textContent) && c.hidden && !!h && !h.disabled; }));
+            await listShows(page, 'maple');
+            check('alone: the visitor first (as "you", looking), no count, and no note and no button under the row', await page.evaluate(() => { const p = document.getElementById('players'); const c = document.querySelector('.pl-count'); const h = p.querySelector('.pl-host, .pl-list .pl-note, .pl-list button'); return p.querySelector('.pl-you .pl-tag').textContent === 'you' && /Looking/.test(p.querySelector('.pl-you').textContent) && c.hidden && !h; }));
             const joiner = await person(r, '5001:willow', { at: 'look' });
             await listShows(page, 'willow');
             check('a person comes: the row, the group "Looking 1", the count (2 here: the chat says it too) within the pace of the hub', await page.evaluate(() => { const g = [...document.querySelectorAll('.pl-group')].map((e) => e.getAttribute('data-g') + ':' + e.querySelector('.pl-gn').textContent); return g.join() === 'look:1' && document.querySelector('.pl-count').textContent === '2'; }));
@@ -330,7 +330,7 @@ async function main() {
             await until('willow plays', () => page.evaluate(() => !!document.querySelector('.pl-group[data-g="play"]')), 8000);
             check('... who plays: "Playing", the map and the players, no Join', await page.evaluate(() => /Tiny · 2 players/.test(document.querySelector('.pl-group[data-g="play"]').textContent) && !document.querySelector('.pl-join')));
             joiner.close();
-            await until('willow is gone', () => page.evaluate(() => document.getElementById('players').textContent.indexOf('willow') === -1 && /Just you here/.test(document.getElementById('players').textContent)), 8000);
+            await until('willow is gone', () => page.evaluate(() => document.getElementById('players').textContent.indexOf('willow') === -1 && /maple/.test(document.getElementById('players').textContent)), 8000);
             check('... who goes: the row is gone and so is the count (nothing of them stays: just you here)', await page.evaluate(() => document.getElementById('players').textContent.indexOf('willow') === -1 && document.querySelector('.pl-count').hidden));
             // the hub goes and comes back by itself
             await crowd(r, PICTURE, 2);

@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -147,7 +148,7 @@ class TheFolder(unittest.TestCase):
         for word in ("percentEncode", "escape(", "/maps/previews", ".webp", "decodeURI"):
             self.assertNotIn(word, self.js, "%s: the address is made by AntsMapPicker.previewPath (web/front/map_picker.js), which checks the file name and the shape of what it makes" % word)
         self.assertEqual(self.js.count("encodeURIComponent"), 1, "the one use: the id in the address of Watch (a second guard, the id is checked by its shape first)")
-        self.assertIn("'/play.html?live=' + encodeURIComponent(e.id)", self.js)
+        self.assertIn("'/play?live=' + encodeURIComponent(e.id)", self.js)
         picker = read("web", "front", "map_picker.js")
         self.assertIn("function previewPath(map) {", picker)
         self.assertIn("previewPath: previewPath", picker)
@@ -230,18 +231,26 @@ class TheStyle(unittest.TestCase):
         self.assertIn("attributeFilter: ['data-tab', 'data-open', 'data-screen', 'hidden']", js)
         self.assertIn("if (!dialog && toast.contains(doc.activeElement)) { clearNotice();", js, "Escape closes a toast that has the focus, and only then")
 
+    def test_have_a_code_is_a_disclosure_button_in_the_heading(self):
+        js = read("web", "home", "games.js")
+        self.assertIn("popHead.appendChild(codeLink);", js.replace("popHead.appendChild(popTitle); popHead.appendChild(popCount); ", ""), "the button is in the heading")
+        self.assertIn("codeLink.setAttribute('aria-expanded', 'false'); codeLink.setAttribute('aria-controls', 'gc-box');", js)
+        self.assertIn("codeLink.setAttribute('aria-expanded', on ? 'true' : 'false');", js, "the state is told every time it changes")
+        self.assertIn("else if (codeOpen && pop.contains(doc.activeElement)) setCode(false, true);", js, "Escape shuts the box first and puts the focus back on the button")
+        self.assertIn(".gcode[hidden] { display: none; }", self.css, "a shut box takes no room")
+
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         heights = {}
         for selector, body in self.rules:
             for m in re.finditer(r"min-height: (\d+)px", body):
                 heights.setdefault(selector.strip(), []).append(int(m.group(1)))
-        for selector in (".gjoin", ".gcode .gcgo", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
+        for selector in (".gjoin", ".gcodelink", ".gcode .gcgo", ".gcode .gcx", ".gcode .joinbox input", ".vbtn", ".gcbtns .btn", ".gtoast .btn", ".gjoining .btn"):
             self.assertIn(selector, heights, selector)
         for selector, values in heights.items():
             for value in values:
                 self.assertGreaterEqual(value, 44, "%s has a min-height of %d" % (selector, value))
         self.assertIn(".gjoining[hidden] { display: none; }", self.css, "a Join that is not on its way shows no line (and no Cancel)")
-        for selector in (r"\.gjoin", r"\.gcode \.gcgo", r"\.gjoining \.btn"):
+        for selector in (r"\.gjoin", r"\.gcodelink", r"\.gcode \.gcgo", r"\.gcode \.gcx", r"\.gjoining \.btn"):
             self.assertGreaterEqual(int(re.search(selector + r" \{[^}]*min-width: (\d+)px", self.css).group(1)), 44, selector)
         self.assertNotRegex(self.css, r"(?<!min-)height: [1-3]\d px; *}", "no fixed height under 40 px on a control")
 
@@ -371,6 +380,9 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     def setUpClass(cls):
         with open(os.path.join(REPO, "tests", "data", "home_games_mutants.json"), encoding="utf-8") as f:
             cls.spec = json.load(f)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import mutant_shard                     # (here and not at the top: the copies in which the mutants run have this file but not that one, and run the other classes)
+        cls.mutants = mutant_shard.from_environment(cls.spec["mutants"])     # (all of them, or the units of tests/scripts/run_python_tests.py: ANTS_MUTANT_SHARD=K/N)
         cls.folder = tempfile.mkdtemp(prefix="ants_games_mutants.")
         for name in cls.FILES:
             os.makedirs(os.path.dirname(os.path.join(cls.folder, *name.split("/"))), exist_ok=True)
@@ -385,14 +397,14 @@ class TheChecksAreNotVacuous(unittest.TestCase):
         return done.returncode, done.stdout + done.stderr
 
     def test_the_copy_with_nothing_changed_passes(self):
-        status, out = self.run_command(self.spec["mutants"][0]["test"])
+        status, out = self.run_command(self.mutants[0]["test"])
         self.assertEqual(status, 0, out[-3000:])
 
     def test_every_mutant_is_seen(self):
         ids = [m["id"] for m in self.spec["mutants"]]
         self.assertEqual(len(ids), len(set(ids)), "an id twice")
         missed = []
-        for m in self.spec["mutants"]:
+        for m in self.mutants:
             path = os.path.join(self.folder, *m["file"].split("/"))
             with open(path, encoding="utf-8", newline="") as f:
                 text = f.read()
