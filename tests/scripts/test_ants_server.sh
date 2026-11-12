@@ -1314,7 +1314,14 @@ check "a pause cap of 59 s is refused by the control interface: 400" "$([ "$(cod
 curl -s -m 3 -o /dev/null -X POST -H "Authorization: Bearer $SECRET" -d "{\"map\":\"TINY.LVL\",\"players\":3,\"code\":\"$RC_STOP_CODE\",\"seed\":6}" "$RC_URL/rooms"
 python3 "$ROOT/tests/scripts/flaky_proxy.py" "$RC_PROXY_PORT" "$RC_PORT" 3600 > "$WORK/proxy.log" 2>&1 &
 PROXY_PID=$!
-for _ in $(seq 1 50); do grep -q listening "$WORK/proxy.log" 2> /dev/null && break; sleep 0.1; done
+RC_PROXY_UP=1
+for _ in $(seq 1 $((300 * TIME_SCALE))); do      # (30 s: a proxy that is up is seen at once; one that is not up refuses the Victim and the room never has its three)
+    if grep -q listening "$WORK/proxy.log" 2> /dev/null; then RC_PROXY_UP=0; break; fi
+    kill -0 "$PROXY_PID" 2> /dev/null || break
+    sleep 0.1
+done
+[ "$RC_PROXY_UP" = "0" ] || fail_note "reconnect: the proxy on port $RC_PROXY_PORT was not listening within $((30 * TIME_SCALE)) s ($(kill -0 "$PROXY_PID" 2> /dev/null && echo "it still runs" || echo "it ended")); its log: $(tail -n 5 "$WORK/proxy.log" 2> /dev/null | tr '\n' '|')"
+check "the proxy for the Victim is listening" "$RC_PROXY_UP"
 RC_PIDS=""
 "$GAME" --headless --no-lan --name Holder1 --join "127.0.0.1:$RC_PORT" --room "$RC_CODE" --screenshot "$WORK/h1.png" --frames 4000000 > "$WORK/h1.log" 2>&1 &
 RC_PIDS="$!"

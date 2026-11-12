@@ -1011,12 +1011,13 @@ void run_way_back_tests() {
             ASSERT_TRUE(w.status("RJ-13A").paused && w.status("RJ-13A").ticks <= ticks_held + 2);        // (still held for Cat)
             w.server.door = Server::Door::Open;                                          // Cat is back
             ASSERT_TRUE(w.run_until([&]() { return !w.status("RJ-13A").paused; }, 20000));
-            w.run(500);
-            for (Machine* m : {&a, &c}) {
-                bool left = false;
-                for (const NetGame::Event& e : m->events) left = left || (e.type == NetGame::Event::Type::PlayerLeft && e.seat == bob);
-                ASSERT_TRUE(left);                                                       // the Leave reached the room: Bob's Drop came with the first turn after the pause
-            }
+            const auto told_a = [&](Machine& m) {
+                for (const NetGame::Event& e : m.events) {
+                    if (e.type == NetGame::Event::Type::PlayerLeft && e.seat == bob) return true;
+                }
+                return false;
+            };
+            ASSERT_TRUE(w.run_until([&]() { return told_a(a) && told_a(c); }, 5000));   // the Leave reached the room: Bob's Drop came with the first turn after the pause (a turn is delivered and run when the kernel hands it over: a poll, not a fixed number of passes)
             ASSERT_TRUE(w.status("RJ-13A").state == RoomState::Running && w.status("RJ-13A").rejoins == 1);
         }
         {   // the machine has no link and leaves: the attempts end
@@ -1065,12 +1066,13 @@ void run_way_back_tests() {
             // A Mac's loopback can hand it the CaughtUp a pass earlier: the seat is given back, then a send to the closed link holds it as lost (the wait below fails) or the Leave drops it with a rejoin counted (the last check fails).
             std::this_thread::sleep_for(std::chrono::milliseconds(50));                  // the kernel delivers both before the server's next pass
             ASSERT_TRUE(w.run_until([&]() { return !w.status("RJ-13C").paused; }, 20000));      // the seat is dropped, so nobody waits for it
-            w.run(500);
-            for (Machine* m : {&a, &b}) {
-                bool left = false;
-                for (const NetGame::Event& e : m->events) left = left || (e.type == NetGame::Event::Type::PlayerLeft && e.seat == cat);
-                ASSERT_TRUE(left);
-            }
+            const auto told_c = [&](Machine& m) {
+                for (const NetGame::Event& e : m.events) {
+                    if (e.type == NetGame::Event::Type::PlayerLeft && e.seat == cat) return true;
+                }
+                return false;
+            };
+            ASSERT_TRUE(w.run_until([&]() { return told_c(a) && told_c(b); }, 5000));   // (the same: the turn that carries the Drop is delivered when the kernel hands it over)
             ASSERT_TRUE(w.status("RJ-13C").absent.empty() && w.status("RJ-13C").rejoins == 0);
         }
     } TEST_END();

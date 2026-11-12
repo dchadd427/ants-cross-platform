@@ -199,12 +199,9 @@ def free_port():
     return port
 
 
-def dead_port():
-    """A port where nothing listens, for as long as the caller holds the returned socket: it stays bound (so no other program can be given the port) but is never put in listen
-    state, so a connect to it is refused. Returns (socket, port); close the socket when done."""
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    return s, s.getsockname()[1]
+# A port where a connect is refused at once, on Linux and macOS alike: nothing listens on port 1 of the loopback, and a test that runs beside this one cannot be given it (below 1024). A port held by a
+# socket that never listens is refused on Linux but makes macOS wait for the timeout (as tests/scripts/test_deploy_webhook.py says), and a free port that was given back can be taken by another test's server.
+DEAD_PORT = 1
 
 
 class Stand(quick_http.QuickThreadingHTTPServer):
@@ -326,8 +323,7 @@ class TheBlocksRun(unittest.TestCase):
         self.stand = Stand()
         self.addCleanup(self.stand.server_close)
         self.addCleanup(self.stand.shutdown)
-        dead_sock, self.dead = dead_port()
-        self.addCleanup(dead_sock.close)
+        self.dead = DEAD_PORT
         site_port = free_port()
         self.site = "http://127.0.0.1:%d" % site_port
         self.fake = fd.FakeDiscord(self.site + "/hub/callback")

@@ -238,11 +238,9 @@ def free_port():
         return s.getsockname()[1]
 
 
-def dead_port():
-    """A port where nothing listens for as long as the returned socket is held: bound (nobody else can be given the port) and never listening, so a connect is refused. (socket, port)."""
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    return s, s.getsockname()[1]
+# A port where a connect is refused at once, on Linux and macOS alike: nothing listens on port 1 of the loopback, and a test that runs beside this one cannot be given it (below 1024). A port held by a
+# socket that never listens is refused on Linux but makes macOS wait for the timeout (as tests/scripts/test_deploy_webhook.py says), and a free port that was given back can be taken by another test's server.
+DEAD_PORT = 1
 
 
 def start_nginx(work, write_conf, attempts=6, wait=15.0):
@@ -545,8 +543,7 @@ class TheListWithoutADoor(unittest.TestCase):
         try:
             for sub in ("srv/previews", "srv/files", "cache/ants_stats", "cache/ants_history", "tmp"):
                 os.makedirs(os.path.join(work, sub))
-            dead_sock, dead = dead_port()
-            self.addCleanup(dead_sock.close)
+            dead = DEAD_PORT
 
             def write_conf(port):
                 conf = os.path.join(work, "nginx.conf")
