@@ -686,8 +686,8 @@
   {
    "id": "the_welcomes_role_is_not_read",
    "file": "web/home/players.js",
-   "old": "role: m.you.role === 'admin' || m.you.role === 'mod' ? m.you.role : m.you.mod === true ? 'mod' : 'none' }",
-   "new": "role: m.you.mod === true ? 'mod' : 'none' }",
+   "old": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.role } : null;",
+   "new": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.mod ? 'mod' : 'none' } : null;",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -695,13 +695,6 @@
    "file": "web/home/players.js",
    "old": "at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pub:",
    "new": "at: doing ? doing.at : 'look', mod: you.mod, pub:",
-   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "the_red_of_the_players_admin_is_the_gold",
-   "file": "web/home/players.css",
-   "old": ".pl-card.r-admin .pl-nm { color: #ff5f66; }",
-   "new": ".pl-card.r-admin .pl-nm { color: var(--gold); }",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -719,17 +712,17 @@
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_players_red_is_the_leave_red",
-   "file": "web/home/players.css",
-   "old": ".pl-card.r-admin .pl-nm { color: #ff5f66; }",
-   "new": ".pl-card.r-admin .pl-nm { color: #9d0d17; }",
+   "id": "the_staff_group_is_called_moderators",
+   "file": "web/home/players.js",
+   "old": "['mod', 'Staff']",
+   "new": "['mod', 'Moderators']",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_own_row_is_not_colored_for_a_moderator",
-   "file": "web/home/players.css",
-   "old": ".pl-card.r-mod .pl-nm { color: var(--gold); }",
-   "new": "",
+   "id": "the_staff_group_holds_a_person_with_no_role",
+   "file": "web/home/players.js",
+   "old": "out[row.mod ? 'mod' : row.at].push(row);",
+   "new": "out[row.mod || row.role === 'none' ? 'mod' : row.at].push(row);",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

@@ -1054,8 +1054,8 @@
   {
    "id": "log_made_again_is_not_scrolled_to_the_newest",
    "file": "web/home/chat.js",
-   "old": "stale = false;\n            settle(true);",
-   "new": "stale = false;\n            settle();",
+   "old": "log.scrollTop = top; else settle(true);",
+   "new": "log.scrollTop = top; else settle();",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1367,13 +1367,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "del_compares_loosely",
-   "file": "web/home/chat.js",
-   "old": "if (feed[i].id !== m.id) continue;",
-   "new": "if (feed[i].id != m.id) continue;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "dock_loaded_before_the_first_paint",
    "file": "web/home/home.js",
    "old": "if (typeof win.requestAnimationFrame === 'function') win.requestAnimationFrame(function () { setTimeout(load, 0); }); else setTimeout(load, 0);",
@@ -1563,9 +1556,9 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "own_name_is_not_gold",
+   "id": "own_name_is_not_white",
    "file": "web/home/chat.css",
-   "old": ".gc-me .gc-who { color: var(--gold); }",
+   "old": ".gc-me .gc-who { color: var(--cream); }",
    "new": ".gc-me .gc-who { color: #9fe0b8; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -2090,8 +2083,8 @@
   {
    "id": "relink_waits_for_the_backoff",
    "file": "web/home/chat.js",
-   "old": "attempt = 0; you = null; menuOn = false; hello = null; removed = '';\n            go();",
-   "new": "attempt = 0; you = null; menuOn = false; hello = null; removed = '';",
+   "old": "after a Log out)\n            go();",
+   "new": "after a Log out)",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2916,7 +2909,7 @@
   {
    "id": "a_refused_line_of_a_banned_person_is_forgotten",
    "file": "web/home/chat.js",
-   "old": "if (code === 'banned') removed = 'banned';",
+   "old": "if (code === 'banned') { removed = 'banned'; retry = false; }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -2965,15 +2958,8 @@
   {
    "id": "a_banned_person_sends",
    "file": "web/home/chat.js",
-   "old": ": removed === 'banned' ? 'banned' : !text ?",
+   "old": ": removed === 'banned' && !retry ? 'banned' : !text ?",
    "new": ": !text ?",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "a_bye_reconnects_itself",
-   "file": "web/home/chat.js",
-   "old": "function onBye(m) {",
-   "new": "function onBye(m) { go();",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3040,34 +3026,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_red_of_the_admin_is_the_gold",
-   "file": "web/home/chat.css",
-   "old": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }",
-   "new": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: var(--gold); }",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "the_chip_plate_is_the_chips_teal",
-   "file": "web/home/chat.css",
-   "old": ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod { padding: 1px 9px; background: #0b1a17;",
-   "new": ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod { padding: 1px 9px; background: #2b6357;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "the_role_line_shows_for_nobody",
-   "file": "web/home/chat.css",
-   "old": ".gc-yr[hidden] { display: none; }",
-   "new": "",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "the_quiet_line_is_loud",
-   "file": "web/home/chat.css",
-   "old": "font-style: italic; text-align: center; color: #9cc0b3;",
-   "new": "font-style: italic; text-align: center; color: #3a5a50;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "numbers_for_everybody",
    "file": "web/home/chat.js",
    "old": "function tools() { return !!you && you.role !== 'none'; }",
@@ -3105,7 +3063,7 @@
   {
    "id": "a_promotion_does_not_make_the_log_again",
    "file": "web/home/chat.js",
-   "old": "if (was !== tools()) stale = true;",
+   "old": "if (was !== tools()) { stale = true; hold = true; }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3145,45 +3103,45 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_whole_line_is_yellow",
-   "file": "web/home/chat.css",
-   "old": ".gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }",
-   "new": ".gc-line.gc-mod, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }",
+   "id": "a_logout_leaves_the_moderators_view",
+   "file": "web/home/chat.js",
+   "old": "retry = false;\n            stale = true;",
+   "new": "retry = false;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_red_is_the_leave_red",
-   "file": "web/home/chat.css",
-   "old": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }",
-   "new": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #9d0d17; }",
+   "id": "a_ban_that_was_lifted_is_never_tried_again",
+   "file": "web/home/chat.js",
+   "old": "retry = removed === 'banned';",
+   "new": "retry = false;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_role_class_is_missing_from_the_avatar_style",
-   "file": "web/home/chat.css",
-   "old": ".gc-av.gc-r-admin { color: #ff5f66; border-color: #ff5f66; }",
+   "id": "a_line_that_was_taken_does_not_end_the_ban",
+   "file": "web/home/chat.js",
+   "old": "if (e.own && removed === 'banned') removed = '';",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_faint_number_is_too_faint",
-   "file": "web/home/chat.css",
-   "old": ".gc-no { font-size: 12px; color: #7f9c92;",
-   "new": ".gc-no { font-size: 12px; color: #2a3f38;",
+   "id": "the_one_line_is_not_used_up",
+   "file": "web/home/chat.js",
+   "old": "catch (e) { lost(); return 'offline'; }\n            retry = false;",
+   "new": "catch (e) { lost(); return 'offline'; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "the_hidden_word_is_display_none",
-   "file": "web/home/chat.css",
-   "old": ".gc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }",
-   "new": ".gc-sr { display: none; }",
+   "id": "a_role_change_takes_the_reader_to_the_newest_line",
+   "file": "web/home/chat.js",
+   "old": "if (was !== tools()) { stale = true; hold = true; }",
+   "new": "if (was !== tools()) { stale = true; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "an_administrators_line_is_yellow_the_rules_in_the_other_order",
-   "file": "web/home/chat.css",
-   "old": ".gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }\n.gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }\n",
-   "new": ".gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }\n.gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }\n",
+   "id": "a_del_without_a_number_takes_a_private_answer",
+   "file": "web/home/chat.js",
+   "old": "if (count(m.id) === null) return;",
+   "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

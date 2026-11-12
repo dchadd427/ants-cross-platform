@@ -23,7 +23,7 @@
 .gc-log > :first-child { margin-top: auto; }
 .gc-line { font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
 .gc-who { color: #9fe0b8; }
-.gc-me .gc-who { color: var(--gold); }
+.gc-me .gc-who { color: var(--cream); }       /* (the visitor's own name is white; the role rules below are heavier, so a staff member's own lines keep their role color) */
 /* the role is the color of the NAME (the message keeps its color): red for an administrator, yellow for a moderator; the words are in the accessible name (chat.js). The red is a lighter red of the Leave buttons' family: it must be readable as text on every dark panel it sits on (tests/scripts/test_web_home_chat.py measures it). */
 .gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }
 .gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }

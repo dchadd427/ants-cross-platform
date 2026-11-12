@@ -12,7 +12,7 @@ Messages (JSON, docs/HUB.md has the table):
                                                        may not chat (muted, too new) has none of it kept
   down  {"t":"who","full":bool,"n","g","more","rows":[row,...],"gone":[id,...]}
         the welcome of a login says `me`, the number of the row that is the account's own
-A row is {"i": a number that names it while the person is here, "name", "at", "mod" (moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
+A row is {"i": a number that names it while the person is here, "name", "at", "mod" and "role" (`mod` or `admin`: moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
 A `here` that is not what a page says is refused with the code `here` and is a mistake of the socket; a second `who` too soon is not (it costs the socket a frame more, like any refusal that is not its doing).
 """
 import collections

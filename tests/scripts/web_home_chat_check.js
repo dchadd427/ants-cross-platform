@@ -1395,8 +1395,8 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     const change = rig({}); change.live(W({ login: true, you: asRole('none'), history: hist }));
     check('before a promotion nothing is shown; when the `you` frame comes, the log is made again with the numbers (no reload), and when the role goes, they go', change.rows().every((x) => one(x, 'gc-no') === null) && (change.s().recv({ t: 'you', you: asRole('mod') }), change.rows().slice(0, 2).every((x) => one(x, 'gc-no') !== null))
           && (change.s().recv({ t: 'you', you: asRole('none') }), change.rows().every((x) => one(x, 'gc-no') === null && one(x, 'gc-u') === null)));
-    const hostile = rig({}); hostile.live(W({ login: true, you: asRole('mod'), history: [{ id: 5, at: 1, who: 'a', text: 'x', mod: false, u: '<img src=x onerror=alert(1)> ‮' }] }));
-    check('the username is text (markup stays markup, the bidirectional controls go) in a <bdi>', hostile.env.innerHTMLWrites.length === 0 && hostile.rows()[0].textContent === 'a (<img src=x onerror=alert(1)>): x #5' && one(hostile.rows()[0], 'gc-u').tagName === 'bdi');
+    const plainText = rig({}); plainText.live(W({ login: true, you: asRole('mod'), history: [{ id: 5, at: 1, who: 'a', text: 'x', mod: false, u: '<img src=x onerror=alert(1)> \u202e' }] }));
+    check('the username is text (markup stays markup, the bidirectional controls go) in a <bdi>', plainText.env.innerHTMLWrites.length === 0 && plainText.rows()[0].textContent === 'a (<img src=x onerror=alert(1)>): x #5' && one(plainText.rows()[0], 'gc-u').tagName === 'bdi');
     check('the help line for /del says to use the number beside the line', Pure.helpOf('mod').filter((l) => l[0] === '/del number')[0][1].indexOf('number beside the line') !== -1);
 }
 {   // the role changes while the page is open
@@ -1524,8 +1524,8 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     b.s().recv({ t: 'bye', why: 'banned' });
     check('bye banned: the notice says that the person can still read', b.note() === BAN);
     b.s().fail(); b.clock.advance(1600); b.s().open().recv(W({ login: true, you: ME, history: HISTORY }));
-    check('a banned person reads on: the new welcome shows the history, the field is OFF (and says why), Send is gone, and so is the Log in button, and the notice stays', b.rows().length === 3 && b.field().disabled === true && b.field().getAttribute('placeholder') === 'You are banned from the chat' && one(b.root, 'gc-send').hidden === true && one(b.root, 'gc-login').hidden === true && b.note() === BAN);
-    same('... a line cannot be sent (say() says banned, nothing goes out), and a /help is still answered', [b.dock.say('hello'), sentSays(b), (b.dock.say('/help'), b.answers().length)], ['banned', [], 1]);
+    check('a banned person reads on: the new welcome shows the history and the notice stays, Log in is not offered, and the field is on for one line (the ban may be lifted: the hub does not say)', b.rows().length === 3 && b.field().disabled === false && one(b.root, 'gc-login').hidden === true && b.note() === BAN);
+    same('... that line goes to the hub, which still bans: the field is off again and says why, Send is gone, nothing else goes out, and a /help is still answered', [b.dock.say('hello'), (b.s().recv({ t: 'err', code: 'banned' }), b.field().disabled), b.field().getAttribute('placeholder'), one(b.root, 'gc-send').hidden, b.dock.say('again'), sentSays(b), (b.dock.say('/help'), b.answers().length)], ['', true, 'You are banned from the chat', true, 'banned', ['hello'], 1]);
     const again = rig({}); again.live(W({ login: true, you: ME })); again.dock.say('hello'); again.s().recv({ t: 'err', code: 'banned' });
     check('a ban that the page learns from the hub\'s refusal of a line (a page that was loaded after it) is the same: the notice, and the field off', again.note() === 'You cannot chat here' && (again.clock.advance(6100), again.note() === BAN) && again.field().disabled === true);
     const out = rig({}); out.live(W({ login: true, you: ME })); out.s().recv({ t: 'bye', why: 'banned' }); out.s().fail(); out.clock.advance(1600); out.s().open().recv(W({ login: true, you: null }));
@@ -1544,6 +1544,43 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     check('a hub that says bye to every socket at once: 10 minutes make a few tries (the wait doubles to a minute), not a try a second', storm.sockets.length >= 8 && storm.sockets.length <= 20, storm.sockets.length);
     const logout = rig({}); logout.live(W({ login: true, you: ME })); logout.s().recv({ t: 'bye', why: 'banned' });
     check('(the notice is the page\'s and the hub does not keep it: it is in memory only)', logout.note() === BAN);
+}
+{   // a moderator's view is gone at once after Log out; a lifted ban; a role that changes keeps the reader's place; the hub's own line is nobody's own; the marks of one's own old lines give no tools
+    const hist = [Object.assign(L(7, 'Maple Leaf', 'one'), { k: OTHERS, u: 'aaa.one' }), L(8, 'pebble', 'two')].map((x) => { const y = Object.assign({}, x); delete y.t; return y; });
+    const out = rig({ chip: true }); out.live(W({ login: true, you: asRole('mod'), history: hist })); out.chip.click(); one(out.dock.slot, 'gc-out').click(); out.answer({ ok: true, status: 200 });
+    check('after Log out, before any welcome, the log holds no username and no number (a moderator\'s view does not stay for the next person)', out.rows().length === 2 && out.rows().every((x) => one(x, 'gc-u') === null && one(x, 'gc-no') === null) && out.rowTexts()[0] === 'Maple Leaf: one');
+    const gone = rig({ chip: true }); gone.live(W({ login: true, you: asRole('admin'), history: hist })); gone.chip.click(); one(gone.dock.slot, 'gc-forget').click(); one(gone.dock.slot, 'gc-forget').fire('blur', {}); one(gone.dock.slot, 'gc-forget').click(); gone.clock.advance(500); one(gone.dock.slot, 'gc-forget').click();
+    check('... the same after Forget me', !gone.pending() || (gone.answer({ ok: true, status: 200 }), gone.rows().every((x) => one(x, 'gc-no') === null && one(x, 'gc-u') === null)));
+    const BANNED = 'You are banned from the chat. You can still read it.';
+    const lifted = rig({}); lifted.live(W({ login: true, you: ME })); lifted.s().recv({ t: 'bye', why: 'banned' }); lifted.s().fail(); lifted.clock.advance(1600); lifted.s().open().recv(W({ login: true, you: ME, history: HISTORY }));
+    check('after the welcome that follows a ban\'s `bye` the field is on again (the ban may be lifted: the hub does not tell a page) and the notice is still there', lifted.field().disabled === false && lifted.note() === BANNED && one(lifted.root, 'gc-send').hidden === false);
+    same('one line goes to the hub, and a second waits for the answer to it (the field does not send twice)', [lifted.dock.say('first'), sentSays(lifted), (lifted.clock.advance(2600), lifted.dock.say('second'))], ['', ['first'], 'banned']);
+    lifted.s().recv({ t: 'err', code: 'banned' });
+    check('the hub still bans: its refusal sets the notice and the field off again, and the line comes back into the field', lifted.field().disabled === true && lifted.note() === 'You cannot chat here' && (lifted.clock.advance(6100), lifted.note() === BANNED) && lifted.field().value === 'first' && lifted.field().getAttribute('placeholder') === 'You are banned from the chat');
+    const taken = rig({}); taken.live(W({ login: true, you: ME })); taken.s().recv({ t: 'bye', why: 'banned' }); taken.s().fail(); taken.clock.advance(1600); taken.s().open().recv(W({ login: true, you: ME }));
+    taken.dock.say('hello again'); taken.s().recv(Object.assign(L(40, 'maple.leaf', 'hello again'), { k: MINE }));
+    check('the ban was lifted: the line is taken and echoed, and the notice goes, the field stays on, and the next line goes without a wait for the notice', taken.note() === '' && taken.field().disabled === false && (taken.clock.advance(2600), taken.dock.say('and more') === '') && sentSays(taken).join() === 'hello again,and more');
+    const reload = rig({}); reload.live(W({ login: true, you: ME })); reload.dock.say('x'); reload.s().recv({ t: 'err', code: 'banned' }); reload.clock.advance(6100);
+    check('a refusal `banned` to a line (a page loaded after the ban) is the same state: the notice and the field off, and no line goes until a new welcome', reload.field().disabled === true && reload.dock.say('y') === 'banned' && sentSays(reload).join() === 'x');
+    const place = rig({}); place.live(W({ login: true, you: asRole('mod'), history: hist }));
+    place.clock.advance(1); const box = place.log(); box.scrollHeight = 2000; box.clientHeight = 100; box.scrollTop = 300;
+    place.s().recv({ t: 'you', you: asRole('none') }); place.clock.advance(1);
+    check('a role that changes keeps the place of a reader who is up in the log (the log is made again, but the reader is not taken to the newest line)', box.scrollTop === 300 && place.rows().length === 2 && place.rows().every((x) => one(x, 'gc-no') === null));
+    const place2 = rig({}); place2.live(W({ login: true, you: asRole('mod'), history: hist })); const box2 = place2.log(); box2.scrollHeight = 2000; box2.clientHeight = 100; box2.scrollTop = 1900;
+    place2.s().recv({ t: 'you', you: asRole('none') }); place2.clock.advance(1);
+    check('... and a reader who is at the bottom stays there', box2.scrollTop === 2000);
+    const own = rig({}); own.live(W({ login: true, you: ME, history: HISTORY })); own.dock.open(false);
+    own.s().recv({ t: 'line', id: 90, at: 1, who: 'system', text: 'bob was kicked.', mod: false, k: MINE, sys: true });
+    const liveCount = own.pill();
+    own.s().fail(); own.clock.advance(1600); own.s().open().recv(W({ login: true, you: ME, history: HISTORY.concat([{ id: 91, at: 2, who: 'system', text: 'carol was banned.', mod: false, k: MINE, sys: true }]) }));
+    check('the hub\'s own line is news even where it carries the visitor\'s key (it is nobody\'s own line): live and in the history of a new welcome, each counts as unread', liveCount === '1' && own.pill() === '1');
+    const marked = rig({}); marked.live(W({ login: true, you: ME, history: [Object.assign({ id: 3, at: 3, who: 'maple.leaf', text: 'written as a moderator', mod: true, role: 'mod', k: MINE, u: 'x.y' })] }));
+    check('a person with no role whose own older lines carry a mark sees no numbers and no usernames (the marks of lines give no tools)', marked.rows().length === 1 && one(marked.rows()[0], 'gc-no') === null && one(marked.rows()[0], 'gc-u') === null && marked.rowTexts()[0].indexOf('moderator maple.leaf: written as a moderator') === 0);
+    const named = rig({}); named.live(W({ login: true, you: ME, history: [{ id: 3, at: 3, who: 'admin', text: 'a person called admin', mod: false, k: OTHERS }] }));
+    check('a line by a person NAMED admin or moderator has no role (a name makes none)', cls(named.rows()[0]).every((c) => c !== 'gc-admin' && c !== 'gc-mod') && one(named.rows()[0], 'gc-sr') === null && Pure.lineOf({ id: 1, who: 'admin', text: 'x', mod: false }).role === 'none');
+    const privateDel = rig({}); privateDel.live(W({ login: true, you: asRole('mod') })); privateDel.dock.say('/help');
+    [null, undefined, 'x', 1.5, -1, {}].forEach((id) => privateDel.s().recv({ t: 'del', id }));
+    check('a `del` that names no line takes nothing off the screen (a private answer has no number)', privateDel.answers().length === 1 && privateDel.errors.length === 0);
 }
 {   // the source of the dock names no role and no command in a selector or in markup (a name or an argument is text)
     check('the dock never builds markup or a selector from what a person types or what the hub says: no innerHTML, no querySelector, no "new Function"', !/innerHTML|outerHTML|insertAdjacentHTML|querySelector|new Function|\beval\b/.test(chatSource.replace(/\/\/.*/g, '')));

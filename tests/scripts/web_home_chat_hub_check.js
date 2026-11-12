@@ -176,8 +176,8 @@ async function main() {
         check('... and it stays there: no third socket', hub.upgrades === 2 && v.errors.length === 0);
         hub.set({ you: ME });
         hub.bye('banned');
-        check('banned: the notice says that the person can still read; the page connects again, the history is shown, the field is off and says why, and Send and Log in are gone', await until(() => hub.upgrades === 3 && v.dock.state() === 'live', 5000) && v.note() === 'You are banned from the chat. You can still read it.' && one(v.dock.root, 'gc-input').disabled === true
-              && one(v.dock.root, 'gc-input').getAttribute('placeholder') === 'You are banned from the chat' && one(v.dock.root, 'gc-send').hidden === true && one(v.dock.root, 'gc-login').hidden === true && v.rows().length === 3);
+        check('banned: the notice says that the person can still read; the page connects again, the history is shown, the field is on for one line (the ban may be lifted), and Log in is not offered', await until(() => hub.upgrades === 3 && v.dock.state() === 'live', 5000) && v.note() === 'You are banned from the chat. You can still read it.' && one(v.dock.root, 'gc-input').disabled === false
+              && one(v.dock.root, 'gc-login').hidden === true && v.rows().length === 3);
         await sleep(1500);
         check('... and no more sockets', hub.upgrades === 3 && v.errors.length === 0);
         await hub.close();

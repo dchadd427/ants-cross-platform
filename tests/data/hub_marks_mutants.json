@@ -129,6 +129,13 @@
    "old": "mods = {account: self.chat.roles.role_of(account) for account in best}",
    "new": "mods = {account: (\"mod\" if self.chat.is_mod(account) else \"none\") for account in best}",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_marks"
+  },
+  {
+   "id": "the_purge_keeps_back_only_a_moderators_line",
+   "file": "hub/store/sqlite.py",
+   "old": "(mod OR deleted) = ?",
+   "new": "(mod = 1 OR deleted) = ?",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 900 python3 -m unittest -f tests.scripts.test_hub_marks tests.scripts.test_hub_store_contract"
   }
  ]
 }

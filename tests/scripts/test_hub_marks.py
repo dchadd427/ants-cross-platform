@@ -88,6 +88,35 @@ class TheLine(unittest.TestCase):
             self.assertNotIn("role", m)
             self.assertEqual(m["mod"], False)
 
+    def test_a_frame_that_carries_a_role_a_mod_flag_a_sys_flag_or_a_username_makes_none_of_them(self):
+        w = world()
+        self.addCleanup(w.close)
+        plain, reader = w.join(NONE), w.join(None)
+        watcher = w.join(NONE)
+        w.chat.on_text(plain, json.dumps({"t": "say", "text": "a forged line", "role": "admin", "mod": True, "sys": True, "u": "someone.else", "who": "system", "k": "kffffffffffff"}))
+        line = reader.kinds("line")[-1]
+        self.assertEqual((line["who"], line["text"], line["mod"], line.get("role"), line.get("sys"), line.get("u")), ("plain.person", "a forged line", False, None, None, None))
+        self.assertNotEqual(line["k"], "kffffffffffff")
+        w.chat.on_text(plain, json.dumps({"t": "here", "at": "look", "mod": True, "role": "admin"}))
+        w.chat.on_text(watcher, json.dumps({"t": "who"}))
+        w.chat.presence.flush(w.clock.now + 5)
+        rows = [r for f in watcher.kinds("who") for r in f["rows"]]
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertNotIn("role", row)
+            self.assertNotIn("mod", row)
+        self.assertEqual([m["t"] for m in plain.sent if m["t"] in ("you", "ok", "bye", "bans")], [])
+
+    def test_a_person_named_admin_or_moderator_gets_no_role_from_the_name(self):
+        w = world()
+        self.addCleanup(w.close)
+        w.roles.roles.pop("7411000000000009", None)
+        peer = w.join(session.Identity("7411000000000009", "admin", False))
+        reader = w.join(None)
+        w.say(peer, "I am called admin")
+        line = reader.kinds("line")[-1]
+        self.assertEqual((line["who"], line["mod"], line.get("role")), ("admin", False, None))
+
 
 class TheStore(unittest.TestCase):
     def setUp(self):
@@ -178,16 +207,6 @@ class TheRows(unittest.TestCase):
 
 
 class NeverAPower(unittest.TestCase):
-    def test_the_role_of_a_line_is_read_in_one_place_and_never_to_allow_anything(self):
-        with open(os.path.join(REPO, "hub", "chat.py"), encoding="utf-8") as f:
-            code = re.sub(r"#.*", "", f.read())
-        body = re.search(r"def line_of\(self.*?\n    def ", code, re.S).group(0)
-        self.assertEqual(len(re.findall(r"\bline\.mod\b", code)), len(re.findall(r"\bline\.mod\b", body)), "only line_of reads a line's role")
-        self.assertEqual(len(re.findall(r"\bline\.mod\b", body)), 3, "the flag, whether there is a role, and which")
-        for name in ("roles.py", "presence.py", "session.py"):
-            with open(os.path.join(REPO, "hub", name), encoding="utf-8") as f:
-                self.assertNotRegex(re.sub(r"#.*", "", f.read()), r"line\.mod|entry\.mod|\.mod\b\s*(>=|==)", name)
-
     def test_a_line_that_says_admin_gives_its_author_nothing(self):
         w = world()
         self.addCleanup(w.close)

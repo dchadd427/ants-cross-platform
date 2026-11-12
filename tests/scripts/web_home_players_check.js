@@ -326,7 +326,7 @@ const CROWD = [row(1, 'maple'), row(2, 'tess', 'look', { mod: true }), row(3, 's
     r.live(); r.who(FULL(CROWD, { n: 13, g: 4 }));
     same('the groups in their order with their counts, each by name; the visitor is not among them', r.groups(), [
         { g: 'mod', n: '1', names: ['tess'] }, { g: 'look', n: '3', names: ['basil', 'fern', 'sage'] }, { g: 'wait', n: '2', names: ['clover', 'juniper'] }, { g: 'play', n: '2', names: ['hazel', 'pebble'] }]);
-    same('the headings of the groups', texts(r.panel(), 'pl-gh').map((t) => t.replace(/\d+$/, '')), ['Moderators', 'Looking', 'Waiting', 'Playing']);
+    same('the headings of the groups', texts(r.panel(), 'pl-gh').map((t) => t.replace(/\d+$/, '')), ['Staff', 'Looking', 'Waiting', 'Playing']);
     check('the visitor is first, apart, as "you" with the line that says where', one(r.panel(), 'pl-you') && texts(one(r.panel(), 'pl-you'), 'pl-nm').join() === 'maple' && texts(one(r.panel(), 'pl-you'), 'pl-tag').join() === 'you' && texts(one(r.panel(), 'pl-you'), 'pl-meta').join().indexOf('Looking') !== -1);
     same('the lines under the names: a moderator is told where, those who look are not, a room by its map and seats, "In a room" for a room that the hub says nothing of, a match by its map and players', ['tess', 'sage', 'clover', 'juniper', 'pebble', 'hazel'].map((n) => r.metaOf(n)), ['Looking: Looking', null, 'Treasure · 2 of 4', 'In a room', 'Islands · 3 players', 'Gauntlet · 2 players']);
     same('the role of a moderator is on the name (class, word, title) of its card, and only there: nobody else has one, and no tag is drawn', [texts(r.panel(), 'pl-badge').length, (() => { const c = byClass(r.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === 'tess'); return [cls(c).indexOf('r-mod') !== -1, one(c, 'pl-sr').textContent, one(c, 'pl-nm').getAttribute('title')]; })(), byClass(r.panel(), 'pl-card').filter((c) => cls(c).indexOf('r-mod') !== -1).length], [0, [true, 'moderator ', 'moderator'], 1]);
@@ -650,7 +650,7 @@ function bringPlayers(env) {
 
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-// 9. The roles: the words ADMIN and MOD beside a name (the hub's `mod` is true for both; `role` says which), and the visitor's own row that follows a live change
+// 9. The roles: the role of a name, red or yellow, with the word in the accessible name (the hub's `mod` is true for both; `role` says which), and the visitor's own row that follows a live change
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
     const P = Pure;
@@ -663,8 +663,13 @@ function bringPlayers(env) {
     const cardOf = (name) => byClass(r.panel(), 'pl-card').find((c) => one(c, 'pl-nm').textContent === name);
     const markOf = (card) => card ? [cls(card).filter((c) => c === 'r-admin' || c === 'r-mod').join(''), one(one(card, 'pl-name'), 'pl-sr') ? one(one(card, 'pl-name'), 'pl-sr').textContent : '', one(card, 'pl-nm').getAttribute('title')] : null;
     const badgeOf = (name) => markOf(cardOf(name));
-    same('the Moderators group has both, the admins first, then by name; each name has its role (red for the admin, yellow for the moderator, the word in the accessible name and the title), and a person with no role has none', [r.groups()[0].names, badgeOf('boss'), badgeOf('amy'), badgeOf('zed'), badgeOf('sage')],
+    same('the Staff group has both, the admins first, then by name; each name has its role (red for the admin, yellow for the moderator, the word in the accessible name and the title), and a person with no role has none', [r.groups()[0].names, badgeOf('boss'), badgeOf('amy'), badgeOf('zed'), badgeOf('sage')],
         [['boss', 'amy', 'zed'], ['r-admin', 'administrator ', 'administrator'], ['r-mod', 'moderator ', 'moderator'], ['r-mod', 'moderator ', 'moderator'], ['', '', null]]);
+    const heading = (q) => texts(q.panel(), 'pl-gh').map((t) => t.replace(/\d+$/, ''));
+    const only = (rows) => { const q = rig(); q.live(W({ you: { name: 'maple', mod: false, role: 'none' } })); q.who(FULL(rows, { n: rows.length + 1 })); return q; };
+    same('the group of the staff is titled "Staff" whoever is in it: both roles, only administrators, only moderators; a person with no role is never in it, and with none of the staff there is no such group', [heading(r)[0], heading(only([row(3, 'boss', 'look', { mod: true, role: 'admin' })]))[0], heading(only([row(2, 'zed', 'look', { mod: true, role: 'mod' })]))[0], heading(only([row(5, 'sage')])).join(), only([row(2, 'zed', 'look', { mod: true }), row(5, 'sage')]).groups().map((g) => g.g + ':' + g.names.join('+')).join()],
+        ['Staff', 'Staff', 'Staff', 'Looking', 'mod:zed,look:sage']);
+    check('... and no group says moderators any more (the title is the page\'s word, and the accessible name of the group is that title)', texts(r.panel(), 'pl-gh').every((t) => !/moderators/i.test(t)) && byClass(r.panel(), 'pl-group').every((g) => one(g, 'pl-gh') !== null));
     r.who({ t: 'who', full: false, n: 5, g: 0, more: 0, rows: [row(2, 'zed', 'look', { mod: true, role: 'admin' })], gone: [] });
     same('a change that makes a moderator an administrator is drawn at once (the role, the place in the group)', [r.groups()[0].names, badgeOf('zed')], [['boss', 'zed', 'amy'], ['r-admin', 'administrator ', 'administrator']]);
     const inPlace = rig(); inPlace.live(W({ you: { name: 'maple', mod: false, role: 'none' } }));
@@ -683,6 +688,8 @@ function bringPlayers(env) {
     check('a reader that is told a `you` is still a reader (no own row)', one(reader.panel(), 'pl-you') === null && reader.errors.length === 0);
     const old = rig(); old.live(W({ you: { name: 'moddy', mod: true } })); old.who(FULL([], { n: 1 }));
     check('a hub that says `mod` only: the visitor is a moderator (yellow)', markOf(one(old.panel(), 'pl-card'))[0] === 'r-mod');
+    const flag = rig(); flag.live(W({ you: { name: 'odd', mod: true, role: 'none' } })); flag.who(FULL([], { n: 1 })); flag.emit('you', { t: 'you', you: { name: 'odd', mod: true, role: 'none' } });
+    check('a `you` that says role none and mod true is nobody on the list as it is in the chat (one rule for both)', markOf(one(flag.panel(), 'pl-card'))[0] === '');
     const adm = rig(); adm.live(W({ you: { name: 'boss', mod: true, role: 'admin' } })); adm.who(FULL([], { n: 1 }));
     check('a welcome that says admin: the own row is red at once', markOf(one(adm.panel(), 'pl-card'))[0] === 'r-admin');
 }

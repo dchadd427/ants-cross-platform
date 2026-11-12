@@ -17,7 +17,7 @@
     var MS = { poll: 1000, tell: 3000, note: 4000 };                      // (poll: the page looks at its own room this often; tell: the hub is told what changed at most this often)
     var ROOM = /^[a-z0-9_-]{1,32}$/;
     var STATUS = ['look', 'wait', 'play'];
-    var GROUPS = [['mod', 'Moderators'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing']];
+    var GROUPS = [['mod', 'Staff'], ['look', 'Looking'], ['wait', 'Waiting'], ['play', 'Playing']];
     var WORD = { look: 'Looking', wait: 'Waiting', play: 'Playing' };
     var TEXT = {
         title: 'Players', here: ' here now', you: 'you', moderator: 'moderator', administrator: 'administrator', privateRoom: 'Private room', privateGame: 'Private game', publicRoom: 'Public room', inRoom: 'In a room', inGame: 'In a game', join: 'Join', gone: 'That game is not open any more.',
@@ -266,15 +266,17 @@
         function clock() { timers.poll = setTimeout(guard(function () { timers.poll = 0; sync(); clock(); }), MS.poll); }
         dock.tap(guard(function (kind, m) {
             if (kind === 'live') {
-                var name = m && m.you && typeof m.you === 'object' && typeof m.you.name === 'string' ? Chat.clip(Chat.plain(m.you.name.slice(0, LIMIT.name * 4), true), LIMIT.name) : '';
                 supported = !!m && m.presence === true; live = true; asked = false; sentSig = null; lastSent = null; model = fresh();
                 me = whole(m && m.me, 0, LIMIT.ids) ? m.me : null;
-                you = name ? { name: name, mod: m.you.mod === true || m.you.role === 'mod' || m.you.role === 'admin', role: m.you.role === 'admin' || m.you.role === 'mod' ? m.you.role : m.you.mod === true ? 'mod' : 'none' } : null;
+                var yo = Chat.youOf(m && m.you);                   // (the dock's one rule for who the visitor is and what role they hold)
+                you = yo ? { name: yo.name, mod: yo.mod, role: yo.role } : null;
                 if (!supported) phase = 'none'; else { doing = look(); tell(); ask(); }
             } else if (kind === 'you') {                                   // the role changed (the chat dock's `you` frame): the visitor's own row follows at once
                 var y = m && m.you && typeof m.you === 'object' ? m.you : null;
                 if (!you || !y) return;
-                you.role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none'; you.mod = you.role !== 'none';
+                var yn = Chat.youOf(y);
+                if (!yn) return;
+                you.role = yn.role; you.mod = yn.mod;
             } else if (kind === 'who') {
                 var next = live && supported ? apply(model, m, Chat, rules) : null;
                 if (!next) return;
