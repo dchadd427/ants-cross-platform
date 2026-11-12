@@ -167,6 +167,17 @@ struct Duo {
         }
         return cond();
     }
+    // The application stands still (its clock does not move: it seals and runs nothing more) and the peer's clock runs until the peer has run every turn the application has run. A guest runs the host's
+    // turns a jitter buffer behind it, and after one late delivery the buffer stays a turn longer for a while, so "both at the same tick at the end of a pass" is not a state that has to come.
+    bool peer_level(uint32_t max_ms = 5000) {
+        for (uint32_t t = 0; t < max_ms && peer.sim.current_tick() < app.sim().current_tick(); t += 10) {
+            app.pump_network(0.0f);
+            peer.now += 10;
+            peer.update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return peer.sim.current_tick() == app.sim().current_tick();
+    }
 };
 
 // The application and two bare machines, stepped together in 10 ms of game time

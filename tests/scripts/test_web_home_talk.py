@@ -33,7 +33,8 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_talk_check.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 FILES = ("talk.js", "talk.css")
-TALK_BUDGET, TALK_GZIP_BUDGET = 22200, 8100       # bytes, raw and gzipped, both files together (about 22,030 and 7,970, comments included; raised once more, from 21,200 and 7,800, on purpose for the plain sentences of the voice errors, the check of the page's own permissions policy and the line said at once, about 1,200 bytes (410 gzipped); raised before, from 19,600 and 7,300, on purpose for the review's fixes: the voice under an inert dock, a caret between a pair of surrogates, a line that is full, the focus kept in the field on a press, about 1,450 bytes with their comments; raised from 19,000 and 7,000 on purpose for the two inline SVG pictures, the usual microphone and a smiley, about 1,300 bytes, in place of two emoji characters:  the picker with its keys, the voice with its states and words); they load after the first paint, after the dock, so they cost the first look nothing
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import TALK_BUDGET, TALK_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 sys.path.insert(0, REPO)
 from hub import limits, text as hubtext          # noqa: E402  (the hub's own rules: the tests run the real thing)
@@ -322,7 +323,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_talk_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.js", "web/home/talk.css",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.js", "web/home/talk.css",
               "tests/scripts/test_web_home_talk.py", "tests/scripts/web_home_talk_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md",
               "hub/__init__.py", "hub/text.py", "hub/limits.py"]

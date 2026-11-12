@@ -7,8 +7,7 @@ nothing of the server or of the protocol changed (network protocol 21).
   - tests/scripts/web_lobby_chat_check.js runs the library without a browser: what may be typed (printable ASCII, 100 characters, no empty line), what the box says in each state of the room, the
     words, and the whole box with a small fake of the DOM (names and lines are TEXT: the fake throws when markup is assigned; the last 200 lines; the follow of the newest line; the toast; what a
     line that the client does not take does; the field shut while the link is down or START waits; the page changing its client);
-  - the page: the new section, the stylesheet, the script in its place, the hooks, and the limit of 1500 lines of tools/check_hygiene.py (web/lobby.html is at it: the map list's own stylesheet moved
-    to its own file to make room);
+  - the page: the new section, the stylesheet, the script in its place, the hooks;
   - the stylesheet: the look of the lobby (its tokens, the black box with the green frame, the accents of the four colors), a field that a phone does not zoom into, the places at each width;
   - this file also changes one thing at a time in a COPY of the library (a character range, a count, a word, a color, a rule of the box): the check must then fail.
 The node check needs node; without it these tests are skipped and say so.
@@ -80,9 +79,6 @@ class ThePage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.page = read(LOBBY)
-
-    def test_the_page_is_within_the_line_limit_of_the_hygiene_check(self):
-        self.assertLessEqual(self.page.count("\n"), 1500)
 
     def test_the_section_is_in_the_grid_between_the_room_and_the_map_with_its_name(self):
         grid = self.page.index('<div class="grid" id="lobby">')

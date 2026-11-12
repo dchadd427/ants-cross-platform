@@ -1,0 +1,207 @@
+{
+ "note": "Mutants of tools/check_doc_move.py (the proof that a split of a document is a pure move) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_check_doc_move.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/check_doc_move_mutants.json --keep-going --jobs 1.",
+ "baseline": {
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_check_doc_move"
+ },
+ "defaults": {
+  "file": "tools/check_doc_move.py",
+  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_check_doc_move"
+ },
+ "mutants": [
+  {
+   "id": "a_lost_link_is_accepted",
+   "old": "    for (src, dst, text), n in sorted(((k, v) for k, v in (before - after).items()), key=str):",
+   "new": "    for (src, dst, text), n in []:"
+  },
+  {
+   "id": "the_anchors_are_not_checked",
+   "old": "    out.extend(\"(c) \" + f for f in ch.check_anchors(root, now))",
+   "new": "    out.extend([])"
+  },
+  {
+   "id": "the_heading_of_a_link_may_change",
+   "old": "                found[(page_of(rel), page_of(path), text)] += 1",
+   "new": "                found[(page_of(rel), page_of(path), None)] += 1"
+  },
+  {
+   "id": "a_part_that_is_not_in_git_is_ignored",
+   "old": "\"ls-files\", \"-z\", \"--cached\", \"--others\", \"--exclude-standard\"",
+   "new": "\"ls-files\", \"-z\", \"--cached\""
+  },
+  {
+   "id": "the_order_of_the_lines_of_a_section_is_not_checked",
+   "old": "                if lines[i:i + len(body)] != body or any(used[i:i + len(body)]):",
+   "new": "                if sorted(lines[i:i + len(body)]) != sorted(body) or any(used[i:i + len(body)]):"
+  },
+  {
+   "id": "blank_lines_are_not_checked",
+   "old": "                if lines[i:i + len(body)] != body or any(used[i:i + len(body)]):",
+   "new": "                if [x for x in lines[i:i + 2 * len(body)] if x.strip()][:len([x for x in body if x.strip()])] != [x for x in body if x.strip()] or any(used[i:i + len(body)]):"
+  },
+  {
+   "id": "a_section_need_not_sit_under_its_own_heading",
+   "old": "                    if k < 0 or lines[heads[k]] != heading or used[heads[k]]:",
+   "new": "                    if k < 0:"
+  },
+  {
+   "id": "a_duplicated_line_is_accepted",
+   "old": "if not problems else []      # (when a section did not fit",
+   "new": "if False else []      # (when a section did not fit"
+  },
+  {
+   "id": "a_section_may_be_in_two_places",
+   "old": "                for j in range(i, i + len(body)):\n                    used[j] = True\n                return (f, h, i, i + len(body))",
+   "new": "                return (f, h, i, i + len(body))"
+  },
+  {
+   "id": "a_link_is_not_read_for_the_section_it_names",
+   "old": "        if anchor:\n            anchor = urllib.parse.unquote(anchor.split(\"?\")[0]).lower()\n            if path.endswith(\".md\"):",
+   "new": "        if False:\n            anchor = urllib.parse.unquote(anchor.split(\"?\")[0]).lower()\n            if path.endswith(\".md\"):"
+  },
+  {
+   "id": "the_sections_are_told_apart_by_their_heading_only",
+   "old": "hashlib.sha1(\"\\n\".join(body).encode(\"utf-8\")).hexdigest()[:12]",
+   "new": "\"\""
+  },
+  {
+   "id": "an_outside_address_is_not_compared",
+   "old": "        if not target or OUTSIDE.match(target):\n            return written",
+   "new": "        if not target or OUTSIDE.match(target):\n            return \"\""
+  },
+  {
+   "id": "a_target_that_is_no_tracked_file_is_not_compared",
+   "old": "        if path not in self.fileset:\n            return written",
+   "new": "        if path not in self.fileset:\n            return \"\""
+  },
+  {
+   "id": "the_call_that_looks_like_a_link_is_blanked",
+   "old": "            piece = TARGET.sub(lambda m: \"](\" + self.meaning(rel, m.group(1)) + \")\", piece)",
+   "new": "            piece = TARGET.sub(\"]()\", piece)"
+  },
+  {
+   "id": "another_page_may_lose_a_blank_line",
+   "old": "        a, b = old.parsed(p)[1], new.parsed(p)[1]",
+   "new": "        a, b = [x for x in old.parsed(p)[1] if x.strip()], [x for x in new.parsed(p)[1] if x.strip()]"
+  },
+  {
+   "id": "another_page_may_change",
+   "old": "        if a != b:\n            n = next(",
+   "new": "        if False:\n            n = next("
+  },
+  {
+   "id": "a_deleted_page_is_not_noticed",
+   "old": "p.endswith(\".md\") and p not in set(now)]",
+   "new": "p.endswith(\".md\") and False]"
+  },
+  {
+   "id": "a_section_that_was_in_the_old_page_is_not_counted_against_the_new_set",
+   "old": "    spoken = {l for l in old_lines if l.strip() and has_text(l)}",
+   "new": "    spoken = set()"
+  },
+  {
+   "id": "a_part_is_not_in_the_new_set",
+   "old": "        self.files = [doc] + parts\n",
+   "new": "        self.files = [doc]\n"
+  },
+  {
+   "id": "a_text_before_the_first_heading_is_not_checked",
+   "old": "    out = [(None, before, 1, None)] if before else []",
+   "new": "    out = []"
+  },
+  {
+   "id": "the_order_of_the_sections_of_a_file_is_not_checked",
+   "old": "            if bt < at:",
+   "new": "            if False:"
+  },
+  {
+   "id": "a_section_may_change_its_parent_heading",
+   "old": "        if (f, above) != (placed.where[parent][0], placed.where[parent][1]):",
+   "new": "        if False:"
+  },
+  {
+   "id": "the_page_title_is_a_parent_like_any_other",
+   "old": "        if parent is None or level_of(placed.sections[parent][0]) == 1 or parent not in placed.where:",
+   "new": "        if parent is None or parent not in placed.where:"
+  },
+  {
+   "id": "the_text_before_the_first_heading_may_move_under_a_heading",
+   "old": "                    if k >= 0:                                 # (the text before the first heading stays before every heading)",
+   "new": "                    if False:"
+  },
+  {
+   "id": "a_link_is_read_for_the_first_line_of_its_section_only",
+   "old": "    if not placed.problems:                                    # (pass two:",
+   "new": "    if False:                                    # (pass two:"
+  },
+  {
+   "id": "added_lines_are_not_checked",
+   "old": "        problems.extend(added)",
+   "new": "        problems.extend([])"
+  },
+  {
+   "id": "a_line_may_stand_between_a_heading_and_its_body",
+   "old": "            if before is not None and before in used_heads and not in_top:",
+   "new": "            if False:"
+  },
+  {
+   "id": "a_line_may_be_added_inside_a_part",
+   "old": "            if not in_top and not is_index:",
+   "new": "            if False:"
+  },
+  {
+   "id": "a_fence_mark_is_an_added_line_like_another",
+   "old": "ch.FENCE.match(lines[i]) or MARKS.search(lines[i])",
+   "new": "MARKS.search(lines[i])"
+  },
+  {
+   "id": "a_comment_or_details_mark_is_an_added_line_like_another",
+   "old": "ch.FENCE.match(lines[i]) or MARKS.search(lines[i])",
+   "new": "ch.FENCE.match(lines[i])"
+  },
+  {
+   "id": "a_part_may_have_two_titles",
+   "old": "                    if level == 1 and in_top and titles == 0:",
+   "new": "                    if level == 1 and in_top:"
+  },
+  {
+   "id": "the_title_may_be_below_the_top",
+   "old": "                    if level == 1 and in_top and titles == 0:",
+   "new": "                    if level == 1 and titles == 0:"
+  },
+  {
+   "id": "a_heading_of_the_index_needs_no_table",
+   "old": "                    elif level == 2 and is_index and ahead:",
+   "new": "                    elif level == 2 and is_index:"
+  },
+  {
+   "id": "a_part_may_hold_a_table",
+   "old": "                    if not is_index:\n                        bad(i, \"a table in a part\")\n                    elif",
+   "new": "                    if False:\n                        bad(i, \"a table in a part\")\n                    elif"
+  },
+  {
+   "id": "a_row_of_the_table_needs_no_link",
+   "old": "not all(is_navigation(new, f, r) for r in rows[2:])",
+   "new": "False"
+  },
+  {
+   "id": "a_table_needs_a_rule_row",
+   "old": "not TABLE_RULE.match(rows[1])",
+   "new": "False"
+  },
+  {
+   "id": "a_navigation_line_may_be_long",
+   "old": "    if len(line) > NAVIGATION_LENGTH:",
+   "new": "    if False:"
+  },
+  {
+   "id": "a_navigation_line_may_link_to_anything_relative",
+   "old": "        if path in new.fileset and path.endswith(\".md\"):",
+   "new": "        if True:"
+  },
+  {
+   "id": "the_title_of_the_index_ends_the_top",
+   "old": "        top_ends = next((h for h in heads if h in used_heads and level_of(lines[h]) >= 2), len(lines))",
+   "new": "        top_ends = next((h for h in heads if h in used_heads), len(lines))"
+  }
+ ]
+}
