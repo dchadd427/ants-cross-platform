@@ -58,10 +58,24 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
+      "id": "lock_not_released",
+      "file": "web/game_menu.js",
+      "old": "                if (page.releaseLock) page.releaseLock();\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
       "id": "leave_asks_the_lock_back",
       "file": "web/game_menu.js",
       "old": "function leaveNow() { close({ relock: false }); call('_ants_menu_do', 1); }",
       "new": "function leaveNow() { close(); call('_ants_menu_do', 1); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lock_listener_dropped",
+      "file": "web/game_menu.js",
+      "old": "if (win.addEventListener) listen(win, name, keepPointerFree, true);",
+      "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
