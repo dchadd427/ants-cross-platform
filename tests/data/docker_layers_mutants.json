@@ -1016,6 +1016,22 @@
    "new": "# syntax=docker/dockerfile:1\n# =============================================================================\n# The dedicated game server",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_the_compiles_have_the_cache_mount_and_ccache_is_installed"
+  },
+  {
+   "id": "relink_does_not_fix_the_order_of_the_ports",
+   "file": "tools/relink_outputs.sh",
+   "old": "sed -i 's/^\\( *\\)dfs(unsorted.pop())$/",
+   "new": "sed -i 's/^\\( *\\)NOT_A_LINE$/",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_relink_makes_emscripten_take_its_ports_by_name_and_stops_when_the_line_is_not_there"
+  },
+  {
+   "id": "relink_goes_on_without_the_line_to_change",
+   "file": "tools/relink_outputs.sh",
+   "old": "[ \"$(grep -c '^ *dfs(unsorted.pop())$' \"$ports\")\" = 1 ]",
+   "new": "[ \"$(grep -c '^ *dfs(unsorted.pop())$' \"$ports\")\" -ge 0 ]",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_relink_makes_emscripten_take_its_ports_by_name_and_stops_when_the_line_is_not_there"
   }
  ]
 }

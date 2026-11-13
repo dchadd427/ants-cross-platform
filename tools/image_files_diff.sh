@@ -4,12 +4,13 @@
 # sha256 of the content), then the image's configuration (user, entrypoint, command, ports, environment, working folder, health check). Any difference fails; the only text that may differ is the
 # build time and the build date of the pages (tools/image_manifest.py: STAMPED, a short list of files and patterns).
 #
-# The linked WebAssembly programs and their JavaScript are the exception: two links of the very same objects do not always give the same bytes (the linker and the optimizer depend on the address
-# space layout and on thread timing), so a comparison of those files could only say "the two builds hit the same variant". For the web image they are compared where it is exact:
+# The linked WebAssembly programs and their JavaScript are the exception: two links of the very same objects do not always give the same bytes (Emscripten puts the
+# game's four port libraries on the linker's command line in an order that it takes from a Python set: every normal build links with one of three orders, and the three programs are the same
+# objects in another layout), so a comparison of those files could only say "the two builds hit the same variant". For the web image they are compared where it is exact:
 #   1. the link's inputs, from the builder stage of both builds (tools/link_inputs.py: every object file, archive, response file (the lists of objects and libraries that the link command lines
 #      name) and library that the link reads, the start-up objects of Emscripten's cache, and the link command lines), byte for byte (a library or object of Emscripten's cache by its members
 #      without their debug information: the ports' debug information holds the folder of their compile, which differs between the two Dockerfiles and which the link drops);
-#   2. the programs of a link that is made deterministic inside the check only (tools/relink_outputs.sh: no address randomization, one linker thread, one optimizer thread), unless --no-relink; if
+#   2. the programs of a link that is made deterministic inside the check only (tools/relink_outputs.sh: the ports in one fixed order, no address randomization, one linker thread, one optimizer thread), unless --no-relink; if
 #      two such links of one image differ here the recipe does not hold on this machine, which is said, and only the first comparison counts.
 # The image's own files of those programs keep their type, mode, owner and a size within one percent, and each of the six (index.js, index.wasm, their two .gz copies, lvl_core.js, lvl_core.wasm) is
 # the builder stage's own link output, byte for byte (a copy of it: nothing after the link may have edited it, and a stub link's file of about the same size cannot stand in). Production links as it
