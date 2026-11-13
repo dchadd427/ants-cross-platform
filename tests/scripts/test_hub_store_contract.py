@@ -998,6 +998,74 @@ class Contract(unittest.TestCase):
         self.assertIsNone(self.store.picture(name))
         self.assertEqual(self.store.picture_usage(), (0, 0))
 
+    def test_a_picture_is_not_served_after_the_last_login_has_run_out_whatever_logins_ended_before_it_and_with_no_purge(self):
+        self.store.add_session("old", "1001", "alice", 100, 10, 100)
+        self.store.add_session("new", "1001", "alice", 1000, 10, 100)
+        name, kept = self.keep(name="a" * 32, until=self.clock.now + 5000)
+        self.assertTrue(kept)
+        self.clock.now += 50
+        self.store.delete_session("new")                                          # (the newer login is logged out: the older one is the last, and ends at 100)
+        self.clock.now += 49
+        self.assertEqual((self.store.picture(name), list(self.store.picture_names().values())), (b"\x89PNG-one", [name]))
+        self.clock.now += 1                                                       # (the older one has run out: no purge has run)
+        self.assertEqual((self.store.logins("1001"), self.store.picture(name), self.store.picture_names()), (0, None, {}))
+
+    def test_a_picture_lasts_as_long_as_the_latest_login_and_no_longer_than_it_was(self):
+        self.store.add_session("a", "1001", "alice", 100, 10, 100)
+        self.store.add_session("b", "1001", "alice", 700, 10, 100)
+        self.store.add_session("c", "1001", "alice", 300, 10, 100)
+        name, _ = self.keep(name="a" * 32, until=self.clock.now + 5000)
+        self.clock.now += 650
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")                  # (the time was cut to the latest login's end, 700, not to the earliest or the newest)
+        self.clock.now += 49
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.clock.now += 1
+        self.assertIsNone(self.store.picture(name))
+        name2, _ = self.keep(account="1002", name="b" * 32, png=b"two", until=self.clock.now + 50)        # (an end that is nearer than the logins' is kept)
+        self.store.add_session("x", "1002", "bob", 1000, 10, 100)
+        self.store.add_session("y", "1002", "bob", 1000, 10, 100)
+        self.store.delete_session("y")
+        self.clock.now += 49
+        self.assertEqual(self.store.picture(name2), b"two")
+        self.clock.now += 1
+        self.assertIsNone(self.store.picture(name2))
+
+    def test_a_login_that_ran_out_and_is_not_purged_yet_is_not_a_login_left(self):
+        self.store.add_session("short", "1001", "alice", 60, 10, 100)
+        self.store.add_session("long", "1001", "alice", 1000, 10, 100)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 61                                                      # ("short" has run out and is still in the table)
+        self.store.delete_session("long")
+        self.assertIsNone(self.store.picture(name))
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+
+    def test_the_purge_and_the_cap_leave_the_picture_of_an_account_that_still_has_a_login(self):
+        self.store.add_session("short", "1001", "alice", 60, 10, 3)
+        self.store.add_session("long", "1001", "alice", 1000, 10, 3)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 61
+        self.store.purge()                                                        # ("short" runs out and goes: "long" is left)
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.store.add_session("k2", "1002", "bob", 1000, 10, 3)
+        self.store.add_session("k3", "1003", "carol", 1000, 10, 3)
+        self.store.add_session("k4", "1004", "dan", 1000, 10, 3)                   # (the cap of 3 pushes the oldest, "long", out: the account has no login now)
+        self.assertIsNone(self.store.picture(name))
+
+    def test_the_cap_of_all_logins_leaves_the_picture_of_an_account_whose_other_login_stays(self):
+        self.store.add_session("a1", "1001", "alice", 1000, 10, 3)
+        self.clock.now += 1
+        self.store.add_session("a2", "1001", "alice", 1000, 10, 3)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 1
+        self.store.add_session("k2", "1002", "bob", 1000, 10, 3)
+        self.clock.now += 1
+        self.store.add_session("k3", "1003", "carol", 1000, 10, 3)                 # (the cap of 3 pushes "a1" out: "a2" is left)
+        self.assertEqual((self.store.session("a1"), self.store.picture(name)), (None, b"\x89PNG-one"))
+
+    def test_a_ban_of_one_account_stops_no_other_accounts_picture(self):
+        self.store.ban("1009", "me", "mallory")
+        self.assertTrue(self.keep(account="1001", name="a" * 32)[1])
+
     def test_a_ban_takes_the_picture_and_a_switch_or_block_that_was_made_stays(self):
         name, _ = self.keep(name="a" * 32)
         self.store.set_picture_show("1002", base.SHOW_OFF)

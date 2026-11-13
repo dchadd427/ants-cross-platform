@@ -127,6 +127,7 @@ class Pictures:
         self.tasks = set()
         self.queued = set()                                  # the references of the accounts whose fetch waits or runs: one each, so a burst of logins of one account is one fetch
         self.dropped = 0                                     # fetches dropped since the last line of the log
+        self.stopping = False                                # the hub is stopping: nothing new is started
         self.dropped_at = float("-inf")
         self.bucket = limitmod.TokenBucket(limits.picture_burst, limits.picture_refill_seconds, clock())
         self.rate = limitmod.RateByAddress(limits.picture_serve_burst, limits.picture_serve_refill_seconds)
@@ -139,6 +140,8 @@ class Pictures:
         whose fetch is waiting or running already, a full queue: nothing is fetched (and the drop is counted and told). A new login always gets its fetch: the next login is the retry. No picture at
         Discord deletes the older copy of ours."""
         try:
+            if self.stopping:
+                return
             if self.store.picture_state(account, touch=True) != SHOW_ON:
                 return
             if self.store.is_banned(account):
@@ -169,7 +172,7 @@ class Pictures:
             self.dropped, self.dropped_at = 0, now
 
     def pump(self):
-        while self.waiting and self.inflight < self.limits.picture_inflight:
+        while not self.stopping and self.waiting and self.inflight < self.limits.picture_inflight:
             account, avatar, key = self.waiting.popleft()
             self.inflight += 1
             task = asyncio.ensure_future(self.work(account, avatar, key))
@@ -221,6 +224,10 @@ class Pictures:
         self.tell_drops(now)
 
     def stop(self):
+        """The hub stops: the queue is emptied first and nothing new starts (a task that ends gives its place back and would start the next one), then the running fetches are cancelled."""
+        self.stopping = True
+        self.waiting.clear()
+        self.queued.clear()
         for task in list(self.tasks):
             task.cancel()
 

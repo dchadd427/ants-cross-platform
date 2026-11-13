@@ -679,15 +679,15 @@
   {
    "id": "login_total_cap_removed",
    "file": "hub/store/sqlite.py",
-   "old": "self.db.execute(\"DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)\", (total,))",
+   "old": "self.db.executemany(\"DELETE FROM sessions WHERE rowid = ?\", [(r[0],) for r in cut])",
    "new": "self.db.execute(\"SELECT ?\", (total,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
   },
   {
    "id": "login_total_cap_keeps_the_oldest",
    "file": "hub/store/sqlite.py",
-   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)\", (total,)).rowcount",
-   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?)\", (total,)).rowcount",
+   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?\", (total,)).fetchall()",
+   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?\", (total,)).fetchall()",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
   },
   {

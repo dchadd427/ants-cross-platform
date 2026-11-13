@@ -154,6 +154,28 @@ class ThePngCheck(unittest.TestCase):
                 with self.assertRaises(picturesmod.ShapeError):
                     picturesmod.rewrite(data)
 
+    def test_interlaced_pictures_of_every_depth_are_kept_with_their_rows_counted_to_the_whole_byte(self):
+        for color, depth in ((0, 1), (0, 2), (0, 4), (3, 4), (3, 1), (2, 16), (6, 16), (4, 16), (0, 8)):
+            for width, height in ((13, 17), (9, 11), (8, 8), (127, 33)):
+                with self.subTest(color=color, depth=depth, size=(width, height)):
+                    data = make_png(width, height, color=color, depth=depth, interlace=1)
+                    self.assertEqual(picturesmod.rewrite(data), data)
+
+    def test_the_data_is_never_inflated_past_the_rows_that_the_header_says(self):
+        import struct
+        import tracemalloc
+        import zlib
+        bomb = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 128, 128, 16, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(b"\x00" * (32 * 2 ** 20))) + chunk(b"IEND", b""))
+        self.assertLess(len(bomb), 32768)
+        tracemalloc.start()
+        try:
+            with self.assertRaises(picturesmod.ShapeError):
+                picturesmod.rewrite(bomb)
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, 2 * 2 ** 20)                                            # (a bound of 131 KB and a bit: 32 MiB of zeros would show here)
+
     def test_the_size_of_the_rows_is_what_the_format_says_for_every_color_depth_size_and_interlace(self):
         self.assertEqual(picturesmod.raw_size(64, 64, 2, 8, 0), 64 * (1 + 192))
         self.assertEqual(picturesmod.raw_size(13, 17, 0, 1, 0), 17 * (1 + 2))
@@ -667,15 +689,19 @@ class TheLateFetch(PictureTest):
     """A fetch that ends after the login, the account or the person was taken away keeps nothing."""
 
     def late(self, act, nothing_at_all=True):
+        """Another account is logged in with a picture of its own (a rule that asked whether ANYBODY has a login, or whether ANYBODY is banned, would keep the late picture); the account's fetch is slow."""
+        self.login((OTHER, "other.one"))
+        self.settle()
         self.fake.cdn_mode = "slow:0.8"
-        v = self.login()
+        v = self.login((ACCOUNT, "maple.leaf"))
         time.sleep(0.2)                                                              # (the fetch is on its way)
         act(v)
-        self.assertEqual(self.settle(), ["none"])
+        self.assertEqual(self.settle(2), ["ok", "none"])
         time.sleep(0.2)
-        self.assertEqual(self.kept(), [])
-        self.assertEqual(self.rows() if nothing_at_all else [], [])                  # (a switch that was made stays as its row, with no picture)
-        self.assertEqual(self.rig.call(self.rig.store.picture_names), {})
+        mine = self.ref()
+        self.assertEqual([r[0] for r in self.kept()], [self.ref(OTHER)])
+        self.assertEqual([r for r in self.rows() if r[0] == mine] if nothing_at_all else [], [])          # (a switch that was made stays as its row, with no picture)
+        self.assertEqual(list(self.rig.call(self.rig.store.picture_names)), [self.ref(OTHER)])
 
     def test_forget_me(self):
         self.late(lambda v: self.assertEqual(v.call("POST", "/hub/forget").status, 200))
@@ -722,7 +748,10 @@ class TheStoreEndsAPictureWithTheLastLogin(PictureTest):
         self.rig.call(lambda: self.rig.store.db.execute("UPDATE sessions SET expires = ? WHERE rowid = (SELECT MIN(rowid) FROM sessions)", (int(time.time()) + 1,)))
         self.assertEqual(newer.call("POST", "/hub/logout").status, 200)
         self.assertEqual(len(self.kept()), 1)                                        # (the older login is left, and so is the picture)
-        time.sleep(2.2)
+        name = self.name()
+        self.assertEqual(self.get(name).status, 200)
+        time.sleep(2.2)                                                              # (the older login has run out; no purge has run)
+        self.assertEqual((self.get(name).status, self.rig.call(self.rig.store.picture_names), self.store("logins", ACCOUNT)), (404, {}, 0))
         self.store("purge")
         self.assertEqual(self.rows(), [])
 
@@ -768,8 +797,9 @@ class TheWorker(PictureTest):
             raise RuntimeError("canary-worker-text")
         self.rig.call(lambda: setattr(self.rig.store, "set_picture", boom))
         for _ in range(4):                                                           # (more than the two places that there are)
+            since = len(kinds_of(self.log()))                                        # (before the login: the fetch may be logged before the login has returned)
             self.login()
-            self.settle(1, len(kinds_of(self.log())))
+            self.settle(1, since)
         text = self.log()
         self.assertEqual(kinds_of(text), ["bug"] * 4)
         self.assertEqual(text.count("picture kind=bug error=RuntimeError"), 4)
@@ -794,6 +824,34 @@ class TheWorker(PictureTest):
             self.login()
             self.settle()
         self.assertEqual((asked, [r[2] for r in self.kept()]), ([16], ["ab" * 16]))       # (one call of 16 bytes, and its answer is the name: not a digest of anything)
+
+
+class TheStop(PictureTest):
+    def test_a_hub_that_stops_with_fetches_queued_starts_none_and_says_nothing(self):
+        import contextlib
+        import io
+        import asyncio
+        self.fake.cdn_mode = "slow:1.5"
+        accounts = [fd.snowflake(100 + n) for n in range(8)]
+        for account in accounts:
+            self.login((account, "user" + account[-3:]))
+        time.sleep(0.4)
+        pictures = self.rig.hub.sessions.pictures
+        self.assertEqual(self.rig.call(lambda: (pictures.inflight, len(pictures.waiting))), (2, 6))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            asyncio.run_coroutine_threadsafe(self.rig.hub.stop(), self.rig.loop).result(30)
+            asked = len(self.asked())
+            time.sleep(2.0)                                                           # (the two that ran are cancelled; a fetch that was waiting would have started by now)
+        self.assertEqual(len(self.asked()), asked)
+        self.assertEqual(asked, 2)
+        self.assertEqual(err.getvalue(), "")
+        self.assertNotIn("kind=bug", self.log())
+        self.assertEqual(self.rig.call(lambda: (pictures.inflight, len(pictures.waiting), len(pictures.queued))), (0, 0, 0))
+        self.rig.call(pictures.offer, accounts[0], fd.AVATAR)                           # (and a login that comes now starts nothing)
+        time.sleep(0.3)
+        self.assertEqual(len(self.asked()), asked)
+        self.assertEqual(self.rig.call(lambda: (len(pictures.waiting), len(pictures.queued))), (0, 0))
 
 
 class TheDoor(PictureTest):

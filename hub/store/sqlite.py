@@ -273,9 +273,10 @@ class Store(StoreBase):
         with self.transaction():
             self.db.execute("INSERT INTO sessions (id, account, name, created, expires) VALUES (?, ?, ?, ?, ?)", (key, account, name, now, now + int(seconds)))
             over = self.db.execute("DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)", (account, account, keep)).rowcount
-            pushed = [r[0] for r in self.db.execute("SELECT DISTINCT account FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,))]
-            over += self.db.execute("DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,)).rowcount
-            self.drop_pictures_without_login(pushed, now)
+            cut = self.db.execute("SELECT rowid, account FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?", (total,)).fetchall()
+            self.db.executemany("DELETE FROM sessions WHERE rowid = ?", [(r[0],) for r in cut])
+            over += len(cut)
+            self.drop_pictures_without_login({r[1] for r in cut}, now)
         if over:
             self.unsettled = True                   # (the logins that went over the caps are in the log file until it is cut)
 
@@ -391,10 +392,14 @@ class Store(StoreBase):
         return bool(row[1])
 
     def drop_pictures_without_login(self, accounts, now):
-        """Inside a transaction that ended logins: the picture of each of these accounts goes when it has no login left (no login, no picture)."""
+        """Inside a transaction that ended logins: the picture of each of these accounts goes when it has no login left (no login, no picture), and when one is left the picture's time is cut to the
+        latest end of the logins that are left (never made later), so that it is never served after the account's last login has run out."""
         for account in accounts:
-            if self.db.execute("SELECT 1 FROM sessions WHERE account = ? AND expires > ? LIMIT 1", (account, now)).fetchone() is None:
+            live = self.db.execute("SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?", (account, now)).fetchone()[0]
+            if live is None:
                 self.drop_picture(self.ref(account))
+            elif self.db.execute("UPDATE pictures SET until = ? WHERE ref = ? AND until > ?", (live, self.ref(account), live)).rowcount:
+                self.count_picture_change()
 
     def set_picture(self, account, png, name, until, rows_max, bytes_max):
         if not (isinstance(png, bytes) and 0 < len(png) <= bytes_max and isinstance(name, str) and PICTURE_NAME.match(name)):

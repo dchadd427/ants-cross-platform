@@ -595,8 +595,8 @@
   {
    "id": "a_picture_is_kept_for_an_expired_login",
    "file": "hub/store/sqlite.py",
-   "old": "SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)",
-   "new": "SELECT MAX(expires) FROM sessions WHERE account = ?\", (account,)",
+   "old": "SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None or",
+   "new": "SELECT MAX(expires) FROM sessions WHERE account = ?\", (account,)).fetchone()[0]\n            if live is None or",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
   },
   {
@@ -609,8 +609,8 @@
   {
    "id": "a_logout_takes_the_picture_while_another_login_is_left",
    "file": "hub/store/sqlite.py",
-   "old": "SELECT 1 FROM sessions WHERE account = ? AND expires > ? LIMIT 1\", (account, now)).fetchone() is None:",
-   "new": "SELECT 1 FROM sessions WHERE account = ? AND expires > ? LIMIT 1\", (account, now)).fetchone() is not None:",
+   "old": "            if live is None:\n                self.drop_picture(self.ref(account))\n            elif",
+   "new": "            if live is not None:\n                self.drop_picture(self.ref(account))\n            elif",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
   },
   {
@@ -623,7 +623,7 @@
   {
    "id": "the_cap_of_logins_keeps_the_picture",
    "file": "hub/store/sqlite.py",
-   "old": "            self.drop_pictures_without_login(pushed, now)\n",
+   "old": "            self.drop_pictures_without_login({r[1] for r in cut}, now)\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
   },
@@ -703,6 +703,97 @@
    "old": "    if not interlace:\n        return height",
    "new": "    if True:\n        return height",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
+  },
+  {
+   "id": "a_picture_is_served_after_the_last_login_ran_out_while_older_logins_ended",
+   "file": "hub/store/sqlite.py",
+   "old": "            elif self.db.execute(\"UPDATE pictures SET until = ? WHERE ref = ? AND until > ?\", (live, self.ref(account), live)).rowcount:\n                self.count_picture_change()\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract tests.scripts.test_hub_pictures.TheStoreEndsAPictureWithTheLastLogin"
+  },
+  {
+   "id": "a_picture_ends_with_the_earliest_login_of_the_account_when_one_ends",
+   "file": "hub/store/sqlite.py",
+   "old": "            live = self.db.execute(\"SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None:\n                self.drop_picture",
+   "new": "            live = self.db.execute(\"SELECT MIN(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None:\n                self.drop_picture",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_picture_is_cut_to_the_earliest_login_when_it_is_kept",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None or",
+   "new": "SELECT MIN(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_late_fetch_is_kept_because_anybodys_login_counts",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None or",
+   "new": "SELECT MAX(expires) FROM sessions WHERE (account = ? OR 1) AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLateFetch"
+  },
+  {
+   "id": "any_ban_stops_every_picture",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT 1 FROM bans WHERE account = ?\", (account,)).fetchone() is not None:\n                return False",
+   "new": "SELECT 1 FROM bans WHERE account = ? OR 1\", (account,)).fetchone() is not None:\n                return False",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "an_expired_login_counts_as_a_login_left",
+   "file": "hub/store/sqlite.py",
+   "old": "            live = self.db.execute(\"SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None:\n                self.drop_picture",
+   "new": "            live = self.db.execute(\"SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ? - 99999999\", (account, now)).fetchone()[0]\n            if live is None:\n                self.drop_picture",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "the_purge_takes_the_picture_of_an_account_with_a_login_left",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.drop_pictures_without_login(ended, now)",
+   "new": "            for gone in ended:\n                self.drop_picture(self.ref(gone))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "the_cap_takes_the_picture_of_an_account_with_a_login_left",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.drop_pictures_without_login({r[1] for r in cut}, now)\n",
+   "new": "            for gone in {r[1] for r in cut}:\n                self.drop_picture(self.ref(gone))\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "png_inflated_without_a_bound",
+   "file": "hub/pictures.py",
+   "old": "inflater.decompress(b\"\".join(pieces), expected + 1)",
+   "new": "inflater.decompress(b\"\".join(pieces))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
+  },
+  {
+   "id": "png_interlaced_row_bytes_rounded_down",
+   "file": "hub/pictures.py",
+   "old": "            total += rows * (1 + (columns * bits + 7) // 8)",
+   "new": "            total += rows * (1 + columns * bits // 8)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
+  },
+  {
+   "id": "a_stopping_hub_starts_the_next_fetch",
+   "file": "hub/pictures.py",
+   "old": "        while not self.stopping and self.waiting and",
+   "new": "        while self.waiting and",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
+  },
+  {
+   "id": "a_stopping_hub_keeps_its_queue",
+   "file": "hub/pictures.py",
+   "old": "        self.stopping = True\n        self.waiting.clear()\n        self.queued.clear()\n",
+   "new": "        self.stopping = True\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
+  },
+  {
+   "id": "a_login_during_the_stop_is_fetched",
+   "file": "hub/pictures.py",
+   "old": "            if self.stopping:\n                return\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
   }
  ]
 }
