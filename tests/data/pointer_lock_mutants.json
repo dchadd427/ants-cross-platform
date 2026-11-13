@@ -1,0 +1,40 @@
+{
+  "note": "Mutants of the fullscreen mouse setting for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's object `antsLock` of web/shell.html (what the settings menu's Fullscreen mouse row reads and writes) against tests/scripts/web_edge_check.js (node, the block run with a page of fakes). Run from the checkout: tools/mutate.py tests/data/pointer_lock_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_edge.py runs them on a copy of the page.",
+  "mutants": [
+    {
+      "id": "lock_not_released",
+      "file": "web/game_menu.js",
+      "old": "                if (page.releaseLock) page.releaseLock();\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lock_listener_dropped",
+      "file": "web/game_menu.js",
+      "old": "if (win.addEventListener) listen(win, name, keepPointerFree, true);",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lock_choice_not_remembered",
+      "file": "web/shell.html",
+      "old": "try { window.localStorage.setItem(ANTS_LOCK_KEY, ANTS_POINTER_LOCK ? 'on' : 'off'); } catch (e) { /* private window: not remembered */ }\n",
+      "new": "\n",
+      "test": "node tests/scripts/web_edge_check.js web/shell.html"
+    },
+    {
+      "id": "lock_free_keeps_the_pointer",
+      "file": "web/shell.html",
+      "old": "if (!ANTS_POINTER_LOCK && typeof releaseLock === 'function') releaseLock();\n            }\n        };",
+      "new": "\n            }\n        };",
+      "test": "node tests/scripts/web_edge_check.js web/shell.html"
+    },
+    {
+      "id": "lock_row_offered_without_a_pointer_lock",
+      "file": "web/shell.html",
+      "old": "available: function () { return !!(canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock); },",
+      "new": "available: function () { return true; },",
+      "test": "node tests/scripts/web_edge_check.js web/shell.html"
+    }
+  ]
+}

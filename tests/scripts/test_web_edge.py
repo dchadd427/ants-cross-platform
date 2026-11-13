@@ -262,5 +262,26 @@ class ThePagesOwnCode(unittest.TestCase):
         self.assertIn("0 failures", done.stdout)
 
 
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the Fullscreen mouse setting were NOT run")
+class TheMouseSettingMutants(unittest.TestCase):
+    def test_the_check_fails_on_every_broken_copy_of_the_page(self):
+        """tests/data/pointer_lock_mutants.json (tools/mutate.py runs it too): the page's object that the settings menu's Fullscreen mouse row reads and writes, each broken copy on a copy of the page"""
+        import json
+        import tempfile
+        with open(os.path.join(REPO, "tests", "data", "pointer_lock_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 3)
+        text = read(SHELL)
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = os.path.join(tmp, "shell.html")
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in the page exactly once" % m["id"])
+                    with open(copy, "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    done = subprocess.run([shutil.which("node"), CHECK_JS, copy], capture_output=True, text=True, timeout=120)
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
+
+
 if __name__ == "__main__":
     unittest.main()
