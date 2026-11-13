@@ -22,12 +22,13 @@
     var PATH = '/hub/ws', VERSION = 1;
     var LOGIN = '/hub/login?next=', LOGOUT = '/hub/logout', FORGET = '/hub/forget';      // the hub's pages (nginx passes them; the cookie goes along with a request of this page only)
     var LIMIT = { name: 32, line: 200, feed: 100, history: 50, frame: 120000, bad: 30, field: 400, count: 1e9, here: 500, said: 2 };       // (the hub's own: names 32, lines 200 code points, history 50; the rest is this page's)
+    var UPRIGHT = '(max-width: 700px) and (min-height: 501px)', ROW = 44, LINE = 22;       // (a phone held upright, as chat.css says it; the box's one row and the height of one more line of words: four lines at most)
     var MS = { ping: 25000, answer: 30000, connect: 15000, stable: 30000, notice: 6000, regain: 1000, flood: 3000, pending: 8000 };       // (pending: the hub answers a line at once: one that has no answer after this long is not waited for)
     var BACKOFF = { min: 1000, max: 60000, low: 0.5, high: 1.5 };      // the wait is spread from half to one and a half times the step (never under a second or over a minute): many pages that lost one hub do not come back together
     var PACE = { burst: 2, every: 2500, same: 31000 };                  // this page's own limit, below the hub's (3 at once, one every 2 s, the same text twice within 30 s)
     var TEXT = {
         title: 'Global chat', welcome: 'Welcome to the front page. Everyone here can read what you write.', online: ' here now', connecting: 'connecting…', reconnecting: 'reconnecting…',
-        offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', send: 'Send',
+        offline: 'Chat is offline', readonly: 'Chat is read-only for now', guest: 'You can read as a guest. Playing and watching stay anonymous.', field: 'Say something to everyone', hint: 'Enter sends the message.', send: 'Send',
         fold: 'Fold chat', open: 'Open chat', log: 'Chat messages', unread: ' unread', generic: 'That did not go through', more: ' more messages', one: 'One more message', many: '500+',
         login: 'Log in', loginWith: 'Log in with Discord', chatting: 'Chatting as ', logout: 'Log out', forget: 'Forget me', sure: 'Are you sure? Press again', forgetNote: 'Deletes your lines in the chat and logs you out everywhere. A ban or a mute stays.',
         shows: 'Chat shows your ', names: ['display name', 'username'], use: 'Show my ',
@@ -151,6 +152,7 @@
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var hold = false;                                                        // the next repaint is for a change of the role: the reader keeps their place
         var removed = '';                                                        // 'kicked' or 'banned' after the hub said `bye` (or `banned` to a line): a notice stays on the screen, and a banned person's field stays off
+        var barredShown = false;                                                 // (whether the last paint showed the field off for a ban: the pieces that stand beside the field are told when it changes)
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
@@ -179,8 +181,8 @@
         log.appendChild(el('p', 'gc-sys', TEXT.welcome));
         var note = el('p', 'gc-note'); note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');
         var news = el('p', 'gc-news'); news.setAttribute('role', 'status'); news.setAttribute('aria-live', 'polite');       // (what a screen reader is told when lines come faster than it can read them: one summary)
-        var form = el('form', 'gc-form'), field = el('input', 'gc-input'), send = el('button', 'btn gc-send', TEXT.send), enter = el('button', 'btn gc-send gc-login');
-        field.type = 'text'; field.setAttribute('aria-label', TEXT.field); field.setAttribute('placeholder', TEXT.field); field.setAttribute('autocomplete', 'off'); field.setAttribute('enterkeyhint', 'send');
+        var form = el('form', 'gc-form'), field = el('textarea', 'gc-input'), send = el('button', 'btn gc-send', TEXT.send), enter = el('button', 'btn gc-send gc-login');
+        field.setAttribute('rows', '1'); field.setAttribute('dir', 'auto'); field.setAttribute('aria-label', TEXT.field); field.setAttribute('aria-describedby', 'gchat-hint'); field.setAttribute('placeholder', TEXT.field); field.setAttribute('autocomplete', 'off'); field.setAttribute('enterkeyhint', 'send');
         field.setAttribute('maxlength', String(LIMIT.field)); send.type = 'submit';
         enter.type = 'button'; enter.setAttribute('aria-label', TEXT.loginWith); enter.hidden = true; put(enter, [el('i', 'gc-dc'), el('span', '', TEXT.login)]);      // (where a login is offered and nobody is named: the field is off and this is in Send's place)
         put(form, [field, send, enter]); form.hidden = true;
@@ -194,7 +196,8 @@
         put(slot, [acct, yr, pickNote, pickBtn, outBtn, el('p', 'gc-mnote', TEXT.forgetNote), forgetBtn]);
         var chipMark = null, chipAv = null, chipName = null;                   // the bar's chip (home.js makes the button and hides it): Log in, or who the visitor is
         if (chip) { chipMark = el('i', 'gc-dc'); chipAv = el('span', 'gc-av'); chipName = el('span', 'gc-cn'); chip.textContent = ''; put(chip, [chipMark, chipAv, chipName]); }
-        put(body, [log, note, news, form, guest]);
+        var hint = el('p', 'gc-hint gc-news', TEXT.hint); hint.id = 'gchat-hint';       // (read with the field's name, drawn nowhere: a text area is "multi-line" to a screen reader, and this says that Enter sends)
+        put(body, [log, note, news, hint, form, guest]);
         put(box, [head, body]);
         host.appendChild(box); if (chip && chip.parentNode && chip.parentNode.insertBefore) chip.parentNode.insertBefore(slot, chip.nextSibling); else (doc.body || host).appendChild(slot);       // (right after the chip: the Tab order and the bar's inert follow)
 
@@ -267,6 +270,7 @@
             var ask = live && !you && login;                                    // (a login is offered and nobody is named: the field says so, and is off)
             var barred = removed === 'banned' && !!you, said = ask ? ERR.login : barred ? TEXT.banField : TEXT.field;       // (a banned person reads on: the field is off, and says why)
             field.disabled = !you || barred; field.setAttribute('placeholder', said); field.setAttribute('aria-label', said);
+            if (barred !== barredShown) { barredShown = barred; tapped('field'); }
             send.hidden = !you || barred; enter.hidden = !!you;
             guest.hidden = !(live && !you);
             note.textContent = notice || (removed ? TEXT[removed] : state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');       // (the notice of a removal stays until the person is somebody else)
@@ -281,6 +285,7 @@
             if (!slot.hidden) place();
             if (!slot.hidden && refocus) { refocus = false; var back = pickBtn.hidden ? outBtn : pickBtn; if (back.focus) back.focus(); }       // (it is back: the focus is where it was, on the button of the name)
             if (!menuOn) refocus = false;
+            grow();                                                             // (the box is measured when its view is shown)
             if (slot.hidden && forgetSure) sure(false);
             if (chip) {                                                         // (the bar: Log in where a login is offered, the visitor's name where they are named; nothing while the hub is not there)
                 chip.hidden = !(live && login);
@@ -457,7 +462,7 @@
             if (refused.cmd) answer([code === 'bad' ? TEXT.cmdBad : code === 'rate' ? TEXT.cmdRate : wordOf(code, login)]); else tell(code);
             if (refused.text === undefined) return;
             delete said[refused.text];
-            if (!refused.cmd && !field.value) field.value = refused.text;      // (a command is not put back: Enter would issue it again)
+            if (!refused.cmd && !field.value) { field.value = refused.text; grow(); }      // (a command is not put back: Enter would issue it again)
         }
         function allowed(text) {                                                // this page's own pace, below the hub's; a text that was sent in the last 31 s is not sent again (the hub remembers every one of them, not only the last)
             var t = now(), old;
@@ -510,10 +515,33 @@
         doc.addEventListener('click', guard(function (e) { var t = e && e.target; if (menuOn && !(t && ((slot.contains && slot.contains(t)) || (chip && chip.contains && chip.contains(t))))) setMenu(false); }));       // (a press anywhere else puts it away)
         win.addEventListener('resize', guard(function () { if (menuOn) render(); }));
         doc.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Escape' && menuOn) { setMenu(false); if (chip && chip.focus) chip.focus(); } }));       // (Escape closes it, wherever the focus is, and the focus goes back to the chip)
-        form.addEventListener('submit', guard(function (e) {
-            if (e && e.preventDefault) e.preventDefault();
-            if (sendLine(field.value) === '') field.value = '';
+        // the field is a text area (a phone's box grows with the words) that behaves as the one-line field it replaced: Enter sends (a keyboard that makes a line break through beforeinput does too), a line break that is pasted becomes a space
+        function grow() {                                                       // a phone held upright: the height of the words, one line to four, then it scrolls; elsewhere the style sheet's own height
+            var s = field.style, tall = false;
+            try { tall = !!win.matchMedia && win.matchMedia(UPRIGHT).matches; } catch (x) { /* none */ }
+            if (!tall) { s.height = ''; return; }
+            if (field.scrollHeight === 0) return;                                 // (the Chat view is not shown: it is measured when the view comes, paint() asks again)
+            var was = atBottom(), at = field.selectionStart;                       // (a log that is read at its end stays at its end while the box grows and shrinks)
+            s.height = 'auto'; s.height = Math.max(ROW, Math.min(ROW + 3 * LINE, field.scrollHeight)) + 'px';
+            if (was) log.scrollTop = log.scrollHeight;
+            if (typeof at !== 'number' || at >= field.value.length) field.scrollTop = field.scrollHeight;
+        }
+        function post() { if (sendLine(field.value) === '') { field.value = ''; grow(); } }
+        function sendNow() {                                                    // through the form's own submit, which the emoji and voice buttons hear; where the form has no requestSubmit (iOS 15) a submit event that can be cancelled is sent to it
+            if (form.requestSubmit) form.requestSubmit();
+            else if (form.dispatchEvent && typeof win.Event === 'function') form.dispatchEvent(new win.Event('submit', { cancelable: true }));
+            else post();
+        }
+        form.addEventListener('submit', guard(function (e) { if (e && e.preventDefault) e.preventDefault(); post(); }));
+        field.addEventListener('keydown', guard(function (e) { if (e && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { if (e.preventDefault) e.preventDefault(); sendNow(); } }));
+        field.addEventListener('beforeinput', guard(function (e) { if (e && (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph')) { if (e.preventDefault) e.preventDefault(); sendNow(); } }));
+        field.addEventListener('input', guard(function () {
+            var v = field.value, at = field.selectionStart;
+            if (/[\r\n]/.test(v)) { field.value = v.replace(/[\r\n]+/g, ' '); if (field.setSelectionRange && typeof at === 'number') { at = v.slice(0, at).replace(/[\r\n]+/g, ' ').length; field.setSelectionRange(at, at); } }       // (a run of breaks is one space, and the caret stays after the same letter)
+            grow();
         }));
+        send.addEventListener('pointerdown', guard(function (e) { if (e && e.preventDefault && doc.activeElement === field) e.preventDefault(); }));       // (a press on Send keeps the focus in the field: a phone's keyboard stays up)
+        win.addEventListener('resize', guard(grow));
         fold.addEventListener('click', guard(function () { setOpen(!open); if (fold.focus) fold.focus(); }));
         head.addEventListener('click', guard(function (e) { if (!open && !(e && e.target && fold.contains && fold.contains(e.target))) setOpen(true); }));       // (a folded header opens wherever it is pressed)
         box.addEventListener('keydown', guard(function (e) {
@@ -527,7 +555,7 @@
         paint();
         go();
         return {
-            root: box, slot: slot, field: field, say: sendLine, state: function () { return state; },
+            root: box, slot: slot, field: field, grow: grow, say: sendLine, state: function () { return state; },
             tap: function (fn) { taps.push(fn); if (hello) tell1(fn, 'live', hello); else if (state === 'offline') tell1(fn, 'lost'); },
             send: out,
             shown: guard(function (on) { isHome = !!on; if (!on) menuOn = false; if (seen()) stale = true; render(); tapped('shown', !!on); }), open: guard(setOpen)

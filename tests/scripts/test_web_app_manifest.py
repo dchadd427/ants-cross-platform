@@ -20,17 +20,23 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import unittest
 import zlib
 
+try:
+    from PIL import Image
+except ImportError:
+    Image = None                   # (the runners of CI have no Pillow: the tests that run the icon tool are skipped there)
+
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "tools"))
-from size_limits import APP_ICONS_BUDGET, APP_MANIFEST_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
+from size_limits import APP_ICONS_BUDGET, APP_MANIFEST_BUDGET, FAVICON_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 THEME = "#2b5f43"                  # the outermost line of the pages' green frame (web/lobby.html)
 BACKGROUND = "#db4b13"             # the orange of the game's menus (web/front/clay.png is this with a little noise)
 PAGES = ["web/shell.html", "web/lobby.html", "web/matches.html", "web/match.html", "web/live.html", "web/legal.html", "web/mapmaker.html", "asset_catalog/index.html"]   # (and the changelog page, made by a tool)
-SHORTCUT_PAGES = {"/matches": "web/matches.html", "/live-now": "web/live.html", "/mapmaker": "web/mapmaker.html"}
+SHORTCUT_PAGES = {"/matches": "web/matches.html", "/live-now": "web/live.html", "/mapmaker": "web/mapmaker.html", "/?vp": "web/lobby.html"}
 ICON_FILES = {"icon-192.png": 192, "icon-512.png": 512, "icon-maskable-512.png": 512, "apple-touch-icon.png": 180}
 
 
@@ -169,7 +175,7 @@ class TheManifest(unittest.TestCase):
         nginx = read("docker", "nginx.conf")
         for url, page in SHORTCUT_PAGES.items():
             self.assertTrue(os.path.isfile(os.path.join(REPO, page)), page)
-            self.assertIn("location = %s {" % url, nginx, url)
+            self.assertIn("location = %s {" % url.split("?")[0], nginx, url)
             self.assertTrue(re.match(r"^[A-Za-z]", [s for s in MANIFEST["shortcuts"] if s["url"] == url][0]["short_name"]))
         for shortcut in MANIFEST["shortcuts"]:
             self.assertTrue(shortcut["name"] and shortcut["short_name"])
@@ -177,6 +183,7 @@ class TheManifest(unittest.TestCase):
     def test_the_budgets(self):
         self.assertLessEqual(sum(os.path.getsize(os.path.join(REPO, "web", "app", n)) for n in ICON_FILES), APP_ICONS_BUDGET)
         self.assertLessEqual(len(MANIFEST_TEXT.encode("utf-8")), APP_MANIFEST_BUDGET)
+        self.assertLessEqual(sum(os.path.getsize(os.path.join(REPO, "web", n)) for n in ("favicon.png", "favicon.ico")), FAVICON_BUDGET)
 
 
 class TheHeadLines(unittest.TestCase):
@@ -196,6 +203,59 @@ class TheHeadLines(unittest.TestCase):
         known = {os.path.basename(p) for p in PAGES} | {"admin.html"}
         for path in glob.glob(os.path.join(REPO, "web", "*.html")):
             self.assertIn(os.path.basename(path), known, "%s is a page without the head lines of the web app (add it to PAGES, or to the admin page's side)" % path)
+
+
+FAVICON_LINKS = re.compile(r'<link rel="(?:shortcut )?icon"[^>]*href="(/favicon\.(?:png|ico))(?:\?v=([0-9a-f]{8}))?"')
+
+
+class TheFavicon(unittest.TestCase):
+    def test_the_tab_icon_is_a_32_pixel_png_with_transparency_and_an_ico_of_three_sizes(self):
+        width, height, transparent = png("web/favicon.png")
+        self.assertEqual((width, height, transparent), (32, 32, True))
+        ico = raw("web", "favicon.ico")
+        reserved, kind, count = struct.unpack("<HHH", ico[:6])
+        self.assertEqual((reserved, kind), (0, 1))
+        sizes = sorted((ico[6 + 16 * i] or 256) for i in range(count))
+        self.assertEqual(sizes, [16, 32, 48])
+
+    def test_every_page_with_a_tab_icon_links_it_with_the_digits_of_its_file_and_names_no_other_file(self):
+        pages = {name: read(*name.split("/")) for name in PAGES + ["web/admin.html"]}
+        pages["the changelog page"] = changelog_page()
+        linked = 0
+        for name, text in pages.items():
+            for path, version in FAVICON_LINKS.findall(text):
+                linked += 1
+                self.assertEqual(version, digits("web" + path), "%s: %s has stale digits (or none)" % (name, path))
+            self.assertEqual(len(re.findall(r'rel="(?:shortcut )?icon"', text)), len(FAVICON_LINKS.findall(text)), "%s: an icon link that is not /favicon.png or /favicon.ico with ?v=" % name)
+        self.assertGreaterEqual(linked, 9)
+        for name in ("web/shell.html", "web/match.html", "web/matches.html", "web/live.html"):
+            self.assertEqual([p for p, v in FAVICON_LINKS.findall(pages[name])], ["/favicon.png", "/favicon.ico"], name)
+
+    def test_the_image_copies_the_favicons_and_the_icons(self):
+        dockerfile = read("Dockerfile")
+        self.assertIn("COPY web/favicon.* /usr/share/nginx/html/", dockerfile)
+        self.assertRegex(dockerfile, r"COPY web/app/? /usr/share/nginx/html/app/")
+
+
+@unittest.skipUnless(Image, "Pillow is needed")
+class TheIconTool(unittest.TestCase):
+    def test_check_passes_and_the_tool_writes_the_committed_pictures_again(self):
+        with tempfile.TemporaryDirectory() as app, tempfile.TemporaryDirectory() as fav:
+            done = subprocess.run([sys.executable, "-I", os.path.join(REPO, "tools", "make_app_icons.py"), "--out", app, "--favicon-dir", fav, "--check"], capture_output=True, text=True, timeout=300)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual(sorted(os.listdir(app)), sorted(ICON_FILES))
+            self.assertEqual(sorted(os.listdir(fav)), ["favicon.ico", "favicon.png"])
+            for folder, name, committed in ((app, "icon-192.png", "web/app"), (app, "icon-512.png", "web/app"), (app, "icon-maskable-512.png", "web/app"), (app, "apple-touch-icon.png", "web/app"),
+                                            (fav, "favicon.png", "web"), (fav, "favicon.ico", "web")):
+                with Image.open(os.path.join(folder, name)) as a, Image.open(os.path.join(REPO, committed, name)) as b:
+                    made, kept = a.convert("RGBA"), b.convert("RGBA")
+                self.assertEqual(made.size, kept.size, name)
+                self.assertEqual(made.tobytes(), kept.tobytes(), name + " differs from the committed picture")
+
+    def test_the_tool_names_no_path_of_anybodys_machine_and_reads_no_picture(self):
+        text = read("tools", "make_app_icons.py")
+        self.assertNotIn("/home/", text)
+        self.assertNotIn("Image.open(", text.split("def check")[0])
 
 
 class NoServiceWorker(unittest.TestCase):

@@ -25,6 +25,7 @@ import logging
 import os
 import re
 import signal
+import socket
 import sys
 import time
 import traceback
@@ -47,6 +48,26 @@ TOKEN, GUILD, ADMIN, MOD, OTHER = fd.BOT_TOKEN, fd.GUILD_ID, fd.ROLE_ADMIN, fd.R
 OWNER = "1900000000000001"
 ENV = {"ANTS_HUB_DISCORD_BOT_TOKEN": TOKEN, "ANTS_HUB_DISCORD_GUILD": GUILD, "ANTS_HUB_ROLE_ADMIN": ADMIN, "ANTS_HUB_ROLE_MOD": MOD}
 SECRETS = (TOKEN, GUILD, ADMIN, MOD, OTHER)
+
+
+def wait_frames(client, kind, settle=0.5, seconds=10.0):
+    """The frames of a socket from the first one of the kind `kind` on: waits up to `seconds` for it (the hub says it as soon as it has it, and on a machine that is busy that can be late), then reads whatever
+    else comes within `settle` seconds of silence; the frames that came before the first one are kept, so that an absence is still seen. For a test that asserts how many frames come: the first is waited for, the rest is the short read."""
+    end = time.monotonic() + seconds
+    seen = []
+    while True:
+        try:
+            msg = client.recv_json(max(0.05, end - time.monotonic()))
+        except socket.timeout:
+            raise AssertionError("no %s frame within %s s; frames seen: %r" % (kind, seconds, seen))
+        if msg.get("t") == kind:
+            return seen + [msg] + client.drain(settle)
+        seen.append(msg)
+
+
+def lines_that_arrive(client, settle=0.5):
+    """The texts of the chat lines that a socket gets: the first is waited for, then the short read for any more."""
+    return [m["text"] for m in wait_frames(client, "line", settle) if m["t"] == "line"]
 
 
 class Clock:
@@ -205,7 +226,7 @@ class TheMapping(SetupTest):
             self.assertEqual(c.recv_json()["you"]["role"], "none")
             for frame in ({"t": "you", "you": {"role": "admin", "mod": True}}, {"t": "say", "text": "/mute bob 5", "role": "admin", "mod": True}, {"t": "here", "at": "look", "role": "admin"}):
                 c.send(hc.frame(1, json.dumps(frame).encode()))
-            seen = c.drain(0.5)
+            seen = wait_frames(c, "err")
             self.assertEqual([m for m in seen if m["t"] == "err"], [{"t": "err", "code": "bad"}] * 2)       # (`you` is not a message that a client may send; and a command from somebody with no role is refused)
             self.assertEqual([m for m in seen if m["t"] == "line"], [])                                    # (and is not posted for everybody to read)
 
@@ -827,7 +848,7 @@ class LiveTest(unittest.TestCase):
 
     recheck = 1
     options = dict(roles_grace_seconds=3.0, roles_refill_seconds=0.01, roles_jitter=0.0, tick_seconds=0.05, sockets_per_address=50, frame_burst=1000, frame_refill_seconds=0.001,
-                   discord_seconds=1.0, discord_connect_seconds=1.0, roles_pause_seconds=5.0)
+                   discord_seconds=1.0, discord_connect_seconds=1.0, roles_pause_seconds=60.0)
 
     def setUp(self):
         self.fake = fd.FakeDiscord()
@@ -921,12 +942,12 @@ class TheLiveRoles(LiveTest):
         time.sleep(0.4)
         victim.drain(0.2)
         victim.say("hello again")
-        self.assertIn({"t": "err", "code": "muted"}, victim.drain(0.5))
+        self.assertIn({"t": "err", "code": "muted"}, wait_frames(victim, "err"))
         self.fake.members["1001"] = []                                           # (demoted: the next check, a second at most, and the command is text)
         self.wait_role(mod, "none")
         mod.drain(0.2)
         mod.say("/mute nobody 5")
-        seen = mod.drain(0.5)
+        seen = wait_frames(mod, "err")
         self.assertEqual(([m for m in seen if m["t"] == "line"], [m["code"] for m in seen if m["t"] == "err"]), ([], ["bad"]))     # (refused, and not posted for everybody to read)
 
     def test_the_players_list_marks_both_roles(self):
@@ -959,7 +980,7 @@ class TheLiveRoles(LiveTest):
             a, _ = self.connect("%d:alice%d" % (2000 + 2 * n, n))                    # (new people for each: an account has its own limit on lines)
             b, _ = self.connect("%d:bob%d" % (2001 + 2 * n, n))
             a.say("a word %s" % mode.replace(":", " "))
-            self.assertEqual([m["text"] for m in b.drain(0.6) if m["t"] == "line"], ["a word %s" % mode.replace(":", " ")], mode)
+            self.assertEqual(lines_that_arrive(b), ["a word %s" % mode.replace(":", " ")], mode)
             self.assertEqual(self.you_frames(a, 0.3), [], mode)
             a.close()
             b.close()
@@ -975,7 +996,7 @@ class TheLiveRoles(LiveTest):
         self.assertEqual(self.rig.log_text.getvalue().count("discord_roles_refused"), 1)
         self.assertIn(" warning what=discord_roles_refused kind=token status=401", self.rig.log_text.getvalue())
         c.say("chat goes on")
-        self.assertEqual([m["text"] for m in c.drain(0.5) if m["t"] == "line"], ["chat goes on"])
+        self.assertEqual(lines_that_arrive(c), ["chat goes on"])
 
     def test_the_memory_of_the_roles_is_the_people_who_are_here(self):
         self.fake.members = {"%d" % n: [MOD] for n in range(1001, 1013)}
@@ -1022,7 +1043,7 @@ class TheLiveOwner(LiveTest):
         self.assertEqual(self.you_frames(a, 2.0), [])
         self.assertEqual(self.you_frames(o, 0.1), [])
         a.say("hello")
-        self.assertEqual([m["text"] for m in o.drain(0.5) if m["t"] == "line"], ["hello"])
+        self.assertEqual(lines_that_arrive(o), ["hello"])
         self.assertEqual(len(self.fake.member_times), 1)                          # (the owner account was never asked about: only alice, once, and refused)
 
 
