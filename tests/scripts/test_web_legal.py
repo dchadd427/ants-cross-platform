@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""The legal notice (run by ./run_tests.sh --fast and by the CI): the Legal page (web/legal.html, served at /legal), the same notice in the README's License section, and the footer link to it.
+"""The legal notice (run by ./run_tests.sh --fast and by the CI): the Legal page (web/legal.html, served at /legal), the same notice in the README's License section, and the link to it in the footers and in the Menu of the bar.
 
   - the page is the changelog page's look (it links /front/classic.css), loads nothing from another site, runs no script, is short, links the LICENSE and THIRD_PARTY_NOTICES.md of the repository
     (files that exist) and says nothing about what the site stores or for how long (that wording has its own home);
   - the five sentences of the notice are the same words on the page and in the README's License section (the owner approved this wording; a change to one is a change to the other), and what both say about
     the original game's data is the README's old wording;
-  - every page of the site that has a footer has the link "Legal" at the end of its footer links, opening in a new tab (a match that runs is not left), the page's own footer marks it as the current page;
-  - the Dockerfile copies the page and nginx.conf sends /legal to it with a plain redirect, as it does /changelog.
+  - every page of the site that has a footer (the front page and the game page) has the link "Legal" at the end of its footer links, opening in a new tab (a match that runs is not left); the pages with the bar at
+    the top have no footer and reach the page from the bar's Menu, and the Legal page carries the credit line that their footers had;
+  - the Dockerfile copies the page (the build stage stamps the version and the build into its bar) and nginx.conf sends /legal to it with a plain redirect, as it does /changelog.
 """
 import glob
 import html
@@ -84,14 +85,13 @@ def changelog_page():
 
 
 def pages_with_a_footer():
-    """{name: text} of every page of the site that has a footer bar: the pages of web/ (the legal page apart) and the generated changelog page."""
+    """{name: text} of every page of the site that has a footer bar: the front page and the game page (the pages with the bar at the top have none)."""
     pages = {}
     for path in sorted(glob.glob(os.path.join(REPO, "web", "*.html"))):
         name = os.path.basename(path)
         text = read("web", name)
         if name != "legal.html" and '<footer class="bar"' in text:
             pages[name] = text
-    pages["changelog.html (generated)"] = changelog_page()
     return pages
 
 
@@ -109,9 +109,9 @@ class TheLegalPage(unittest.TestCase):
         self.assertIn('<div class="pt"><h1>Legal</h1><p>', self.page)
         self.assertIn('<link rel="stylesheet" href="/site_nav.css">', self.page)
         self.assertEqual(re.findall(r"<script[^>]*>", self.page), ['<script src="/site_nav.js">'])               # (the site bar's Menu: no other script)
-        self.assertIn('<header class="sb" data-live="menu">', self.page)
+        self.assertIn('<header class="sb" data-live="menu" ', self.page)
         self.assertEqual(re.findall(r'<nav aria-label="Pages">(.*?)</nav>', self.page, re.S)[0].count('aria-current'), 0)      # (Legal is not one of the bar's five: it is in the Menu)
-        self.assertNotIn("@@", self.page)                                                                         # (the page is copied as it is: nothing in it is filled in by the build)
+        self.assertEqual(sorted(re.findall(r"@@\w+@@", self.page)), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])      # (what the build fills in: the bar's three stamps, for the last line of the Menu)
         for blank in re.findall(r"<a [^>]*target=\"_blank\"[^>]*>", self.page):
             self.assertIn('rel="noopener noreferrer"', blank)
 
@@ -126,9 +126,9 @@ class TheLegalPage(unittest.TestCase):
             "an image of another site": ('<img src="/front/logo.png"', '<img src="https://cdn.example/logo.png"', "https://cdn.example/logo.png"),
             "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
             "an address that only starts like the repository's": ('href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="https://github.com/dchadd427/ants-cross-platform.evil.example/issues"', "ants-cross-platform.evil.example"),
-            "an @import of a quoted address": ("main { margin-top: 26px; }", '@import "https://cdn.example/x.css";\nmain { margin-top: 26px; }', "@import"),
-            "an @import url()": ("main { margin-top: 26px; }", "@import url(//cdn.example/x.css);\nmain { margin-top: 26px; }", "@import"),
-            "a url() in the page's own rules": ("main { margin-top: 26px; }", 'main { margin-top: 26px; background: url("/front/clay.png"); }', "url("),
+            "an @import of a quoted address": ("main { margin: 26px 0 32px; }", '@import "https://cdn.example/x.css";\nmain { margin: 26px 0 32px; }', "@import"),
+            "an @import url()": ("main { margin: 26px 0 32px; }", "@import url(//cdn.example/x.css);\nmain { margin: 26px 0 32px; }", "@import"),
+            "a url() in the page's own rules": ("main { margin: 26px 0 32px; }", 'main { margin: 26px 0 32px; background: url("/front/clay.png"); }', "url("),
             "a srcset": ('<img src="/front/logo.png"', '<img src="/front/logo.png" srcset="//cdn.example/l.png 2x"', "//cdn.example/l.png"),
         }
         for name, (old, new, needle) in sorted(mutants.items()):
@@ -181,11 +181,9 @@ class TheLegalPage(unittest.TestCase):
         for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
             self.assertTrue(os.path.exists(os.path.join(REPO, name)), name)
 
-    def test_its_footer_is_the_changelog_pages_and_marks_the_page_it_is(self):
-        self.assertEqual([(href, text) for href, _, text in footer_links(self.page)],
-                         [("/", "Play"), (GITHUB, "GitHub"), (GITHUB + "/issues", "Feedback"), ("/legal", "Legal")])
-        self.assertIn('<a href="/legal" aria-current="page">Legal</a>', self.page)
-        self.assertIn(".bar a[aria-current]", self.page)
+    def test_it_carries_the_credit_line_that_the_footer_had(self):
+        code = self.main[self.main.index('<section class="panel" id="code">'):]
+        self.assertIn("Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2", code)
 
 
 class TheReadme(unittest.TestCase):
@@ -212,7 +210,7 @@ class TheFooterLinks(unittest.TestCase):
         names = sorted(self.pages)
         self.assertIn("lobby.html", names)
         self.assertIn("shell.html", names)
-        self.assertIn("changelog.html (generated)", names)
+        self.assertEqual(names, ["lobby.html", "shell.html"])
 
     def test_every_footer_ends_with_the_legal_link_in_a_new_tab(self):
         for name, page in sorted(self.pages.items()):
@@ -236,7 +234,7 @@ class TheFooterLinks(unittest.TestCase):
 
 class TheRouteAndTheImage(unittest.TestCase):
     def test_the_dockerfile_copies_the_page_to_the_site(self):
-        self.assertIn("\nCOPY web/legal.html /usr/share/nginx/html/legal.html\n", read("Dockerfile"))
+        self.assertIn("\nCOPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html\n", read("Dockerfile"))
 
     def test_nginx_serves_legal_and_changelog_at_their_clean_addresses_and_the_old_files_answer_200_not_a_redirect(self):
         conf = read("docker", "nginx.conf")

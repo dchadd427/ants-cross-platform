@@ -67,7 +67,7 @@ class TheStrip(unittest.TestCase):
         for words in ('<h2 id="opener-h">Got a replay file?</h2>', "Watch a downloaded .antsrep here. It stays on this device: nothing is uploaded.", "Open a replay file</button>"):
             has(self, words, strip)
         has(self, '<div id="open-note" aria-live="polite" hidden></div>', self.page)
-        veil = self.page[self.page.index('<div class="dropveil"'):self.page.index('<footer')]
+        veil = self.page[self.page.index('<div class="dropveil"'):self.page.index('<script src="site_nav.js">')]
         for words in ("Drop the replay file to watch it", "It stays on this device. Nothing is uploaded.", 'hidden aria-hidden="true"'):
             has(self, words, veil)
 
