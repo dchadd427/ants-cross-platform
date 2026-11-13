@@ -332,7 +332,7 @@ class TheLookIsTheFrontPages(PageCase):
 
 class TheHeader(PageCase):
     CONTROLS = (("menu-btn", "/", "Menu"), ("watch-btn", "/matches", "Matches"), (None, "/asset_catalog/", "Sprites and sounds"), (None, "/changelog", "Changelog"), ("reset-btn", None, "Reset"),
-                ("fullscreen-btn", None, "Fullscreen"), (None, GITHUB, "GitHub"), (None, GITHUB + "/issues", "Feedback"))
+                ("fullscreen-btn", None, "Fullscreen"), (None, GITHUB, "GitHub"), ("feedback-btn", GITHUB + "/issues", "Feedback"))
 
     def header(self):
         return self.page[self.page.index("<header>"):self.page.index("</header>")]
@@ -391,7 +391,7 @@ class TheHeader(PageCase):
         self.assertRegex(narrow, r"\.more \{\s*display: block;")
         self.assertRegex(narrow, r"\.logo img \{\s*width: 88px;")
         self.assertEqual(self.style.count(".wide-only {"), 1, "the one rule that hides the wide row's six")
-        self.assertRegex(self.style, r"@media \(min-width: 701px\) and \(max-width: 1139px\) \{\s*#watch-btn \{\s*display: none;")          # (eight buttons need 1140 px for one row; between 701 and 1139 the header keeps the seven it had, and the footer link is the way)
+        self.assertRegex(self.style, r"@media \(min-width: 701px\) and \(max-width: 1139px\) \{\s*#watch-btn, #feedback-btn \{\s*display: none;")          # (nine buttons, the Settings button one of them, need 1140 px for one row; between 701 and 1139 the header keeps the seven it had, the gear in the place of Feedback, and the footer links are the way)
         self.assertEqual(self.style.count("#watch-btn"), 1)
         # the label of Fullscreen is short where the row is tight, and the smallest windows get smaller buttons and a smaller logo
         self.assertIn("@media (max-width: 440px)", self.style)

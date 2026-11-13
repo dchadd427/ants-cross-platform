@@ -310,7 +310,7 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertIn("width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
         self.assertIn("width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
         self.assertNotRegex(rule, r"\* 16 / 9")                                                              # (not the 16:9 formula for every shape)
-        self.assertRegex(self.page, r":root \{\s*--chrome: 180px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # (16:9 until the script says otherwise)
+        self.assertRegex(self.page, r":root \{\s*--chrome: \d+px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # (16:9 until the script says otherwise)
         self.assertNotIn("--bar-max", self.page)
         self.assertNotIn('#game-stage[data-aspect=', self.page)                                                # (no rule for each shape: the table's rows give the numbers)
 

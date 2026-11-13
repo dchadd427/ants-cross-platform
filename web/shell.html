@@ -237,12 +237,12 @@
 
         /* The picture starts in 16:9 here and the script picks the shape nearest to the screen on a first visit (the game's 16:9 canvas is 960 x 540; "Classic 4:3" is the original's 640 x 480 and is chosen with ?aspect=4:3 or the selector under
            the game). Two boxes: #game-stage is the SLOT, sized by CSS alone (width: the page's column, at most 1280 px, and what the height of the window leaves after the page's
-           own header and bar, so the whole picture fits the window; --chrome is that height, measured by the script below, 180 px until then) and the element that goes
+           own header and bar, so the whole picture fits the window; --chrome is that height, measured by the script below, 120 px until then) and the element that goes
            fullscreen; #game-container is the picture's box inside it, sized by the script to the exact pixels of the picture (a whole number of 16 x 9 canvas pixels, so
            that the canvas the game makes has exactly the shape of its picture and the game shows no black bar of its own), centred in the slot. The ring around the box is
            a shadow, not a border, so that the box has no frame inside it: the front page's frame of a picture (green between two black lines, and the red shadow). */
         :root {
-            --chrome: 180px;
+            --chrome: 120px;
             /* the shape's ratio and widest slot: 16:9 until the script sets the shape's own (web/shapes.js's table, ANTS_PAGE.slotVars, on <body>); the stage and the replay bar read them */
             --ar-w: 16;
             --ar-h: 9;
@@ -898,9 +898,9 @@
             .btn.sm { padding: 6px 8px; }
         }
 
-        /* The header holds its eight buttons in one row from 1140 px; between 701 and 1139 px it keeps the seven it had (a ninth of the width would make two rows) and the footer's Matches is the way */
+        /* The header holds its nine buttons (the Settings button is one) in one row from 1140 px; between 701 and 1139 px it keeps the seven it had, the Settings button's gear taking the place of Feedback (a ninth of the width would make two rows), and the footer's Matches and Feedback are the way */
         @media (min-width: 701px) and (max-width: 1139px) {
-            #watch-btn {
+            #watch-btn, #feedback-btn {
                 display: none;
             }
         }
@@ -1135,7 +1135,7 @@
             <button id="reset-btn" type="button" class="btn sm wide-only" onclick="window.location.reload()" title="Reset Game / Reload Page">Reset</button>
             <button id="fullscreen-btn" type="button" class="btn sm" title="Toggle Fullscreen"><span class="btn-text">Fullscreen</span><span class="btn-text-short">Full</span></button>
             <a href="https://github.com/dchadd427/ants-cross-platform" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="View Source Code on GitHub">GitHub</a>
-            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" class="btn sm wide-only" title="Give Feedback or Report Issues">Feedback</a>
+            <a href="https://github.com/dchadd427/ants-cross-platform/issues" target="_blank" rel="noopener noreferrer" id="feedback-btn" class="btn sm wide-only" title="Give Feedback or Report Issues">Feedback</a>
             <details class="more">
                 <summary><span class="btn sm">More</span></summary>
                 <div class="more-list">
