@@ -13,15 +13,15 @@ COPY src/ ./src/
 COPY web/ ./web/
 COPY Original-Ants/ ./Original-Ants/
 
-# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html (the game page), lobby.html (the front page: its footer) and the three pages of the match history (matches.html, match.html, live.html: their footers), and check the map maker's own version (web/MAPMAKER_VERSION) against web/mapmaker.html
+# Inject the build timestamp (JS, WASM and data bundles share lockstep versioning) and the game's version text (the file VERSION) into shell.html (the game page: its footer), lobby.html (the front page: its footer) and the pages that have the bar at the top (matches.html, match.html, live.html, legal.html, mapmaker.html: the data attributes of the bar, which the Menu shows as its last line), and check the map maker's own version (web/MAPMAKER_VERSION) against web/mapmaker.html
 RUN BUILD_TIME=$(date +%s) && \
     GAME_VERSION="v$(head -n 1 VERSION | tr -d '[:space:]')" && \
     MAPMAKER_VERSION="v$(head -n 1 web/MAPMAKER_VERSION | tr -d '[:space:]')" && \
     case "${GAME_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "VERSION is not MAJOR.MINOR.PATCH: ${GAME_VERSION}" >&2; exit 1 ;; esac && \
     case "${MAPMAKER_VERSION}" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "MAPMAKER_VERSION is not MAJOR.MINOR.PATCH: ${MAPMAKER_VERSION}" >&2; exit 1 ;; esac && \
-    grep -q "id=\"mapmaker-version\">${MAPMAKER_VERSION}<" web/mapmaker.html && \
-    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html web/lobby.html web/matches.html web/match.html web/live.html && \
-    ! grep -q '@@GAME_VERSION@@' web/shell.html web/lobby.html web/matches.html web/match.html web/live.html
+    grep -q "data-maker=\"${MAPMAKER_VERSION}\"" web/mapmaker.html && \
+    sed -i "s/@@BUILD_TIMESTAMP@@/${BUILD_TIME}/g; s/@@GAME_VERSION@@/${GAME_VERSION}/g" web/shell.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \
+    ! grep -q '@@GAME_VERSION@@' web/shell.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html
 
 # Configure and compile using default Makefiles
 RUN emcmake cmake -B build_web \
@@ -47,7 +47,7 @@ RUN BUILD_TIME=$(date +%s) && \
     ! grep -q '@@DATA_SIZE@@' "$PAGE" && \
     ! grep -Eq 'index\.js\?v=[0-9]+\?v=' "$PAGE"
 
-# Which build this is (the page's footer and the footer of the changelog page name it), found AFTER the compile layers so that a new commit does not recompile the game
+# Which build this is (the footers of the front page and of the game page, and the Menu of every other page, name it), found AFTER the compile layers so that a new commit does not recompile the game
 # (the page is the only place of the web build that shows it; the compiled game's own ants::BUILD_ID is "unknown" here and nothing in the browser prints it). The first of:
 # the build argument ANTS_BUILD_ID (docker build --build-arg ANTS_BUILD_ID=$(git rev-parse --short HEAD) .; a compose file's build.args), the commit named by the HEAD and refs files
 # of the repository's .git folder (a stack that a deployment tool builds from a clone has them: .dockerignore lets only these three through, never .git/config), the UTC build time.
@@ -61,18 +61,18 @@ RUN BUILD_ID="$(sh /src/docker/resolve_build_id.sh "${ANTS_BUILD_ID}" /src/gitin
     echo "${BUILD_ID}" > /src/build_id.txt && \
     echo "${BUILD_DATE}" > /src/build_date.txt && \
     PAGE=/src/build_web/src/ants_app/index.html && \
-    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g; s/@@BUILD_DATE@@/${BUILD_DATE}/g" "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html && \
-    sed -i "s|<span id=\"mapmaker-build\">local</span>|<span id=\"mapmaker-build\">build <span id=\"game-build-id\">${BUILD_ID}</span> <span id=\"game-build-date\">(${BUILD_DATE})</span></span>|" /src/web/mapmaker.html && \
-    ! grep -q '@@BUILD_' "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html && \
+    sed -i "s/@@BUILD_ID@@/${BUILD_ID}/g; s/@@BUILD_DATE@@/${BUILD_DATE}/g" "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html /src/web/legal.html /src/web/mapmaker.html && \
+    ! grep -q '@@BUILD_' "$PAGE" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html /src/web/legal.html /src/web/mapmaker.html && \
     grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" "$PAGE" && \
     grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" "$PAGE" && \
-    for LISTED in lobby matches match live mapmaker; do \
-        grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/${LISTED}.html && grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" /src/web/${LISTED}.html || exit 1; \
+    grep -Eq "id=\"?game-build-id\"?>${BUILD_ID}<" /src/web/lobby.html && grep -Eq "id=\"?game-build-date\"?>\\(${BUILD_DATE}\\)<" /src/web/lobby.html && \
+    for BARRED in matches match live legal mapmaker; do \
+        grep -Eq "data-build=\"${BUILD_ID}\"" /src/web/${BARRED}.html && grep -Eq "data-built=\"${BUILD_DATE}\"" /src/web/${BARRED}.html || exit 1; \
     done
 
 # The pages carry two placeholders for a site label, which the production site does not use: they become nothing (the same layer as the build id: the compile layers above do not depend on it).
 RUN cp /src/web/lobby.html /src/lobby.html && \
-    cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/live.html /src/live.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
+    cp /src/web/matches.html /src/matches.html && cp /src/web/match.html /src/match.html && cp /src/web/live.html /src/live.html && cp /src/web/legal.html /src/legal.html && if [ -f /src/web/mapmaker.html ]; then cp /src/web/mapmaker.html /src/mapmaker.html; fi && \
     for PAGE in /src/build_web/src/ants_app/index.html /src/lobby.html /src/matches.html /src/match.html /src/live.html; do \
         sed -i "s|@@SITE_TITLE@@||g; s|@@SITE_FOOTER@@||g" "$PAGE" || exit 1; \
         if grep -q '@@SITE_' "$PAGE"; then echo "a site placeholder is left in $PAGE" >&2; exit 1; fi; \
@@ -179,8 +179,8 @@ COPY --from=builder /src/mapmaker.html /usr/share/nginx/html/mapmaker.html
 # The map maker's sprite atlas (made in the builder stage; the page fetches it when the editor opens, and a few big toys one by one from /asset_catalog/sprites/, copied below): served at /mapmaker_atlas/
 COPY --from=builder /src/mapmaker_atlas/ /usr/share/nginx/html/mapmaker_atlas/
 
-# The Legal page (docs/PLAY_IN_BROWSER.md "The Legal page"): a page of its own in the changelog page's look, linked from every footer, with no placeholder to fill in
-COPY web/legal.html /usr/share/nginx/html/legal.html
+# The Legal page (docs/PLAY_IN_BROWSER.md "The Legal page"): a page of its own in the changelog page's look, linked from the Menu of every page and from the footers; the builder stage stamped the version and the build into its bar
+COPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html
 
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
 # /front/classic.css and shows /front/logo.png, which the web/front/ copy above puts in the image
