@@ -1,0 +1,271 @@
+{
+ "note": "Mutants of the seat-key reader for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): web/rejoin_key.js (which storage entries count, the key's shape, the age limit, the clock that is ahead, the server, the newest of several, a storage that throws, and that the key is never returned) against tests/scripts/web_rejoin_block_check.js, and the two pages' one question to it (web/lobby.html, web/shell.html) against tests/scripts/web_name_check.js and web_lobby_entry_check.js. Run from the checkout: tools/mutate.py tests/data/rejoin_key_mutants.json --keep-going --jobs 1; every mutant must be caught.",
+ "mutants": [
+  {
+   "id": "key_short_accepted",
+   "file": "web/rejoin_key.js",
+   "old": "/^[0-9A-Fa-f]{32}$/.test(v.k)",
+   "new": "/^[0-9A-Fa-f]{1,32}$/.test(v.k)",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "key_not_hex_accepted",
+   "file": "web/rejoin_key.js",
+   "old": "/^[0-9A-Fa-f]{32}$/.test(v.k)",
+   "new": "/^[0-9A-Za-z]{32}$/.test(v.k)",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "key_all_zero_accepted",
+   "file": "web/rejoin_key.js",
+   "old": "|| /^0+$/.test(v.k)) return null;",
+   "new": "|| false) return null;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "key_not_a_string_accepted",
+   "file": "web/rejoin_key.js",
+   "old": "if (typeof v.k !== 'string' || ",
+   "new": "if (",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "key_returned_by_parse",
+   "file": "web/rejoin_key.js",
+   "old": "return { room: m[1], seat: Number(m[2]), server: v.s, t: v.t };",
+   "new": "return { room: m[1], seat: Number(m[2]), server: v.s, t: v.t, k: v.k };",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "key_returned_by_offer",
+   "file": "web/rejoin_key.js",
+   "old": "return best ? { room: best.room, seat: best.seat, t: best.t } : null;",
+   "new": "return best ? best : null;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "age_limit_forgotten",
+   "file": "web/rejoin_key.js",
+   "old": "if (now - entry.t > REJOIN_MAX_AGE_MS) {",
+   "new": "if (false) {",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "age_limit_a_day",
+   "file": "web/rejoin_key.js",
+   "old": "var REJOIN_MAX_AGE_MS = 3 * 60 * 60 * 1000;",
+   "new": "var REJOIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "age_limit_off_by_one",
+   "file": "web/rejoin_key.js",
+   "old": "if (now - entry.t > REJOIN_MAX_AGE_MS) {",
+   "new": "if (now - entry.t >= REJOIN_MAX_AGE_MS) {",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "stale_entry_kept",
+   "file": "web/rejoin_key.js",
+   "old": "try { storage.removeItem(name); } catch (e) { /* it stays, and is not offered */ } return; }",
+   "new": "return; }",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "future_limit_forgotten",
+   "file": "web/rejoin_key.js",
+   "old": "if (entry.t - now > REJOIN_FUTURE_MS || entry.server !== server) return;",
+   "new": "if (entry.server !== server) return;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "future_limit_an_hour",
+   "file": "web/rejoin_key.js",
+   "old": "var REJOIN_FUTURE_MS = 60 * 1000;",
+   "new": "var REJOIN_FUTURE_MS = 60 * 60 * 1000;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "other_server_offered",
+   "file": "web/rejoin_key.js",
+   "old": "if (entry.t - now > REJOIN_FUTURE_MS || entry.server !== server) return;",
+   "new": "if (entry.t - now > REJOIN_FUTURE_MS) return;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "other_room_offered",
+   "file": "web/rejoin_key.js",
+   "old": "if ((room && entry.room !== room) || ",
+   "new": "if (",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "other_seat_offered",
+   "file": "web/rejoin_key.js",
+   "old": "|| (typeof seat === 'number' && seat >= 0 && entry.seat !== seat)) return;",
+   "new": "|| false) return;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "newest_is_oldest",
+   "file": "web/rejoin_key.js",
+   "old": "if (!best || entry.t > best.t ||",
+   "new": "if (!best || entry.t < best.t ||",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "tie_takes_higher_seat",
+   "file": "web/rejoin_key.js",
+   "old": "(entry.seat < best.seat ||",
+   "new": "(entry.seat > best.seat ||",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "seat_beyond_three",
+   "file": "web/rejoin_key.js",
+   "old": "\\.([0-3])$/.exec",
+   "new": "\\.([0-9])$/.exec",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "room_code_longer",
+   "file": "web/rejoin_key.js",
+   "old": "([A-Za-z0-9_-]{1,32})\\.",
+   "new": "([A-Za-z0-9_-]{1,64})\\.",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "room_code_with_dots",
+   "file": "web/rejoin_key.js",
+   "old": "([A-Za-z0-9_-]{1,32})\\.",
+   "new": "([A-Za-z0-9_.-]{1,32})\\.",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "prefix_changed",
+   "file": "web/rejoin_key.js",
+   "old": "var REJOIN_PREFIX = 'ants.rejoin.';",
+   "new": "var REJOIN_PREFIX = 'ants.rejoin';",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "extra_member_accepted",
+   "file": "web/rejoin_key.js",
+   "old": "if (members !== 'k,s,t') return null;",
+   "new": "if (members.indexOf('k') === -1) return null;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "server_not_printable_accepted",
+   "file": "web/rejoin_key.js",
+   "old": "!/^[\\x20-\\x7e]{1,255}$/.test(v.s)",
+   "new": "!/^[\\x00-\\x7f]{1,255}$/.test(v.s)",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "server_too_long_accepted",
+   "file": "web/rejoin_key.js",
+   "old": "{1,255}$/.test(v.s)",
+   "new": "{1,4096}$/.test(v.s)",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "time_fraction_accepted",
+   "file": "web/rejoin_key.js",
+   "old": " || Math.floor(v.t) !== v.t",
+   "new": "",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "time_negative_accepted",
+   "file": "web/rejoin_key.js",
+   "old": " || v.t < 0 ||",
+   "new": " ||",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "parse_throws_on_bad_json",
+   "file": "web/rejoin_key.js",
+   "old": "try { v = JSON.parse(text); } catch (e) { return null; }",
+   "new": "v = JSON.parse(text);",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "storage_read_error_not_caught",
+   "file": "web/rejoin_key.js",
+   "old": "try { text = storage.getItem(name); } catch (e) { return; }",
+   "new": "text = storage.getItem(name);",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "exports_the_wrong_function",
+   "file": "web/rejoin_key.js",
+   "old": "parse: rejoinParse, offer: rejoinOffer };",
+   "new": "parse: rejoinParse, offer: rejoinParse };",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "global_has_another_name",
+   "file": "web/rejoin_key.js",
+   "old": "else root.AntsRejoinKey = api;",
+   "new": "else root.AntsRejoin = api;",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "lobby_never_asks_the_file",
+   "file": "web/lobby.html",
+   "old": "return window.AntsRejoinKey ? window.AntsRejoinKey.offer(storage, now, server, room, seat) : null; }",
+   "new": "return null; }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "lobby_asks_in_another_order",
+   "file": "web/lobby.html",
+   "old": "window.AntsRejoinKey.offer(storage, now, server, room, seat)",
+   "new": "window.AntsRejoinKey.offer(storage, now, room, server, seat)",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "lobby_does_not_load_the_file",
+   "file": "web/lobby.html",
+   "old": "<script src=\"rejoin_key.js\"></script>",
+   "new": "",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "shell_never_asks_the_file",
+   "file": "web/shell.html",
+   "old": "return window.AntsRejoinKey ? window.AntsRejoinKey.offer(storage, now, server, room, seat) : null; }",
+   "new": "return null; }",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_asks_in_another_order",
+   "file": "web/shell.html",
+   "old": "window.AntsRejoinKey.offer(storage, now, server, room, seat)",
+   "new": "window.AntsRejoinKey.offer(storage, now, room, server, seat)",
+   "test": "node tests/scripts/web_name_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "shell_does_not_load_the_file",
+   "file": "web/shell.html",
+   "old": "<script src=\"rejoin_key.js\"></script>",
+   "new": "",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "lobby_throws_when_the_file_is_missing",
+   "file": "web/lobby.html",
+   "old": "return window.AntsRejoinKey ? window.AntsRejoinKey.offer(storage, now, server, room, seat) : null; }",
+   "new": "return window.AntsRejoinKey.offer(storage, now, server, room, seat); }",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  },
+  {
+   "id": "shell_throws_when_the_file_is_missing",
+   "file": "web/shell.html",
+   "old": "return window.AntsRejoinKey ? window.AntsRejoinKey.offer(storage, now, server, room, seat) : null; }",
+   "new": "return window.AntsRejoinKey.offer(storage, now, server, room, seat); }",
+   "test": "node tests/scripts/web_rejoin_block_check.js web/lobby.html web/shell.html"
+  }
+ ]
+}

@@ -125,12 +125,6 @@ console.log(JSON.stringify(out));
     def test_a_hidden_bar_is_no_target_for_the_locked_cursor(self):
         self.assertIn("bar.classList.contains('idle') || bar.classList.contains('gone')) return null;", read("web", "replay_page.js"))
 
-    def test_the_game_page_line_ceiling_is_the_pages_length(self):
-        lines = read("web", "shell.html").count("\n")
-        ceiling = int(re.search(r'"web/shell.html": (\d+)', read("tools", "check_hygiene.py")).group(1))
-        self.assertLessEqual(lines, ceiling)
-        self.assertGreater(lines, ceiling * 0.99)                                                            # (a ceiling that is far above the page is no ceiling)
-
 
 class TheDocs(unittest.TestCase):
     def test_the_docs_say_how_to_hide_and_call_the_bar(self):

@@ -7,7 +7,7 @@ of the match who played in a browser (docs/SERVER.md "Lobby rooms"); the game pa
   - tests/scripts/web_rematch_check.js runs the library without a browser, on tables and with a small fake of the DOM (a name is TEXT: the fake throws when markup is assigned), the game page's strip
     with the real client of web/front/lobby_net.js on a fake socket; it reads the game's own text of a match that is over from tests/data/match_over.txt (test_network_app N5.99 holds the game to it);
   - the pages: the strip's element, the stylesheet and the scripts in their places, the hooks (the game's word, the layout that counts the strip, the front page's strip, the note under START, START
-    that waits), and the limits of tools/check_hygiene.py for the two pages;
+    that waits);
   - the stylesheet: the classes that the scripts set, in the colors of the approved pictures;
   - the mutants of tests/data/rematch_mutants.json that need no build (the pages' own: rematch.js, lobby_net.js, lobby_rules.js) are run here on a COPY of the files, one at a time: each must make its
     check fail; the C++ ones are run by tools/mutate.py (the deep tier).
@@ -129,11 +129,6 @@ class ThePages(unittest.TestCase):
         self.assertIn("c.on('gone', mine(function () { lastStarting = false; leaveBack(); }));", page)
         self.assertIn("if (back && p.code !== back.code) leaveBack();", page)
 
-    def test_the_pages_stay_within_their_limits(self):
-        """tools/check_hygiene.py holds the two pages to their sizes: the rematch's code is in front/rematch.js and front/rematch.css"""
-        self.assertLessEqual(len(self.shell.splitlines()), 3966)
-        self.assertLessEqual(len(self.lobby.splitlines()), 1500)
-
 
 class TheStylesheet(unittest.TestCase):
     @classmethod
@@ -176,7 +171,7 @@ class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/rematch_mutants.json that need no build, on a COPY of the files, one at a time: each must make its check fail (a command that exits non-zero), and the copy with
     nothing changed must pass, so that a failure is the change's"""
 
-    FILES = ("web/front/rematch.js", "web/front/lobby_net.js", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_chat.js", "web/front/game_modes.js", "web/front/game_type.js", "web/lobby.html", "web/shell.html", "web/shapes.js", "tests/data/match_over.txt", "tests/data/replay_players.txt", "tests/data/lobby_messages.txt",
+    FILES = ("web/front/rematch.js", "web/front/lobby_net.js", "web/front/lobby_rules.js", "web/front/player_name.js", "web/front/lobby_chat.js", "web/front/game_modes.js", "web/front/game_type.js", "web/lobby.html", "web/rejoin_key.js", "web/shell.html", "web/shapes.js", "tests/data/match_over.txt", "tests/data/replay_players.txt", "tests/data/lobby_messages.txt",
              "tests/scripts/web_rematch_check.js", "tests/scripts/web_lobby_rules_check.js", "tests/scripts/web_lobby_client_check.js", "tests/scripts/web_lobby_net_check.js", "tests/scripts/web_name_check.js", "tests/scripts/web_page_harness.js", "web/home/home.js", "web/home/games.js",
              "include/ants_net/flood.hpp", "include/ants_net/protocol.hpp")      # (the client check reads the server's limits, the rules check the server's sentences)
 

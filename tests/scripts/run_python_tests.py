@@ -63,7 +63,7 @@ SHARD_ENV = "ANTS_MUTANT_SHARD"
 # timers, the watchdog of a node that does not end in test_web_mapmaker_play, the long output of a node through a pipe in test_web_mapmaker.TheCodeRuns, file names and paths, bash 3.2, compilers).
 # test_run_python_tests allows page tests only in this list, and a group that is new runs on macOS until it is named here.
 LINUX_ONLY = {
-    "test_web_home_games.TheChecksAreNotVacuous", "test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_screen.TheChecksAreNotVacuous", "test_web_lobby.TheCheckIsNotVacuous",
+    "test_web_home_games.TheChecksAreNotVacuous", "test_web_home_chat.TheChecksAreNotVacuous", "test_web_home_screen.TheChecksAreNotVacuous", "test_web_home_screen.TheMapCardChecksAreNotVacuous", "test_web_lobby.TheCheckIsNotVacuous",
     "test_web_lobby_chat.TheChecksAreNotVacuous", "test_web_lobby_net.TheBudgetChecksAreNotVacuous", "test_web_lobby_net.ThePublicRoomChecksAreNotVacuous",
     "test_web_lobby_rules.TheCheckIsNotVacuous", "test_web_rematch.TheChecksAreNotVacuous", "test_web_map_maker_link.TheChecksAreNotVacuous", "test_web_game_menu.TheMutants",
     "test_web_shapes.TheMutantsOfTheTable", "test_web_shapes.TheMutantsOfThePicker", "test_bot_names.TheMutants", "test_web_mapmaker.TheGroundAndTheSprites", "test_web_mapmaker.ThePage",
@@ -168,6 +168,22 @@ def run_unit(label, dotted, root, shim=None):
     return {"label": label, "status": done.returncode, "tests": int(ran.group(1)) if ran else 0, "seconds": time.monotonic() - started, "output": text}
 
 
+ANNOTATION = re.compile(r"^::(?:warning|notice)\b.*$", re.M)
+
+
+def annotations(results):
+    """The ::warning and ::notice lines (GitHub shows them on the pull request) of the groups that passed, once each: this runner keeps the output of a passing group to itself, and
+    the size warnings of tools/check_hygiene.py would never be seen. (A group that failed prints all its output, those lines too.)"""
+    seen, out = set(), []
+    for r in results:
+        if r["status"] == 0:
+            for line in ANNOTATION.findall(r["output"]):
+                if line not in seen:
+                    seen.add(line)
+                    out.append(line)
+    return out
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description="Runs the python tests of tests/scripts side by side (see the top of this file).")
     parser.add_argument("--dir", default=os.path.dirname(os.path.abspath(__file__)), help="the folder of the test_*.py files (default: this script's folder)")
@@ -210,6 +226,8 @@ def main(argv):
         print("%-62s %s  %3d tests  %5.1fs" % (r["label"], "ok    " if r["status"] == 0 else "FAILED", r["tests"], r["seconds"]))
     for r in failed:
         print("\n===== %s =====\n%s" % (r["label"], r["output"].rstrip()))
+    for line in annotations(results):
+        print(line)
     which = (" of slice %d/%d" % shard) if shard else ""
     print("\nRan %d tests in %d groups%s in %.1fs (side by side; one after the other they take %.1fs)" % (
         sum(r["tests"] for r in results), len(results), which, time.monotonic() - started, sum(r["seconds"] for r in results)))

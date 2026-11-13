@@ -303,6 +303,7 @@ function runLobby(search, stored, options) {
         if (c.onload) { try { c.onload({}); } catch (e) { env.lazyErrors.push(String(e && e.message || e)); } }       // (a handler that throws is an error of the page, which does not reach the one that appended the file)
         return c;
     };
+    win.AntsRejoinKey = loadFile('rejoin_key.js', scope).AntsRejoinKey;
     win.AntsLobbyRules = loadFront('lobby_rules.js', scope).AntsLobbyRules;
     win.AntsPlayerName = loadFront('player_name.js', scope).AntsPlayerName;
     win.AntsLobbyNet = loadFront('lobby_net.js', scope).AntsLobbyNet;

@@ -902,7 +902,7 @@ function bring(env) {                                     // the two files arriv
     check('(the dock is there and takes presses)', root.id === 'gchat' && !root.hasAttribute('inert'));
     env.home('mine').click();
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
-    env.$('browse').click();
+    env.$('change-map').click();
     check('the map list is a dialog: the dock is inert with the bars, the Room and the strips behind it', root.hasAttribute('inert') && env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert'));
     const late = runLobby('', { 'ants.name': 'Sam' }, { stayHome: true });
     hubFor(late); late.advance(0);

@@ -216,9 +216,10 @@ for (const [what, answer, link] of [['a guest whom the hub could log in', ['Gues
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 const shellPage = between(shellText, 'ANTS_PAGE_BEGIN', 'ANTS_PAGE_END', shellPath);
 const gateBlock = between(shellText, 'NAMEGATE_BEGIN', 'NAMEGATE_END', shellPath);
-const keysBlockShell = between(shellText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', shellPath);
+const keysBlockShell = between(shellText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', shellPath);      // (the page's question; the rules are web/rejoin_key.js's, which the page loads: it is window.AntsRejoinKey here)
+const keysFile = require('path').join(require('path').dirname(require('path').resolve(shellPath)), 'rejoin_key.js');
 const shellCode = shellPage + '\n' + nameBlockShell + '\n' + keysBlockShell + '\n' + gateBlock + '\nreturn { P: ANTS_PAGE, makeNameGate: makeNameGate, holdsThisSeat: holdsThisSeat };';
-const shell = new Function('window', 'document', shellCode)({ location: { search: '' }, localStorage: null }, {
+const shell = new Function('window', 'document', shellCode)({ location: { search: '' }, localStorage: null, AntsRejoinKey: require(keysFile) }, {
     getElementById() { return { setAttribute() {}, classList: { add() {} } }; },
     querySelectorAll() { return []; },
     body: { style: { setProperty() {} } },
@@ -408,7 +409,7 @@ same('a game here asks for the person\'s own name (nameless) when its address na
     check('with no door in the arguments there is no key to hold', shell.holdsThisSeat('?room=ABC&seat=1', [], storageOf(KEEP), NOW) === false);
     check('... and no other word of the arguments is taken for the door (the program\'s own name, say, which an entry may name as its server)', shell.holdsThisSeat('?room=ABC&seat=1', ['./this.program', '--room', 'ABC'], storageOf({ 'ants.rejoin.ABC.1': entry(5000, './this.program') }), NOW) === false);
     check('the step asks, unless the browser holds this very seat: the page looks at the keys of this browser', /var asks = ANTS_PAGE\.asksForName\(window\.location\.search\);\s*if \(asks\) \{[^}]*holdsThisSeat\(window\.location\.search, ANTS_ARGS, window\.localStorage, Date\.now\(\)\)/.test(shellText));
-    check('the keys block is the same text in the front page and the game page', keysBlockShell === between(lobbyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', lobbyPath));
+    check('the keys question is the same text in the front page and the game page, and both load the file that answers it', keysBlockShell === between(lobbyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', lobbyPath) && lobbyText.indexOf('<script src="rejoin_key.js"></script>') !== -1 && shellText.indexOf('<script src="rejoin_key.js"></script>') !== -1);
 }
 // what the page does with the gate (read from the file): the game starts through it, and only through it
 {
@@ -447,7 +448,7 @@ const path = require('path');
 const H = require('./web_page_harness.js')(lobbyPath);
 const { lobbyDir, lobbyMarkup, lobbyScripts, lobbyScript, RULES0, NET0, CHAT0, GUEST, hex, E, C, str8, KEY, welcome, reject, roomMessage, helloBytes, helloName, helloRoom, CODE, grouped, BLOCK_PARAMS, blockText, noBlockOf, THROWS, runLobby } = H;
 {
-    same('the page loads its scripts (the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
+    same('the page loads its scripts (the seat-key reader, the rules, the network client, the chat box, the rematch\'s strip, the map list, the shapes, the file fetcher, the Home screen) and then runs its own', lobbyScripts.map((m) => { const s = /src="([^"]*)"/.exec(m[1]); return s ? s[1] : 'inline'; }), ['rejoin_key.js', 'front/map_maker_link.js', 'front/lobby_rules.js', 'front/lobby_net.js', 'front/player_name.js', 'front/lobby_chat.js', 'front/rematch.js', 'front/game_modes.js', 'front/game_type.js', 'front/map_picker.js', 'shapes.js', 'map_files.js', 'home/home.js', 'inline']);
     const markupIds = [...lobbyMarkup.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
     check('no id is used twice in the markup', new Set(markupIds).size === markupIds.length, markupIds.filter((id, i) => markupIds.indexOf(id) !== i).join(','));
     const asked = new Set([...lobbyScript.matchAll(/\$\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/freshNode\('([\w-]+)'\)/g), ...lobbyScript.matchAll(/getElementById\('([\w-]+)'\)/g)].map((m) => m[1]));
@@ -792,8 +793,9 @@ for (const [what, me, shown] of [['a hub where nobody is logged in', 'guest', tr
     const button = (seat, side) => env.$('slots').querySelector('[data-seat="' + seat + '"][data-side="' + side + '"]');
     const lit = (seat, side) => button(seat, side).getAttribute('aria-pressed') === 'true';
     check('the leader of three has the two team buttons on every color, and the room has no teams', button(0, 1) !== null && button(1, 1) !== null && button(2, 2) !== null && !lit(0, 1) && !lit(1, 1) && /Free for all/.test(env.$('teams-note').textContent));
-    for (let i = 0; i < 8; i++) env.$('next').click();
-    check('the map arrow held down (8 presses) sends 5 plans: the plan budget of the page is empty', plans().length === 5, String(plans().length));
+    const level = env.$('slots').querySelector('[data-mode="3"]');
+    for (let i = 0; i < 8; i++) { level.value = i % 2 ? 'medium' : 'easy'; env.$('slots').fire('change', { target: level }); }
+    check('the open color\'s level changed 8 times in a row sends 5 plans: the plan budget of the page is empty', plans().length === 5, String(plans().length));
     env.press(button(0, 1));
     check('a team button pressed alone is the page\'s own (a pair is what the room holds): lit, nothing sent', lit(0, 1) && plans().length === 5);
     env.press(button(1, 1));

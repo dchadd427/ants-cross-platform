@@ -151,13 +151,6 @@ class ThePlayer(unittest.TestCase):
         has(self, "else if (OWN) setHeader();", self.glue)
         has(self, "if (OWN) OWN.chrome();", self.glue)
 
-    def test_the_game_page_has_not_grown(self):
-        with open(os.path.join(REPO, "web", "shell.html"), "rb") as f:
-            lines = f.read().count(b"\n")
-        with open(os.path.join(REPO, "tools", "check_hygiene.py"), encoding="utf-8") as f:
-            ceiling = int(re.search(r'"web/shell.html": (\d+)', f.read()).group(1))
-        self.assertLessEqual(lines, ceiling)                                                              # (the logic is in web/replay_page.js: the page only calls it)
-
     def test_a_map_that_a_file_carries_is_counted_before_the_game_starts_and_the_limits_are_the_games(self):
         has(self, "(carried ? Promise.resolve(window.AntsMapFiles.carriedVerdict(carried)) : need ?", self.glue)
         has(self, "if (!map.ok) { card(OWN && map.mismatch ? 'changed' : OWN && map.gone ? 'nomap' : 'cant', map.text); return; }", self.glue)        # (a refused count has neither flag: the card with the reason)

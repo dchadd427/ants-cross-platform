@@ -60,6 +60,7 @@ cp -f "${SCRIPT_DIR}/web/match_stats.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/death_map.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/death_map.css" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/replay_stats.css" "${DIST_DIR}/"
+cp -f "${SCRIPT_DIR}/web/rejoin_key.js" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web/shapes.js" "${DIST_DIR}/"                                                                                                                                           # the pages' one table of the picture's shapes
 cp -f "${SCRIPT_DIR}/web/shape_picker.js" "${DIST_DIR}/"                                                                                                                                     # ... and its control, a button and a list that the page makes (a native list does not open under the fullscreen mouse lock)
 cp -f "${SCRIPT_DIR}/web/map_files.js" "${DIST_DIR}/"                                                                                                                                             # ... and the helpers it shares with the game page
@@ -74,9 +75,11 @@ cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.data" "${DIST_DIR}/"
 cp -f "${SCRIPT_DIR}/web"/favicon.* "${DIST_DIR}/"
-mkdir -p "${DIST_DIR}/front" "${DIST_DIR}/home"
+mkdir -p "${DIST_DIR}/front" "${DIST_DIR}/home" "${DIST_DIR}/app"
 cp -f "${SCRIPT_DIR}/web/front"/* "${DIST_DIR}/front/"            # the front page's pictures and font, served at /front/
 cp -f "${SCRIPT_DIR}/web/home"/* "${DIST_DIR}/home/"              # the front page's Home and Room screens (docs/HOME_SCREEN.md), served at /home/
+cp -f "${SCRIPT_DIR}/web/manifest.webmanifest" "${DIST_DIR}/"             # the installable web app: its manifest (served at /manifest.webmanifest) ...
+cp -f "${SCRIPT_DIR}/web/app"/* "${DIST_DIR}/app/"                  # ... and its icons (tools/front_page_art/make_app_icons.py), served at /app/
 python3 "${SCRIPT_DIR}/tools/map_atlas.py" "${DIST_DIR}/mapmaker_atlas"        # the map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"); the few big toys that it fetches one by one come from /asset_catalog/sprites/, which the image has and this folder does not
 
 echo "========================================================"

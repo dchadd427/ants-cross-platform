@@ -11,7 +11,7 @@ native `ants_server` of this tree there (as web_rejoin_check.py does). The DevTo
 headless browser (its own profile and port; nothing of yours is touched), the parts with several people in one browser each. Parts:
 
   * front    the page at "/" on a first visit (a room of its own: a new code of six letters and numbers from the alphabet without look-alikes, the link with it, Copy link (there is no other way to play on the page);
-             the four cards in their places, the host's with You and the pencil, the others open with their drop-down; the map side with its picture, arrows and the Treasure default; START!; the footer's version, build, links
+             the four cards in their places, the host's with You and the pencil, the others open with their drop-down; the map card with its picture, name, kind, Change map button and the Treasure default; START!; the footer's version, build, links
              and notice; Picture (in the match column, under the map's line and above START!, not in the footer) with the shape nearest the screen (16:10 at 1440 x 900) checked on a first visit and 4:3 remembered, a stale or bad value ignored); How it works; Join by code (the Games list) with its lines for a bad, an own and a code that has no room; the name card of a link to
              a room that is gone (which comes back with the line that says so, and the room of one's own that its button makes); 23 widths from 320 to 1600 px: no sideways scroll, two columns from 1041 px, the cards two by two above 720 px and one under another
              below it, nothing sticking out of a card, the grip's dots clear of the names, START! in view on a phone, the map's name not cut off; Share where the browser has it; the game server that cannot be reached (the gold
@@ -152,7 +152,7 @@ STATE_JS = """(function () {
   });
   return JSON.stringify({ path: location.pathname, search: location.search, heading: text($('room-h')), code: text($('code')), link: $('link').value, invite: text($('invite-line')), cards: cards,
     slotsNote: text($('slots-note')), teamsNote: text($('teams-note')), teamsWarn: $('teams-note').classList.contains('warn'),
-    start: { text: text($('start')), disabled: $('start').disabled, busy: $('start').getAttribute('aria-busy') }, plan: text($('plan')), planShort: text($('plan-short')), info: text($('info')), map: $('map').value, mapDisabled: $('map').disabled,
+    start: { text: text($('start')), disabled: $('start').disabled, busy: $('start').getAttribute('aria-busy') }, plan: text($('plan')), planShort: text($('plan-short')), info: text($('info')), map: text($('map-name')).toLowerCase(), mapDisabled: $('change-map').disabled || $('change-map').hidden,
     banner: { shown: !banner.hidden, text: text($('banner-text')), button: $('banner-x').hidden ? '' : text($('banner-x')), cls: banner.className }, rejoin: !$('rejoin').hidden, toast: $('toast').hidden ? '' : text($('toast')),
     nameStep: !$('name-step').hidden, offline: document.body.classList.contains('offline'), guest: document.body.classList.contains('guest') });
 })()"""
@@ -190,13 +190,11 @@ LAYOUT_JS = """(function () {
     var r = e.getBoundingClientRect();
     return r.right > window.innerWidth + 0.5 || r.left < -0.5;
   }).map(function (e) { return e.id || e.className || e.tagName; });
-  var map = $('map'), cs = getComputedStyle(map), cv = document.createElement('canvas').getContext('2d');
-  cv.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
-  var widest = Math.max.apply(null, Array.prototype.map.call(map.options, function (o) { return cv.measureText(o.text).width; }));
+  var mapName = $('map-name');
   return JSON.stringify({ scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, innerH: window.innerHeight, docH: document.documentElement.scrollHeight, scrollY: window.scrollY,
     panel: rect(panel), side: shown(side) ? rect(side) : null, maprow: rect(document.querySelector('.maprow')), start: rect($('start')), go: rect(document.querySelector('.go')), cards: cards, strays: strays,
     plan: [shown($('plan')), shown($('plan-short'))], link: shown($('link')), copy: rect($('copy')), invite: rect(document.querySelector('.invite')), share: shown($('share')),
-    mapFit: [widest, map.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)] });
+    mapFit: [mapName.scrollWidth, mapName.clientWidth] });
 })()"""
 
 LOBBY_NOTICE = "Online matches are recorded. Recordings are kept for 30 days. Results and names are kept for good and are public."        # (the line under the name field of the front page's name card and in its footer)
@@ -493,6 +491,13 @@ def main():
         def real_click(selector):
             click_on(tab, selector)
 
+        def pick_map(file):
+            """The host's way to another map: Change map opens the list (here the six originals, or all the maps when the site has them), the map's row is pressed, then Choose map."""
+            real_click("#change-map")
+            wait_for(lambda: tab.ev("!!document.querySelector('#picker-panel [data-file=\"%s\"]')" % file), 5)
+            real_click('#picker-panel [data-file="%s"]' % file)
+            tab.ev("Array.prototype.filter.call(document.querySelectorAll('#picker-panel button'), function (b) { return b.textContent === 'Choose map'; })[0].click(); 1")
+
         def key(name, vk, text="", modifiers=0):
             key_press(tab, name, name, vk, text, modifiers)
 
@@ -638,28 +643,28 @@ def main():
 
             # the map side
             side = json.loads(value("""JSON.stringify({preview: (function () { var i = document.getElementById('preview'); return [i.complete && i.naturalWidth > 0, i.getAttribute('src'), i.alt]; })(),
-                maps: Array.prototype.map.call(document.getElementById('map').options, function (o) { return o.value + '=' + o.text; }).join(), map: document.getElementById('map').value, info: document.getElementById('info').textContent,
-                arrows: [document.getElementById('prev').getAttribute('aria-label'), document.getElementById('next').getAttribute('aria-label'), document.getElementById('prev').disabled, document.getElementById('next').disabled],
+                card: [document.getElementById('map-name').textContent, Array.prototype.map.call(document.getElementById('map-facts').children, function (c) { return c.textContent; }).join(), document.getElementById('change-map').textContent, document.getElementById('change-map').hidden, document.getElementById('change-map').getBoundingClientRect().height >= 44],
+                old: ['map', 'prev', 'next', 'browse'].filter(function (id) { return document.getElementById(id); }).join(), map: document.getElementById('map-name').textContent.toLowerCase(), info: document.getElementById('info').textContent,
                 start: (function () { var b = document.getElementById('start'), r = b.getBoundingClientRect(), cs = getComputedStyle(b); return [b.textContent, b.disabled, Math.round(r.width), Math.round(r.height), cs.fontSize]; })(),
                 plan: document.getElementById('plan').textContent})"""))
             check(side["preview"] == [True, "front/preview_treasure.png", "The map: Treasure"] and side["map"] == "treasure" and side["info"] == "One person's trash... (12 min)",
                   "the map is Treasure, the default of the page (its picture, its line from the original's setup screen: %r)" % side["info"])
-            check(side["maps"] == "tiny=Tiny,small=Small,medium=Medium,gauntlet=Gauntlet,treasure=Treasure,islands=Islands" and side["arrows"] == ["Previous map", "Next map", False, False], "the map's drop-down lists the six maps of the original, with arrows (%s)" % side["maps"])
+            check(side["card"][:2] == ["Treasure", "Original"] and side["card"][2:4] == ["Change map", False] and side["card"][4] and side["old"] == "",
+                  "the map is one card: its name, the kind, a Change map button that is a full touch target for the host, and no arrows, drop-down or Browse button (%s)" % (side["card"], side["old"]))
             check(side["start"][0] == "START!" and not side["start"][1] and side["start"][2] >= 280 and side["start"][3] >= 56 and side["plan"] == "A game for one. Red, Blue and Black are open and stay empty unless a player joins first.",
                   "START! is on and big (%s x %s px) and the line under it says that, alone, it is a game for one: \"%s\"" % (side["start"][2], side["start"][3], side["plan"]))
-            real_click("#next")
+            pick_map("ISLANDS.LVL")
             ok = wait_for(lambda: lobby()["map"] == "islands", 5)
             status = server.room(code) or {}
             check(bool(ok) and status.get("map") == "ISLANDS.LVL" and lobby()["info"] == "Island hopping, expert map (12 min)" and lobby()["start"]["text"] == "START!",
-                  "the arrow > chooses the next map, Islands: the game server's room has it (%s) and the line follows (%r)" % (status.get("map"), lobby()["info"]))
-            real_click("#prev")
-            real_click("#prev")
+                  "Change map, Islands, Choose map: the game server's room has it (%s) and the line follows (%r)" % (status.get("map"), lobby()["info"]))
+            pick_map("GAUNTLET.LVL")
             ok = wait_for(lambda: lobby()["map"] == "gauntlet", 5)
-            check(bool(ok) and (server.room(code) or {}).get("map") == "GAUNTLET.LVL", "the arrow < twice goes back over Treasure to Gauntlet, and the room follows (%s)" % (server.room(code) or {}).get("map"))
-            tab.ev("var m = document.getElementById('map'); m.value = 'tiny'; m.dispatchEvent(new Event('change', { bubbles: true })); 1")
+            check(bool(ok) and (server.room(code) or {}).get("map") == "GAUNTLET.LVL", "the list chooses Gauntlet, and the room follows (%s)" % (server.room(code) or {}).get("map"))
+            pick_map("TINY.LVL")
             ok = wait_for(lambda: (server.room(code) or {}).get("map") == "TINY.LVL", 5)
-            check(bool(ok) and lobby()["info"] == "Tiny map with no PowerUps (6 min)", "the drop-down chooses a map too (Tiny: %r)" % lobby()["info"])
-            tab.ev("var m = document.getElementById('map'); m.value = 'treasure'; m.dispatchEvent(new Event('change', { bubbles: true })); 1")
+            check(bool(ok) and lobby()["info"] == "Tiny map with no PowerUps (6 min)", "and Tiny (%r)" % lobby()["info"])
+            pick_map("TREASURE.LVL")
             wait_for(lambda: (server.room(code) or {}).get("map") == "TREASURE.LVL", 5)
 
             # the open colors: a bot of a level, Nobody (the drop-down tells the room, the card and the line under START follow)
