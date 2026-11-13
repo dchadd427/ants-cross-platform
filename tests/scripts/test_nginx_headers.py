@@ -194,11 +194,9 @@ def mime_line():
 
 
 def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import quick_http
+    return quick_http.free_port()
 
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"

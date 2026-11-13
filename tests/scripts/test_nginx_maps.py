@@ -233,9 +233,9 @@ class StandIn(BaseHTTPRequestHandler):
 
 
 def free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import quick_http
+    return quick_http.free_port()
 
 
 # A port where a connect is refused at once, on Linux and macOS alike: nothing listens on port 1 of the loopback, and a test that runs beside this one cannot be given it (below 1024). A port held by a

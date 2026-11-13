@@ -191,11 +191,9 @@ def nginx_binary():
 
 
 def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import quick_http
+    return quick_http.free_port()
 
 
 # A port where a connect is refused at once, on Linux and macOS alike: nothing listens on port 1 of the loopback, and a test that runs beside this one cannot be given it (below 1024). A port held by a

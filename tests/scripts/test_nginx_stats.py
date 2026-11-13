@@ -206,11 +206,9 @@ def docker_ready():
 
 
 def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import quick_http
+    return quick_http.free_port()
 
 
 # What the stand-in server logs for each request: the method, the path, the query, the Host, the lengths and the headers that a visitor could have (a "-" is a header that was not sent)

@@ -2,6 +2,8 @@
 
   - starting either class never calls socket.getfqdn, gethostbyaddr, gethostbyname or getaddrinfo with a name (a lookup of an address literal by getaddrinfo is local and is let through)
   - they still serve a request, and the threading one serves two at once
+  - quick_http.free_port: processes side by side are never given the same number (each has a range of its own below 32768), a number that something holds is skipped, and no tests/scripts/*.py
+    has a free_port of its own that binds port 0 and gives the number back
   - no tests/scripts/test_*.py makes or derives from a http.server.HTTPServer or ThreadingHTTPServer itself (the stdlib one asks for the name of the machine when it binds); found in the syntax tree
 """
 import ast
@@ -108,6 +110,52 @@ class NoTestBuildsTheStdlibServer(unittest.TestCase):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
             self.assertEqual(stdlib_server_uses(path), [3, 5, 7])
+
+
+PICKER = "import sys; sys.path.insert(0, sys.argv[1]); import quick_http; print(' '.join(str(quick_http.free_port()) for _ in range(40)), flush=True); sys.stdin.readline()"
+
+
+class FreePort(unittest.TestCase):
+    def test_processes_side_by_side_are_never_given_the_same_number(self):
+        import subprocess
+        procs = [subprocess.Popen([sys.executable, "-c", PICKER, HERE], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) for _ in range(6)]
+        picks = []
+        for proc in procs:      # (each keeps its range until it is told to end: they run side by side)
+            picks.append([int(n) for n in proc.stdout.readline().split()])
+        for proc in procs:
+            proc.communicate("\n", timeout=60)
+            self.assertEqual(proc.returncode, 0)
+        everything = [n for each in picks for n in each]
+        self.assertEqual(len(everything), 240)
+        self.assertEqual(len(set(everything)), 240, "a number was given twice")
+        self.assertTrue(all(quick_http.PORT_FIRST <= n < 32768 for n in everything), "a number is outside the range below the system's own")
+
+    def test_one_process_counts_up_inside_its_range_and_skips_a_number_that_is_held(self):
+        first = quick_http.free_port()
+        held = socket.socket()
+        self.addCleanup(held.close)
+        held.bind(("", first + 1))
+        after = [quick_http.free_port() for _ in range(3)]
+        self.assertNotIn(first + 1, after)
+        self.assertEqual(after[0], first + 2)
+        self.assertEqual(len(set(after)), 3)
+
+    def test_the_range_wraps_and_the_numbers_stay_free(self):
+        seen = [quick_http.free_port() for _ in range(quick_http.PORT_SPAN + 5)]
+        self.assertEqual(len(set(seen)), quick_http.PORT_SPAN)
+        self.assertEqual(max(seen) - min(seen), quick_http.PORT_SPAN - 1)
+
+    def test_no_file_has_a_free_port_of_its_own_that_gives_the_number_back(self):
+        found = []
+        for path in sorted(glob.glob(os.path.join(HERE, "*.py"))):
+            if os.path.basename(path) == "quick_http.py":
+                continue
+            with open(path, encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name == "free_port" and any(isinstance(n, ast.Attribute) and n.attr == "getsockname" for n in ast.walk(node)):
+                    found.append("%s:%d" % (os.path.basename(path), node.lineno))
+        self.assertEqual(found, [], "use quick_http.free_port: a number that was given back is free for another process")
 
 
 if __name__ == "__main__":
