@@ -23,8 +23,25 @@
 .gc-log > :first-child { margin-top: auto; }
 .gc-line { font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
 .gc-who { color: #9fe0b8; }
-.gc-me .gc-who { color: var(--gold); }
-.gc-badge { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.gc-me .gc-who { color: var(--cream); }       /* (the visitor's own name is white; the role rules below are heavier, so a staff member's own lines keep their role color) */
+/* the role is the color of the NAME (the message keeps its color): red for an administrator, yellow for a moderator; the words are in the accessible name (chat.js). The red is a lighter red of the Leave buttons' family: it must be readable as text on every dark panel it sits on (tests/scripts/test_web_home_chat.py measures it). */
+.gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod { color: var(--gold); }
+.gc-line.gc-admin .gc-who, .gc-an.gc-r-admin, .gc-cn.gc-r-admin { color: #ff5f66; }
+.gc-cn.gc-r-admin, .gc-cn.gc-r-mod { padding: 1px 9px; background: #0b1a17; border-radius: 11px; }       /* (the chip's face is teal: the name sits on a dark plate, as the circle does) */
+.gc-av.gc-r-admin { color: #ff5f66; border-color: #ff5f66; }
+.gc-av.gc-r-mod { border-color: var(--gold); }
+.gc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.gc-u { font-size: 13px; color: #8fb3a6; }
+.gc-no { font-size: 12px; color: #7f9c92; white-space: nowrap; }
+.gc-event { font-size: 14px; line-height: 1.35; font-style: italic; text-align: center; color: #9cc0b3; }       /* (a line of the hub's own: quiet, no author) */
+.gc-private { padding: 6px 10px 7px; font-size: 15px; line-height: 1.35; color: var(--cream); background: #0e1c18; border-left: 3px solid #5fa48a; border-radius: 3px; }
+.gc-tag { display: block; margin-bottom: 2px; font-size: 11px; line-height: 14px; letter-spacing: .08em; text-transform: uppercase; color: #a8cfc0; }
+.gc-pl { overflow-wrap: anywhere; }
+.gc-cmd { font-weight: 500; color: var(--cream); }
+.gc-pw { color: #b9d9cc; }
+.gc-note[data-removed]:not([data-removed=""]) { padding: 6px 10px; background: #1c140c; border-left: 3px solid #f2c48c; border-radius: 3px; color: var(--cream); }
+.gc-yr { margin: 6px 0 0; font-size: 15px; color: var(--cream); }
+.gc-yr[hidden] { display: none; }
 .gc-sys { font-size: 14px; line-height: 1.35; color: #a8cfc0; }
 .gc[data-state="offline"] .gc-log { filter: saturate(.5) brightness(.94); }
 .gc-note { margin-top: 8px; font-size: 15px; line-height: 1.35; color: #f2c48c; }

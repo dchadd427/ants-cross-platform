@@ -36,7 +36,11 @@
 .pl-who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .pl-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 1.25; color: #9fe0b8; }
 .pl-meta { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.25; color: #a8cfc0; }
-.pl-badge, .pl-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.pl-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
+.pl-card.r-admin .pl-nm { color: #ff5f66; }       /* (the role is the color of the NAME: red for an administrator, yellow for a moderator; the word is in the accessible name; the red is measured in tests/scripts/test_web_home_chat.py) */
+.pl-card.r-mod .pl-nm { color: var(--gold); }
+.pl-card.r-admin .pl-av { color: #ff5f66; border-color: #ff5f66; }
+.pl-card.r-mod .pl-av { border-color: var(--gold); }
 .pl-tag { margin: 0 0 0 6px; padding: 0 6px; }
 .pl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .pl-join { flex: none; min-height: 44px; min-width: 60px; padding: 6px 12px; font-size: 15px; }

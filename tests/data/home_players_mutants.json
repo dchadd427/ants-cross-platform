@@ -133,7 +133,7 @@
   {
    "id": "the_groups_are_not_sorted",
    "file": "web/home/players.js",
-   "old": "GROUPS.forEach(function (g) { out[g[0]].sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id; }); });",
+   "old": "GROUPS.forEach(function (g) { out[g[0]].sort(function (a, b) { return (b.role === 'admin') - (a.role === 'admin') || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id); }); });       // (the admins first, then by name)",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -266,8 +266,8 @@
   {
    "id": "a_name_in_a_span_not_a_bdi",
    "file": "web/home/players.js",
-   "old": "name.appendChild(el('bdi', 'pl-nm', row.name));",
-   "new": "name.appendChild(el('span', 'pl-nm', row.name));",
+   "old": "var nm = el('bdi', 'pl-nm', row.name),",
+   "new": "var nm = el('span', 'pl-nm', row.name),",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -632,6 +632,97 @@
    "file": "web/home/players.js",
    "old": "if (!empty) {                                                // (alone:",
    "new": "if (true) {                                                // (alone:",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "admins_are_not_first",
+   "file": "web/home/players.js",
+   "old": "(b.role === 'admin') - (a.role === 'admin') || ",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_admin_has_the_word_mod",
+   "file": "web/home/players.js",
+   "old": "word = row.role === 'admin' ? TEXT.administrator : TEXT.moderator;",
+   "new": "word = TEXT.moderator;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "an_admin_is_not_red",
+   "file": "web/home/players.js",
+   "old": "li.className += row.role === 'admin' ? ' r-admin' : ' r-mod';",
+   "new": "li.className += ' r-mod';",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_role_word_without_mod_is_a_role",
+   "file": "web/home/players.js",
+   "old": "return mod !== true ? 'none' : raw === 'admin' ? 'admin' : 'mod'; }",
+   "new": "return raw === 'admin' ? 'admin' : mod === true ? 'mod' : 'none'; }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_live_role_is_not_read",
+   "file": "web/home/players.js",
+   "old": "} else if (kind === 'you') {",
+   "new": "} else if (kind === 'you-is-not-read') {",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_own_row_is_not_made_again_for_a_role",
+   "file": "web/home/players.js",
+   "old": "mine = you ? { name: you.name, mod: you.mod, role: you.role, doing: doing }",
+   "new": "mine = you ? { name: you.name, mod: you.mod, doing: doing }",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_rows_role_does_not_make_the_list_again",
+   "file": "web/home/players.js",
+   "old": "return [r.id, r.name, r.at, r.mod, r.role, r.pub,",
+   "new": "return [r.id, r.name, r.at, r.mod, r.pub,",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_welcomes_role_is_not_read",
+   "file": "web/home/players.js",
+   "old": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.role } : null;",
+   "new": "you = yo ? { name: yo.name, mod: yo.mod, role: yo.mod ? 'mod' : 'none' } : null;",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_own_row_has_no_role",
+   "file": "web/home/players.js",
+   "old": "at: doing ? doing.at : 'look', mod: you.mod, role: you.role, pub:",
+   "new": "at: doing ? doing.at : 'look', mod: you.mod, pub:",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_word_is_not_in_the_accessible_name",
+   "file": "web/home/players.js",
+   "old": "name.appendChild(el('span', 'pl-sr', word + ' '));",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_name_has_no_title",
+   "file": "web/home/players.js",
+   "old": "nm.setAttribute('title', word);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_staff_group_is_called_moderators",
+   "file": "web/home/players.js",
+   "old": "['mod', 'Staff']",
+   "new": "['mod', 'Moderators']",
+   "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_staff_group_holds_a_person_with_no_role",
+   "file": "web/home/players.js",
+   "old": "out[row.mod ? 'mod' : row.at].push(row);",
+   "new": "out[row.mod || row.role === 'none' ? 'mod' : row.at].push(row);",
    "test": "python3 tests/scripts/test_web_home_players.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage && node tests/scripts/web_home_players_check.js web/lobby.html && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

@@ -336,6 +336,18 @@ class Contract(unittest.TestCase):
         self.assertEqual(self.store.make_room(0, 5, 0), 5)                  # (a chunk that is smaller than the lines that may go: the moderator's stays)
         self.assertIn(again[1], [r[0] for r in self.store.lines(1000)])
 
+    def test_a_line_holds_the_role_of_its_author_0_none_1_moderator_2_administrator_and_a_bool_is_0_or_1(self):
+        for mod in (0, 1, 2, False, True):
+            self.say(0, mod=mod)
+        self.assertEqual([l.mod for l in self.store.recent_lines(10)], [0, 1, 2, 0, 1])
+
+    def test_make_room_takes_the_lines_of_a_moderator_and_of_an_administrator_both_after_the_others(self):
+        ids = [self.say(n, mod=2 if n == 4 else 1 if n == 9 else 0).id for n in range(50)]
+        self.assertEqual(self.store.make_room(0, 45, 3), 45)                # (the 47 oldest lines that hold no role)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], [ids[4], ids[9]] + ids[47:])
+        self.assertEqual(self.store.make_room(0, 10, 3), 2)                 # (and now both go: the role of the author is no other reason to keep a line)
+        self.assertEqual([r[0] for r in self.store.lines(1000)][::-1], ids[47:])
+
     def test_make_room_takes_the_lines_that_a_moderator_deleted_after_the_others_too(self):
         ids = [self.say(n).id for n in range(30)]
         self.store.delete_line(ids[2], "me")

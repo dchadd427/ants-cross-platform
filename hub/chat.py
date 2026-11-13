@@ -158,6 +158,8 @@ class Chat:
         """A line as it goes to a page: `k` is its author's key (the page tells its own lines by it, since names are not unique). `names` (account -> username) is given only for a moderator's
         copy: it adds `u`, the author's username, where that is not the name that the line shows."""
         out = {"id": line.id, "at": line.at, "who": line.name, "text": line.text, "mod": bool(line.mod), "k": self.key_of(line.account) if line.account else ""}
+        if line.mod:
+            out["role"] = "admin" if line.mod >= RANK["admin"] else "mod"      # (what the author was when it wrote the line: a mark for the pages and never a reason to allow anything)
         if not line.account:
             out["sys"] = True                      # (a line of the hub's own: nobody's, so it has no key)
         username = names.get(line.account) if names else None
@@ -240,6 +242,7 @@ class Chat:
         if why:
             return self.mistake(peer, why)
         mod = self.is_mod(who.account_id)
+        role = self.roles.role_of(who.account_id)
         if mod and line.startswith("/"):
             try:
                 return self.command(peer, line)
@@ -261,7 +264,7 @@ class Chat:
             return self.mistake(peer, "rate")
         self.global_limit.take(now)
         try:
-            entry = self.store.add_line(who.account_id, who.name, line, mod)
+            entry = self.store.add_line(who.account_id, who.name, line, max(RANK[role], 1 if mod else 0))       # (the role that the author has now: what the line will say of it)
         except StoreError as e:
             self.account_limits.refund(who.account_id, line)       # (the line was not kept: it did not cost a token, and the same text may be tried again)
             self.global_limit.give_back()

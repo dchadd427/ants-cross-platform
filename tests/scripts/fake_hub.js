@@ -5,6 +5,10 @@
 // The two names (docs/HUB.md "Names"): a `you` with `k` (the key of the account), `pick` ("display" or "username") and `other` (the name that is not shown) is an account that can choose; its lines carry its key,
 // and a {"t":"pick","pick":...} is answered as the real hub does: the names change places, every socket is closed (1000) and the next welcome says who the account is now; where the account cannot choose it is
 // {"t":"err","code":"pick"}. `line(id, who, text, mod, extra)` takes more fields (k, u).
+// The roles (docs/HUB.md "Roles", "Moderation"): `you.role` is none, mod or admin (`mod` is true for both); `hub.you(you)` changes it and tells every socket with a `you` frame; a moderator's command in a `say`
+// is read as the hub reads it (the seven words, any case; a role of none gets `bad` and nothing is posted; a role that may not gets `power`; a name that is nobody's in `people` ({ name: role }) gets `who`; a
+// person of the same or a higher rank, or oneself, gets `power`; `o.roleDown` makes every command `role`; a done one is answered `ok`, a kick and a ban also make the hub's own line `<name> was kicked.` with
+// `sys: true`, a line of a moderator or an administrator carries `role`, and /bans answers the private `bans` frame from `o.bans`); `hub.bye(why)` sends the `bye` frame and closes the sockets (a kick also ends the login: the next welcome names nobody).
 //   const hub = await startHub({ you: { name: 'maple.leaf', mod: false }, login: true, history: [line(1, 'pebble', 'hello')] });  hub.url; hub.say('pebble', 'hi'); hub.drop(); await hub.close();
 'use strict';
 const http = require('http');
@@ -84,6 +88,7 @@ function startHub(options) {
         }
         if (m.t !== 'say') { hub.send(peer, { t: 'err', code: 'bad' }); return; }
         if (!o.you) { hub.send(peer, { t: 'err', code: 'login' }); return; }
+        if (typeof m.text === 'string' && /^\/(mute|unmute|del|kick|ban|unban|bans)(\s|$)/i.test(m.text.trim())) { command(peer, m.text.trim()); return; }
         const w = writers.get(peer), now = Date.now();
         w.tokens = Math.min(3, w.tokens + (now - w.at) / 2000); w.at = now;
         for (const [t, at] of w.said) if (now - at >= 30000) w.said.delete(t);
@@ -91,8 +96,28 @@ function startHub(options) {
         if ([...m.text].length > 200) { hub.send(peer, { t: 'err', code: 'long' }); return; }
         if (w.said.has(m.text) || w.tokens < 1) { hub.rateRefusals = (hub.rateRefusals || 0) + 1; hub.send(peer, { t: 'err', code: 'rate' }); return; }
         w.tokens -= 1; w.said.set(m.text, now);
-        hub.say(o.you.name, m.text, o.you.mod, o.you.k ? { k: o.you.k } : undefined);
+        hub.say(o.you.name, m.text, o.you.mod, Object.assign(o.you.k ? { k: o.you.k } : {}, o.you.role === 'mod' || o.you.role === 'admin' ? { role: o.you.role } : {}));       // (a line says the role that its author has, as the hub's does)
     }
+    const RANK = { none: 0, mod: 1, admin: 2 }, NEEDS = { mute: 1, unmute: 1, del: 1, kick: 1, ban: 2, unban: 2, bans: 2 }, ARGS = { mute: 2, unmute: 1, del: 1, kick: 1, ban: 1, unban: 1, bans: 0 };
+    function command(peer, text) {                      // a moderator's command, as the hub answers it
+        const parts = text.split(/\s+/), word = parts[0].slice(1).toLowerCase(), mine = o.you.role || (o.you.mod ? 'mod' : 'none');
+        const err = (code) => hub.send(peer, { t: 'err', code });
+        hub.commands.push(text);
+        if (mine === 'none' || parts.length - 1 !== ARGS[word]) { err('bad'); return; }
+        if (RANK[mine] < NEEDS[word]) { err('power'); return; }
+        if (o.roleDown) { err('role'); return; }
+        if (word === 'bans') { hub.send(peer, { t: 'bans', rows: o.bans || [] }); return; }
+        if (word === 'del') { if (!/^\d+$/.test(parts[1])) { err('bad'); return; } hub.send(peer, { t: 'ok', c: 'del' }); return; }
+        if (word === 'mute' && !/^\d+$/.test(parts[2])) { err('bad'); return; }
+        const them = (o.people || {})[parts[1]], self = parts[1] === o.you.name || parts[1] === o.you.other;
+        if (them === undefined && !self) { err('who'); return; }
+        if (self || RANK[them] >= RANK[mine]) { err('power'); return; }
+        hub.send(peer, { t: 'ok', c: word });
+        if (word === 'kick' || word === 'ban') hub.say('system', parts[1] + ' was ' + (word === 'kick' ? 'kicked' : 'banned') + '.', false, { k: '', sys: true });
+    }
+    hub.commands = [];
+    hub.you = (you) => { o.you = you; hub.broadcast({ t: 'you', you }); };
+    hub.bye = (why) => { hub.broadcast({ t: 'bye', why }); if (why === 'kicked') o.you = null; hub.closeAll(1000); };
     hub.send = (peer, obj) => { if (peer.open) peer.socket.write(frame(1, Buffer.from(typeof obj === 'string' ? obj : JSON.stringify(obj)))); };
     hub.raw = (peer, buffer) => { if (peer.open) peer.socket.write(buffer); };
     hub.broadcast = (obj) => hub.peers.forEach((p) => hub.send(p, obj));

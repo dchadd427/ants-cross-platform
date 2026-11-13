@@ -208,7 +208,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertIn("slot.hidden = !(live && you && login && menuOn);", self.js, "the account's dropdown: the welcome names the visitor, the hub has a login, and the chip has opened it; nothing else shows it")
         self.assertIn("chip.hidden = !(live && login);", self.js, "the bar's chip: only where the hub offers a login, and not while the hub is not there")
         self.assertIn("var ask = live && !you && login;", self.js, "the field is off and asks for the login only where one is offered")
-        self.assertIn("send.hidden = !you; enter.hidden = !!you;", self.js, "Send for a named visitor, Log in for the others, never both")
+        self.assertIn("send.hidden = !you || barred; enter.hidden = !!you;", self.js, "Send for a named visitor who may write, Log in for the others, never both")
         self.assertEqual(self.code.count("login = m.login === true;"), 1, "whether there is a login is what the hub says, nothing else")
 
     def test_the_log_and_the_controls_have_their_names_and_the_dock_its_focus_handling(self):
@@ -319,10 +319,8 @@ class TheStyle(unittest.TestCase):
             self.assertNotIn(gone + " {", self.css, "the account line of the panel and its More button are gone: " + gone)
         self.assertIn("-webkit-mask: var(--dc) no-repeat center / contain; mask: var(--dc) no-repeat center / contain;", self.css, "the mark takes the color of the text around it")
 
-    def test_the_switch_is_a_target_and_the_username_of_a_line_is_not_drawn(self):
+    def test_the_switch_is_a_target(self):
         self.assertRegex(self.rule(".gc-pick"), r"min-height: (4[4-9]|[5-9]\d)px;")
-        self.assertNotRegex(self.css, r"\.gc-u\b", "the username of a moderator's copy is not drawn: no style for it")
-        self.assertNotIn("'gc-u'", read("web", "home", "chat.js"), "... and no element for it")
 
     def test_the_hidden_parts_are_hidden_even_where_the_style_gives_them_a_display(self):
         self.assertIn(".gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }", self.css)
@@ -336,9 +334,103 @@ class TheStyle(unittest.TestCase):
     def test_a_link_that_is_down_dims_the_log(self):
         self.assertIn('.gc[data-state="offline"] .gc-log { filter: saturate(.5) brightness(.94); }', self.css)
 
-    def test_the_mod_mark_and_the_visitor_s_own_name_are_seen(self):
-        self.assertIn(".gc-me .gc-who { color: var(--gold); }", self.css)
-        self.assertRegex(self.rule(".gc-badge"), r"background: var\(--gold\);")
+    def test_the_visitor_s_own_name_is_white_the_pages_cream(self):
+        self.assertIn(".gc-me .gc-who { color: var(--cream); }", self.css)
+
+
+def luminance(color):
+    channels = [int(color.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    channels = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def contrast(a, b):
+    high, low = sorted((luminance(a), luminance(b)), reverse=True)
+    return (high + 0.05) / (low + 0.05)
+
+
+class TheRoles(unittest.TestCase):
+    """the page's side of the roles (docs/HUB.md "Roles" and "Moderation"): what it reads, what it draws, the words, and what it never does with a person's text; the behavior is run in
+    tests/scripts/web_home_chat_check.js (the fake clock) and web_home_chat_hub_check.js (a real socket)"""
+    @classmethod
+    def setUpClass(cls):
+        cls.js = read("web", "home", "chat.js")
+        cls.code = code_of(cls.js)
+        cls.css = read("web", "home", "chat.css")
+        cls.players_css = read("web", "home", "players.css")
+        cls.home_css = read("web", "home", "home.css")
+        cls.lobby = read("web", "lobby.html")
+
+    def rule(self, css, selector):
+        rules = re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", css, flags=re.S))
+        return next(body for sel, body in rules if " ".join(sel.split()) == selector)
+
+    def token(self, name):
+        return re.search(r"--%s: (#[0-9a-f]{6})" % name, self.lobby).group(1)
+
+    def background(self, css, selector):
+        return re.search(r"background: (#[0-9a-f]{6});", self.rule(css, selector)).group(1)
+
+    def test_the_two_colors_are_read_as_text_on_every_background_a_name_sits_on(self):
+        red = re.search(r"\.gc-line\.gc-admin \.gc-who, \.gc-an\.gc-r-admin, \.gc-cn\.gc-r-admin \{ color: (#[0-9a-f]{6}); \}", self.css).group(1)
+        for css, selector in ((self.css, ".gc-av.gc-r-admin"), (self.players_css, ".pl-card.r-admin .pl-av"), (self.players_css, ".pl-card.r-admin .pl-nm")):
+            self.assertIn("color: %s;" % red, self.rule(css, selector), selector)
+        gold = self.token("gold")
+        for css, selector in ((self.css, ".gc-line.gc-mod .gc-who, .gc-an.gc-r-mod, .gc-cn.gc-r-mod"), (self.players_css, ".pl-card.r-mod .pl-nm")):
+            self.assertIn("color: var(--gold);", self.rule(css, selector), selector)
+        grounds = {"the chat log": self.background(self.css, ".gc-log"), "a card of the players list": self.background(self.players_css, ".pl-card"), "the visitor's own row": self.background(self.players_css, ".pl-you .pl-card"),
+                   "the chip's dark plate": self.background(self.css, ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod"), "the account's dropdown": self.background(self.css, ".gc-slot")}
+        lowest = {}
+        for name, ground in grounds.items():
+            for color, word in ((red, "red"), (gold, "gold")):
+                ratio = contrast(color, ground)
+                lowest[word] = min(ratio, lowest.get(word, 99))
+                self.assertGreaterEqual(ratio, 4.5, "%s %s on %s %s is %.2f to 1" % (word, color, name, ground, ratio))
+        self.assertGreaterEqual(lowest["red"], 6.0, "measured: the red (#ff5f66) is 6.03 to 1 at the lowest, 6.45 on the chat log; the Leave buttons' #9d0d17 is far too dark as text")
+        self.assertGreaterEqual(lowest["gold"], 11.9, "measured: the gold is 11.99 to 1 at the lowest")
+        self.assertGreater(contrast("#9d0d17", grounds["the chat log"]), 0)
+        self.assertLess(contrast("#9d0d17", grounds["the chat log"]), 4.5, "the Leave buttons' red cannot be the text color: it is the family, not the value")
+        self.assertEqual(self.token("gold"), "#f6d058")
+        cream = self.token("cream")
+        lowest_white = min(contrast(cream, grounds[g]) for g in ("the chat log", "the account's dropdown", "the visitor's own row"))
+        self.assertGreaterEqual(lowest_white, 15.0, "measured: the visitor's own name, white (the page's cream), is 16.33 to 1 on the chat log and 15.28 at the lowest")
+
+    def test_the_role_color_beats_the_mine_color_on_a_staff_members_own_lines(self):
+        css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        mine = len(re.findall(r"\.[\w-]+", ".gc-me .gc-who"))
+        for selector in (".gc-line.gc-mod .gc-who", ".gc-line.gc-admin .gc-who"):
+            self.assertIn(selector, css)
+            self.assertGreater(len(re.findall(r"\.[\w-]+", selector)), mine, selector + ": a line that is the visitor's own and a staff member's keeps the role's color")
+
+    def test_an_administrators_line_is_red_not_yellow_the_red_rule_is_the_last(self):
+        css = re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)
+        self.assertLess(css.index(".gc-line.gc-mod .gc-who"), css.index(".gc-line.gc-admin .gc-who"), "an administrator's line has both classes (gc-mod is the hub's `mod`, true for both roles): the later rule of the same weight wins")
+
+    def test_the_chip_is_dark_under_the_name_because_its_face_is_teal(self):
+        self.assertGreater(contrast("#ff5f66", "#2b6357"), 0)
+        self.assertLess(contrast("#ff5f66", "#2b6357"), 4.5, "on the chip's own teal the red would not be readable")
+        self.assertIn("padding: 1px 9px;", self.rule(self.css, ".gc-cn.gc-r-admin, .gc-cn.gc-r-mod"))
+
+    def test_the_text_of_a_message_keeps_its_color(self):
+        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", self.css + self.players_css, flags=re.S)):
+            if "gc-text" in selector:
+                self.assertNotIn("color", body, selector + ": the message is not colored by the role")
+        for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", self.css, flags=re.S)):
+            if re.search(r"(?<![-\w])color:", body):
+                for part in selector.split(","):
+                    if "gc-admin" in part or "gc-mod" in part:
+                        self.assertIn("gc-who", part, "the line is not colored by the role: only the name (%s)" % part.strip())
+
+    def test_the_quiet_line_and_the_private_answers_have_text_that_can_be_read(self):
+        event = re.search(r"color: (#[0-9a-f]{6})", self.rule(self.css, ".gc-event")).group(1)
+        self.assertGreaterEqual(contrast(event, "#0a1016"), 4.5, "the hub's own line on the log")
+        for color in ("#f4ece2", "#a8cfc0", "#b9d9cc"):
+            self.assertGreaterEqual(contrast(color, "#0e1c18"), 4.5, color + " on the private answer")
+        self.assertGreaterEqual(contrast("#f4ece2", "#1c140c"), 4.5, "the notice of a removal")
+        for selector in (".gc-u", ".gc-no"):
+            self.assertGreaterEqual(contrast(re.search(r"color: (#[0-9a-f]{6})", self.rule(self.css, selector)).group(1), "#0a1016"), 4.5, selector + ": faint, and still readable")
+        self.assertIn("font-style: italic;", self.rule(self.css, ".gc-event"))
+        self.assertIn("border-left: 3px solid", self.rule(self.css, ".gc-private"), "a private answer is set apart by more than its color")
 
 
 class TheWayIntoTheImage(unittest.TestCase):
@@ -440,7 +532,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

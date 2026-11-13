@@ -12,7 +12,7 @@ Messages (JSON, docs/HUB.md has the table):
                                                        may not chat (muted, too new) has none of it kept
   down  {"t":"who","full":bool,"n","g","more","rows":[row,...],"gone":[id,...]}
         the welcome of a login says `me`, the number of the row that is the account's own
-A row is {"i": a number that names it while the person is here, "name", "at", "mod" (moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
+A row is {"i": a number that names it while the person is here, "name", "at", "mod" and "role" (`mod` or `admin`: moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
 A `here` that is not what a page says is refused with the code `here` and is a mistake of the socket; a second `who` too soon is not (it costs the socket a frame more, like any refusal that is not its doing).
 """
 import collections
@@ -67,9 +67,12 @@ def bare(where):
 
 
 def row_of(ident, name, mod, where):
+    """`mod` is False, True, or the role's word (`mod`, `admin`): a moderator's row says `mod` (for both roles, as it always did) and, with the word, `role`."""
     row = {"i": ident, "name": name, "at": where.at if where else "look"}
     if mod:
         row["mod"] = True
+        if mod in ("mod", "admin"):
+            row["role"] = mod
     if where is not None and where.pub:
         row["pub"] = True
         for key, value in (("map", where.map), ("n", where.n), ("of", where.of), ("code", where.code)):
@@ -192,12 +195,13 @@ class Presence:
         for account in banned.intersection(best):
             del best[account]
             guests += 1
-        mods = {account for account in best if self.chat.is_mod(account)}
+        mods = {account: self.chat.roles.role_of(account) for account in best}
+        mods = {account: role for account, role in mods.items() if role != "none"}
         order = sorted(best.items(), key=lambda item: (item[0] not in mods, RANK[item[1][2].at if item[1][2] else "look"], item[1][1], item[0]))
         rows = {}
         for account, (_, name, where, young) in order[:self.limits.who_rows_max]:
             ident = self.row_id(account)
-            rows[ident] = row_of(ident, name, account in mods, bare(where) if where is not None and (young or account in muted) else where)
+            rows[ident] = row_of(ident, name, mods.get(account, False), bare(where) if where is not None and (young or account in muted) else where)
         return {"n": len(best) + guests, "g": guests, "more": max(0, len(best) - self.limits.who_rows_max), "rows": rows}
 
     def frame(self, view, previous):
