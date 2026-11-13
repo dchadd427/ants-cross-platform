@@ -16,7 +16,7 @@ PICKS = ("display", "username")
 MAX_LINES = 200                                # the store keeps the newest this many chat lines (every line counts, a moderator's and a deleted one too), and no line older than `retention`: whichever limit is smaller deletes first
 MODLOG_DAYS = 30                        # the moderators' log keeps an action this long ...
 MODLOG_ROWS = 10000                     # ... and at most this many rows (the newest)
-ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban")     # what the log can say was done
+ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban", "nopic", "pic")     # what the log can say was done
 TERMINAL = "terminal"                   # the actor of an action that the command line did
 REFERENCE = re.compile(r"[0-9a-f]{16}\Z")      # the pseudonymous reference of an account (hub/pseudo.py)
 PICTURE_NAME = re.compile(r"[0-9a-f]{32}\Z")        # the public name of a picture: 128 random bits (hub/pictures.py)
@@ -124,9 +124,9 @@ class StoreBase:
         """Delete the account's picture and name; its switch, if it was ever changed, stays. True when there was a picture."""
         raise NotImplementedError
 
-    def set_picture_show(self, account, show, operator=False):
+    def set_picture_show(self, account, show, operator=False, note=None):
         """Set the account's picture to SHOW_ON, SHOW_OFF or SHOW_BLOCKED; a picture that is not shown is deleted in the same step. A block is lifted by the operator only (`operator=True`): the person's own change of a
-        block does nothing. Returns the state the account is in after it."""
+        block does nothing. Returns the state the account is in after it. `note` (see check_note) goes into the moderators' log in the same step, and only when the state changed."""
         raise NotImplementedError
 
     def picture_state(self, account, touch=False):
@@ -139,6 +139,14 @@ class StoreBase:
 
     def picture(self, name):
         """The bytes kept under the public `name`, or None for a name that is not 32 lower-case hex digits, is not known, or whose account is not shown (switched off or blocked) or whose login has run out."""
+        raise NotImplementedError
+
+    def picture_marks(self):
+        """{reference: state} of the accounts whose picture is switched off (SHOW_OFF) or blocked (SHOW_BLOCKED): the ones that are not in the default state."""
+        raise NotImplementedError
+
+    def picture_end(self):
+        """The soonest end of a picture that may be shown now (seconds since 1970), or None when there is none: when the list of names is to be read again for time alone."""
         raise NotImplementedError
 
     def picture_names(self):

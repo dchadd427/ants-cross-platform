@@ -462,14 +462,14 @@
   {
    "id": "logout_keeps_the_login",
    "file": "hub/login.py",
-   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")",
+   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n                self.sync_pictures()                                          # (the store took the picture with the account's last login: the pages are told)\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "new": "pass\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
   {
    "id": "logout_keeps_the_sockets",
    "file": "hub/login.py",
-   "old": "                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "old": "                self.hub.end_logins(session=digest(value))\n                self.sync_pictures()                                          # (the store took the picture with the account's last login: the pages are told)\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "new": "                pass\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },

@@ -108,9 +108,18 @@ class DiscordLogin(session.Sessions):
         self.discord = discordmod.Discord(self.cfg, self.limits)
         self.pictures = picturesmod.Pictures(self.store, self.discord, self.limits, self.log, hub.clock)
         self.picture_route = self.pictures.serve             # (GET /hub/pic/<name>.png: the hub asks for it by its prefix)
+        self.pictures.on_change = hub.chat.picture_changed    # (the chat tells the sockets of an account whose picture arrived, went or was switched)
+        hub.chat.pictures = self.pictures
         self.rate_login = limitmod.RateByAddress(self.limits.login_burst, self.limits.login_refill_seconds)
         self.rate_callback = limitmod.RateByAddress(self.limits.login_burst, self.limits.login_refill_seconds)
         self.rate_session = limitmod.RateByAddress(self.limits.session_burst, self.limits.session_refill_seconds)
+
+    def sync_pictures(self):
+        """The pictures are read again after something here ended a login (the pages of the account are told at once); a database that refuses leaves it to the hub's clock, one tick later."""
+        try:
+            self.pictures.sync()
+        except StoreError:
+            pass
 
     def forget_idle(self, now, wall):
         """Called by the hub's clock once a minute: the buckets that are full again, and the logins that were started and never finished."""
@@ -253,6 +262,7 @@ class DiscordLogin(session.Sessions):
             if old and VALUE.match(old):                                      # (a login that this browser had is over: a new one never takes over the value of an old one)
                 self.store.delete_session(digest(old))
                 self.hub.end_logins(session=digest(old))
+                self.sync_pictures()                                          # (the old login may have been another account's last: its picture went with it)
         except StoreError as e:
             self.log.event("login_failed", kind="database", error=type(e).__name__)
             return self.page("unavailable", back, gone)
@@ -304,6 +314,7 @@ class DiscordLogin(session.Sessions):
             if value and VALUE.match(value):
                 self.store.delete_session(digest(value))
                 self.hub.end_logins(session=digest(value))
+                self.sync_pictures()                                          # (the store took the picture with the account's last login: the pages are told)
         except StoreError:
             return self.fail(503, "busy")
         self.log.event("logout", tag=self.log.tag(address))
@@ -321,6 +332,7 @@ class DiscordLogin(session.Sessions):
         except StoreError:
             return self.fail(503, "busy")
         self.hub.end_logins(account=who.account_id)
+        self.sync_pictures()
         self.hub.chat.drop_lines(lines)
         self.log.event("forget", tag=self.log.tag(address), lines=len(lines))
         return http.response(200, {"ok": True}, [("Set-Cookie", cookie_line(COOKIE, "", 0, "Strict"))])

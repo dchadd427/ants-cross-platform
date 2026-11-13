@@ -3,10 +3,13 @@
 
 Messages (JSON, "v":1; docs/HUB.md has the table):
   up    {"t":"say","text":"..."}   {"t":"ping"}   {"t":"who"}   {"t":"here",...}      (the last two: hub/presence.py)
+        {"t":"pics","on":true|false}                 the switch of the account's Discord picture (a login is needed; a hub without the Discord login does not know it); switching off deletes the copy at once,
+                                                     switching on shows nothing until the next login; the answer is the whole `you` again (the account's every socket), or `err pics` (not a boolean, past the limit, blocked)
         {"t":"pick","pick":"display"|"username"}     which of its two names the account is shown by (only an account that has a display name as well may); stored, then every socket of
                                                      the account is closed (the same call as a logout's: end_logins), and the page connects again and reads the new name in the welcome
-  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick|power|role|who"}
-        {"t":"you","you":{...}}                      the whole `you` again, to every socket of an account whose role changed (hub/roles.py: who is a moderator or an administrator)
+  down  {"t":"welcome",...}  {"t":"line",...}  {"t":"del","id":n}  {"t":"online","n":n}  {"t":"who",...}  {"t":"err","code":"login|rate|quota|muted|banned|long|empty|young|bad|here|pick|pics|power|role|who"}
+        {"t":"you","you":{...}}                      the whole `you` again, to every socket of an account whose role changed (hub/roles.py: who is a moderator or an administrator) or whose picture
+                                                     arrived, went, was switched or blocked (hub/pictures.py `sync`)
         {"t":"ok","c":"mute|unmute|del|kick|ban|unban"}   the private answer to a moderator's command that was done
         {"t":"bans","rows":[{"u","at"}]}             the private answer to /bans (a username, never an id; the newest 50)
         {"t":"bye","why":"kicked|banned"}            to every socket of a person who was kicked or banned, just before the hub closes it
@@ -31,6 +34,7 @@ import re
 from . import PROTOCOL, presence as presencemod, pseudo, text as textrules
 from .limits import AccountLimits, RateByAccount, TokenBucket
 from .store import PICKS, StoreError
+from .store.base import SHOW_OFF, SHOW_ON
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
@@ -39,6 +43,7 @@ RANK = {"none": 0, "mod": 1, "admin": 2}
 NEEDS = {"mute": 1, "unmute": 1, "del": 1, "kick": 1, "ban": 2, "unban": 2, "bans": 2}       # the rank that a command needs
 SYSTEM = "system"                           # who a line of the hub's own is from: a reserved name (hub/text.py), which no account can have
 BANS_SHOWN = 50                             # the newest bans that /bans lists
+PICS_REFUSED = "pics"                       # the code of the `err` for a `pics` that is not done
 PICK_REFUSED = "pick"                       # the code of the `err` for a `pick` that is not done (a page that reads the codes of its lines must not take it for one)
 
 
@@ -73,6 +78,8 @@ class Chat:
         self.wait_limits = RateByAccount(limits.roles_urgent_actor_burst, limits.roles_urgent_actor_refill_seconds)      # the commands of a moderator that wait for lookups, across all its sockets
         self.named_limits = RateByAccount(limits.named_lines_burst, limits.named_lines_refill_seconds)               # the kicks and the bans of a moderator: each one is a line for everybody
         self.pick_limits = RateByAccount(limits.pick_burst, limits.pick_refill_seconds)               # an account's switches between its two names, across all its tabs
+        self.pics_limits = RateByAccount(limits.pics_burst, limits.pics_refill_seconds)               # an account's switches of its picture, across all its tabs (keyed by the run's key of the account)
+        self.pictures = None                        # hub/pictures.py Pictures on a hub that has the Discord login (the login sets it): none, and no picture field anywhere, on a hub without it
         self.salt = os.urandom(16)                  # the key of an account (key_of) is made with this: it changes with every start, so it names nobody for longer than the hub runs
         self.peers = presencemod.Peers()
         self.presence = presencemod.Presence(self, limits, clock, dumps)       # (who is here: the list of the front page)
@@ -115,6 +122,17 @@ class Chat:
             if who is not None and who.account_id == account and not getattr(peer, "closed", False):
                 peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 
+    def picture_changed(self, refs):
+        """The pictures of the accounts with these references arrived, went or were switched (hub/pictures.py `sync`): every socket of each gets the whole `you` again."""
+        for peer in list(self.peers):
+            who = peer.identity
+            if who is not None and not getattr(peer, "closed", False) and self.ref(who.account_id) in refs:
+                peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
+
+    def sync_pictures(self):
+        if self.pictures is not None:
+            self.pictures.sync()
+
     def you_of(self, who):
         """What a page is told of its own account (the welcome's `you`, and /hub/me): the name that is shown, `role` (`none`, `mod` or `admin`; from Discord, never from a page), `mod` (true for
         both roles, for pages that read only that), the key of its lines `k`; and, only where the account has a display name as well and so can choose, `pick` (the name that is shown: "display"
@@ -123,6 +141,12 @@ class Chat:
         you = {"name": who.name, "mod": role != "none", "role": role, "k": self.key_of(who.account_id)}
         if who.other:
             you["pick"], you["other"] = who.pick, who.other
+        if self.pictures is not None:
+            ref = self.ref(who.account_id)
+            you["pics"] = self.pictures.state_of(ref)
+            name = self.pictures.name_of(ref)
+            if name:
+                you["pic"] = name
         return you
 
     def welcome(self, peer):
@@ -196,6 +220,8 @@ class Chat:
             self.presence.on_here(peer, msg)
         elif kind == "pick":
             self.on_pick(peer, msg)
+        elif kind == "pics" and self.pictures is not None:
+            self.on_pics(peer, msg)
         else:
             self.mistake(peer, "bad")
 
@@ -299,6 +325,27 @@ class Chat:
             return self.mistake(peer, PICK_REFUSED)
         if self.end_logins:
             self.end_logins(account=who.account_id)
+
+    def on_pics(self, peer, msg):
+        """The switch of the account's Discord picture. Refused (a mistake of the socket) with `login` for a guest and with `pics` for anything but a true or a false, past the account's limit, and for an account
+        whose picture the operator blocked (a block is not the person's to lift). Done: the copy is deleted first (off) or the switch is remembered (on: nothing is shown until the next login), then every socket of the account gets
+        the whole `you` again. Nothing else of the message is read."""
+        who = peer.identity
+        if who is None:
+            return self.mistake(peer, "login")
+        on = msg.get("on")
+        if not isinstance(on, bool) or not self.pics_limits.take(self.key_of(who.account_id), self.clock()):
+            return self.mistake(peer, PICS_REFUSED)
+        try:
+            state = self.store.set_picture_show(who.account_id, SHOW_ON if on else SHOW_OFF)
+        except StoreError as e:
+            return self.trouble(peer, e, PICS_REFUSED)
+        if state not in (SHOW_ON, SHOW_OFF):
+            return self.mistake(peer, PICS_REFUSED)
+        try:
+            self.pictures.sync()
+        except StoreError as e:
+            self.trouble(peer, e, PICS_REFUSED)
 
     @staticmethod
     def parse(line):
@@ -410,6 +457,7 @@ class Chat:
             shown = sockets[0].identity.name
             self.store.end_sessions(target, note=(by, "kick", whom, ""))
             self.remove(sockets, "kicked")
+            self.sync_pictures()
             self.announce("%s was kicked." % shown, me)
         else:
             if self.store.is_banned(target):
@@ -417,6 +465,7 @@ class Chat:
             shown = self.shown_name(target) or arg
             self.store.ban(target, by, arg, note=(by, "ban", whom, ""))
             self.remove(self.sockets_of(target), "banned")
+            self.sync_pictures()
             self.announce("%s was banned." % shown, me)
         peer.send_text(dumps({"t": "ok", "c": name}))
 

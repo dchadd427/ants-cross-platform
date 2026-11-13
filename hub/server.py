@@ -118,6 +118,7 @@ class Hub:
         self.next_presence_log = float("-inf")
         self.next_roles_log = float("-inf")
         self.next_command_log = float("-inf")
+        self.next_pictures_log = float("-inf")
         self.per_address = limitmod.PerAddress(self.limits.sockets_per_address)
         self.pending = 0
         self.server = None
@@ -273,6 +274,12 @@ class Hub:
             self.next_command_log = now + 10.0
             self.log.event("error", kind=type(error).__name__, where="command")
 
+    def pictures_trouble(self, now, error):
+        """The pictures' look in the clock failed (the database refused): one line in the log every ten seconds at the most (the class of the error, never its text)."""
+        if now >= self.next_pictures_log:
+            self.next_pictures_log = now + 10.0
+            self.log.event("error", kind=type(error).__name__, where="pictures")
+
     def roles_trouble(self, now, error):
         """The roles' work in the clock failed: one line in the log every ten seconds at the most (the class of the error, never its text)."""
         if now >= self.next_roles_log:
@@ -333,6 +340,12 @@ class Hub:
             self.chat.roles.on_tick(now)
         except Exception as e:
             self.roles_trouble(now, e)
+        pictures = getattr(self.sessions, "pictures", None)
+        if pictures is not None:
+            try:                                         # (the pictures are read again once a tick when something changed, here or in the command line: the pages of an account whose picture changed are told, and the list's rows read this)
+                pictures.sync()
+            except Exception as e:
+                self.pictures_trouble(now, e)
         try:                                             # (the count of people and the list of the front page, on their own: a bug in them never stops the retention below, and a failing purge never stops them)
             count = self.chat.presence.people()
             if count != self.online_shown and now - self.online_at >= self.limits.online_seconds:
@@ -348,6 +361,7 @@ class Hub:
             self.next_forget = now + 60.0
             self.chat.account_limits.forget_idle(now)
             self.chat.pick_limits.forget_idle(now)
+            self.chat.pics_limits.forget_idle(now)
             self.chat.wait_limits.forget_idle(now)
             self.chat.named_limits.forget_idle(now)
             if hasattr(self.sessions, "forget_idle"):

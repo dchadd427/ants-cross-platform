@@ -22,7 +22,7 @@ import zlib
 
 from . import discord as discordmod, http, limits as limitmod, pseudo
 from .store import StoreError
-from .store.base import SHOW_ON
+from .store.base import SHOW_BLOCKED, SHOW_OFF, SHOW_ON
 
 PATH = re.compile(r"/hub/pic/([0-9a-f]{32})\.png\Z")
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -131,7 +131,11 @@ class Pictures:
         self.dropped_at = float("-inf")
         self.bucket = limitmod.TokenBucket(limits.picture_burst, limits.picture_refill_seconds, clock())
         self.rate = limitmod.RateByAddress(limits.picture_serve_burst, limits.picture_serve_refill_seconds)
-        self.seen = None                                     # (the number of the last change, {reference: name}) for names()
+        self.seen = None                                     # the number of the last change of the pictures that sync() read
+        self.cache = {}                                      # {reference: name} of the pictures that may be shown, as sync() last read them
+        self.marks = {}                                      # {reference: SHOW_OFF or SHOW_BLOCKED} of the accounts that are not in the default state
+        self.ends = None                                     # the soonest end of a picture in `cache`: past it, the list is read again for time alone
+        self.on_change = None                                # called with the set of references whose name or state changed, each time sync() finds a change (the chat tells their sockets)
 
     # ---- the fetch ---------------------------------------------------------------------------------------------------------------------------
 
@@ -146,11 +150,11 @@ class Pictures:
                 return
             if self.store.is_banned(account):
                 self.store.clear_picture(account)
-                return
+                return self.sync()
             if avatar is None:
                 self.store.clear_picture(account)
                 self.log.event("picture", kind="none")
-                return
+                return self.sync()
             key, now = pseudo.reference(self.store.secret(), account), self.clock()
             if key in self.queued or len(self.waiting) >= self.limits.picture_waiting:
                 return self.drop(now)
@@ -205,6 +209,7 @@ class Pictures:
             return self.log.event("picture", kind="big" if e.kind == "big" else "down")
         if status == 404:
             self.store.clear_picture(account)
+            self.sync()
             return self.log.event("picture", kind="none")
         if status != 200:
             return self.log.event("picture", kind="down")
@@ -218,6 +223,7 @@ class Pictures:
             return self.log.event("picture", kind="shape")
         kept = self.store.set_picture(account, png, secrets.token_hex(16), self.store.clock() + self.limits.session_seconds, self.limits.pictures_rows_max, self.limits.pictures_bytes_max)
         self.log.event("picture", kind="ok" if kept else "none")       # (not kept: the person switched it off, the login ended or the account was banned while it was on its way)
+        self.sync()
 
     def forget_idle(self, now):
         self.rate.forget_idle(now)
@@ -233,12 +239,30 @@ class Pictures:
 
     # ---- the names ---------------------------------------------------------------------------------------------------------------------------
 
-    def names(self):
-        """{reference: name} of the pictures that may be shown: read again when the store's counter says that something changed (here or in another process, the command line)."""
+    def sync(self):
+        """Read the pictures again when the store's counter says that something changed (here, or in another process: the command line) or when the soonest picture has run out, and tell the chat which
+        references changed (their name or their state): the hub's clock calls it once a tick, and whatever changes a picture here calls it at once. One small read when nothing changed."""
         number = self.store.last_picture_change()
-        if self.seen is None or self.seen[0] != number:
-            self.seen = (number, self.store.picture_names())
-        return self.seen[1]
+        if self.seen == number and (self.ends is None or self.ends > self.store.clock()):
+            return
+        names, marks, ends = self.store.picture_names(), self.store.picture_marks(), self.store.picture_end()
+        changed = {ref for ref in set(self.cache) | set(names) if self.cache.get(ref) != names.get(ref)} | {ref for ref in set(self.marks) | set(marks) if self.marks.get(ref) != marks.get(ref)}
+        first = self.seen is None
+        self.seen, self.cache, self.marks, self.ends = number, names, marks, ends
+        if changed and not first and self.on_change is not None:
+            self.on_change(changed)
+
+    def name_of(self, ref):
+        """The public name of the account's picture (the account by its reference) when it may be shown now, else None: the list that sync() last read, no database read."""
+        if self.seen is None:
+            self.sync()
+        return self.cache.get(ref)
+
+    def state_of(self, ref):
+        """`on`, `off` (the person switched it off) or `blocked` (the operator did) for the account, by the list that sync() last read."""
+        if self.seen is None:
+            self.sync()
+        return {SHOW_OFF: "off", SHOW_BLOCKED: "blocked"}.get(self.marks.get(ref), "on")
 
     # ---- the door ----------------------------------------------------------------------------------------------------------------------------
 

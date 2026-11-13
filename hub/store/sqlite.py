@@ -429,7 +429,7 @@ class Store(StoreBase):
         with self.transaction():
             return self.drop_picture(self.ref(account))
 
-    def set_picture_show(self, account, show, operator=False):
+    def set_picture_show(self, account, show, operator=False, note=None):
         if show not in (SHOW_ON, SHOW_OFF, SHOW_BLOCKED):
             raise ValueError("not a state of a picture")
         ref, now = self.ref(account), int(self.clock())
@@ -447,6 +447,7 @@ class Store(StoreBase):
                 self.db.execute("INSERT INTO pictures (ref, show, name, png, until, at) VALUES (?, ?, NULL, NULL, 0, ?) ON CONFLICT (ref) DO UPDATE SET show = excluded.show, at = excluded.at", (ref, show, now))
                 self.db.execute("DELETE FROM pictures WHERE rowid IN (SELECT rowid FROM pictures WHERE show = ? ORDER BY at DESC, rowid DESC LIMIT -1 OFFSET ?)", (SHOW_OFF, self.max_picture_marks))
             self.count_picture_change()
+            self.write_note(note)
             return show
 
     def picture_state(self, account, touch=False):
@@ -470,6 +471,12 @@ class Store(StoreBase):
 
     def picture_names(self):
         return {ref: name for ref, name in self.db.execute("SELECT ref, name FROM pictures WHERE show = ? AND until > ? AND png IS NOT NULL", (SHOW_ON, int(self.clock())))}
+
+    def picture_marks(self):
+        return {ref: show for ref, show in self.db.execute("SELECT ref, show FROM pictures WHERE show != ?", (SHOW_ON,))}
+
+    def picture_end(self):
+        return self.db.execute("SELECT MIN(until) FROM pictures WHERE show = ? AND until > ? AND png IS NOT NULL", (SHOW_ON, int(self.clock()))).fetchone()[0]
 
     def last_picture_change(self):
         row = self.db.execute("SELECT v FROM meta WHERE k = 'pic_seq'").fetchone()

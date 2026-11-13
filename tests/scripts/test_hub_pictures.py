@@ -306,6 +306,7 @@ class PictureTest(unittest.TestCase):
 
     limits = {}
     env = None
+    roles = None                                    # {account id: "mod" | "admin"}: the roles of the accounts that are here (no Discord for them: hub_rig.FakeRoles)
 
     def setUp(self):
         self.start()
@@ -315,7 +316,7 @@ class PictureTest(unittest.TestCase):
         self.fake = fd.FakeDiscord(CALLBACK, user=(ACCOUNT, "maple.leaf"))
         self.fake.consent = False
         self.fake.avatar = fd.AVATAR
-        self.rig = hub_rig.Rig(discord=self.fake, env=self.env, **dict(dict(sockets_per_address=100), **self.limits))
+        self.rig = hub_rig.Rig(discord=self.fake, env=self.env, roles=self.roles, **dict(dict(sockets_per_address=100), **self.limits))
         self.rig.__enter__()
         self.count = 0
 
@@ -921,16 +922,18 @@ class TheStoreAndTheHub(PictureTest):
     def test_the_names_are_read_again_when_another_process_changed_a_picture(self):
         self.login()
         self.settle()
-        pictures = self.rig.hub.sessions.pictures
-        first = self.rig.call(pictures.names)
-        self.assertEqual(list(first.values()), [self.name()])
+        pictures, ref = self.rig.hub.sessions.pictures, self.ref()
+        self.cached = self.rig.call(pictures.name_of, ref)
+        self.assertEqual(self.cached, self.name())
         other = sqlite3.connect(self.rig.db, isolation_level=None)                    # (the command line: a process of its own on the same file; the SQL here is its change)
         self.addCleanup(other.close)
         other.execute("DELETE FROM pictures")
-        self.assertEqual(self.rig.call(pictures.names), first)                      # (nothing says that it changed: the list is the one it had)
+        self.rig.call(pictures.sync)
+        self.assertEqual(self.rig.call(pictures.name_of, ref), self.cached)        # (nothing says that it changed: the list is the one it had)
         other.execute("INSERT OR IGNORE INTO meta (k, v) VALUES ('pic_seq', 0)")
         other.execute("UPDATE meta SET v = v + 1 WHERE k = 'pic_seq'")
-        self.assertEqual(self.rig.call(pictures.names), {})
+        self.rig.call(pictures.sync)
+        self.assertIsNone(self.rig.call(pictures.name_of, ref))
 
     def test_a_store_that_refuses_costs_the_login_nothing(self):
         self.rig.call(lambda: setattr(self.rig.store, "picture_state", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("canary-db-text"))))

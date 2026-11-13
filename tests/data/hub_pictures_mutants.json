@@ -787,6 +787,160 @@
    "old": "            if self.stopping:\n                return\n",
    "new": "",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
+  },
+  {
+   "id": "you_without_the_switch_word",
+   "file": "hub/chat.py",
+   "old": "            you[\"pics\"] = self.pictures.state_of(ref)\n",
+   "new": "            pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheYou"
+  },
+  {
+   "id": "you_without_the_name_of_the_picture",
+   "file": "hub/chat.py",
+   "old": "            if name:\n                you[\"pic\"] = name",
+   "new": "            if False:\n                you[\"pic\"] = name",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheYou"
+  },
+  {
+   "id": "a_guest_may_switch_the_picture",
+   "file": "hub/chat.py",
+   "old": "        if who is None:\n            return self.mistake(peer, \"login\")\n        on = msg.get(\"on\")",
+   "new": "        on = msg.get(\"on\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "the_switch_takes_any_value",
+   "file": "hub/chat.py",
+   "old": "        if not isinstance(on, bool) or not self.pics_limits.take(",
+   "new": "        if not self.pics_limits.take(",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "the_switch_is_not_limited",
+   "file": "hub/chat.py",
+   "old": "        if not isinstance(on, bool) or not self.pics_limits.take(self.key_of(who.account_id), self.clock()):",
+   "new": "        if not isinstance(on, bool):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "a_person_lifts_the_block",
+   "file": "hub/chat.py",
+   "old": "self.store.set_picture_show(who.account_id, SHOW_ON if on else SHOW_OFF)",
+   "new": "self.store.set_picture_show(who.account_id, SHOW_ON if on else SHOW_OFF, operator=True)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "a_blocked_switch_is_answered_as_done",
+   "file": "hub/chat.py",
+   "old": "        if state not in (SHOW_ON, SHOW_OFF):\n            return self.mistake(peer, PICS_REFUSED)",
+   "new": "        if False:\n            return self.mistake(peer, PICS_REFUSED)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "the_switch_off_does_not_switch_off",
+   "file": "hub/chat.py",
+   "old": "SHOW_ON if on else SHOW_OFF)",
+   "new": "SHOW_ON)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "the_pages_are_not_told_when_a_picture_changes",
+   "file": "hub/chat.py",
+   "old": "            if who is not None and not getattr(peer, \"closed\", False) and self.ref(who.account_id) in refs:",
+   "new": "            if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheYou tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "a_changed_picture_is_told_to_every_account",
+   "file": "hub/chat.py",
+   "old": "            if who is not None and not getattr(peer, \"closed\", False) and self.ref(who.account_id) in refs:",
+   "new": "            if who is not None and not getattr(peer, \"closed\", False):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheYou"
+  },
+  {
+   "id": "the_switch_frame_is_known_without_pictures",
+   "file": "hub/chat.py",
+   "old": "        elif kind == \"pics\" and self.pictures is not None:",
+   "new": "        elif kind == \"pics\":",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheYou"
+  },
+  {
+   "id": "a_row_has_no_picture",
+   "file": "hub/presence.py",
+   "old": "        return pictures.name_of(self.chat.ref(account)) if pictures is not None else None",
+   "new": "        return None",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheRows"
+  },
+  {
+   "id": "the_names_are_read_for_every_frame",
+   "file": "hub/pictures.py",
+   "old": "        if self.seen is None:\n            self.sync()\n        return self.cache.get(ref)",
+   "new": "        return self.store.picture_names().get(ref)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheTick"
+  },
+  {
+   "id": "the_clock_does_not_read_the_pictures",
+   "file": "hub/server.py",
+   "old": "                pictures.sync()\n            except Exception as e:\n                self.pictures_trouble(now, e)",
+   "new": "                pass\n            except Exception as e:\n                self.pictures_trouble(now, e)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "the_end_of_a_pictures_time_is_not_noticed",
+   "file": "hub/pictures.py",
+   "old": "        if self.seen == number and (self.ends is None or self.ends > self.store.clock()):",
+   "new": "        if self.seen == number:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheYou"
+  },
+  {
+   "id": "nopic_is_not_written_to_the_log",
+   "file": "hub/admin.py",
+   "old": "note=(TERMINAL, \"nopic\", whom, \"\"))",
+   "new": "note=None)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "nopic_prints_the_account",
+   "file": "hub/admin.py",
+   "old": "out.write(\"%s picture blocked\\n\" % whom)",
+   "new": "out.write(\"%s picture blocked\\n\" % account)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "pic_of_an_account_that_is_not_blocked_is_done",
+   "file": "hub/admin.py",
+   "old": "            if store.picture_state(account) != SHOW_BLOCKED:\n                err.write(\"hub.admin: the picture of %s was not blocked\\n\" % whom)\n                return 1",
+   "new": "            if False:\n                return 1",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "pic_does_not_lift_the_block",
+   "file": "hub/admin.py",
+   "old": "store.set_picture_show(account, SHOW_ON, operator=True, note=(TERMINAL, \"pic\", whom, \"\"))",
+   "new": "store.set_picture_show(account, SHOW_ON, operator=False, note=(TERMINAL, \"pic\", whom, \"\"))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "the_status_has_no_picture_line",
+   "file": "hub/admin.py",
+   "old": "            show_pictures(store, limitmod.Limits(), out)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "the_status_counts_blocks_as_switches_off",
+   "file": "hub/admin.py",
+   "old": "format(marks.count(SHOW_OFF), \",\"), format(marks.count(SHOW_BLOCKED), \",\")",
+   "new": "format(marks.count(SHOW_BLOCKED), \",\"), format(marks.count(SHOW_OFF), \",\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "a_ban_leaves_the_name_in_the_list_until_the_clock",
+   "file": "hub/chat.py",
+   "old": "            self.remove(self.sockets_of(target), \"banned\")\n            self.sync_pictures()",
+   "new": "            self.remove(self.sockets_of(target), \"banned\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheEnds"
   }
  ]
 }

@@ -12,7 +12,7 @@ Messages (JSON, docs/HUB.md has the table):
                                                        may not chat (muted, too new) has none of it kept
   down  {"t":"who","full":bool,"n","g","more","rows":[row,...],"gone":[id,...]}
         the welcome of a login says `me`, the number of the row that is the account's own
-A row is {"i": a number that names it while the person is here, "name", "at", "mod" and "role" (`mod` or `admin`: moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
+A row is {"i": a number that names it while the person is here, "name", "at", "pic" (the public name of the account's picture, 32 hex digits, where it has one that may be shown), "mod" and "role" (`mod` or `admin`: moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
 A `here` that is not what a page says is refused with the code `here` and is a mistake of the socket; a second `who` too soon is not (it costs the socket a frame more, like any refusal that is not its doing).
 """
 import collections
@@ -66,9 +66,11 @@ def bare(where):
     return Where(where.at, None, None, None, False, None, where.seq)
 
 
-def row_of(ident, name, mod, where):
+def row_of(ident, name, mod, where, pic=None):
     """`mod` is False, True, or the role's word (`mod`, `admin`): a moderator's row says `mod` (for both roles, as it always did) and, with the word, `role`."""
     row = {"i": ident, "name": name, "at": where.at if where else "look"}
+    if pic:
+        row["pic"] = pic                        # (the public name of the account's picture, 32 hex digits, where the account has one that may be shown)
     if mod:
         row["mod"] = True
         if mod in ("mod", "admin"):
@@ -201,8 +203,13 @@ class Presence:
         rows = {}
         for account, (_, name, where, young) in order[:self.limits.who_rows_max]:
             ident = self.row_id(account)
-            rows[ident] = row_of(ident, name, mods.get(account, False), bare(where) if where is not None and (young or account in muted) else where)
+            rows[ident] = row_of(ident, name, mods.get(account, False), bare(where) if where is not None and (young or account in muted) else where, self.picture_of(account))
         return {"n": len(best) + guests, "g": guests, "more": max(0, len(best) - self.limits.who_rows_max), "rows": rows}
+
+    def picture_of(self, account):
+        """The name of the account's picture, where the hub has pictures and the account has one that may be shown (a banned account is never in the list, so its picture is not either)."""
+        pictures = getattr(self.chat, "pictures", None)
+        return pictures.name_of(self.chat.ref(account)) if pictures is not None else None
 
     def frame(self, view, previous):
         """The frame that takes a page that has `previous` to `view`: the rows that changed and the numbers of those that went, or the whole list when the page has none or the change is big."""
