@@ -702,7 +702,7 @@ function bringPlayers(env) {
     const circleOf = (q, name) => { const c = byClass(q.panel(), 'pl-card').find((x) => one(x, 'pl-nm').textContent === name); return c ? one(c, 'pl-av') : null; };
     const imgsOf = (circle) => circle.children.filter((c) => c.tagName === 'img');
     const q = rig();
-    q.live(W({ you: { name: 'maple', mod: false, role: 'none', pic: OTHER } }));
+    q.live(W({ you: { name: 'maple', mod: false, role: 'none', pics: 'on', pic: OTHER } }));
     q.who(FULL([row(2, 'sage', 'look', { pic: NAME }), row(3, 'tess')], { n: 4 }));
     const sage = circleOf(q, 'sage'), img = imgsOf(sage)[0];
     same('a row with a valid picture name has one img in its circle, with the address made of the name and the attributes the page sets', [imgsOf(sage).length, img && img.attributes],
@@ -725,8 +725,17 @@ function bringPlayers(env) {
     // the visitor's own picture follows a live `you`
     q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none' } });
     check('a `you` without `pic` takes the own card\'s picture away', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 0);
-    q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none', pic: NAME } });
+    q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none', pics: 'on', pic: NAME } });
     check('a `you` with one puts it on', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).map((i) => i.attributes.src).join() === '/hub/pic/' + NAME + '.png');
+    for (const pics of ['off', 'blocked', undefined, 'maybe']) {
+        q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none', pics, pic: NAME } });
+        check('a `you` that carries a name but whose `pics` is ' + JSON.stringify(pics) + ' shows no picture on the own card (the picture is shown only where the switch says on)', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 0);
+    }
+    q.emit('you', { t: 'you', you: { name: 'maple', mod: false, role: 'none', pics: 'on', pic: NAME } });
+    q.lost(); q.live(W({ you: { name: 'maple', mod: false, role: 'none', pics: 'on' } })); q.who(FULL([row(2, 'sage')], { n: 3 }));
+    check('after the link is closed and made again, the welcome says who the visitor is now: a welcome without `pic` leaves the own card with its letter', imgsOf(one(one(q.panel(), 'pl-you'), 'pl-av')).length === 0 && one(one(q.panel(), 'pl-you'), 'pl-av').textContent === 'm');
+    q.lost(); q.live(W({ you: null })); q.who(FULL([row(2, 'sage')], { n: 2 }));
+    check('... and a welcome for a guest has no own card at all', one(q.panel(), 'pl-you') === null || byClass(q.panel(), 'pl-you').length === 0 || one(one(q.panel(), 'pl-you'), 'pl-av') === null);
     // names that are not a picture's
     const bad = ['A1B2C3D4E5F60718293A4B5C6D7E8F90', NAME.slice(0, 31), NAME + '0', '../' + NAME.slice(3), 'https://x.example/' + NAME + '.png', '/hub/pic/' + NAME + '.png', 12345678901234567890123456789012, { toString: () => NAME }, [NAME], null, true, '', ' ' + NAME.slice(1), NAME + '\n', NAME.slice(0, 31) + 'g', NAME.slice(0, 31) + '\u0661'];
     const odd = rig();

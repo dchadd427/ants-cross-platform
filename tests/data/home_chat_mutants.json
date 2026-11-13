@@ -3280,15 +3280,15 @@
   {
    "id": "pic_name_taken_unchecked_from_the_frame",
    "file": "web/home/chat.js",
-   "old": "pic: picOf(y.pic),",
-   "new": "pic: typeof y.pic === 'string' ? y.pic : '',",
+   "old": "pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '',",
+   "new": "pic: picsOf(y.pics) === 'on' && typeof y.pic === 'string' ? y.pic : '',",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "pic_read_from_another_field",
    "file": "web/home/chat.js",
-   "old": "pic: picOf(y.pic),",
-   "new": "pic: picOf(y.name),",
+   "old": "pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '',",
+   "new": "pic: picsOf(y.pics) === 'on' ? picOf(y.name) : '',",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3343,15 +3343,15 @@
   {
    "id": "switch_box_not_put_back_after_a_refusal",
    "file": "web/home/chat.js",
-   "old": "function failPic() { picWait = false; stop('pics');",
-   "new": "function failPic() { stop('pics');",
+   "old": "function failPic(guest) { picWait = false; stop('pics');",
+   "new": "function failPic(guest) { stop('pics');",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "switch_wait_is_not_ended_by_the_you_frame",
    "file": "web/home/chat.js",
-   "old": "you.pics = next.pics; picPending(false);",
-   "new": "you.pics = next.pics;",
+   "old": "if (!picWait || next.pics === 'blocked' || next.pics === (picWant ? 'on' : 'off')) picPending(false);",
+   "new": "",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3394,6 +3394,34 @@
    "file": "web/home/chat.js",
    "old": "swAgain.hidden = !(gone && !picWait && !picFailed);",
    "new": "swAgain.hidden = true;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_shown_where_the_switch_is_not_on",
+   "file": "web/home/chat.js",
+   "old": "pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '',",
+   "new": "pic: picOf(y.pic),",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_wait_ended_by_any_you",
+   "file": "web/home/chat.js",
+   "old": "if (!picWait || next.pics === 'blocked' || next.pics === (picWant ? 'on' : 'off')) picPending(false);",
+   "new": "picPending(false);",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_wait_not_ended_by_a_blocked_you",
+   "file": "web/home/chat.js",
+   "old": "next.pics === 'blocked' || next.pics ===",
+   "new": "next.pics ===",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_stays_after_a_login_refusal",
+   "file": "web/home/chat.js",
+   "old": "failPic(m.code === 'login');",
+   "new": "failPic(false);",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]

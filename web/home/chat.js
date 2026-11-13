@@ -116,7 +116,7 @@
     function youOf(y) {                                                  // the visitor, as the hub's `you` says (a welcome, or the frame that changes it), or null when it names nobody: { name, mod, role, k, pick, other, pic (a checked name or ''), pics ('on', 'off', 'blocked' or '') }
         if (!y || typeof y !== 'object') return null;
         var name = nameOf(y.name), role = y.role === 'admin' || y.role === 'mod' || y.role === 'none' ? y.role : y.mod === true ? 'mod' : 'none';       // (`role` where the hub says it; an older hub says `mod` only)
-        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picOf(y.pic), pics: picsOf(y.pics) } : null;
+        return name ? { name: name, mod: role !== 'none', role: role, k: nameOf(y.k), pick: y.pick, other: y.pick === 'display' || y.pick === 'username' ? nameOf(y.other) : '', pic: picsOf(y.pics) === 'on' ? picOf(y.pic) : '', pics: picsOf(y.pics) } : null;       // (a picture only where the switch says `on`, whatever else a frame holds)
     }
     function lineOf(m) {                                                 // one line of the hub (history or live), cleaned: { id, who, text, mod, role, sys (a line of the hub's own: only its flag says so), k (its author's key), u (its author's username: only a moderator's copy has it; drawn for a moderator only) }, or null when it is not a line
         if (!m || typeof m !== 'object' || typeof m.who !== 'string' || typeof m.text !== 'string' || count(m.id) === null) return null;
@@ -444,12 +444,13 @@
             render();
         }
         function picPending(on) { picWait = !!on; stop('pics'); if (!on) picFailed = false; }
-        function failPic() { picWait = false; stop('pics'); picFailed = true; render(); }       // (the box goes back to what the hub last said, with "That did not work, try again")
+        function failPic(guest) { picWait = false; stop('pics'); picFailed = true; if (guest && you) you.pics = ''; render(); }       // (a refused press: nothing is sent again; `login` says that this socket is a guest: no switch)       // (the box goes back to what the hub last said, with "That did not work, try again")
         function onYou(m) {                                                      // the role changed (a promotion, a removal, a role that ran out): the marks and the commands follow at once; who the visitor is does not change on a socket
             var next = you ? youOf(m.you) : null;
             if (!next) return;
             var was = tools();
-            you.role = next.role; you.mod = next.mod; you.pic = next.pic; you.pics = next.pics; picPending(false);       // (the picture and the switch follow the hub's `you` at once; it also answers a press of the switch)
+            you.role = next.role; you.mod = next.mod; you.pic = next.pic; you.pics = next.pics;       // (the picture and the switch follow the hub's whole `you` at once, whenever it comes)
+            if (!picWait || next.pics === 'blocked' || next.pics === (picWant ? 'on' : 'off')) picPending(false);       // (a `you` that says what was asked for answers a press of the switch, and so does one that follows a refusal; another `you` meanwhile does not)
             if (was !== tools()) { stale = true; hold = seen(); }                                   // (the numbers and the usernames come or go with the role: the log is made again)
             render();
             tapped('you', m);
@@ -484,7 +485,7 @@
             else if (m.t === 'bye') onBye(m);
             else if (m.t === 'online') { people = count(m.n); render(); }
             else if (m.t === 'who') tapped('who', m);
-            else if (m.t === 'err' && picWait && (m.code === 'pics' || m.code === 'login')) failPic();
+            else if (m.t === 'err' && picWait && (m.code === 'pics' || m.code === 'login')) failPic(m.code === 'login');
             else if (m.t === 'err' && (SAID.indexOf(m.code) !== -1 || ABOUT.indexOf(m.code) !== -1)) refuse(m.code);
             else if (m.t === 'err' && m.code === 'pick') tell('failed');
         }                                                                        // (any other kind is ignored)

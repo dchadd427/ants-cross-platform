@@ -243,6 +243,7 @@ async function main() {
         const tall = await page.evaluate(() => document.querySelector('.gc-swl').getBoundingClientRect().height);
         check('the row of the box is 46 px tall or more', tall >= 46, String(tall));
         await shot(page, 'built_menu_off_desktop.png', 'the account menu, switch off (the box is not checked)', { clip: { x: 760, y: 0, width: 520, height: 520 } });
+        hub.set({ picAfterOn: 900, picAfterOnName: N.me });       // (the fetch of the picture finishes a moment after the switch: a `you` with `pic` follows by itself)
         await page.keyboard.press('Space');
         await sleep(300);
         const got = hub.received.filter((m) => m.t === 'pics');
@@ -250,10 +251,9 @@ async function main() {
         check('the hub answers with the whole `you`: the box is on and enabled, and still has the focus', await page.evaluate(() => { const b = document.querySelector('.gc-swb'); return b.checked && !b.disabled && document.activeElement === b; }));
         check('the dropdown says that the picture is loaded when the person logs in (the hub sent none yet), with a Log in again button', await page.evaluate(() => document.querySelector('.gc-swn').textContent === 'Your picture is loaded when you log in.' && document.querySelector('.gc-again').getClientRects().length > 0));
         await shot(page, 'built_menu_none_desktop.png', 'the account menu, switch on and no picture yet (Log in again)', { clip: { x: 760, y: 0, width: 520, height: 520 } });
-        hub.broadcast({ t: 'you', you: Object.assign({}, ME, { pics: 'on' }) });
-        await sleep(250);
+        await sleep(900);
         await shot(page, 'built_menu_on_desktop.png', 'the account menu, switch on with a picture', { clip: { x: 760, y: 0, width: 520, height: 520 } });
-        check('a `you` with a picture draws it on the chip at once', await page.evaluate(() => !!document.querySelector('.hbar .gc-av img')));
+        check('the `you` with a picture that follows by itself is taken: it is drawn on the chip', await page.evaluate(() => !!document.querySelector('.hbar .gc-av img')));
         // a refusal, and silence
         hub.set({ picsMode: 'refuse' });
         await page.keyboard.press('Space');
@@ -265,7 +265,7 @@ async function main() {
         check('while the hub is silent the box waits (disabled)', await page.evaluate(() => document.querySelector('.gc-swb').disabled));
         await sleep(8200);
         check('after 8 seconds of silence the box is back, enabled, with the same words', await page.evaluate(() => { const b = document.querySelector('.gc-swb'); return b.checked && !b.disabled && document.querySelector('.gc-swn').textContent === 'That did not work, try again'; }));
-        hub.set({ picsMode: undefined });
+        hub.set({ picsMode: undefined, picAfterOn: 0 });
         hub.broadcast({ t: 'you', you: Object.assign({}, ME, { pics: 'blocked' }) });
         await sleep(250);
         check('blocked: the box is off and disabled, and the line says it is hidden on this site', await page.evaluate(() => { const b = document.querySelector('.gc-swb'); return !b.checked && b.disabled && document.querySelector('.gc-swn').textContent === 'Your picture is hidden on this site.'; }));
