@@ -118,6 +118,23 @@ def show_usage(store, limit, out):
         "; at the limit (the log file counts): no new line is kept" if used.bytes + used.log >= limit else ""))
 
 
+def change_picture(store, command, whom, state, setter, out, err):
+    """`nopic` and `pic`: `whom` is the account's reference (never its id), `state` the picture's state now and `setter(show, note)` the store's call that changes it, by the account or by the reference."""
+    if command == "nopic":
+        if state == SHOW_BLOCKED:
+            err.write("hub.admin: the picture of %s is blocked already\n" % whom)
+            return 1
+        setter(SHOW_BLOCKED, (TERMINAL, "nopic", whom, ""))
+        out.write("%s picture blocked\n" % whom)
+        return 0
+    if state != SHOW_BLOCKED:
+        err.write("hub.admin: the picture of %s was not blocked\n" % whom)
+        return 1
+    setter(SHOW_ON, (TERMINAL, "pic", whom, ""))
+    out.write("%s picture is no longer blocked\n" % whom)
+    return 0
+
+
 def show_pictures(store, limits, out):
     """The pictures' line of `status`: how many copies are kept and their bytes, of the two limits, and how many accounts have their picture switched off and blocked."""
     count, size = store.picture_usage()
@@ -216,10 +233,16 @@ def run(argv, out=None, err=None, env=None):
                 return 1
             out.write("line %d deleted\n" % args.line_id)
             return 0
+        if args.command in ("nopic", "pic") and pseudo.REFERENCE.match(args.account) and store.picture_state_by_reference(args.account) is not None:
+            return change_picture(store, args.command, args.account, store.picture_state_by_reference(args.account),
+                                  lambda show, note: store.set_picture_show_by_reference(args.account, show, operator=True, note=note), out, err)      # (the pictures' own row has the reference: a block is lifted by it after Forget me)
         account, name = resolve(store, args.account)
         if account is None:
             err.write("hub.admin: %s\n" % name)
             return 1
+        if args.command in ("nopic", "pic"):
+            whom = ref(store, account)
+            return change_picture(store, args.command, whom, store.picture_state(account), lambda show, note: store.set_picture_show(account, show, operator=True, note=note), out, err)
         if args.command == "mute":
             whom = ref(store, account)
             until = store.mute(account, args.minutes, BY, name, note=(TERMINAL, "mute" if args.minutes else "unmute", whom, str(args.minutes) if args.minutes else ""))
@@ -228,20 +251,6 @@ def run(argv, out=None, err=None, env=None):
             whom = ref(store, account)
             store.ban(account, BY, name, note=(TERMINAL, "ban", whom, ""))
             out.write("%s banned\n" % whom)
-        elif args.command == "nopic":
-            whom = ref(store, account)
-            if store.picture_state(account) == SHOW_BLOCKED:
-                err.write("hub.admin: the picture of %s is blocked already\n" % whom)
-                return 1
-            store.set_picture_show(account, SHOW_BLOCKED, operator=True, note=(TERMINAL, "nopic", whom, ""))
-            out.write("%s picture blocked\n" % whom)
-        elif args.command == "pic":
-            whom = ref(store, account)
-            if store.picture_state(account) != SHOW_BLOCKED:
-                err.write("hub.admin: the picture of %s was not blocked\n" % whom)
-                return 1
-            store.set_picture_show(account, SHOW_ON, operator=True, note=(TERMINAL, "pic", whom, ""))
-            out.write("%s picture is no longer blocked\n" % whom)
         else:
             whom = ref(store, account)
             if not store.unban(account, note=(TERMINAL, "unban", whom, "")):

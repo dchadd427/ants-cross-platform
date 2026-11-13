@@ -130,8 +130,13 @@ class Chat:
                 peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 
     def sync_pictures(self):
+        """The pictures are read again after a kick or a ban; a database that refuses leaves it to the clock's look a tick later: the act is done, and its public line and its answer must not depend on a look."""
         if self.pictures is not None:
-            self.pictures.sync()
+            try:
+                self.pictures.sync()
+            except StoreError as e:
+                if self.on_store_error:
+                    self.on_store_error(e)
 
     def you_of(self, who):
         """What a page is told of its own account (the welcome's `you`, and /hub/me): the name that is shown, `role` (`none`, `mod` or `admin`; from Discord, never from a page), `mod` (true for
@@ -337,6 +342,7 @@ class Chat:
         if not isinstance(on, bool) or not self.pics_limits.take(self.key_of(who.account_id), self.clock()):
             return self.mistake(peer, PICS_REFUSED)
         try:
+            before = self.store.picture_state(who.account_id)
             state = self.store.set_picture_show(who.account_id, SHOW_ON if on else SHOW_OFF)
         except StoreError as e:
             return self.trouble(peer, e, PICS_REFUSED)
@@ -346,6 +352,8 @@ class Chat:
             self.pictures.sync()
         except StoreError as e:
             self.trouble(peer, e, PICS_REFUSED)
+        if state == before:                                                     # (nothing changed: no frame goes to the account, so the asking socket is answered all the same, and a page's box never waits for nothing)
+            peer.send_text(dumps({"t": "you", "you": self.you_of(who)}))
 
     @staticmethod
     def parse(line):

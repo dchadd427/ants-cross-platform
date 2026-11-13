@@ -430,9 +430,28 @@ class Store(StoreBase):
             return self.drop_picture(self.ref(account))
 
     def set_picture_show(self, account, show, operator=False, note=None):
+        return self.set_show(self.ref(account), show, operator, note)
+
+    def set_picture_show_by_reference(self, reference, show, operator=False, note=None):
+        if self.picture_state_by_reference(reference) is None:
+            return None
+        return self.set_show(reference, show, operator, note)
+
+    def picture_state_by_reference(self, reference):
+        row = self.db.execute("SELECT show FROM pictures WHERE ref = ?", (reference,)).fetchone()
+        return row[0] if row else None
+
+    def picture_look(self):
+        self.db.execute("BEGIN")
+        try:
+            return self.last_picture_change(), self.picture_names(), self.picture_marks(), self.picture_end()
+        finally:
+            self.db.execute("COMMIT")
+
+    def set_show(self, ref, show, operator, note):
         if show not in (SHOW_ON, SHOW_OFF, SHOW_BLOCKED):
             raise ValueError("not a state of a picture")
-        ref, now = self.ref(account), int(self.clock())
+        now = int(self.clock())
         with self.transaction():
             row = self.db.execute("SELECT show FROM pictures WHERE ref = ?", (ref,)).fetchone()
             now_in = row[0] if row else SHOW_ON

@@ -980,7 +980,7 @@ class TheProcess(unittest.TestCase):
             proc = subprocess.Popen([sys.executable, "-m", "hub"], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
         self.addCleanup(lambda: proc.poll() is None and proc.kill())
         port = None
-        for _ in range(100):
+        for _ in range(300):                                                          # (30 seconds: a machine that is busy starts a process slowly)
             with open(log_path) as f:
                 m = re.search(r" listening port=(\d+)", f.read())
             if m:

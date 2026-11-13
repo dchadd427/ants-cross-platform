@@ -141,6 +141,20 @@ class StoreBase:
         """The bytes kept under the public `name`, or None for a name that is not 32 lower-case hex digits, is not known, or whose account is not shown (switched off or blocked) or whose login has run out."""
         raise NotImplementedError
 
+    def picture_look(self):
+        """(the counter of the last change, picture_names(), picture_marks(), picture_end()) read in one read transaction: what a look at the pictures sees is one moment of the data, whatever another process does
+        meanwhile."""
+        raise NotImplementedError
+
+    def picture_state_by_reference(self, reference):
+        """The state (SHOW_OFF, SHOW_ON or SHOW_BLOCKED) of the row of this reference (hub/pseudo.py) in the pictures' table, or None when there is no such row: the one place that the operator's `nopic` and
+        `pic` can find an account by its reference after the account's other rows are gone (Forget me leaves a block)."""
+        raise NotImplementedError
+
+    def set_picture_show_by_reference(self, reference, show, operator=False, note=None):
+        """set_picture_show() for the account that has this reference, when the pictures' table has a row for it; None when it has not."""
+        raise NotImplementedError
+
     def picture_marks(self):
         """{reference: state} of the accounts whose picture is switched off (SHOW_OFF) or blocked (SHOW_BLOCKED): the ones that are not in the default state."""
         raise NotImplementedError

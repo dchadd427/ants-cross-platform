@@ -245,23 +245,30 @@ class Pictures:
         number = self.store.last_picture_change()
         if self.seen == number and (self.ends is None or self.ends > self.store.clock()):
             return
-        names, marks, ends = self.store.picture_names(), self.store.picture_marks(), self.store.picture_end()
+        number, names, marks, ends = self.store.picture_look()                # (one moment of the data: the names and the marks of a look agree)
         changed = {ref for ref in set(self.cache) | set(names) if self.cache.get(ref) != names.get(ref)} | {ref for ref in set(self.marks) | set(marks) if self.marks.get(ref) != marks.get(ref)}
         first = self.seen is None
         self.seen, self.cache, self.marks, self.ends = number, names, marks, ends
         if changed and not first and self.on_change is not None:
             self.on_change(changed)
 
-    def name_of(self, ref):
-        """The public name of the account's picture (the account by its reference) when it may be shown now, else None: the list that sync() last read, no database read."""
+    def first_look(self):
+        """Before the hub's first look at the pictures a page that asks gets it made now; a database that refuses it leaves "no pictures, on" for this once (the clock's look tries again)."""
         if self.seen is None:
-            self.sync()
-        return self.cache.get(ref)
+            try:
+                self.sync()
+            except StoreError:
+                pass
+
+    def name_of(self, ref):
+        """The public name of the account's picture (the account by its reference) when it may be shown now, else None: the list that sync() last read, no database read. Never a name for an account whose
+        picture is off or blocked, whatever the two lists say."""
+        self.first_look()
+        return None if ref in self.marks else self.cache.get(ref)
 
     def state_of(self, ref):
         """`on`, `off` (the person switched it off) or `blocked` (the operator did) for the account, by the list that sync() last read."""
-        if self.seen is None:
-            self.sync()
+        self.first_look()
         return {SHOW_OFF: "off", SHOW_BLOCKED: "blocked"}.get(self.marks.get(ref), "on")
 
     # ---- the door ----------------------------------------------------------------------------------------------------------------------------
