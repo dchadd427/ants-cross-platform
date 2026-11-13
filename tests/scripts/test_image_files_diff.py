@@ -405,6 +405,19 @@ class TheLibrariesOfEmscriptensCache(unittest.TestCase):
         self.assertEqual(li.object_without_debug(b"BC\xc0\xde"), b"BC\xc0\xde")
 
 
+PORTS_ORDER = b"""def dependency_order(port_list):
+  unsorted = set(port_list)
+
+  def dfs(node):
+    stack.append(node)
+
+  while unsorted:
+    dfs(unsorted.pop())
+
+  return stack
+"""
+
+
 @unittest.skipUnless(shutil.which("sh") and shutil.which("sha256sum"), "needs sh and sha256sum")
 class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
     def setUp(self):
@@ -418,7 +431,9 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
         with open(os.path.join(self.bin, "em-config"), "w", encoding="utf-8") as f:
             f.write("#!/bin/sh\necho '%s'\n" % self.cache)
         os.chmod(os.path.join(self.bin, "em-config"), 0o755)
-        self.env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"], ANTS_SRC=self.src)
+        self.ports = os.path.join(self.tmp, "ports_init.py")
+        self.put(self.ports, PORTS_ORDER)
+        self.env = dict(os.environ, PATH=self.bin + os.pathsep + os.environ["PATH"], ANTS_SRC=self.src, ANTS_PORTS_FILE=self.ports)
 
     def put(self, path, data):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -504,6 +519,30 @@ class TheScriptsThatRunInsideTheBuilderStage(unittest.TestCase):
         self.assertEqual(len(listing), 4)
         with open(os.path.join(self.src, "build_web", "src", "ants_app", "index.js"), "rb") as f:
             self.assertEqual(f.read(), b"js\n", "the old output was removed and made again")
+
+    def test_relink_makes_emscripten_take_its_ports_by_name_and_stops_when_the_line_is_not_there(self):
+        self.tree()
+        self.fake_cmake()
+        done = self.run_script("relink_outputs.sh")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        with open(self.ports, "rb") as f:
+            fixed = f.read()
+        self.assertNotIn(b"dfs(unsorted.pop())", fixed)
+        self.assertEqual(fixed.count(b"    port = min(unsorted, key=lambda p: p.name); unsorted.remove(port); dfs(port)\n"), 1, "the same indent, the port is taken out of the set as pop() did")
+        self.assertEqual(fixed.replace(b"    port = min(unsorted, key=lambda p: p.name); unsorted.remove(port); dfs(port)\n", b"    dfs(unsorted.pop())\n"), PORTS_ORDER, "nothing else of the file is changed")
+        for what, text in (("another Emscripten", PORTS_ORDER.replace(b"dfs(unsorted.pop())", b"dfs(sorted(unsorted)[0])")), ("two such lines", PORTS_ORDER + b"  dfs(unsorted.pop())\n"), ("an empty file", b"")):
+            with self.subTest(what):
+                self.put(self.ports, text)
+                shutil.rmtree(os.path.join(self.src, "build_web", "src", "ants_app"))
+                self.tree()
+                self.put(os.path.join(self.bin, "cmake"), b"#!/bin/sh\ntouch " + os.path.join(self.tmp, "linked").encode("ascii") + b"\n")
+                os.chmod(os.path.join(self.bin, "cmake"), 0o755)
+                done = self.run_script("relink_outputs.sh")
+                self.assertEqual(done.returncode, 2)
+                self.assertIn("dfs(unsorted.pop())", done.stderr)
+                self.assertFalse(os.path.exists(os.path.join(self.tmp, "linked")), "no link is made with the ports in an order that nobody fixed")
+        os.remove(self.ports)
+        self.assertEqual(self.run_script("relink_outputs.sh").returncode, 2, "no file of Emscripten's ports is no fix either")
 
     def test_relink_that_makes_nothing_or_fails_is_status_2(self):
         self.tree()

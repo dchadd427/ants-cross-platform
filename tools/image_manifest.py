@@ -10,8 +10,9 @@ usage: image_manifest.py manifest < image.tar > manifest.json        the tar is 
 Two kinds of file are not compared byte for byte, and only these (the lists are STAMPED and LINKED below):
   - the pages that carry the build time and the build date (as text in a footer, or as the data-built attribute of the bar at the top): the stamp is replaced by a fixed text before the hash, and the number of replacements is part of the manifest, so a file that gains or
     loses a stamp differs (the build id is the same in both builds: the script passes the same ANTS_BUILD_ID);
-  - the WebAssembly programs that Emscripten links (index.wasm, lvl_core.wasm), their JavaScript and the compressed copies: two links of the SAME objects do not always give the same bytes (the linker
-    and the optimizer depend on the address space layout and on thread timing: the order of the functions, and so their numbers in the JavaScript, differs from link to link). Of these the final image
+  - the WebAssembly programs that Emscripten links (index.wasm, lvl_core.wasm), their JavaScript and the compressed copies: two links of the SAME objects do not always give the same bytes: Emscripten puts the game's four port libraries on the linker's
+    command line in an order that it takes from a Python set, so every normal build links with one of three orders; the three programs are the same objects in another layout (another data layout,
+    so other function numbers in the program and other import names in the JavaScript), and the index.js and the index.wasm of one link always belong together. Of these the final image
     keeps only the type, the mode, the owner and a size within one percent. What they are made of is compared where it is exact: the link's inputs (every object, archive and library that the link reads,
     and the link command lines: `inputs`), taken from the builder stage of both builds, and the programs of a link made deterministic (`relink`).
 Modification times are not compared (a COPY keeps the time of the file in the repository, a generated file has the time of its build); everything else is, byte for byte.
