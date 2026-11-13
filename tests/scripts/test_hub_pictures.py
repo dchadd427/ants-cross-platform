@@ -97,7 +97,7 @@ class ThePngCheck(unittest.TestCase):
             "not bytes": "text", "empty": b"", "signature only": sig, "wrong signature": b"\x89PNX" + good[4:], "jpeg": b"\xff\xd8\xff\xe0" + b"x" * 100, "svg": b"<svg xmlns='http://www.w3.org/2000/svg'/>",
             "cut off": good[:len(good) - 5], "cut in a head": good[:20], "a crc that is wrong": bytes(bad_crc), "a header crc that is wrong": bytes(bad_ihdr_crc),
             "a byte after IEND": good + b"\x00", "a chunk after IEND": good + chunk(b"tEXt", b"x"), "no IEND": good[:-12], "IEND with a body": sig + ihdr(64, 64) + idat + chunk(b"IEND", b"x"),
-            "no header first": sig + idat + iend, "a text chunk first": sig + chunk(b"tEXt", b"x") + ihdr(64, 64) + idat + iend,
+            "a first chunk that is not the header": sig + chunk(b"IDAT", ihdr(64, 64)[8:-4]) + idat + iend, "no header first": sig + idat + iend, "a text chunk first": sig + chunk(b"tEXt", b"x") + ihdr(64, 64) + idat + iend,
             "a header of 12 bytes": sig + chunk(b"IHDR", b"\x00" * 12) + idat + iend, "a second header": sig + ihdr(64, 64) + ihdr(64, 64) + idat + iend,
             "4096 pixels wide": sig + ihdr(4096, 64) + idat + iend, "4096 pixels high": sig + ihdr(64, 4096) + idat + iend, "7 pixels": sig + ihdr(7, 64) + idat + iend, "129 pixels": sig + ihdr(64, 129) + idat + iend,
             "0 pixels": sig + ihdr(0, 0) + idat + iend, "a side of two billion": sig + ihdr(2 ** 31, 64) + idat + iend, "a color type that is not one": sig + ihdr(64, 64, 8, 5) + idat + iend,
@@ -221,7 +221,7 @@ class TheCallToThePictureHost(unittest.TestCase):
                 status = self.picture(self.client())[0]
             except discordmod.DiscordError as e:
                 self.assertIsNone(e.__cause__, mode)
-                self.assertFalse(e.__suppress_context__ and e.__context__, mode)
+                self.assertIsNone(e.__context__, mode)                                    # (nothing of what went wrong first hangs on it either)
                 self.assertEqual(sorted(vars(e)), ["kind", "status"])
                 self.assertNotIn(ACCOUNT, repr(e) + str(e))
                 self.assertNotIn(fd.AVATAR, repr(e) + str(e))

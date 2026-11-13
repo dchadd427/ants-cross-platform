@@ -168,8 +168,8 @@ def mini_conf(tmp, port, hub_port):
     off = "location @hub_off {%s}" % stats.block_of(CONF, "location @hub_off ")
     return ("daemon off;\nmaster_process off;\npid %(t)s/n%(p)d.pid;\nerror_log %(t)s/e%(p)d.log error;\nevents { worker_connections 1024; }\nhttp {\n  access_log %(t)s/a%(p)d.log;\n"
             "  client_body_temp_path %(t)s/b%(p)d;\n  proxy_temp_path %(t)s/p%(p)d;\n  %(zone)s\n  %(cache)s\n  server {\n    listen 127.0.0.1:%(p)d;\n    %(headers)s\n"
-            "    location ~ \"^/hub/pic/[0-9a-f]{32}\\.png\\z\" {%(block)s}\n    %(off)s\n    location / { return 404 'not passed on'; }\n  }\n}\n"
-            % {"t": tmp, "p": port, "zone": zone, "cache": cache, "headers": headers, "block": text, "off": off})
+            "    %(header)s{%(block)s}\n    %(off)s\n    location / { return 404 'not passed on'; }\n  }\n}\n"
+            % {"t": tmp, "p": port, "zone": zone, "cache": cache, "headers": headers, "header": SERVER[START:OPEN], "block": text, "off": off})
 
 
 class Nginx:

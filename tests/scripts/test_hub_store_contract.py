@@ -1013,6 +1013,15 @@ class SqliteContract(Contract):
         self.assertTrue(self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000))
         self.assertEqual(self.store.picture("a" * 32), b"png-bytes")
 
+    def test_a_row_that_holds_bytes_with_the_picture_off_or_blocked_is_not_given_and_not_listed(self):
+        # (the store never writes such a row; this is the check that a file that was edited by hand, or a bug, cannot make a hidden picture visible)
+        self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000)
+        for show in (base.SHOW_OFF, base.SHOW_BLOCKED):
+            self.store.db.execute("UPDATE pictures SET show = ?", (show,))
+            self.assertEqual((self.store.picture("a" * 32), self.store.picture_names()), (None, {}), show)
+        self.store.db.execute("UPDATE pictures SET show = 1")
+        self.assertEqual(self.store.picture("a" * 32), b"png-bytes")
+
     def test_a_deleted_picture_is_in_neither_file_once_the_log_file_is_cut(self):
         marker = b"canary-picture-bytes-" + b"7f3a" * 30
         self.store.set_picture("1001", marker, "a" * 32, self.clock.now + DAY, 10, 10 ** 6)
