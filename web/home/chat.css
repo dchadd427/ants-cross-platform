@@ -32,7 +32,7 @@
 .gc-news { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .gc-form { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 10px; }
 .gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }
-.gc-input { display: block; box-sizing: border-box; width: 100%; min-width: 0; height: 48px; min-height: 48px; padding: 11px 14px; font: inherit; font-size: 16px; line-height: 20px; white-space: nowrap; overflow: hidden; resize: none; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
+.gc-input { display: block; box-sizing: border-box; width: 100%; min-width: 0; height: 48px; min-height: 48px; padding: 11px 14px; font: inherit; font-size: 16px; line-height: 20px; white-space: pre; overflow: hidden; resize: none; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
 .gc-input::placeholder { color: #7f9c92; opacity: 1; }
 .gc-send { min-height: 48px; }
 .gc-guest { flex: none; margin-top: 8px; font-size: 14px; line-height: 1.35; color: #a8cfc0; }

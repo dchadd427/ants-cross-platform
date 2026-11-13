@@ -523,6 +523,20 @@ function bring(env, file, name) {
     two.clock.advance(2100);
     check('... and then goes', two.sayText() === '');
 }
+{   // the line before the microphone starts stays until the state changes, like "Listening"; Enter ends the listening and closes the picker where the form cannot requestSubmit
+    const r = rig();
+    r.mic.click();
+    check('the line "asking" (before the browser starts to listen) is shown', r.sayText() === Pure.TEXT.asking);
+    r.clock.advance(120000);
+    check('... and it stays until the browser says something (it is not timed)', r.sayText() === Pure.TEXT.asking);
+    const q = rig();
+    q.form.dispatchEvent = (ev) => q.form.fire(ev.type, ev);
+    q.win.Event = function (type, o) { this.type = type; this.cancelable = !!(o && o.cancelable); this.preventDefault = () => {}; };
+    const rec = q.start(); q.heard('half a line');
+    q.emoji.click();
+    q.field.fire('keydown', { key: 'Enter', preventDefault() {} });
+    check('Enter in a form without requestSubmit (iOS 15) goes through a submit event: the listening ends and the picker closes, as for Send', rec.aborts === 1 && q.pick.hidden === true && q.said().length === 1);
+}
 {   // the field is a text area that the chat makes as tall as its words: after a pick and after the words that are heard
     const r = rig();
     r.win.matchMedia = () => ({ matches: true });

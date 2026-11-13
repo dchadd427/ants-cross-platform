@@ -168,11 +168,12 @@ async function main() {
             check(L + 'the accessible name holds the name', b.label === 'Chatting as ' + n[1], b.label);
             check(L + 'the badge is the first letter', !!b.badge && b.badge.w >= 26);
             if (phoneRow) {
-                check(L + 'the name is shown beside the badge', named && b.nameText === n[1], JSON.stringify([b.nameText, b.name]));
+                if (s[1] >= 360) check(L + 'the name is shown beside the badge', named && b.nameText === n[1], JSON.stringify([b.nameText, b.name]));
+                else check(L + 'under 360 px the row has no room for letters: the badge alone (no sliver of a name)', !named && b.chip.w <= 50, JSON.stringify(b));
                 check(L + 'the logo is 66 px (54 under 360 px) and the first row is one row: logo, Games, chip, Menu, in that order, no overlap, the Menu at the right edge of the window',
                     !!b.logo && Math.abs(b.logo.w - (s[1] < 360 ? 54 : 66)) < 1 && b.logo.r <= b.chip.x + 0.5 && b.chip.r <= b.menu.x + 0.5 && b.menu.r <= s[1] + 0.5 && Math.abs(b.menu.r - (s[1] - 14)) < 2 && Math.abs(b.menu.y - b.chip.y) < 4 && Math.abs(b.menu.y - b.logo.y) < 50, JSON.stringify(b));
                 if ((n[0] === 'one' || n[0] === 'typical') && s[1] >= 390) check(L + 'a short name shows whole (no ellipsis; under 390 px the row has room for the badge and a few letters)', !b.cut, JSON.stringify(b.name));
-                if (n[0] === 'longest' && s[1] <= 412) check(L + 'a long name is cut with an ellipsis and the chip stays between the logo and the Menu', b.cut && b.chip.x >= b.logo.r, JSON.stringify(b));
+                if (n[0] === 'longest' && s[1] <= 412 && s[1] >= 360) check(L + 'a long name is cut with an ellipsis and the chip stays between the logo and the Menu', b.cut && b.chip.x >= b.logo.r, JSON.stringify(b));
                 if (n[0] === 'longest' && s[1] >= 390) check(L + 'the chip grows into the free space: at 390 px and up, more than the badge', b.chip.w > 100);
             } else if (s[1] >= 1280) {
                 check(L + 'a desktop shows the badge and the name, as before', named && b.nameText === n[1]);

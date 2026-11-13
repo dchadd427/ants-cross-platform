@@ -113,6 +113,8 @@ async function main() {
         check(name + 'the log keeps room to be read (at least 60 px high, 30 px in a window under 500 px high)', !!logBox && logBox.h >= (h < 500 ? 30 : 60), JSON.stringify(logBox));
         console.log('   ' + size + ': ' + (boxed ? 'box' : under ? 'row under' : 'beside') + ', field ' + input.w + ' px');
         check(name + 'the field keeps room to type (90 px at least)', input.w >= 90, input.w);
+        const fieldLook = await page.evaluate(() => { const f = document.querySelector('.gc-input'), c = getComputedStyle(f); return { font: parseFloat(c.fontSize), h: f.getBoundingClientRect().height }; });
+        check(name + 'the field\'s text is 16 px or more (an iPhone does not zoom into it) and the field is 44 px high or more', fieldLook.font >= 16 && fieldLook.h >= 44, JSON.stringify(fieldLook));
         check(name + 'the page does not scroll sideways', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.body.scrollWidth <= window.innerWidth));
         const labels = await page.evaluate(() => [...document.querySelectorAll('.gt-btn')].map((b) => [b.getAttribute('aria-label'), b.title]));
         check(name + 'the labels and tooltips', JSON.stringify(labels) === JSON.stringify([['Emoji', 'Emoji'], ['Voice to text: your browser\'s speech service hears you', 'Voice to text: your browser\'s speech service hears you']]), JSON.stringify(labels));

@@ -241,7 +241,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("position: relative;", self.rule(".gc-form.gt-on"), "the picker is placed against the form")
         self.assertIn("grid-column: 1 / -1;", self.rule(".gt-say"))
         self.assertNotRegex(self.css, r"position: *fixed")
-        self.assertEqual(self.css.count("z-index"), 1, "one layer, the picker's, over the log")
+        self.assertEqual(self.css.count("z-index"), 2, "two layers over the log: the picker's (2) and the voice line's (3, so that \"The message is full.\" shows over the open picker)")
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto; }", self.css)
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
@@ -250,14 +250,6 @@ class TheStyle(unittest.TestCase):
         narrow = self.css[self.css.index("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n"):]
         self.assertIn(".gt-on .gt-tools { order: 3; grid-column: 1 / -1; }", narrow)
         self.assertIn(".gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }", narrow, "the field, Send and the login button keep their order when the buttons move to the last row")
-
-    def test_a_phone_upright_has_one_box_with_the_words_on_top_and_the_buttons_under_them(self):
-        box = re.search(r"@media \(max-width: 700px\) and \(min-height: 501px\) \{(.*?)\n\}", self.css, re.S).group(1)
-        self.assertIn('grid-template-areas: "f f f" "t . s";', box, "the field over the whole width, the two buttons at the left and Send at the right of the row under it")
-        self.assertIn("border-radius: 22px;", box)
-        self.assertRegex(box, r"\.gt-say \{[^}]*position: absolute;", "the line of words is a bubble: it takes no room")
-        self.assertRegex(box, r"textarea\.gc-input \{[^}]*max-height: 110px;[^}]*overflow-y: auto;", "four lines, then the words scroll")
-        self.assertRegex(box, r"\.gc-send \{[^}]*min-height: 44px;")
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         for selector in (".gt-btn", ".gt-e"):

@@ -1334,7 +1334,7 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
         r.win.matchMedia = () => ({ matches: upright });
         r.live(W({ you: YOU }));
         const f = r.field();
-        Object.defineProperty(f, 'scrollHeight', { get() { return 22 + 22 * Math.max(1, Math.ceil(this.value.length / 20)); } });       // (a stand-in for the browser's: the padding and 22 px for each line of 20 characters)
+        Object.defineProperty(f, 'scrollHeight', { get() { return this.zero ? 0 : 22 + 22 * Math.max(1, Math.ceil(this.value.length / 20)); } });       // (a stand-in for the browser's: the padding and 22 px for each line of 20 characters)
         f.setSelectionRange = (a, b) => { f.selectionStart = a; f.selectionEnd = b; };
         const type = (text) => { f.value = text; f.fire('input', {}); };
         const key = (k, o) => { let stopped = false; f.fire('keydown', Object.assign({ key: k, preventDefault() { stopped = true; } }, o)); return stopped; };
@@ -1389,6 +1389,40 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     const turn = mk(true);
     turn.f.value = 'x'.repeat(30); turn.r.win.listeners.resize.forEach((fn) => fn({}));
     check('turning the phone makes the box as tall as its words again', turn.f.style.height === '66px');
+    const ime = mk(true);
+    ime.type('half typed');
+    check('the Enter that confirms a composition in Safari (keyCode 229, no isComposing) sends nothing and is left alone', !ime.key('Enter', { keyCode: 229, isComposing: false }) && ime.r.said().length === 0 && ime.f.value === 'half typed');
+    check('Ctrl+Enter and Meta+Enter send too (the one-line field did not, nobody minds)', ime.key('Enter', { ctrlKey: true }) && ime.r.said().length === 1);
+    const para = mk(true);
+    let madePara = 0;
+    para.type('a paragraph break');
+    para.f.fire('beforeinput', { inputType: 'insertParagraph', preventDefault() { madePara++; } });
+    check('a keyboard that says insertParagraph sends and makes no break', madePara === 1 && para.r.said().length === 1 && para.f.value === '');
+    const run = mk(true);
+    run.f.value = 'ab\n\n\ncd'; run.f.selectionStart = 6; run.f.fire('input', {});
+    check('a pasted run of line breaks is one space and the caret stays after the same letter ("ab cd", the caret after the c, not after the d)', run.f.value === 'ab cd' && run.f.selectionStart === 4, run.f.selectionStart);
+    const gone = mk(true);
+    gone.type('x'.repeat(30));
+    gone.f.zero = true; gone.type('x'.repeat(100));
+    check('a view that is not shown (the field has no height) keeps the box as it was and is measured when it comes', gone.f.style.height === '66px');
+    gone.f.zero = false; gone.r.dock.grow();
+    check('... the chat asks again when the view comes (the dock paints, or the window turns)', gone.f.style.height === '110px');
+    const fol = mk(true);
+    const lg = fol.r.log();
+    lg.scrollHeight = 1000; lg.clientHeight = 300; lg.scrollTop = 700;
+    fol.type('x'.repeat(30));
+    check('a log that is read at its end follows to its end when the box grows', lg.scrollTop === 1000, lg.scrollTop);
+    lg.scrollTop = 100; fol.type('x'.repeat(100));
+    check('a log that was scrolled up is left where it is', lg.scrollTop === 100);
+    const nosub = mk(true);
+    nosub.r.form().dispatchEvent = (ev) => nosub.r.form().fire(ev.type, ev);
+    nosub.r.win.Event = function (type, o) { this.type = type; this.cancelable = !!(o && o.cancelable); this.preventDefault = () => {}; };
+    let heard = 0;
+    nosub.r.form().addEventListener('submit', () => { heard++; });
+    nosub.type('no requestSubmit');
+    nosub.key('Enter');
+    check('where the form has no requestSubmit (iOS 15) Enter sends a cancelable submit event to it, which the other buttons hear, and the line goes once', heard === 1 && nosub.r.said().length === 1 && nosub.r.said()[0].text === 'no requestSubmit');
+    check('the field has a hint that is read with its name: "Enter sends the message."', mk(true).f.getAttribute('aria-describedby') === 'gchat-hint' && one(mk(true).r.root, 'gc-hint') !== null && one(mk(true).r.root, 'gc-hint').id === 'gchat-hint' && one(mk(true).r.root, 'gc-hint').textContent === 'Enter sends the message.');
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');

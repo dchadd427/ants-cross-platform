@@ -124,8 +124,8 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar .quick { order: 7; flex: 1 1 0; min-width: 0; min-height: 44px; padding: 4px 6px; font-size: 16px; letter-spacing: .06em; gap: 8px; } .quick::before { width: 15px; height: 15px; }
     .hbar:has(.mine:not([hidden])) .quick { padding: 4px 4px; font-size: 14px; letter-spacing: .02em; } .hbar:has(.mine:not([hidden])) .quick::before { display: none; }
 }
-@media (max-width: 419px) and (orientation: portrait) { .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: "Room"; font-size: 15px; } .hbar .mine { padding: 4px 4px; } .hbar .mine .pill { margin-left: 4px; padding: 0 4px; } }
-@media (max-width: 359px) and (orientation: portrait) { .hbar { gap: 0 4px; } .hbar .mine .name::after { font-size: 14px; } .hbar .mine .pill { margin-left: 3px; padding: 0 3px; } .hbar button.hlogin { max-width: calc(100% - 234px); } .hbar .quick { font-size: 14px; letter-spacing: .02em; } .quick::before { display: none; } .hbar .hlogo { width: 54px; } }
+@media (max-width: 421px) and (orientation: portrait) { .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: "Room"; font-size: 15px; } .hbar .mine { padding: 4px 4px; } .hbar .mine .pill { margin-left: 4px; padding: 0 4px; } }
+@media (max-width: 359px) and (orientation: portrait) { .hbar { gap: 0 4px; } .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; } .hbar .mine .name::after { font-size: 14px; } .hbar .mine .pill { margin-left: 3px; padding: 0 3px; } .hbar button.hlogin { max-width: calc(100% - 234px); } .hbar .quick { font-size: 14px; letter-spacing: .02em; } .quick::before { display: none; } .hbar .hlogo { width: 54px; } }
 /* ---- ... held sideways (a short window, 360 to 639 px wide): two compact rows (106 px), not three (184) ---- */
 @media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {
     .hbar { grid-template-columns: auto repeat(2, minmax(0, 1fr)) auto; gap: 6px; padding: 8px 12px 4px; }
