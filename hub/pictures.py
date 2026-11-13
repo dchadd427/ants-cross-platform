@@ -2,15 +2,15 @@
 
 After a login is answered, in the background, the hub asks Discord's image host for the one 64 pixel PNG of the picture whose short code the login saw (hub/discord.py `picture()`: the address
 is made there from constants and the two checked parts, no redirect is followed, nothing is read past a cap). The login never waits for it and never fails because of it: every failure is a
-letter in the page's circle (no picture kept), and one line in the log that says which kind (`picture kind=ok|none|down|type|big|shape`, nothing else: no id, no code, no name, no reference).
+letter in the page's circle (no picture kept), and one line in the log that says which kind (`picture kind=ok|none|down|type|big|shape|busy|bug`, with the count of dropped fetches or the class of an error, nothing else: no id, no code, no name, no reference).
 
 What Discord sends is data, not a thing to trust. It is kept only when it is a PNG whose every chunk is whole (a length that fits, a CRC that matches), whose header is first and says 8 to 128 pixels
-and a legal depth and color, that ends with IEND and has nothing after it. The hub then writes its own copy, which holds only the header, the palette, the transparency, the picture data and
+and a legal depth and color, that ends with IEND and has nothing after it, and whose data is a whole zlib stream that inflates to exactly the rows that the header says (never inflated past that). The hub then writes its own copy, which holds only the header, the palette, the transparency, the picture data and
 the end: every other chunk (text, EXIF, color profiles, the animation chunks of an APNG) is dropped. The copy is what is kept and served; its pixels are not decoded here.
 
 The copy is kept under a random 128-bit name that is new at every login (`secrets.token_hex(16)`; nothing in it comes from the id, the reference, the code or the bytes), by the account's keyed
 reference (hub/pseudo.py) and never by its id. It is served at /hub/pic/<name>.png with fixed headers (hub/http.py `picture()`). It is deleted with the login's end, a kick, Forget me, the person's
-switch, a ban, a block, or when the login runs out; a name that is not known, is not shown or is past its time answers 404.
+switch, a ban, a block, or when the login runs out (the store's rule: no login, no picture); a fetch that ends after any of these keeps nothing; a name that is not known, is not shown or is past its time answers 404.
 
 A person's id is used in one place here: the path of the one fetch. It is not kept, not logged, not in an error.
 """
@@ -28,10 +28,25 @@ PATH = re.compile(r"/hub/pic/([0-9a-f]{32})\.png\Z")
 SIGNATURE = b"\x89PNG\r\n\x1a\n"
 DEPTHS = {0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8), 4: (8, 16), 6: (8, 16)}       # color type -> the bit depths that the format allows with it
 SIDE_MIN, SIDE_MAX = 8, 128                                 # pixels, each side
+CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+PASSES = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2))      # (first column, first row, column step, row step) of the seven passes of an interlaced file
 
 
 class ShapeError(Exception):
     """What was fetched is not a PNG that is kept."""
+
+
+def raw_size(width, height, color, depth, interlace):
+    """How many bytes the picture data inflates to: each row has a filter byte and its pixels, to a whole byte (an interlaced file: the rows of its seven passes)."""
+    bits = CHANNELS[color] * depth
+    if not interlace:
+        return height * (1 + (width * bits + 7) // 8)
+    total = 0
+    for x0, y0, dx, dy in PASSES:
+        columns, rows = (width - x0 + dx - 1) // dx, (height - y0 + dy - 1) // dy
+        if columns > 0 and rows > 0:
+            total += rows * (1 + (columns * bits + 7) // 8)
+    return total
 
 
 def rewrite(data):
@@ -40,7 +55,7 @@ def rewrite(data):
     if not isinstance(data, (bytes, bytearray)) or data[:8] != SIGNATURE:
         raise ShapeError
     data = bytes(data)
-    at, out, header, ended, seen, phase, color, palette, total = 8, [SIGNATURE], False, False, set(), 0, 0, 0, 0       # phase: 0 before the picture data, 1 in its run of IDATs, 2 after it
+    at, out, header, ended, seen, phase, color, palette, total, pieces = 8, [SIGNATURE], False, False, set(), 0, 0, 0, 0, []       # phase: 0 before the picture data, 1 in its run of IDATs, 2 after it
     while at < len(data):
         if ended or len(data) - at < 12:
             raise ShapeError                                 # (a byte after IEND, or a chunk with no room for its head and its CRC)
@@ -69,6 +84,7 @@ def rewrite(data):
             if phase == 2:
                 raise ShapeError                             # (picture data that is not in one run)
             phase, total = 1, total + length
+            pieces.append(body)
             out.append(chunk)
             continue
         phase = 2 if phase else 0
@@ -90,6 +106,14 @@ def rewrite(data):
             raise ShapeError                                 # (a critical chunk that this reader does not know)
     if not ended or not total or (color == 3 and not palette):
         raise ShapeError
+    expected = raw_size(width, height, color, depth, interlace)        # (the data must be a whole zlib stream that inflates to exactly the rows that the header says: at most 128 x 128 x 8 bytes and a bit more, and it is never inflated past that)
+    try:
+        inflater = zlib.decompressobj()
+        inflated = inflater.decompress(b"".join(pieces), expected + 1)
+    except zlib.error:
+        raise ShapeError
+    if len(inflated) != expected or not inflater.eof or inflater.unused_data:
+        raise ShapeError
     return b"".join(out)
 
 
@@ -101,7 +125,9 @@ class Pictures:
         self.waiting = collections.deque()                   # (account id, picture code) of the fetches that wait for their turn: in memory only, at most `picture_waiting`
         self.inflight = 0
         self.tasks = set()
-        self.recent = {}                                     # reference -> when the last fetch for the account was accepted (hub's clock)
+        self.queued = set()                                  # the references of the accounts whose fetch waits or runs: one each, so a burst of logins of one account is one fetch
+        self.dropped = 0                                     # fetches dropped since the last line of the log
+        self.dropped_at = float("-inf")
         self.bucket = limitmod.TokenBucket(limits.picture_burst, limits.picture_refill_seconds, clock())
         self.rate = limitmod.RateByAddress(limits.picture_serve_burst, limits.picture_serve_refill_seconds)
         self.seen = None                                     # (the number of the last change, {reference: name}) for names()
@@ -110,7 +136,8 @@ class Pictures:
 
     def offer(self, account, avatar):
         """What a finished login hands over: the account and the short code of its picture (None for none). It decides at once, never waits and never raises: a switched off or blocked account, a banned one, one
-        that was fetched for a minute ago, a full queue: nothing is fetched. No picture at Discord deletes the older copy of ours."""
+        whose fetch is waiting or running already, a full queue: nothing is fetched (and the drop is counted and told). A new login always gets its fetch: the next login is the retry. No picture at
+        Discord deletes the older copy of ours."""
         try:
             if self.store.picture_state(account, touch=True) != SHOW_ON:
                 return
@@ -122,23 +149,34 @@ class Pictures:
                 self.log.event("picture", kind="none")
                 return
             key, now = pseudo.reference(self.store.secret(), account), self.clock()
-            if now - self.recent.get(key, float("-inf")) < self.limits.picture_account_seconds or len(self.waiting) >= self.limits.picture_waiting:
-                return
-            self.recent[key] = now
-            self.waiting.append((account, avatar))
+            if key in self.queued or len(self.waiting) >= self.limits.picture_waiting:
+                return self.drop(now)
+            self.queued.add(key)
+            self.waiting.append((account, avatar, key))
             self.pump()
         except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)
             self.log.event("picture", kind="bug", error=type(e).__name__)
 
+    def drop(self, now):
+        """One more fetch that was not made: counted, and told in one line at most every `picture_dropped_log_seconds` (the count only: no account)."""
+        self.dropped += 1
+        if now - self.dropped_at >= self.limits.picture_dropped_log_seconds:
+            self.tell_drops(now)
+
+    def tell_drops(self, now):
+        if self.dropped:
+            self.log.event("picture", kind="busy", dropped=self.dropped)
+            self.dropped, self.dropped_at = 0, now
+
     def pump(self):
         while self.waiting and self.inflight < self.limits.picture_inflight:
-            account, avatar = self.waiting.popleft()
+            account, avatar, key = self.waiting.popleft()
             self.inflight += 1
-            task = asyncio.ensure_future(self.work(account, avatar))
+            task = asyncio.ensure_future(self.work(account, avatar, key))
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
 
-    async def work(self, account, avatar):
+    async def work(self, account, avatar, key):
         try:
             await self.pace()
             await self.fetch(account, avatar)
@@ -148,6 +186,7 @@ class Pictures:
             self.log.event("picture", kind="bug", error=type(e).__name__)
         finally:
             self.inflight -= 1
+            self.queued.discard(key)
             self.pump()
 
     async def pace(self):
@@ -175,11 +214,11 @@ class Pictures:
         except ShapeError:
             return self.log.event("picture", kind="shape")
         kept = self.store.set_picture(account, png, secrets.token_hex(16), self.store.clock() + self.limits.session_seconds, self.limits.pictures_rows_max, self.limits.pictures_bytes_max)
-        self.log.event("picture", kind="ok" if kept else "none")       # (not kept: the person switched it off while it was on its way)
+        self.log.event("picture", kind="ok" if kept else "none")       # (not kept: the person switched it off, the login ended or the account was banned while it was on its way)
 
     def forget_idle(self, now):
-        for key in [k for k, at in self.recent.items() if now - at >= self.limits.picture_account_seconds]:
-            del self.recent[key]
+        self.rate.forget_idle(now)
+        self.tell_drops(now)
 
     def stop(self):
         for task in list(self.tasks):

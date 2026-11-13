@@ -117,13 +117,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
   },
   {
-   "id": "png_data_may_be_missing",
-   "file": "hub/pictures.py",
-   "old": "    if not ended or not total or (color == 3 and not palette):",
-   "new": "    if not ended or (color == 3 and not palette):",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
-  },
-  {
    "id": "png_data_in_two_runs",
    "file": "hub/pictures.py",
    "old": "            if phase == 2:\n                raise ShapeError                             # (picture data that is not in one run)\n",
@@ -154,8 +147,8 @@
   {
    "id": "fetch_trouble_fails_the_login",
    "file": "hub/pictures.py",
-   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def pump",
-   "new": "        except ZeroDivisionError as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def pump",
+   "old": "        except Exception as e:                                # (a bug or a refusing database costs one picture, never the login)\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def drop",
+   "new": "        except ZeroDivisionError as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n\n    def drop",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStoreAndTheHub"
   },
   {
@@ -234,13 +227,6 @@
    "old": "            if self.store.is_banned(account):",
    "new": "            if False:",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheEndOfAPicture"
-  },
-  {
-   "id": "account_pacing_dropped",
-   "file": "hub/pictures.py",
-   "old": "            if now - self.recent.get(key, float(\"-inf\")) < self.limits.picture_account_seconds or len(self.waiting)",
-   "new": "            if len(self.waiting)",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
    "id": "queue_not_limited",
@@ -348,20 +334,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
   },
   {
-   "id": "last_logout_keeps_the_picture",
-   "file": "hub/login.py",
-   "old": "                if row is not None and self.store.logins(row[0]) == 0:",
-   "new": "                if False:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheEndOfAPicture"
-  },
-  {
-   "id": "logout_with_another_login_left_takes_the_picture",
-   "file": "hub/login.py",
-   "old": "                if row is not None and self.store.logins(row[0]) == 0:",
-   "new": "                if row is not None:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheEndOfAPicture"
-  },
-  {
    "id": "forget_keeps_the_picture",
    "file": "hub/store/sqlite.py",
    "old": "\"DELETE FROM pictures WHERE ref = ? AND show != ?\"",
@@ -399,8 +371,8 @@
   {
    "id": "a_picture_is_kept_while_switched_off",
    "file": "hub/store/sqlite.py",
-   "old": "            if row is not None and row[0] != SHOW_ON:\n                return False\n            self.db.execute(\"INSERT INTO pictures",
-   "new": "            self.db.execute(\"INSERT INTO pictures",
+   "old": "            if row is not None and row[0] != SHOW_ON:\n                return False\n            live =",
+   "new": "            live =",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
   },
   {
@@ -562,14 +534,175 @@
    "file": "docker/nginx.conf",
    "old": "        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }\n        access_log off;\n        limit_req zone=ants_hub_pic",
    "new": "        if ($http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }\n        limit_req zone=ants_hub_pic",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_pic.TheText"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_pic.TheBlockRuns"
   },
   {
-   "id": "nginx_door_after_the_static_images",
-   "file": "docker/nginx.conf",
-   "old": "    location ~ \"^/hub/pic/[0-9a-f]{32}\\.png\\z\" {",
-   "new": "    location ~ \"^/hub/picx/[0-9a-f]{32}\\.png\\z\" {",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_pic"
+   "id": "one_account_may_have_two_fetches_at_a_time",
+   "file": "hub/pictures.py",
+   "old": "            if key in self.queued or len(self.waiting) >= self.limits.picture_waiting:",
+   "new": "            if len(self.waiting) >= self.limits.picture_waiting:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
+  },
+  {
+   "id": "a_fetch_that_ended_blocks_the_next_login",
+   "file": "hub/pictures.py",
+   "old": "            self.queued.discard(key)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheNextLoginIsTheRetry"
+  },
+  {
+   "id": "a_drop_is_not_told",
+   "file": "hub/pictures.py",
+   "old": "        if now - self.dropped_at >= self.limits.picture_dropped_log_seconds:\n            self.tell_drops(now)",
+   "new": "        pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
+  },
+  {
+   "id": "the_drops_are_never_told_by_the_clock",
+   "file": "hub/pictures.py",
+   "old": "        self.rate.forget_idle(now)\n        self.tell_drops(now)",
+   "new": "        self.rate.forget_idle(now)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLoginWithAPicture"
+  },
+  {
+   "id": "the_door_buckets_are_not_swept",
+   "file": "hub/pictures.py",
+   "old": "        self.rate.forget_idle(now)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheDoor"
+  },
+  {
+   "id": "a_picture_is_kept_for_an_account_with_no_login",
+   "file": "hub/store/sqlite.py",
+   "old": "            if live is None or self.db.execute(\"SELECT 1 FROM bans WHERE account = ?\", (account,)).fetchone() is not None:",
+   "new": "            if self.db.execute(\"SELECT 1 FROM bans WHERE account = ?\", (account,)).fetchone() is not None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_picture_is_kept_for_a_banned_account",
+   "file": "hub/store/sqlite.py",
+   "old": "            if live is None or self.db.execute(\"SELECT 1 FROM bans WHERE account = ?\", (account,)).fetchone() is not None:",
+   "new": "            if live is None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_picture_outlives_the_last_login",
+   "file": "hub/store/sqlite.py",
+   "old": "            until = min(int(until), live)",
+   "new": "            until = int(until)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_picture_is_kept_for_an_expired_login",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)",
+   "new": "SELECT MAX(expires) FROM sessions WHERE account = ?\", (account,)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "the_last_login_gone_keeps_the_picture",
+   "file": "hub/store/sqlite.py",
+   "old": "            if row is not None:\n                self.drop_pictures_without_login([row[0]], int(self.clock()))          # (the account's last login: its picture goes with it)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_logout_takes_the_picture_while_another_login_is_left",
+   "file": "hub/store/sqlite.py",
+   "old": "SELECT 1 FROM sessions WHERE account = ? AND expires > ? LIMIT 1\", (account, now)).fetchone() is None:",
+   "new": "SELECT 1 FROM sessions WHERE account = ? AND expires > ? LIMIT 1\", (account, now)).fetchone() is not None:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "the_purge_keeps_the_picture_of_an_expired_login",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.db.execute(\"DELETE FROM sessions WHERE expires <= ?\", (now,))\n            self.drop_pictures_without_login(ended, now)",
+   "new": "            self.db.execute(\"DELETE FROM sessions WHERE expires <= ?\", (now,))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "the_cap_of_logins_keeps_the_picture",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.drop_pictures_without_login(pushed, now)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_ban_keeps_the_picture",
+   "file": "hub/store/sqlite.py",
+   "old": "            self.drop_picture(self.ref(account))                    # (a banned account",
+   "new": "            pass                    # (a banned account",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_late_fetch_after_forget_me_is_kept",
+   "file": "hub/store/sqlite.py",
+   "old": "            live = self.db.execute(\"SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0]\n            if live is None or",
+   "new": "            live = self.db.execute(\"SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?\", (account, now)).fetchone()[0] or now + 1\n            if False or",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheLateFetch tests.scripts.test_hub_pictures.TheStoreEndsAPictureWithTheLastLogin tests.scripts.test_hub_pictures.TheNextLoginIsTheRetry tests.scripts.test_hub_pictures.TheWorker tests.scripts.test_hub_pictures.TheLoginWithAPicture"
+  },
+  {
+   "id": "the_slot_of_a_failed_fetch_is_never_given_back",
+   "file": "hub/pictures.py",
+   "old": "        finally:\n            self.inflight -= 1\n            self.queued.discard(key)\n            self.pump()",
+   "new": "        else:\n            self.inflight -= 1\n            self.queued.discard(key)\n            self.pump()",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheWorker"
+  },
+  {
+   "id": "a_bug_in_the_worker_is_not_caught",
+   "file": "hub/pictures.py",
+   "old": "        except Exception as e:\n            self.log.event(\"picture\", kind=\"bug\", error=type(e).__name__)\n        finally:",
+   "new": "        finally:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheWorker"
+  },
+  {
+   "id": "name_made_from_the_id_the_code_and_the_time",
+   "file": "hub/pictures.py",
+   "old": "self.store.set_picture(account, png, secrets.token_hex(16),",
+   "new": "self.store.set_picture(account, png, __import__(\"hashlib\").sha256((\"%s/%s/%d\" % (account, avatar, __import__(\"time\").time_ns())).encode()).hexdigest()[:32],",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheWorker"
+  },
+  {
+   "id": "name_made_from_the_key_the_id_and_one_random_byte",
+   "file": "hub/pictures.py",
+   "old": "self.store.set_picture(account, png, secrets.token_hex(16),",
+   "new": "self.store.set_picture(account, png, __import__(\"hashlib\").sha256(self.store.secret() + account.encode() + secrets.token_bytes(1)).hexdigest()[:32],",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheWorker"
+  },
+  {
+   "id": "png_data_size_not_checked",
+   "file": "hub/pictures.py",
+   "old": "    if len(inflated) != expected or not inflater.eof or inflater.unused_data:",
+   "new": "    if not inflater.eof or inflater.unused_data:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
+  },
+  {
+   "id": "png_data_end_of_stream_not_checked",
+   "file": "hub/pictures.py",
+   "old": "    if len(inflated) != expected or not inflater.eof or inflater.unused_data:",
+   "new": "    if len(inflated) != expected or inflater.unused_data:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
+  },
+  {
+   "id": "png_data_after_the_stream_not_refused",
+   "file": "hub/pictures.py",
+   "old": "    if len(inflated) != expected or not inflater.eof or inflater.unused_data:",
+   "new": "    if len(inflated) != expected or not inflater.eof:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
+  },
+  {
+   "id": "png_data_that_is_no_zlib_stream_is_not_refused",
+   "file": "hub/pictures.py",
+   "old": "    except zlib.error:\n        raise ShapeError\n",
+   "new": "    except zlib.error:\n        raise\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
+  },
+  {
+   "id": "png_interlaced_rows_counted_as_plain",
+   "file": "hub/pictures.py",
+   "old": "    if not interlace:\n        return height",
+   "new": "    if True:\n        return height",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
   }
  ]
 }

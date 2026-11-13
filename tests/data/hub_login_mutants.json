@@ -462,14 +462,14 @@
   {
    "id": "logout_keeps_the_login",
    "file": "hub/login.py",
-   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n                if row is not None and self.store.logins(row[0]) == 0:        # (the last login of the account: its picture goes with it)\n                    self.store.clear_picture(row[0])\n        except StoreError:\n            return self.fail(503, \"busy\")",
+   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "new": "pass\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
   {
    "id": "logout_keeps_the_sockets",
    "file": "hub/login.py",
-   "old": "                self.hub.end_logins(session=digest(value))\n                if row is not None and self.store.logins(row[0]) == 0:        # (the last login of the account: its picture goes with it)\n                    self.store.clear_picture(row[0])\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "old": "                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "new": "                pass\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
@@ -686,8 +686,8 @@
   {
    "id": "login_total_cap_keeps_the_oldest",
    "file": "hub/store/sqlite.py",
-   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)",
-   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?)",
+   "old": "FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)\", (total,)).rowcount",
+   "new": "FROM sessions ORDER BY created ASC, rowid ASC LIMIT -1 OFFSET ?)\", (total,)).rowcount",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfLoginsInAll"
   },
   {
@@ -1505,8 +1505,8 @@
   {
    "id": "logout_does_not_ask_for_the_cut",
    "file": "hub/store/sqlite.py",
-   "old": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        self.unsettled = True\n        return gone\n",
-   "new": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n        return gone\n",
+   "old": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n            if row is not None:\n                self.drop_pictures_without_login([row[0]], int(self.clock()))          # (the account's last login: its picture goes with it)\n        self.unsettled = True\n        return gone\n",
+   "new": "            gone = self.db.execute(\"DELETE FROM sessions WHERE id = ?\", (key,)).rowcount == 1\n            if row is not None:\n                self.drop_pictures_without_login([row[0]], int(self.clock()))          # (the account's last login: its picture goes with it)\n        return gone\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_core.TheModerators tests.scripts.test_hub_core.TheStore tests.scripts.test_hub_login.TheLogFileIsCutWhenSomethingIsForgotten"
   },
   {

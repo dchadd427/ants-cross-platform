@@ -43,12 +43,19 @@ def chunk(kind, body):
 def make_png(width=64, height=64, before=(), after=(), color=2, depth=8, interlace=0):
     """A real PNG (8 bit RGB by default) of the size asked for, with the chunks of `before` between the header and the data and the ones of `after` between the data and the end: (letters, bytes) pairs."""
     channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color]
-    row = b"\x00" + bytes((x * 7 + 3) % 256 for x in range(width * channels * depth // 8))
+    row = b"\x00" + bytes((x * 7 + 3) % 256 for x in range(-(-width * channels * depth // 8)))
+    raw = row * height
+    if interlace:                                    # (the rows of the seven passes: each has a filter byte and its pixels to a whole byte)
+        raw = b""
+        for x0, y0, dx, dy in ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)):
+            columns, rows = -(-(width - x0) // dx), -(-(height - y0) // dy)
+            if columns > 0 and rows > 0:
+                raw += (b"\x00" + b"\x55" * -(-columns * channels * depth // 8)) * rows
     head = chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, color, 0, 0, interlace))
     mid = b"".join(chunk(k, b) for k, b in before)
     if color == 3:
         mid = chunk(b"PLTE", bytes(range(256))[:3 * 16]) + mid
-    return b"\x89PNG\r\n\x1a\n" + head + mid + chunk(b"IDAT", zlib.compress(row * height)) + b"".join(chunk(k, b) for k, b in after) + chunk(b"IEND", b"")
+    return b"\x89PNG\r\n\x1a\n" + head + mid + chunk(b"IDAT", zlib.compress(raw)) + b"".join(chunk(k, b) for k, b in after) + chunk(b"IEND", b"")
 
 
 def snowflake(age_days, now=None, worker=7):

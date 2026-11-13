@@ -190,7 +190,9 @@ class Store(StoreBase):
                 gone += self.db.execute("DELETE FROM lines WHERE id IN (SELECT id FROM lines WHERE id <= (SELECT id FROM lines ORDER BY id DESC LIMIT 1 OFFSET ?) LIMIT ?)",
                                         (self.max_lines, chunk - gone)).rowcount
             self.db.execute("DELETE FROM mutes WHERE until <= ?", (now,))
+            ended = [r[0] for r in self.db.execute("SELECT DISTINCT account FROM sessions WHERE expires <= ?", (now,))]
             self.db.execute("DELETE FROM sessions WHERE expires <= ?", (now,))
+            self.drop_pictures_without_login(ended, now)
             self.db.execute("DELETE FROM profiles WHERE updated < ?", (now - PROFILE_DAYS * 86400,))
             gone_pictures = self.db.execute("DELETE FROM pictures WHERE (show = ? AND until <= ?) OR (show = ? AND at < ?)", (SHOW_ON, now, SHOW_OFF, now - PICTURE_DAYS * 86400)).rowcount
             if gone_pictures:
@@ -271,7 +273,9 @@ class Store(StoreBase):
         with self.transaction():
             self.db.execute("INSERT INTO sessions (id, account, name, created, expires) VALUES (?, ?, ?, ?, ?)", (key, account, name, now, now + int(seconds)))
             over = self.db.execute("DELETE FROM sessions WHERE account = ? AND id NOT IN (SELECT id FROM sessions WHERE account = ? ORDER BY created DESC, rowid DESC LIMIT ?)", (account, account, keep)).rowcount
+            pushed = [r[0] for r in self.db.execute("SELECT DISTINCT account FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,))]
             over += self.db.execute("DELETE FROM sessions WHERE rowid IN (SELECT rowid FROM sessions ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET ?)", (total,)).rowcount
+            self.drop_pictures_without_login(pushed, now)
         if over:
             self.unsettled = True                   # (the logins that went over the caps are in the log file until it is cut)
 
@@ -284,7 +288,10 @@ class Store(StoreBase):
         """End one login. What was deleted is still in the log file until it is cut: `unsettled` asks the hub's clock to cut it at its next look (within ten seconds, and many logins ending
         at once cost one cut), so that the hash of the login does not stay in a file for the hour that is the pause between two purges."""
         with self.transaction():
+            row = self.db.execute("SELECT account FROM sessions WHERE id = ?", (key,)).fetchone()
             gone = self.db.execute("DELETE FROM sessions WHERE id = ?", (key,)).rowcount == 1
+            if row is not None:
+                self.drop_pictures_without_login([row[0]], int(self.clock()))          # (the account's last login: its picture goes with it)
         self.unsettled = True
         return gone
 
@@ -383,6 +390,12 @@ class Store(StoreBase):
             self.unsettled = True                     # (the bytes that went are in the log file until the hub's clock cuts it)
         return bool(row[1])
 
+    def drop_pictures_without_login(self, accounts, now):
+        """Inside a transaction that ended logins: the picture of each of these accounts goes when it has no login left (no login, no picture)."""
+        for account in accounts:
+            if self.db.execute("SELECT 1 FROM sessions WHERE account = ? AND expires > ? LIMIT 1", (account, now)).fetchone() is None:
+                self.drop_picture(self.ref(account))
+
     def set_picture(self, account, png, name, until, rows_max, bytes_max):
         if not (isinstance(png, bytes) and 0 < len(png) <= bytes_max and isinstance(name, str) and PICTURE_NAME.match(name)):
             return False
@@ -391,8 +404,12 @@ class Store(StoreBase):
             row = self.db.execute("SELECT show FROM pictures WHERE ref = ?", (ref,)).fetchone()
             if row is not None and row[0] != SHOW_ON:
                 return False
+            live = self.db.execute("SELECT MAX(expires) FROM sessions WHERE account = ? AND expires > ?", (account, now)).fetchone()[0]
+            if live is None or self.db.execute("SELECT 1 FROM bans WHERE account = ?", (account,)).fetchone() is not None:
+                return False                                           # (no login, or a ban: a fetch that ended after Forget me, the last log out, a kick or a ban keeps nothing)
+            until = min(int(until), live)                              # (a picture never outlives the last login of its account)
             self.db.execute("INSERT INTO pictures (ref, show, name, png, until, at) VALUES (?, 1, ?, ?, ?, ?) ON CONFLICT (ref) DO UPDATE SET name = excluded.name, png = excluded.png, until = excluded.until, at = excluded.at",
-                            (ref, name, png, int(until), now))
+                            (ref, name, png, until, now))
             while True:
                 rows, size = self.db.execute("SELECT COUNT(*), COALESCE(SUM(LENGTH(png)), 0) FROM pictures WHERE png IS NOT NULL").fetchone()
                 if rows <= rows_max and size <= bytes_max:
@@ -484,6 +501,7 @@ class Store(StoreBase):
         with self.transaction():
             self.count_restriction()
             self.db.execute("INSERT OR REPLACE INTO bans (account, at, by, name) VALUES (?, ?, ?, ?)", (account, int(self.clock()), by, name))
+            self.drop_picture(self.ref(account))                    # (a banned account is a guest in the list: it shows no picture, and none is fetched while the ban stands)
             self.write_note(note)
 
     def unban(self, account, note=None):

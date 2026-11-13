@@ -784,7 +784,13 @@ class Contract(unittest.TestCase):
 
     # ---- pictures ----
 
+    def login(self, account="1001", seconds=30 * DAY):
+        """A login of the account, if it has none: a picture is kept only for an account that has one."""
+        if self.store.logins(account) == 0:
+            self.store.add_session("k-" + account, account, "alice", seconds, 10, 1000)
+
     def keep(self, account="1001", name=None, png=b"\x89PNG-one", until=None, rows=100, size=10 ** 6):
+        self.login(account)
         name = name or ("%032x" % (abs(hash((account, png))) % 16 ** 32))
         return name, self.store.set_picture(account, png, name, self.clock.now + DAY if until is None else until, rows, size)
 
@@ -945,6 +951,61 @@ class Contract(unittest.TestCase):
         self.store.delete_session("k2")
         self.assertEqual(self.store.logins("1001"), 0)
 
+    def test_a_picture_is_not_kept_for_an_account_with_no_login_or_with_a_ban_and_never_outlives_the_last_login(self):
+        self.assertFalse(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + DAY, 10, 1000))             # (no login: a fetch that ended after Forget me or the last log out)
+        self.store.add_session("k1", "1001", "alice", 100, 10, 100)
+        self.clock.now += 100                                                                                    # (a login that ran out)
+        self.assertFalse(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + DAY, 10, 1000))
+        self.store.add_session("k2", "1001", "alice", 500, 10, 100)
+        self.store.ban("1001", "me", "alice")
+        self.assertFalse(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + DAY, 10, 1000))
+        self.assertEqual((self.store.picture_usage(), self.store.has_picture("1001")), ((0, 0), False))
+        self.assertTrue(self.store.unban("1001"))
+        self.assertTrue(self.store.set_picture("1001", b"x", "a" * 32, self.clock.now + 99 * DAY, 10, 1000))
+        self.clock.now += 499
+        self.assertEqual(self.store.picture("a" * 32), b"x")
+        self.clock.now += 1
+        self.assertIsNone(self.store.picture("a" * 32))
+
+    def test_the_last_login_to_go_takes_the_picture_by_any_way_it_goes(self):
+        name, _ = self.keep(name="a" * 32)
+        self.store.add_session("k2", "1001", "alice", 60, 10, 100)
+        self.store.delete_session("k-1001")
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")                                              # (another login is left)
+        self.store.delete_session("k2")
+        self.assertIsNone(self.store.picture(name))                                                              # (the last one went)
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+
+    def test_the_purge_takes_the_picture_of_an_account_whose_last_login_ran_out_and_leaves_the_others(self):
+        self.login("1001", 100)
+        self.store.add_session("k3", "1001", "alice", 10 * DAY, 10, 100)        # (the account's newer login: the picture, fetched for it, runs as long as it does)
+        mine, _ = self.keep(name="a" * 32)
+        other, _ = self.keep(account="1002", name="b" * 32, png=b"other")
+        self.store.delete_session("k3")                                         # (the newer one is logged out: the older is left, and the picture with it)
+        self.assertEqual(self.store.picture(mine), b"\x89PNG-one")
+        self.clock.now += 100                                                   # (the older one runs out: the picture's own time is far off, and it must go all the same)
+        self.store.purge()
+        self.assertEqual((self.store.picture(mine), self.store.picture(other)), (None, b"other"))
+
+    def test_a_login_pushed_out_by_the_cap_of_all_logins_takes_its_accounts_picture_when_it_was_the_last(self):
+        self.store.add_session("k1", "1001", "alice", 60, 10, 2)
+        name, _ = self.keep(name="a" * 32)
+        self.clock.now += 1
+        self.store.add_session("k2", "1002", "bob", 60, 10, 2)
+        self.assertEqual(self.store.picture(name), b"\x89PNG-one")
+        self.clock.now += 1
+        self.store.add_session("k3", "1003", "carol", 60, 10, 2)                 # (the oldest login of all goes)
+        self.assertIsNone(self.store.picture(name))
+        self.assertEqual(self.store.picture_usage(), (0, 0))
+
+    def test_a_ban_takes_the_picture_and_a_switch_or_block_that_was_made_stays(self):
+        name, _ = self.keep(name="a" * 32)
+        self.store.set_picture_show("1002", base.SHOW_OFF)
+        self.store.ban("1001", "me", "alice")
+        self.store.ban("1002", "me", "bob")
+        self.assertEqual((self.store.picture(name), self.store.picture_usage()), (None, (0, 0)))
+        self.assertEqual(self.store.picture_state("1002"), base.SHOW_OFF)
+
     def test_a_refused_write_of_a_picture_is_a_store_error_and_leaves_the_picture_as_it_was(self):
         name, _ = self.keep()
         writes = (lambda: self.keep(name="b" * 32, png=b"new"), lambda: self.store.clear_picture("1001"), lambda: self.store.set_picture_show("1001", base.SHOW_OFF),
@@ -1000,6 +1061,7 @@ class SqliteContract(Contract):
     def test_the_pictures_are_an_additive_table_the_schema_stays_and_a_file_without_the_table_gets_it(self):
         self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 4)
         self.assertEqual(storemod.SCHEMA, 4)
+        self.login()
         self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000)
         self.store.close()
         old = sqlite3.connect(self.path, isolation_level=None)                      # (the file as a hub of the version before the pictures left it: no such table)
@@ -1010,11 +1072,12 @@ class SqliteContract(Contract):
         self.store = storemod.Store(self.path, clock=self.clock, busy_ms=50)
         self.assertEqual(self.store.db.execute("PRAGMA user_version").fetchone()[0], 4)
         self.assertEqual((self.store.picture_usage(), self.store.picture_state("1001"), self.store.last_picture_change()), ((0, 0), base.SHOW_ON, 0))
-        self.assertTrue(self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000))
+        self.assertTrue(self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000))          # (the login is in the file: the older hub's data is the same)
         self.assertEqual(self.store.picture("a" * 32), b"png-bytes")
 
     def test_a_row_that_holds_bytes_with_the_picture_off_or_blocked_is_not_given_and_not_listed(self):
         # (the store never writes such a row; this is the check that a file that was edited by hand, or a bug, cannot make a hidden picture visible)
+        self.login()
         self.store.set_picture("1001", b"png-bytes", "a" * 32, self.clock.now + DAY, 10, 1000)
         for show in (base.SHOW_OFF, base.SHOW_BLOCKED):
             self.store.db.execute("UPDATE pictures SET show = ?", (show,))
@@ -1024,6 +1087,7 @@ class SqliteContract(Contract):
 
     def test_a_deleted_picture_is_in_neither_file_once_the_log_file_is_cut(self):
         marker = b"canary-picture-bytes-" + b"7f3a" * 30
+        self.login()
         self.store.set_picture("1001", marker, "a" * 32, self.clock.now + DAY, 10, 10 ** 6)
         self.store.checkpoint()
         with open(self.path, "rb") as f:

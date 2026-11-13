@@ -22,6 +22,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -86,7 +87,13 @@ class ThePngCheck(unittest.TestCase):
     def test_a_file_that_is_not_a_whole_png_of_a_small_picture_is_refused(self):
         good = make_png()
         ihdr = lambda w, h, depth=8, color=2, interlace=0, comp=0, filt=0: chunk(b"IHDR", w.to_bytes(4, "big") + h.to_bytes(4, "big") + bytes([depth, color, comp, filt, interlace]))      # noqa: E731
-        idat = chunk(b"IDAT", b"\x78\x9c\x03\x00\x00\x00\x00\x01")
+        zlib = __import__("zlib")
+
+        def D(w=64, h=64, depth=8, color=2, interlace=0, *more):
+            """a picture data chunk that is a whole zlib stream of exactly the rows that the header says, where the header is one that can have rows (the others are refused at the header)"""
+            if not (0 < w <= 5000 and 0 < h <= 5000 and color in (0, 2, 3, 4, 6) and depth in (1, 2, 4, 8, 16) and interlace == 0):
+                return chunk(b"IDAT", b"\x78\x9c\x03\x00\x00\x00\x00\x01")
+            return chunk(b"IDAT", zlib.compress((b"\x00" + b"\x11" * -(-w * {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color] * depth // 8)) * h))
         iend = chunk(b"IEND", b"")
         sig = good[:8]
         bad_crc = bytearray(good)
@@ -96,28 +103,62 @@ class ThePngCheck(unittest.TestCase):
         cases = {
             "not bytes": "text", "empty": b"", "signature only": sig, "wrong signature": b"\x89PNX" + good[4:], "jpeg": b"\xff\xd8\xff\xe0" + b"x" * 100, "svg": b"<svg xmlns='http://www.w3.org/2000/svg'/>",
             "cut off": good[:len(good) - 5], "cut in a head": good[:20], "a crc that is wrong": bytes(bad_crc), "a header crc that is wrong": bytes(bad_ihdr_crc),
-            "a byte after IEND": good + b"\x00", "a chunk after IEND": good + chunk(b"tEXt", b"x"), "no IEND": good[:-12], "IEND with a body": sig + ihdr(64, 64) + idat + chunk(b"IEND", b"x"),
-            "a first chunk that is not the header": sig + chunk(b"IDAT", ihdr(64, 64)[8:-4]) + idat + iend, "no header first": sig + idat + iend, "a text chunk first": sig + chunk(b"tEXt", b"x") + ihdr(64, 64) + idat + iend,
-            "a header of 12 bytes": sig + chunk(b"IHDR", b"\x00" * 12) + idat + iend, "a second header": sig + ihdr(64, 64) + ihdr(64, 64) + idat + iend,
-            "4096 pixels wide": sig + ihdr(4096, 64) + idat + iend, "4096 pixels high": sig + ihdr(64, 4096) + idat + iend, "7 pixels": sig + ihdr(7, 64) + idat + iend, "129 pixels": sig + ihdr(64, 129) + idat + iend,
-            "0 pixels": sig + ihdr(0, 0) + idat + iend, "a side of two billion": sig + ihdr(2 ** 31, 64) + idat + iend, "a color type that is not one": sig + ihdr(64, 64, 8, 5) + idat + iend,
-            "a depth that the color does not take": sig + ihdr(64, 64, 4, 2) + idat + iend, "a depth that is not one": sig + ihdr(64, 64, 7, 0) + idat + iend,
-            "interlace 2": sig + ihdr(64, 64, 8, 2, 2) + idat + iend, "a compression method": sig + ihdr(64, 64, 8, 2, 0, 1) + idat + iend, "a filter method": sig + ihdr(64, 64, 8, 2, 0, 0, 1) + idat + iend,
+            "a byte after IEND": good + b"\x00", "a chunk after IEND": good + chunk(b"tEXt", b"x"), "no IEND": good[:-12], "IEND with a body": sig + ihdr(64, 64) + D(64, 64) + chunk(b"IEND", b"x"),
+            "a first chunk that is not the header": sig + chunk(b"IDAT", ihdr(64, 64)[8:-4]) + D(64, 64) + iend, "no header first": sig + D() + iend, "a text chunk first": sig + chunk(b"tEXt", b"x") + ihdr(64, 64) + D(64, 64) + iend,
+            "a header of 12 bytes": sig + chunk(b"IHDR", b"\x00" * 12) + D() + iend, "a second header": sig + ihdr(64, 64) + ihdr(64, 64) + D(64, 64) + iend,
+            "4096 pixels wide": sig + ihdr(4096, 64) + D(4096, 64) + iend, "4096 pixels high": sig + ihdr(64, 4096) + D(64, 4096) + iend, "7 pixels": sig + ihdr(7, 64) + D(7, 64) + iend, "129 pixels": sig + ihdr(64, 129) + D(64, 129) + iend,
+            "0 pixels": sig + ihdr(0, 0) + D(0, 0) + iend, "a side of two billion": sig + ihdr(2 ** 31, 64) + D(2 ** 31, 64) + iend, "a color type that is not one": sig + ihdr(64, 64, 8, 5) + D(64, 64, 8, 5) + iend,
+            "a depth that the color does not take": sig + ihdr(64, 64, 4, 2) + D(64, 64, 4, 2) + iend, "a depth that is not one": sig + ihdr(64, 64, 7, 0) + D(64, 64, 7, 0) + iend,
+            "interlace 2": sig + ihdr(64, 64, 8, 2, 2) + D(64, 64, 8, 2, 2) + iend, "a compression method": sig + ihdr(64, 64, 8, 2, 0, 1) + D(64, 64, 8, 2, 0, 1) + iend, "a filter method": sig + ihdr(64, 64, 8, 2, 0, 0, 1) + D(64, 64, 8, 2, 0, 0, 1) + iend,
             "no picture data": sig + ihdr(64, 64) + iend, "empty picture data": sig + ihdr(64, 64) + chunk(b"IDAT", b"") + iend,
-            "picture data in two runs": sig + ihdr(64, 64) + idat + chunk(b"tEXt", b"x") + idat + iend,
+            "picture data in two runs": sig + ihdr(64, 64) + chunk(b"IDAT", zlib.compress((b"\x00" + b"\x11" * 192) * 64)[:20]) + chunk(b"tEXt", b"x") + chunk(b"IDAT", zlib.compress((b"\x00" + b"\x11" * 192) * 64)[20:]) + iend,
             "a length past the end": sig + ihdr(64, 64) + (1000).to_bytes(4, "big") + b"IDAT" + b"x" * 20, "a length of two billion": sig + ihdr(64, 64) + (2 ** 31).to_bytes(4, "big") + b"IDAT" + b"x" * 20,
             "a length of four billion": sig + ihdr(64, 64) + b"\xff\xff\xff\xff" + b"IDAT" + b"x" * 20, "a length that overflows into the crc": sig + ihdr(64, 64) + (9).to_bytes(4, "big") + b"IDAT" + b"x" * 12,
-            "a chunk name of digits": sig + ihdr(64, 64) + chunk(b"1234", b"x") + idat + iend, "a critical chunk that is not known": sig + ihdr(64, 64) + chunk(b"ABCD", b"x") + idat + iend,
-            "a palette for grey": sig + ihdr(64, 64, 8, 0) + chunk(b"PLTE", b"\x00" * 3) + idat + iend, "a palette of 4 bytes": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 4) + idat + iend,
-            "an empty palette": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"") + idat + iend, "a palette of 300 colors": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 900) + idat + iend,
-            "a palette type with no palette": sig + ihdr(64, 64, 8, 3) + idat + iend, "two palettes": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 6) * 2 + idat + iend,
-            "a palette after the data": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 6) + idat + chunk(b"PLTE", b"\x00" * 6) + iend,
-            "transparency of the wrong length": sig + ihdr(64, 64, 8, 2) + chunk(b"tRNS", b"\x00") + idat + iend, "transparency for a type that has an alpha channel": sig + ihdr(64, 64, 8, 6) + chunk(b"tRNS", b"\x00") + idat + iend,
+            "a chunk name of digits": sig + ihdr(64, 64) + chunk(b"1234", b"x") + D(64, 64) + iend, "a critical chunk that is not known": sig + ihdr(64, 64) + chunk(b"ABCD", b"x") + D(64, 64) + iend,
+            "a palette for grey": sig + ihdr(64, 64, 8, 0) + chunk(b"PLTE", b"\x00" * 3) + D(64, 64, 8, 0) + iend, "a palette of 4 bytes": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 4) + D(64, 64, 8, 3) + iend,
+            "an empty palette": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"") + D(64, 64, 8, 3) + iend, "a palette of 300 colors": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 900) + D(64, 64, 8, 3) + iend,
+            "a palette type with no palette": sig + ihdr(64, 64, 8, 3) + D(64, 64, 8, 3) + iend, "two palettes": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 6) * 2 + D(64, 64, 8, 3) + iend,
+            "a palette after the data": sig + ihdr(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 6) + D(64, 64, 8, 3) + chunk(b"PLTE", b"\x00" * 6) + iend,
+            "transparency of the wrong length": sig + ihdr(64, 64, 8, 2) + chunk(b"tRNS", b"\x00") + D(64, 64, 8, 2) + iend, "transparency for a type that has an alpha channel": sig + ihdr(64, 64, 8, 6) + chunk(b"tRNS", b"\x00") + D(64, 64, 8, 6) + iend,
         }
         for name, data in cases.items():
             with self.subTest(name):
                 with self.assertRaises(picturesmod.ShapeError):
                     picturesmod.rewrite(data)
+
+    def test_the_data_must_be_a_whole_zlib_stream_that_inflates_to_exactly_the_rows_the_header_says(self):
+        import struct
+        import zlib
+
+        def made(raw, width=64, height=64, color=2, depth=8, interlace=0, tail=b"", stream=None):
+            data = zlib.compress(raw) + tail if stream is None else stream
+            return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, color, 0, 0, interlace)) + chunk(b"IDAT", data) + chunk(b"IEND", b""))
+
+        whole = zlib.compress(rows64 := (b"\x00" + b"\x11" * (64 * 3)) * 64)
+        unfinished = zlib.compressobj()
+        unfinished = unfinished.compress(rows64) + unfinished.flush(zlib.Z_SYNC_FLUSH)        # (all the rows, and no end of the stream)
+
+        rows = b"\x00" + b"\x11" * (64 * 3)
+        self.assertEqual(picturesmod.rewrite(made(rows * 64)), made(rows * 64))
+        cases = {
+            "a stream that inflates to 32 MiB under a 128 pixel header": made(b"\x00" * (32 * 2 ** 20), 128, 128, 6, 16),
+            "bytes that are no zlib stream": made(b"", stream=b"<script>alert(1)</script>"),
+            "a row too few": made(rows * 63), "a byte too many": made(rows * 64 + b"\x00"), "a byte too few": made((rows * 64)[:-1]),
+            "a stream that is cut off": made(b"", stream=whole[:-4]), "a stream that has all the rows and no end": made(b"", stream=unfinished),
+            "bytes after the end of the stream": made(rows * 64, tail=b"x"),
+            "data that is not the rows of an interlaced file": made(rows * 64, interlace=1),
+            "data for the other color": made(rows * 64, color=6),
+        }
+        for name, data in cases.items():
+            with self.subTest(name):
+                with self.assertRaises(picturesmod.ShapeError):
+                    picturesmod.rewrite(data)
+
+    def test_the_size_of_the_rows_is_what_the_format_says_for_every_color_depth_size_and_interlace(self):
+        self.assertEqual(picturesmod.raw_size(64, 64, 2, 8, 0), 64 * (1 + 192))
+        self.assertEqual(picturesmod.raw_size(13, 17, 0, 1, 0), 17 * (1 + 2))
+        self.assertEqual(picturesmod.raw_size(128, 128, 6, 16, 0), 128 * (1 + 1024))
+        self.assertEqual(picturesmod.raw_size(8, 8, 0, 8, 1), 1 * (1 + 1) + 1 * (1 + 1) + 1 * (1 + 2) + 2 * (1 + 2) + 2 * (1 + 4) + 4 * (1 + 4) + 4 * (1 + 8))
 
     def test_a_refusal_says_nothing_of_the_file(self):
         with self.assertRaises(picturesmod.ShapeError) as e:
@@ -252,7 +293,7 @@ class PictureTest(unittest.TestCase):
         self.fake = fd.FakeDiscord(CALLBACK, user=(ACCOUNT, "maple.leaf"))
         self.fake.consent = False
         self.fake.avatar = fd.AVATAR
-        self.rig = hub_rig.Rig(discord=self.fake, env=self.env, **dict(dict(sockets_per_address=100, picture_account_seconds=0.0), **self.limits))
+        self.rig = hub_rig.Rig(discord=self.fake, env=self.env, **dict(dict(sockets_per_address=100), **self.limits))
         self.rig.__enter__()
         self.count = 0
 
@@ -292,6 +333,17 @@ class PictureTest(unittest.TestCase):
                 return kinds_of(self.log())
             time.sleep(0.05)
         self.fail("no picture line in the log: " + self.log())
+
+    def until_logged(self, text, count=1):
+        for _ in range(200):
+            if self.log().count(text) >= count:
+                time.sleep(0.05)
+                return
+            time.sleep(0.05)
+        self.fail("%r not in the log: %s" % (text, self.log()))
+
+    def dropped(self):
+        return sum(int(n) for n in re.findall(r" picture kind=busy dropped=(\d+)", self.log()))
 
     def rows(self):
         db = sqlite3.connect(self.rig.db)
@@ -477,15 +529,17 @@ class TheLoginWithAPicture(PictureTest):
         self.assertEqual(len(self.kept()), 3)
         self.assertEqual({r[0] for r in self.kept()}, {self.ref(a) for a in names})
 
-    def test_the_same_account_logging_in_again_within_a_minute_is_one_fetch(self):
-        self.restart(picture_account_seconds=60.0)
-        self.login()
-        self.login()
-        self.login()
-        self.settle()
-        time.sleep(0.4)
-        self.assertEqual(len(self.asked()), 1)
-        self.assertEqual(kinds_of(self.log()), ["ok"])
+    def test_logins_of_one_account_while_its_fetch_is_on_its_way_are_one_fetch_and_the_next_login_is_a_new_one(self):
+        self.fake.cdn_mode = "slow:0.6"
+        for _ in range(3):
+            self.login()
+        self.until_logged("picture kind=ok")
+        self.rig.call(self.rig.hub.sessions.pictures.forget_idle, self.rig.hub.clock())
+        self.assertEqual((len(self.asked()), self.dropped()), (1, 2))                 # (the two that came while it ran were dropped and counted)
+        self.fake.cdn_mode = "ok"
+        self.login()                                                                 # (a login after it: a fetch of its own, at once)
+        self.until_logged("picture kind=ok", 2)
+        self.assertEqual(len(self.asked()), 2)
 
     def test_logins_that_come_together_make_two_fetches_at_the_most_at_a_time_and_every_picture(self):
         self.fake.cdn_mode = "slow:0.6"
@@ -503,7 +557,12 @@ class TheLoginWithAPicture(PictureTest):
             self.assertEqual(self.login((account, "user" + account[-3:])).session() is not None, True)
         self.settle(2)
         time.sleep(1.0)
-        self.assertEqual(kinds_of(self.log()), ["ok", "ok"])                         # (one ran, one waited, the others were dropped: letters)
+        self.assertIn("picture kind=busy dropped=1", self.log())                     # (the first drop is told at once)
+        pictures = self.rig.hub.sessions.pictures
+        self.rig.call(pictures.forget_idle, self.rig.hub.clock())                    # (what is counted and not told yet is told by the clock's minute)
+        self.assertEqual([k for k in kinds_of(self.log()) if k != "busy"], ["ok", "ok"])        # (one ran, one waited, the others were dropped: letters)
+        self.assertEqual(self.dropped(), 3)
+        self.assertNotIn(ACCOUNT, self.log())
         self.assertEqual(len(self.kept()), 2)
 
     def test_a_burst_of_fetches_goes_at_the_pace_of_the_whole_hub(self):
@@ -604,6 +663,139 @@ class TheEndOfAPicture(PictureTest):
         self.assertEqual(len(self.asked()), 1)
 
 
+class TheLateFetch(PictureTest):
+    """A fetch that ends after the login, the account or the person was taken away keeps nothing."""
+
+    def late(self, act, nothing_at_all=True):
+        self.fake.cdn_mode = "slow:0.8"
+        v = self.login()
+        time.sleep(0.2)                                                              # (the fetch is on its way)
+        act(v)
+        self.assertEqual(self.settle(), ["none"])
+        time.sleep(0.2)
+        self.assertEqual(self.kept(), [])
+        self.assertEqual(self.rows() if nothing_at_all else [], [])                  # (a switch that was made stays as its row, with no picture)
+        self.assertEqual(self.rig.call(self.rig.store.picture_names), {})
+
+    def test_forget_me(self):
+        self.late(lambda v: self.assertEqual(v.call("POST", "/hub/forget").status, 200))
+
+    def test_the_last_log_out(self):
+        self.late(lambda v: self.assertEqual(v.call("POST", "/hub/logout").status, 200))
+
+    def test_a_kick(self):
+        self.late(lambda v: self.store("end_sessions", ACCOUNT))
+
+    def test_a_ban(self):
+        self.late(lambda v: self.store("ban", ACCOUNT, "command line", "maple.leaf"))
+
+    def test_the_switch_off(self):
+        self.late(lambda v: self.store("set_picture_show", ACCOUNT, 0), nothing_at_all=False)
+
+    def test_a_log_out_with_another_login_left_does_not_stop_the_fetch(self):
+        other = self.login()
+        self.fake.cdn_mode = "slow:0.8"
+        self.login()
+        time.sleep(0.2)
+        self.assertEqual(other.call("POST", "/hub/logout").status, 200)
+        self.assertEqual(self.settle(2)[-1], "ok")
+        self.assertEqual(len(self.kept()), 1)
+
+
+class TheStoreEndsAPictureWithTheLastLogin(PictureTest):
+    def test_a_browser_that_logs_in_as_another_account_ends_the_picture_of_the_first(self):
+        v = self.login()
+        self.settle()
+        name = self.name()
+        self.fake.user = (OTHER, "other.one")
+        r = v.login()                                                                # (the same browser: the callback replaces its old login, which was the first account's last)
+        self.assertEqual(r.status, 302)
+        self.assertEqual(self.get(name).status, 404)
+        self.assertEqual(self.settle(2)[-1], "ok")
+        self.assertEqual([r[0] for r in self.kept()], [self.ref(OTHER)])
+
+    def test_two_logins_of_which_the_newer_is_logged_out_leave_no_picture_when_the_older_runs_out(self):
+        self.login()
+        self.settle()
+        newer = self.login()
+        self.settle(2)
+        self.rig.call(lambda: self.rig.store.db.execute("UPDATE sessions SET expires = ? WHERE rowid = (SELECT MIN(rowid) FROM sessions)", (int(time.time()) + 1,)))
+        self.assertEqual(newer.call("POST", "/hub/logout").status, 200)
+        self.assertEqual(len(self.kept()), 1)                                        # (the older login is left, and so is the picture)
+        time.sleep(2.2)
+        self.store("purge")
+        self.assertEqual(self.rows(), [])
+
+    def test_a_ban_made_by_the_command_line_takes_the_picture_at_once(self):
+        self.login()
+        self.settle()
+        name = self.name()
+        self.store("ban", ACCOUNT, "command line", "maple.leaf")
+        self.assertEqual(self.get(name).status, 404)
+
+
+class TheNextLoginIsTheRetry(PictureTest):
+    def test_a_log_out_and_a_login_is_a_new_fetch(self):
+        v = self.login()
+        self.settle()
+        self.assertEqual(v.call("POST", "/hub/logout").status, 200)
+        self.login()
+        self.assertEqual(self.settle(2), ["ok", "ok"])
+        self.assertEqual(len(self.kept()), 1)
+
+    def test_off_then_on_then_a_login_is_a_new_fetch(self):
+        self.login()
+        self.settle()
+        self.store("set_picture_show", ACCOUNT, 0)
+        self.store("set_picture_show", ACCOUNT, 1)
+        self.login()
+        self.assertEqual(self.settle(2), ["ok", "ok"])
+        self.assertEqual(len(self.kept()), 1)
+
+    def test_a_failed_fetch_and_a_login_is_a_new_fetch(self):
+        self.fake.cdn_mode = "500"
+        self.login()
+        self.assertEqual(self.settle(), ["down"])
+        self.fake.cdn_mode = "ok"
+        self.login()
+        self.assertEqual(self.settle(2), ["down", "ok"])
+        self.assertEqual(len(self.kept()), 1)
+
+
+class TheWorker(PictureTest):
+    def test_a_bug_inside_the_worker_is_caught_logged_by_its_class_and_gives_its_place_back(self):
+        def boom(*args, **kwargs):
+            raise RuntimeError("canary-worker-text")
+        self.rig.call(lambda: setattr(self.rig.store, "set_picture", boom))
+        for _ in range(4):                                                           # (more than the two places that there are)
+            self.login()
+            self.settle(1, len(kinds_of(self.log())))
+        text = self.log()
+        self.assertEqual(kinds_of(text), ["bug"] * 4)
+        self.assertEqual(text.count("picture kind=bug error=RuntimeError"), 4)
+        self.assertNotIn("canary-worker-text", text)
+        pictures = self.rig.hub.sessions.pictures
+        self.assertEqual(self.rig.call(lambda: (pictures.inflight, len(pictures.queued), len(pictures.waiting), len(pictures.tasks))), (0, 0, 0, 0))
+        self.rig.call(lambda: delattr(self.rig.store, "set_picture"))
+        self.login()
+        self.assertEqual(self.settle(1, 4)[-1], "ok")
+        self.assertEqual(len(self.kept()), 1)
+
+    def test_a_name_is_what_the_random_source_gave_and_nothing_made_of_the_account_the_code_the_time_or_the_key(self):
+        asked = []
+
+        class Source:
+            @staticmethod
+            def token_hex(n):
+                asked.append(n)
+                return "ab" * 16
+
+        with mock.patch.object(picturesmod, "secrets", Source):
+            self.login()
+            self.settle()
+        self.assertEqual((asked, [r[2] for r in self.kept()]), ([16], ["ab" * 16]))       # (one call of 16 bytes, and its answer is the name: not a digest of anything)
+
+
 class TheDoor(PictureTest):
     def test_a_name_of_any_other_shape_and_any_other_way_to_ask_is_a_refusal(self):
         self.login()
@@ -639,6 +831,13 @@ class TheDoor(PictureTest):
         self.assertEqual(self.get("0" * 32, address="203.0.113.6").status, 404)         # (another address has its own allowance)
         r = self.get("0" * 32, address="203.0.113.5")
         self.assertEqual((r.status, r.get("retry-after")), (429, "1"))
+
+    def test_the_allowances_of_addresses_are_forgotten_by_the_clock_when_they_are_full_again(self):
+        pictures = self.rig.hub.sessions.pictures
+        self.get("0" * 32, address="203.0.113.7")
+        self.assertEqual(len(self.rig.call(lambda: pictures.rate.buckets)), 1)
+        self.rig.call(pictures.forget_idle, self.rig.hub.clock() + 3600)
+        self.assertEqual(self.rig.call(lambda: pictures.rate.buckets), {})
 
     def test_a_hub_without_the_discord_login_has_no_door(self):
         with hub_rig.Rig(test_login=True) as rig:

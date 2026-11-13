@@ -313,7 +313,7 @@ class TheRealHubBehindIt(unittest.TestCase):
         fake.consent = False
         fake.avatar = fd.AVATAR
         self.addCleanup(fake.close)
-        rig = hub_rig.Rig(discord=fake, origin=site, sockets_per_address=100, picture_account_seconds=0.0)
+        rig = hub_rig.Rig(discord=fake, origin=site, sockets_per_address=100)
         rig.__enter__()
         self.addCleanup(rig.__exit__, None, None, None)
         nginx = Nginx(tmp, rig.port)

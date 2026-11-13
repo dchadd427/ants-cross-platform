@@ -116,7 +116,7 @@ class StoreBase:
 
     def set_picture(self, account, png, name, until, rows_max, bytes_max):
         """Keep `png` (the bytes the hub rewrote) under the public `name` (32 random hex digits) for the account, until `until` (seconds since 1970); the account's older copy and name are gone in the same step. False,
-        and nothing kept, when the account's picture is switched off or blocked, or the picture is bigger than `bytes_max`. At most `rows_max` pictures and `bytes_max` bytes are kept in all: the ones
+        and nothing kept, when the account's picture is switched off or blocked, the account has no login or is banned (a fetch that ended too late), or the picture is bigger than `bytes_max`; `until` is cut to the end of the account's last login. At most `rows_max` pictures and `bytes_max` bytes are kept in all: the ones
         fetched longest ago lose their bytes and their name first."""
         raise NotImplementedError
 

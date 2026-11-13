@@ -302,11 +302,8 @@ class DiscordLogin(session.Sessions):
         value = cookies_of(request.headers.get("cookie", "")).get(COOKIE)
         try:
             if value and VALUE.match(value):
-                row = self.store.session(digest(value))
                 self.store.delete_session(digest(value))
                 self.hub.end_logins(session=digest(value))
-                if row is not None and self.store.logins(row[0]) == 0:        # (the last login of the account: its picture goes with it)
-                    self.store.clear_picture(row[0])
         except StoreError:
             return self.fail(503, "busy")
         self.log.event("logout", tag=self.log.tag(address))

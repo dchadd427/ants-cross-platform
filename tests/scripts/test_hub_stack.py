@@ -277,13 +277,13 @@ class TheCode(unittest.TestCase):
     def test_the_documented_limits_of_the_pictures_are_the_ones_in_the_code(self):
         doc = read(os.path.join(REPO, "docs", "HUB.md"))
         defaults = limitmod.Limits()
-        for needle in ("one fetch for an account a minute, 2 at a time and 32 waiting, a burst of 5 and then one a second for the hub", "3 seconds to connect and 6 in all", "49,152 bytes read and 32,768 kept",
+        for needle in ("one fetch at a time for an account, 2 at a time and 32 waiting, a burst of 5 and then one a second for the hub", "3 seconds to connect and 6 in all", "49,152 bytes read and 32,768 kept",
                        "2,000 pictures and 8 MiB", "20 a second for an address (a burst of 240, in nginx and in the hub)", "remembered 400 days"):
             self.assertIn(needle, doc, needle)
-        self.assertEqual((defaults.picture_account_seconds, defaults.picture_inflight, defaults.picture_waiting, defaults.picture_burst, defaults.picture_refill_seconds, defaults.discord_connect_seconds,
+        self.assertEqual((defaults.picture_inflight, defaults.picture_waiting, defaults.picture_burst, defaults.picture_refill_seconds, defaults.discord_connect_seconds,
                           defaults.discord_seconds, defaults.picture_read_max, defaults.picture_bytes_max, defaults.pictures_rows_max, defaults.pictures_bytes_max, defaults.picture_serve_burst,
                           defaults.picture_serve_refill_seconds),
-                         (60.0, 2, 32, 5, 1.0, 3.0, 6.0, 49152, 32768, 2000, 8 * 1024 * 1024, 240, 0.05))
+                         (2, 32, 5, 1.0, 3.0, 6.0, 49152, 32768, 2000, 8 * 1024 * 1024, 240, 0.05))
         self.assertEqual(storemod.PICTURE_DAYS, 400)
 
 
