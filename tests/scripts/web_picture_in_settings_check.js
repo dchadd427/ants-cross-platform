@@ -1,7 +1,8 @@
 // The game page with its game stood in for (no WebAssembly build): what the page does once the picture's shape and the fullscreen mouse live in the settings menu only (docs/GAME_MENU.md).
 // A real Chromium (Playwright, when the machine has it: the exit status is 3 and nothing is checked when it does not) opens web/shell.html, served from a copy with its @@ placeholders filled, and the
 // stand-in is the Module's menu calls (the rows of tests/data/game_menu_match.json) and the page's own postRun hook, which is what the game's start calls:
-//   * there is no strip under the game: the box takes the window's height that the strip had (the slot reaches the bottom of the window at 1280 x 800 and at 844 x 390; at 390 x 844 the picture is as wide as the page);
+//   * there is no strip under the game: the box takes the window's height that the strip had, and the WHOLE framed box (its border and red shadow too) is inside the window with at least the page's side margin
+//     under it, as large as that allows (1280 x 800 and 844 x 390: the height decides; 390 x 844, 360 x 740 and 448 x 998: the picture is as wide as the page);
 //   * the header has ONE Settings button after Menu at 360, 390, 844 and 1280 px, 44 x 44 or more, named "Settings", and the header stays one row on a 360 px phone (Menu, Fullscreen, Settings, More);
 //   * a tap on it (390 px, touch) opens the menu, Video has a Picture shape row, and a choice changes the page's shape at once, is remembered under ants.aspect.v2 and put in the address;
 //   * on a computer the Fullscreen mouse row switches Locked / Free and the choice is remembered under ants.pointerlock; on a touch screen the row is not there;
@@ -70,9 +71,11 @@ async function open(browser, port, w, h, touch, query) {
 }
 const geometry = (page) => page.evaluate(() => {
     const rect = (e) => { const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; };
-    const stage = document.getElementById('game-stage'), header = document.querySelector('header'), actions = document.querySelector('.header-actions');
+    const stage = document.getElementById('game-stage'), header = document.querySelector('header'), actions = document.querySelector('.header-actions'), box = document.getElementById('game-container');
+    // how far the box's shadows reach below it: the largest of (offset down + blur + spread) of the box-shadow
+    const reach = (getComputedStyle(box).boxShadow.match(/-?[\d.]+px -?[\d.]+px -?[\d.]+px -?[\d.]+px/g) || []).map((t) => { const n = t.match(/-?[\d.]+/g).map(Number); return n[1] + n[2] + n[3]; }).reduce((a, b) => Math.max(a, b), 0);
     const button = document.getElementById('settings-btn'), pad = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
-    return { stage: rect(stage), header: rect(header), actions: rect(actions), button: rect(button), name: button.getAttribute('aria-label'), pad, innerW: innerWidth, innerH: innerHeight, scrollW: document.documentElement.scrollWidth,
+    return { box: rect(box), reach, side: parseFloat(getComputedStyle(document.body).paddingLeft) || 0, scrollY: window.scrollY, stage: rect(stage), header: rect(header), actions: rect(actions), button: rect(button), name: button.getAttribute('aria-label'), pad, innerW: innerWidth, innerH: innerHeight, scrollW: document.documentElement.scrollWidth,
              buttonsInHeader: Array.prototype.map.call(document.querySelectorAll('.gm-btn'), (b) => b.id), strip: !!document.getElementById('view-bar') || !!document.getElementById('aspect-select') || !!document.getElementById('lock-on') };
 });
 
@@ -80,19 +83,19 @@ server.listen(0, async () => {
     const port = server.address().port;
     const browser = await chromium.launch({ args: ['--no-sandbox'] });
     try {
-        // the box has the strip's height: the slot's bottom edge is at the window's bottom edge (less the page's own padding) where the window's height decides the size
-        for (const [w, h, touch, label] of [[1280, 800, false, 'a computer, 1280 x 800'], [844, 390, true, 'a phone on its side, 844 x 390']]) {
+        // the whole framed box (border and shadow too) is inside the window, with at least the page's side margin under it, and is as large as that allows
+        const sizes = [[1280, 800, false, 'height'], [844, 390, true, 'height'], [390, 844, true, 'width'], [360, 740, true, 'width'], [448, 998, true, 'width']];
+        for (const [w, h, touch, limit] of sizes) {
             const { context, page } = await open(browser, port, w, h, touch);
             const g = await geometry(page);
-            ok(label + ': no strip under the picture (no view bar, no Picture dropdown, no mouse buttons)', !g.strip);
-            const gap = g.innerH - (g.stage.y + g.stage.h + g.pad);
-            ok(label + ': the picture reaches the bottom of the window (' + gap.toFixed(1) + ' px short)', gap >= -1 && gap <= 3);
-            await context.close();
-        }
-        {
-            const { context, page } = await open(browser, port, 390, 844, true);
-            const g = await geometry(page);
-            ok('a phone upright, 390 x 844: no strip, and the picture is as wide as the page (its width decides)', !g.strip && Math.abs(g.stage.w - (g.innerW - 40)) <= 1.5);
+            const at = w + ' x ' + h;
+            ok(at + ': no strip under the picture (no view bar, no Picture dropdown, no mouse buttons)', !g.strip);
+            const room = g.innerH - (g.box.y + g.box.h + g.reach);
+            ok(at + ': the box with its ring and shadow ends ' + room.toFixed(1) + ' px above the window\'s bottom edge, at least the page\'s side margin (' + g.side + ' px)', room >= g.side - 0.5);
+            ok(at + ': the box starts inside the window and the page is at the top (' + g.box.y.toFixed(0) + ', scroll ' + g.scrollY + ')', g.box.y >= 0 && g.scrollY === 0);
+            ok(at + ': nothing scrolls sideways', g.scrollW <= g.innerW);
+            if (limit === 'height') ok(at + ': as large as that allows: ' + (room - g.side).toFixed(1) + ' px of slack is less than one step of the picture', room - g.side >= -0.5 && room - g.side <= 20);
+            else ok(at + ': as large as that allows: the picture is as wide as the page (' + g.box.w.toFixed(1) + ' of ' + (g.innerW - 2 * g.side) + ')', Math.abs(g.box.w - (g.innerW - 2 * g.side)) <= 8);
             await context.close();
         }
         // one Settings button, after Menu, big enough and named, and the header on one row

@@ -33,6 +33,7 @@
             --gold: #f6d058;
             --bad-bg: #3b0d10; --bad-ink: #ffe4de; --bad-edge: #ff7a6b;
             --side: 30px;           /* the page's side space: the frame (10 px) and room for the red shadow of the picture's ring */
+            --reach: 14px;          /* how far the picture's ring and its red shadow reach below the box (its box-shadow: 6 px down and 8 px of spread) */
         }
         @media (forced-colors: active) { :root { --weave: linear-gradient(#0000, #0000); --sheen: linear-gradient(#0000, #0000); --btn-text: none; } }
 
@@ -265,6 +266,11 @@
             justify-content: center;
         }
 
+        /* A game (not a recording, whose bar is under the picture) has the ring's reach and the page's side space under the picture, so that the whole framed box is in the window, with the same room under it as beside it
+           (the game's bottom rows hold the score counters, and a phone's gesture area is there: env(safe-area-inset-bottom)); measureChrome counts it */
+        #game-stage { margin-bottom: var(--stage-gap, 0px); }
+        body:not(.replay) { --stage-gap: calc(var(--reach) + max(var(--side), env(safe-area-inset-bottom, 0px))); }
+
         /* The field that a phone's keyboard types into (ANTS_CHAT in the script): over the chat box, there but not seen (opacity 0, not display: none: a hidden field cannot be focused), taking
            no tap itself, and 16px so that iOS does not zoom the page when it is focused. The script places it over the box when the keyboard opens. */
         #chat-keys {
@@ -303,6 +309,7 @@
         #game-stage:fullscreen,
         #game-stage:-webkit-full-screen,
         #game-stage.pseudo-fullscreen {
+            margin: 0;
             width: 100vw;
             height: 100vh;
             height: 100dvh;
@@ -835,6 +842,7 @@
         @media (max-width: 700px) {
             :root {
                 --side: 20px;
+                --reach: 9px;       /* (the thinner ring: 4 px down and 5 px of spread) */
             }
 
             body {
@@ -2259,7 +2267,7 @@
             var barStyle = bar ? window.getComputedStyle(bar) : null;
             var barHeight = bar ? bar.offsetHeight + (parseFloat(barStyle.marginTop) || 0) + (parseFloat(barStyle.marginBottom) || 0) : 0;
             var strip = document.getElementById('rematch'); if (strip && !strip.hidden && !ANTS_REPLAY_MODE) barHeight += strip.offsetHeight + (parseFloat(window.getComputedStyle(strip).marginTop) || 0);      // (the rematch's strip under the picture)
-            var chrome = stageElement.getBoundingClientRect().top + (window.pageYOffset || 0) + barHeight + (parseFloat(bodyStyle.paddingBottom) || 0);
+            var chrome = stageElement.getBoundingClientRect().top + (window.pageYOffset || 0) + barHeight + (parseFloat(bodyStyle.paddingBottom) || 0) + (ANTS_REPLAY_MODE ? 0 : parseFloat(window.getComputedStyle(stageElement).marginBottom) || 0);
             if (isFinite(chrome) && chrome > 0) {
                 var old = parseFloat(document.documentElement.style.getPropertyValue('--chrome')) || 0;
                 if (Math.abs(old - chrome) > 0.5) document.documentElement.style.setProperty('--chrome', chrome.toFixed(1) + 'px');
