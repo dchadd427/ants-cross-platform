@@ -51,7 +51,7 @@
 }
 @media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }
 @media (max-width: 700px) and (max-height: 500px) { .gc-head { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }       /* (a phone held sideways: the Chat view is about 160 px high; the heading and the account line give their place to the log, which keeps three lines) */
-@media (max-width: 700px) and (max-height: 500px) { .gc-input { height: 44px; padding: 9px 14px; } }       /* (the text area is as high as the field it replaced) */
+@media (max-width: 700px) and (max-height: 500px) { .gc-input { height: auto; padding: 8px 14px; line-height: 1.45; } }       /* (the text area is as high as the field it replaced) */
 /* a narrow phone (320 and 340): the heading and the count fit on one line; a window that is low (a phone held sideways, or a small phone with notices above Home): the guest line gives its place to the log */
 @media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }
 @media (max-height: 700px) { .gc-guest { display: none; } }
