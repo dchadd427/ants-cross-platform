@@ -673,7 +673,7 @@ def main():
                 got = tab.ev(width_of)
                 check(got[0] > 300 and abs(got[0] - got[1]) <= 1 and abs(got[2] - got[3]) <= 1, "%s: the bar is as wide as the picture and stands under it (stage %s, bar %s, left %s / %s)" % (shape, got[0], got[1], got[2], got[3]))
                 check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == shape, "%s: the picture has the shape that the address asks for" % shape)
-                check(tab.ev("getComputedStyle(document.getElementById('view-bar')).display") == "none", "%s: the player's Picture row stays hidden" % shape)
+                check(tab.ev("document.getElementById('view-bar') === null"), "%s: the page has no strip of a player's under the picture" % shape)
                 bx = tab.ev("(function () { var r = document.getElementById('picbtn').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()")
                 tab.click(bx[0], bx[1])
                 check(tab.ev(state)[:2] == [False, "true"], "%s: the button opens the window and says so" % shape)

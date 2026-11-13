@@ -51,7 +51,7 @@ PLAY_BUDGET, PLAY_GZIP_BUDGET = 36_500, 10_500          # Play this map
 # the game page
 GAME_BUDGET, GAME_GZIP_BUDGET = 12_000, 4_600           # the game page's side of Play this map
 GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET = 45_000, 13_000  # the settings menu
-SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 8_100, 3_100        # the one table of the picture's shapes
+SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 7_500, 2_900        # the one table of the picture's shapes
 REJOIN_KEY_BUDGET, REJOIN_KEY_GZIP_BUDGET = 5_900, 2_400    # the seat-key reader (web/rejoin_key.js), shared by the front page and the game page
 PICKER_BUDGET, PICKER_GZIP_BUDGET = 15_500, 5_000       # the picture's dropdown
 # the front page (web/home/, web/front/player_name.js)
@@ -60,11 +60,13 @@ GAMES_BUDGET, GAMES_GZIP_BUDGET = 98_000, 28_000
 PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 33_000, 10_500
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)
 CHAT_BUDGET, CHAT_GZIP_BUDGET = 56_500, 18_000
-TALK_BUDGET, TALK_GZIP_BUDGET = 24_500, 8_800
+TALK_BUDGET, TALK_GZIP_BUDGET = 28_500, 9_800
 SCRIPT_BUDGET, SCRIPT_GZIP_BUDGET = 13_000, 4_500       # player_name.js
-# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 66,850 bytes), and the manifest (measured 1,331, revalidated on every visit)
-APP_ICONS_BUDGET = 73_600
+# the installable web app (web/app/, web/manifest.webmanifest): the four icons together (measured 4,260 bytes), and the manifest (measured 1,331, revalidated on every visit)
+APP_ICONS_BUDGET = 4_700
+# the browser-tab icon (web/favicon.png 285 bytes + web/favicon.ico 1,212 bytes)
+FAVICON_BUDGET = 1_650
 APP_MANIFEST_BUDGET = 1_500
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
-NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 5_900, 1_900
-NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 4_400, 1_800
+NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 5_800, 1_900
+NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_300, 2_100

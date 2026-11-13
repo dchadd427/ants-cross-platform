@@ -359,8 +359,8 @@
   {
    "id": "the_first_job_has_no_history",
    "file": ".github/workflows/ci.yml",
-   "old": "          fetch-depth: 0\n          persist-credentials: false\n",
-   "new": "          persist-credentials: false\n",
+   "old": "          fetch-depth: 0\n          persist-credentials: false\n\n      # The decision and every changed file are printed.",
+   "new": "          persist-credentials: false\n\n      # The decision and every changed file are printed.",
    "test": "python3 tests/scripts/test_ci_workflow.py"
   },
   {
@@ -492,8 +492,8 @@
   {
    "id": "the_first_job_is_told_the_head_as_the_base",
    "file": ".github/workflows/ci.yml",
-   "old": "BASE_SHA: ${{ github.event.pull_request.base.sha }}",
-   "new": "BASE_SHA: ${{ github.event.pull_request.head.sha }}",
+   "old": "\n          BASE_SHA: ${{ github.event.pull_request.base.sha }}",
+   "new": "\n          BASE_SHA: ${{ github.event.pull_request.head.sha }}",
    "test": "python3 tests/scripts/test_ci_workflow.py",
    "expect": "test_the_first_job_runs_the_script_with_the_ids_of_the_commits_and_nothing_of_the_text_of_the_pull_request"
   },
@@ -508,10 +508,58 @@
   {
    "id": "the_web_cache_is_not_keyed_by_the_files",
    "file": ".github/workflows/ci.yml",
-   "old": "          key: docker-web-${{ hashFiles('Dockerfile', '.dockerignore', 'CMakeLists.txt', 'VERSION', 'cmake/**', 'include/**', 'src/**', 'web/**', 'Original-Ants/**') }}",
+   "old": "          key: docker-web-${{ hashFiles('Dockerfile', '.dockerignore', 'docker/emsdk_warm.cpp', 'CMakeLists.txt', 'cmake/**', 'include/**', 'src/**') }}",
    "new": "          key: docker-web-${{ hashFiles('Dockerfile') }}",
    "test": "python3 tests/scripts/test_ci_workflow.py",
    "expect": "test_the_images_are_built_by_buildx_with_a_layer_cache_in_a_folder_and_built_whole"
+  },
+  {
+   "id": "the_web_cache_key_changes_with_every_page",
+   "file": ".github/workflows/ci.yml",
+   "old": "'cmake/**', 'include/**', 'src/**') }}\n          restore-keys: docker-web-",
+   "new": "'cmake/**', 'include/**', 'src/**', 'web/**') }}\n          restore-keys: docker-web-",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_images_are_built_by_buildx_with_a_layer_cache_in_a_folder_and_built_whole"
+  },
+  {
+   "id": "the_web_cache_key_misses_the_warm_program",
+   "file": ".github/workflows/ci.yml",
+   "old": "'.dockerignore', 'docker/emsdk_warm.cpp', ",
+   "new": "'.dockerignore', ",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_images_are_built_by_buildx_with_a_layer_cache_in_a_folder_and_built_whole"
+  },
+  {
+   "id": "the_server_cache_key_changes_with_every_tool",
+   "file": ".github/workflows/ci.yml",
+   "old": "'src/**', 'third_party/**') }}\n          restore-keys: docker-server-",
+   "new": "'src/**', 'third_party/**', 'tools/**') }}\n          restore-keys: docker-server-",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_images_are_built_by_buildx_with_a_layer_cache_in_a_folder_and_built_whole"
+  },
+  {
+   "id": "the_server_cache_key_changes_with_every_release",
+   "file": ".github/workflows/ci.yml",
+   "old": "docker-server-${{ hashFiles('Dockerfile.server', '.dockerignore', 'CMakeLists.txt', ",
+   "new": "docker-server-${{ hashFiles('Dockerfile.server', '.dockerignore', 'CMakeLists.txt', 'VERSION', ",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_the_images_are_built_by_buildx_with_a_layer_cache_in_a_folder_and_built_whole"
+  },
+  {
+   "id": "the_image_check_decision_swallows_a_failed_git",
+   "file": ".github/workflows/ci.yml",
+   "old": "tools/relink_outputs.sh)\n              echo",
+   "new": "tools/relink_outputs.sh) || true\n              echo",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
+  },
+  {
+   "id": "the_image_check_decision_is_an_if",
+   "file": ".github/workflows/ci.yml",
+   "old": "              [ -z \"$changed\" ] || run=true\n",
+   "new": "              if [ -n \"$changed\" ]; then run=true; fi\n",
+   "test": "python3 tests/scripts/test_ci_workflow.py",
+   "expect": "test_no_failure_is_swallowed_in_a_job_a_leg_a_step_or_a_gate"
   },
   {
    "id": "the_image_is_not_loaded",

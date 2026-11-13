@@ -757,7 +757,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_picture_that_the_page_names_is_in_the_folder_and_every_picture_is_used(self):
         named = set(re.findall(r"front/([\w.-]+\.(?:png|ttf))", self.page))                 # the markup and the style name them; the script builds preview_<map>.png from a map's key
         previews = set("preview_%s.png" % key for key in MAP_KEYS)
-        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY) - set(PLAY_LAZY) - set(CONVERT_LAZY) - set(ANTS_LAZY) - set(PICKUP_LAZY) - set(GAME_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
+        in_folder = set(os.listdir(FRONT)) - {"LibreFranklin-OFL.txt", "logo.png"} - set(STYLE_FILES) - set(LOBBY_STYLES) - set(SCRIPT_FILES) - set(UNLOADED_SCRIPTS) - set(MAPMAKER_FILES) - set(MAPMAKER_LAZY) - set(SUBMIT_LAZY) - set(PLAY_LAZY) - set(CONVERT_LAZY) - set(ANTS_LAZY) - set(PICKUP_LAZY) - set(GAME_SCRIPTS)         # (the stylesheet is the other pages': tests/scripts/test_web_pages_classic.py; the lobby's own are tested with the pieces that they style; the scripts are not pictures)
         self.assertEqual(named - in_folder, set(), "named but not in web/front/")
         self.assertEqual(in_folder - named - previews, set(), "in web/front/ but not used by the page")
         self.assertIn("'front/preview_' + side.mapKey + '.png'", self.page)
@@ -765,7 +765,7 @@ class ThePageUsesTheArt(unittest.TestCase):
     def test_every_img_has_the_size_of_its_file(self):
         tags = [tag for tag in re.findall(r"<img [^>]*>", self.page) if COFFEE_IMAGE not in tag]               # (the pictures of web/front/; the coffee button is checked with the links that leave the page)
         sources = sorted(re.search(r'src="front/([^"?]+)', tag).group(1) for tag in tags)
-        self.assertEqual(sources, ["logo.png", "preview_treasure.png", "qh_power.png", "qh_quickhelp.png"])      # (the logo, the map's picture and the two help sheets; the ants are not <img>: the style draws them from ants.png, TheRosterAnts)
+        self.assertEqual(sources, ["preview_treasure.png", "qh_power.png", "qh_quickhelp.png"])      # (no logo: the page draws none; the map's picture and the two help sheets; the ants are not <img>: the style draws them from ants.png, TheRosterAnts)
         for tag in tags:
             source = re.search(r'src="front/([^"?]+)"', tag).group(1)                      # (no ?v= on these: a picture that changes is a new file name or a new page)
             width = int(re.search(r'width="(\d+)"', tag).group(1))
@@ -834,7 +834,7 @@ class ThePageUsesTheArt(unittest.TestCase):
         lazy = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' in t)
         at_once = set(re.search(r'src="front/([^"]+)"', t).group(1) for t in tags if 'loading="lazy"' not in t)
         self.assertEqual(lazy, {"qh_quickhelp.png", "qh_power.png"})                       # the two help sheets (behind "How it works")
-        self.assertEqual(at_once, {"logo.png", "preview_treasure.png"})                    # the logo and the map are on the screen at once
+        self.assertEqual(at_once, {"preview_treasure.png"})                    # the map is on the screen at once, and the page downloads no logo
         for tag in tags:
             if 'loading="lazy"' in tag:
                 self.assertIn('decoding="async"', tag)
@@ -843,31 +843,11 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', self.page)
         self.assertRegex(self.page, r'@font-face \{ font-family: "Libre Franklin"; src: url\("front/LibreFranklin-Medium\.ttf"\) format\("truetype"\);')
 
-    def test_the_pictures_shapes_are_a_native_dropdown_that_the_keyboard_reaches_and_shows(self):
-        sheet = Sheet(self.style)
-        for prop in ("appearance", "width", "min-height", "cursor"):
-            self.assertIsNotNone(sheet.value(".shape-select", prop), prop)                              # (the look of the game's teal buttons, as wide as the column)
-        self.assertIsNotNone(sheet.value(".shape-box::after", "border"))                                # (the chevron: it is the wrapper's, so that the face of the dropdown stays the buttons' own)
-        self.assertEqual(sheet.value(".shape-select", "width"), "100%")
-        self.assertEqual(sheet.value(".shape-select:focus-visible", "outline"), "3px solid var(--gold)")        # the focused dropdown shows it
-        self.assertEqual(len(re.findall(r'<select ', self.page.split('id="shape-row"')[1].split('class="go"')[0])), 1)      # (one native dropdown, no radio button: the entries are made by the script from web/shapes.js)
-        self.assertNotRegex(self.page, r'<input type="radio"')
-        self.assertIn('<label class="shape-label" id="shape-label" for="aspect-select">Picture</label>', self.page)         # (the label is the dropdown's: a tap on it focuses it)
-
-    def test_the_picture_row_and_start_stack_at_the_top_of_the_match_column_between_721_and_1040_px(self):
-        """The map's column spans three rows, the third takes the spare height, so the Picture row and START! sit under each other beside the top of the map (not spread over its height)."""
+    def test_the_game_type_and_start_stack_at_the_top_of_the_match_column_between_721_and_1040_px(self):
+        """The map's column spans two rows, the second takes the spare height, so the game type and START! sit under each other beside the top of the map (not spread over its height)."""
         wide = self.style[self.style.index("@media (max-width: 1040px)"):self.style.index("@media (max-width: 720px)")]
-        self.assertIn("grid-template-rows: auto auto 1fr;", wide)
-        self.assertIn(".side .maprow { grid-row: span 3; }", wide)
-
-    def test_the_picture_row_has_a_quiet_line_under_the_dropdown_for_the_shape_nearest_the_screen_on_every_screen(self):
-        """"fills your screen" is one line of text under the dropdown (the script writes it and shows it: "16:10 fills your screen"), in the row's own flow, so a narrow phone never clips it; it shows on a phone too."""
-        self.assertEqual(len(re.findall(r'<span class="fit-note" id="fit-note" hidden></span>', self.page)), 1)        # (hidden until the script has a shape that fills the screen)
-        self.assertEqual(self.style.count(".fit-note[hidden] { display: none; }"), 1)
-        self.assertNotIn("hover: none", self.style[self.style.index(".fit-note {"):self.style.index(".fit-note[hidden]")])       # (no rule that hides it where there is no mouse)
-        self.assertNotIn("has-fit", self.style + self.page)                                                    # (no room made for it: it is in the flow)
-        self.assertEqual(Sheet(self.style).value(".shape", "flex-direction"), "column")                        # the label, the dropdown, the line: one under the other, in the column
-        self.assertNotIn("fit-tag", self.page)
+        self.assertIn("grid-template-rows: auto 1fr;", wide)
+        self.assertIn(".side .maprow { grid-row: span 2; }", wide)
 
 
 class ThePanelsThatTheMockupDidNotDraw(unittest.TestCase):
@@ -913,11 +893,11 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.phone = media(self.style, "(max-width: 720px)")
 
     def test_the_room_has_two_columns_from_1041_px_and_one_under_it(self):
-        self.assertEqual(self.sheet.value(".grid", "grid-template-columns"), "minmax(0, 1fr) 340px")             # (the room, and the map's side: the picture, its drop-down, START)
+        self.assertEqual(self.sheet.value(".grid", "grid-template-columns"), "minmax(0, 1fr) 340px")             # (the room, and the map's side: the picture, the game type, START)
         narrower = media(self.style, "(max-width: 1040px)")
         self.assertIn(".grid { grid-template-columns: minmax(0, 1fr);", narrower)
-        self.assertIn(".side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr);", narrower)                 # (one column: the map's picture beside its drop-down and START)
-        self.assertIn(".side .maprow { grid-row: span 3; }", narrower)
+        self.assertIn(".side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr);", narrower)                 # (one column: the map's picture beside the game type and START)
+        self.assertIn(".side .maprow { grid-row: span 2; }", narrower)
         self.assertIn(":root { --k: 4; }", media(self.style, "(min-width: 1041px) and (min-height: 880px)"))        # (the ants 4 times their size instead of 3, only where both the width and the height have room)
         self.assertEqual(self.sheet.value(".wrap", "max-width"), self.sheet.value(".bar-in", "max-width"))          # (the footer lines up with the page)
 
@@ -1030,9 +1010,6 @@ class TheColors(unittest.TestCase):
             ("gold title on the name step's teal banner", (".name-step-title", "color"), (".name-step-title", "background")),
             ("cream text on a teal button", (".btn", "color"), (".btn", "background")),
             ("cream text on a hovered button", (".btn", "color"), (".btn:hover", "background-color")),
-            ("cream text on the picture's dropdown", (".shape-select", "color"), (".shape-select", "background")),
-            ("cream text on the hovered dropdown", (".shape-select", "color"), (".shape-select:hover", "background-color")),
-            ("cream text of an entry of the open list", (".shape-select option", "color"), (".shape-select option", "background")),
         ))
 
     def test_the_black_boxes_keep_their_text_readable(self):

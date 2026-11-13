@@ -28,7 +28,7 @@
         '.mast #mapmaker-top { grid-area: map; justify-self: end; margin-right: 0; }' +
         '}' +
         '@media (max-width: 389px) {' +
-        '.mast { column-gap: 6px; } .mast img { width: 88px; }' +
+        '.mast { column-gap: 6px; }' +
         '.mast #mapmaker-top, .mast #watch-top { padding-left: 9px; padding-right: 9px; font-size: 14px; }' +
         '}';
     document.head.appendChild(style);

@@ -97,7 +97,7 @@ class NoDeploy(unittest.TestCase):
 
     def test_there_is_no_deploy_job_no_secret_and_no_repository_variable(self):
         self.assertNotIn("deploy", job_ids())
-        self.assertEqual(job_ids()[-1], "web")
+        self.assertEqual(job_ids()[-2:], ["web", "image_files"])      # (the one job after the web job is the image check, which no required check waits for)
         code = "\n".join(l for l in LINES if not l.lstrip().startswith("#"))
         self.assertNotIn("secrets.", code)
         self.assertNotIn("vars.", code)
@@ -184,9 +184,11 @@ class SameSuitesAsTheRunner(unittest.TestCase):
 
     def test_the_images_are_built_by_buildx_with_a_layer_cache_in_a_folder_and_built_whole(self):
         """The cache changes the time and not the image: the same Dockerfile and context, `docker buildx build --load` into the local daemon (so that every later step runs the same image), the cache in a
-        folder that the first-party actions/cache keeps (no other action), written to a new folder and swapped in (so that it does not grow), and keyed by the files that the Dockerfile copies."""
-        for job, folder, dockerfile, key_files in (("web_image", "web", "", ("'Dockerfile'", "'web/**'", "'src/**'", "'CMakeLists.txt'", "'VERSION'", "'cmake/**'", "'include/**'", "'Original-Ants/**'")),
-                                                   ("web_stack", "server", "-f Dockerfile.server ", ("'Dockerfile.server'", "'src/**'", "'tools/**'", "'third_party/**'", "'CMakeLists.txt'", "'VERSION'", "'cmake/**'", "'include/**'"))):
+        folder that the first-party actions/cache keeps (no other action), written to a new folder and swapped in (so that it does not grow), and keyed by the files that the compile layers of the
+        Dockerfile read: the files copied before the compile, and nothing that is copied after it (web/, VERSION, web/shell.html, Original-Ants/ and, for the server, tools/ do not recompile the game)."""
+        for job, folder, dockerfile, key_files, not_in_key in (
+                ("web_image", "web", "", ("'Dockerfile'", "'.dockerignore'", "'docker/emsdk_warm.cpp'", "'src/**'", "'CMakeLists.txt'", "'cmake/**'", "'include/**'"), ("web/", "VERSION", "Original-Ants", "tools/")),
+                ("web_stack", "server", "-f Dockerfile.server ", ("'Dockerfile.server'", "'.dockerignore'", "'src/**'", "'third_party/**'", "'CMakeLists.txt'", "'cmake/**'", "'include/**'"), ("web/", "VERSION", "Original-Ants", "tools/"))):
             block = "\n".join(job_block(job))
             self.assertIn("docker buildx create --name ants-builder --driver docker-container --driver-opt image=moby/buildkit:v0.19.0 --use", block, job)      # (a release of the builder, not a moving tag)
             self.assertIn("uses: actions/cache@v6", block, job)
@@ -195,6 +197,9 @@ class SameSuitesAsTheRunner(unittest.TestCase):
             key = next(l for l in job_block(job) if l.strip().startswith("key: docker-%s-" % folder))
             for needle in key_files:
                 self.assertIn(needle, key, job)
+            for needle in not_in_key:
+                self.assertNotIn(needle, key, "%s: the key must not change with %s (the Dockerfile copies it after the compile)" % (job, needle))
+            self.assertEqual(re.findall(r"'([^']*)'", key).count("Dockerfile" if job == "web_image" else "Dockerfile.server"), 1, job)
             self.assertIn("--cache-from type=local,src=/tmp/docker-cache/%s" % folder, block, job)
             self.assertIn("--cache-to type=local,dest=/tmp/docker-cache/%s-new,mode=max" % folder, block, job)
             self.assertIn("rm -rf /tmp/docker-cache/%s && mv /tmp/docker-cache/%s-new /tmp/docker-cache/%s" % (folder, folder, folder), block, job)
@@ -678,7 +683,7 @@ class Structure(unittest.TestCase):
         cls.doc = yaml.safe_load(TEXT)
 
     def test_it_parses_and_the_jobs_are_these(self):
-        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web"])
+        self.assertEqual(list(self.doc["jobs"]), ["changes", "linux_tests", "linux", "macos_tests", "macos", "windows_tests", "windows_2022", "windows_2026", "web_image", "web_stack", "web", "image_files"])
 
     def test_the_triggers(self):
         on = self.doc[True] if True in self.doc else self.doc["on"]                       # (YAML 1.1 reads `on` as true)

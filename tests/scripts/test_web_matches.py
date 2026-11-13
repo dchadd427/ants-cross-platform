@@ -74,13 +74,14 @@ class TheCommonFiles(unittest.TestCase):
     def test_every_page_is_filled_in_like_the_other_pages_and_loads_nothing_from_elsewhere(self):
         for name in PAGES:
             page = read("web", name)
-            for placeholder in ("@@SITE_TITLE@@", "@@SITE_FOOTER@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
-                self.assertEqual(page.count(placeholder), 1, name + " " + placeholder)
+            for placeholder in ("@@SITE_TITLE@@", "@@GAME_VERSION@@", "@@BUILD_ID@@", "@@BUILD_DATE@@"):
+                self.assertEqual(page.count(placeholder), 1, name + " " + placeholder)           # (the title, and the three stamps on the bar: web/site_nav.js writes them in the Menu)
+            self.assertNotIn("@@SITE_FOOTER@@", page, name)                                         # (no footer here: the label of a labelled build is in the title)
             self.assertNotRegex(page, r'(?:src|href)="https?://(?!github\.com/dchadd427/|discord\.gg/WaWrXQnKPj")', name)
             self.assertIn('<link rel="stylesheet" href="matches.css">', page, name)
             self.assertIn('<script src="replay_page.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="history_page.js"></script>', page, name)    # (the helpers before the page's own script)
             self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', page, name)
-            self.assertIn("$('game-version-line').style.display = 'none'", page, name)       # (a page that was not built hides the line of the version)
+            self.assertNotIn("game-version", page, name)
             self.assertIn('<noscript>', page, name)
         css = read("web", "matches.css")
         self.assertIn('url("front/LibreFranklin-Medium.ttf")', css)
@@ -108,7 +109,7 @@ class TheCommonFiles(unittest.TestCase):
             bar = re.search(r'<header class="sb"[^>]*>.*?</header>', page, re.S).group(0)                    # (the bar of every page: web/site_nav.css, web/site_nav.js)
             self.assertIn('<a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc"', bar, name)
             self.assertEqual(page.count("discord.gg"), 1, name)
-            self.assertEqual(len(re.findall(r"<img", bar)), 1, name + ": the logo is the bar's only picture")
+            self.assertEqual(len(re.findall(r"<img", bar)), 0, name + ": the bar has no picture")
             self.assertNotIn('class="mast"', page, name)
             self.assertIn('<link rel="stylesheet" href="site_nav.css">', page, name)
             self.assertIn('<script src="site_nav.js"></script>\n<script src="replay_page.js"></script>', page, name)      # (the bar's script before the page's own)
@@ -144,7 +145,7 @@ class TheListPage(unittest.TestCase):
         self.assertIn("go(copy(state, { q: q }), false, false, 0)", self.page)                               # (the search has waited already)
         self.assertIn("'Back to the first page'", self.page)                                                 # (a page past the last one has a way back)
         self.assertNotIn("fetch('/live'", self.page)                                                         # (the count of live matches is web/site_nav.js's one look: data-live="now")
-        self.assertIn('<header class="sb" data-live="now">', self.page)
+        self.assertIn('<header class="sb" data-live="now" ', self.page)
 
     def test_it_says_what_it_shows_and_what_went_wrong_in_the_approved_words(self):
         for words in ("Every match played here.", "Find a map or a player", "No match fits those filters.", "Clear the filters", "Stats & replay", "Older version", "Replay removed",

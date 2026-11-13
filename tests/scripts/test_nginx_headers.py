@@ -160,7 +160,7 @@ class TheText(unittest.TestCase):
         self.assertIsNotNone(step)
         self.assertEqual(step.group(1).split(), ["index.data", "index.wasm", "index.js"])          # (-k: the plain files stay; test -s: a missing or empty copy stops the build)
         builder, runner = DOCKERFILE.split("FROM nginx:alpine")
-        self.assertLess(builder.index("RUN cmake --build build_web"), builder.index(step.group(0)))
+        self.assertLess(builder.rindex("cmake --build build_web"), builder.index(step.group(0)))
         self.assertIn("COPY --from=builder /src/build_web/src/ants_app/index.* /usr/share/nginx/html/", runner)       # (index.* takes the .gz files along)
         self.assertNotIn("gzip ", runner.replace("gzip_", ""))                                    # (nothing is compressed in the last stage: its gzip is busybox's, and a file there is changed no more)
 
@@ -194,11 +194,12 @@ def mime_line():
 
 
 def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import quick_http
+    return quick_http.free_port()
 
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"

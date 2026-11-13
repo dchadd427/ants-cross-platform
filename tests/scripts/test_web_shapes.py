@@ -7,8 +7,8 @@ menu (and, through the page, the CSS slot and the box) on the web. Here:
   - the two tables agree row by row (name, words, canvas width and height), in the same order, which is also the place that `ants_set_aspect` takes;
   - every canvas is one that the pages can stand in (640 x 480, or 960 x 540 and more in both directions), and each row is wider than the one before;
   - no page, script or source file keeps a list of the shapes of its own: a quoted shape name or a shape's steps appears in web/shapes.js (and, for the game, canvas_layout.hpp) and nowhere else
-    in the code; the front page's Picture row is an empty select that AntsShapes.fillSelect fills from the table, and the game page's dropdown, the replay's Picture window's and the settings menu's
-    are empty hosts in which the picker (web/shape_picker.js) makes a button and a list from the same rows (a native list does not open under the fullscreen mouse lock); each entry says the shape
+    in the code; the game page's replay Picture window and the settings menu
+    have empty hosts in which the picker (web/shape_picker.js) makes a button and a list from the same rows (a native list does not open under the fullscreen mouse lock); each entry says the shape
     and its canvas ("16:9 · 960 x 540") and nothing else;
   - the pages load web/shapes.js (and the game page web/shape_picker.js) before their own code, and the image, the web build and the CI's file check carry them;
   - the picker runs on a fake of the DOM (tests/scripts/web_shape_picker_check.js) and every broken copy of it is noticed (tests/data/shape_picker_mutants.json).
@@ -137,19 +137,16 @@ class NoCopyOfTheListIsLeft(unittest.TestCase):
 
 
 class TheDropdownsAreTheTable(unittest.TestCase):
-    """The front page's dropdown is an empty select, filled from the table by AntsShapes.fillSelect; the game page's, the replay's Picture window's and the settings menu's are made by the picker (web/shape_picker.js) from
+    """The game page's replay Picture window's and the settings menu's dropdowns are made by the picker (web/shape_picker.js) from
     the same rows, into empty hosts: no page can keep a shape list of its own."""
 
     def test_the_game_pages_dropdown_and_the_replays_picture_window_are_empty_hosts_for_the_picker(self):
         page = read("web", "shell.html")
-        bar = page[page.index('<div class="view-bar" id="view-bar">'):page.index('id="lock-bar-label"')]
-        self.assertEqual(bar.count('<span class="pick" id="aspect-pick"><span class="fit-note" id="fit-note" hidden></span></span>'), 1)
-        self.assertIn('<span id="view-bar-label">Picture</span>', bar)
         pop = page[page.index('id="picpop"'):page.index('id="b-fsx"')]
         self.assertEqual(pop.count('<span class="pick" id="pic-pick"><span class="fit-note" id="pic-note" hidden></span></span>'), 1)
         self.assertNotIn("<option", page, "the entries come from the table, not from the markup")
         self.assertNotIn("<select", page, "no native select is left on the game page: its list does not open under the fullscreen mouse lock")
-        self.assertEqual(page.count("AntsShapePicker.create(AntsShapes, {"), 1, "the game page makes its two dropdowns once, at the start")
+        self.assertEqual(page.count("AntsShapePicker.create(AntsShapes, {"), 1, "the game page makes its one dropdown (the recording's Picture window) once, at the start")
         self.assertNotIn("fillSelect", page)
 
     def test_the_pickers_key_listener_is_made_before_the_picture_windows_so_that_esc_closes_only_the_list(self):
@@ -160,14 +157,6 @@ class TheDropdownsAreTheTable(unittest.TestCase):
         self.assertLess(made, page.index("PICTURE_POPOVER_BEGIN"), "the dropdowns must be made before the Picture window's block adds its Esc listener")
         self.assertLess(page.index("ANTS_SELECTOR_BEGIN"), page.index("PICTURE_POPOVER_BEGIN"))
         self.assertIn("}, true);\n            // PICTURE_POPOVER_END", page, "the Picture window's key listener is a capture listener: only then does the order decide")
-
-    def test_the_front_pages_picture_row_is_an_empty_select_filled_from_the_table(self):
-        page = read("web", "lobby.html")
-        row = page[page.index('<div class="shape" id="shape-row">'):page.index('<div class="go">')]
-        self.assertEqual(len(re.findall(r'<span class="shape-box"><select class="shape-select" id="aspect-select"[^>]*></select></span>', row)), 1)
-        self.assertIn('<label class="shape-label" id="shape-label" for="aspect-select">Picture</label>', row)
-        self.assertNotIn("<option", row)
-        self.assertIn("AntsShapes.fillSelect($('aspect-select'), document)", page)
 
     def test_the_settings_menu_builds_its_dropdown_from_the_page_table(self):
         menu = read("web", "game_menu.js")
@@ -226,12 +215,6 @@ class TheTablesFunctions(unittest.TestCase):
                           " S.placeOf('21:9'), S.placeOf('32:9'), S.placeOf('wide'), S.placeOf(undefined), S.names()]));")
         self.assertEqual(got, ["4:3", None, None, "3:2", "32:9", None, None, None, None, None, None, None, 5, 6, -1, -1, ["4:3", "3:2", "16:10", "16:9", "20:9", "21:9", "32:9"]])
 
-    def test_fill_select_makes_one_option_for_each_row_and_nothing_else(self):
-        got = self.run_js("const made = []; const select = { appendChild(o) { made.push([o.value, o.textContent]); } }; const doc = { createElement(tag) { if (tag !== 'option') throw new Error(tag); return {}; } };"
-                          " console.log(JSON.stringify([S.fillSelect(select, doc) === select, made]));")
-        self.assertTrue(got[0])
-        self.assertEqual(got[1], [[r[0], "%s \u00b7 %d x %d" % (r[1], r[2], r[3])] for r in page_rows()])
-
     def test_the_line_under_a_dropdown_names_the_shape_that_fills_the_screen(self):
         got = self.run_js("console.log(JSON.stringify([S.fillsLine(1920, 1080), S.fillsLine(1440, 900), S.fillsLine(2736, 1824), S.fillsLine(2560, 1080), S.fillsLine(3840, 1080), S.fillsLine(1280, 1024), S.fillsLine(1000, 1000), S.fillsLine(0, 0)]));")
         self.assertEqual(got, ["16:9 fills your screen", "16:10 fills your screen", "3:2 fills your screen", "21:9 fills your screen", "32:9 fills your screen", "Classic 4:3 fills your screen", "", ""])
@@ -248,7 +231,7 @@ class ThePickerRunsOnAFakeOfTheDom(unittest.TestCase):
 
     def test_the_picker_has_no_table_of_its_own_and_makes_no_markup(self):
         text = read("web", "shape_picker.js")
-        for gone in ("innerHTML", "insertAdjacentHTML", "fillSelect", "createElement('select')", "createElement('option')", "var TABLE"):
+        for gone in ("innerHTML", "insertAdjacentHTML", "createElement('select')", "createElement('option')", "var TABLE"):
             self.assertNotIn(gone, text)
         self.assertIn("shapes.rows", text)                                                                  # (the rows are the table's)
         self.assertNotRegex(text, r"'(?:4:3|3:2|16:10|16:9|20:9|21:9|32:9)'")

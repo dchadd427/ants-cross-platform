@@ -197,9 +197,12 @@ if(NOT EMSCRIPTEN)
     target_include_directories(ants_test_paths PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/tests/common")
 endif()
 
+# The programs of tools/ (below: not part of the normal build, but CMake needs their source files at configure time). -DANTS_BUILD_TOOLS=OFF leaves them out, so that a build that does not
+# make them (the game server's Docker image) does not need the folder tools/ at all and its first, long layer does not change when a file there does. It needs BUILD_TESTS=OFF: the tests run the tools.
+option(ANTS_BUILD_TOOLS "Define the programs of tools/ (gen_food_footprints, map_sweep, bot_arena, bot_watch, replay_tool, lvl_tool)" ON)
 # Table generator (not part of the normal build): writes src/ants_sim/food_footprints_data.inc from Original-Ants/ants.chd
 #   cmake --build build --target gen_food_footprints && ./build/gen_food_footprints > src/ants_sim/food_footprints_data.inc
-if(NOT EMSCRIPTEN)
+if(NOT EMSCRIPTEN AND ANTS_BUILD_TOOLS)
     add_executable(gen_food_footprints EXCLUDE_FROM_ALL tools/gen_food_footprints.cpp)
     target_link_libraries(gen_food_footprints PRIVATE ants_sim ants_assets ants_test_paths)
 
@@ -261,6 +264,9 @@ if(EMSCRIPTEN)
     option(BUILD_TESTS "Build test executables" OFF)
 else()
     option(BUILD_TESTS "Build test executables" ON)
+endif()
+if(NOT ANTS_BUILD_TOOLS AND BUILD_TESTS)
+    message(FATAL_ERROR "ANTS_BUILD_TOOLS=OFF needs BUILD_TESTS=OFF (the tests run the programs of tools/).")
 endif()
 if(BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     # Guard (every platform, every configure): SDL's headers do `#define main SDL_main`, and on Windows SDL2main.lib supplies the real main,

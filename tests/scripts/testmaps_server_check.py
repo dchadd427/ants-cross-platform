@@ -29,9 +29,12 @@ OCTET = {"Content-Type": "application/octet-stream", "Sec-Fetch-Site": "same-ori
 
 
 def free_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+    """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import quick_http
+    return quick_http.free_port()
 
 
 class Server:

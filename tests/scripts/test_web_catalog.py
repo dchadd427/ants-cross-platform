@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Sprites and sounds (asset_catalog/index.html, served at /asset_catalog/) in the Classic look (run by ./run_tests.sh --fast and by the CI).
 
-The page is a catalog and inspector of the game's assets with a lot of script. Its look was moved to the Classic look of the front page (the shared stylesheet /front/classic.css, the logo
-in the header, a Play button to the front page) by changing only the head's two links, the style block and the header: the markup and the script after the header are as they were. What is
+The page is a catalog and inspector of the game's assets with a lot of script. Its look was moved to the Classic look of the front page (the shared stylesheet /front/classic.css, the site bar
+above the header) by changing only the head's two links, the style block and the header: the markup and the script after the header are as they were. What is
 pinned here is what that must not break and what it promised:
 
   - the head loads the font and the shared stylesheet before the page's own style, and nothing else (the script file of the data, and nothing from another site)
-  - the header: the logo is a link to the front page (its size is the picture's), the page's banner, the three tabs with the ids and the calls that the script uses, Play first among the buttons
+  - the site bar: a Home button to the front page and no picture; the header: the page's banner, the three tabs with the ids and the calls that the script uses, Play first among the buttons
   - every element that the script asks for by a fixed id is in the page (a rewritten header cannot lose one)
   - the style block makes no colors of its own that the stylesheet has, keeps none of the old dark blue palette, leaves the frame its room, keeps the page's own phone rules (the page
     scrolls as a document, a table scrolls inside its box, the inspector's two columns stand one above the other) and overrides the colors that the markup and the script give to buttons
@@ -52,17 +52,16 @@ class TheHead(unittest.TestCase):
 
     def test_nothing_is_loaded_but_the_data_the_font_and_the_stylesheet(self):
         self.assertEqual(re.findall(r'<script[^>]*\bsrc="([^"]+)"', PAGE), ["catalog_data.js", "/site_nav.js"])
-        self.assertEqual(re.findall(r'<link[^>]*\bhref="([^"]+)"', PAGE), ["/manifest.webmanifest", "/app/apple-touch-icon.png?v=9b89d547", "/front/LibreFranklin-Medium.ttf", "/front/classic.css", "/site_nav.css"])
+        self.assertEqual(re.findall(r'<link[^>]*\bhref="([^"]+)"', PAGE), ["/manifest.webmanifest", "/app/apple-touch-icon.png?v=4fbefb68", "/front/LibreFranklin-Medium.ttf", "/front/classic.css", "/site_nav.css"])
         self.assertNotIn("@import", STYLE)
         self.assertNotRegex(STYLE, r"url\(\s*[\"']?(?:https?:)?//")
         self.assertNotRegex(PAGE, r"<(?:img|iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")
 
 
 class TheHeader(unittest.TestCase):
-    def test_the_logo_is_a_link_to_the_front_page_and_has_the_size_of_its_picture(self):
-        link = re.search(r'<a class="sblogo" href="/"><img src="/front/logo\.png" alt="ants! - Home" width="(\d+)" height="(\d+)"></a>', BAR)
-        self.assertIsNotNone(link)
-        self.assertEqual((int(link.group(1)), int(link.group(2))), png_size(os.path.join(REPO, "web", "front", "logo.png")))
+    def test_the_bar_has_a_way_to_the_front_page_and_no_picture(self):
+        self.assertIn('<a class="btn sbhome" href="/">', BAR)
+        self.assertNotIn("<img", BAR)
 
     def test_the_banner_the_three_tabs_and_the_buttons(self):
         self.assertEqual(re.findall(r"<h1 class=\"banner gold\">(.*?)</h1>", HEADER), ["Ants Asset Catalog &amp; Inspector"])

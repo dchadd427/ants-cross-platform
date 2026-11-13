@@ -427,7 +427,7 @@ same('a game here asks for the person\'s own name (nameless) when its address na
     check('the card is hidden until the step shows it', /id="name-step"[^>]*hidden/.test(shellText));
     // The invitation of the front page's card is a link to THIS page's step (?join=/ws&room=..&seat=..: no name), so a friend who opens it on a phone sees this card and nothing else: the way out is here too,
     // as the front page's own step has it ("Whatever the one-card page does with the name step, it keeps a visible way out of it")
-    const stepMarkup = shellText.slice(shellText.indexOf('id="name-step"'), shellText.indexOf('<div class="view-bar"'));
+    const stepMarkup = shellText.slice(shellText.indexOf('id="name-step"'), shellText.indexOf('<section class="rematch"'));
     check('the card has a way out: "Back to the front page", a plain link to the front page (no query: nothing of the match goes with it), after the hint and inside the card',
           /<a class="btn sm name-step-back" id="name-step-back" href="\/">&larr; Back to the front page<\/a>\s*<\/div>\s*<\/div>/.test(stepMarkup) && stepMarkup.indexOf('name-step-hint') < stepMarkup.indexOf('name-step-back'));
     // The notice (decided on 2026-10-08): where a page asks for a name it also says what the server does with an online match, in the hint's own type under the name field. The
