@@ -77,8 +77,8 @@ Parts:
              through its first cell, across or down; with no key, or Command or Alt alone, it is free; Hills, Pan and Pick up only look around; a zoomed view, the map's edge, the keys let go and pressed in a stroke
   * minimap  1280 x 800 and a phone (390 x 844, 844 x 390) (tests/scripts/web_mapmaker_browser_minimap.py, which says what it covers): the small map's hills with their edges, Hide and Show map (kept for the next visit),
              the grip that drags the box (mouse and finger; no stroke, no looking around), the arrow keys, Home, two taps, Lock, a smaller window, a stored place that does not fit, the phone's size
-  * foot     desktop windows from 800 x 500 to 1920 x 1080 (at 1 and 1.25 pixels a pixel) and phones (390 x 844, 360 x 640, 320 x 568) (tests/scripts/web_mapmaker_browser_foot.py, which says what it covers): the footer line
-             lies inside the screen's frame, as the page opens, after a stroke and with the Pick up bar open, and the page has no scrollbar that it did not need; a phone held sideways has no footer
+  * foot     desktop windows from 800 x 500 to 1920 x 1080 (at 1 and 1.25 pixels a pixel) and phones (390 x 844, 360 x 640, 320 x 568) (tests/scripts/web_mapmaker_browser_foot.py, which says what it covers): the page has no footer
+             and the editor's panels end inside the screen's frame, as the page opens, after a stroke and with the Pick up bar open, and the page has no scrollbar that it did not need
   * rules    1280 x 800, 1280 x 720, 1280 x 960 and a phone (tests/scripts/web_mapmaker_browser_rules.py, which says what it covers): the rules word of a new Extended map (New map, Copy, Save as a new map, Resize, Start an Extended map: long orders where the map plays like the original with them) and its Rules 2 badge, never in the top bar, read from the bytes that Download hands over
   * convertwait  1280 x 800, the scripts of Copy, convert and Crop on a slow network (every request takes 1.5 s longer): a second press of Copy... during the load asks for nothing more (one tag for each script) and opens ONE dialog; a map opened, or an Open a map dialog opened, while the crop scripts load keeps the crop screen shut (it would be cut for the wrong map and limits)
   * older    a map core of another interface version (the page is given a module that says it is version 4, the one before the long orders): the page says so and offers a reload, and no button works.
@@ -2214,7 +2214,7 @@ def run_part(part, tab, args, check, tiny, junk):
         import web_mapmaker_browser_line as line_part                  # (Shift or Ctrl keeps a stroke to a line: its own file, this one is at the limit of lines)
         line_part.run_line(Page(tab, args.web), tab, args, check, {"wait_for": wait_for, "REPO": REPO}, edges_bytes, EDGES_JS)
     elif part == "foot":
-        import web_mapmaker_browser_foot as foot_part                  # (the footer inside the frame: its own file, this one is at the limit of lines)
+        import web_mapmaker_browser_foot as foot_part                  # (the editor's foot inside the frame: its own file, this one is at the limit of lines)
         foot_part.run_foot(Page(tab, args.web), tab, args, check, {"wait_for": wait_for, "REPO": REPO}, edges_bytes, EDGES_JS)
     elif part == "minimap":
         import web_mapmaker_browser_minimap as minimap_part                  # (the small map: its own file, this one is at the limit of lines)

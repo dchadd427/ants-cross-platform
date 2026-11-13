@@ -30,7 +30,7 @@ from size_limits import APP_ICONS_BUDGET, APP_MANIFEST_BUDGET  # noqa: E402  (ev
 THEME = "#2b5f43"                  # the outermost line of the pages' green frame (web/lobby.html)
 BACKGROUND = "#db4b13"             # the orange of the game's menus (web/front/clay.png is this with a little noise)
 PAGES = ["web/shell.html", "web/lobby.html", "web/matches.html", "web/match.html", "web/live.html", "web/legal.html", "web/mapmaker.html", "asset_catalog/index.html"]   # (and the changelog page, made by a tool)
-SHORTCUT_PAGES = {"/matches": "web/matches.html", "/live-now": "web/live.html", "/mapmaker": "web/mapmaker.html"}
+SHORTCUT_PAGES = {"/matches": "web/matches.html", "/live-now": "web/live.html", "/mapmaker": "web/mapmaker.html", "/?vp": "web/lobby.html"}
 ICON_FILES = {"icon-192.png": 192, "icon-512.png": 512, "icon-maskable-512.png": 512, "apple-touch-icon.png": 180}
 
 
@@ -169,7 +169,7 @@ class TheManifest(unittest.TestCase):
         nginx = read("docker", "nginx.conf")
         for url, page in SHORTCUT_PAGES.items():
             self.assertTrue(os.path.isfile(os.path.join(REPO, page)), page)
-            self.assertIn("location = %s {" % url, nginx, url)
+            self.assertIn("location = %s {" % url.split("?")[0], nginx, url)
             self.assertTrue(re.match(r"^[A-Za-z]", [s for s in MANIFEST["shortcuts"] if s["url"] == url][0]["short_name"]))
         for shortcut in MANIFEST["shortcuts"]:
             self.assertTrue(shortcut["name"] and shortcut["short_name"])

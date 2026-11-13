@@ -265,6 +265,8 @@
             align-items: center;
             justify-content: center;
         }
+        /* an installed window: the smaller of the two heights (the units may report more than the window shows), so the bar under the picture stays in view */
+        @supports (height: 100svh) { @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { #game-stage { width: min(100%, var(--stage-max), calc((min(100dvh, 100svh) - var(--chrome)) * var(--ar-w) / var(--ar-h))); } } }
 
         /* A game (not a recording, whose bar is under the picture) has the ring's reach and the page's side space under the picture, so that the whole framed box is in the window, with the same room under it as beside it
            (the game's bottom rows hold the score counters, and a phone's gesture area is there: env(safe-area-inset-bottom)); measureChrome counts it */
@@ -326,6 +328,7 @@
         #game-stage.pseudo-fullscreen {
             position: fixed;
             inset: 0;
+            height: auto;                               /* (the box between the four edges: no unit that may report more than the window shows) */
             z-index: 1000;
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
@@ -995,6 +998,7 @@
 
         /* the replay bar: under the picture, the same width as the picture */
         .rbar { position: relative; width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h))); width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h))); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play rew tl clock cam speed pic fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; container: rbar / inline-size; } .rbar:where(:not(.islive)) { gap: 0 8px; }
+        @supports (height: 100svh) { @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { .rbar { width: min(100%, var(--stage-max), calc((min(100dvh, 100svh) - var(--chrome)) * var(--ar-w) / var(--ar-h))); } } }
         /* the bar is as wide as the picture, whatever its shape (the same custom properties as #game-stage above; the bar follows the stage in the page, and floats over it in fullscreen, where .over has its own width) */
         body:not(.replay) .rbar { display: none; }
         .rbar .rplay { grid-area: play; min-width: 64px; min-height: 50px; padding: 6px 14px; } .rbar .rew { grid-area: rew; flex-direction: column; gap: 1px; } @media (min-width: 421px) and (max-width: 1100px) { .rbar .rew { min-width: 44px; padding: 6px 8px; } }
