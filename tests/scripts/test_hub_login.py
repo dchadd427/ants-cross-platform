@@ -77,11 +77,11 @@ def pick_frame(word):
 
 
 def you_without_the_key(you):
-    """The welcome's `you` (or the one of /hub/me) without its key, which is a new one at every start of the hub: only its shape is checked here."""
+    """The welcome's `you` (or the one of /hub/me) without its key, which is a new one at every start of the hub (only its shape is checked here), and without the picture's `pics` and `pic`."""
     if you is None:
         return None
     assert re.fullmatch(r"[0-9a-f]{12}", you["k"]), you
-    return {k: v for k, v in you.items() if k != "k"}
+    return {k: v for k, v in you.items() if k not in ("k", "pics", "pic")}          # (the picture's two fields are tests/scripts/test_hub_pictures_frames.py's)
 
 
 class LoginTest(unittest.TestCase):

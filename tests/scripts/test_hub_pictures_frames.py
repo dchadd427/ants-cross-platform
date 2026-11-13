@@ -409,11 +409,12 @@ class TheOperator(FrameTest):
         self.member(user=(THIRD, "third.one"))
         self.run_admin("nopic", "@third.one")
         self.change("set_picture_show", OTHER, base.SHOW_OFF)
+        self.change("set_picture_show", ADMIN, base.SHOW_OFF)                            # (two are switched off and one is blocked: the two counts differ)
         code, out, err = self.run_admin("status")
         self.assertEqual(code, 0)
         line = [l for l in out.splitlines() if l.startswith("pictures:")]
         self.assertEqual(len(line), 1)
-        self.assertRegex(line[0], r"^pictures: 1 of 2,000 kept, 0\.0 MB of 8\.0 MB; 1 switched off, 1 blocked$")
+        self.assertRegex(line[0], r"^pictures: 1 of 2,000 kept, 0\.0 MB of 8\.0 MB; 2 switched off, 1 blocked$")
         self.assertNotIn(ACCOUNT, out)
 
 

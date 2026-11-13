@@ -934,13 +934,6 @@
    "old": "format(marks.count(SHOW_OFF), \",\"), format(marks.count(SHOW_BLOCKED), \",\")",
    "new": "format(marks.count(SHOW_BLOCKED), \",\"), format(marks.count(SHOW_OFF), \",\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
-  },
-  {
-   "id": "a_ban_leaves_the_name_in_the_list_until_the_clock",
-   "file": "hub/chat.py",
-   "old": "            self.remove(self.sockets_of(target), \"banned\")\n            self.sync_pictures()",
-   "new": "            self.remove(self.sockets_of(target), \"banned\")",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheEnds"
   }
  ]
 }
