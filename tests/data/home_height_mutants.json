@@ -1,0 +1,113 @@
+{
+ "note": "Mutants of the front page's height guard and of the screen numbers of /?vp (web/home/home.js: fitHeight, heightGuard, readout; web/home/vp.js; docs/HOME_SCREEN.md 'The page's height') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'), against tests/scripts/web_home_height_check.js (the rule and the guard in a small fake window).",
+ "baseline": {
+  "test": "node tests/scripts/web_home_height_check.js"
+ },
+ "mutants": [
+  {
+   "id": "the_guard_takes_the_largest_reading",
+   "file": "web/home/home.js",
+   "old": "(!least || all[i] < least)",
+   "new": "(!least || all[i] > least)",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_pure_rule_acts_while_a_field_has_the_focus",
+   "file": "web/home/home.js",
+   "old": "if (m.typing) return 'keep';\n",
+   "new": "\n",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_guard_acts_while_a_field_has_the_focus",
+   "file": "web/home/home.js",
+   "old": "                if (typing()) return;\n",
+   "new": "\n",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "a_pinch_counts_as_a_short_window",
+   "file": "web/home/home.js",
+   "old": "m.scale > 0.99 && m.scale < 1.01 ? m.vv : 0",
+   "new": "m.vv",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "a_drop_of_more_than_a_third_is_a_short_page",
+   "file": "web/home/home.js",
+   "old": " || least < m.box * 2 / 3) return null;",
+   "new": ") return null;",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "one_pixel_of_rounding_makes_a_limit",
+   "file": "web/home/home.js",
+   "old": "!(m.box > least + 1)",
+   "new": "!(m.box > least)",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_limit_is_never_taken_away",
+   "file": "web/home/home.js",
+   "old": "                root.style.removeProperty('--home-h');\n",
+   "new": "\n",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_room_gets_a_limit",
+   "file": "web/home/home.js",
+   "old": "                if (!onHome()) return;\n",
+   "new": "\n",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "a_turn_of_the_phone_is_not_looked_at",
+   "file": "web/home/home.js",
+   "old": "win.addEventListener('orientationchange', soon); ",
+   "new": "",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_visual_viewport_is_not_listened_to",
+   "file": "web/home/home.js",
+   "old": "win.visualViewport.addEventListener('resize', fit);",
+   "new": "void 0;",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_is_shown_without_vp",
+   "file": "web/home/home.js",
+   "old": "if (!/[?&]vp(&|=|$)/.test((win.location && win.location.search) || '')) return false;",
+   "new": "if (false) return false;",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_is_shown_for_any_word_that_starts_with_vp",
+   "file": "web/home/home.js",
+   "old": "/[?&]vp(&|=|$)/",
+   "new": "/[?&]vp/",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_leaves_out_the_visual_viewport",
+   "file": "web/home/vp.js",
+   "old": "'visual viewport ' + (v ? v.width + ' x ' + v.height + ', top ' + v.offsetTop + ', scale ' + v.scale : 'none'),",
+   "new": "'visual viewport none',",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_leaves_out_the_safe_areas",
+   "file": "web/home/vp.js",
+   "old": "'safe top ' + probe.t + ', right ' + probe.r + ', bottom ' + probe.b + ', left ' + probe.l,",
+   "new": "'safe top ' + probe.t,",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_does_not_say_which_height_is_which",
+   "file": "web/home/vp.js",
+   "old": "'vh ' + probe.vh + ', dvh ' + probe.dvh + ', svh ' + probe.svh + ', lvh ' + probe.lvh",
+   "new": "'vh ' + probe.vh + ', dvh ' + probe.vh + ', svh ' + probe.vh + ', lvh ' + probe.vh",
+   "test": "node tests/scripts/web_home_height_check.js"
+  }
+ ]
+}
