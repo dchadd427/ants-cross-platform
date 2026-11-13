@@ -6,7 +6,11 @@
 //   * the header has ONE Settings button after Menu at 360, 390, 844 and 1280 px, 44 x 44 or more, named "Settings", and the header stays one row on a 360 px phone (Menu, Fullscreen, Settings, More);
 //   * a tap on it (390 px, touch) opens the menu, Video has a Picture shape row, and a choice changes the page's shape at once, is remembered under ants.aspect.v2 and put in the address;
 //   * on a computer the Fullscreen mouse row switches Locked / Free and the choice is remembered under ants.pointerlock; on a touch screen the row is not there;
-//   * the game's own call for Esc (the stand-in has no game to press the key in) and the button open the same menu.
+//   * the game's own call for Esc (the stand-in has no game to press the key in) and the button open the same menu;
+//   * outside a match (the stand-in answers "no match screen"): the button opens the small form with Fullscreen, Picture shape and Fullscreen mouse, and with listeners that imitate the game's window system (SDL's: key
+//     presses and typed text on the window in the bubble phase, mouse on the canvas) only the lifts of keys and a bare modifier's press reach them while it is up, for typed letters, Enter, Space, Tab, an arrow, Ctrl+S
+//     and a click; Enter on Close closes it although the stand-in cancels `keypress`; a shape pick and Locked / Free work; a phone at 390 x 844 opens it by touch; the full menu of a match still lets a letter through
+//     and answers Enter on Resume.
 // usage: node web_picture_in_settings_check.js <the folder of web/>     (exit 0: every check holds; 1: one fails; 3: no browser to run it in)
 'use strict';
 const fs = require('fs'), http = require('http'), os = require('os'), path = require('path');
@@ -45,13 +49,28 @@ const STAND_IN = `(function () {
     var values = { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0 };
     Module.UTF8ToString = function (p) { return p; };
     Module._ants_menu_describe = function () { return ${JSON.stringify(MATCH)}; };
-    Module._ants_menu_get = function (w) { return w === 100 ? 0 : w === 101 ? 0 : w === 102 ? 2 : (w in values ? values[w] : -1); };
+    Module._ants_menu_get = function (w) { return w === 100 ? (window.__where === undefined ? 0 : window.__where) : w === 101 ? 0 : w === 102 ? 2 : (w in values ? values[w] : -1); };
     Module._ants_menu_set = function (id, v) { values[id] = v; return 1; };
     Module._ants_menu_do = function () { return 1; };
-    Module._ants_menu_open = function () {};
+    window.__told = [];
+    Module._ants_menu_open = function (o) { window.__told.push(o); };
     Module.postRun[0]();
     return 1;
 })()`;
+
+// the game's window system, imitated (SDL 2.28.4 for Emscripten: key presses, typed text and key lifts on the window in the bubble phase, the mouse on the canvas, the release on the document); what each handler returns is
+// what the game does with the event (true: it cancels it, as the real one cancels a keypress)
+const LISTENERS = `(function () {
+    window.__got = [];
+    var nav = function (e) { var k = e.keyCode; return k === 8 || k === 9 || (k >= 37 && k <= 40) || (k >= 112 && k <= 135) || e.ctrlKey; };
+    window.addEventListener('keydown', function (e) { window.__got.push('down:' + e.key); if (nav(e)) e.preventDefault(); }, false);
+    window.addEventListener('keypress', function (e) { window.__got.push('press:' + e.key); e.preventDefault(); }, false);
+    window.addEventListener('keyup', function (e) { window.__got.push('up:' + e.key); }, false);
+    var c = document.getElementById('canvas');
+    ['mousedown', 'mousemove', 'wheel', 'touchstart', 'touchend'].forEach(function (n) { c.addEventListener(n, function (e) { if (e.isTrusted) window.__got.push(n); }, false); });
+    return 1;
+})()`;
+const taken = (page) => page.evaluate(() => { const g = window.__got; window.__got = []; return g; });
 
 let failed = 0, checks = 0;
 function check(label, got, want) {
@@ -227,6 +246,79 @@ server.listen(0, async () => {
             await page.click('#settings-btn');
             await page.waitForSelector('#game-menu', { timeout: 4000 });
             ok('1280 px, a click on the header\'s Settings opens the menu', true);
+            await context.close();
+        }
+        // outside a match: the small form, and what reaches the game while it is up
+        {
+            const { context, page } = await open(browser, port, 1280, 800, false);
+            await page.evaluate(LISTENERS);
+            await page.evaluate(() => { window.__where = -1; });
+            await page.waitForFunction(() => { const b = document.getElementById('settings-btn'); return b && !b.disabled && b.title.indexOf('picture shape') >= 0; }, null, { timeout: 4000 });
+            await page.click('#settings-btn');
+            await page.waitForSelector('#game-menu', { timeout: 4000 });
+            const shape = await page.evaluate(() => ({ tabs: document.querySelectorAll('#game-menu [role=tab]').length, rows: Array.prototype.map.call(document.querySelectorAll('#game-menu .gm-name'), (n) => n.textContent), active: document.activeElement.textContent, told: window.__told.slice() }));
+            check('outside a match: the small form has no tabs and the three rows of the page', [shape.tabs, shape.rows], [0, ['Fullscreen', 'Picture shape', 'Fullscreen mouse']]);
+            check('...the focus is on Close, and the game was told it is open', [shape.active, shape.told], ['Close', [1]]);
+            await taken(page);
+            for (const k of ['s', 'q', 'x', 'c', 't', 'h', 'Tab', 'ArrowDown', 'Backspace', 'F9', 'Delete', 'Control+s', 'Shift']) await page.keyboard.press(k);
+            await page.focus('#game-menu .pick-select');
+            await page.keyboard.press('Space');
+            await page.keyboard.press('Escape');
+            const got = await taken(page);
+            check('outside a match with the small form up: only the lifts of keys and a bare modifier\'s press reach the game\'s listeners', got.filter((g) => !/^up:/.test(g) && g !== 'down:Shift' && g !== 'down:Control'), []);
+            ok('...and the lifts do (the game would think a key still held otherwise): ' + got.filter((g) => /^up:/.test(g)).length, got.filter((g) => /^up:/.test(g)).length >= 10);
+            check('...and the panel is still up (no key closed it)', await page.evaluate(() => !!document.getElementById('game-menu')), true);
+            await page.mouse.move(40, 400);
+            await page.mouse.down();
+            await page.mouse.up();
+            await page.mouse.wheel(0, 60);
+            check('...a click and the wheel on the dimmed picture reach nothing of the game\'s', await taken(page), []);
+            // a shape pick and Locked / Free work from here
+            await page.click('#game-menu .pick-select');
+            await page.click('#gm-picture-o5');
+            const picked = await page.evaluate(() => ({ stage: document.getElementById('game-stage').getAttribute('data-aspect'), stored: localStorage.getItem('ants.aspect.v2'), address: location.search }));
+            check('a shape pick sets the stage\'s shape, the stored choice and the address', [picked.stage, picked.stored, /aspect=21:9/.test(picked.address)], ['21:9', '21:9', true]);
+            await page.click('#game-menu [role=radio]:nth-of-type(2)');
+            check('Free is remembered under ants.pointerlock', await page.evaluate(() => localStorage.getItem('ants.pointerlock')), 'off');
+            await taken(page);
+            await page.focus('.gm-resume');
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(150);
+            check('Enter on Close closes it although the game cancels the keypress, and the game was told', [await page.evaluate(() => !document.getElementById('game-menu')), await page.evaluate(() => window.__told.slice(-1)[0])], [true, 0]);
+            check('...and what reached the game was the lift only', (await taken(page)).filter((g) => !/^up:/.test(g)), []);
+            // the full menu of a match: a letter goes on, Enter presses Resume
+            await page.evaluate(() => { window.__where = 0; });
+            await page.waitForFunction(() => document.getElementById('settings-btn').title.indexOf('sound') >= 0, null, { timeout: 4000 });
+            await page.click('#settings-btn');
+            await page.waitForSelector('#game-menu .gm-tab', { timeout: 4000 });
+            await taken(page);
+            await page.keyboard.press('s');
+            ok('in a match the full menu is unchanged: a letter still reaches the page and the game (the game takes none while the panel is up)', (await taken(page)).indexOf('down:s') >= 0);
+            await page.focus('.gm-resume');
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(150);
+            check('...Enter on Resume closes it although the game cancels the keypress', await page.evaluate(() => !document.getElementById('game-menu')), true);
+            // the small form closes itself when the match has the screen
+            await page.evaluate(() => { window.__where = -1; });
+            await page.waitForFunction(() => document.getElementById('settings-btn').title.indexOf('picture shape') >= 0, null, { timeout: 4000 });
+            await page.click('#settings-btn');
+            await page.waitForSelector('#game-menu', { timeout: 4000 });
+            await page.evaluate(() => { window.__where = 0; });
+            await page.waitForFunction(() => !document.getElementById('game-menu'), null, { timeout: 4000 });
+            ok('a match that begins closes the small form', true);
+            await context.close();
+        }
+        // a phone, by touch
+        {
+            const { context, page } = await open(browser, port, 390, 844, true);
+            await page.evaluate(() => { window.__where = -1; });
+            await page.waitForFunction(() => document.getElementById('settings-btn').title.indexOf('picture shape') >= 0, null, { timeout: 4000 });
+            await page.tap('#settings-btn');
+            await page.waitForSelector('#game-menu', { timeout: 4000 });
+            const names = await page.evaluate(() => ({ rows: Array.prototype.map.call(document.querySelectorAll('#game-menu .gm-name'), (n) => n.textContent), box: (() => { const r = document.querySelector('#game-menu .gm-panel').getBoundingClientRect(); return [r.left >= 0, r.right <= innerWidth, r.top >= 0, r.bottom <= innerHeight]; })() }));
+            check('390 x 844 by touch: the small form has Fullscreen and Picture shape (no mouse row) and fits the screen', [names.rows, names.box], [['Fullscreen', 'Picture shape'], [true, true, true, true]]);
+            await page.tap('.gm-resume');
+            check('...Close closes it', await page.evaluate(() => !document.getElementById('game-menu')), true);
             await context.close();
         }
     } catch (e) {

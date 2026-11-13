@@ -6,6 +6,8 @@
 //   * The panel is a child of the stage (it goes fullscreen with it), fixed over the window. The pointer lock is let go while it is up and asked for again when it closes; the page behind it is inert; Tab stays
 //     inside; Esc closes it (in the question of Leave game it means stay, and with the picture's list open it closes the list; a held key does nothing); the game is told (Module._ants_menu_open) and takes no input meanwhile; a click on the dimmed area does nothing;
 //     a dialog that needs an answer closes it (ask 101). Leave game asks in the words of what it will do (ask 102). A recording has no Game section.
+//   * Outside a match (the opening picture, the quick help, the setup and room screens, the results, a match under a dialog) the same panel opens in a small form with only the page's own rows (Fullscreen, Picture shape,
+//     Fullscreen mouse), one line saying where the rest is, and Close. It calls nothing of the game's rows, and it keeps every key press and all typed text from the game (the game's own gate is for a match).
 //   * It makes its own Settings buttons and fetches its own stylesheet; every text goes in with textContent. ES5, no module system: a page gets the global AntsGameMenu, node gets module.exports
 //     (tests/scripts/web_game_menu_check.js runs it on a strict fake of the DOM).
 (function (root, factory) {
@@ -19,6 +21,9 @@
     var FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
     var CSS_FILE = 'game_menu.css';
     var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right|Up|Down)|Home|End)$/; // the keys of the panel's own controls (Esc is handled before)
+    var MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|OS|CapsLock|NumLock|ScrollLock|Fn)$/; // a bare modifier press passes the small panel (the game's window system keeps count of what is held)
+    var FULL_TITLE = 'Settings: sound, picture, controls and Leave game', SMALL_TITLE = 'Settings: picture shape and fullscreen mouse';
+    var SMALL_NOTE = 'Sound, ant health, controls and the game\'s own settings are here during a match.', SMALL_CLOSE = 'Close';
 
     // The Controls list: what the game's keys and the mouse do (docs/CONTROLS.md "Camera & Hotkeys"). [keys, what]: the mouse and touch lines name their input in words, a key line is a list of keys (a word that
     // starts with ~ is the text between two keys); `watch` leaves out what a recording ignores.
@@ -64,7 +69,7 @@
         // ---- what the game says now ----
         function where() { return get(100); } // -1: no match screen, 0: a match, 1: watched
         function answered() { return get(101) === 0; } // nothing needs an answer first
-        function available() { return ready() && styleReady && where() >= 0 && answered(); }
+        function available() { return ready() && styleReady && where() >= 0 && answered(); } // (the full menu: a match with nothing waiting)
 
         // ---- the page's own rows: its functions, by name ----
         function shapeNow() { return stage.getAttribute('data-aspect'); } // (a shape's name: the dropdown's entries are made from the page's one table of shapes, web/shapes.js, and the page's function takes a name)
@@ -81,6 +86,9 @@
                 write: function (i) { page.lock.set(i === 0); }
             }
         };
+
+        // The small form (outside a match): there when the game runs, the style is here and the page can serve one of its own rows
+        function small() { return ready() && styleReady && (PAGE_ROWS.picture.has() || PAGE_ROWS.lockmouse.has()) && !!(info || (info = describe())); }
 
         // ---- the Settings buttons: the page's own look, made here ----
         function show(node, on) { node.hidden = !on; node.style.display = on ? '' : 'none'; } // (the page's .btn has a display of its own, which hidden alone does not beat)
@@ -106,14 +114,15 @@
         }
 
         function refresh() {
-            var up = available();
+            var up = available(), less = !up && small();
             for (var i = 0; i < buttons.length; i++) {
                 var b = buttons[i];
                 show(b, styleReady && ready());
-                b.disabled = !up;
-                b.title = up ? 'Settings: sound, picture, controls and Leave game' : 'Not now';
+                b.disabled = !(up || less);
+                b.title = up ? FULL_TITLE : less ? SMALL_TITLE : 'Not now';
             }
-            if (state && (where() < 0 || !answered())) close({ relock: false }); // a dialog needs its answer, or the match is over
+            if (state && state.small && up) close({ relock: false }); // a match has the screen now: the full menu is for it (the next press opens that)
+            else if (state && !state.small && (where() < 0 || !answered())) close({ relock: false }); // a dialog needs its answer, or the match is over
             else if (state) {
                 keepPointerFree(); // (a lock that came while the panel is up: the page's own handler stops the event before the panel's listener, so the poll catches it too)
                 if (ask && get(102) !== shown.askKind) showAsk(false); // (the question follows Leave game: it may be redrawn here, it never leaves by itself)
@@ -255,12 +264,25 @@
             fillPane(id);
         }
 
-        function build() {
+        // the small form's rows: the table's rows that the page serves itself, in the table's order, under the heading of their section (never a row of the game: nothing here calls the game's rows)
+        function fillSmall() {
+            var n = 0, last = '';
+            info.rows.forEach(function (row) {
+                if (!row.page || !(PAGE_ROWS[row.key] || row.key === 'fullscreen')) return;
+                var line = rowOf(row, ++n);
+                if (!line) return;
+                if (row.sec !== last) { last = row.sec; info.sections.forEach(function (s) { if (s.id === row.sec) state.pane.appendChild(el('h3', 'gm-gh', s.label)); }); }
+                state.pane.appendChild(line);
+            });
+        }
+
+        function build(lite) {
             var w = info.words, watching = where() === 1;
-            state = { watching: watching, tabs: [], pane: null, fsButton: null, fsWords: ['', ''] };
+            if (lite) watching = false;
+            state = { small: !!lite, watching: watching, tabs: [], pane: null, fsButton: null, fsWords: ['', ''] };
             scrim = el('div', 'gm-scrim');
             scrim.id = 'game-menu';
-            panel = el('div', 'gm-panel');
+            panel = el('div', 'gm-panel' + (lite ? ' gm-small' : ''));
             panel.setAttribute('role', 'dialog');
             panel.setAttribute('aria-modal', 'true');
             panel.setAttribute('aria-labelledby', 'gm-title');
@@ -281,7 +303,7 @@
             var tabs = el('div', 'gm-tabs');
             tabs.setAttribute('role', 'tablist');
             tabs.setAttribute('aria-orientation', touchy() ? 'horizontal' : 'vertical');
-            info.sections.forEach(function (s, i) {
+            if (!lite) info.sections.forEach(function (s, i) {
                 var b = el('button', 'btn gm-tab', s.label);
                 b.type = 'button';
                 b.id = 'gm-tab-' + s.id;
@@ -291,28 +313,28 @@
                 state.tabs.push({ section: s.id, button: b });
                 tabs.appendChild(b);
             });
-            panel.appendChild(tabs);
+            if (!lite) panel.appendChild(tabs);
             state.pane = el('div', 'gm-pane');
             state.pane.id = 'gm-pane';
-            state.pane.setAttribute('role', 'tabpanel');
+            if (!lite) state.pane.setAttribute('role', 'tabpanel');
             panel.appendChild(state.pane);
             var note = el('div', 'gm-note'), clock = el('span', 'gm-clock');
             clock.setAttribute('aria-hidden', 'true');
-            note.appendChild(clock);
-            note.appendChild(el('span', '', watching ? (page.live ? w.noteLive : w.noteReplay) : w.note));
+            if (!lite) note.appendChild(clock);
+            note.appendChild(el('span', '', lite ? SMALL_NOTE : watching ? (page.live ? w.noteLive : w.noteReplay) : w.note));
             panel.appendChild(note);
             var btns = el('div', 'gm-btns');
-            state.resume = el('button', 'btn gm-resume', w.resume);
+            state.resume = el('button', 'btn gm-resume', lite ? SMALL_CLOSE : w.resume);
             state.resume.type = 'button';
             state.resume.addEventListener('click', function () { close(); });
             state.leave = el('button', 'btn gm-leave' + (watching ? ' gm-back' : ''), watching ? w.back : w.leave);
             state.leave.type = 'button';
             state.leave.addEventListener('click', function () { showAsk(true); });
             btns.appendChild(state.resume);
-            btns.appendChild(state.leave);
+            if (!lite) btns.appendChild(state.leave);
             panel.appendChild(btns);
             scrim.appendChild(panel);
-            selectTab(info.sections[0].id, false);
+            if (lite) fillSmall(); else selectTab(info.sections[0].id, false);
         }
 
         // ---- Leave game ----
@@ -394,6 +416,10 @@
                 return;
             }
             if (USED.test(key)) e.stopPropagation(); // (only the keys that the panel uses are its own; the others reach the page, which keeps the browser's reactions to Ctrl+S, F1 and the like off, and the game, which takes none while the panel is up; the lifts are left alone, or the game's window system reads the next press as a repeat)
+            else if (state.small && !MODIFIER.test(key)) { // (the small form: the game takes keys on its setup and opening screens, so nothing but a bare modifier goes on: the page's own cancelling of the browser's keys is done here, as it cannot see the key)
+                if (page.cancelsKey && page.cancelsKey(e)) e.preventDefault();
+                e.stopPropagation();
+            }
             if (key === 'Tab') {
                 var items = focusables();
                 if (!items.length) return;
@@ -412,24 +438,29 @@
             }
         }
 
+        // Typed text: the game makes it from the key's `keypress`, and cancels that event, which stops a native press of Enter on a button. The panel's own keys never reach it, in either form; the small form keeps all of them
+        function onPress(e) { if (state.small || USED.test(e.key)) e.stopPropagation(); }
+
         // Fullscreen begins while the panel is up (its own row): the page asks for the lock then; the panel needs the free pointer
         function keepPointerFree() { if (page.isLocked && page.isLocked()) page.releaseLock(); }
 
-        function open(from) {
+        function open(from, fullOnly) {
             if (state || opening) return false;
-            if (!available()) return false;
+            var lite = !available();
+            if (lite && (fullOnly || !small())) return false; // (the game's Esc asks for the full menu only: the small form is for the button)
             info = info || describe();
             if (!info || !info.rows || !info.sections || !info.sections.length) return false;
             opening = true;
             opener = from || null;
             try {
                 wasLocked = !!(page.isLocked && page.isLocked());
-                build();
+                build(lite);
                 stage.appendChild(scrim);
                 inertBehind();
                 call('_ants_menu_open', 1);
                 if (page.releaseLock) page.releaseLock();
                 listen(doc, 'keydown', onKey, true);
+                listen(doc, 'keypress', onPress, true);
                 ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) { if (win.addEventListener) listen(win, name, keepPointerFree, true); }); // (the window in the capture phase, as the page's own handler: it stops the event before the document's)
                 ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) { listen(doc, name, function () { refresh(); }, false); });
                 state.resume.focus();
@@ -475,7 +506,7 @@
         }
 
         placeButtons();
-        win.antsGameMenuAsk = function () { open(null); }; // (the game's Esc with nothing to cancel: src/ants_app/application_game_menu.cpp)
+        win.antsGameMenuAsk = function () { open(null, true); }; // (the game's Esc with nothing to cancel: src/ants_app/application_game_menu.cpp)
         (page.every || function (fn, ms) { return setInterval(fn, ms); })(refresh, POLL_MS);
         loadStyle();
         return { open: open, close: close, isOpen: function () { return !!state; }, refresh: refresh, buttons: buttons, onKey: onKey };

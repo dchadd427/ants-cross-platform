@@ -88,22 +88,22 @@
     {
       "id": "dialog_does_not_close",
       "file": "web/game_menu.js",
-      "old": "if (state && (where() < 0 || !answered())) close({ relock: false });",
-      "new": "if (state && (where() < 0)) close({ relock: false });",
+      "old": "!state.small && (where() < 0 || !answered())) close({ relock: false });",
+      "new": "!state.small && (where() < 0)) close({ relock: false });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "results_do_not_close",
       "file": "web/game_menu.js",
-      "old": "if (state && (where() < 0 || !answered())) close({ relock: false });",
-      "new": "if (state && (!answered())) close({ relock: false });",
+      "old": "!state.small && (where() < 0 || !answered())) close({ relock: false });",
+      "new": "!state.small && (!answered())) close({ relock: false });",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "dialog_closes_with_lock_back",
       "file": "web/game_menu.js",
-      "old": "if (state && (where() < 0 || !answered())) close({ relock: false });",
-      "new": "if (state && (where() < 0 || !answered())) close();",
+      "old": "!state.small && (where() < 0 || !answered())) close({ relock: false });",
+      "new": "!state.small && (where() < 0 || !answered())) close();",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -235,8 +235,8 @@
     {
       "id": "dimmed_area_closes",
       "file": "web/game_menu.js",
-      "old": "            scrim.appendChild(panel);\n            selectTab(",
-      "new": "            scrim.appendChild(panel);\n            scrim.addEventListener('click', function (e) { if (e && e.target === scrim) close(); });\n            selectTab(",
+      "old": "            scrim.appendChild(panel);\n            if (lite) fillSmall();",
+      "new": "            scrim.appendChild(panel);\n            scrim.addEventListener('click', function (e) { if (e && e.target === scrim) close(); });\n            if (lite) fillSmall();",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -298,7 +298,7 @@
     {
       "id": "buttons_never_off",
       "file": "web/game_menu.js",
-      "old": "b.disabled = !up;",
+      "old": "b.disabled = !(up || less);",
       "new": "b.disabled = false;",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
@@ -459,7 +459,7 @@
     {
       "id": "esc_function_missing",
       "file": "web/game_menu.js",
-      "old": "win.antsGameMenuAsk = function () { open(null); };",
+      "old": "win.antsGameMenuAsk = function () { open(null, true); };",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
@@ -1370,6 +1370,153 @@
       "old": "!(panel && panel.contains(e.target) && !e.ctrlKey)",
       "new": "!(menu && menu.contains(e.target) && !e.ctrlKey)",
       "test": "python3 tests/scripts/test_web_game_menu.py TheScrolling"
+    },
+    {
+      "id": "small_form_never_available",
+      "file": "web/game_menu.js",
+      "old": "less = !up && small();",
+      "new": "less = false;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_lets_keys_through",
+      "file": "web/game_menu.js",
+      "old": "else if (state.small && !MODIFIER.test(key)) {",
+      "new": "else if (false) {",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_keeps_no_text_from_the_game",
+      "file": "web/game_menu.js",
+      "old": "                listen(doc, 'keypress', onPress, true);\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_swallows_bare_modifiers",
+      "file": "web/game_menu.js",
+      "old": "state.small && !MODIFIER.test(key)",
+      "new": "state.small",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_stops_lifts",
+      "file": "web/game_menu.js",
+      "old": "                listen(doc, 'keypress', onPress, true);\n",
+      "new": "                listen(doc, 'keypress', onPress, true);\n                listen(doc, 'keyup', function (e) { e.stopPropagation(); }, true);\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "full_menu_takes_every_key",
+      "file": "web/game_menu.js",
+      "old": "else if (state.small && !MODIFIER.test(key)) {",
+      "new": "else if (!MODIFIER.test(key)) {",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "full_menu_takes_all_text",
+      "file": "web/game_menu.js",
+      "old": "state.small || USED.test(e.key)",
+      "new": "true",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "full_menu_enter_keypress_reaches_the_game",
+      "file": "web/game_menu.js",
+      "old": "state.small || USED.test(e.key)",
+      "new": "state.small",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_draws_the_games_rows",
+      "file": "web/game_menu.js",
+      "old": "if (!row.page || !(PAGE_ROWS[row.key] || row.key === 'fullscreen')) return;",
+      "new": "if (false) return;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_has_leave_game",
+      "file": "web/game_menu.js",
+      "old": "            if (!lite) btns.appendChild(state.leave);\n",
+      "new": "            btns.appendChild(state.leave);\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_has_the_section_tabs",
+      "file": "web/game_menu.js",
+      "old": "            if (!lite) panel.appendChild(tabs);\n",
+      "new": "            panel.appendChild(tabs);\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_tags_a_recording",
+      "file": "web/game_menu.js",
+      "old": "            if (lite) watching = false;\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_not_told_open",
+      "file": "web/game_menu.js",
+      "old": "                call('_ants_menu_open', 1);\n",
+      "new": "                if (!lite) call('_ants_menu_open', 1);\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_stays_when_a_match_begins",
+      "file": "web/game_menu.js",
+      "old": "if (state && state.small && up) close({ relock: false });",
+      "new": "if (false) close({ relock: false });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_closed_by_the_full_menus_rule",
+      "file": "web/game_menu.js",
+      "old": "else if (state && !state.small && (where() < 0 || !answered())) close({ relock: false });",
+      "new": "else if (state && (where() < 0 || !answered())) close({ relock: false });",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "esc_request_opens_the_small_form",
+      "file": "web/game_menu.js",
+      "old": "win.antsGameMenuAsk = function () { open(null, true); };",
+      "new": "win.antsGameMenuAsk = function () { open(null); };",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "browser_keys_not_cancelled_in_the_small_form",
+      "file": "web/game_menu.js",
+      "old": "                if (page.cancelsKey && page.cancelsKey(e)) e.preventDefault();\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_offered_without_a_page_row",
+      "file": "web/game_menu.js",
+      "old": "(PAGE_ROWS.picture.has() || PAGE_ROWS.lockmouse.has()) && ",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_offered_without_a_table",
+      "file": "web/game_menu.js",
+      "old": "&& !!(info || (info = describe())); }",
+      "new": "; }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_offered_before_the_game_runs",
+      "file": "web/game_menu.js",
+      "old": "function small() { return ready() && styleReady && ",
+      "new": "function small() { return styleReady && ",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_offered_before_the_style",
+      "file": "web/game_menu.js",
+      "old": "function small() { return ready() && styleReady && ",
+      "new": "function small() { return ready() && ",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]
 }

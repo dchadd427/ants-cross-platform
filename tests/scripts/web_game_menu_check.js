@@ -232,15 +232,16 @@ function makePage(opts) {
     const rbar = make('div', 'rbar'), picwrap = make('div', 'picwrap', rbar);
     const toast = make('div', 'toast');
     toast.hidden = true;
-    const intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
+    const asked = [], intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
     const page = {
         doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, lock, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
+        cancelsKey: opts.noCancel ? undefined : (e) => { asked.push(e.key + (e.ctrlKey ? '+ctrl' : '')); return !!(e.ctrlKey ? 'ahlnopqs'.indexOf(e.key) >= 0 : /^F[123]$/.test(e.key)); },       // (the page's ANTS_PAGE.cancelsBrowserKey, in the cases that matter here)
     };
     const menu = Menu.forPage(page);
-    const p = { doc, win, game, state, page, menu, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, intervals, box };
+    const p = { asked, doc, win, game, state, page, menu, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, intervals, box };
     p.styleLoaded = () => { doc.links.forEach((l) => { if (l.onload) l.onload(); }); };
     p.poll = () => intervals.forEach((i) => i.fn());
     p.ready = () => { p.styleLoaded(); p.poll(); return p; };
@@ -279,19 +280,19 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.state.ready = true;
     p.game.needsAnswer = 1;
     p.poll();
-    ok('a dialog that needs its answer turns them off (and says so)', all.filter((b) => !b.hidden).every((b) => b.disabled && b.title === 'Not now'));
+    ok('a dialog that needs its answer leaves them on, for the small form (the title says which)', all.filter((b) => !b.hidden).every((b) => !b.disabled && b.title === 'Settings: picture shape and fullscreen mouse'));
     p.game.needsAnswer = 0;
     p.game.where = -1;
     p.poll();
-    ok('so does a screen that is not a match', all.filter((b) => !b.hidden).every((b) => b.disabled));
+    ok('so does a screen that is not a match', all.filter((b) => !b.hidden).every((b) => !b.disabled && b.title === 'Settings: picture shape and fullscreen mouse'));
     p.game.where = 0;
     p.poll();
-    ok('and they are on again', all.filter((b) => !b.hidden).every((b) => !b.disabled));
+    ok('and in a match with nothing waiting the title is the full menu\'s', all.filter((b) => !b.hidden).every((b) => !b.disabled && b.title === 'Settings: sound, picture, controls and Leave game'));
     expect('the poll is 250 ms', p.intervals.map((i) => i.ms), [250]);
     expect('...once', p.intervals.length, 1);
     p.game.where = -1;
     p.poll();
-    ok('a click on a button that is off opens nothing', !p.open() && !p.menu.isOpen());
+    ok('the game\'s Esc outside a match opens nothing (the small form is for the button)', !p.open() && !p.menu.isOpen());
     p.game.where = 0;
     p.state.ready = false;
     p.poll();
@@ -309,13 +310,13 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
 }
 {
     const p = makePage({ noModule: true }).ready();
-    ok('a game that is not there: the buttons are off, Esc opens nothing', p.qa('.gm-btn').every((b) => b.disabled) && !p.open());
+    ok('a game that is not there: the buttons are off, Esc opens nothing', p.qa('.gm-btn').every((b) => b.disabled && b.title === 'Not now') && !p.open());
 }
 {
     const p = makePage();
     p.state.ready = true;
     p.poll();
-    ok('without the style the buttons stay hidden and Esc opens nothing', p.qa('.gm-btn').every((b) => b.hidden) && !p.open());
+    ok('without the style the buttons stay hidden and nothing opens, from Esc or a press on one', p.qa('.gm-btn').every((b) => b.hidden) && !p.open() && (p.q('#settings-btn').click(), !p.menu.isOpen()));
     const link = p.doc.links[0];
     link.onerror();
     ok('a style that fails is dropped and fetched once more', !link.parentNode && p.doc.links.length === 1);
@@ -682,6 +683,230 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.game.where = -1;
     p.poll();
     ok('the match ending (the results) closes it', !p.menu.isOpen());
+}
+
+// ---- outside a match: the small form -----------------------------------------------------------------------------------------------------------------------------------------
+const PAGE_ROW_LABELS = MATCH_ROWS.filter((r) => r.page === 1).map((r) => r.label);
+const SMALL_NOTE = 'Sound, ant health, controls and the game\'s own settings are here during a match.';
+const outside = (opts) => { const p = makePage(opts).ready(); p.game.where = -1; p.poll(); return p; };
+{
+    const p = outside();
+    ok('where is -1 (the opening picture, the quick help, the setup and room screens, the results): the buttons are on', p.qa('.gm-btn').every((b) => !b.disabled));
+    p.q('#settings-btn').click();
+    ok('...and a press opens a panel', p.menu.isOpen());
+    expect('...the small form: no tabs, no tab list, and one pane', [p.qa('[role=tab]').length, p.qa('[role=tablist]').length, p.qa('.gm-pane').length], [0, 0, 1]);
+    expect('...its rows are exactly the table\'s rows of the page, in the table\'s order (the three are the table\'s `page: 1`)', p.rows().map((r) => r.name), PAGE_ROW_LABELS);
+    expect('...three of them', PAGE_ROW_LABELS, ['Fullscreen', 'Picture shape', 'Fullscreen mouse']);
+    expect('...under the heading of their section', p.qa('.gm-gh').map((h) => h.textContent), ['Video']);
+    expect('...no row of the game (no slider, no switch of the game), no Controls list, no version', [p.qa('.gm-panel input').length, p.qa('.gm-info').length, p.qa('.gm-krow').length, p.qa('.gm-btnrow').length], [0, 0, 0, 0]);
+    expect('the title, the Esc hint and the cross are the full menu\'s', [p.q('#gm-title').textContent, p.q('.gm-esc').textContent.indexOf('closes') > 0, p.q('.gm-x').getAttribute('aria-label')], ['Settings', true, 'Close the settings']);
+    expect('one quiet line says where the rest is', p.q('.gm-note').textContent, SMALL_NOTE);
+    expect('one button: Close (no Resume, no Leave game)', p.qa('.gm-btns button').map((b) => b.textContent), ['Close']);
+    expect('the focus starts on Close', p.doc.activeElement.textContent, 'Close');
+    ok('it is a child of the stage, a modal dialog, with the page behind it inert', p.q('#game-menu').parentNode === p.stage && p.q('.gm-panel').getAttribute('aria-modal') === 'true' && p.header.hasAttribute('inert') && p.box.hasAttribute('inert'));
+    p.q('.gm-resume').click();
+    ok('Close closes it', !p.menu.isOpen() && p.q('#game-menu') === null);
+}
+{
+    const p = makePage().ready();
+    p.game.needsAnswer = 1;
+    p.poll();
+    p.q('#settings-btn').click();
+    ok('a match under a dialog (the countdown, a vote, a lost link) opens the small form too', p.menu.isOpen() && p.qa('[role=tab]').length === 0 && p.rows().length === 3);
+    expect('the game is told, as for the full menu', p.game.calls, [['open', 1]]);
+    p.menu.close();
+}
+{
+    // which rows the page can serve
+    const t = outside({ touch: true }); t.q('#settings-btn').click();
+    expect('a touch screen has no Fullscreen mouse row (a finger never locks), the others are there', t.rows().map((r) => r.name), ['Fullscreen', 'Picture shape']);
+    const l = outside({ noLock: true }); l.q('#settings-btn').click();
+    expect('a page without the pointer lock: no Fullscreen mouse row', l.rows().map((r) => r.name), ['Fullscreen', 'Picture shape']);
+    const k = outside({ noPick: true }); k.q('#settings-btn').click();
+    expect('a page without its own pick of the shape: no Picture shape row', k.rows().map((r) => r.name), ['Fullscreen', 'Fullscreen mouse']);
+    const none = outside({ noPick: true, noLock: true });
+    ok('a page with neither is not the game page: the buttons are off and say so, nothing opens', none.qa('.gm-btn').every((b) => b.disabled && b.title === 'Not now') && (none.q('#settings-btn').click(), !none.menu.isOpen()));
+    const gone = outside({ noModule: true });
+    ok('with no game to ask there is no table to draw: off', gone.qa('.gm-btn').every((b) => b.disabled) && (gone.q('#settings-btn').click(), !gone.menu.isOpen()));
+    const early = makePage({ noCancel: true });
+    early.state.ready = false;
+    early.styleLoaded();
+    early.poll();
+    ok('before the game runs there is no button, and a press on the hidden one opens nothing', early.qa('.gm-btn').every((b) => b.hidden) && (early.q('#settings-btn').click(), !early.menu.isOpen()));
+    const w = outside({ watch: true });
+    w.game.where = 1; w.game.needsAnswer = 1; w.poll();
+    w.q('#settings-btn-bar').click();
+    ok('a watched match under a dialog: the recording\'s bar has the small form, with no tag of "watching"', w.menu.isOpen() && w.rows().length === 3 && w.qa('.gm-tag').length === 0);
+}
+{
+    // the controls do the page's things and nothing of the game's rows
+    const p = outside();
+    p.q('#settings-btn').click();
+    const before = p.game.calls.length;
+    p.q('.gm-act').click();
+    expect('Fullscreen is the page\'s enter, then leave (the word follows)', [p.state.enters, p.qa('.gm-act')[0].textContent], [1, 'Enter fullscreen']);
+    p.poll();
+    expect('...the word follows the page\'s state', p.qa('.gm-act')[0].textContent, 'Leave fullscreen');
+    p.qa('.gm-act')[0].click();
+    expect('...and a second press leaves', [p.state.leaves, p.state.fullscreen], [1, false]);
+    const pick = p.q('.gm-pick .pick-select');
+    pick.click();
+    p.q('#gm-picture-o5').click();
+    expect('a shape pick calls the page\'s function with the name', [p.shapes.clicked, p.stage.getAttribute('data-aspect')], [['21:9'], '21:9']);
+    const group = p.q('[role=radiogroup]');
+    group.children[1].click();
+    group.children[0].click();
+    expect('Free and Locked are the page\'s lock setting', [p.game.calls.filter((c) => c[0] === 'lock'), p.lockState.on], [[['lock', 'off'], ['lock', 'on']], true]);
+    p.qa('.gm-panel button').forEach((b) => { if (!b.disabled && b.className.indexOf('gm-resume') < 0 && b.className.indexOf('gm-x') < 0) b.click(); });
+    expect('pressing every control of the small form never sets or does a row of the game', p.game.calls.filter((c) => c[0] === 'set' || c[0] === 'do'), []);
+    ok('...and the game was told only that the panel is open', p.game.calls.filter((c) => c[0] === 'open').length === 1 && before === 1);
+    p.menu.close();
+}
+{
+    // keys: nothing reaches the game but the lifts and a bare modifier's press
+    const p = outside();
+    p.q('#settings-btn').click();
+    const typed = ['s', 'q', 'x', 'c', 't', 'h', 'F1', 'Backspace', 'ArrowDown', 'F9', 'Enter', ' ', 'Tab', 'a', 'Delete'];
+    const down = typed.map((k) => [k, p.doc.key(k).reachedPage]);
+    expect('no key press reaches the page and the game behind it (S would start a match, Q and X quit, T opens the chat line)', down.filter((d) => d[1]), []);
+    const press = typed.map((k) => [k, p.doc.key(k, { type: 'keypress' }).reachedPage]);
+    expect('...no typed text either (the keypress of each is stopped)', press.filter((d) => d[1]), []);
+    const ctrlS = p.doc.key('s', { ctrlKey: true });
+    ok('...Ctrl+S too, and the page\'s own cancelling of the browser\'s reaction is done here', !ctrlS.reachedPage && ctrlS.prevented);
+    const f1 = p.doc.key('F1');
+    ok('...F1 is cancelled for the browser, a plain S is not', f1.prevented && !p.doc.key('s').prevented);
+    expect('the page\'s canceller is asked for the keys that are not the panel\'s own, and not for the panel\'s own', [p.asked.indexOf('q') >= 0, p.asked.indexOf('F1') >= 0, p.asked.indexOf('s+ctrl') >= 0, p.asked.indexOf('Enter'), p.asked.indexOf(' '), p.asked.indexOf('Tab'), p.asked.indexOf('ArrowDown')], [true, true, true, -1, -1, -1, -1]);
+    ['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].forEach((m) => ok('a bare ' + m + ' press goes on (the game keeps count of what is held)', p.doc.key(m).reachedPage));
+    ['s', 'Shift', 'Enter', 'F1'].forEach((k) => ok('the lift of ' + k + ' goes on', p.doc.key(k, { type: 'keyup' }).reachedPage));
+    p.menu.close();
+    expect('the listeners go with the panel', [p.doc.count('keydown'), p.doc.count('keypress')], [0, 0]);
+    ok('...and a letter is the page\'s again', p.doc.key('s').reachedPage);
+    const none = outside({ noCancel: true });
+    none.q('#settings-btn').click();
+    const e = none.doc.key('s', { ctrlKey: true });
+    ok('a page that hands no canceller: the key still stops, nothing breaks', !e.reachedPage && !e.prevented);
+}
+{
+    // the full menu is unchanged: only its own keys stop; a letter and its text go on (the game drops them: it was told). Enter and Space stop as keypress too
+    const p = makePage().ready();
+    p.open();
+    ok('a letter and its text go on in the full menu', p.doc.key('s').reachedPage && p.doc.key('s', { type: 'keypress' }).reachedPage);
+    ok('...a Ctrl+S, an F1, a bare modifier and a lift too', p.doc.key('s', { ctrlKey: true }).reachedPage && p.doc.key('F1').reachedPage && p.doc.key('Shift').reachedPage && p.doc.key('s', { type: 'keyup' }).reachedPage);
+    expect('...the page\'s canceller is not asked here (the page\'s own listener does it)', p.asked, []);
+    ok('its own keys stop: Enter, Space, Tab, an arrow', ['Enter', ' ', 'Tab', 'ArrowDown'].every((k) => !p.doc.key(k).reachedPage));
+    ok('the keypress of Enter and Space stops too: the game cancels keypress, which would stop a native press of Enter on a button', !p.doc.key('Enter', { type: 'keypress' }).reachedPage && !p.doc.key(' ', { type: 'keypress' }).reachedPage);
+    p.menu.close();
+    expect('...the listener goes with the panel', p.doc.count('keypress'), 0);
+}
+{
+    // the keys of the small form's panel: Esc, Tab, a click on the dimmed area, the focus
+    const p = outside();
+    const b = p.q('#settings-btn');
+    b.fire('click', { detail: 0 });
+    ok('a key press on the button opens it', p.menu.isOpen());
+    p.doc.key('Escape', { repeat: true });
+    ok('a held Esc does nothing', p.menu.isOpen());
+    let e = p.doc.key('Escape');
+    ok('Esc closes it once (and it stops at the panel)', !p.menu.isOpen() && e.prevented && !e.reachedPage);
+    ok('...the focus goes back to the button that a key opened it from', p.doc.activeElement === b);
+    b.fire('click', { detail: 1 });
+    const scrim = p.q('#game-menu');
+    scrim.fire('click', { target: scrim });
+    scrim.fire('mousedown', { target: scrim });
+    ok('a click on the dimmed area does nothing', p.menu.isOpen());
+    p.qa('.gm-btns button')[0].focus();
+    e = p.doc.key('Tab');
+    ok('Tab from the last control wraps to the first', e.prevented && p.doc.activeElement === p.qa('.gm-panel button').filter((x) => !x.disabled)[0]);
+    e = p.doc.key('Tab', { shiftKey: true });
+    ok('Shift+Tab from the first wraps to the last (Close)', e.prevented && p.doc.activeElement.textContent === 'Close');
+    p.qa('.gm-x')[0].click();
+    ok('the cross closes it, and a click opened it: the canvas has the focus', !p.menu.isOpen() && p.doc.activeElement === p.canvas);
+    p.q('#settings-btn').click();
+    p.q('.gm-pick .pick-select').focus();
+    p.doc.key('Enter');
+    e = p.doc.key('ArrowDown');
+    ok('the picture\'s list works by keys (the picker takes them first), and the panel stays', p.menu.isOpen() && e.prevented && !e.reachedPage && !p.q('.gm-pick [role=listbox]').hidden);
+    e = p.doc.key('Escape');
+    ok('Esc with the list open closes the list alone', p.menu.isOpen() && p.q('.gm-pick [role=listbox]').hidden);
+    p.menu.close();
+}
+{
+    // the game is told, and the pointer lock
+    const p = outside();
+    p.state.locked = true;
+    p.q('#settings-btn').click();
+    expect('the game is told 1 at open, and the lock is let go', [p.game.calls, p.state.locks], [[['open', 1]], ['release']]);
+    p.state.locked = true;
+    p.win.emit('pointerlockchange');
+    ok('a lock that comes while it is up is let go', !p.state.locked);
+    p.state.locked = true;
+    p.poll();
+    ok('...and the poll lets go of one that no event told of', !p.state.locked);
+    p.state.locks.length = 0;
+    p.game.calls.length = 0;
+    p.q('.gm-resume').click();
+    expect('the game is told 0 at close, and the lock is asked for again, as it was held', [p.game.calls, p.state.locks], [[['open', 0]], ['request']]);
+    const q = outside();
+    q.state.fullscreen = true;
+    q.q('#settings-btn').click();
+    q.state.locks.length = 0;
+    q.q('.gm-resume').click();
+    expect('in fullscreen Close asks for the lock (the click is the gesture)', q.state.locks, ['request']);
+    const r = outside();
+    r.q('#settings-btn').click();
+    r.q('.gm-resume').click();
+    expect('with the mouse free in a window it asks for nothing', r.state.locks, ['release']);
+}
+{
+    // when the screen changes under it
+    const p = outside();
+    p.q('#settings-btn').click();
+    p.game.leave = 0;
+    p.poll();
+    p.poll();
+    ok('the screen stays the same: the poll keeps it (it is not the old rule, which closed a panel while where was -1)', p.menu.isOpen());
+    p.game.needsAnswer = 1;
+    p.game.where = 0;
+    p.poll();
+    ok('...a match that begins under a dialog: it stays (the full menu is not possible)', p.menu.isOpen());
+    p.state.locked = false;
+    p.state.locks.length = 0;
+    p.game.needsAnswer = 0;
+    p.poll();
+    ok('the dialog is answered, the match has the screen: the small form closes at the next poll', !p.menu.isOpen());
+    expect('...without asking for the pointer lock, the game is told, and the focus goes to the canvas', [p.state.locks, p.game.calls.slice(-1)[0], p.doc.activeElement === p.canvas], [[], ['open', 0], true]);
+    const q = outside();
+    q.state.fullscreen = true;
+    q.q('#settings-btn').click();
+    q.state.locks.length = 0;
+    q.game.where = 0;
+    q.poll();
+    expect('...even in fullscreen (the match needs the eyes and hands)', [q.menu.isOpen(), q.state.locks], [false, []]);
+    const f = makePage().ready();
+    f.open();
+    f.game.where = -1;
+    f.poll();
+    ok('the full menu open and the match over: it closes and no small form takes its place', !f.menu.isOpen() && f.q('#game-menu') === null);
+    f.game.needsAnswer = 1;
+    f.game.where = 0;
+    f.poll();
+    ok('...a dialog does not turn the full menu into the small form either', f.q('#game-menu') === null);
+    const m = makePage().ready();
+    m.open();
+    m.game.needsAnswer = 1;
+    m.poll();
+    ok('the full menu open and a dialog comes up: it closes', !m.menu.isOpen());
+}
+{
+    const p = outside();
+    ok('the game\'s Esc request outside a match opens nothing', !p.open() && !p.menu.isOpen());
+    p.game.where = 0;
+    p.game.needsAnswer = 1;
+    p.poll();
+    ok('...nor under a dialog', !p.open() && !p.menu.isOpen());
+    p.game.needsAnswer = 0;
+    p.poll();
+    ok('...and in a match with nothing waiting it opens the full menu', !!p.open() && p.qa('[role=tab]').length === 4);
 }
 
 // ---- Leave game ------------------------------------------------------------------------------------------------------------------------------------------------------------------------

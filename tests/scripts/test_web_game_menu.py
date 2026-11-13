@@ -142,7 +142,7 @@ class TheScript(unittest.TestCase):
     def test_it_listens_to_nothing_outside_the_panels_life(self):
         self.assertNotIn("window.addEventListener", self.script)
         self.assertNotIn("stage.addEventListener", self.script)
-        self.assertEqual(len(re.findall(r"listen\(doc, ", self.script)), 2, "the keys and fullscreen (two names): all removed when it closes")
+        self.assertEqual(len(re.findall(r"listen\(doc, ", self.script)), 3, "the keys, the typed text and fullscreen (two names): all removed when it closes")
         self.assertEqual(len(re.findall(r"listen\(win, name, keepPointerFree, true\)", self.script)), 1, "the pointer lock (three names) is heard on the window in the capture phase: the page's own handler there stops the event before the document's")
         self.assertNotIn("'keyup'", self.script, "the lifts of keys are the game's: swallowed, its window system would read the next press as a repeat")
         self.assertIn("removers[i]()", self.script)
@@ -216,8 +216,8 @@ def pane_failures(css_text):
     if pane and not re.search(r"overscroll-behavior:\s*contain", pane.group(1)):
         bad.append("the pane's wheel and fingers chain to the page behind it (overscroll-behavior: contain)")
     rows = re.findall(r"grid-template-rows:\s*([^;]*);", css_text)
-    if len(rows) != 3 or not all("minmax(0, 1fr)" in r for r in rows):
-        bad.append("one of the three layouts (computer, phone upright, phone on its side) does not hold the pane's row to what is left: %s" % rows)
+    if len(rows) != 4 or not all("minmax(0, 1fr)" in r for r in rows):
+        bad.append("one of the four layouts (computer, phone upright, phone on its side, the small form) does not hold the pane's row to what is left: %s" % rows)
     heights = re.findall(r"\.gm-panel \{[^}]*?height:\s*([^;]*);", css_text)
     if len(heights) != 3 or not all(("100%" in h) for h in heights):
         bad.append("the panel is not held to the window in every layout: %s" % heights)
