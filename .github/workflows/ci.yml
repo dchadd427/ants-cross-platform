@@ -541,14 +541,15 @@ jobs:
       - uses: actions/checkout@v7
 
       # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
-      # the Dockerfile copies before the compile (a run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own). The image is
-      # the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
+      # the compile layers read (the Dockerfile, the build files and the sources; a change of the pages, VERSION, web/shell.html or Original-Ants/ does not change it, because the Dockerfile copies them
+      # after the compile). A run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own. The BuildKit cache mounts of the
+      # Dockerfile (ccache) are not part of this cache: they are empty in every run here. The image is the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
       # The builder image is pinned to a release (the default is a moving tag).
       - name: Restore the Docker layer cache of the web image
         uses: actions/cache@v6
         with:
           path: /tmp/docker-cache/web
-          key: docker-web-${{ hashFiles('Dockerfile', '.dockerignore', 'CMakeLists.txt', 'VERSION', 'cmake/**', 'include/**', 'src/**', 'web/**', 'Original-Ants/**') }}
+          key: docker-web-${{ hashFiles('Dockerfile', '.dockerignore', 'docker/emsdk_warm.cpp', 'CMakeLists.txt', 'cmake/**', 'include/**', 'src/**') }}
           restore-keys: docker-web-
 
       - name: Create the buildx builder
@@ -605,14 +606,15 @@ jobs:
       - uses: actions/checkout@v7
 
       # The Docker layer cache: a buildx builder of its own (the default builder cannot keep a cache in a folder) with the cache in a folder that actions/cache keeps. The key is a hash of the files that
-      # the Dockerfile copies before the compile (a run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own). The image is
-      # the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
+      # the compile layers read (the Dockerfile, the build files, the sources and third_party/; a change of VERSION or of tools/ does not change it: the Dockerfile copies VERSION after the first compile and
+      # not tools/ at all, and the image has no page). A run with the same files finds the cache and has nothing to save; another one starts from the latest older cache and saves its own. The BuildKit cache mounts of the
+      # Dockerfile (ccache) are not part of this cache: they are empty in every run here. The image is the same as `docker build` makes: only layers whose inputs are the same are taken from the cache.
       # The builder image is pinned to a release (the default is a moving tag).
       - name: Restore the Docker layer cache of the server image
         uses: actions/cache@v6
         with:
           path: /tmp/docker-cache/server
-          key: docker-server-${{ hashFiles('Dockerfile.server', '.dockerignore', 'CMakeLists.txt', 'VERSION', 'cmake/**', 'include/**', 'src/**', 'third_party/**', 'tools/**') }}
+          key: docker-server-${{ hashFiles('Dockerfile.server', '.dockerignore', 'CMakeLists.txt', 'cmake/**', 'include/**', 'src/**', 'third_party/**') }}
           restore-keys: docker-server-
 
       - name: Create the buildx builder
@@ -670,3 +672,40 @@ jobs:
           echo "the job that decides what runs: $CHANGES; the web image job: $IMAGE; the server, hub and stack job: $STACK"
           [ "$CHANGES" = success ] || { echo "the job that decides what runs did not succeed: this check fails"; exit 1; }
           [ "$IMAGE" = success ] && [ "$STACK" = success ] || { echo "a web job failed, was cancelled or did not run: this check fails"; exit 1; }
+
+  # Not one of the five required checks: it runs for a pull request that changes a Dockerfile or this check, and proves that the images did not change with it (tools/image_files_diff.sh builds the web image and the
+  # game server's image from the pull request's base Dockerfiles and from this tree's, with one build context and one build id, and compares every file and the image's configuration, and for the web image what its
+  # link reads; about 25 minutes). It is behind no required name, on purpose: a pull request that adds a COPY line (a new page file) changes the images by design and would turn the name red, and the small
+  # job of a name can say "skipped is fine" only for all the jobs behind it together, never for one of them.
+  image_files:
+    name: Image files unchanged by a Dockerfile change
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Did a Dockerfile or this check change?
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          run=false
+          case "$EVENT" in
+            pull_request)
+              changed=$(git diff --name-only "$PR_BASE_SHA" HEAD -- Dockerfile Dockerfile.server docker/emsdk_warm.cpp tools/image_files_diff.sh tools/image_manifest.py tools/link_inputs.py tools/relink_outputs.sh)
+              echo "the files of the images and of this check that the pull request changed: ${changed:-none}"
+              [ -z "$changed" ] || run=true
+              ;;
+          esac
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "compare the images: $run"
+
+      - name: Build the images from the pull request's base Dockerfiles and from this tree's, and compare their files
+        if: steps.decide.outputs.run == 'true'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash tools/image_files_diff.sh --base "$PR_BASE_SHA" --diagnose

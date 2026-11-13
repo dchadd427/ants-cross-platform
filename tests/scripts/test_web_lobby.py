@@ -556,7 +556,7 @@ class TheImageAndTheCi(PageCase):
         self.assertIn("COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html", dockerfile)
         self.assertIn("RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html", dockerfile)
         self.assertFalse("/src/four.html" in dockerfile or "web/four.html" in dockerfile, "the Dockerfile still builds the old page")
-        self.assertIn("web/shell.html web/lobby.html", dockerfile)                           # the version goes into both pages
+        self.assertIn("build_web/src/ants_app/index.html web/lobby.html", dockerfile)                           # the version goes into both pages (the game page that the link made, and the lobby)
         self.assertIn('"$PAGE" /src/web/lobby.html', dockerfile)                             # and the build id
         self.assertIn("cp /src/web/lobby.html /src/lobby.html", dockerfile)                  # the site placeholder step runs on the lobby
 
