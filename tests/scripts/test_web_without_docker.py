@@ -408,6 +408,7 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertFalse(os.path.exists(os.path.join(src, "gitinfo", "config")), "a clone's .git/config is never part of the build")
 
 
+@unittest.skipUnless(LINUX and shutil.which("sed") and shutil.which("python3"), "the Dockerfile's RUN lines use GNU tools: Linux")
 class TheStampChecksOfTheRealDockerfile(unittest.TestCase):
     """The steps of the repository's Dockerfile up to the stamps of the build id, replayed with a fake Emscripten on a small copy of the repository in which one page is spoiled: the build must stop
     at the Dockerfile's own checks (the placeholder that is left, the stamp that is missing, the map maker's version that does not match)."""
@@ -484,6 +485,8 @@ class TheStampChecksOfTheRealDockerfile(unittest.TestCase):
         self.assertIsNotNone(error)
         self.assertIn("RUN failed", error)
 
+
+class TheStampLinesOfTheRealDockerfile(unittest.TestCase):
     def test_the_seds_and_the_checks_after_them_name_the_same_pages(self):
         docker = read("Dockerfile").replace("\\\n", " ")
         for sed_start, placeholder in (("sed -i \"s/@@BUILD_TIMESTAMP@@", "@@GAME_VERSION@@"), ("sed -i \"s/@@BUILD_ID@@", "@@BUILD_")):
