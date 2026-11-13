@@ -393,7 +393,7 @@ def computer(p, args, check):
     s = p.state()
     want = shape_of(at + 3)
     check(s["aspect"] == want and s["shape"] == aspect.SHAPE_ORDER.index(want) and ("aspect=" + want) in tab.ev("location.search"), "the shape is the page's own: the stage, the game's canvas and the address (%s, shape %s)" % (s["aspect"], s["shape"]))
-    check(tab.ev("(document.querySelector('#aspect-select-list [aria-selected=true]') || document.body).getAttribute('data-shape')") == want and tab.ev("localStorage.getItem('ants.aspect.v2')") == want, "the dropdown under the picture follows, and the choice is remembered")
+    check(tab.ev("(document.querySelector('#gm-picture-list [aria-selected=true]') || document.body).getAttribute('data-shape')") == want and tab.ev("localStorage.getItem('ants.aspect.v2')") == want, "the menu's dropdown follows, and the choice is remembered")
     p.key("Enter", "Enter", 13)
     p.key("End", "End", 35)
     p.key("Enter", "Enter", 13)

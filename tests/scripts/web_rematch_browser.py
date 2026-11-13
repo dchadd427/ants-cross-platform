@@ -36,8 +36,8 @@ from web_lobby_chat_browser import Visitor                                      
 STRIP = ("(function () { var s = document.getElementById('rematch'); if (!s || s.hidden) return null; var q = function (c) { var n = s.querySelector(c); return n ? n.textContent : null; };"
          " var go = s.querySelector('.rmt-go'); return { title: q('.rmt-title'), text: q('.rmt-text'), button: go && !go.hidden ? q('.rmt-go .btn') : null, note: q('.rmt-note'),"
          " chips: Array.prototype.map.call(s.querySelectorAll('.rmt-chip'), function (c) { return [c.textContent, c.className]; }), markup: s.querySelectorAll('script, img, a').length }; })()")
-PLACE = ("(function () { var st = document.getElementById('game-stage').getBoundingClientRect(), s = document.getElementById('rematch').getBoundingClientRect(), v = document.getElementById('view-bar').getBoundingClientRect();"
-         " return { below: s.top >= st.bottom - 1, above: v.top >= s.bottom - 1, fits: st.top >= 0 && v.bottom <= window.innerHeight + 1 }; })()")
+PLACE = ("(function () { var st = document.getElementById('game-stage').getBoundingClientRect(), s = document.getElementById('rematch').getBoundingClientRect();"
+         " return { below: s.top >= st.bottom - 1, fits: st.top >= 0 && s.bottom <= window.innerHeight + 1 }; })()")
 BAR = ("(function () { var b = document.getElementById('backbar'); if (!b || b.hidden) return null; var a = b.querySelector('a');"
        " return { lead: b.querySelector('b').textContent, text: b.textContent, link: a ? [a.textContent, a.getAttribute('href'), a.target] : null, first: document.body.firstElementChild === b }; })()")
 CARDS = ("Array.prototype.map.call(document.querySelectorAll('#slots > li'), function (li) { var p = li.querySelector('.pstat'); return [li.getAttribute('data-i'), p ? p.textContent : '', p ? p.className : '']; })"
@@ -128,7 +128,7 @@ def main():
         check(bool(wait_for(lambda: [c[0] for c in (ann.ev(STRIP) or {}).get("chips", [])] == ["Ann · on the results screen", "Bob · on the results screen"], 10, 0.25)),
               "nobody is back yet: both chips say \"on the results screen\" (%s)" % (ann.ev(STRIP) or {}).get("chips"))
         place = ann.ev(PLACE) or {}
-        check(place == {"below": True, "above": True, "fits": True}, "the strip lies under the picture and above the Picture row, and the picture, the strip and the Picture row are in the window together (%s)" % place)
+        check(place == {"below": True, "fits": True}, "the strip lies under the picture, and the picture and the strip are in the window together (%s)" % place)
         ann.shot(args.shots, "r1_game_page_match_over")
 
         # ---- Ann goes back to the lobby ----
