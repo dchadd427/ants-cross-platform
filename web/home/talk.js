@@ -16,6 +16,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    var BUBBLE = 6000;                                         // ms that the line of words stays
     var LIMIT = 200;                                           // code points of a chat line (the hub's own, and the dock's)
     var TEXT = {
         emoji: 'Emoji', emojiList: 'Emoji: choose one to add it to your message', voice: 'Voice to text: your browser\'s speech service hears you',
@@ -107,8 +108,13 @@
         if (send) form.insertBefore(tools, send); else form.appendChild(tools);
         form.className = String(form.className) + ' gt-on';
 
-        var open = false, byPointer = false, run = null, at = 0, said = '';
-        function note(text) { said = text; say.textContent = text; say.hidden = !text; }
+        var open = false, byPointer = false, run = null, at = 0, said = '', gone = 0;
+        function note(text) {                                  // the line is a bubble over the log: it goes by itself after a few seconds (not while the microphone listens: that line stays until the state changes), and at once on the next action
+            said = text; say.textContent = text; say.hidden = !text;
+            if (gone) { clearTimeout(gone); gone = 0; }
+            if (text && text !== TEXT.asking && text !== TEXT.listening) gone = setTimeout(function () { gone = 0; if (said === text) note(''); }, BUBBLE);
+        }
+        function grown() { if (dock.grow) dock.grow(); }       // (the field is a text area: the chat makes it as tall as its words)
         function sync() { tools.hidden = !!field.disabled; if (field.disabled || form.hidden) { drop(); close(false); } }
         function fit() {                                       // the picker lies over the log, above the form: no taller than the room above the form (72 to 180 px): up to the top of the dock's body where the dock clips what is outside it (a phone), else up to the window's top
             var clips = win.getComputedStyle && dock.root && win.getComputedStyle(dock.root).overflow === 'hidden';
@@ -119,18 +125,18 @@
         function close(back) { if (!open) return; open = false; pick.hidden = true; emojiBtn.setAttribute('aria-expanded', 'false'); if (back && field.focus) field.focus(); }
         function toggle() {
             if (open) { close(true); return; }
-            open = true; pick.hidden = false; emojiBtn.setAttribute('aria-expanded', 'true'); if (said === TEXT.full) note('');
+            open = true; pick.hidden = false; emojiBtn.setAttribute('aria-expanded', 'true'); if (!run) note('');
             fit(); if (byPointer) { at = Math.max(0, Math.min(keys.length - 1, at)); keys.forEach(function (b, k) { b.tabIndex = k === at ? 0 : -1; }); } else rove(at);
         }
         function choose(text) {
             var r = insert(field.value, field.selectionStart, field.selectionEnd, text);
             if (!r) { note(TEXT.full); return; }
-            note(''); field.value = r.value;
+            note(''); field.value = r.value; grown();
             if (field.setSelectionRange) field.setSelectionRange(r.caret, r.caret);
         }
         // ---- voice
         function paint(me, words) { if (micBtn) { micBtn.setAttribute('aria-pressed', run === me && !me.over ? 'true' : 'false'); micBtn.className = 'btn gt-btn gt-mic' + (run === me && !me.over ? ' gt-hot' : ''); } note(words); }
-        function draw(me) { var r = speak(me.before, me.text, me.after); field.value = r.value; if (field.setSelectionRange) field.setSelectionRange(r.caret, r.caret); }
+        function draw(me) { var r = speak(me.before, me.text, me.after); field.value = r.value; grown(); if (field.setSelectionRange) field.setSelectionRange(r.caret, r.caret); }
         function drop() {                                      // away at once: nothing that the recognizer still says is heard (a send, typing, a page that goes, a field that is off)
             var me = run; if (!me) return;
             run = null; me.over = true; paint(me, '');
@@ -182,8 +188,8 @@
             if (e.stopPropagation) e.stopPropagation();
             if (open) close(true); else listen();
         });
-        form.addEventListener('submit', function () { drop(); close(false); });
-        field.addEventListener('input', function () { if (run) drop(); else if (said === TEXT.full) note(''); });
+        form.addEventListener('submit', function () { drop(); close(false); note(''); });
+        field.addEventListener('input', function () { if (run) drop(); else note(''); });
         doc.addEventListener('visibilitychange', function () { if (doc.hidden) { drop(); close(false); } });
         doc.addEventListener('pointerdown', function (e) { if (open && e && e.target && !form.contains(e.target)) close(false); });
         win.addEventListener('pagehide', function () { drop(); });

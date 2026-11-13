@@ -70,6 +70,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     #home[data-tab="chat"] .hmain, #home:not([data-tab="chat"]) .gc, #home[data-tab="games"] .pl, #home[data-tab="players"] .gdock { display: none; }
     #home:not(.pl-on)[data-tab="players"] .gdock { display: flex; }
 }
+@media (max-width: 700px) and (min-height: 501px) { .hmain { padding: 2px 12px 6px; } .htabs { gap: 6px; padding: 4px 12px 12px; } .htab { min-height: 44px; font-size: 15px; } }       /* (a phone upright: the strip is 60 px, not 68) */
 @media (max-width: 380px) { .htabs { gap: 6px; padding-left: 8px; padding-right: 8px; } .htab { gap: 0; font-size: 15px; padding: 6px 2px; } .htab .pill { margin-left: 4px; padding: 0 5px; font-size: 13px; } }       /* (320 px: Players with "99+" fits its third of the strip) */
 @media (max-width: 700px) and (max-height: 500px) { .htabs { padding: 4px 12px 6px; } .htab { min-height: 44px; } }       /* (a phone held sideways: the strip is 54 px, so the views keep the room) */
 
@@ -112,6 +113,23 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .rbar { gap: 8px; } .rbar .hlogo { width: 76px; } .rbar .btn { padding: 6px 12px; } .rbar .rhome { padding-left: 9px; }
     .hmenubox { width: calc(100vw - 20px); }
 }
+/* ---- a phone upright: two rows of 44 px (110 px, not 184): the logo, Games, the name chip and the Menu; then Quick host and Quick join (and My room while the page holds a room) ---- */
+@media (max-width: 720px) and (orientation: portrait) {
+    .hbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; padding: 12px 14px 4px; }
+    .hbar::after { content: ""; order: 5; flex: 0 0 100%; height: 6px; }
+    .hbar .hright { display: contents; }
+    .hbar .hbrand { order: 1; flex: none; margin-right: 0; } .hbar .hlogo { width: 66px; }
+    .hbar .btn { min-height: 44px; padding: 4px 10px; font-size: 15px; }
+    .hbar .games { order: 2; flex: 1 1 0; min-width: 116px; padding: 4px 6px; } .hbar .games .pill { margin-left: 4px; padding: 0 5px; }
+    .hbar button.hlogin { order: 3; flex: 0 1 auto; min-width: 46px; max-width: calc(100% - 246px); gap: 6px; padding: 0 8px 0 6px; }
+    .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { font-size: 14px; }
+    .hbar .hmenu { order: 4; flex: none; min-width: 46px; padding: 0; }
+    .hbar .mine { order: 6; flex: 1 1 0; min-width: 0; padding: 4px 6px; }
+    .hbar .quick { order: 7; flex: 1 1 0; min-width: 0; min-height: 44px; padding: 4px 6px; font-size: 16px; letter-spacing: .06em; gap: 8px; } .quick::before { width: 15px; height: 15px; }
+    .hbar:has(.mine:not([hidden])) .quick { padding: 4px 4px; font-size: 14px; letter-spacing: .02em; } .hbar:has(.mine:not([hidden])) .quick::before { display: none; }
+}
+@media (max-width: 421px) and (orientation: portrait) { .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: "Room"; font-size: 15px; } .hbar .mine { padding: 4px 4px; } .hbar .mine .pill { margin-left: 4px; padding: 0 4px; } }
+@media (max-width: 359px) and (orientation: portrait) { .hbar { gap: 0 4px; } .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; } .hbar .mine .name::after { font-size: 14px; } .hbar .mine .pill { margin-left: 3px; padding: 0 3px; } .hbar button.hlogin { max-width: calc(100% - 234px); } .hbar .quick { font-size: 14px; letter-spacing: .02em; } .quick::before { display: none; } .hbar .hlogo { width: 54px; } }
 /* ---- ... held sideways (a short window, 360 to 639 px wide): two compact rows (106 px), not three (184) ---- */
 @media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {
     .hbar { grid-template-columns: auto repeat(2, minmax(0, 1fr)) auto; gap: 6px; padding: 8px 12px 4px; }
