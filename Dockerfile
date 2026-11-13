@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # =============================================================================
 # Stage 1: Emscripten's libraries and ports, made once per Emscripten version
 # =============================================================================

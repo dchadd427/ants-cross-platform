@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # =============================================================================
 # The dedicated game server (ants_server): a headless program, no SDL, no game assets except the six maps.
 #   docker build -f Dockerfile.server -t ants-server .

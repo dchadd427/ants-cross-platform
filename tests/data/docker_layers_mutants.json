@@ -114,10 +114,10 @@
    "expect": "test_the_runner_stage_copies_the_same_builder_outputs_and_runs_as_before"
   },
   {
-   "id": "web_syntax_line_is_gone",
+   "id": "web_gets_an_external_frontend",
    "file": "Dockerfile",
-   "old": "# syntax=docker/dockerfile:1\n",
-   "new": "",
+   "old": "# =============================================================================\n# Stage 1: Emscripten's libraries",
+   "new": "# syntax=docker/dockerfile:1\n# =============================================================================\n# Stage 1: Emscripten's libraries",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_every_compile_has_the_ccache_mount_and_the_wrapper"
   },
@@ -944,6 +944,78 @@
    "new": "BAR = (r'(data-built2=\")",
    "test": "python3 tests/scripts/test_image_files_diff.py",
    "expect": "test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it"
+  },
+  {
+   "id": "manifest_date_pattern_takes_the_version",
+   "file": "tools/image_manifest.py",
+   "old": "(data-built=\")\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} PT",
+   "new": "(?:data-version=\"[^\"]*\")?( data-build=\"[^\"]*\" data-built=\")\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} PT",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it"
+  },
+  {
+   "id": "manifest_date_pattern_takes_any_text_of_the_date",
+   "file": "tools/image_manifest.py",
+   "old": "(data-built=\")\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} PT(\")",
+   "new": "(data-built=\")[^\"]*(\")",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it"
+  },
+  {
+   "id": "manifest_date_pattern_takes_any_digits",
+   "file": "tools/image_manifest.py",
+   "old": "(data-built=\")\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} PT(\")",
+   "new": "(data-built=\")[\\d: -]*PT(\")",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it"
+  },
+  {
+   "id": "manifest_forgets_the_play_page_stamps",
+   "file": "tools/image_manifest.py",
+   "old": "    HTML + \"play.html\": (TIME, CACHE, DATE),\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_every_page_that_the_builder_stamps_with_the_build_date_is_listed"
+  },
+  {
+   "id": "stamp_check_for_the_version_forgets_a_page",
+   "file": "Dockerfile",
+   "old": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html",
+   "new": "! grep -q '@@GAME_VERSION@@' build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html",
+   "test": "python3 tests/scripts/test_web_without_docker.py",
+   "expect": "test_the_seds_and_the_checks_after_them_name_the_same_pages"
+  },
+  {
+   "id": "stamp_check_for_the_build_is_gone",
+   "file": "Dockerfile",
+   "old": "    ! grep -q '@@BUILD_' \"$PAGE\" /src/web/lobby.html /src/web/matches.html /src/web/match.html /src/web/live.html /src/web/legal.html /src/web/mapmaker.html && \\\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_without_docker.py",
+   "expect": "test_a_placeholder_of_the_build_that_is_left_in_a_page_stops_the_build"
+  },
+  {
+   "id": "stamp_loop_of_the_bar_pages_forgets_legal",
+   "file": "Dockerfile",
+   "old": "for BARRED in matches match live legal mapmaker",
+   "new": "for BARRED in matches match live mapmaker",
+   "test": "python3 tests/scripts/test_web_without_docker.py",
+   "expect": "test_a_page_with_a_bar_at_the_top_that_lacks_a_stamp_stops_the_build"
+  },
+  {
+   "id": "map_maker_version_check_is_gone",
+   "file": "Dockerfile",
+   "old": "    grep -q \"data-maker=\\\"${MAPMAKER_VERSION}\\\"\" web/mapmaker.html && \\\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_without_docker.py",
+   "expect": "test_a_map_maker_whose_version_is_not_the_file_stops_the_build"
+  },
+  {
+   "id": "server_gets_an_external_frontend",
+   "file": "Dockerfile.server",
+   "old": "# =============================================================================\n# The dedicated game server",
+   "new": "# syntax=docker/dockerfile:1\n# =============================================================================\n# The dedicated game server",
+   "test": "python3 tests/scripts/test_docker_layers.py",
+   "expect": "test_the_compiles_have_the_cache_mount_and_ccache_is_installed"
   }
  ]
 }

@@ -408,6 +408,94 @@ class TheRealDockerfileReplayed(Scratch):
         self.assertFalse(os.path.exists(os.path.join(src, "gitinfo", "config")), "a clone's .git/config is never part of the build")
 
 
+class TheStampChecksOfTheRealDockerfile(unittest.TestCase):
+    """The steps of the repository's Dockerfile up to the stamps of the build id, replayed with a fake Emscripten on a small copy of the repository in which one page is spoiled: the build must stop
+    at the Dockerfile's own checks (the placeholder that is left, the stamp that is missing, the map maker's version that does not match)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base = tempfile.mkdtemp(prefix="ants_wwd_stamps_")
+        cls.context = os.path.join(cls.base, "context")
+        for name in ("CMakeLists.txt", "VERSION", ".gitignore", ".gitattributes", ".dockerignore"):
+            os.makedirs(cls.context, exist_ok=True)
+            shutil.copy(os.path.join(REPO, name), os.path.join(cls.context, name))
+        for name in ("cmake", "include", "src", "Original-Ants"):
+            shutil.copytree(os.path.join(REPO, name), os.path.join(cls.context, name), ignore=shutil.ignore_patterns("*.exe", "*.dll"))
+        os.makedirs(os.path.join(cls.context, "docker"))
+        shutil.copy(os.path.join(REPO, "docker", "resolve_build_id.sh"), os.path.join(cls.context, "docker", "resolve_build_id.sh"))
+        write(os.path.join(cls.base, "bin", "emcmake"), "#!/bin/sh\nmkdir -p build_web/generated/ants_app\n"
+              "printf 'inline constexpr std::string_view VERSION_STRING = \"v%s\";\\n' \"$(head -n 1 VERSION)\" > build_web/generated/ants_app/version.hpp\n", 0o755)
+        write(os.path.join(cls.base, "bin", "cmake"),
+              "#!/bin/sh\nout=build_web/src/ants_app\nmkdir -p \"$out\"\n"
+              "sed 's|{{{ SCRIPT }}}|<script async type=\"text/javascript\" src=\"index.js\"></script>|' web/shell.html > \"$out/index.html\"\n"
+              "echo game > \"$out/index.js\"; echo \"wasm v$(head -n 1 VERSION)\" > \"$out/index.wasm\"; head -c 1100000 /dev/zero > \"$out/index.data\"\n"
+              "mkdir -p build_web/lvl_core; echo core > build_web/lvl_core/lvl_core.js; echo wasm > build_web/lvl_core/lvl_core.wasm\n", 0o755)
+        cls.env = dict(os.environ, PATH=os.path.join(cls.base, "bin") + os.pathsep + os.environ["PATH"])
+        steps = wd.parse_dockerfile(read("Dockerfile"))
+        last = [i for i, s in enumerate(steps) if s.op == "RUN" and "BARRED" in s.text][0]
+        cls.steps = steps[:last + 1]
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.base, ignore_errors=True)
+
+    def replay(self, **spoiled):
+        """None when the build went through, else the error text; `spoiled` maps a page of web/ to a function from its text to the spoiled text."""
+        work = tempfile.mkdtemp(prefix="ants_wwd_stamps_run_")
+        self.addCleanup(shutil.rmtree, work, True)
+        context = os.path.join(work, "context")
+        shutil.copytree(self.context, context)
+        shutil.copytree(os.path.join(REPO, "web"), os.path.join(context, "web"), ignore=shutil.ignore_patterns("*.exe"))
+        for page, spoil in spoiled.items():
+            path = os.path.join(context, "web", page + ".html")
+            text = read_path(path)
+            changed = spoil(text)
+            self.assertNotEqual(changed, text, page)
+            write(path, changed)
+        fs = os.path.join(work, "fs")
+        os.makedirs(fs)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                wd.Replay(self.steps, context, fs, self.env, {"ANTS_BUILD_ID": "abc1234"}, output=subprocess.DEVNULL).play()
+        except wd.ToolError as error:
+            return str(error)
+        return None
+
+    def test_the_pages_as_they_are_go_through(self):
+        self.assertIsNone(self.replay())
+
+    def test_a_placeholder_of_the_build_that_is_left_in_a_page_stops_the_build(self):
+        for page in ("legal", "mapmaker", "matches", "match", "live", "lobby"):
+            with self.subTest(page):
+                error = self.replay(**{page: lambda text: text.replace("</body>", "<p>@@BUILD_NOTE@@</p></body>")})
+                self.assertIsNotNone(error)
+                self.assertIn("RUN failed", error)
+
+    def test_a_page_with_a_bar_at_the_top_that_lacks_a_stamp_stops_the_build(self):
+        for page in ("matches", "match", "live", "legal", "mapmaker"):
+            for attribute in ("data-build", "data-built"):
+                with self.subTest(page=page, attribute=attribute):
+                    error = self.replay(**{page: lambda text: text.replace(' %s="@@' % attribute, ' %s-x="@@' % attribute, 1)})
+                    self.assertIsNotNone(error)
+                    self.assertIn("RUN failed", error)
+
+    def test_a_map_maker_whose_version_is_not_the_file_stops_the_build(self):
+        error = self.replay(mapmaker=lambda text: re.sub(r'data-maker="v[^"]*"', 'data-maker="v0.0.1"', text))
+        self.assertIsNotNone(error)
+        self.assertIn("RUN failed", error)
+
+    def test_the_seds_and_the_checks_after_them_name_the_same_pages(self):
+        docker = read("Dockerfile").replace("\\\n", " ")
+        for sed_start, placeholder in (("sed -i \"s/@@BUILD_TIMESTAMP@@", "@@GAME_VERSION@@"), ("sed -i \"s/@@BUILD_ID@@", "@@BUILD_")):
+            with self.subTest(placeholder):
+                begin = docker.index(sed_start)
+                sed = re.search(r"\" ([^&]*?) &&", docker[begin:]).group(1)
+                check = re.search(r"! grep -q '%s[^']*' ([^&]*?)(?: &&|$)" % re.escape(placeholder), docker[begin:], re.M).group(1)
+                pages = lambda text: sorted(re.findall(r"[\w/.]+\.html|\$PAGE", text))
+                self.assertEqual([p.replace("build_web/src/ants_app/index.html", "$PAGE") for p in pages(sed)], [p.replace("build_web/src/ants_app/index.html", "$PAGE") for p in pages(check)])
+                self.assertGreaterEqual(len(pages(check)), 6)
+
+
 class TheEmsdk(Scratch):
     def made(self, version, finished=True):
         """An emsdk of that version, with the files that the end of `emsdk install` and of `emsdk activate` leave (finished), else with the one that the unpacking of Emscripten leaves first."""

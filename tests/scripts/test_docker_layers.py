@@ -216,7 +216,7 @@ class TheWebImage(unittest.TestCase):
             self.assertIn('EM_COMPILER_WRAPPER="$(command -v ccache)"', run, "Emscripten runs the wrapper with execv: a full path, not a name that the PATH would resolve")
             self.assertIn("command -v ccache", run, "the build must work where ccache is not installed (the tool that replays the Dockerfile on a machine)")
         self.assertIn("ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G\n", self.docker.text, "the cache has a size limit (ccache's own default is 5 GB)")
-        self.assertTrue(self.docker.text.startswith("# syntax=docker/dockerfile:1\n"))
+        self.assertFalse(self.docker.text.startswith("# syntax"), "no external frontend: the build asks Docker Hub for nothing but the base images (the built-in one understands everything the file uses)")
         self.assertIn("ccache", self.warm[1].text, "ccache is installed in the stage that is reused")
 
     def test_the_runner_stage_copies_the_same_builder_outputs_and_runs_as_before(self):
@@ -337,7 +337,7 @@ class TheServerImage(unittest.TestCase):
             self.assertTrue(run.startswith("RUN --mount=type=cache,target=/root/.ccache,id=ants-ccache-server "), run[:80])
         self.assertIn("ccache", self.builder[0].text if self.builder[0].op == "RUN" else self.builder[1].text)
         self.assertIn("ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G\n", self.docker.text, "the cache has a size limit (ccache's own default is 5 GB)")
-        self.assertTrue(self.docker.text.startswith("# syntax=docker/dockerfile:1\n"))
+        self.assertFalse(self.docker.text.startswith("# syntax"), "no external frontend: the build asks Docker Hub for nothing but the base images (the built-in one understands everything the file uses)")
         web = read("Dockerfile")
         self.assertNotEqual(re.findall(r"id=(ants-ccache-\w+)", web)[0], re.findall(r"id=(ants-ccache-\w+)", self.docker.text)[0], "each image has its own cache")
 

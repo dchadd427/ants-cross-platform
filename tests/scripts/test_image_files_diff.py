@@ -93,8 +93,8 @@ class TheManifest(unittest.TestCase):
         self.assertTrue(im.differences(with_date, none))
 
     def test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it(self):
-        def bar(minute, build="abc1234"):
-            return ('<header class="sb" data-version="v1.2.3" data-build="%s" data-built="2026-11-11 10:%02d PT">' % (build, minute)).encode("ascii")
+        def bar(minute, build="abc1234", version="v1.2.3", date="2026-11-11 10:%02d PT"):
+            return ('<header class="sb" data-version="%s" data-build="%s" data-built="%s">' % (version, build, date % minute if "%" in date else date)).encode("ascii")
         for name in ("matches", "match", "live", "legal", "mapmaker", "changelog"):
             with self.subTest(name):
                 path = HTML + name + ".html"
@@ -103,6 +103,11 @@ class TheManifest(unittest.TestCase):
                 self.assertEqual(one[path]["stamps"], 1)
                 self.assertTrue(im.differences(one, manifest({path: bar(1, "other")})), "the build id is compared")
                 self.assertTrue(im.differences(one, manifest({path: b"<header>"})), "a page that loses its stamp differs")
+                self.assertTrue(im.differences(one, manifest({path: bar(1, version="v1.2.4")})), "the version is compared")
+                self.assertTrue(im.differences(one, manifest({path: bar(1, date="@@BUILD_DATE@@")})), "a date that was never filled in is not a date")
+                self.assertTrue(im.differences(one, manifest({path: bar(1, date="2026-11-11 10:01:30 PT")})), "a date with seconds is another shape")
+                self.assertTrue(im.differences(one, manifest({path: bar(1, date="2026-11-11 10:01 UTC")})), "another zone is another shape")
+                self.assertTrue(im.differences(one, manifest({path: bar(1, date="soon")})), "any other text is not a date")
 
     def test_every_page_that_the_builder_stamps_with_the_build_date_is_listed(self):
         with open(os.path.join(REPO, "Dockerfile"), encoding="utf-8") as handle:
@@ -113,6 +118,8 @@ class TheManifest(unittest.TestCase):
         self.assertGreaterEqual(len(pages), 7)
         for path in sorted(pages):
             self.assertIn(path, im.STAMPED)
+        if re.search(r"cp /usr/share/nginx/html/index\.html /usr/share/nginx/html/play\.html", docker):
+            self.assertEqual(im.STAMPED[HTML + "play.html"], im.STAMPED[HTML + "index.html"], "play.html is a copy of index.html and carries the same stamps")
 
     def test_each_kind_of_difference_is_found_and_named(self):
         base = manifest({HTML + "a.js": b"1", "bin/x": (b"x", 0o755, 0), "etc/y": b"y"}, [("lib/l", "symlink", "a")])
