@@ -271,6 +271,16 @@ class TheStyle(unittest.TestCase):
         side = side[:side.index("\n}\n")]
         self.assertIn(".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: none; }", side, "held sideways there is no free place: the badge alone")
 
+    def test_a_phone_upright_has_two_rows_of_44_px_and_every_target_keeps_44_px(self):
+        """docs/HOME_SCREEN.md, "The top bar": the logo, Games, the chip and the Menu; then Quick host, Quick join and My room. The sizes in a real browser: tests/scripts/web_home_topbar_browser.js"""
+        start = self.css.index("@media (max-width: 720px) and (orientation: portrait) {\n    .hbar { display: flex; flex-wrap: wrap;")
+        two = self.css[start:self.css.index("\n}\n", start)]
+        self.assertIn(".hbar .btn { min-height: 44px;", two)
+        self.assertIn(".hbar .quick { order: 7; flex: 1 1 0; min-width: 0; min-height: 44px;", two)
+        self.assertIn(".hbar .games { order: 2;", two, "Games stands on the first row, beside the logo and the chip")
+        self.assertIn(".hbar .mine { order: 6;", two, "My room joins the second row")
+        self.assertIn("@media (max-width: 700px) and (min-height: 501px) { .hmain { padding: 2px 12px 6px; } .htabs { gap: 6px; padding: 4px 12px 12px; } .htab { min-height: 44px; font-size: 15px; } }", self.css, "the strip is 60 px high")
+
 
 class TheBodyOfHome(unittest.TestCase):
     """Home under its bar is the games (left), the players (right) and the chat (along the bottom); a phone (up to 700 px wide) has one of the three at a time and a strip to pick it. There is no Yard on Home yet:

@@ -627,7 +627,7 @@ async function flows() {
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const o = await bar.evaluate(OUT); if (o.length) badHome.push(w + 'x' + h + ': ' + o.join(', ')); }
             check('Home\'s bar at ' + sizes.length + ' sizes (900 to 1000 px wide, 844 x 390, 390 x 844, 360 x 640, every tenth width from 320 to 1300 px, and both sides of every limit) with the widest counts and a long name on the login chip: every button inside the window and no sideways scroll', badHome.length === 0, badHome.slice(0, 6).join(' | ') + (badHome.length > 6 ? ' ... ' + badHome.length + ' sizes' : ''));
             // a phone held sideways (docs/HOME_SCREEN.md, "The top bar"): 360 to 639 px wide and at most 500 px high, landscape, Home's bar is two compact rows (at most 110 px, the body keeps the rest: 110 px or more at 568 x 320, beside the strip), every target at
-            // least 44 px high and wide and no two of them over each other; one pixel narrower, one pixel higher, or upright, the phone's three rows stay (150 px or more); from 640 px wide it is the one low row (at most 70 px)
+            // least 44 px high and wide and no two of them over each other; one pixel narrower or one pixel higher, a window wider than high keeps the three rows (150 px or more), and a phone upright has two rows of 44 px (110 px); from 640 px wide it is the one low row (at most 70 px)
             const BARS = () => {
                 const box = (e) => e.getBoundingClientRect(), bar = document.querySelector('.hbar'), yard = document.querySelector('#hmain'), small = [], over = [], cut = [], list = [];
                 bar.querySelectorAll('button').forEach((e) => { const r = box(e); if (r.width >= 3 && !e.closest('[hidden]')) list.push([e, r]); });
@@ -639,11 +639,13 @@ async function flows() {
             for (const [w, h] of SIDEWAYS) {
                 await bar.setViewportSize({ width: w, height: h }); await bar.evaluate(WIDEST); const m = await bar.evaluate(BARS), two = w >= 360 && w <= 639 && h <= 500 && w > h;
                 if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
-                if (!two && w <= 639 && m.bar < 150) badRows.push(w + 'x' + h + ': the phone\'s three rows expected, the bar is ' + m.bar + ' px high');
+                const upright = h >= w && w <= 720;       // (a phone upright: two rows of 44 px, 110 px high)
+                if (upright && (m.bar > 112 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': the upright phone\'s two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
+                if (!two && !upright && w <= 639 && m.bar < 150) badRows.push(w + 'x' + h + ': the three rows expected, the bar is ' + m.bar + ' px high');
                 if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
                 if (w === 568 && h === 320 && m.yard < 110) badRows.push('568x320: the body is only ' + m.yard + ' px high');
             }
-            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the body 110 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the phone\'s three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501, and upright 360 x 480 and 500 x 500) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
+            check('a phone held sideways (568 x 320, 600 x 300, 630 x 360, 480 x 320, 360 x 240, 639 x 500) shows two compact rows: the bar at most 110 px high, the body 110 px or more at 568 x 320, every button 44 px or more, none over another and no word or count wider than its button; and the three rows on the other side of each limit (359 x 240, 639 x 501, 600 x 501), the two rows of a phone upright (360 x 480 and 500 x 500: 110 px) and the low row from 640 px wide', badRows.length === 0, badRows.join(' | '));
             // the chat dock's open panel stays under the bar (its top is at or below the bar's bottom), also under the two compact rows (106 px): chat.css
             const badPanel = [];
             for (const [w, h] of [[568, 320], [480, 300], [600, 400], [630, 360], [640, 360], [844, 390]]) {
