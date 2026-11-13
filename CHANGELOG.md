@@ -31,7 +31,7 @@ Work that is not released yet is written in the same template under a heading th
 
 **Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.2 page or game still joins.
 
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4e6c7c0c...52f1b67e)
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4e6c7c0c...f436bd12)
 
 ## v0.16.2 - 2026-11-12 - One map chooser in the room lobby and the site can be installed as an app
 
