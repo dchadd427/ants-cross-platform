@@ -41,11 +41,12 @@ sys.exit(server.main())
 
 
 def free_port():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+    """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import quick_http
+    return quick_http.free_port()
 
 
 def site_conf(site_port, webroot, hub_port, server_ports, dead_port, cache):
