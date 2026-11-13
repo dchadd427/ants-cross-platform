@@ -116,8 +116,8 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar .hright { display: contents; }
     .hbar .hbrand { order: 1; flex: none; margin-right: 0; } .hbar .hlogo { width: 66px; }
     .hbar .btn { min-height: 44px; padding: 4px 10px; font-size: 15px; }
-    .hbar .games { order: 2; flex: 1 1 0; min-width: 112px; padding: 4px 6px; } .hbar .games .pill { margin-left: 4px; padding: 0 5px; }
-    .hbar button.hlogin { order: 3; flex: 0 1 auto; min-width: 46px; max-width: calc(100% - 270px); gap: 6px; padding: 0 9px 0 7px; }
+    .hbar .games { order: 2; flex: 1 1 0; min-width: 116px; padding: 4px 6px; } .hbar .games .pill { margin-left: 4px; padding: 0 5px; }
+    .hbar button.hlogin { order: 3; flex: 0 1 auto; min-width: 46px; max-width: calc(100% - 246px); gap: 6px; padding: 0 8px 0 6px; }
     .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { font-size: 14px; }
     .hbar .hmenu { order: 4; flex: none; min-width: 46px; padding: 0; }
     .hbar .mine { order: 6; flex: 1 1 0; min-width: 0; padding: 4px 6px; }
@@ -125,7 +125,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
     .hbar:has(.mine:not([hidden])) .quick { padding: 4px 4px; font-size: 14px; letter-spacing: .02em; } .hbar:has(.mine:not([hidden])) .quick::before { display: none; }
 }
 @media (max-width: 419px) and (orientation: portrait) { .hbar .mine .name { font-size: 0; } .hbar .mine .name::after { content: "Room"; font-size: 15px; } .hbar .mine { padding: 4px 4px; } .hbar .mine .pill { margin-left: 4px; padding: 0 4px; } }
-@media (max-width: 359px) and (orientation: portrait) { .hbar .mine .name::after { font-size: 14px; } .hbar .mine .pill { margin-left: 3px; padding: 0 3px; } .hbar button.hlogin { max-width: calc(100% - 258px); } .hbar .quick { font-size: 14px; letter-spacing: .02em; } .quick::before { display: none; } .hbar .hlogo { width: 54px; } }
+@media (max-width: 359px) and (orientation: portrait) { .hbar { gap: 0 4px; } .hbar .mine .name::after { font-size: 14px; } .hbar .mine .pill { margin-left: 3px; padding: 0 3px; } .hbar button.hlogin { max-width: calc(100% - 234px); } .hbar .quick { font-size: 14px; letter-spacing: .02em; } .quick::before { display: none; } .hbar .hlogo { width: 54px; } }
 /* ---- ... held sideways (a short window, 360 to 639 px wide): two compact rows (106 px), not three (184) ---- */
 @media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {
     .hbar { grid-template-columns: auto repeat(2, minmax(0, 1fr)) auto; gap: 6px; padding: 8px 12px 4px; }
