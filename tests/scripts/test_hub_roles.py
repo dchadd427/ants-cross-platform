@@ -52,7 +52,7 @@ SECRETS = (TOKEN, GUILD, ADMIN, MOD, OTHER)
 
 def wait_frames(client, kind, settle=0.5, seconds=10.0):
     """The frames of a socket from the first one of the kind `kind` on: waits up to `seconds` for it (the hub says it as soon as it has it, and on a machine that is busy that can be late), then reads whatever
-    else comes within `settle` seconds of silence. For a test that asserts how many frames come: the first is waited for, the rest is the short read."""
+    else comes within `settle` seconds of silence; the frames that came before the first one are kept, so that an absence is still seen. For a test that asserts how many frames come: the first is waited for, the rest is the short read."""
     end = time.monotonic() + seconds
     seen = []
     while True:
@@ -61,7 +61,7 @@ def wait_frames(client, kind, settle=0.5, seconds=10.0):
         except socket.timeout:
             raise AssertionError("no %s frame within %s s; frames seen: %r" % (kind, seconds, seen))
         if msg.get("t") == kind:
-            return [msg] + client.drain(settle)
+            return seen + [msg] + client.drain(settle)
         seen.append(msg)
 
 
@@ -848,7 +848,7 @@ class LiveTest(unittest.TestCase):
 
     recheck = 1
     options = dict(roles_grace_seconds=3.0, roles_refill_seconds=0.01, roles_jitter=0.0, tick_seconds=0.05, sockets_per_address=50, frame_burst=1000, frame_refill_seconds=0.001,
-                   discord_seconds=1.0, discord_connect_seconds=1.0, roles_pause_seconds=5.0)
+                   discord_seconds=1.0, discord_connect_seconds=1.0, roles_pause_seconds=60.0)
 
     def setUp(self):
         self.fake = fd.FakeDiscord()

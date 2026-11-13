@@ -3241,6 +3241,27 @@
    "old": "var UPRIGHT = '(max-width: 700px)",
    "new": "var UPRIGHT = '(max-width: 7000px)",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_private_answer_does_not_take_the_log_to_its_end",
+   "file": "web/home/chat.js",
+   "old": "if (seen() && !stale) { settle(true); e.el = row(e);",
+   "new": "if (seen() && !stale) { e.el = row(e);",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_ban_from_a_refusal_does_not_tell_the_buttons",
+   "file": "web/home/chat.js",
+   "old": "if (barred !== barredShown) { barredShown = barred; tapped('field'); }",
+   "new": "if (barred !== barredShown) { barredShown = barred; }",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_command_refused_with_banned_is_a_note",
+   "file": "web/home/chat.js",
+   "old": "if (refused.cmd) answer([code === 'bad'",
+   "new": "if (refused.cmd && code !== 'banned') answer([code === 'bad'",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }

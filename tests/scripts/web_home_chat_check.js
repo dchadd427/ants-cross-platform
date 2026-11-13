@@ -1560,6 +1560,13 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     const place2 = rig({}); place2.live(W({ login: true, you: asRole('mod'), history: hist })); place2.clock.advance(1); const box2 = place2.log(); box2.scrollHeight = 2000; box2.clientHeight = 100; box2.scrollTop = 1900;
     place2.s().recv({ t: 'you', you: asRole('none') }); place2.clock.advance(1);
     check('... and a reader who is at the bottom stays there', box2.scrollTop === 2000);
+    const pa = rig({}); pa.live(W({ login: true, you: asRole('mod'), history: hist })); pa.clock.advance(1); const boxA = pa.log(); boxA.scrollHeight = 2000; boxA.clientHeight = 100; boxA.scrollTop = 300;
+    pa.dock.say('/help'); pa.clock.advance(1);
+    check('a private answer takes a reader who is up in the log to its end (the answer is for the visitor alone and is read where it comes)', pa.answers().length === 1 && boxA.scrollTop === 2000);
+    const bc = rig({}); bc.live(W({ login: true, you: asRole('mod') })); bc.dock.say('/mute bob 5'); bc.s().recv({ t: 'err', code: 'banned' });
+    same('a command that the hub refuses with `banned` is answered as a private line (not as the note of a line), is not put back in the field, and the person is banned on the page', [bc.answers(), bc.field().value, bc.field().disabled, bc.note()], [['You cannot chat here'], '', true, 'You are banned from the chat. You can still read it.']);
+    const bt = rig({}); const toldKinds = []; bt.live(W({ login: true, you: ME })); bt.dock.tap((kind) => toldKinds.push(kind)); bt.dock.say('hello'); bt.s().recv({ t: 'err', code: 'banned' }); bt.clock.advance(7000);
+    same('a ban that the page learns from a refusal turns the field off, and the pieces beside the field (the emoji and microphone buttons) are told once, so that they go with it', [bt.field().disabled, toldKinds.filter((k) => k === 'field').length], [true, 1]);
     const hid = rig({}); hid.live(W({ login: true, you: asRole('mod'), history: hist })); hid.clock.advance(1); const box3 = hid.log(); box3.scrollHeight = 2000; box3.clientHeight = 100; box3.scrollTop = 300;
     hid.hidden(true); hid.s().recv({ t: 'you', you: asRole('none') }); hid.hidden(false); hid.clock.advance(1);
     check('a role that changed while the tab was hidden does not keep the place: the tab that comes back reads from the bottom, as every tab does', box3.scrollTop === 2000);

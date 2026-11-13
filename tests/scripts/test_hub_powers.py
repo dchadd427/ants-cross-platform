@@ -40,7 +40,7 @@ import hub_client as hc  # noqa: E402
 import hub_rig  # noqa: E402
 import test_hub_server as ths  # noqa: E402
 from test_hub_core import ALICE, BOB, MAPLE_A, FakePeer, World  # noqa: E402
-from test_hub_roles import ADMIN, ENV, MOD, NOT_A_MEMBER, TOKEN, LiveTest, Log, Stub, good  # noqa: E402
+from test_hub_roles import ADMIN, ENV, MOD, NOT_A_MEMBER, TOKEN, LiveTest, Log, Stub, good, wait_frames  # noqa: E402
 from hub import admin, chat as chatmod, config, discord as discordmod, limits as limitmod, pseudo, roles as rolesmod, session, store as storemod  # noqa: E402
 
 ID = "7311000099990001"                       # the made-up Discord id of a person who acts: like a password, it is nowhere that it need not be
@@ -1308,7 +1308,7 @@ class TheLiveHub(LiveTest):
         self.drain_until(mod, "ok")
         self.assertEqual(sorted(set(self.fake.member_ids[before:])), ["1001", "1003"])
         for victim in (v1, v2):
-            seen = victim.drain(1.0)
+            seen = wait_frames(victim, "bye")
             self.assertIn({"t": "bye", "why": "kicked"}, seen)
         line, _ = self.drain_until(watcher, "line")
         self.assertEqual((line["who"], line["text"], line.get("sys"), line["mod"]), ("system", "victim was kicked.", True, False))
@@ -1318,7 +1318,7 @@ class TheLiveHub(LiveTest):
         again, welcome = self.connect("1003:victim")                                               # (at once: no timer)
         self.assertEqual(welcome["you"]["name"], "victim")
         again.say("back again")
-        self.assertIn("back again", [m["text"] for m in watcher.drain(0.5) if m["t"] == "line"])
+        self.assertIn("back again", [m["text"] for m in wait_frames(watcher, "line") if m["t"] == "line"])
         newcomer, welcome = self.connect("1004:watcher")
         self.assertIn(("system", "victim was kicked."), [(h["who"], h["text"]) for h in welcome["history"]])
 
@@ -1329,8 +1329,8 @@ class TheLiveHub(LiveTest):
         other, _ = self.connect("1004:other")
         admin1.say("/ban victim")
         self.drain_until(admin1, "ok")
-        self.assertIn({"t": "bye", "why": "banned"}, victim.drain(1.0))
-        seen = other.drain(0.5)
+        self.assertIn({"t": "bye", "why": "banned"}, wait_frames(victim, "bye"))
+        seen = wait_frames(other, "line")
         self.assertIn("victim was banned.", [m.get("text") for m in seen])
         admin1.say("/bans")
         frame, _ = self.drain_until(admin1, "bans")
@@ -1339,7 +1339,7 @@ class TheLiveHub(LiveTest):
         self.assertEqual(other.drain(0.3), [])
         again, _ = self.connect("1003:victim")
         again.say("i am here")
-        self.assertIn({"t": "err", "code": "banned"}, again.drain(0.5))
+        self.assertIn({"t": "err", "code": "banned"}, wait_frames(again, "err"))
         admin1.say("/unban victim")
         self.drain_until(admin1, "ok")
         again.say("a line after the unban")
@@ -1379,7 +1379,7 @@ class TheLiveHub(LiveTest):
             frame, _ = self.drain_until(mod, "err", 6.0)
             self.assertEqual(frame["code"], "role", mode)
             reader.say("the chat goes on, again %d" % n)
-            self.assertIn(True, [m.get("t") == "line" for m in victim.drain(0.4)])
+            self.assertIn(True, [m.get("t") == "line" for m in wait_frames(victim, "line")])
             time.sleep(0.2)
         self.assertEqual(self.rig.call(lambda: self.rig.store.actions()), [])
         self.assertFalse(self.rig.call(lambda: self.rig.hub.chat.sockets_of("1003")[0].closed))
@@ -1400,7 +1400,7 @@ class TheLiveHub(LiveTest):
         owner.say("/unmute victim")
         self.assertEqual(self.drain_until(owner, "err")[0]["code"], "role")                       # (the answer is old: a lookup is needed, and it cannot be had)
         victim.say("hi")
-        self.assertIn({"t": "err", "code": "muted"}, victim.drain(0.5))
+        self.assertIn({"t": "err", "code": "muted"}, wait_frames(victim, "err"))
 
 
     def test_a_command_that_waits_is_stopped_with_the_hub(self):

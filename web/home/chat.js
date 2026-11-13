@@ -152,6 +152,7 @@
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var hold = false;                                                        // the next repaint is for a change of the role: the reader keeps their place
         var removed = '';                                                        // 'kicked' or 'banned' after the hub said `bye` (or `banned` to a line): a notice stays on the screen, and a banned person's field stays off
+        var barredShown = false;                                                 // (whether the last paint showed the field off for a ban: the pieces that stand beside the field are told when it changes)
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
         function el(tag, cls, text) {
@@ -269,6 +270,7 @@
             var ask = live && !you && login;                                    // (a login is offered and nobody is named: the field says so, and is off)
             var barred = removed === 'banned' && !!you, said = ask ? ERR.login : barred ? TEXT.banField : TEXT.field;       // (a banned person reads on: the field is off, and says why)
             field.disabled = !you || barred; field.setAttribute('placeholder', said); field.setAttribute('aria-label', said);
+            if (barred !== barredShown) { barredShown = barred; tapped('field'); }
             send.hidden = !you || barred; enter.hidden = !!you;
             guest.hidden = !(live && !you);
             note.textContent = notice || (removed ? TEXT[removed] : state === 'offline' ? TEXT.offline : live && !you && !login ? ERR.readonly : '');       // (the notice of a removal stays until the person is somebody else)
