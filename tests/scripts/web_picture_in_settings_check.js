@@ -34,6 +34,7 @@ for (const name of ['shell.html']) {
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf', '.json': 'application/json' };
 const server = http.createServer((q, r) => {
     let p = decodeURIComponent(q.url.split('?')[0]);
+    if (p.startsWith('/replays/') || p.startsWith('/live/')) { r.writeHead(200, { 'content-type': 'application/octet-stream' }); r.end(Buffer.from('ANTSREP0')); return; }      // (a recording's page asks for its file: any bytes will do, the game is not there)
     if (p === '/play') p = '/shell.html';
     const f = path.join(folder, p);
     fs.readFile(f, (e, d) => { if (e) { r.writeHead(404); r.end('no'); } else { r.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' }); r.end(d); } });
@@ -65,7 +66,7 @@ async function open(browser, port, w, h, touch, query) {
     await page.goto('http://localhost:' + port + '/play' + (query || '?map=TREASURE'), { waitUntil: 'load' });
     await page.waitForTimeout(400);
     await page.evaluate(STAND_IN);
-    await page.waitForFunction(() => { const b = document.getElementById('settings-btn'); return b && !b.hidden && !b.disabled; }, null, { timeout: 8000 });
+    await page.waitForFunction(() => { const b = document.getElementById('settings-btn') || document.getElementById('settings-btn-bar'); return b && !b.hidden && !b.disabled; }, null, { timeout: 8000 });
     await page.waitForTimeout(300);
     return { context, page };
 }
@@ -151,6 +152,49 @@ server.listen(0, async () => {
             const locked = await state();
             check('Locked again: pressed, remembered', locked && [locked.pressed, locked.kept], [['true', 'false'], 'on']);
             await page.click('.gm-x').catch(() => {});
+            await context.close();
+        }
+        // the rematch strip shown (an online match is over): the room under the column is under the strip, the picture-to-strip gap is the strip's own, and picture, strip and ring fit the window
+        for (const [w, h, touch] of [[1280, 800, false], [844, 390, true]]) {
+            const { context, page } = await open(browser, port, w, h, touch);
+            await page.evaluate(() => { const s = document.getElementById('rematch'); s.hidden = false; s.style.minHeight = '88px'; });
+            await page.waitForTimeout(500);
+            const g = await page.evaluate(() => {
+                const r = (e) => { const b = e.getBoundingClientRect(); return { y: b.y, h: b.height, bottom: b.bottom }; };
+                const stage = document.getElementById('game-stage'), strip = document.getElementById('rematch'), box = document.getElementById('game-container');
+                return { stage: r(stage), strip: r(strip), box: r(box), side: parseFloat(getComputedStyle(document.body).paddingLeft), innerH: innerHeight, stageMargin: parseFloat(getComputedStyle(stage).marginBottom), stripMargin: parseFloat(getComputedStyle(strip).marginBottom), shadow: 6 };
+            });
+            const at = w + ' x ' + h + ', strip shown';
+            check(at + ': no room under the picture (the stage has no bottom margin)', g.stageMargin, 0);
+            ok(at + ': the gap from the picture to the strip is the strip\'s own 16 px (' + (g.strip.y - g.stage.bottom).toFixed(1) + ')', Math.abs(g.strip.y - g.stage.bottom - 16) <= 1);
+            const room = g.innerH - (g.strip.bottom + g.shadow);
+            ok(at + ': the strip with its shadow ends ' + room.toFixed(1) + ' px above the window\'s bottom edge, at least the side margin (' + g.side + ' px)', room >= g.side - 0.5);
+            ok(at + ': ... and the picture is as large as that allows (slack ' + (room - g.side).toFixed(1) + ' px)', room - g.side <= 20);
+            await context.close();
+        }
+        // a recording and a live match: the bar's Settings button opens the menu, Video has the Picture shape row and a choice changes the shape at once
+        for (const [query, label] of [['?replay=ants-TEST-20260101-000000Z.antsrep', 'a replay'], ['?live=LIVE-1', 'a live match']]) {
+            const { context, page } = await open(browser, port, 1280, 800, false, query);
+            await page.evaluate(() => { const b = document.getElementById('rbar'); if (b) b.hidden = false; for (const q of ['.veil', '#rm']) { const e = document.querySelector(q); if (e) e.hidden = true; } });      // (the stand-in has no recording to show: the page's own notice of that is put away)
+            await page.evaluate(() => document.getElementById('settings-btn-bar').click());      // (a script's click: the stand-in's bar may not take a pointer)
+            await page.waitForSelector('#game-menu', { timeout: 4000 });
+            await page.click('#gm-tab-video');
+            await page.waitForTimeout(300);
+            const rows = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('.gm-row .gm-name'), (n) => n.textContent));
+            ok(label + ': the bar\'s Settings opens the menu and Video has the Picture shape row (' + rows.join(', ') + ')', rows.indexOf('Picture shape') >= 0);
+            await page.click('#gm-picture');
+            await page.waitForTimeout(200);
+            await page.click('#gm-picture-o6');
+            await page.waitForTimeout(400);
+            const after = await page.evaluate(() => ({ shape: document.getElementById('game-stage').getAttribute('data-aspect'), kept: localStorage.getItem('ants.aspect.v2') }));
+            check(label + ': a choice changes the shape at once and is remembered', after, { shape: '32:9', kept: '32:9' });
+            await context.close();
+        }
+        // the header stays one row where Feedback leaves it (a window of 1000 px, a phone on its side at 780 px)
+        for (const [w, h, touch] of [[1000, 700, false], [780, 390, true]]) {
+            const { context, page } = await open(browser, port, w, h, touch);
+            const g = await geometry(page);
+            ok(w + ' x ' + h + ': the header is one row (' + g.header.h.toFixed(0) + ' px)', g.header.h <= 50);
             await context.close();
         }
         // the header's button on a computer opens the same menu as Esc

@@ -292,11 +292,11 @@ class TheLookIsTheFrontPages(PageCase):
     def test_the_picture_dropdown_keeps_the_face_of_the_pages_buttons_and_the_two_state_buttons_stay_the_game_pages(self):
         # The game page's Picture dropdown (`.pick-select`, in the recording's Picture window; the settings menu's is `.gm-select`) has the colors, the frame, the corners and the bevel of the buttons. The two-state
         # buttons that are left (the replay's speed) are this page's `.seg button`; the front page has no Picture dropdown.
-        ours = rule(self.style, ".pick-select")
+        ours, button = rule(self.style, ".pick-select"), rule(self.style, ".btn")
+        for name in ("color", "border-radius"):
+            self.assertEqual(ours[name], button[name], name)
+        self.assertEqual(ours["border"].split()[1:], button["border"].split()[1:], "the frame's style and color")
         self.assertRegex(ours["box-shadow"], r"^var\(--bevel-sm\), \d+px \d+px 0 var\(--shadow\)$")
-        self.assertNotIn(".shape-select", self.lobby_style)
-        for gone in ('id="aspect-pick"', 'id="lock-on"', 'id="lock-off"'):
-            self.assertNotIn(gone, self.page)
         self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 1)           # (the replay bar's speed: TheReplayPage)
 
     def test_the_black_boxes_are_the_front_pages(self):
@@ -391,7 +391,7 @@ class TheHeader(PageCase):
         self.assertRegex(narrow, r"\.more \{\s*display: block;")
         self.assertRegex(narrow, r"\.logo img \{\s*width: 88px;")
         self.assertEqual(self.style.count(".wide-only {"), 1, "the one rule that hides the wide row's six")
-        self.assertRegex(self.style, r"@media \(min-width: 701px\) and \(max-width: 1139px\) \{\s*#watch-btn, #feedback-btn \{\s*display: none;")          # (nine buttons, the Settings button one of them, need 1140 px for one row; between 701 and 1139 the header keeps the seven it had, the gear in the place of Feedback, and the footer links are the way)
+        self.assertRegex(self.style, r"@media \(min-width: 701px\) and \(max-width: 1139px\) \{\s*#watch-btn \{\s*display: none;")          # (between 701 and 1139 the header keeps the links it had, Matches being the footer's; where Feedback leaves it too is run in tests/scripts/web_picture_in_settings_check.js)
         self.assertEqual(self.style.count("#watch-btn"), 1)
         # the label of Fullscreen is short where the row is tight, and the smallest windows get smaller buttons and a smaller logo
         self.assertIn("@media (max-width: 440px)", self.style)

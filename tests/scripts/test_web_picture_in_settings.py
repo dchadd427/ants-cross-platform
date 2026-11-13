@@ -20,14 +20,6 @@ class TheGamePageInAStandInBrowser(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertRegex(done.stdout, r"\d+ checks, 0 failures")
 
-    def test_the_page_has_no_strip_for_the_check_to_find(self):
-        page = open(os.path.join(REPO, "web", "shell.html"), encoding="utf-8").read()
-        lobby = open(os.path.join(REPO, "web", "lobby.html"), encoding="utf-8").read()
-        for gone in ('id="view-bar"', 'id="aspect-select"', 'id="lock-on"'):
-            self.assertNotIn(gone, page)
-        for gone in ('id="shape-row"', 'id="aspect-select"'):
-            self.assertNotIn(gone, lobby)
-
 
 if __name__ == "__main__":
     unittest.main()

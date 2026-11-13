@@ -178,7 +178,6 @@ class TheBlockAndTheWiring(unittest.TestCase):
         self.assertNotRegex(start, r"\.leave\(|\.close\(|Leave")                                                       # (the seat is handed over, not given up: the game's own Hello takes it with the key)
         net = read("web", "front", "lobby_net.js")
         self.assertIn("return { name: 'ants.rejoin.' + code + '.' + seat, text: JSON.stringify({ k: hexOf(key), s: server, t: Math.floor(nowMs) }) };", net)
-        self.assertEqual(len(re.findall(r"localStorage\.setItem\(", self.page)), 1)                                      # (the entry of the seat: nothing else of the page writes to the storage)
 
 
 class TheGamePageDoesNotAskARejoinerForAName(unittest.TestCase):

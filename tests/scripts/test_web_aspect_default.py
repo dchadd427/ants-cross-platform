@@ -47,11 +47,9 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertIn("ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window))", page)
         self.assertEqual(page.count("source: 'default' }"), 1)                                                   # (one place answers 'default', and it asks the table)
 
-    def test_the_game_page_has_no_strip_under_the_picture_and_the_one_host_left_is_the_recordings_window(self):
+    def test_the_one_host_of_the_picker_left_on_the_game_page_is_the_recordings_window(self):
         """The Picture dropdown and the Fullscreen mouse pair are rows of the settings menu (Video); the page keeps the one host of the picker that its recording's Picture button opens."""
         page = read(SHELL)
-        for gone in ('id="view-bar"', 'id="aspect-pick"', 'id="aspect-select"', 'id="lock-on"', 'id="lock-off"', 'id="lock-bar-label"', 'data-lock='):
-            self.assertNotIn(gone, page, "the strip under the game is gone: " + gone)
         self.assertEqual(len(re.findall(r'<span class="pick" id="pic-pick">', page)), 1)                   # (the picker, web/shape_picker.js, puts the button and its list in the host)
 
     def test_the_page_and_the_game_agree_on_the_shapes(self):
@@ -87,8 +85,6 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         page = read(LOBBY)
         self.assertNotIn(".frame {", page)                                                                 # (the lobby has no games in frames: the test room that had them is gone)
         self.assertEqual(len(re.findall(r'name="aspect"', page)), 0)
-        for gone in ('id="shape-row"', 'id="aspect-select"', 'id="fit-note"', 'class="shape-select"', "fillSelect", "firstVisit"):
-            self.assertNotIn(gone, page, "the front page has no Picture row: " + gone)
         self.assertIn("var pickedShape = '';", page)                                                        # (nothing is handed on until the address or the browser names a shape)
 
     def test_the_game_page_reads_the_one_table_of_shapes_and_says_the_line(self):

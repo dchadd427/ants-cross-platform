@@ -1,5 +1,5 @@
 {
-  "note": "Mutants of the fullscreen mouse setting for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's object `antsLock` of web/shell.html (what the settings menu's Fullscreen mouse row reads and writes) against tests/scripts/web_edge_check.js (node, the block run with a page of fakes). Run from the checkout: tools/mutate.py tests/data/pointer_lock_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_edge.py runs them on a copy of the page.",
+  "note": "Mutants of the settings menu's two rows that are the page's own, for tools/mutate.py (docs/TESTING.md, 'Mutation checks'): the page's object `antsLock` of web/shell.html (what the Fullscreen mouse row reads and writes) against tests/scripts/web_edge_check.js (node, the block run with a page of fakes), and the page's hand-over to the menu (the call of AntsGameMenu.forPage: the Picture shape row's `pickShape`, the Fullscreen mouse row's `lock`) against tests/scripts/web_menu_handover_check.js. Run from the checkout: tools/mutate.py tests/data/pointer_lock_mutants.json --keep-going --jobs 1; every mutant must be caught. tests/scripts/test_web_edge.py runs them on a copy of the page.",
   "mutants": [
     {
       "id": "lock_choice_not_remembered",
@@ -21,6 +21,27 @@
       "old": "available: function () { return !!(canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock); },",
       "new": "available: function () { return true; },",
       "test": "node tests/scripts/web_edge_check.js web/shell.html"
+    },
+    {
+      "id": "handover_without_the_lock",
+      "file": "web/shell.html",
+      "old": "pickShape: antsPickShape, lock: antsLock, stage: stageElement,",
+      "new": "pickShape: antsPickShape, stage: stageElement,",
+      "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
+    },
+    {
+      "id": "handover_without_the_pick_function",
+      "file": "web/shell.html",
+      "old": "pickShape: antsPickShape, lock: antsLock, stage: stageElement,",
+      "new": "lock: antsLock, stage: stageElement,",
+      "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
+    },
+    {
+      "id": "handover_of_a_copy_of_the_lock",
+      "file": "web/shell.html",
+      "old": "pickShape: antsPickShape, lock: antsLock, stage: stageElement,",
+      "new": "pickShape: antsPickShape, lock: { available: antsLock.available, get: antsLock.get, set: antsLock.set }, stage: stageElement,",
+      "test": "node tests/scripts/web_menu_handover_check.js web/shell.html"
     }
   ]
 }

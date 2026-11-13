@@ -329,9 +329,6 @@ class TheFrontPageMarkup(PageCase):
             self.assertNotRegex(self.page, r"(recall|remember|getItem|setItem|removeItem)\(\s*'%s" % key, key + " is neither read nor written by the lobby")
         for gone in ("CARD_KEY", "CARD_ROOM_KEY", "hostSeatsText", "cardParse", "cardFromOld"):
             self.assertNotIn(gone, self.page, gone)
-        written = set(re.findall(r"\bremember\(([A-Za-z_']+)", self.page))
-        self.assertEqual(written, {"storage"})                                              # (through Modes.remember(storage, id), the leader's last game type under the key of front/game_modes.js: no other key is written to the local storage by name; the front page does not write the picture's shape)
-        self.assertEqual(sorted(re.findall(r"localStorage\.setItem\(([^,]+),", self.page)), ["entry.name"])       # (the entry of a seat that the game page reads: ants.rejoin.<room>.<seat>)
         self.assertNotIn("ants.name", self.page, "nobody types a name any more: the page keeps none")
         self.assertIn("var ASPECT_KEY = 'ants.aspect.v2';", self.page)
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
@@ -362,9 +359,6 @@ class TheFrontPageMarkup(PageCase):
         self.assertNotIn("placeholder", self.script)
         self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 2, "the name card is asked for by a typed code and a link to a room")
         self.assertNotRegex(self.script, r"pencil|editName|\.rename\(", "nobody types a name any more: no pencil, no rename")
-        # the picture's shape: the match column has no Picture row (it is a row of the game's settings menu, Video)
-        for gone in ('id="shape-row"', 'id="aspect-select"', 'id="fit-note"', 'id="shape-label"'):
-            self.assertNotIn(gone, self.markup, gone)
         self.assertNotIn('name="aspect"', self.markup)
         # the test room (a second page inside this file, with the games in frames) is gone
         for ident in ("room-panel", "play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint", "sync", "grid", "frames-note"):

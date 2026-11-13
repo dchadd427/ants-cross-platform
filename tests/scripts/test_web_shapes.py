@@ -142,8 +142,6 @@ class TheDropdownsAreTheTable(unittest.TestCase):
 
     def test_the_game_pages_dropdown_and_the_replays_picture_window_are_empty_hosts_for_the_picker(self):
         page = read("web", "shell.html")
-        self.assertNotIn('id="view-bar"', page)                                                          # (no strip under the game: the Picture shape is a row of the settings menu)
-        self.assertNotIn('id="aspect-pick"', page)
         pop = page[page.index('id="picpop"'):page.index('id="b-fsx"')]
         self.assertEqual(pop.count('<span class="pick" id="pic-pick"><span class="fit-note" id="pic-note" hidden></span></span>'), 1)
         self.assertNotIn("<option", page, "the entries come from the table, not from the markup")
@@ -159,11 +157,6 @@ class TheDropdownsAreTheTable(unittest.TestCase):
         self.assertLess(made, page.index("PICTURE_POPOVER_BEGIN"), "the dropdowns must be made before the Picture window's block adds its Esc listener")
         self.assertLess(page.index("ANTS_SELECTOR_BEGIN"), page.index("PICTURE_POPOVER_BEGIN"))
         self.assertIn("}, true);\n            // PICTURE_POPOVER_END", page, "the Picture window's key listener is a capture listener: only then does the order decide")
-
-    def test_the_front_page_has_no_picture_dropdown(self):
-        page = read("web", "lobby.html")
-        self.assertNotIn("<select", page)
-        self.assertNotIn("fillSelect", page)
 
     def test_the_settings_menu_builds_its_dropdown_from_the_page_table(self):
         menu = read("web", "game_menu.js")

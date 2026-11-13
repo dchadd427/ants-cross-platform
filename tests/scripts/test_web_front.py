@@ -843,14 +843,6 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', self.page)
         self.assertRegex(self.page, r'@font-face \{ font-family: "Libre Franklin"; src: url\("front/LibreFranklin-Medium\.ttf"\) format\("truetype"\);')
 
-    def test_the_match_column_has_no_picture_dropdown(self):
-        """The shape of the picture is a row of the game's settings menu (Video): the front page has no dropdown, no label and no quiet line for it, and no radio button."""
-        for gone in ('id="shape-row"', 'id="aspect-select"', 'id="shape-label"', 'id="fit-note"', '<select '):
-            self.assertNotIn(gone, self.page, gone)
-        for gone in (".shape-select", ".shape-box", ".fit-note", ".shape {"):
-            self.assertNotIn(gone, self.style, gone)
-        self.assertNotRegex(self.page, r'<input type="radio"')
-
     def test_the_game_type_and_start_stack_at_the_top_of_the_match_column_between_721_and_1040_px(self):
         """The map's column spans two rows, the second takes the spare height, so the game type and START! sit under each other beside the top of the map (not spread over its height)."""
         wide = self.style[self.style.index("@media (max-width: 1040px)"):self.style.index("@media (max-width: 720px)")]

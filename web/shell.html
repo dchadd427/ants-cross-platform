@@ -236,9 +236,9 @@
             box-shadow: 0 0 0 3px var(--frame), 0 0 0 5px var(--edge), 4px 6px 0 5px var(--shadow);
         }
 
-        /* The picture starts in 16:9 here and the script picks the shape nearest to the screen on a first visit (the game's 16:9 canvas is 960 x 540; "Classic 4:3" is the original's 640 x 480 and is chosen with ?aspect=4:3 or the selector under
-           the game). Two boxes: #game-stage is the SLOT, sized by CSS alone (width: the page's column, at most 1280 px, and what the height of the window leaves after the page's
-           own header and bar, so the whole picture fits the window; --chrome is that height, measured by the script below, 120 px until then) and the element that goes
+        /* The picture starts in 16:9 here and the script picks the shape nearest to the screen on a first visit (the game's 16:9 canvas is 960 x 540; "Classic 4:3" is the original's 640 x 480 and is chosen with ?aspect=4:3 or the Picture shape row of the settings menu).
+           Two boxes: #game-stage is the SLOT, sized by CSS alone (width: the page's column, at most 1280 px, and what the height of the window leaves after the page's
+           own header, the room under the box and, in a recording, its bar, so the whole picture fits the window; --chrome is that height, measured by the script below, 120 px until then) and the element that goes
            fullscreen; #game-container is the picture's box inside it, sized by the script to the exact pixels of the picture (a whole number of 16 x 9 canvas pixels, so
            that the canvas the game makes has exactly the shape of its picture and the game shows no black bar of its own), centred in the slot. The ring around the box is
            a shadow, not a border, so that the box has no frame inside it: the front page's frame of a picture (green between two black lines, and the red shadow). */
@@ -270,6 +270,9 @@
            (the game's bottom rows hold the score counters, and a phone's gesture area is there: env(safe-area-inset-bottom)); measureChrome counts it */
         #game-stage { margin-bottom: var(--stage-gap, 0px); }
         body:not(.replay) { --stage-gap: calc(var(--reach) + max(var(--side), env(safe-area-inset-bottom, 0px))); }
+        /* With the rematch strip shown (measureChrome sets the class) the room belongs under the strip, the last thing of the column: the gap between the picture and the strip stays the strip's own 16 px */
+        body.strip-shown { --stage-gap: 0px; }
+        body.strip-shown .rematch { margin-bottom: calc(6px + max(var(--side), env(safe-area-inset-bottom, 0px))); }
 
         /* The field that a phone's keyboard types into (ANTS_CHAT in the script): over the chat box, there but not seen (opacity 0, not display: none: a hidden field cannot be focused), taking
            no tap itself, and 16px so that iOS does not zoom the page when it is focused. The script places it over the box when the keyboard opens. */
@@ -408,8 +411,8 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* The picture's dropdown (web/shape_picker.js: a button and a list of the table's rows, made by the script, so that it works in fullscreen and under a locked mouse; in the strip under the game, in a recording's Picture window and in the
-           settings menu) and the quiet line under it that names the shape that fills the computer's screen (the script shows it): the bar makes room for the line under it. Under 560 px the dropdown has a line of its own. */
+        /* The picture's dropdown (web/shape_picker.js: a button and a list of the table's rows, made by the script, so that it works in fullscreen and under a locked mouse; in a recording's Picture window and in the
+           settings menu) and the quiet line under it that names the shape that fills the computer's screen (the script shows it). */
         .pick { position: relative; display: inline-flex; min-width: 0; }
         .pick::after { content: ""; position: absolute; right: 16px; top: calc(50% - 6px); width: 7px; height: 7px; border: solid var(--cream); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
         .pick-select {
@@ -906,9 +909,15 @@
             .btn.sm { padding: 6px 8px; }
         }
 
-        /* The header holds its nine buttons (the Settings button is one) in one row from 1140 px; between 701 and 1139 px it keeps the seven it had, the Settings button's gear taking the place of Feedback (a ninth of the width would make two rows), and the footer's Matches and Feedback are the way */
+        /* Between 701 and 1139 px the header keeps the seven links it had, and Matches is the footer's (the Settings button is in the row, a gear without its word). Feedback goes too only where that saves a row, as measured:
+           about 930 to 1040 px in a window taller than 520 px and about 740 to 830 px in a short one (a phone on its side); elsewhere the row is one row, or two rows with or without it. The footer has both links. */
         @media (min-width: 701px) and (max-width: 1139px) {
-            #watch-btn, #feedback-btn {
+            #watch-btn {
+                display: none;
+            }
+        }
+        @media (min-width: 920px) and (max-width: 1045px) and (min-height: 521px), (min-width: 736px) and (max-width: 836px) and (max-height: 520px) {
+            #feedback-btn {
                 display: none;
             }
         }
@@ -984,7 +993,7 @@
         .veil .card { display: grid; gap: 10px; justify-items: center; padding: 14px 24px 16px; min-width: min(78%, 330px); font-size: max(12px, 1.8cqw); color: var(--cream); background: var(--inset); border: 3px solid var(--frame); border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
         .veil .progress-bar-container { display: block; width: 100%; height: 16px; margin: 0; }
 
-        /* the replay bar: in the place of the picture bar (Picture, Fullscreen mouse), the same width as the picture */
+        /* the replay bar: under the picture, the same width as the picture */
         .rbar { position: relative; width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h))); width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h))); min-width: min(100%, 320px); margin: 49px 0 10px; padding: 0 4px; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "play rew tl clock cam speed pic fsx"; gap: 0 18px; align-items: center; color: var(--ink); cursor: default; container: rbar / inline-size; } .rbar:where(:not(.islive)) { gap: 0 8px; }
         /* the bar is as wide as the picture, whatever its shape (the same custom properties as #game-stage above; the bar follows the stage in the page, and floats over it in fullscreen, where .over has its own width) */
         body:not(.replay) .rbar { display: none; }
@@ -1221,7 +1230,6 @@
     </div>
 
     <section class="rematch" id="rematch" aria-label="The match is over" hidden></section>
-    </div>
 
     <div class="rbar rep-only" id="rbar">
         <div class="rtag rep-only" id="rtag" hidden><b id="rtag-b">REPLAY</b><span id="rtag-s">1&times;</span></div>
@@ -1257,7 +1265,7 @@
                         <li><strong>Power-ups</strong>&#8197;dropped by special flowers give an ant a special power (see below); an ant holds one at a time.</li>
                         <li><strong>Opponents:</strong>&#8197;the Menu button starts a game on this computer against Easy, Medium or Hard bots, each base at its own level, with you and one bot as a team if you like, or alone as in the original; there you can also host or join a match on the game server to play against friends.</li>
                         <li><strong>Help:</strong>&#8197;<kbd>F1</kbd>&#8197;or the Help button shows the original's quick help.</li>
-                        <li><strong>Picture:</strong>&#8197;the first time, the shape nearest to your screen (16:9 on most);&#8197;<em>Classic 4:3</em>&#8197;is the original's picture, and the other shapes suit tablets, laptops, phones held sideways and wide monitors (a wider or taller picture shows more of the map). Choose a shape in the Picture list under the game: the picture changes at once and the match goes on. Or add&#8197;<kbd>?aspect=16:10</kbd>&#8197;(or another shape of the list) to the address.&#8197;The Fullscreen button makes the picture as big as your screen allows.</li>
+                        <li><strong>Picture:</strong>&#8197;the first time, the shape nearest to your screen (16:9 on most);&#8197;<em>Classic 4:3</em>&#8197;is the original's picture, and the other shapes suit tablets, laptops, phones held sideways and wide monitors (a wider or taller picture shows more of the map). Choose a shape in the Picture shape row of Settings (the gear in the header, or Esc), under Video: the picture changes at once and the match goes on. Or add&#8197;<kbd>?aspect=16:10</kbd>&#8197;(or another shape of the list) to the address.&#8197;The Fullscreen button makes the picture as big as your screen allows.</li>
                     </ul>
                 </div>
             </details>
@@ -1278,8 +1286,8 @@
                 <div class="info-content">
                     <ul>
                         <li><strong>Edge scrolling:</strong>&#8197;move the pointer to the edge of the map: an arrow shows and the map scrolls. Options &rarr; Map Scroll Rate sets the speed. In a window, clicking the game during a match locks the mouse inside the picture so you can pan freely without leaving the window; hold&#8197;<kbd>Ctrl</kbd>+<kbd>Alt</kbd>&#8197;(or press&#8197;<kbd>Esc</kbd>) to release the mouse. In a window the map keeps scrolling while the pointer is just past the edge of the game (about an inch); it stops when the pointer goes farther, onto a button or a link of the page, or out of the window.</li>
-                        <li><strong>Fullscreen:</strong>&#8197;the Fullscreen button in the header. The black bars of a screen that is not the picture's shape count as the picture's edge: the map scrolls with the pointer anywhere beyond it, corners included. The mouse is held inside the game (<em>Fullscreen mouse: Locked</em>, under the game, is the default): your cursor cannot leave the picture, so every edge of the screen scrolls the map, and a Mac's Dock and menu bar stay away. A click on the game takes the mouse again if the browser let it go (that click does nothing else).</li>
-                        <li class="note"><strong>Esc in fullscreen:</strong>&#8197;in Chrome and Edge Esc goes to the game (close a dialog, deselect, and with nothing to deselect open the settings menu) and&#8197;<em>holding</em>&#8197;it leaves fullscreen; in Safari and Firefox Esc gives the mouse back first (Safari leaves fullscreen with it), and a phone has no Esc, so there you leave fullscreen first to open the settings menu;&#8197;<kbd>Ctrl</kbd>+<kbd>Alt</kbd>&#8197;releases the mouse anywhere. <em>Free</em>&#8197;under the game gives the browser's plain fullscreen and leaves the mouse unlocked in a window.</li>
+                        <li><strong>Fullscreen:</strong>&#8197;the Fullscreen button in the header. The black bars of a screen that is not the picture's shape count as the picture's edge: the map scrolls with the pointer anywhere beyond it, corners included. The mouse is held inside the game (<em>Fullscreen mouse: Locked</em>, a row of Settings under Video, is the default): your cursor cannot leave the picture, so every edge of the screen scrolls the map, and a Mac's Dock and menu bar stay away. A click on the game takes the mouse again if the browser let it go (that click does nothing else).</li>
+                        <li class="note"><strong>Esc in fullscreen:</strong>&#8197;in Chrome and Edge Esc goes to the game (close a dialog, deselect, and with nothing to deselect open the settings menu) and&#8197;<em>holding</em>&#8197;it leaves fullscreen; in Safari and Firefox Esc gives the mouse back first (Safari leaves fullscreen with it), and a phone has no Esc, so there you leave fullscreen first to open the settings menu;&#8197;<kbd>Ctrl</kbd>+<kbd>Alt</kbd>&#8197;releases the mouse anywhere. <em>Free</em>&#8197;(the same row of Settings) gives the browser's plain fullscreen and leaves the mouse unlocked in a window.</li>
                         <li><strong>Minimap:</strong>&#8197;hold the left button on it and the view follows the pointer.</li>
                         <li><strong>Jump to an ant:</strong>&#8197;<kbd>Ctrl</kbd>+<kbd>N</kbd>&#8197;/&#8197;<kbd>Ctrl</kbd>+<kbd>P</kbd>&#8197;select the next / previous ant and scroll to it;&#8197;<kbd>Ctrl</kbd>+<kbd>H</kbd>&#8197;selects your anthill.</li>
                         <li><strong>Zoom:</strong>&#8197;the mouse wheel (a trackpad's two-finger scroll or pinch) over the map zooms in and out towards the pointer, one level a notch: from 2&times; (every world pixel a 2 &times; 2 square) through 1&times; (the original's picture) down to the whole width or height of the map; the middle button goes back to 1&times;. It works in an online match too.</li>
@@ -1498,7 +1506,7 @@
                 var y = pos.y + (isFinite(dy) ? dy : 0);
                 return { x: Math.min(Math.max(x, 0), w - 0.001), y: Math.min(Math.max(y, 0), h - 0.001) };           // (trunc of the largest value is the last pixel, w - 1)
             }
-            // The player's choice (the key ants.pointerlock, written by the control next to the picture's selector and by nothing else): only "off" turns the lock off. Ctrl+Alt releases a held lock.
+            // The player's choice (the key ants.pointerlock, written by the settings menu's Fullscreen mouse row and by nothing else): only "off" turns the lock off. Ctrl+Alt releases a held lock.
             function lockSetting(stored) { return stored !== 'off'; }
             function releasesMouseLock(e) {
                 if (!e || !e.ctrlKey || !e.altKey || !e.key || e.metaKey || e.shiftKey) return false;
@@ -1837,7 +1845,7 @@
             Object.keys(vars).forEach(function (name) { document.body.style.setProperty(name, vars[name]); });
         }
         // The shape of this page's picture, passed on to the game as --aspect (the game validates it too); the selector changes it while the game runs (antsSetAspect below). The stage's data-aspect names the shape (tests and the settings menu read it), and the slot's CSS takes its ratio from custom properties of <body> (antsShowShape, from web/shapes.js's rows).
-        // What the selector remembers lives under ANTS_ASPECT_KEY, and only the selector writes it (web/lobby.html reads and writes the same key). The key of the first versions of the page was
+        // What a pick remembers lives under ANTS_ASPECT_KEY, and only a pick (the settings menu's Picture shape row, a recording's Picture window) writes it (web/lobby.html only reads the same key). The key of the first versions of the page was
         // 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered (anybody who tried it stayed on 4:3 for good) is forgotten once: every browser starts
         // with the first-visit picture until its player picks a shape again (the shape nearest to the screen, AntsShapes.firstVisit; never stored). ?aspect=4:3 (or any other shape of the table) in the address works as ever.
         var ANTS_ASPECT_KEY = 'ants.aspect.v2';
@@ -2266,7 +2274,9 @@
             var bodyStyle = window.getComputedStyle(document.body);
             var barStyle = bar ? window.getComputedStyle(bar) : null;
             var barHeight = bar ? bar.offsetHeight + (parseFloat(barStyle.marginTop) || 0) + (parseFloat(barStyle.marginBottom) || 0) : 0;
-            var strip = document.getElementById('rematch'); if (strip && !strip.hidden && !ANTS_REPLAY_MODE) barHeight += strip.offsetHeight + (parseFloat(window.getComputedStyle(strip).marginTop) || 0);      // (the rematch's strip under the picture)
+            var strip = document.getElementById('rematch'), stripShown = !!strip && !strip.hidden && !ANTS_REPLAY_MODE;
+            document.body.classList.toggle('strip-shown', stripShown);                  // (the room under the column moves from the picture to the strip: see .strip-shown)
+            if (stripShown) { var stripStyle = window.getComputedStyle(strip); barHeight += strip.offsetHeight + (parseFloat(stripStyle.marginTop) || 0) + (parseFloat(stripStyle.marginBottom) || 0); }      // (the rematch's strip under the picture)
             var chrome = stageElement.getBoundingClientRect().top + (window.pageYOffset || 0) + barHeight + (parseFloat(bodyStyle.paddingBottom) || 0) + (ANTS_REPLAY_MODE ? 0 : parseFloat(window.getComputedStyle(stageElement).marginBottom) || 0);
             if (isFinite(chrome) && chrome > 0) {
                 var old = parseFloat(document.documentElement.style.getPropertyValue('--chrome')) || 0;
