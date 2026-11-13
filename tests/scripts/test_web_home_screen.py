@@ -189,14 +189,6 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".leave:hover { background-color: #b5222c; }", self.css, "a lighter red under the cream words (5.6 to 1)")
         self.assertNotRegex(self.css, r"\.leave[^{]*\{[^}]*(transform|text-shadow|#1b0f0d)", "the press, the words' shadow and forced colors are .btn's")
 
-    def test_the_heading_of_a_bar_is_read_out_and_not_drawn(self):
-        """The page's name is an h1 in each bar, for a screen reader: it must not be hidden from it (display none or visibility hidden), and it takes no room."""
-        match = re.search(r"\.hbrand \{([^}]*)\}", self.css)
-        self.assertIsNotNone(match)
-        self.assertIn("position: absolute;", match.group(1))
-        self.assertIn("clip: rect(0 0 0 0);", match.group(1))
-        self.assertNotRegex(match.group(1), r"display: *none|visibility: *hidden")
-
     def test_the_menu_scrolls_inside_itself_when_the_window_is_short(self):
         box = next(body for selector, body in self.rules if selector.strip() == ".hmenubox")
         self.assertIn("overflow-y: auto;", box)

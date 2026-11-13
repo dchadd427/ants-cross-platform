@@ -1,8 +1,16 @@
 {
  "note": "Mutants of the bar at the top of every page (web/site_nav.css, web/site_nav.js, the markup of the pages, the front page's Menu and the Dockerfile) for tools/mutate.py (docs/WORKFLOW.md, 'Mutation checks'): each breaks one rule on purpose and a test of tests/scripts/test_web_site_nav.py must notice. Run from the checkout, no build needed: python3 tools/mutate.py tests/data/site_nav_mutants.json --keep-going --jobs 1.",
- "baseline": {
-  "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_web_site_nav"
- },
+ "baseline": [
+  {
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.scripts.test_web_site_nav"
+  },
+  {
+   "test": "node tests/scripts/web_site_nav_browser.js"
+  },
+  {
+   "test": "node tests/scripts/web_picture_in_settings_check.js web"
+  }
+ ],
  "mutants": [
   {
    "id": "escape_does_not_close_the_menu",
@@ -227,6 +235,20 @@
    "old": "html.escape(value, quote=True))",
    "new": "html.escape(value, quote=False))",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_changelog_to_html"
+  },
+  {
+   "id": "the_covered_site_bar_can_be_tabbed_to",
+   "file": "web/front/mapmaker.css",
+   "old": "@media (min-width: 601px) { #editor:has(> #mine:not([hidden])) > .sb { visibility: hidden; } }",
+   "new": "@media (min-width: 601px) { #editor:has(> #mine:not([hidden])) > .sb { visibility: visible; } }",
+   "test": "node tests/scripts/web_site_nav_browser.js"
+  },
+  {
+   "id": "the_recordings_home_button_is_hidden",
+   "file": "web/shell.html",
+   "old": "id=\"home-btn\" class=\"btn sm\"",
+   "new": "id=\"home-btn\" class=\"btn sm\" style=\"display: none\"",
+   "test": "node tests/scripts/web_picture_in_settings_check.js web"
   }
  ]
 }

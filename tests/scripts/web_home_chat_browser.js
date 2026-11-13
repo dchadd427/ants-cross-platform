@@ -132,7 +132,7 @@ async function main() {
         const inside = await rect(page, '#gchat');
         check(size + ': the dock is wholly inside the window', inside.x >= 0 && inside.y >= 0 && inside.right <= W && inside.bottom <= Hh, JSON.stringify(inside));
         await sleep(400);       // (the log is quiet for 300 ms after it is made again: a screen reader is not read all of it)
-        check(size + ': one h1 on the screen (the page's name), the dock\'s heading is an h2, the log is role=log aria-live=polite', (await page.evaluate(() => [...document.querySelectorAll('h1')].filter((h) => h.getClientRects().length).length)) === 1
+        check(size + ': one h1 on the screen (the page\'s name), the dock\'s heading is an h2, the log is role=log aria-live=polite', (await page.evaluate(() => [...document.querySelectorAll('h1')].filter((h) => h.getClientRects().length).length)) === 1
               && (await page.evaluate(() => document.querySelector('#gchat h2').tagName === 'H2' && document.querySelector('#gchat .gc-log').getAttribute('role') === 'log' && document.querySelector('#gchat .gc-log').getAttribute('aria-live') === 'polite')));
         await context.close();
     }

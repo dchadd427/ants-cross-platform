@@ -172,6 +172,34 @@ async function main() {
             }
         }
     }
+    // the Map maker's own screens (the page's own state is set: My maps is the #mine section shown with the editor's row and body hidden, as web/front/mapmaker_app.js does; Crop to fit is the #crop section shown with the editor hidden)
+    if (CHECKS) {
+        const reachable = () => [...document.querySelectorAll('a[href], button, summary, input, select, textarea, [tabindex]')].filter((e) => e.tabIndex >= 0 && !e.disabled && e.checkVisibility({ visibilityProperty: true }) && !e.closest('[inert]'));
+        for (const [width, height] of [[390, 844], [600, 800], [601, 800], [720, 900], [844, 390], [1280, 800], [1920, 1080]]) {
+            const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+            const page = await context.newPage();
+            await page.goto(base + '/mapmaker', { waitUntil: 'load' });
+            await page.waitForTimeout(300);
+            const tag = 'mapmaker ' + width + 'x' + height;
+            const up = await page.evaluate((reach) => {
+                const r = new Function('return (' + reach + ')')();
+                const barBefore = r().filter((e) => e.closest('.sb')).length;
+                document.getElementById('top').hidden = document.getElementById('body').hidden = true; document.getElementById('mine').hidden = false;
+                const list = r(), home = document.getElementById('mine-home'), hb = home.getBoundingClientRect();
+                const bar = document.querySelector('.sb a.sbhome');
+                return { barBefore, barReachable: list.filter((e) => e.closest('.sb')).length, ids: list.map((e) => e.id || e.className).slice(0, 8), homeShown: home.checkVisibility({ visibilityProperty: true }), href: home.getAttribute('href'), homeIn: hb.left >= 0 && hb.right <= innerWidth && hb.top >= 0 && hb.bottom <= innerHeight, homeH: hb.height,
+                    barHomeShown: !!bar && bar.checkVisibility({ visibilityProperty: true }) && bar.getBoundingClientRect().bottom <= innerHeight };
+            }, reachable.toString());
+            const wide = width >= 601;
+            check(tag + ': My maps up: ' + (wide ? 'the covered bar cannot be reached with the Tab key or seen by a screen reader, and the screen has its own Home (to "/", in the window, 44 px)' : 'the bar and its Home are seen, and the screen has no second Home'),
+                wide ? up.barBefore > 0 && up.barReachable === 0 && up.homeShown && up.href === '/' && up.homeIn && up.homeH >= 43.5 : up.barHomeShown && !up.homeShown, JSON.stringify(up));
+            const back = await page.evaluate((reach) => { document.getElementById('mine').hidden = true; document.getElementById('top').hidden = document.getElementById('body').hidden = false; return new Function('return (' + reach + ')')()().filter((e) => e.closest('.sb')).length; }, reachable.toString());
+            check(tag + ': My maps closed: the bar is in the Tab order again', back > 0, String(back));
+            const crop = await page.evaluate((reach) => { document.getElementById('editor').hidden = true; document.getElementById('crop').hidden = false; const list = new Function('return (' + reach + ')')()(); const cr = document.getElementById('crop'); return { outside: list.filter((e) => !cr.contains(e)).map((e) => e.tagName + '#' + e.id), inside: list.filter((e) => cr.contains(e)).length }; }, reachable.toString());
+            check(tag + ': Crop to fit up: nothing outside the step can be reached with the Tab key, and the step has its own controls (it is left by Cancel)', crop.outside.length === 0 && crop.inside > 0, JSON.stringify(crop));
+            await context.close();
+        }
+    }
     await browser.close();
     server.close();
     console.log('web_site_nav_browser: ' + checks + ' checks, ' + failures + ' failed');

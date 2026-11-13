@@ -400,10 +400,12 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
     .crbtns .btn { min-height: 44px; font-size: 15px; padding: 4px 8px; } .cdo, .chelp { margin: 4px 0; } .creasons .note { margin: 3px 0; }
 }
 
-/* My maps (mapmaker_mine.js): a screen over the editor's place, with the list of the maps saved in this browser */
+/* My maps (mapmaker_mine.js): a screen over the editor's place, with the list of the maps saved in this browser. From 601 px it lies over the site bar too, so the bar is taken out of the Tab order and
+   away from a screen reader while it is up, and the screen has its own Home button (a phone's flow keeps the bar in view, and its Home, so the button is left out there) */
 .mine { position: absolute; inset: 0; z-index: 8; overflow: auto; }
+@media (min-width: 601px) { #editor:has(> #mine:not([hidden])) > .sb { visibility: hidden; } }
 .mine .mhead { display: flex; align-items: center; gap: 16px; padding: 16px 28px 6px; } .mine .mhead .banner { flex: 1; margin: 0; font-size: 26px; padding: 8px 16px; }
-.mwrap { padding: 10px 28px 28px; } .mtools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; } .mtools #mine-back { margin-left: auto; }
+.mwrap { padding: 10px 28px 28px; } .mtools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; } .mtools #mine-home { margin-left: auto; }
 .mchips { display: inline-flex; gap: 8px; flex-wrap: wrap; } .mchips[hidden] { display: none; }
 .mchip { min-height: 44px; display: inline-flex; align-items: center; padding: 4px 14px; font-size: 15px; cursor: pointer; color: var(--cream); background: var(--sheen) var(--teal); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--btn-shadow-sm); }
 .mchip.on { background: var(--pressed); color: var(--pressed-ink); box-shadow: var(--btn-shadow-chosen); transform: translate(1px, 2px); }
@@ -416,7 +418,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .st-ok { color: var(--ok); } .st-no { color: var(--bad); }
 @media (max-width: 600px) {
     .gl { min-height: 44px; padding: 0 12px; }
-    .mine { position: static; overflow: visible; flex: 1 0 auto; } .hidem { display: none; }
+    .mine { position: static; overflow: visible; flex: 1 0 auto; } .hidem { display: none; } #mine-home { display: none; }
     .mine .mhead { padding: 12px 14px 4px; gap: 10px; } .mine .mhead .banner { font-size: 20px; padding: 6px 10px; }
     .mwrap { padding: 8px 14px 20px; } .mtools { gap: 8px; margin-bottom: 10px; } .mtools #mine-back { order: 1; } .mtools .mchips { order: 2; width: 100%; } .mtools .btn.big { min-height: 44px; font-size: 17px; padding: 6px 16px; } .mchip { padding: 2px 10px; font-size: 14px; }
     .mlist { gap: 10px; } .mrow { grid-template-columns: 64px minmax(0, 1fr); gap: 6px 12px; padding: 8px 10px; } .mthumb { width: 64px; height: 64px; } .macts { grid-column: 1 / -1; justify-content: flex-start; } .mrow .t1 { font-size: 19px; }

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The page layout had not been updated. The game page (web/shell.html, served as /play and, as "/", for
 a link that somebody shared) has the look of web/lobby.html, which is the look of the 1998 game's own menus: the clay, the thin green frame,
-the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and the small "ants!" logo (web/front/). What needs no browser is read from the two files:
+the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and, on the loading screen, the "ants!" logo (web/front/). What needs no browser is read from the two files:
 
   - the colors are the front page's, token for token, and the rules of the buttons, the two-state buttons, the frame, the black boxes, the progress bar and the footer are the front page's own
     text, where the front page (the lobby, drawn as the approved pictures draw it) has the same piece; the buttons' corners are one rounded radius, their face is lit from above (the
     sheen) and their edges are bevelled on all four sides (the bevel tokens), on the front page, this page, the changelog pages' style sheet and Sprites and sounds
-  - the header: the logo (a link back to the menu that asks as Menu does, with the same code), the eight controls in their order, and "More" for a narrow window (a <details>, no script) with
+  - the header: no logo; Menu (a link back to the menu that asks, with the code that the footer's link has; Home in its place in a recording), the eight controls in their order, and "More" for a narrow window (a <details>, no script) with
     the other six
   - the loading screen (the logo, the same ids and messages, a teal bar), the failure cards (classes, not colors written into the script), the bottom controls (the same buttons and ids), the footer
     (the version and the build where the Dockerfile and the CI look for them), the embed mode (only the game) and the pictures that the page names
@@ -345,6 +345,13 @@ class TheHeader(PageCase):
         self.assertNotIn('href="/"', self.header()[:menu.start()])                                            # (nothing before it leads to the front page)
         self.assertEqual(len(re.findall(r"<h1[ >]", self.page)), 1)                                           # (the page keeps its heading: for a screen reader)
 
+    def test_a_recording_or_live_view_has_a_home_button_first_in_its_group_of_the_header(self):
+        group = self.header()[self.header().index('<div class="header-actions rep-only">'):]
+        first = re.search(r'<(a|button) ([^>]*)>', group)
+        self.assertIn('href="/"', first.group(2))
+        self.assertIn('id="home-btn"', first.group(2))
+        self.assertNotIn("target=", first.group(2))
+
     def test_the_eight_controls_are_there_in_their_order_in_the_teal_style(self):
         row = self.header()[self.header().index('<div class="header-actions">'):self.header().index('<details class="more">')]
         found = re.findall(r'<(a|button) ([^>]*)>(.*?)</\1>', row, re.S)
@@ -402,12 +409,11 @@ class TheHeader(PageCase):
         self.assertNotIn("flex-wrap", rule(self.style, "header"))                                                # (the controls wrap among themselves)
 
 
-class TheMenuAndTheFooterLinkAskTheSameQuestion(PageCase):
-    def test_both_are_in_the_list_of_the_code_that_asks_and_the_question_is_in_one_place(self):
-        self.assertIn("['menu-btn', 'menu-link'].forEach(function (id) {", self.page)
+class TheLinksHomeAskTheSameQuestion(PageCase):
+    def test_the_three_links_are_in_the_list_of_the_code_that_asks_and_the_question_is_in_one_place(self):
+        self.assertIn("['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {", self.page)
         self.assertEqual(self.page.count("Leave the game and go back to the menu?"), 1)
-        self.assertEqual(len(re.findall(r"id=\"(?:logo-link|menu-btn|menu-link)\"", self.page)), 2)
-        self.assertNotIn("logo-link", self.page)
+        self.assertEqual(len(re.findall(r"id=\"(?:menu-btn|home-btn|menu-link)\"", self.page)), 3)
 
 
 class TheLoadingScreen(PageCase):

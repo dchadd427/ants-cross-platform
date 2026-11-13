@@ -462,7 +462,6 @@ class TheGamePage(PageCase):
         header = re.search(r'<a href="/" id="menu-btn"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(header)
         self.assertNotIn("target=", header.group(1))
-        self.assertNotIn("logo-link", self.page)                                                                       # (the header has no logo: Menu is its way back)
         footer = re.search(r'<a href="/" id="menu-link"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(footer)
         self.assertNotIn("target=", footer.group(1))
@@ -470,10 +469,10 @@ class TheGamePage(PageCase):
         self.assertNotIn(">Play online<", self.page)
 
     def test_it_asks_before_it_leaves_a_game_that_runs_or_a_room_that_is_joined(self):
-        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the Menu button and the footer's link)
+        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the Menu button, the recording's Home button and the footer's link)
         block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
         block = block[:block.index("// The fullscreen mouse: Locked")]
-        self.assertIn("['menu-btn', 'menu-link'].forEach(function (id) {", block)
+        self.assertIn("['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {", block)
         self.assertIn("ANTS_ARGS.indexOf('--join-url') !== -1", block)
         self.assertIn("Module._ants_match_running() === 1", block)
         self.assertIn("e.preventDefault()", block)

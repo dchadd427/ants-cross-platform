@@ -97,16 +97,16 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 .mfacts { margin-top: 4px; padding-top: 10px; border-top: 1px solid #1d3a31; font-size: 14px; line-height: 1.5; white-space: pre-line; color: #a8cfc0; }
 .mfacts[hidden] { display: none; }
 
-/* ---- a phone upright, or any window under 640 px: three rows ---- */
+/* ---- a window under 640 px that is wider than high and taller than 500 px (a phone upright has its own two rows below): Games, the login chip and the Menu; Quick host and Quick join; My room while the page holds a room ---- */
 @media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {
     .hbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; padding: 12px 16px 10px; }
-    .hbar .hright { grid-area: 1 / 1 / 2 / 3; min-width: 0; margin-left: 0; justify-content: flex-end; }        /* (first row: the whole row is the login chip's and the Menu's, to the right) */
+    .hbar .hright { grid-area: 1 / 2; min-width: 0; margin-left: 0; justify-content: flex-end; }        /* (first row: the right column is the login chip's and the Menu's, to the right) */
     .hbar button.hlogin { flex: 0 1 auto; gap: 6px; padding: 0 9px; }
     .hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: block; flex: 0 1 auto; min-width: 0; font-size: 15px; }                 /* (a named visitor: the name beside the badge, an ellipsis where it does not fit; "Log in" stays the mark alone) */
     .hbar .quick { grid-row: 2; min-height: 50px; padding: 6px 8px; font-size: 17px; letter-spacing: .06em; }
     .hbar .quick.host { grid-column: 1; } .hbar .quick.join { grid-column: 2; }
-    .hbar .mine { grid-row: 3; grid-column: 1; } .hbar .games { grid-row: 3; grid-column: 2; }
-    .hbar .mine[hidden] ~ .games { grid-column: 1 / -1; }                                                          /* (no room: Games takes the whole row) */
+    .hbar .games { grid-row: 1; grid-column: 1; }                                                                   /* (the left column of the first row is Games', as on a phone upright) */
+    .hbar .mine { grid-row: 3; grid-column: 1 / -1; }                                                              /* (My room has the third row to itself, while the page holds a room) */
     .rbar { gap: 8px; } .rbar .btn { padding: 6px 12px; } .rbar .rhome { padding-left: 9px; }
     .hmenubox { width: calc(100vw - 20px); }
 }

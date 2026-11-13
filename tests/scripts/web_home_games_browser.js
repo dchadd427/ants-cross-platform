@@ -641,7 +641,7 @@ async function flows() {
                 if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
                 const upright = h >= w && w <= 720;       // (a phone upright: two rows of 44 px, 110 px high)
                 if (upright && (m.bar > 112 || m.small.length || m.over.length || m.cut.filter((c) => !/^gc-cn /.test(c)).length)) badRows.push(w + 'x' + h + ': the upright phone\'s two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
-                if (!two && !upright && w <= 639 && m.bar < 150) badRows.push(w + 'x' + h + ': the three rows expected, the bar is ' + m.bar + ' px high');
+                if (!two && !upright && w <= 639 && m.bar < 120) badRows.push(w + 'x' + h + ': two or three rows expected (128 px, 184 with My room), the bar is ' + m.bar + ' px high');
                 if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
                 if (w === 568 && h === 320 && m.yard < 110) badRows.push('568x320: the body is only ' + m.yard + ' px high');
             }

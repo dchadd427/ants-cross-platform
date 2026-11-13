@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Sprites and sounds (asset_catalog/index.html, served at /asset_catalog/) in the Classic look (run by ./run_tests.sh --fast and by the CI).
 
-The page is a catalog and inspector of the game's assets with a lot of script. Its look was moved to the Classic look of the front page (the shared stylesheet /front/classic.css, the logo
-in the header, a Play button to the front page) by changing only the head's two links, the style block and the header: the markup and the script after the header are as they were. What is
+The page is a catalog and inspector of the game's assets with a lot of script. Its look was moved to the Classic look of the front page (the shared stylesheet /front/classic.css, the site bar
+above the header) by changing only the head's two links, the style block and the header: the markup and the script after the header are as they were. What is
 pinned here is what that must not break and what it promised:
 
   - the head loads the font and the shared stylesheet before the page's own style, and nothing else (the script file of the data, and nothing from another site)
-  - the header: the logo is a link to the front page (its size is the picture's), the page's banner, the three tabs with the ids and the calls that the script uses, Play first among the buttons
+  - the site bar: a Home button to the front page and no picture; the header: the page's banner, the three tabs with the ids and the calls that the script uses, Play first among the buttons
   - every element that the script asks for by a fixed id is in the page (a rewritten header cannot lose one)
   - the style block makes no colors of its own that the stylesheet has, keeps none of the old dark blue palette, leaves the frame its room, keeps the page's own phone rules (the page
     scrolls as a document, a table scrolls inside its box, the inspector's two columns stand one above the other) and overrides the colors that the markup and the script give to buttons

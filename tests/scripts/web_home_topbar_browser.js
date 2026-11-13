@@ -4,6 +4,7 @@
 //   1. a phone upright (up to 700 px wide): the login chip is the round badge AND the name, the name is cut with an ellipsis only where it does not fit (a short one shows whole from 390 px), and the first row stays ONE row (the bar is two rows: Games, chip and Menu, then Quick host, Quick join and My room):
 //      Games from the left edge, then the chip, then the Menu button, no overlap, nothing past the window's edge, the page does not scroll sideways, every target 44 px or more;
 //   2. wide windows and a phone held sideways keep what they were: the badge alone below 1280 px, the badge and the name at 1280;
+//   2b. a window under 640 px wide, wider than high and taller than 500 px (620 x 560, 600 x 520, 639 x 600, 350 x 300): Games from the left edge, the chip and the Menu at the right edge on the first row, Quick host and Quick join under them, My room on a third row of its own;
 //   3. the chip's accessible name holds the name ("Chatting as <name>"); a visitor who is not logged in sees the mark of Discord alone on a phone (the text "Log in" is not drawn) and "Log in" on a desktop;
 //   --shots DIR takes the pictures (topbar_*.png).
 //
@@ -59,7 +60,7 @@ const SHOW_COUNT = () => { const m = document.querySelector('.hbar .mine'); cons
 const BOXES = () => {
     const box = (s) => { const e = document.querySelector(s); if (!e || e.hidden || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
     const cn = document.querySelector('.hbar .hlogin .gc-cn');
-    return { games: box('.hbar .games'), pictures: document.querySelectorAll('.hbar img, .rbar img').length, heading: (document.querySelector('.hbar h1') || { textContent: null }).textContent, chip: box('.hbar .hlogin'), menu: box('.hbar .hmenu'), badge: box('.hbar .hlogin .gc-av'), name: box('.hbar .hlogin .gc-cn'), bar: box('.hbar'),
+    return { games: box('.hbar .games'), pictures: document.querySelectorAll('.hbar img, .rbar img').length, heading: (document.querySelector('.hbar h1') || { textContent: null }).textContent, headingInTree: (() => { const h = document.querySelector('.hbar h1'); return !!h && h.checkVisibility({ visibilityProperty: true }) && h.getBoundingClientRect().width <= 3; })(), chip: box('.hbar .hlogin'), menu: box('.hbar .hmenu'), badge: box('.hbar .hlogin .gc-av'), name: box('.hbar .hlogin .gc-cn'), bar: box('.hbar'),
         cut: !!cn && cn.scrollWidth > cn.clientWidth + 1, nameText: cn ? cn.textContent : null, label: (document.querySelector('.hbar .hlogin') || { getAttribute: () => null }).getAttribute('aria-label'),
         wide: document.documentElement.scrollWidth > window.innerWidth || document.body.scrollWidth > window.innerWidth, win: window.innerWidth };
 };
@@ -108,7 +109,7 @@ async function main() {
             const phoneRow = (s[1] <= 720 && s[2] > s[1]);
             check(s[0] + ' guest: the chip is there, a target of 44 px, and ' + (s[1] >= 1280 ? 'says Log in' : 'is the mark alone'), !!b.chip && b.chip.h >= 44 && b.chip.w >= 44 && (s[1] >= 1280 ? b.chip.w > 80 : b.chip.w <= 50), JSON.stringify(b.chip));
             if (phoneRow) check(s[0] + ' guest: one row (Games, chip, Menu), the menu at the right edge', !!b.menu && b.games.x + b.games.w <= b.chip.x + 0.5 && b.chip.r <= b.menu.x + 0.5 && b.menu.r <= s[1] && Math.abs(b.menu.y - b.chip.y) < 4 && Math.abs(b.games.y - b.chip.y) < 4);
-            check(s[0] + ' guest: the bar draws no logo (no picture in it), and the page\'s heading is the name', b.pictures === 0 && b.heading === 'Ants!', JSON.stringify([b.pictures, b.heading]));
+            check(s[0] + ' guest: the bar draws no logo (no picture in it), and the page\'s heading is the name, in the page for a screen reader and not drawn', b.pictures === 0 && b.heading === 'Ants!' && b.headingInTree, JSON.stringify([b.pictures, b.heading, b.headingInTree]));
             check(s[0] + ' guest: no sideways scroll', !b.wide);
             const none = await page.evaluate(ROW);
             check(s[0] + ' no room: My room is not drawn (display none: no place in the row, not in the tab order)', none.mine === null && none.mineDisplay === 'none', JSON.stringify(none));
@@ -152,6 +153,28 @@ async function main() {
         await context.close();
     }
 
+    // ---- a window under 640 px wide that is wider than high and taller than 500 px (and one under 360 px wide that is wider than high): the bar's first row is Games at the left and the chip and the Menu at the right ----
+    {
+        const context = await browser.newContext({ deviceScaleFactor: 1 });
+        for (const [name, w, h] of [['w620x560', 620, 560], ['w600x520', 600, 520], ['w639x600', 639, 600], ['w350x300', 350, 300]]) {
+            const page = await openAt(context, w, h);
+            await page.goto(info.site + '/', { waitUntil: 'load' });
+            await live(page, 'no');
+            const m = await page.evaluate(() => { const q = (e) => { const x = document.querySelector(e); if (!x || !x.getClientRects().length) return null; const r = x.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }; return { games: q('.hbar .games'), chip: q('.hbar .hlogin'), menu: q('.hbar .hmenu'), host: q('.hbar .quick.host'), join: q('.hbar .quick.join'), bar: q('.hbar'), pictures: document.querySelectorAll('.hbar img').length, wide: document.documentElement.scrollWidth > innerWidth }; });
+            const L = name + ': ';
+            check(L + 'the first row is Games from the left edge, then the chip, then the Menu at the right edge, all on one row', !!m.games && !!m.chip && !!m.menu && m.games[0] <= 20 && m.games[2] <= m.chip[0] + 0.5 && m.chip[2] <= m.menu[0] + 0.5 && m.menu[2] >= w - 20 && m.menu[2] <= w && Math.abs(m.games[1] - m.menu[1]) < 4 && Math.abs(m.chip[1] - m.menu[1]) < 4, JSON.stringify(m));
+            check(L + 'Quick host and Quick join are under it, side by side, inside the window; no picture in the bar; no sideways scroll', !!m.host && !!m.join && m.host[1] >= m.games[3] - 0.5 && Math.abs(m.host[1] - m.join[1]) <= 2 && m.host[2] <= m.join[0] + 1 && m.join[2] <= w && m.pictures === 0 && !m.wide, JSON.stringify(m));
+            check(L + 'a press on the middle of Games reaches Games (the group of the chip and the Menu does not lie over it)', await page.evaluate(() => { const g = document.querySelector('.hbar .games').getBoundingClientRect(), e = document.elementFromPoint(g.left + g.width / 2, g.top + g.height / 2); return !!e && !!e.closest('.games'); }));
+            check(L + 'every target is 44 px or more', [m.games, m.chip, m.menu, m.host, m.join].every((x) => x[3] - x[1] >= 43.5 && x[2] - x[0] >= 43.5), JSON.stringify(m));
+            await page.evaluate(() => { const e = document.querySelector('.hbar .mine'); e.hidden = false; e.querySelector('.pill').hidden = false; e.querySelector('.pill').textContent = '1/4'; });
+            const r = await page.evaluate(() => { const q = (e) => { const x = document.querySelector(e); if (!x || !x.getClientRects().length) return null; const r = x.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; }; return { games: q('.hbar .games'), host: q('.hbar .quick.host'), mine: q('.hbar .mine'), menu: q('.hbar .hmenu') }; });
+            check(L + 'with My room (a room is held): it has the third row to itself, under Quick host and Quick join, and the first row does not move', !!r.mine && r.mine[1] >= r.host[3] - 0.5 && r.mine[0] <= 20 && r.mine[2] >= w - 20 && JSON.stringify(r.games) === JSON.stringify(m.games) && JSON.stringify(r.menu) === JSON.stringify(m.menu), JSON.stringify([m, r]));
+            if (name === 'w620x560') await shot(page, 'threerow_' + name);
+            await page.close();
+        }
+        await context.close();
+    }
+
     // ---- logged in, five names, every size ----
     for (const n of NAMES.filter((x) => !arg('--only') || x[0] === arg('--only'))) {
         const context = await browser.newContext({ deviceScaleFactor: 1 });
@@ -174,7 +197,7 @@ async function main() {
                 check(L + 'the first row is one row: Games from the left edge, chip, Menu, in that order, no overlap, the Menu at the right edge of the window, and no logo anywhere in the bar',
                     b.pictures === 0 && b.games.x <= 20 && b.games.x + b.games.w <= b.chip.x + 0.5 && b.chip.r <= b.menu.x + 0.5 && b.menu.r <= s[1] + 0.5 && Math.abs(b.menu.r - (s[1] - 14)) < 2 && Math.abs(b.menu.y - b.chip.y) < 4 && Math.abs(b.menu.y - b.games.y) < 4, JSON.stringify(b));
                 if ((n[0] === 'one' || n[0] === 'typical') && s[1] >= 360) check(L + 'a short name shows whole (no ellipsis) from 360 px: the row has the room that the logo had', !b.cut, JSON.stringify(b.name));
-                if (n[0] === 'medium' && s[1] >= 390) check(L + 'a name of ten letters shows whole at 390 px and up', !b.cut, JSON.stringify(b.name));
+                if (n[0] === 'medium' && s[1] >= 360) check(L + 'a name of ten letters shows whole from 360 px', !b.cut, JSON.stringify(b.name));
                 if (n[0] === 'longest' && s[1] <= 412 && s[1] >= 360) check(L + 'a long name is cut with an ellipsis and the chip stays between Games and the Menu', b.cut && b.chip.x >= b.games.x + b.games.w - 0.5, JSON.stringify(b));
                 if (n[0] === 'longest' && s[1] >= 390) check(L + 'the chip grows into the free space: at 390 px and up, more than the badge', b.chip.w > 100);
             } else if (s[1] >= 1280) {

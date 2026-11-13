@@ -894,7 +894,7 @@
             .btn.sm { padding: 6px 8px; }
         }
 
-        /* Between 701 and 1139 px the header keeps the seven links it had, and Matches is the footer's (the Settings button is in the row, a gear without its word). Feedback goes too only where that saves a row, as measured:
+        /* Between 701 and 1139 px the header keeps the seven links it had, and Matches is the footer's (the Settings button is in the row, a gear without its word). Feedback goes too only where that saves a row, at limits that were measured when the row also held a logo (the logo is gone and the limits are as they were):
            about 930 to 1040 px in a window taller than 520 px and about 740 to 830 px in a short one (a phone on its side); elsewhere the row is one row, or two rows with or without it. The footer has both links. */
         @media (min-width: 701px) and (max-width: 1139px) {
             #watch-btn {
@@ -956,6 +956,7 @@
         /* the header: what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
         body.replay .header-actions.rep-only { flex: 0 0 auto; flex-wrap: nowrap; }
+        @media (max-width: 340px) { body.replay .header-actions.rep-only { gap: 8px 4px; } body.replay .header-actions.rep-only .btn.sm { padding: 6px 5px; } }       /* (a 320 px phone: Home, All matches, Full and More share one row) */
         .rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; line-height: 1.15; align-content: center; }
         .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); overflow-wrap: anywhere; }
         .rhead h2 small { font-size: 15px; font-weight: 500; }
@@ -1145,6 +1146,7 @@
             </details>
         </div>
         <div class="header-actions rep-only">
+            <a href="/" id="home-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Home</a>
             <a href="/matches" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
             <button id="copy-btn" type="button" class="btn sm wide-only" title="Copy the link to this match">Copy link</button>
             <button id="stats-btn" type="button" class="btn sm wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
@@ -2696,11 +2698,11 @@
         })();
         // ANTS_SELECTOR_END
 
-        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's Menu button and the footer's link go there in THIS tab (requested: nothing opens a new tab by default). The game that is running
+        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's Menu button (Home, in a recording or a live view) and the footer's link go there in THIS tab (requested: nothing opens a new tab by default). The game that is running
         // here is left, and a room that is joined is left for good, so a click asks first while a match is being played here or a room is joined (ants_match_running, and
         // --join-url among the arguments), and No stays; Yes tells the server (antsLeaveMatch: the seat is dropped at once and the key is let go of; a closed tab would have held it).
         (function () {
-            ['menu-btn', 'menu-link'].forEach(function (id) {
+            ['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {
                 var link = document.getElementById(id);
                 if (!link) return;
                 link.addEventListener('click', function (e) {

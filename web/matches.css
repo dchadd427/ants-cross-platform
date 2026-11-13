@@ -1,6 +1,6 @@
 /* The three pages of the match history (docs/REPLAYS.md "The match pages"): the list of every match (web/matches.html), one match with its stats and replay (web/match.html) and the matches that run
-   now (web/live.html). The look of the front page (web/lobby.html): the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black inset boxes, the game's own font and the
-   "ants!" logo, all from web/front/. Nothing is loaded from another site. The colors of the front page (clay, ink, teal ... bad-edge) are the first lines of each page's own <style>, as the front page
+   now (web/live.html). The look of the front page (web/lobby.html): the orange clay, the thin green frame, teal bevelled buttons with a red shadow, black inset boxes, and the game's own font, all
+   from web/front/. Nothing is loaded from another site. The colors of the front page (clay, ink, teal ... bad-edge) are the first lines of each page's own <style>, as the front page
    and the game page carry them (tests/scripts/test_web_pages_classic.py keeps them the same as web/front/classic.css); the rest of the tokens are here. */
 @font-face { font-family: "Libre Franklin"; src: url("front/LibreFranklin-Medium.ttf") format("truetype"); font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
