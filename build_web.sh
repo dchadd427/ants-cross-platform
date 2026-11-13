@@ -40,14 +40,14 @@ cmake --build "${BUILD_DIR}" -j4
 
 echo "==> Packaging into ${DIST_DIR}..."
 mkdir -p "${DIST_DIR}"
-# The page's footer names the version (the file VERSION) and the build (ANTS_BUILD_ID, else the commit of this checkout, else the time), as the Docker image does
+# The footers of the game page and the front page, and the Menu of every page with the bar at the top, name the version (the file VERSION) and the build (ANTS_BUILD_ID, else the commit of this checkout, else the time), as the Docker image does
 GAME_VERSION="v$(head -n 1 "${SCRIPT_DIR}/VERSION" | tr -d '[:space:]')"
 BUILD_ID="$(sh "${SCRIPT_DIR}/docker/resolve_build_id.sh" "${ANTS_BUILD_ID:-}" "${SCRIPT_DIR}/.git" 2>/dev/null)"
 BUILD_DATE="$(TZ=PST8PDT,M3.2.0,M11.1.0 date '+%Y-%m-%d %H:%M PT')"
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${BUILD_DIR}/src/ants_app/index.html" > "${DIST_DIR}/index.html"
 cp -f "${DIST_DIR}/index.html" "${DIST_DIR}/play.html"            # the game page at its own path (the games on this computer), as the image has it
 sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/lobby.html" > "${DIST_DIR}/lobby.html"
-for PAGE in matches match live; do                                # the pages of the match history: the list, one match, the matches that run now
+for PAGE in matches match live legal; do                         # the pages of the match history (the list, one match, the matches that run now) and the Legal page
     sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" -e "s/@@SITE_TITLE@@//g" -e "s/@@SITE_FOOTER@@//g" "${SCRIPT_DIR}/web/${PAGE}.html" > "${DIST_DIR}/${PAGE}.html"
 done
 cp -f "${SCRIPT_DIR}/web/matches.css" "${DIST_DIR}/"                                                                                                                                                # ... their stylesheet
@@ -68,8 +68,8 @@ cp -f "${SCRIPT_DIR}/web/countdown_button.js" "${DIST_DIR}/"                    
 cp -f "${SCRIPT_DIR}/web/game_menu.js" "${SCRIPT_DIR}/web/game_menu.css" "${DIST_DIR}/"                                                                                  # ... the settings menu's panel (loaded by the game page once the game runs)
 cp -f "${BUILD_DIR}/lvl_core/lvl_core.js" "${BUILD_DIR}/lvl_core/lvl_core.wasm" "${DIST_DIR}/"                                                                                    # the map core for the browser (docs/MAP_FORMAT.md, "In the browser")
 cp -f "${SCRIPT_DIR}/web/lvl_core_api.js" "${DIST_DIR}/"
-MAPMAKER_VERSION="v$(head -n 1 "${SCRIPT_DIR}/web/MAPMAKER_VERSION" | tr -d '[:space:]')" && grep -q "id=\"mapmaker-version\">${MAPMAKER_VERSION}<" "${SCRIPT_DIR}/web/mapmaker.html"
-sed -e "s|<span id=\"mapmaker-build\">local</span>|<span id=\"mapmaker-build\">build <span id=\"game-build-id\">${BUILD_ID}</span> <span id=\"game-build-date\">(${BUILD_DATE})</span></span>|" "${SCRIPT_DIR}/web/mapmaker.html" > "${DIST_DIR}/mapmaker.html"   # the map maker (docs/MAP_EDITOR.md); its scripts are in front/
+MAPMAKER_VERSION="v$(head -n 1 "${SCRIPT_DIR}/web/MAPMAKER_VERSION" | tr -d '[:space:]')" && grep -q "data-maker=\"${MAPMAKER_VERSION}\"" "${SCRIPT_DIR}/web/mapmaker.html"
+sed -e "s/@@GAME_VERSION@@/${GAME_VERSION}/g" -e "s/@@BUILD_ID@@/${BUILD_ID}/g" -e "s/@@BUILD_DATE@@/${BUILD_DATE}/g" "${SCRIPT_DIR}/web/mapmaker.html" > "${DIST_DIR}/mapmaker.html"   # the map maker (docs/MAP_EDITOR.md); its scripts are in front/
 cp -f "${SCRIPT_DIR}/web/admin.html" "${SCRIPT_DIR}/web/admin.css" "${SCRIPT_DIR}/web/admin_page.js" "${DIST_DIR}/"   # the admin page (docs/MAP_SUBMISSIONS.md): typed by hand, nothing links to it
 cp -f "${BUILD_DIR}/src/ants_app/index.js" "${DIST_DIR}/"
 cp -f "${BUILD_DIR}/src/ants_app/index.wasm" "${DIST_DIR}/"
@@ -79,7 +79,7 @@ mkdir -p "${DIST_DIR}/front" "${DIST_DIR}/home" "${DIST_DIR}/app"
 cp -f "${SCRIPT_DIR}/web/front"/* "${DIST_DIR}/front/"            # the front page's pictures and font, served at /front/
 cp -f "${SCRIPT_DIR}/web/home"/* "${DIST_DIR}/home/"              # the front page's Home and Room screens (docs/HOME_SCREEN.md), served at /home/
 cp -f "${SCRIPT_DIR}/web/manifest.webmanifest" "${DIST_DIR}/"             # the installable web app: its manifest (served at /manifest.webmanifest) ...
-cp -f "${SCRIPT_DIR}/web/app"/* "${DIST_DIR}/app/"                  # ... and its icons (tools/front_page_art/make_app_icons.py), served at /app/
+cp -f "${SCRIPT_DIR}/web/app"/* "${DIST_DIR}/app/"                  # ... and its icons (tools/make_app_icons.py), served at /app/
 python3 "${SCRIPT_DIR}/tools/map_atlas.py" "${DIST_DIR}/mapmaker_atlas"        # the map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"); the few big toys that it fetches one by one come from /asset_catalog/sprites/, which the image has and this folder does not
 
 echo "========================================================"

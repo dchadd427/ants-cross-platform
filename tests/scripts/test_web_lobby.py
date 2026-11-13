@@ -68,7 +68,7 @@ class TheFrontPageMarkup(PageCase):
     def test_the_page_is_one_lobby_the_room_with_its_four_colors_and_the_match_with_its_map_and_start(self):
         self.assertEqual(len(re.findall(r'<section class="card', self.page)), 0)                  # the one card of the earlier front page (New match: Friend seats, Sit here, START) is gone: the page is a room
         self.assertEqual(self.markup.count('<div class="grid" id="lobby">'), 1)
-        self.assertEqual(len(re.findall(r'<select ', self.page)), 1)                               # the picture's shape only (the map is a card with a button, no drop-down; the drop-down of a color is made by the script, for the colors that the host can set; the picture's is filled by the script from web/shapes.js)
+        self.assertEqual(len(re.findall(r'<select ', self.page)), 0)                               # (no drop-down in the markup: the map is a card with a button, the drop-down of a color is made by the script, for the colors that the host can set; the picture's shape is a row of the game's settings menu)
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match',
                      'Opponents</span>', 'Sit here', 'seat-row-', 'id="h-match"', 'id="player-name"', 'btn_start', 'setup-hint', 'four.html'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
@@ -300,7 +300,7 @@ class TheFrontPageMarkup(PageCase):
         script = self.script
         self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", script)
         self.assertIn("url: SERVER, code: p.code, map: Rules.mapByKey(Rules.DEFAULT_MAP_KEY).file, name: p.name, key: p.key || null, join: !!p.join, joinFirst: !!p.joinFirst, platform: platform()", script)      # (the Hello of a new room asks for the default map)
-        run = script[script.index("function runLobby() {"):script.index("// SELECTOR_BEGIN")]
+        run = script[script.index("function runLobby() {"):script.index("// STATS_BEGIN")]
         self.assertIn("connect({ code: newCode(), name: myName(), own: true });", run)                            # a plain visit: a room of a new code
         self.assertIn("} else if (stored) {", run)
         self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", run)       # a reload: the same room and the key of the seat
@@ -329,16 +329,13 @@ class TheFrontPageMarkup(PageCase):
             self.assertNotRegex(self.page, r"(recall|remember|getItem|setItem|removeItem)\(\s*'%s" % key, key + " is neither read nor written by the lobby")
         for gone in ("CARD_KEY", "CARD_ROOM_KEY", "hostSeatsText", "cardParse", "cardFromOld"):
             self.assertNotIn(gone, self.page, gone)
-        written = set(re.findall(r"\bremember\(([A-Za-z_']+)", self.page))
-        self.assertEqual(written, {"key", "ASPECT_KEY", "storage"})                       # (the definition, the picture's shape and, through Modes.remember(storage, id), the leader's last game type under the key of front/game_modes.js: no other key is written to the local storage by name)
-        self.assertEqual(sorted(re.findall(r"localStorage\.setItem\(([^,]+),", self.page)), ["entry.name", "key"])       # (the one definition of remember, and the entry of a seat that the game page reads: ants.rejoin.<room>.<seat>)
         self.assertNotIn("ants.name", self.page, "nobody types a name any more: the page keeps none")
         self.assertIn("var ASPECT_KEY = 'ants.aspect.v2';", self.page)
         self.assertEqual(len(re.findall(r"localStorage\.removeItem|localStorage\.clear|sessionStorage\.clear", self.page)), 0)
 
-    def test_the_footer_links_the_name_card_the_picture_row_and_the_test_room_buttons_are_there(self):
-        self.assertEqual(self.page.count("<nav "), 1, "the header is the logo, the tagline and the one button of Matches: the other links are in the footer")
-        self.assertIn('<header class="mast"><h1><img src="front/logo.png" alt="Ants!" width="581" height="218"></h1>', self.markup)
+    def test_the_footer_links_the_name_card_and_the_test_room_buttons_are_there(self):
+        self.assertEqual(self.page.count("<nav "), 1, "the header is the name, the tagline and the one button of Matches: the other links are in the footer")
+        self.assertIn('<header class="mast"><h1>Ants!</h1>', self.markup)
         self.assertIn('<a class="btn sm" href="/matches" id="watch-top"', self.markup)                  # (the one button of the header, the right of the row: test_web_replay.py)
         nav = self.page[self.page.index('<nav aria-label="Footer links">'):]
         nav = nav[:nav.index("</nav>")]
@@ -362,8 +359,6 @@ class TheFrontPageMarkup(PageCase):
         self.assertNotIn("placeholder", self.script)
         self.assertEqual(len(re.findall(r"\baskName\(\{", self.script)), 2, "the name card is asked for by a typed code and a link to a room")
         self.assertNotRegex(self.script, r"pencil|editName|\.rename\(", "nobody types a name any more: no pencil, no rename")
-        # the picture's shape: the Picture row in the match column is a label, an empty dropdown that the script fills from the table (the first visit's shape is chosen by it) and the quiet line under it
-        self.found(self.markup, r'<label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture"></select></span><span class="fit-note" id="fit-note" hidden></span>')
         self.assertNotIn('name="aspect"', self.markup)
         # the test room (a second page inside this file, with the games in frames) is gone
         for ident in ("room-panel", "play-tab", "all-here", "all-windows", "new-room", "any-link", "copy-any", "seat-rows", "room-code", "room-map", "popup-hint", "fill-hint", "sync", "grid", "frames-note"):
@@ -376,7 +371,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIsNotNone(found, "the Discord link is the last thing of the header, right after Matches")
         self.assertEqual(hashlib.sha256(found.group(2).encode()).hexdigest(), DISCORD_MARK_SHA256, "the mark is Discord's own glyph (Simple Icons, CC0), as it is, not redrawn")
         self.assertEqual(header.count('id="discord-top"'), 1)
-        self.assertEqual(len(re.findall(r"<img", header)), 1, "the logo is the header's only picture: the mark is inline")
+        self.assertEqual(len(re.findall(r"<img", header)), 0, "the header has no picture: the mark is inline")
         self.assertEqual(self.page.count("discord.gg"), 1)
 
     def test_nothing_opens_a_new_tab_but_the_links_that_leave_the_game_and_the_explicit_windows(self):
@@ -405,11 +400,6 @@ class TheFrontPageMarkup(PageCase):
         self.assertLess(alone.index("client.leave();"), alone.index("window.location.assign("))
         self.assertIn("var LOCAL_PAGE = 'play';", script)
         self.assertIn("client.start();", script)
-        # the selector of the picture's shape changes the lobby's next game at once and asks nothing (the lobby has no game open)
-        block = script[script.index("// SELECTOR_BEGIN"):script.index("// SELECTOR_END")]
-        self.assertIn("aspect = value;", block)
-        self.assertNotIn("confirm", block)
-        self.assertNotIn("location.assign", block)
 
     def test_only_a_room_code_and_the_shape_are_read_from_the_address(self):
         for needle in ("new URLSearchParams(window.location.search).get('room')", "new URLSearchParams(window.location.search).get('aspect')"):
@@ -472,9 +462,6 @@ class TheGamePage(PageCase):
         header = re.search(r'<a href="/" id="menu-btn"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(header)
         self.assertNotIn("target=", header.group(1))
-        logo = re.search(r'<a href="/" id="logo-link"([^>]*)>\s*<img src="front/logo\.png"', self.page)                  # (the logo is the Menu's twin: the way back too)
-        self.assertIsNotNone(logo)
-        self.assertNotIn("target=", logo.group(1))
         footer = re.search(r'<a href="/" id="menu-link"([^>]*)>Menu</a>', self.page)
         self.assertIsNotNone(footer)
         self.assertNotIn("target=", footer.group(1))
@@ -482,10 +469,10 @@ class TheGamePage(PageCase):
         self.assertNotIn(">Play online<", self.page)
 
     def test_it_asks_before_it_leaves_a_game_that_runs_or_a_room_that_is_joined(self):
-        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the logo, the Menu button and the footer's link)
+        self.assertEqual(self.page.count("window.confirm('Leave the game and go back to the menu?')"), 1)           # (one question for the Menu button, the recording's Home button and the footer's link)
         block = self.page[self.page.index("THE WAY BACK TO THE MENU"):]
         block = block[:block.index("// The fullscreen mouse: Locked")]
-        self.assertIn("['logo-link', 'menu-btn', 'menu-link'].forEach(function (id) {", block)
+        self.assertIn("['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {", block)
         self.assertIn("ANTS_ARGS.indexOf('--join-url') !== -1", block)
         self.assertIn("Module._ants_match_running() === 1", block)
         self.assertIn("e.preventDefault()", block)
@@ -566,7 +553,7 @@ class TheImageAndTheCi(PageCase):
         self.assertIn("COPY --from=builder /src/lobby.html /usr/share/nginx/html/lobby.html", dockerfile)
         self.assertIn("RUN cp /usr/share/nginx/html/index.html /usr/share/nginx/html/play.html", dockerfile)
         self.assertFalse("/src/four.html" in dockerfile or "web/four.html" in dockerfile, "the Dockerfile still builds the old page")
-        self.assertIn("web/shell.html web/lobby.html", dockerfile)                           # the version goes into both pages
+        self.assertIn("build_web/src/ants_app/index.html web/lobby.html", dockerfile)                           # the version goes into both pages (the game page that the link made, and the lobby)
         self.assertIn('"$PAGE" /src/web/lobby.html', dockerfile)                             # and the build id
         self.assertIn("cp /src/web/lobby.html /src/lobby.html", dockerfile)                  # the site placeholder step runs on the lobby
 

@@ -42,8 +42,6 @@ class PageCase(unittest.TestCase):
 class TheControlAndTheGuide(PageCase):
     def test_the_control_starts_locked_and_has_one_key(self):
         page = read(SHELL)
-        self.found(page, r'id="lock-on" data-lock="on" aria-checked="true"')                          # Locked is the default
-        self.found(page, r'id="lock-off" data-lock="off" aria-checked="false"')
         self.assertIn("var ANTS_LOCK_KEY = 'ants.pointerlock';", page)
         self.assertEqual(len(re.findall(r"getItem\(ANTS_LOCK_KEY\)", page)), 1, "the key is read once")
         self.assertIn("var ANTS_POINTER_LOCK = true;", page)
@@ -261,6 +259,34 @@ class ThePagesOwnCode(unittest.TestCase):
         done = subprocess.run([shutil.which("node"), CHECK_JS, SHELL], capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertIn("0 failures", done.stdout)
+
+    def test_the_page_hands_the_menu_its_pick_function_and_its_lock(self):
+        """the call of AntsGameMenu.forPage, run as the page writes it (tests/scripts/web_menu_handover_check.js): the menu's Picture shape row and Fullscreen mouse row work only through what it is handed"""
+        done = subprocess.run([shutil.which("node"), os.path.join(REPO, "tests", "scripts", "web_menu_handover_check.js"), SHELL], capture_output=True, text=True, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("0 failures", done.stdout)
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the mutants of the Fullscreen mouse setting were NOT run")
+class TheMouseSettingMutants(unittest.TestCase):
+    def test_the_check_fails_on_every_broken_copy_of_the_page(self):
+        """tests/data/pointer_lock_mutants.json (tools/mutate.py runs it too): the page's object that the settings menu's Fullscreen mouse row reads and writes, and what the page hands the menu, each broken copy on a copy of the page"""
+        import json
+        import tempfile
+        with open(os.path.join(REPO, "tests", "data", "pointer_lock_mutants.json"), encoding="utf-8") as f:
+            spec = json.load(f)
+        self.assertGreaterEqual(len(spec["mutants"]), 6)
+        text = read(SHELL)
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = os.path.join(tmp, "shell.html")
+            for m in spec["mutants"]:
+                with self.subTest(m["id"]):
+                    self.assertEqual(text.count(m["old"]), 1, "%s: the text is not in the page exactly once" % m["id"])
+                    with open(copy, "w", encoding="utf-8", newline="") as f:
+                        f.write(text.replace(m["old"], m["new"]))
+                    command = [copy if part == m["file"] else (os.path.join(REPO, part) if part.startswith("tests/") else part) for part in m["test"].split()]
+                    done = subprocess.run([shutil.which("node")] + command[1:], capture_output=True, text=True, timeout=120)
+                    self.assertNotEqual(done.returncode, 0, "the check did not notice: " + m["id"])
 
 
 if __name__ == "__main__":

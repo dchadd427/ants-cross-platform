@@ -88,11 +88,11 @@ class TheDockerfileIsRead(unittest.TestCase):
     def test_the_repositorys_dockerfile_is_read_to_the_end_and_no_step_is_lost(self):
         for op in ("FROM", "COPY", "RUN"):
             self.assertEqual(len([s for s in self.steps if s.op == op]), len(re.findall(r"^%s " % op, self.text, re.M)), op)
-        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1])
+        self.assertEqual([s.stage for s in self.steps if s.op == "FROM"], [0, 1, 2])
         self.assertTrue(all(s.text.strip() for s in self.steps))
 
     def test_the_emscripten_version_is_the_one_of_the_from_line(self):
-        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:(\S+) AS builder", self.text, re.M).group(1))
+        self.assertEqual(wd.emscripten_version(self.steps), re.search(r"^FROM emscripten/emsdk:(\S+) AS emsdk-warm", self.text, re.M).group(1))
 
     def test_a_dockerfile_without_the_emsdk_image_is_an_error(self):
         with self.assertRaises(wd.ToolError):
@@ -110,12 +110,16 @@ class TheDockerfileIsRead(unittest.TestCase):
         self.assertEqual((step.flags, step.words), ({"from": "builder"}, ["/x/a", "/y/"]))
 
     def test_what_the_tool_cannot_play_is_refused(self):
-        for text in ("ADD x y", "ONBUILD RUN x", "SHELL [\"/bin/bash\", \"-c\"]", "RUN [\"a\", \"b\"]", "COPY [\"a\", \"b\"]", "RUN --mount=type=cache,target=/x true"):
+        for text in ("ADD x y", "ONBUILD RUN x", "SHELL [\"/bin/bash\", \"-c\"]", "RUN [\"a\", \"b\"]", "COPY [\"a\", \"b\"]", "RUN --mount=type=bind,target=/x true", "RUN --network=none true"):
             with self.subTest(text):
                 with self.assertRaises(wd.ToolError):
                     wd.parse_dockerfile("FROM a\n" + text + "\n")
         with self.assertRaises(wd.ToolError):
             wd.parse_dockerfile("RUN true\n")
+
+    def test_a_cache_mount_is_dropped_and_the_command_stays(self):
+        step = wd.parse_dockerfile("FROM a\nRUN --mount=type=cache,target=/root/.ccache,id=x \\\n    --mount=type=cache,target=/y echo one && echo --mount=type=cache true\n")[1]
+        self.assertEqual(step.text, "echo one && echo --mount=type=cache true")
 
     def test_a_heredoc_is_refused_at_its_first_line(self):
         with self.assertRaisesRegex(wd.ToolError, r"line 2: this form of RUN is not supported"):       # (the lines after it would be refused as unknown instructions, which is not the point)
@@ -175,6 +179,14 @@ class TheReplay(Scratch):
 
     def seen(self, fs, *parts):
         return os.path.join(fs, *parts)
+
+    def test_the_stage_that_only_prepares_the_compiler_is_not_played_and_a_cache_mount_is_run_without_the_mount(self):
+        fs, said = self.play("FROM a AS emsdk-warm\nRUN touch /src/made_by_the_warm_stage\nCOPY a.txt /src/warm.txt\n"
+                             "FROM emsdk-warm AS builder\nWORKDIR /src\nRUN --mount=type=cache,target=/root/.ccache,id=x touch made_by_the_builder\n", {"a.txt": "A"})
+        self.assertFalse(os.path.exists(self.seen(fs, "src", "made_by_the_warm_stage")))
+        self.assertFalse(os.path.exists(self.seen(fs, "src", "warm.txt")))
+        self.assertTrue(os.path.exists(self.seen(fs, "src", "made_by_the_builder")))
+        self.assertIn("stage emsdk-warm is not replayed", said)
 
     def test_copy_puts_files_folders_and_patterns_where_docker_does(self):
         fs, _ = self.play("FROM a AS one\nWORKDIR /src\nCOPY a.txt b.txt ./\nCOPY dir/ ./dir/\nCOPY web/f1.* /usr/share/nginx/html/\nCOPY a.txt /src/renamed.txt\nCOPY dir/sub /etc/nginx/conf.d/\n",
@@ -239,6 +251,30 @@ class TheReplay(Scratch):
         with open(self.seen(fs, "src/out.txt"), encoding="utf-8") as f:
             self.assertEqual(f.read(), "[][the ants][x][hello world][big][ant][value with spaces]")
 
+    def test_the_ccache_folder_of_the_dockerfile_is_a_private_folder_and_never_the_machines_own(self):
+        """ENV CCACHE_DIR=/root/.ccache CCACHE_MAXSIZE=1G of the Dockerfile must not reach this machine's own compiler cache (it would be trimmed to 1 GB) or need /root (a user who is not root has none)."""
+        envs = [step.text for step in wd.parse_dockerfile(read("Dockerfile")) if step.op == "ENV" and "CCACHE_DIR" in step.text]
+        self.assertTrue(envs, "the Dockerfile sets CCACHE_DIR")
+        fs, _ = self.play("FROM a\n" + "".join("ENV %s\n" % text for text in envs) + "WORKDIR /src\nRUN printf '%s|%s' \"$CCACHE_DIR\" \"$CCACHE_MAXSIZE\" > /src/out.txt\n", env={"PATH": os.environ["PATH"], "CCACHE_DIR": "/home/someone/.ccache"})
+        with open(self.seen(fs, "src/out.txt"), encoding="utf-8") as f:
+            folder, size = f.read().split("|")
+        self.assertNotIn("/root", folder)
+        self.assertNotEqual(folder, "/home/someone/.ccache")
+        self.assertTrue(folder.startswith(self.path("")), "the folder is in this run's scratch space: " + folder)
+        self.assertTrue(os.path.isdir(folder))
+        self.assertEqual(size, "1G", "the size limit is kept: it applies to the private folder")
+
+    def test_an_env_path_that_is_moved_is_moved_and_one_that_is_not_is_an_error(self):
+        fs, _ = self.play("FROM a\nENV WHERE=/src/x NAME=plain\nWORKDIR /src\nRUN printf '%s|%s' \"$WHERE\" \"$NAME\" > /src/out.txt\n")
+        with open(self.seen(fs, "src/out.txt"), encoding="utf-8") as f:
+            self.assertEqual(f.read(), "%s|plain" % os.path.join(fs, "src", "x"))
+        for text in ("ENV CACHE=/var/cache/x", "ENV CACHE /var/cache/x", "ENV A=b CACHE=/home/me"):
+            with self.subTest(text):
+                with self.assertRaises(wd.ToolError) as caught:
+                    self.play("FROM a\n%s\n" % text)
+                self.assertIn("ENV CACHE is /", str(caught.exception))
+                self.assertIn("does not move", str(caught.exception))
+
     def test_a_path_that_is_not_moved_is_an_error_before_the_command_runs_and_the_harmless_ones_are_not(self):
         self.play("FROM a\nRUN test -d /src && true > /dev/null && echo '</strong>' > /dev/null && test -d /usr/share/nginx/html && /bin/sh -c true\n")
         outside = self.path("outside.txt")
@@ -276,11 +312,12 @@ class TheRealDockerfileReplayed(Scratch):
     @classmethod
     def setUpClass(cls):
         cls.base = tempfile.mkdtemp(prefix="ants_wwd_real_")
-        write(os.path.join(cls.base, "bin", "emcmake"), "#!/bin/sh\nmkdir -p build_web\n", 0o755)
+        write(os.path.join(cls.base, "bin", "emcmake"), "#!/bin/sh\nmkdir -p build_web/generated/ants_app\n"
+              "printf 'inline constexpr std::string_view VERSION_STRING = \"v%s\";\\n' \"$(head -n 1 VERSION)\" > build_web/generated/ants_app/version.hpp\n", 0o755)
         write(os.path.join(cls.base, "bin", "cmake"),
               "#!/bin/sh\nout=build_web/src/ants_app\nmkdir -p \"$out\"\n"
               "sed 's|{{{ SCRIPT }}}|<script async type=\"text/javascript\" src=\"index.js\"></script>|' web/shell.html > \"$out/index.html\"\n"
-              "echo game > \"$out/index.js\"; echo wasm > \"$out/index.wasm\"; head -c 4096 /dev/zero > \"$out/index.data\"\n"
+              "echo game > \"$out/index.js\"; echo \"wasm v$(head -n 1 VERSION)\" > \"$out/index.wasm\"; head -c 1100000 /dev/zero > \"$out/index.data\"\n"
               "mkdir -p build_web/lvl_core; echo core > build_web/lvl_core/lvl_core.js; echo wasm > build_web/lvl_core/lvl_core.wasm\n", 0o755)
         env = dict(os.environ, PATH=os.path.join(cls.base, "bin") + os.pathsep + os.environ["PATH"])
         steps = wd.parse_dockerfile(read("Dockerfile"))
@@ -339,16 +376,21 @@ class TheRealDockerfileReplayed(Scratch):
         text = self.page("plain", "index.html")
         self.assertEqual(len(re.findall(r'<script[^>]* src="?index\.js\?v=\d+"?', text)), 1)
         self.assertNotRegex(text, r"index\.js\?v=\d+\?v=")
-        self.assertIn("parseInt('4096', 10)", text)
+        self.assertIn("parseInt('1100000', 10)", text)
 
     def test_the_site_placeholders_become_nothing_in_the_titles_and_the_footers(self):
         self.assertIn("<title>Ants (1998)</title>", self.page("plain", "lobby.html"))
         self.assertIn("<title>Ants (1998) \u2014 beta.playants.org</title>", self.page("plain", "index.html"))
-        for name in ("index.html", "play.html", "lobby.html", "matches.html", "match.html", "live.html"):
+        for name in ("index.html", "play.html", "lobby.html"):
             if os.path.exists(self.html("plain", name)):
                 text = self.page("plain", name)
                 self.assertNotIn("@@SITE_", text, name)
-                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)
+                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)            # (the footers of the game page and the front page)
+        for name in ("matches.html", "match.html", "live.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
+            text = self.page("plain", name)
+            self.assertNotIn("@@", text, name)
+            self.assertNotIn("<footer", text, name)
+            self.assertRegex(text, r'<header class="sb"[^>]* data-version="%s" data-build="abc1234" data-built="\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT"' % re.escape("v" + read("VERSION").strip()), name)
 
     def test_the_changelog_page_is_made_from_the_changelog_and_is_the_only_one(self):
         page = self.page("plain", "changelog.html")
@@ -364,6 +406,97 @@ class TheRealDockerfileReplayed(Scratch):
             self.assertFalse(os.path.exists(os.path.join(src, name)), name)
         self.assertEqual(sorted(os.listdir(os.path.join(src, "changelog"))), ["CHANGELOG.md", "changelog.html", "changelog_to_html.py"])
         self.assertFalse(os.path.exists(os.path.join(src, "gitinfo", "config")), "a clone's .git/config is never part of the build")
+
+
+@unittest.skipUnless(LINUX and shutil.which("sed") and shutil.which("python3"), "the Dockerfile's RUN lines use GNU tools: Linux")
+class TheStampChecksOfTheRealDockerfile(unittest.TestCase):
+    """The steps of the repository's Dockerfile up to the stamps of the build id, replayed with a fake Emscripten on a small copy of the repository in which one page is spoiled: the build must stop
+    at the Dockerfile's own checks (the placeholder that is left, the stamp that is missing, the map maker's version that does not match)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.base = tempfile.mkdtemp(prefix="ants_wwd_stamps_")
+        cls.context = os.path.join(cls.base, "context")
+        for name in ("CMakeLists.txt", "VERSION", ".gitignore", ".gitattributes", ".dockerignore"):
+            os.makedirs(cls.context, exist_ok=True)
+            shutil.copy(os.path.join(REPO, name), os.path.join(cls.context, name))
+        for name in ("cmake", "include", "src", "Original-Ants"):
+            shutil.copytree(os.path.join(REPO, name), os.path.join(cls.context, name), ignore=shutil.ignore_patterns("*.exe", "*.dll"))
+        os.makedirs(os.path.join(cls.context, "docker"))
+        shutil.copy(os.path.join(REPO, "docker", "resolve_build_id.sh"), os.path.join(cls.context, "docker", "resolve_build_id.sh"))
+        write(os.path.join(cls.base, "bin", "emcmake"), "#!/bin/sh\nmkdir -p build_web/generated/ants_app\n"
+              "printf 'inline constexpr std::string_view VERSION_STRING = \"v%s\";\\n' \"$(head -n 1 VERSION)\" > build_web/generated/ants_app/version.hpp\n", 0o755)
+        write(os.path.join(cls.base, "bin", "cmake"),
+              "#!/bin/sh\nout=build_web/src/ants_app\nmkdir -p \"$out\"\n"
+              "sed 's|{{{ SCRIPT }}}|<script async type=\"text/javascript\" src=\"index.js\"></script>|' web/shell.html > \"$out/index.html\"\n"
+              "echo game > \"$out/index.js\"; echo \"wasm v$(head -n 1 VERSION)\" > \"$out/index.wasm\"; head -c 1100000 /dev/zero > \"$out/index.data\"\n"
+              "mkdir -p build_web/lvl_core; echo core > build_web/lvl_core/lvl_core.js; echo wasm > build_web/lvl_core/lvl_core.wasm\n", 0o755)
+        cls.env = dict(os.environ, PATH=os.path.join(cls.base, "bin") + os.pathsep + os.environ["PATH"])
+        steps = wd.parse_dockerfile(read("Dockerfile"))
+        last = [i for i, s in enumerate(steps) if s.op == "RUN" and "BARRED" in s.text][0]
+        cls.steps = steps[:last + 1]
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.base, ignore_errors=True)
+
+    def replay(self, **spoiled):
+        """None when the build went through, else the error text; `spoiled` maps a page of web/ to a function from its text to the spoiled text."""
+        work = tempfile.mkdtemp(prefix="ants_wwd_stamps_run_")
+        self.addCleanup(shutil.rmtree, work, True)
+        context = os.path.join(work, "context")
+        shutil.copytree(self.context, context)
+        shutil.copytree(os.path.join(REPO, "web"), os.path.join(context, "web"), ignore=shutil.ignore_patterns("*.exe"))
+        for page, spoil in spoiled.items():
+            path = os.path.join(context, "web", page + ".html")
+            text = read_path(path)
+            changed = spoil(text)
+            self.assertNotEqual(changed, text, page)
+            write(path, changed)
+        fs = os.path.join(work, "fs")
+        os.makedirs(fs)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                wd.Replay(self.steps, context, fs, self.env, {"ANTS_BUILD_ID": "abc1234"}, output=subprocess.DEVNULL).play()
+        except wd.ToolError as error:
+            return str(error)
+        return None
+
+    def test_the_pages_as_they_are_go_through(self):
+        self.assertIsNone(self.replay())
+
+    def test_a_placeholder_of_the_build_that_is_left_in_a_page_stops_the_build(self):
+        for page in ("legal", "mapmaker", "matches", "match", "live", "lobby"):
+            with self.subTest(page):
+                error = self.replay(**{page: lambda text: text.replace("</body>", "<p>@@BUILD_NOTE@@</p></body>")})
+                self.assertIsNotNone(error)
+                self.assertIn("RUN failed", error)
+
+    def test_a_page_with_a_bar_at_the_top_that_lacks_a_stamp_stops_the_build(self):
+        for page in ("matches", "match", "live", "legal", "mapmaker"):
+            for attribute in ("data-build", "data-built"):
+                with self.subTest(page=page, attribute=attribute):
+                    error = self.replay(**{page: lambda text: text.replace(' %s="@@' % attribute, ' %s-x="@@' % attribute, 1)})
+                    self.assertIsNotNone(error)
+                    self.assertIn("RUN failed", error)
+
+    def test_a_map_maker_whose_version_is_not_the_file_stops_the_build(self):
+        error = self.replay(mapmaker=lambda text: re.sub(r'data-maker="v[^"]*"', 'data-maker="v0.0.1"', text))
+        self.assertIsNotNone(error)
+        self.assertIn("RUN failed", error)
+
+
+class TheStampLinesOfTheRealDockerfile(unittest.TestCase):
+    def test_the_seds_and_the_checks_after_them_name_the_same_pages(self):
+        docker = read("Dockerfile").replace("\\\n", " ")
+        for sed_start, placeholder in (("sed -i \"s/@@BUILD_TIMESTAMP@@", "@@GAME_VERSION@@"), ("sed -i \"s/@@BUILD_ID@@", "@@BUILD_")):
+            with self.subTest(placeholder):
+                begin = docker.index(sed_start)
+                sed = re.search(r"\" ([^&]*?) &&", docker[begin:]).group(1)
+                check = re.search(r"! grep -q '%s[^']*' ([^&]*?)(?: &&|$)" % re.escape(placeholder), docker[begin:], re.M).group(1)
+                pages = lambda text: sorted(re.findall(r"[\w/.]+\.html|\$PAGE", text))
+                self.assertEqual([p.replace("build_web/src/ants_app/index.html", "$PAGE") for p in pages(sed)], [p.replace("build_web/src/ants_app/index.html", "$PAGE") for p in pages(check)])
+                self.assertGreaterEqual(len(pages(check)), 6)
 
 
 class TheEmsdk(Scratch):

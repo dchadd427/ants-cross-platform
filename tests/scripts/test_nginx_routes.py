@@ -127,6 +127,9 @@ class TheRoutesRun(unittest.TestCase):
             f.write('{"name": "Ants!", "start_url": "/"}\n')
         with open(os.path.join(html, "app", "icon-192.png"), "wb") as f:
             f.write(b"\x89PNG\r\n\x1a\n a stand-in")
+        for name, data in (("favicon.png", b"\x89PNG\r\n\x1a\n a stand-in"), ("favicon.ico", b"\x00\x00\x01\x00 a stand-in")):        # the tab icon (stand-ins)
+            with open(os.path.join(html, name), "wb") as f:
+                f.write(data)
         conf = os.path.join(cls.tmp, "default.conf")
         text = read(CONF)
         if not os.path.exists("/proc/net/if_inet6"):                                       # a kernel without IPv6 cannot listen on [::]: the rest of the file is the one under test

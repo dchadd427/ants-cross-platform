@@ -70,10 +70,81 @@ cleanup() {
     for p in $CLIENT_PIDS $VICTIM_PIDS $LEAD_PIDS $FILL_PIDS $PLAN_PIDS $CHAT_PIDS $RC_PIDS $RR_PIDS $RP_PIDS; do kill -CONT "$p" 2> /dev/null; kill "$p" 2> /dev/null; done
     [ -n "$PROXY_PID" ] && kill "$PROXY_PID" 2> /dev/null
     stop_watchdog
+    [ -n "$PORT_SLOT_DIR" ] && rm -rf "$PORT_SLOT_DIR"
     rm -rf "$WORK"
 }
 trap cleanup EXIT
-free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'; }
+# Ports. A number that was found free and handed back (bind to port 0, print, close) is free for everybody until the server binds it, so two parts that started in the same instant, two calls
+# in a row, or the many short servers of the options part could be given the same number, and the second server would not start. Every call of this script now takes its numbers from a
+# RANGE OF ITS OWN: PORT_SPAN numbers (500) of 20000 - 25999 (the python tests use 26000 - 31999, quick_http.py), below the numbers that the system hands to outgoing connections (32768 and up on Linux, 49152 and up on macOS and Windows). The
+# range is claimed with an atomic mkdir of a folder named for the slot in $TMPDIR/ants_e2e_ports (it holds the script's process id; a folder of a process that no longer runs is taken over), so
+# the parts of the CI (one call each, side by side) and a second run of the script on the same machine get different ranges. free_port counts up inside the range (the last number is kept
+# in a file of the scratch folder: the calls run inside $( ) and cannot keep a variable), skips a number that something on this machine holds (a bind test), and wraps at the end of the range.
+PORT_SLOTS=12
+PORT_SPAN=500
+PORT_SLOT_DIR=""
+claim_port_range() {
+    local root="${TMPDIR:-/tmp}/ants_e2e_ports" s d p
+    mkdir -p "$root" 2> /dev/null && chmod 1777 "$root" 2> /dev/null
+    for ((s = 0; s < PORT_SLOTS; s++)); do
+        d="$root/slot$s"
+        if mkdir "$d" 2> /dev/null; then
+            echo "$$" > "$d/pid"; PORT_SLOT="$s"; PORT_SLOT_DIR="$d"; return 0
+        fi
+        p="$(cat "$d/pid" 2> /dev/null)"
+        if [ -n "$p" ] && ! kill -0 "$p" 2> /dev/null && mkdir "$d.take" 2> /dev/null; then      # (the process that claimed it is gone: one script at a time takes the slot over, after reading its process id again)
+            if [ "$(cat "$d/pid" 2> /dev/null)" = "$p" ]; then echo "$$" > "$d/pid"; PORT_SLOT="$s"; PORT_SLOT_DIR="$d"; fi
+            rmdir "$d.take" 2> /dev/null
+            [ -n "$PORT_SLOT_DIR" ] && return 0
+        fi
+    done
+    PORT_SLOT=$(($$ % PORT_SLOTS))      # (more runs side by side than slots: the range is shared; the bind test still skips a number that is held)
+    echo "  NOTE: no free range of ports ($PORT_SLOTS runs of this script are active): sharing range $PORT_SLOT" >&2
+}
+claim_port_range
+PORT_LO=$((20000 + PORT_SLOT * PORT_SPAN))
+free_port() {      # free_port: the next number of this script's range that nothing holds
+    python3 -c '
+import socket, sys
+lo, span, state = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+try:
+    last = int(open(state).read().strip())
+except (OSError, ValueError):
+    last = -1
+for i in range(1, span + 1):
+    n = (last + i) % span
+    s = socket.socket()
+    try:
+        s.bind(("", lo + n))
+    except OSError:
+        continue
+    finally:
+        s.close()
+    open(state, "w").write(str(n))
+    print(lo + n)
+    sys.exit(0)
+sys.exit(1)' "$PORT_LO" "$PORT_SPAN" "$WORK/port_next"
+}
+# log_tail WHAT LOGFILE...: when a server (or the proxy) did not come up, its last lines, so that the failure names its cause (on stderr: it may be called inside a $( ))
+log_tail() {
+    local what="$1" f
+    shift
+    for f in "$@"; do
+        echo "    $what: last lines of $(basename "$f"):" >&2
+        if [ -s "$f" ]; then tail -n 12 "$f" 2> /dev/null | sed 's/^/      | /' >&2; else echo "      | (empty or missing)" >&2; fi
+    done
+}
+# wait_healthz URL PID LOG [TURNS]: 0 when the control interface answers /healthz within TURNS tenths of a second (50); a server that ended is not waited for; otherwise its log's last lines are printed and 1
+wait_healthz() {
+    local i
+    for ((i = 0; i < ${4:-50}; i++)); do
+        curl -s -m 1 "$1/healthz" | grep -q '"ok"' && return 0
+        kill -0 "$2" 2> /dev/null || break
+        sleep 0.1
+    done
+    log_tail "no answer from $1/healthz ($(kill -0 "$2" 2> /dev/null && echo "the server still runs" || echo "the server ended"))" "$3"
+    return 1
+}
 # (used by several parts)
 code_of() { curl -s -m 3 -o /dev/null -w '%{http_code}' "$@"; }
 # Nothing in this script waits for ever (tests/scripts/e2e_deadlines.sh): wait_end, stop_pids and run_limited give every wait for a process a deadline, and the part has a watchdog
@@ -290,6 +361,7 @@ db_start() {      # db_start LOGFILE ARGS...: starts the server in the backgroun
         fail_note "db_start: ants_server ($*) did not log its game port within 30 s; it is stopped"
         kill -TERM "$pid" 2> /dev/null
     fi
+    [ "$up" = "0" ] || log_tail "db_start: ants_server ($*) did not log its game port" "$log"
     wait_end "$pid" 30 "ants_server of db_start ($*)"
     echo $?
 }
@@ -372,12 +444,8 @@ if part_enabled rooms; then
 WS_PORT="$(free_port)"
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ws-port "$WS_PORT" --ctl-port "$CTL_PORT" --results-dir "$WORK/results" --start-countdown-seconds 0 > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
-UP=1
-for _ in $(seq 1 50); do
-    if curl -s -m 1 "$CTL/healthz" | grep -q '"ok"'; then UP=0; break; fi
-    kill -0 "$SERVER_PID" 2> /dev/null || break
-    sleep 0.1
-done
+wait_healthz "$CTL" "$SERVER_PID" "$WORK/server.log"
+UP=$?
 check "the server is up and answers /healthz without a secret" "$UP"
 # the busy answer (GET /busy on the WebSocket port; the site's nginx routes /busy to it): public, read-only, plain counts, GET only; the deploy job of CI waits for matches to be 0
 BUSY="http://127.0.0.1:$WS_PORT/busy"
@@ -841,9 +909,10 @@ start_stats_server() {      # start_stats_server LOG [RESULTS-DIR [OPTION...]]: 
     SERVER_PID=$!
     for _ in $(seq 1 50); do
         [ "$(code_of "http://127.0.0.1:$WS2/busy")" = "200" ] && return 0
-        kill -0 "$SERVER_PID" 2> /dev/null || return 1
+        kill -0 "$SERVER_PID" 2> /dev/null || break
         sleep 0.1
     done
+    log_tail "no answer from http://127.0.0.1:$WS2/busy ($(kill -0 "$SERVER_PID" 2> /dev/null && echo "the server still runs" || echo "the server ended"))" "$log"
     return 1
 }
 start_stats_server "$WORK/server2.log"
@@ -909,12 +978,7 @@ start_nosecret() {       # start_nosecret LOG CTL_PORT [more options]: the serve
     # umask 0: the mode of the secret file is then the mode that the server asked for (a strict umask would hide a wrong one); exec: SERVER_PID is the server
     ( umask 0; exec env "${SECRET_ENV[@]}" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --ctl-port "$ctl" "$@" ) > "$log" 2>&1 &
     SERVER_PID=$!
-    for _ in $(seq 1 50); do
-        curl -s -m 1 "http://127.0.0.1:$ctl/healthz" | grep -q '"ok"' && return 0
-        kill -0 "$SERVER_PID" 2> /dev/null || return 1
-        sleep 0.1
-    done
-    return 1
+    wait_healthz "http://127.0.0.1:$ctl" "$SERVER_PID" "$log"
 }
 exit_nosecret() { env -u ANTS_SERVER_SECRET perl -e 'alarm 5; exec @ARGV' "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --ctl-port "$(free_port)" "$@" > "$WORK/exit.log" 2>&1; echo $?; }
 GEN_DIR="$WORK/gen"
@@ -948,7 +1012,7 @@ check "and the message says so, and nothing was made behind the link" "$(grep -q
 GEN_CTL3="$(free_port)"
 env ANTS_SERVER_SECRET="env-wins-0123456789-$RANDOM" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$(free_port)" --ctl-port "$GEN_CTL3" --results-dir "$GEN_DIR" > "$WORK/gen3.log" 2>&1 &
 SERVER_PID=$!
-for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$GEN_CTL3/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+wait_healthz "http://127.0.0.1:$GEN_CTL3" "$SERVER_PID" "$WORK/gen3.log"
 check "a secret in the environment wins over the file: the file's secret is refused (401)" "$([ "$(code_of -H "Authorization: Bearer $GEN_SECRET" "http://127.0.0.1:$GEN_CTL3/rooms")" = "401" ]; echo $?)"
 stop_server
 # a first start that cannot go on (a demo map that is not in the maps folder) has made the file: the log must already show the secret, for the next start only reads it
@@ -983,7 +1047,7 @@ PICK_PORT="$(free_port)"
 PICK_CTL="$(free_port)"
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$PICK_PORT" --ctl-port "$PICK_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,SMALL.LVL > "$WORK/pick.log" 2>&1 &
 SERVER_PID=$!
-for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$PICK_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+wait_healthz "http://127.0.0.1:$PICK_CTL" "$SERVER_PID" "$WORK/pick.log"
 check "the log names the maps that a create block can choose" "$(grep -q 'unless the block names one of TINY.LVL, SMALL.LVL' "$WORK/pick.log"; echo $?)"
 PICK_PIDS=""
 for pick in "pick-small:--room-map small" "pick-tiny:--room-map tiny" "pick-none:--room-seats 4" "pick-medium:--room-map medium" "pick-small2:--room-map small --room-seats 2"; do
@@ -1153,7 +1217,7 @@ LOBBY_CTL="$(free_port)"
 LOBBY_REPLAY="$(free_port)"
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --replay-port "$LOBBY_REPLAY" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 2 > "$WORK/lobby.log" 2>&1 &
 SERVER_PID=$!
-for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+wait_healthz "http://127.0.0.1:$LOBBY_CTL" "$SERVER_PID" "$WORK/lobby.log"
 LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" "$LOBBY_REPLAY" 2>&1)"
 check "a lobby page's Hello with a lobby block makes a lobby room (the Welcome says it made it and gives a key)" "$([ "$(lobby_value page_makes_lobby)" = "yes" ]; echo $?)"
 check "the Room message of that room says it is a lobby room" "$([ "$(lobby_value room_says_lobby)" = "yes" ]; echo $?)"
@@ -1177,13 +1241,13 @@ check "... a public room whose leader goes is private and off the list, and the 
 stop_server
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 0 > "$WORK/lobby0.log" 2>&1 &
 SERVER_PID=$!
-for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+wait_healthz "http://127.0.0.1:$LOBBY_CTL" "$SERVER_PID" "$WORK/lobby.log"
 LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" "$LOBBY_REPLAY" 2>&1)"
 check "with --demo-lobbies 0 a lobby page is told NoSuchRoom, and a game still makes its public room" "$([ "$(lobby_value page_makes_lobby)" = "no" ] && [ "$(lobby_value game_makes_public_room)" = "yes" ]; echo $?)"
 stop_server
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL > "$WORK/lobbyd.log" 2>&1 &
 SERVER_PID=$!
-for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+wait_healthz "http://127.0.0.1:$LOBBY_CTL" "$SERVER_PID" "$WORK/lobby.log"
 LOBBY_OUT="$(python3 "$LOBBY_PY" "$LOBBY_PORT" "$LOBBY_WS" "$LOBBY_CTL" "$SECRET" "$PROTOCOL16" "$LOBBY_REPLAY" 2>&1)"
 check "without the option a server with public rooms makes lobby rooms (the default pool has a place for the third lobby that the pool of two refused)" "$([ "$(lobby_value page_makes_lobby)" = "yes" ] && [ "$(lobby_value pool_full)" = "welcome" ]; echo $?)"
 stop_server
@@ -1194,7 +1258,7 @@ stop_server
 if command -v node > /dev/null 2>&1; then
     ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --replay-port "$LOBBY_REPLAY" --demo-rooms 5 --demo-map TINY.LVL --demo-maps TINY.LVL,MEDIUM.LVL --demo-lobbies 12 > "$WORK/lobbyp.log" 2>&1 &
     SERVER_PID=$!
-    for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+    wait_healthz "http://127.0.0.1:$LOBBY_CTL" "$SERVER_PID" "$WORK/lobby.log"
     run_limited $((120 * TIME_SCALE)) "node web_lobby_server_check.js (the lobby page's client against the server)" "$WORK/page_check.out" node "$ROOT/tests/scripts/web_lobby_server_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_WS" "http://127.0.0.1:$LOBBY_REPLAY"
     PAGE_RC=$?
     PAGE_OUT="$(cat "$WORK/page_check.out")"
@@ -1206,7 +1270,7 @@ if command -v node > /dev/null 2>&1; then
     # the browser's storage), and the match loads, starts and runs (tests/scripts/web_lobby_handoff_check.js)
     ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$LOBBY_PORT" --ws-port "$LOBBY_WS" --ctl-port "$LOBBY_CTL" --demo-rooms 5 --demo-map TINY.LVL --demo-lobbies 12 --start-countdown-seconds 8 > "$WORK/lobbyh.log" 2>&1 &
     SERVER_PID=$!
-    for _ in $(seq 1 50); do curl -s -m 1 "http://127.0.0.1:$LOBBY_CTL/healthz" | grep -q '"ok"' && break; sleep 0.1; done
+    wait_healthz "http://127.0.0.1:$LOBBY_CTL" "$SERVER_PID" "$WORK/lobby.log"
     run_limited $((120 * TIME_SCALE)) "node web_lobby_handoff_check.js (two pages hand their room over to two games)" "$WORK/handoff_check.out" env ANTS_E2E_SECRET="$SECRET" ANTS_HANDOFF_WAIT_MS=$((60000 * TIME_SCALE)) node "$ROOT/tests/scripts/web_lobby_handoff_check.js" "$ROOT/web/front/lobby_net.js" "ws://127.0.0.1:$LOBBY_WS/ws" "http://127.0.0.1:$LOBBY_CTL" "127.0.0.1:$LOBBY_PORT" "$GAME" "$ROOT" "$WORK"
     HAND_RC=$?
     HAND_OUT="$(cat "$WORK/handoff_check.out")"
@@ -1228,12 +1292,8 @@ STACK_CTL="$(free_port)"
 # shellcheck disable=SC2086
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$STACK_PORT" --ctl-port "$STACK_CTL" $STACK_OPTS > "$WORK/stack_demo.log" 2>&1 &
 SERVER_PID=$!
-STACK_UP=1
-for _ in $(seq 1 50); do
-    if curl -s -m 1 "http://127.0.0.1:$STACK_CTL/healthz" | grep -q '"ok"'; then STACK_UP=0; break; fi
-    kill -0 "$SERVER_PID" 2> /dev/null || break
-    sleep 0.1
-done
+wait_healthz "http://127.0.0.1:$STACK_CTL" "$SERVER_PID" "$WORK/stack_demo.log"
+STACK_UP=$?
 check "a server started with the stack's own demo options runs (the six maps are in the folder)" "$STACK_UP"
 STACK_PIDS=""
 for pick in "stack-n1:--room-seats 4" "stack-tiny-n2:--room-map tiny" "stack-treasure-n3:--room-map treasure" "stack-islands-n4:--room-map islands --room-seats 2"; do
@@ -1263,12 +1323,8 @@ NOREC_CTL="$(free_port)"
 # shellcheck disable=SC2086
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$NOREC_PORT" --ctl-port "$NOREC_CTL" --results-dir "$WORK/norec_results" $STACK_OPTS --no-reconnect > "$WORK/norec.log" 2>&1 &
 SERVER_PID=$!
-NOREC_UP=1
-for _ in $(seq 1 50); do
-    if curl -s -m 1 "http://127.0.0.1:$NOREC_CTL/healthz" | grep -q '"ok"'; then NOREC_UP=0; break; fi
-    kill -0 "$SERVER_PID" 2> /dev/null || break
-    sleep 0.1
-done
+wait_healthz "http://127.0.0.1:$NOREC_CTL" "$SERVER_PID" "$WORK/norec.log"
+NOREC_UP=$?
 check "a server started with the stack's options and --no-reconnect runs" "$NOREC_UP"
 "$GAME" --headless --no-lan --name Chooser --join "127.0.0.1:$NOREC_PORT" --room norec-nr1 --room-seats 4 --frames 400 > "$WORK/norec_demo.log" 2>&1 &
 NOREC_PID=$!
@@ -1298,12 +1354,8 @@ for part in sys.argv[1].split("."):
 print(json.dumps(v) if isinstance(v, (dict, list)) or v is None else str(v).lower() if isinstance(v, bool) else v)' "$2" 2> /dev/null; }
 ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$RC_PORT" --ctl-port "$RC_CTL" --results-dir "$WORK/rc_results" --reconnect --max-pause-seconds 60 --resume-countdown-seconds 8 --start-countdown-seconds 0 > "$WORK/rc_server.log" 2>&1 &
 SERVER_PID=$!
-RC_UP=1
-for _ in $(seq 1 50); do
-    if curl -s -m 1 "$RC_URL/healthz" | grep -q '"ok"'; then RC_UP=0; break; fi
-    kill -0 "$SERVER_PID" 2> /dev/null || break
-    sleep 0.1
-done
+wait_healthz "$RC_URL" "$SERVER_PID" "$WORK/rc_server.log"
+RC_UP=$?
 check "the reconnect server is up" "$RC_UP"
 check "the log says that rooms hold the seat of a player whose connection is lost, with the vote and the cap" "$(grep -q 'rooms hold the seat of a player whose connection is lost' "$WORK/rc_server.log" && grep -q 'capped at 60 s' "$WORK/rc_server.log"; echo $?)"
 RC_BODY="{\"map\":\"TINY.LVL\",\"players\":3,\"code\":\"$RC_CODE\",\"seed\":5}"      # (made in an assignment: a JSON body inside "$( )" in an argument is mangled by the brace expansion of macOS's bash 3.2)
@@ -1480,13 +1532,7 @@ rr_launch() {      # rr_launch [EXTRA ARGUMENTS]: starts the server of this sect
 }
 rr_start() {      # rr_start [EXTRA ARGUMENTS]: rr_launch, and it returns when the control interface answers (the restore of the records goes on after that: rr_wait_room)
     rr_launch "$@"
-    local up=1
-    for _ in $(seq 1 100); do
-        if curl -s -m 1 "$RR_URL/healthz" | grep -q '"ok"'; then up=0; break; fi
-        kill -0 "$SERVER_PID" 2> /dev/null || break
-        sleep 0.1
-    done
-    return $up
+    wait_healthz "$RR_URL" "$SERVER_PID" "$WORK/rr_server.log" 100
 }
 # The records are replayed in slices while the server serves (the restore does not block it): a room is back when its replay has ended, a moment after the server answers.
 rr_wait_room() {      # rr_wait_room CODE: waits (20 s at the most) until the room is running again; 0 when it is
@@ -1712,12 +1758,7 @@ RP_PUBURL="http://127.0.0.1:$RP_PUB"
 rp_server() {      # rp_server [options]: the server over the results folder, with the control interface; 0 when it answers
     ANTS_SERVER_SECRET="$SECRET" "$SERVER" --maps "$ROOT/Original-Ants/Maps" --port "$GAME_PORT" --ctl-port "$CTL_PORT" --results-dir "$RP_RESULTS" --start-countdown-seconds 0 "$@" >> "$WORK/rp_server.log" 2>&1 &
     SERVER_PID=$!
-    for _ in $(seq 1 50); do
-        if curl -s -m 1 "$CTL/healthz" | grep -q '"ok"'; then return 0; fi
-        kill -0 "$SERVER_PID" 2> /dev/null || return 1
-        sleep 0.1
-    done
-    return 1
+    wait_healthz "$CTL" "$SERVER_PID" "$WORK/rp_server.log"
 }
 rp_auth() { curl -s -m 5 -H "Authorization: Bearer $SECRET" "$@"; }
 rp_list_ok() {      # rp_list_ok FILE: the control interface's list holds this one replay of TINY.LVL and says the colors with the names that the two games typed (the game whose Hello came first has Green: either order is right), not the room's code

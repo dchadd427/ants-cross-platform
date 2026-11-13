@@ -43,10 +43,11 @@ def footer_links(page):
 
 
 class TheLink(unittest.TestCase):
-    """The way to the matches: "Matches" (the list of every match) and "Live now" (the matches that are being played) in the footer of the front page, the game page and the three pages of the match history,
-    and a "Matches" button in the header of the front page and of the game page (docs/REPLAYS.md "The match pages"). It was one link, "Watch matches", to one list of the recordings."""
+    """The way to the matches: "Matches" (the list of every match) and "Live now" (the matches that are being played) in the footer of the front page and the game page, in the bar at the top of the three pages
+    of the match history (they have no footer), and a "Matches" button in the header of the front page and of the game page (docs/REPLAYS.md "The match pages"). It was one link, "Watch matches", to one list of the recordings."""
 
-    PAGES = (("the game page", "shell.html", "Menu"), ("the front page", "lobby.html", "How it works"), ("the list", "matches.html", None), ("a match", "match.html", None), ("the live page", "live.html", None))
+    PAGES = (("the game page", "shell.html", "Menu"), ("the front page", "lobby.html", "How it works"))
+    HISTORY = ("matches.html", "match.html", "live.html")
 
     def test_every_page_with_the_footer_links_has_matches_then_live_now_once_each(self):
         for name, file, before in self.PAGES:
@@ -62,7 +63,11 @@ class TheLink(unittest.TestCase):
                 self.assertIn('id="watch-link"', [f for f in found if f[2] == "Matches"][0][1], name)
             self.assertFalse({"Watch matches", "Watch live", "Watch replays"} & set(texts), name)               # (the old names are gone)
         for file, label in (("matches.html", "Matches"), ("match.html", "Matches"), ("live.html", "Live now")):
-            self.assertIn('aria-current="page"', [f for f in footer_links(read("web", file)) if f[2] == label][0][1], file)      # (a page marks its own place)
+            page = read("web", file)
+            row = re.search(r'<nav aria-label="Pages">(.*?)</nav>', page, re.S).group(1)
+            links = re.findall(r'<a class="btn[a-z ]*" href="([^"]+)"([^>]*)>(?:<span>)?([^<]+)', row)
+            self.assertEqual([l[2] for l in links][1:3], ["Matches", "Live now"], file)                  # (the bar's row: Home, Matches, Live now, ...)
+            self.assertIn('aria-current="page"', [l for l in links if l[2] == label][0][1], file)       # (a page marks its own place)
         self.assertIn("$('watch-link').setAttribute('aria-current', 'page');", read("web", "shell.html"))     # (the game page in replay or live mode says where the player is)
         for file, title in (("matches.html", "Matches"), ("match.html", "Match"), ("live.html", "Live now")):
             self.assertIn("<title>%s \u2014 Ants (1998)@@SITE_TITLE@@</title>" % title, read("web", file))     # (the tab's title agrees with the link)
@@ -296,13 +301,12 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertNotRegex(self.page, r'\bid="aspect-\d')                                                   # (no button of a shape on the page at all)
 
     def test_the_window_uses_the_pages_own_selector_and_remembers_the_choice(self):
-        self.assertIn("['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']", self.page)          # (the bar's dropdown is made with the strip's, from the same picker)
-        self.assertIn("onPick: antsPickShape }", self.page)                                                 # (a choice of either is the page's own pick)
+        self.assertIn("['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']", self.page)          # (the one dropdown the page makes itself, from the same picker as the settings menu's)
+        self.assertIn("onPick: antsPickShape }", self.page)                                                 # (a choice is the page's own pick, the one function that the settings menu calls too)
         self.assertIn("window.localStorage.setItem(ANTS_ASPECT_KEY, value);", self.page)
-        self.assertIn("body.replay .view-bar", self.page)
-        self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's row stays hidden here)
+        self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's header buttons stay hidden here)
         self.assertEqual(len(re.findall(r"\n\s*\.picpop \{", self.page)), 1)
-        self.assertEqual(len(re.findall(r"\n\s*\.pick-select \{", self.page)), 1)                           # (one style for the dropdown, the player's and the bar's)
+        self.assertEqual(len(re.findall(r"\n\s*\.pick-select \{", self.page)), 1)                           # (one style for the dropdown)
 
     def test_the_bar_is_as_wide_as_the_picture_in_every_shape(self):
         """The bar reads the same custom properties as the stage (--ar-w, --ar-h, --stage-max: 16:9 until the script sets the shape's own from web/shapes.js, ANTS_PAGE.slotVars, which tests/scripts/web_aspect_key_check.js runs)."""
@@ -311,7 +315,7 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertIn("width: min(100%, var(--stage-max), calc((100vh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
         self.assertIn("width: min(100%, var(--stage-max), calc((100dvh - var(--chrome)) * var(--ar-w) / var(--ar-h)));", rule)
         self.assertNotRegex(rule, r"\* 16 / 9")                                                              # (not the 16:9 formula for every shape)
-        self.assertRegex(self.page, r":root \{\s*--chrome: 180px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # (16:9 until the script says otherwise)
+        self.assertRegex(self.page, r":root \{\s*--chrome: \d+px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # (16:9 until the script says otherwise)
         self.assertNotIn("--bar-max", self.page)
         self.assertNotIn('#game-stage[data-aspect=', self.page)                                                # (no rule for each shape: the table's rows give the numbers)
 
@@ -512,7 +516,7 @@ class TheFiles(unittest.TestCase):
             self.assertIn(name, build, name)
         for name in ("matches", "match", "live"):
             self.assertRegex(dockerfile, r"COPY --from=builder /src/%s\.html [^\n]*%s\.html" % (name, name))
-        self.assertIn("for PAGE in matches match live; do", build)
+        self.assertIn("for PAGE in matches match live legal; do", build)
         self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js")
         self.assertIn("index.data match_stats.js match_stats.css countdown_button.js", ci)                 # (the stats sections of the match page are in the image too)
         self.assertNotIn("watch.html", dockerfile + build + ci)                                              # (the list of the recordings is gone: the pages of the match history replace it)

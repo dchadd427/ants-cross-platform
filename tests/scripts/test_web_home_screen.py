@@ -189,20 +189,6 @@ class TheStyle(unittest.TestCase):
         self.assertIn(".leave:hover { background-color: #b5222c; }", self.css, "a lighter red under the cream words (5.6 to 1)")
         self.assertNotRegex(self.css, r"\.leave[^{]*\{[^}]*(transform|text-shadow|#1b0f0d)", "the press, the words' shadow and forced colors are .btn's")
 
-    def test_the_rooms_bar_gives_the_logo_what_is_left_on_a_narrow_phone(self):
-        match = re.search(r"@media \(max-width: 389px\) \{(.*?)\n\}", self.css, re.S)
-        self.assertIsNotNone(match, "a rule for 360 and 320 px (the bar does not fit at its size for a wider phone)")
-        self.assertIn(".rbar .hbrand { flex: 1 1 0; min-width: 40px; max-width: 76px; } .rbar .hlogo { width: 100%; }", match.group(1))
-
-    def test_the_rooms_bar_leaves_the_logo_picture_out_below_340_px_and_the_h1_keeps_its_name(self):
-        match = re.search(r"@media \(max-width: 339px\) \{ \.rbar \.hbrand \{([^}]*)\} \}", self.css)
-        self.assertIsNotNone(match, "a rule for 320 px (the logo is 40 px wide at 360 and 320: too small to read)")
-        body = match.group(1)
-        self.assertIn("position: absolute;", body)
-        self.assertIn("clip: rect(0 0 0 0);", body)
-        self.assertNotRegex(body, r"display: *none|visibility: *hidden", "the heading and its name (the picture's alt) stay for a screen reader")
-        self.assertLess(self.css.index("max-width: 389px"), self.css.index("max-width: 339px"), "the narrower rule comes after the wider one")
-
     def test_the_menu_scrolls_inside_itself_when_the_window_is_short(self):
         box = next(body for selector, body in self.rules if selector.strip() == ".hmenubox")
         self.assertIn("overflow-y: auto;", box)
@@ -262,11 +248,10 @@ class TheStyle(unittest.TestCase):
 
 
     def test_a_phone_upright_shows_the_visitor_s_name_beside_the_badge_and_the_guest_chip_stays_the_mark(self):
-        """docs/HOME_SCREEN.md, "The top bar": the first row is the logo, then what is left of it is the chip's and the Menu's. Where the layout is in the real browser: tests/scripts/web_home_topbar_browser.js"""
+        """docs/HOME_SCREEN.md, "The top bar": the first row is Games, the chip and the Menu. Where the layout is in the real browser: tests/scripts/web_home_topbar_browser.js"""
         phone = self.css[self.css.index("@media (max-width: 720px) and (orientation: portrait), (max-width: 639px) {"):]
         phone = phone[:phone.index("\n}\n")]
         self.assertIn(".hbar .hlogin .gc-av:not([hidden]) ~ .gc-cn { display: block;", phone, "the name only where the badge is drawn: a guest's chip says Log in with the mark alone")
-        self.assertIn(".hbar .hright { grid-area: 1 / 1 / 2 / 3; min-width: 0; margin-left: 102px;", phone, "the chip and the Menu use the row's free place, to the right of the logo (92 px and the gap)")
         self.assertRegex(phone, r"\.hbar button\.hlogin \{ flex: 0 1 auto;", "the chip shrinks, so the name is cut and the Menu stays in the row")
         side = self.css[self.css.index("@media (min-width: 360px) and (max-width: 639px) and (max-height: 500px) and (orientation: landscape) {"):]
         side = side[:side.index("\n}\n")]

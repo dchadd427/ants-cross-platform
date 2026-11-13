@@ -222,29 +222,25 @@ function makePage(opts) {
     const header = make('header'), menuBtn = make('a', 'menu-btn', header, 'btn sm');
     const stage = make('div', 'game-stage'), box = make('div', 'game-container', stage), canvas = make('canvas', 'canvas', box), chat = make('input', 'chat-keys', box);
     stage.setAttribute('data-aspect', '16:9');
-    const bar = make('div', 'view-bar'), label = make('span', 'view-bar-label', bar);
     const shapes = {};                                                                   // (what the page's own dropdown does with a pick: antsPickShape; the page's `pickShape` is that function)
     const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); if (!opts.keepShape) stage.setAttribute('data-aspect', shape); };
     win.screen = opts.screen || { width: 1440, height: 900 };
     win.innerWidth = 1440;
     win.innerHeight = 900;
-    const lockOn = make('button', opts.noLock ? 'lock-x' : 'lock-on', bar), lockOff = make('button', opts.noLock ? 'lock-y' : 'lock-off', bar);
-    lockOn.setAttribute('aria-checked', 'true');
-    lockOff.setAttribute('aria-checked', 'false');
-    lockOn.addEventListener('click', () => { lockOn.setAttribute('aria-checked', 'true'); lockOff.setAttribute('aria-checked', 'false'); game.calls.push(['lock', 'on']); });
-    lockOff.addEventListener('click', () => { lockOn.setAttribute('aria-checked', 'false'); lockOff.setAttribute('aria-checked', 'true'); game.calls.push(['lock', 'off']); });
+    const lockState = { on: true };                                                       // (the page's object `lock`: the pointer lock's setting, what the Fullscreen mouse row reads and writes)
+    const lock = opts.noLock ? undefined : { available: () => true, get: () => lockState.on, set: (on) => { lockState.on = !!on; game.calls.push(['lock', on ? 'on' : 'off']); } };
     const rbar = make('div', 'rbar'), picwrap = make('div', 'picwrap', rbar);
     const toast = make('div', 'toast');
     toast.hidden = true;
     const intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
     const page = {
-        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
+        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, lock, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
     };
     const menu = Menu.forPage(page);
-    const p = { doc, win, game, state, page, menu, stage, canvas, header, menuBtn, bar, picwrap, rbar, toast, chat, shapes, lockOn, lockOff, intervals, box };
+    const p = { doc, win, game, state, page, menu, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, intervals, box };
     p.styleLoaded = () => { doc.links.forEach((l) => { if (l.onload) l.onload(); }); };
     p.poll = () => intervals.forEach((i) => i.fn());
     p.ready = () => { p.styleLoaded(); p.poll(); return p; };
@@ -265,15 +261,14 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('the script defines the function that the game calls for Esc', typeof p.win.antsGameMenuAsk === 'function');
     ok('the style is fetched with the script (one link)', p.doc.links.length === 1 && p.doc.links[0].rel === 'stylesheet' && p.doc.links[0].href === 'game_menu.css?v=7');
     const all = p.qa('.gm-btn');
-    expect('a button in the header, one under the picture, none over it', all.map((b) => b.id), ['settings-btn', 'settings-btn-narrow']);
-    expect('the header button stands right after Menu', p.header.children.map((c) => c.id), ['menu-btn', 'settings-btn']);
-    expect('the narrow one is the first thing of the bar under the picture', p.bar.children[0].id, 'settings-btn-narrow');
+    expect('one button, in the header, none under the picture and none over it (there is no strip under the picture)', all.map((b) => b.id), ['settings-btn']);
+    expect('the header button stands right after Menu, at every width', p.header.children.map((c) => c.id), ['menu-btn', 'settings-btn']);
     ok('none is in the stage, the element that goes fullscreen: nothing is laid over the game\'s picture', all.every((b) => !p.stage.contains(b)) && !p.q('#settings-btn-fs'));
     ok('all hide until the style is there', all.every((b) => b.hidden && b.style.display === 'none'));
-    ok('every one is a real button with the page\'s look and the word Settings', all.every((b) => b.tagName === 'button' && b.type === 'button' && /(^| )btn( |$)/.test(b.className) && b.textContent === 'Settings' && b.getAttribute('aria-haspopup') === 'dialog'));
+    ok('every one is a real button with the page\'s look and the word Settings', all.every((b) => b.tagName === 'button' && b.type === 'button' && /(^| )btn( |$)/.test(b.className) && b.textContent === 'Settings' && b.getAttribute('aria-label') === 'Settings' && b.getAttribute('aria-haspopup') === 'dialog'));
     p.styleLoaded();
     p.poll();
-    expect('with the style and a running game the header and the narrow button show', [p.q('#settings-btn').hidden, p.q('#settings-btn-narrow').hidden], [false, false]);
+    expect('with the style and a running game the header button shows', [p.q('#settings-btn').hidden], [false]);
     p.state.fullscreen = true;
     p.poll();
     ok('fullscreen makes no button over the picture', !p.q('#settings-btn-fs') && all.every((b) => !p.stage.contains(b)));
@@ -310,7 +305,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
 {
     const p = makePage({ watch: true });
     expect('a recording has one button, in the replay bar before the Picture button', p.rbar.children.map((c) => c.id), ['settings-btn-bar', 'picwrap']);
-    ok('and none in the header, under the picture or in the stage', !p.q('#settings-btn') && !p.q('#settings-btn-narrow') && !p.q('#settings-btn-fs'));
+    ok('and none in the header, under the picture or in the stage', !p.q('#settings-btn') && !p.q('#settings-btn-fs'));
 }
 {
     const p = makePage({ noModule: true }).ready();
@@ -370,7 +365,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     const p = makePage({ noLock: true }).ready();
     p.open();
     p.tab('video');
-    ok('a page without the lock buttons has no Fullscreen mouse row', p.rows().map((r) => r.name).indexOf('Fullscreen mouse') < 0);
+    ok('a page without the pointer lock has no Fullscreen mouse row', p.rows().map((r) => r.name).indexOf('Fullscreen mouse') < 0);
 }
 {
     const p = makePage({ noPick: true }).ready();
@@ -475,7 +470,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('the dropdown is in the panel\'s own focus order and no button of a shape is there', !p.qa('.gm-panel button').some((b) => /^\d+:\d+$/.test(b.textContent)) && pick.getAttribute('disabled') === null);
     expect('the mouse starts Locked', video[0].children.map((b) => b.getAttribute('aria-checked')), ['true', 'false']);
     video[0].children[1].click();
-    expect('Free is the page\'s Free button', [p.game.calls, p.lockOff.getAttribute('aria-checked')], [[['lock', 'off']], 'true']);
+    expect('Free is the page\'s setting (the page\'s lock object is told, the row shows it)', [p.game.calls, p.lockState.on, video[0].children.map((b) => b.getAttribute('aria-checked'))], [[['lock', 'off']], false, ['false', 'true']]);
     expect('Ant health starts on the game\'s value (Hurt ants), Show health as on Bar', [video[1], video[2]].map((g) => g.children.map((b) => b.getAttribute('aria-checked'))), [['true', 'false', 'false'], ['true', 'false']]);
     video[1].children[2].click();
     expect('Ant health is row 8, and its words are its values in their order (Off is 2), shown pressed in', [p.game.calls[1], video[1].children.map((b) => b.getAttribute('aria-checked'))], [['set', 8, 2], ['false', 'false', 'true']]);
@@ -522,7 +517,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.state.locked = true;
     let scrim = p.open();
     expect('the game is told, and the pointer lock is let go', [p.game.calls[0], p.state.locks], [['open', 1], ['release']]);
-    expect('the page behind it is inert: the header, the bar, the picture\'s box, the toast', [p.header.hasAttribute('inert'), p.bar.hasAttribute('inert'), p.box.hasAttribute('inert'), p.rbar.hasAttribute('inert'), p.toast.hasAttribute('inert')], [true, true, true, true, true]);
+    expect('the page behind it is inert: the header, the picture\'s box, the toast', [p.header.hasAttribute('inert'), p.box.hasAttribute('inert'), p.rbar.hasAttribute('inert'), p.toast.hasAttribute('inert')], [true, true, true, true]);
     ok('the stage is not inert (the panel is in it) and the panel is not', !p.stage.hasAttribute('inert') && !scrim.hasAttribute('inert'));
     expect('the focus is on Resume', p.doc.activeElement.textContent, 'Resume');
     expect('the lifts of keys are left to the game (it would think a key still held, and read the next press as a repeat)', p.doc.count('keyup'), 0);
@@ -611,7 +606,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     ok('Esc closes it, even with the focus on the body', !p.menu.isOpen() && p.q('#game-menu') === null && e.prevented && !e.reachedPage);
     expect('the game is told it may take its keys again', p.game.calls, [['open', 0]]);
     expect('the pointer lock is asked for again, as it was held', p.state.locks, ['request']);
-    expect('the page is live again', [p.header.hasAttribute('inert'), p.bar.hasAttribute('inert'), p.box.hasAttribute('inert'), p.toast.hasAttribute('inert')], [false, false, false, false]);
+    expect('the page is live again', [p.header.hasAttribute('inert'), p.box.hasAttribute('inert'), p.toast.hasAttribute('inert')], [false, false, false]);
     ok('the focus is on the canvas', p.doc.activeElement === p.canvas);
     expect('no listener is left on the document or the window', [p.doc.count('keydown'), p.doc.count('keyup'), p.win.count('pointerlockchange'), p.doc.count('fullscreenchange')], [0, 0, 0, 0]);
     e = p.doc.key('Escape');

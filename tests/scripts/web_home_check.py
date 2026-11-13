@@ -39,7 +39,7 @@ headless browser (its own profile and port; nothing of yours is touched), the pa
              are the front page like any other, with a room of its own and no name card;
   * game     the GAME PAGE in the front page's look (web/shell.html at /play): the clay, the frame, the font and the logo; the loading screen (the logo, a teal bar in a black box) and its failure card; 19 widths
              from 320 to 1600 px with no sideways scroll, the header's eight controls (one row with "More" up to 700 px: the six other links, over the picture), the picture, the bar and the guide inside the frame, a phone
-             on its side; the logo goes back to the front page as Menu does (it asks first while a match runs or a room is joined: No stays); the two pairs under the game (the chosen one is pressed in; the clicks keep their
+             on its side; Menu goes back to the front page (it asks first while a match runs or a room is joined: No stays); the two pairs under the game (the chosen one is pressed in; the clicks keep their
              ids and what they remember); the name step of a shared link, with that line; the contrast of every text (4.5:1) in each of these states.
 Exit status 0: every check passed; 1: a check failed; 3: the check could not be made because the environment is not there (no browser, nothing answers at the page's address, and for the parts that open the front page
 or play no game server of this tree or a site whose /ws does not lead to it).
@@ -160,7 +160,7 @@ STATE_JS = """(function () {
 # The layout of the lobby at the width of the window: the sideways scroll, the columns, the places of the four cards (in the order of the markup), whatever sticks out of a card or out of the window, the grip's dots against the
 # names and the drop-down, START and the line under it, the link and its buttons, and the widest map name against the room that the map's drop-down leaves it
 MAST_JS = """(function () {
-  var m = document.querySelector('header.mast'), img = m.querySelector('img'), b = document.getElementById('watch-top'), p = m.querySelector('p');
+  var m = document.querySelector('header.mast'), img = m.querySelector('h1'), b = document.getElementById('watch-top'), p = m.querySelector('p');
   function r(e) { var x = e.getBoundingClientRect(); return [x.left, x.top, x.right, x.bottom]; }
   return JSON.stringify({ header: r(m), logo: r(img), btn: r(b), text: getComputedStyle(p).display === 'none' ? null : r(p), inner: document.documentElement.clientWidth });
 })()"""
@@ -592,23 +592,20 @@ def main():
             st = lobby()
             codes.append(code_of(st))
             info = json.loads(value("""JSON.stringify({title: document.title, path: location.pathname, h1: document.querySelectorAll('h1').length,
-                logo: (function () { var i = document.querySelector('header.mast img'); return i ? [i.complete && i.naturalWidth === 581, i.getAttribute('alt'), i.getBoundingClientRect().width] : null; })(),
+                logo: (function () { var i = document.querySelector('header.mast h1'); return i ? [document.querySelectorAll('header.mast img').length === 0, i.textContent] : null; })(),
                 tag: document.querySelector('.mast .tag').textContent, sub: document.querySelector('.mast .sub').textContent,
                 head: [document.getElementById('room-h').textContent, document.querySelector('.code').textContent],
                 link: [document.getElementById('link').value, document.getElementById('link').readOnly, document.getElementById('link').getAttribute('aria-label')],
                 buttons: ['copy'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
                 noMore: !document.getElementById('more') && !document.getElementById('morebox') && document.body.textContent.indexOf('More ways to play') === -1,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
-                aspect: [document.getElementById('aspect-select').value, document.body.getAttribute('data-aspect')],
-                note: [document.getElementById('fit-note').hidden, document.getElementById('fit-note').textContent, getComputedStyle(document.getElementById('fit-note')).display], screenSize: [screen.width, screen.height],
-                shapeEntries: Array.prototype.map.call(document.querySelectorAll('#aspect-select option'), function (o) { return [o.value, o.textContent]; }),
-                shapePlace: (function () { var r = document.getElementById('shape-row').getBoundingClientRect(), i = document.getElementById('info').getBoundingClientRect(), s = document.getElementById('start').getBoundingClientRect(); return [r.top >= i.bottom - 1, r.bottom <= s.top + 1, !!document.querySelector('footer .shape, footer #aspect-select')]; })(),
+                screenSize: [screen.width, screen.height], picked: pickedShape,
                 footer: document.querySelector('footer').textContent, notice: document.getElementById('footer-notice').textContent, noticeShown: document.getElementById('footer-notice').getBoundingClientRect().height > 0,
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
             check(info["title"].startswith("Ants (1998)") and info["path"] == "/" and info["h1"] == 1, "the front page is at / and is titled Ants (1998) (%r)" % info["title"])
-            check(info["logo"] is not None and info["logo"][0] and info["logo"][1] == "Ants!" and 100 <= info["logo"][2] <= 200 and info["tag"] == "Four colonies, one picnic." and info["sub"] == "The 1998 ant war game, rebuilt for your browser.",
-                  "the mast has the logo (loaded, %s px wide) and the two lines under it, and nothing else: no header bar of links (%r)" % (info["logo"] and round(info["logo"][2]), info["tag"]))
+            check(info["logo"] is not None and info["logo"][0] and info["logo"][1] == "Ants!" and info["tag"] == "Four colonies, one picnic." and info["sub"] == "The 1998 ant war game, rebuilt for your browser.",
+                  "the mast has the name as words (no picture) and the two lines under it, and nothing else: no header bar of links (%r)" % (info["tag"],))
             check(bool(info["font"]), "the game's own font, Libre Franklin, is loaded from the site")
             code = code_of(st)
             check(re.match(r"^[%s]{6}$" % CODE_ALPHABET, code) is not None and st["code"] == code[:3] + " " + code[3:] and info["head"] == ["Your room", "Room code " + st["code"]],
@@ -761,59 +758,33 @@ def main():
                   "the line of numbers is either not there (a site with no /stats) or says what it counts: matches and players now, and, where the site counts them, the games played (%r; the dot between the two is drawn by the page's style)" % (stats["text"],))
             check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
 
-            # the picture's shape: the one nearest the screen is chosen in the dropdown on a first visit; a choice is remembered
+            # the picture's shape is a row of the game's settings menu, not of the room: the room hands on the shape that the address or the browser holds, and nothing on a first visit
             def shape_now():
-                return json.loads(value("JSON.stringify([document.getElementById('aspect-select').value, document.body.getAttribute('data-aspect'), localStorage.getItem('ants.aspect.v2')])"))
+                return json.loads(value("JSON.stringify([pickedShape, localStorage.getItem('ants.aspect.v2')])"))
 
-            check(info["aspect"] == [FIRST, FIRST], "Picture: %s (nearest a 1440 x 900 screen) is chosen on a first visit (%s)" % (FIRST, info["aspect"]))
-            check(info["shapePlace"] == [True, True, False], "the Picture row is in the match column under the map's line and above START!, and the footer has no selector (%s)" % info["shapePlace"])
-            check(info["shapeEntries"] == aspect.SHAPE_ENTRIES, "Picture is a dropdown with the seven shapes of the table, from the narrowest to the widest, each as the shape and its canvas (%s)" % info["shapeEntries"])
-            # "fills your screen": the quiet line under the dropdown names the shape nearest to this computer's screen (nothing when no shape is within 8 per cent), on every screen
+            check(info["picked"] == "", "the room has no shape of its own on a first visit: nothing is handed on to the game (%r)" % (info["picked"],))
             sw, sh = info["screenSize"]
-            ratios = {name: aspect.SHAPE_STEPS[name][0] / aspect.SHAPE_STEPS[name][1] for name in aspect.SHAPE_ORDER}
-            near = min(ratios, key=lambda k: max(ratios[k] / (sw / sh), (sw / sh) / ratios[k])) if sw > 0 and sh > 0 else None
-            if near and max(ratios[near] / (sw / sh), (sw / sh) / ratios[near]) - 1 > 0.08:
-                near = None
-            words = (("Classic 4:3" if near == "4:3" else near) + " fills your screen") if near else None
-            check((None if info["note"][0] else info["note"][1]) == words, "the line under the dropdown says %r for the %d x %d screen (%s)" % (words, sw, sh, info["note"]))
-            check(info["note"][0] is False or info["note"][2] == "none", "a hidden line takes no room")
-            aspect.choose_shape(tab, "4:3")
-            time.sleep(0.5)
-            chosen = shape_now()
-            check(chosen == ["4:3", "4:3", "4:3"] and lobby()["code"] == st["code"], "a choice of 4:3 in the dropdown changes the page (it keeps its room) and the browser remembers it (%s)" % (chosen,))
-            tab.open(web, wait=False)
-            time.sleep(1.5)
-            check(shape_now()[:2] == ["4:3", "4:3"], "... and the next visit starts with 4:3 chosen (%s)" % (shape_now(),))
-            aspect.choose_shape(tab, "16:9")
-            time.sleep(0.5)
-            check(shape_now() == ["16:9", "16:9", "16:9"], "a choice of 16:9 brings it back")
+            for held in ("4:3", "16:9"):                       # what the game page remembered (its settings menu writes the key): the room hands it on, and the next visit has it
+                tab.ev("localStorage.setItem('ants.aspect.v2', %r); 1" % held)
+                tab.open(web, wait=False)
+                time.sleep(1.5)
+                check(shape_now()[0] == held, "a shape that the browser remembers (%s) is what the room hands on (%s)" % (held, shape_now()))
             tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
-            check(shape_now()[:2] == [FIRST, FIRST], "a remembered value that is no shape is ignored: %s" % FIRST)
+            check(shape_now()[0] == "", "a remembered value that is no shape is ignored: nothing is handed on")
             tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.setItem('ants.aspect', '4:3'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
-            check(shape_now()[:2] == [FIRST, FIRST], "a 4:3 that the old key 'ants.aspect' remembers is not read: %s (the first visit's shape)" % FIRST)
-            tab.open(web + "?aspect=4:3", wait=False)
-            time.sleep(1.5)
-            check(shape_now()[:2] == ["4:3", "4:3"], "?aspect=4:3 in the address chooses 4:3")
-            for asked in ("16:10", "3:2", "20:9", "21:9", "32:9"):
+            check(shape_now()[0] == "", "a 4:3 that the old key 'ants.aspect' remembers is not read: nothing is handed on")
+            tab.ev("localStorage.removeItem('ants.aspect'); 1")
+            for asked in ("4:3", "16:10", "3:2", "20:9", "21:9", "32:9"):
                 tab.open(web + "?aspect=" + asked, wait=False)
                 time.sleep(1.5)
-                check(shape_now()[:2] == [asked, asked], "?aspect=%s in the address chooses %s" % (asked, asked))
+                check(shape_now()[0] == asked, "?aspect=%s in the address is what the room hands on" % asked)
             tab.open(web + "?aspect=5:4", wait=False)
             time.sleep(1.5)
-            check(shape_now()[:2] == [FIRST, FIRST], "?aspect=5:4 is not a shape the page offers: ignored, %s" % FIRST)
-            for picked in ("16:10", "3:2", "20:9", "21:9", "32:9"):       # every other shape: chosen with the keys, remembered, and the next visit starts with it (the game page reads the same key)
-                tab.open(web, wait=False)
-                time.sleep(1.5)
-                aspect.choose_shape(tab, picked)
-                time.sleep(0.5)
-                check(shape_now() == [picked, picked, picked], "a choice of %s in the dropdown changes the page and the browser remembers it (%s)" % (picked, shape_now()))
-                tab.open(web, wait=False)
-                time.sleep(1.5)
-                check(shape_now()[:2] == [picked, picked], "... and the next visit starts with %s chosen" % picked)
+            check(shape_now()[0] == "", "?aspect=5:4 is not a shape the page offers: ignored")
             tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.removeItem('ants.aspect'); 1")
 
             # a new tab makes a new room each time: the codes are letters and numbers
@@ -952,24 +923,14 @@ def main():
             for width in (1280, 390, 320):
                 tab.emulate(width, 900, 1, width <= 480)
                 time.sleep(0.15)
-                m = json.loads(value("(function () { var a = document.getElementById('mapmaker-top'), b = document.getElementById('watch-top'), l = document.querySelector('header.mast img'), h = document.querySelector('header.mast'); if (!a) return 'null'; var r = a.getBoundingClientRect(), q = b.getBoundingClientRect(), g = l.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = function (px, py) { return document.elementFromPoint(px, py) === a; }; "
+                m = json.loads(value("(function () { var a = document.getElementById('mapmaker-top'), b = document.getElementById('watch-top'), l = document.querySelector('header.mast h1'), h = document.querySelector('header.mast'); if (!a) return 'null'; var r = a.getBoundingClientRect(), q = b.getBoundingClientRect(), g = l.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = function (px, py) { return document.elementFromPoint(px, py) === a; }; "
                                      "return JSON.stringify({href: a.getAttribute('href'), text: a.textContent.trim(), n: document.querySelectorAll('#mapmaker-top').length, before: r.right <= q.left + 0.5, gap: Math.round(q.left - r.right), h: r.height, hitAbove: hit(x, y - 21.5), hitBelow: hit(x, y + 21.5), hitLeft: hit(r.left - 1.5, y), hitRight: hit(r.right + 1.5, y), farAbove: !hit(x, y - 30), overLogo: r.left < g.right, scroll: document.documentElement.scrollWidth > innerWidth, inside: r.left >= h.getBoundingClientRect().left - 0.5 && q.right <= h.getBoundingClientRect().right + 4.5, row: innerWidth > 720 || r.top < g.bottom}); })()"))
                 if m is None or m["href"] != "/mapmaker" or m["text"] != "Map maker" or m["n"] != 1 or not m["before"] or m["gap"] < 6 or abs(m["h"] - 38) > 1 or not (m["hitAbove"] and m["hitBelow"] and m["hitLeft"] and m["hitRight"]) or not m["farAbove"] or m["overLogo"] or m["scroll"] or not m["inside"] or not m["row"]:
                     bad.append((width, m))
             check(not bad, "the Map maker link: one, to /mapmaker, before Matches and as tall as it, a hit area of 44 px, clear of the logo, on the logo's row on a phone, no sideways scroll at 1280, 390 and 320 px (wrong: %s)" % bad)
-            # the quiet line under the dropdown (32:9 here: a 5120 x 1440 screen, "32:9 fills your screen"): in a narrow window it stays inside the page and the page does not scroll sideways
             fresh_tab()
-            tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 5120, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)
             tab.open(web, wait=False)
             front_ready()
-            wrong_tag = []
-            for width in (320, 360, 370, 440, 480, 600, 720):
-                tab.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 5120, "screenHeight": 1440})
-                time.sleep(0.3)
-                m = json.loads(value("JSON.stringify({sw: document.documentElement.scrollWidth, iw: document.documentElement.clientWidth, tag: (function () { var t = document.getElementById('fit-note'); if (t.hidden) return null; var r = t.getBoundingClientRect(), s = document.getElementById('aspect-select').getBoundingClientRect(); return [t.textContent, Math.round(r.left), Math.round(r.right), Math.round(r.top - s.bottom)]; })()})"))
-                if m["sw"] > m["iw"] or not m["tag"] or m["tag"][0] != "32:9 fills your screen" or m["tag"][1] < 0 or m["tag"][2] > m["iw"] or not 0 <= m["tag"][3] < 16:
-                    wrong_tag.append((width, m))
-            check(not wrong_tag, "a computer with a 5120 x 1440 screen, windows of 320 to 720 px: the line under the dropdown stays inside the page, right under it, and the page does not scroll sideways (wrong: %s)" % (wrong_tag,))
             tab.emulate(1366, 900, 1)
             time.sleep(0.4)
             shot("home_front_1366")
@@ -1484,17 +1445,19 @@ def main():
                 check(status.get("joined", 0) == 0 or status.get("state") in ("finished", "ended", None), "the room that the front page made is let go of: nobody is in it now (%s)" % {k: status.get(k) for k in ("state", "joined", "reason")})
             else:
                 check(False, "the game page of a game on this computer is ready")
-            # Classic 4:3, chosen under Screen, is what reaches the game (the choice is remembered by the browser)
+            # Classic 4:3, remembered by the browser (the game's settings menu writes it), is what reaches the game
             clear_storage()
             load(web, settle=1.5)
             front_ready()
             rename_by_pencil(tab, "Bob")
-            aspect.choose_shape(tab, "4:3")
+            tab.ev("localStorage.setItem('ants.aspect.v2', '4:3'); 1")                     # (what the game page's settings menu remembers: the room hands it on)
+            load(web, settle=1.5)
+            front_ready()
             set_modes(tab, {"red": "nobody", "blue": "nobody", "black": "nobody"})
             real_click("#start")
             ok = wait_for(lambda: tab.ev("location.pathname") == "/play", 20)
             where = tab.ev("location.pathname + location.search") if ok else ""
-            check(ok and "aspect=4:3" in where, "with Classic 4:3 chosen under Screen, START takes this tab to the game with that shape (%s)" % where)
+            check(ok and "aspect=4:3" in where, "with Classic 4:3 remembered, START takes this tab to the game with that shape (%s)" % where)
             if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
                 given = [x for x in game_args(tab) if x != "./this.program"]
                 check(given[given.index("--aspect") + 1:][:1] == ["4:3"] and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "4:3", "... and the game is the 4:3 one (--aspect 4:3, the stage says 4:3)")
@@ -1837,8 +1800,8 @@ def main():
                 var shown = function (e) { return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0 && (!e.checkVisibility || e.checkVisibility()); };
                 var controls = Array.prototype.filter.call(document.querySelectorAll('header a, header button, header summary'), shown).map(function (e) { return { text: e.innerText.trim(), rect: rect(e) }; });
                 return { inner: [de.clientWidth, window.innerHeight], scroll: [de.scrollWidth, de.scrollHeight], controls: controls, box: rect(document.getElementById('game-container')), bar: rect(document.querySelector('footer.bar')),
-                         panel: rect(document.getElementById('info-panel')), header: rect(document.querySelector('header')), more: shown(document.querySelector('header .more')), view: rect(document.getElementById('view-bar')),
-                         seg: Array.prototype.filter.call(document.querySelectorAll('.seg button, #aspect-select'), shown).map(rect) };
+                         panel: rect(document.getElementById('info-panel')), header: rect(document.querySelector('header')), more: shown(document.querySelector('header .more')), view: rect(document.getElementById('game-container')),
+                         seg: Array.prototype.filter.call(document.querySelectorAll('.seg button'), shown).map(rect) };
             })())"""
             clear_storage()
             load(play + "?aspect=16:9", ready=True, settle=1.5)
@@ -1851,7 +1814,7 @@ def main():
                 if m["scroll"][0] > m["inner"][0]:
                     wrong["scroll"].append((width, m["scroll"][0], m["inner"][0]))
                 texts = [c["text"] for c in m["controls"]]
-                want = (["", "Menu", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["", "Menu"] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub", "Feedback"])
+                want = (["Menu", "", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["Menu", "Settings" if width >= 1140 else ""] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub"] + ([] if 920 <= width <= 1045 else ["Feedback"]))
                 height = m["header"][3] - m["header"][1]
                 if texts != want or m["more"] != narrow or ((narrow or width >= 1024) and height > 60):
                     wrong["header"].append((width, texts, "More" if m["more"] else "no More", round(height)))
@@ -1859,7 +1822,7 @@ def main():
                     for b in m["controls"][i + 1:]:
                         same_row = min(a["rect"][3], b["rect"][3]) - max(a["rect"][1], b["rect"][1]) > 0.5 * (a["rect"][3] - a["rect"][1])
                         if same_row and min(a["rect"][2], b["rect"][2]) - max(a["rect"][0], b["rect"][0]) > 0.5:
-                            wrong["overlap"].append((width, a["text"] or "logo", b["text"] or "logo"))
+                            wrong["overlap"].append((width, a["text"] or "(icon)", b["text"] or "(icon)"))
                 if any(c["rect"][0] < 10 or c["rect"][2] > m["inner"][0] - 10 for c in m["controls"]) or any(s[0] < 10 or s[2] > m["inner"][0] - 10 for s in m["seg"]) or m["panel"][0] < 10 or m["panel"][2] > m["inner"][0] - 10:
                     wrong["frame"].append((width, [round(v) for v in m["panel"]]))
                 ring, shadow = (5, 3) if narrow else (8, 4)
@@ -1869,8 +1832,8 @@ def main():
                 if abs(m["bar"][0]) > 0.5 or abs(m["bar"][2] - m["inner"][0]) > 0.5:
                     wrong["foot"].append((width, [round(v, 1) for v in m["bar"]]))
             check(not wrong["scroll"], "no sideways scroll from 320 to 1600 px (wrong: %s)" % (wrong["scroll"],))
-            check(not wrong["header"], "the header: up to 700 px one row of the logo, Menu, Fullscreen (Full up to 440 px) and More; above it the logo and the controls in their order (the seven it had, and Matches after Menu from 1140 px, where the eight fit one row; one row from 1024 px) (wrong: %s)" % (wrong["header"],))
-            check(not wrong["overlap"], "no control of the header lies over another or over the logo, in one row or two, at every width (wrong: %s)" % (wrong["overlap"][:6],))
+            check(not wrong["header"], "the header: up to 700 px one row of Menu, Settings, Fullscreen (Full up to 440 px) and More, with no logo; above it the controls in their order (the seven it had, and Matches after Menu from 1140 px, where the eight fit one row; one row from 1024 px) (wrong: %s)" % (wrong["header"],))
+            check(not wrong["overlap"], "no control of the header lies over another, in one row or two, at every width (wrong: %s)" % (wrong["overlap"][:6],))
             check(not wrong["frame"], "the header's controls, the pair buttons and the guide stay inside the thin green frame at every width (wrong: %s)" % (wrong["frame"],))
             check(not wrong["picture"], "the picture with its ring and shadow is centred and inside the frame at every width (wrong: %s)" % (wrong["picture"],))
             check(not wrong["foot"], "the footer's bar spans the window at every width (wrong: %s)" % (wrong["foot"],))
@@ -1888,29 +1851,12 @@ def main():
                   "the header of the game page has Matches right after Menu, in a new tab (a match that is being played goes on), and every button is shown at 1440 px (%s)" % [h[0] for h in head])
             contrast_of("the game page at 1440 px", 60, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })")
 
-            # --- the pairs under the game: the chosen button is pressed in, a click keeps its id and what it remembers; the Picture dropdown has the buttons' face
-            pairs = json.loads(value("""JSON.stringify(['lock-on', 'lock-off'].map(function (id) { var e = document.getElementById(id), s = getComputedStyle(e);
-                return [id, e.getAttribute('aria-checked'), s.backgroundColor, s.transform, (s.boxShadow.match(/rgb\\(157, 13, 23\\) (\\d+)px (\\d+)px/) || []).slice(1).join('x')]; }))"""))
-            pressed, raised = ("rgb(16, 43, 37)", "matrix(1, 0, 0, 1, 1, 2)"), ("rgb(43, 99, 87)", "none")
-            check([tuple(p[2:4]) for p in pairs] == [pressed, raised] and [p[1] for p in pairs] == ["true", "false"],
-                  "the mouse pair under the game: Locked is pressed in (dark, moved), Free is teal (%s)" % pairs)
-            check([p[4] for p in pairs] == ["1x1", "2x3"], "... a teal button has the front page's red shadow (2 x 3 px), a pressed one the small one (1 x 1 px) (%s)" % [p[4] for p in pairs])
-            face = json.loads(value("(function () { var s = getComputedStyle(document.getElementById('aspect-select')); return JSON.stringify([s.backgroundColor, (s.boxShadow.match(/rgb\\(157, 13, 23\\) (\\d+)px (\\d+)px/) || []).slice(1).join('x'), s.borderRadius, s.color]); })()"))
-            check(face[0] == raised[0] and face[1] == "2x3" and face[2] == "8px", "the Picture dropdown has the teal button's face: its color, its red shadow and its corners (%s)" % (face,))
-            x, y = centre_xy("#lock-off")
-            tab.click(x, y)
-            time.sleep(0.4)
-            after = json.loads(value("JSON.stringify(['lock-on', 'lock-off'].map(function (id) { var e = document.getElementById(id); return [e.getAttribute('aria-checked'), getComputedStyle(e).backgroundColor]; }).concat([localStorage.getItem('ants.pointerlock')]))"))
-            check(after == [["false", raised[0]], ["true", pressed[0]], "off"], "Free clicked: it is pressed in, Locked is teal, and the browser remembers \"off\" (%s)" % (after,))
-            x, y = centre_xy("#lock-on")
-            tab.click(x, y)
-            time.sleep(0.4)
-            check(value("document.getElementById('lock-on').getAttribute('aria-checked') + '/' + localStorage.getItem('ants.pointerlock')") == "true/on", "Locked clicked again: pressed in, remembered \"on\"")
+            # --- the picture's shape is a row of the settings menu: a choice there changes the picture at once (no reload), the browser remembers it, the address has it
             tab.ev("window.antsMarker = 7; 1")
             aspect.choose_shape(tab, "4:3")
             time.sleep(1.0)
-            chosen = json.loads(value("JSON.stringify([document.querySelector('#aspect-select-list [aria-selected=true]').getAttribute('data-shape'), localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
-            check(chosen == ["4:3", "4:3", "4:3", 7, True], "Classic 4:3 chosen in the dropdown: the picture changes at once (no reload), the browser remembers it, the address has it (%s)" % (chosen,))
+            chosen = json.loads(value("JSON.stringify([localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
+            check(chosen == ["4:3", "4:3", 7, True], "Classic 4:3 chosen in the menu's Picture shape row: the picture changes at once (no reload), the browser remembers it, the address has it (%s)" % (chosen,))
             shot("game_classic_1440")
             clear_storage()
 
@@ -1945,31 +1891,31 @@ def main():
             tab.emulate(844, 390, 2, mobile=True)
             tab.open(play + "?aspect=16:9", settle=1.5)
             m = json.loads(value(LAYOUT))
-            check(m["scroll"][0] <= m["inner"][0] and m["view"][3] <= m["inner"][1] + 1 and m["header"][3] - m["header"][1] <= 60 and not m["more"],
-                  "a phone on its side (844 x 390): the header is one slim row, the whole picture and the bar under it fit the window, no sideways scroll (bar ends at %.0f of %d)" % (m["view"][3], m["inner"][1]))
+            check(m["scroll"][0] <= m["inner"][0] and m["view"][3] + 14 <= m["inner"][1] and m["header"][3] - m["header"][1] <= 60 and not m["more"],
+                  "a phone on its side (844 x 390): the header is one slim row, the whole picture with its ring fits the window, no sideways scroll (the box ends at %.0f of %d)" % (m["view"][3], m["inner"][1]))
             shot("game_844")
             tab.emulate(1440, 900, 1)
 
-            # --- the logo is the way back to the front page, as Menu is: it asks while a match runs or a room is joined (No stays), and does not ask at the setup screen
+            # --- Menu is the way back to the front page (the header has no logo): it asks while a match runs or a room is joined (No stays), and does not ask at the setup screen
             clear_storage()
             load(play, ready=True, settle=1.0)
             before = pages()
             dialogs.clear()
-            tab.ev("document.getElementById('logo-link').click(); 1")
+            tab.ev("document.getElementById('menu-btn').click(); 1")
             back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('slots') ? 1 : 0")), 20)
-            check(back and not dialogs and pages() == before, "the logo at the setup screen (no match): back to the front page in this tab, nothing asked (%s)" % dialogs)
+            check(back and not dialogs and pages() == before, "Menu at the setup screen (no match): back to the front page in this tab, nothing asked (%s)" % dialogs)
             tab.emulate(1440, 900, 1)
             tab.open(play + "?map=treasure&bots=medium&name=Ann", settle=2.0)
             if start_by_enter():
                 dialogs.clear()
                 answer["accept"] = False
-                tab.ev("document.getElementById('logo-link').click(); 1")
+                tab.ev("document.getElementById('menu-btn').click(); 1")
                 time.sleep(0.8)
                 check(len(dialogs) == 1 and "Leave the game and go back to the menu?" in dialogs[0] and tab.ev("location.pathname") == "/play",
-                      "the logo while a match runs asks \"Leave the game and go back to the menu?\" (%s) and No stays in the game" % dialogs)
+                      "Menu while a match runs asks \"Leave the game and go back to the menu?\" (%s) and No stays in the game" % dialogs)
                 check(tab.ev("Module._ants_match_running()") == 1, "... the match goes on")
                 answer["accept"] = True
-                tab.ev("document.getElementById('logo-link').click(); 1")
+                tab.ev("document.getElementById('menu-btn').click(); 1")
                 back = wait_for(lambda: tab.ev("location.pathname") == "/" and bool(tab.ev("document.getElementById('slots') ? 1 : 0")), 20)
                 check(back and pages() == before, "... and Yes goes back to the front page in the same tab (no new tab)")
             else:
@@ -1979,9 +1925,9 @@ def main():
             tab.open(play + "?join=/ws&room=k7m2xq&roommap=small&roomseats=2&name=Ann&aspect=16:9", wait=False)
             time.sleep(2.0)
             answer["accept"] = False
-            tab.ev("document.getElementById('logo-link').click(); 1")
+            tab.ev("document.getElementById('menu-btn').click(); 1")
             time.sleep(0.8)
-            check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and tab.ev("location.pathname") == "/play", "the logo in a joined room asks too, and No stays (%s)" % dialogs)
+            check(len(dialogs) == 1 and "menu" in dialogs[0].lower() and tab.ev("location.pathname") == "/play", "Menu in a joined room asks too, and No stays (%s)" % dialogs)
             answer["accept"] = True
             dialogs.clear()
 

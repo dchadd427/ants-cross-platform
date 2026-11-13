@@ -173,7 +173,7 @@ class Page:
         for _ in range(2):                                                   # the quick help's Enter, the setup screen's Enter (START)
             self.key("Enter", "Enter", 13, text="\r")
             time.sleep(1.2)
-        return bool(wait_for(lambda: self.tab.ev("Module._ants_match_running()") == 1, 25, 0.5)) and bool(wait_for(lambda: self.tab.ev("!!document.querySelector('#settings-btn-narrow, #settings-btn')") and self.tab.ev("Module._ants_menu_get(101)") == 0, 10, 0.3))
+        return bool(wait_for(lambda: self.tab.ev("Module._ants_match_running()") == 1, 25, 0.5)) and bool(wait_for(lambda: self.tab.ev("!!document.querySelector('#settings-btn')") and self.tab.ev("Module._ants_menu_get(101)") == 0, 10, 0.3))
 
     def click_text(self, selector, text):
         """a real click on the first element of `selector` with this text"""
@@ -272,8 +272,8 @@ def computer(p, args, check):
     tab.ev("window.__lockSeen = false; window.addEventListener('pointerlockchange', function () { if (document.pointerLockElement) window.__lockSeen = true; }, true); 1")      # (the check's own witness that the browser grants a lock, however quickly the panel lets go of it: it is put in before the panel's own listener, which is made when it opens)
     wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 10)       # (the page polls the game every quarter second: shown and on are two moments)
     b = p.buttons()
-    check(b.get("settings-btn", {}).get("shown") and not b["settings-btn"]["disabled"] and not b["settings-btn-narrow"]["shown"] and "settings-btn-fs" not in b,
-          "the Settings button is in the header and on, the narrow one is not shown and there is none over the picture (%s)" % {k: v["shown"] for k, v in b.items()})
+    check(b.get("settings-btn", {}).get("shown") and not b["settings-btn"]["disabled"] and "settings-btn-fs" not in b and "settings-btn-narrow" not in b,
+          "the Settings button is in the header and on, and there is none over the picture or under it (%s)" % {k: v["shown"] for k, v in b.items()})
     header = tab.ev("document.getElementById('settings-btn').previousElementSibling.id")
     check(header == "menu-btn", "the header button stands right after Menu (%s)" % header)
     tab.ev("document.getElementById('canvas').focus(); 1")
@@ -393,7 +393,7 @@ def computer(p, args, check):
     s = p.state()
     want = shape_of(at + 3)
     check(s["aspect"] == want and s["shape"] == aspect.SHAPE_ORDER.index(want) and ("aspect=" + want) in tab.ev("location.search"), "the shape is the page's own: the stage, the game's canvas and the address (%s, shape %s)" % (s["aspect"], s["shape"]))
-    check(tab.ev("(document.querySelector('#aspect-select-list [aria-selected=true]') || document.body).getAttribute('data-shape')") == want and tab.ev("localStorage.getItem('ants.aspect.v2')") == want, "the dropdown under the picture follows, and the choice is remembered")
+    check(tab.ev("(document.querySelector('#gm-picture-list [aria-selected=true]') || document.body).getAttribute('data-shape')") == want and tab.ev("localStorage.getItem('ants.aspect.v2')") == want, "the menu's dropdown follows, and the choice is remembered")
     p.key("Enter", "Enter", 13)
     p.key("End", "End", 35)
     p.key("Enter", "Enter", 13)
@@ -534,12 +534,12 @@ def phone(p, args, check):
     print("[web game menu] a phone, 390 x 844 with touch")
     p.open_game(LOCAL, 390, 844, mobile=True)
     check(p.start_match(), "a match is running")
-    wait_for(lambda: p.buttons().get("settings-btn-narrow", {}).get("shown") and not p.buttons()["settings-btn-narrow"]["disabled"], 10)       # (shown and on are two moments of the page's quarter-second poll)
+    wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 10)       # (shown and on are two moments of the page's quarter-second poll)
     b = p.buttons()
-    check(b.get("settings-btn-narrow", {}).get("shown") and b["settings-btn-narrow"]["h"] >= 43.5 and not b["settings-btn"]["shown"],
-          "the Settings button is under the picture, at least 44 px high, and the header's is not shown (%s)" % {k: (v["shown"], round(v["h"])) for k, v in b.items()})
+    check(b.get("settings-btn", {}).get("shown") and b["settings-btn"]["h"] >= 43.5 and b["settings-btn"]["w"] >= 43.5 and "settings-btn-narrow" not in b and p.state()["scrollW"] <= p.state()["innerW"],
+          "the Settings button is in the header at 390 px, at least 44 x 44, with no strip under the picture and no sideways scroll (%s)" % {k: (v["shown"], round(v["h"])) for k, v in b.items()})
     taps = p.state()["taps"]
-    p.tap_element("#settings-btn-narrow")
+    p.tap_element("#settings-btn")
     s = p.state()
     check(s["open"] and s["parent"] == "game-stage", "a tap opens the panel")
     check(s["panel"] and s["panel"][0] >= 15.5 and s["panel"][1] >= 15.5 and s["panel"][0] + s["panel"][2] <= s["innerW"] - 15.5 and s["panel"][1] + s["panel"][3] <= s["innerH"] - 15.5,
@@ -588,7 +588,7 @@ def phone(p, args, check):
     time.sleep(0.6)
     s = p.state()
     check(not s["open"] and s["taps"] == taps + 1 and tab.ev("Module._ants_probe(34)") == 0, "...and after it closes the next finger on the map is a tap of the game's (taps %s, was %s)" % (s["taps"], taps))
-    p.tap_element("#settings-btn-narrow")
+    p.tap_element("#settings-btn")
     check(p.state()["open"], "(the button opens it again)")
 
     print("[web game menu] a phone on its side, 844 x 390")
@@ -684,8 +684,8 @@ def scrolling(p, args, check):
 
     p.open_game(LOCAL, 390, 844, mobile=True)
     check(p.start_match(), "a match is running on a phone")
-    wait_for(lambda: p.buttons().get("settings-btn-narrow", {}).get("shown") and not p.buttons()["settings-btn-narrow"]["disabled"], 10)
-    p.tap_element("#settings-btn-narrow")
+    wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 10)
+    p.tap_element("#settings-btn")
     check(p.state()["open"], "a tap opens the panel")
     scroll_every_section(p, check, "390 x 844, a finger", finger)
     scroll_every_section(p, check, "390 x 844, a wheel", wheel)

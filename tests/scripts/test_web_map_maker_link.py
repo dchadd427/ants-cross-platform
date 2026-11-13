@@ -74,7 +74,7 @@ def problems(page, js):
         bad.append("on a phone the Discord link is in its own place and is 44 px wide")
     if "'.mast #discord-top::before { content:" not in js or ".mast #discord-top .dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }" not in js:
         bad.append("the Discord link's touch layer, and on a phone only its mark shows (the word stays for a screen reader)")
-    if "@media (max-width: 389px)" not in js or "width: 88px" not in js:
+    if "@media (max-width: 389px)" not in js:
         bad.append("at 320 px both fit")
     for need, why in (("flex: 0 0 auto; position: relative; }", "the layer is anchored to the link (position: relative)"),
                       ("margin-left: auto; margin-right: -12px;", "10 px between the pair (the row's gap is 22)"),

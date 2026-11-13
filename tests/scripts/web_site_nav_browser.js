@@ -3,10 +3,11 @@
 // Sprites and sounds), each size (320, 390, 450, 721, 768, 1280 wide and a phone held sideways, 667 x 375) and with no match live and two live, it checks:
 //   1. the page does not scroll sideways, and nothing in the bar is wider than the window;
 //   2. the bar's visible buttons are 44 px tall or more and do not overlap each other;
-//   3. a phone (under 720 px): Home, the logo and the Menu are shown, the row of pages is not; from 720 px: the row of five is shown (Home, Matches, Live now, Map maker, Discord), Home and the live button of the phone are not;
+//   3. a phone (under 720 px): Home and the Menu are shown, the row of pages is not; from 720 px: the row of five is shown (Home, Matches, Live now, Map maker, Discord), Home and the live button of the phone are not;
 //   4. the page that is open is marked aria-current in the row (Matches for Matches and Match, Live now, Map maker), and in the Menu for Legal, Changelog and Sprites and sounds;
 //   5. the live count: with two live the phone's red button says "2 live" (never on Live now itself, which lists them) and the row's Live now carries 2; with none the button is hidden;
-//   6. nothing moves when the count arrives (the logo, the row and the Menu button keep their places);
+//   6. nothing moves when the count arrives (the Home button, the row and the Menu button keep their places);
+//   6b. the bar draws no logo (no picture in it), a link to the front page is shown, and the first button starts at the page's left edge (no gap where the logo was);
 //   7. the Menu: opens with every link (the five and the five small ones), Escape closes it and the focus goes back to its button, a press outside closes it too.
 //   --shots DIR takes a picture of every page at every size (PREFIX_page_size_liveN.png); --root DIR names the tree to serve (default: this repository); --prefix names the pictures; --no-checks takes
 //   pictures only (for a tree from before the bar).
@@ -95,7 +96,7 @@ const measure = () => {       // runs in the page: where the bar's parts are
         parts, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, bodyScrollW: document.body.scrollWidth,
         navShown: shown(nav), home: shown(bar.querySelector('.sbhome')), live: shown(bar.querySelector('.sblive')), liveText: bar.querySelector('.sblive').textContent,
         current: [...bar.querySelectorAll('nav [aria-current]')].map((a) => a.textContent.trim().replace(/\d+$/, '')), lvN: bar.querySelector('.sblv .sbn').textContent,
-        logo: box(bar.querySelector('.sblogo')), menu: box(bar.querySelector('.sbtn')), bar: box(bar),
+        pictures: document.querySelectorAll('.sb img').length, wayHome: [...bar.querySelectorAll('a[href="/"]')].filter(shown).map(box), pad: parseFloat(getComputedStyle(bar).paddingLeft) || 0, menu: box(bar.querySelector('.sbtn')), bar: box(bar),
     };
 };
 
@@ -133,6 +134,7 @@ async function main() {
                         if (a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5 && a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5) overlap = [a.name, b.name];
                     }
                     check(tag + ': nothing in the bar overlaps', overlap === null, JSON.stringify(overlap));
+                    check(tag + ': the bar draws no picture, a link to the front page is shown (44 px tall, inside the window), and the first button starts at the left edge of the bar itself', m.pictures === 0 && m.wayHome.length >= 1 && m.wayHome.every((h) => h.h >= 44 && h.x >= 0) && m.parts[0].x - m.bar.x - m.pad <= 2, JSON.stringify([m.pictures, m.wayHome, m.parts[0], m.bar]));
                     check(tag + ': ' + (wide ? 'the row of pages is shown and the phone\'s Home and live buttons are not' : 'the phone\'s Home is shown and the row of pages is not'), wide ? m.navShown && !m.home && !m.live : m.home && !m.navShown);
                     if (wide) {
                         const names = m.parts.map((p) => p.name);
@@ -165,9 +167,37 @@ async function main() {
             if (CHECKS && seen[0] && seen[2]) {
                 const still = (a, b) => Math.abs(a.x - b.x) < 0.6 && Math.abs(a.y - b.y) < 0.6 && Math.abs(a.w - b.w) < 0.6 && Math.abs(a.h - b.h) < 0.6;
                 const a = seen[0], b = seen[2];
-                check(pname + ' ' + sname + ': nothing moves when the live count arrives (the logo, the Menu button and the bar)', still(a.logo, b.logo) && still(a.menu, b.menu) && still(a.bar, b.bar), JSON.stringify([a.logo, b.logo, a.menu, b.menu]));
+                check(pname + ' ' + sname + ': nothing moves when the live count arrives (the first button, the Menu button and the bar)', still(a.parts[0], b.parts[0]) && still(a.menu, b.menu) && still(a.bar, b.bar), JSON.stringify([a.parts[0], b.parts[0], a.menu, b.menu]));
                 if (wide) check(pname + ' ' + sname + ': ... nor the row\'s buttons', a.parts.filter((p) => !/sblive/i.test(p.cls)).every((p) => b.parts.some((q) => q.name.replace(/\d+$/, '') === p.name.replace(/\d+$/, '') && still(p, q))), '');
             }
+        }
+    }
+    // the Map maker's own screens (the page's own state is set: My maps is the #mine section shown with the editor's row and body hidden, as web/front/mapmaker_app.js does; Crop to fit is the #crop section shown with the editor hidden)
+    if (CHECKS) {
+        const reachable = () => [...document.querySelectorAll('a[href], button, summary, input, select, textarea, [tabindex]')].filter((e) => e.tabIndex >= 0 && !e.disabled && e.checkVisibility({ visibilityProperty: true }) && !e.closest('[inert]'));
+        for (const [width, height] of [[390, 844], [600, 800], [601, 800], [720, 900], [844, 390], [1280, 800], [1920, 1080]]) {
+            const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+            const page = await context.newPage();
+            await page.goto(base + '/mapmaker', { waitUntil: 'load' });
+            await page.waitForTimeout(300);
+            const tag = 'mapmaker ' + width + 'x' + height;
+            const up = await page.evaluate((reach) => {
+                const r = new Function('return (' + reach + ')')();
+                const barBefore = r().filter((e) => e.closest('.sb')).length;
+                document.getElementById('top').hidden = document.getElementById('body').hidden = true; document.getElementById('mine').hidden = false;
+                const list = r(), home = document.getElementById('mine-home'), hb = home.getBoundingClientRect();
+                const bar = document.querySelector('.sb a.sbhome');
+                return { barBefore, barReachable: list.filter((e) => e.closest('.sb')).length, ids: list.map((e) => e.id || e.className).slice(0, 8), homeShown: home.checkVisibility({ visibilityProperty: true }), href: home.getAttribute('href'), homeIn: hb.left >= 0 && hb.right <= innerWidth && hb.top >= 0 && hb.bottom <= innerHeight, homeH: hb.height,
+                    barHomeShown: !!bar && bar.checkVisibility({ visibilityProperty: true }) && bar.getBoundingClientRect().bottom <= innerHeight };
+            }, reachable.toString());
+            const wide = width >= 601;
+            check(tag + ': My maps up: ' + (wide ? 'the covered bar cannot be reached with the Tab key or seen by a screen reader, and the screen has its own Home (to "/", in the window, 44 px)' : 'the bar and its Home are seen, and the screen has no second Home'),
+                wide ? up.barBefore > 0 && up.barReachable === 0 && up.homeShown && up.href === '/' && up.homeIn && up.homeH >= 43.5 : up.barHomeShown && !up.homeShown, JSON.stringify(up));
+            const back = await page.evaluate((reach) => { document.getElementById('mine').hidden = true; document.getElementById('top').hidden = document.getElementById('body').hidden = false; return new Function('return (' + reach + ')')()().filter((e) => e.closest('.sb')).length; }, reachable.toString());
+            check(tag + ': My maps closed: the bar is in the Tab order again', back > 0, String(back));
+            const crop = await page.evaluate((reach) => { document.getElementById('editor').hidden = true; document.getElementById('crop').hidden = false; const list = new Function('return (' + reach + ')')()(); const cr = document.getElementById('crop'); return { outside: list.filter((e) => !cr.contains(e)).map((e) => e.tagName + '#' + e.id), inside: list.filter((e) => cr.contains(e)).length }; }, reachable.toString());
+            check(tag + ': Crop to fit up: nothing outside the step can be reached with the Tab key, and the step has its own controls (it is left by Cancel)', crop.outside.length === 0 && crop.inside > 0, JSON.stringify(crop));
+            await context.close();
         }
     }
     await browser.close();

@@ -1618,14 +1618,13 @@ class TheImageCarriesThePage(unittest.TestCase):
         self.assertIn("node tests/scripts/web_mapmaker_core_check.js --module lvl_core_from_image --require", ci)
         self.assertIn("node tests/scripts/web_mapmaker_pickup_check.js --module lvl_core_from_image --require", ci)
 
-    def test_the_map_maker_has_its_own_version_file_and_prints_it_in_the_bottom_footer(self):
+    def test_the_map_maker_has_its_own_version_file_and_the_bar_carries_it_for_the_menu(self):
         ver = read("web", "MAPMAKER_VERSION").strip()
         self.assertRegex(ver, r"^\d+\.\d+\.\d+$", "web/MAPMAKER_VERSION is MAJOR.MINOR.PATCH")
         page = read("web", "mapmaker.html")
-        self.assertIn('<footer class="bar edfoot" id="edfoot">', page)
-        self.assertIn('Map Maker <span id="mapmaker-version">v%s</span>' % ver, page)
-        self.assertIn('<span id="mapmaker-build">local</span>', page)
-        for href in ('href="/"', 'href="/matches"', 'href="/changelog"', 'href="/legal"'):
+        self.assertIn(' data-maker="v%s"' % ver, page)
+        self.assertEqual(sorted(re.findall(r"@@\w+@@", page)), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])
+        for href in ('href="/"', 'href="/matches"'):                                            # (the footer's links that the bar has too; the Menu has the Changelog and Legal)
             self.assertIn(href, page)
 
     def test_the_objects_palette_of_seven_rows_has_its_short_window_rule(self):
@@ -1638,15 +1637,18 @@ class TheImageCarriesThePage(unittest.TestCase):
             self.assertIn(part, rules[0])
         self.assertEqual(len(re.findall(r"\.swatches\.objects \{ grid-template-columns: repeat\(5, 1fr\); gap: 3px; \}", css)), 1, "five chips to a row, as the picture that was approved shows")
 
-    def test_the_footer_line_sits_above_the_screens_frame(self):
-        """the screen's frame (classic.css, --screen-frame) lies over the last pixels of the page: the footer's bottom padding must be at least as thick as the frame, or the line is cut by the red edge (browser part `foot`)"""
+    def test_the_editor_ends_above_the_screens_frame(self):
+        """the screen's frame (classic.css, --screen-frame) lies over the last pixels of the page: the bottom padding of the editor's row must be at least as thick as the frame, or the panels are cut by the red edge
+        (browser part `foot` measures it)"""
         frame = max(int(n) for n in re.findall(r"inset 0 0 0 (\d+)px", re.search(r"--screen-frame:([^;]*);", read("web", "front", "classic.css")).group(1)))
         self.assertGreaterEqual(frame, 10)
-        rules = [r for r in re.findall(r"\.edfoot \{([^}]*)\}", read("web", "front", "mapmaker.css")) if "padding:" in r]
-        self.assertGreaterEqual(len(rules), 2, "the desktop's rule and the phone's")
+        css = read("web", "front", "mapmaker.css")
+        self.assertNotIn("edfoot", css)
+        rules = [r for r in re.findall(r"\.edbody \{([^}]*)\}", css) if "padding:" in r]
+        self.assertGreaterEqual(len(rules), 3, "the desktop's rule, the phone's and the phone held sideways")
         for rule in rules:
             sides = [float(v) for v in re.search(r"padding:\s*([^;]*);", rule).group(1).replace("px", "").split()]
-            self.assertGreaterEqual(sides[2] if len(sides) > 2 else sides[0], frame, "the footer's bottom padding clears the frame: %s" % rule.strip())
+            self.assertGreaterEqual(sides[2] if len(sides) > 2 else sides[0], frame, "the editor's bottom padding clears the frame: %s" % rule.strip())
 
     def test_every_file_of_the_page_is_in_front_and_the_folder_is_copied_whole(self):
         self.assertIn("COPY web/front/ /usr/share/nginx/html/front/", read("Dockerfile"))

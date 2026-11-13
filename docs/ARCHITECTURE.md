@@ -186,6 +186,8 @@ ants-cross-platform/
 │   │                                   # this machine, the pages served with nginx, for the browser checks
 │   ├── ci_light.sh                     # Does a pull request need all of CI or only the light checks? (the first job
 │   │                                   # of ci.yml: pages, documents and page tests only)
+│   ├── make_app_icons.py               # Draws the app icons (web/app/) and the browser-tab icon (web/favicon.*): pixel ant head
+│   │                                   # (needs Pillow; a developer's tool, in no build or test)
 │   └── front_page_art/                 # Makes the front page's pictures in web/front/ from the game's own assets
 │                                       # (needs Pillow; a developer's tool, in no build or test)
 ├── web/                                # The web build's page files
@@ -197,8 +199,8 @@ ants-cross-platform/
 │   ├── front/                          # The front page's pictures, rules and chat box (lobby_rules.js, lobby_net.js, lobby_chat.js and .css, map_picker.js and .css, game_modes.js and game_type.js and .css; art made by tools/front_page_art), its font Libre
 │   │                                   # Franklin (SIL Open Font License, licence beside it) and classic.css, the
 │   │                                   # look that the other pages link
-│   ├── favicon.ico                     # Site icon
-│   └── favicon.png                     # Site icon (PNG)
+│   ├── favicon.ico                     # Browser-tab icon (16, 32, 48 px frames)
+│   └── favicon.png                     # Browser-tab icon (PNG, 32 px)
 ├── .github/
 │   ├── CODEOWNERS                      # Who reviews a change; the build, container, deployment and automation
 │   │                                   # files have lines of their own
