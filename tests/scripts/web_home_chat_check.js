@@ -978,7 +978,7 @@ function bring(env) {                                     // the two files arriv
 // 7. The source of the script
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 {
-    const code = chatSource.replace(/\/\/.*/g, '');
+    const code = chatSource.replace(/\/\/.*/g, '').replace("img.setAttribute('src', PICDIR + ok + PICEXT);", '');       // (the one address of a picture: made of a checked name and two constants, checked in section 11)
     check('chat.js builds nothing from markup, runs nothing from text, keeps nothing in the browser and makes no link', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|localStorage|sessionStorage|indexedDB|document\.cookie|createElement\(['"]a['"]\)|setAttribute\(['"](href|src|style|on)/.test(code));
     check('chat.js names no other site (no http:// or https:// address at all) and loads nothing', !/https?:\/\//.test(code) && !/XMLHttpRequest|importScripts|\bimport\b/.test(code));
     check('the one thing that it asks for is a POST of the page itself to the two pages of the login (/hub/logout, /hub/forget): `fetch` is in one line, and it is that one', (code.match(/\bfetch\b/g) || []).length === 2 && code.indexOf('var f = env.fetch || win.fetch;') !== -1
@@ -1680,6 +1680,114 @@ const tagOf = (row) => one(row, 'gc-tag') ? one(row, 'gc-tag').textContent : nul
     nosub.key('Enter');
     check('where the form has no requestSubmit (iOS 15) Enter sends a cancelable submit event to it, which the other buttons hear, and the line goes once', heard === 1 && nosub.r.said().length === 1 && nosub.r.said()[0].text === 'no requestSubmit');
     check('the field has a hint that is read with its name: "Enter sends the message."', mk(true).f.getAttribute('aria-describedby') === 'gchat-hint' && one(mk(true).r.root, 'gc-hint') !== null && one(mk(true).r.root, 'gc-hint').id === 'gchat-hint' && one(mk(true).r.root, 'gc-hint').textContent === 'Enter sends the message.');
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 11. The pictures: the account chip's circle, the switch in the dropdown and its four states (the Players list's circles are in web_home_players_check.js)
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    const NAME = 'a1b2c3d4e5f60718293a4b5c6d7e8f90', OTHER = '0123456789abcdef0123456789abcdef';
+    const P = Pure;
+    same('picOf: exactly 32 lower-case hex characters is a name; nothing else is (capitals, 31, 33, a path, an address, a number, an object, null, a line end)',
+        [NAME, OTHER, NAME.toUpperCase(), NAME.slice(1), NAME + '0', '../' + NAME.slice(3), 'https://x.example/' + NAME, 5, {}, [NAME], null, undefined, NAME + '\n', NAME.slice(0, 31) + 'g'].map((v) => P.picOf(v)), [NAME, OTHER].concat(Array(12).fill('')));
+    same('youOf reads `pic` (a checked name) and `pics` (on, off or blocked) and nothing else of them', [P.youOf({ name: 'a', pic: NAME, pics: 'on' }), P.youOf({ name: 'a', pic: 'x', pics: 'maybe' })].map((y) => [y.pic, y.pics]), [[NAME, 'on'], ['', '']]);
+
+    const withYou = (extra) => Object.assign({}, YOU, extra);
+    const imgsOf = (circle) => circle.children.filter((c) => c.tagName === 'img');
+    const circle = (r) => one(r.chip, 'gc-av');
+    const r = rig({ chip: true });
+    r.live(W({ login: true, you: withYou({ pic: NAME, pics: 'on' }) }));
+    const img = imgsOf(circle(r))[0];
+    same('a visitor with a picture: one img in the chip\'s circle, the address from the name only, the attributes set', [imgsOf(circle(r)).length, img && img.attributes],
+        [1, { src: '/hub/pic/' + NAME + '.png', alt: '', width: '28', height: '28', loading: 'lazy', decoding: 'async', draggable: 'false' }]);
+    check('the letter is in the circle and not hidden before the picture has loaded', circle(r).textContent === 'm' && circle(r).getAttribute('data-pic') === null);
+    img.fire('load');
+    check('a loaded picture hides the letter', circle(r).getAttribute('data-pic') === 'on');
+    r.s().recv({ t: 'online', n: 9 }); r.chip.click(); r.chip.click();
+    check('painting again does not make the picture again (the same img stays)', imgsOf(circle(r)).length === 1 && imgsOf(circle(r))[0] === img && circle(r).getAttribute('data-pic') === 'on');
+    r.s().recv({ t: 'you', you: withYou({ pics: 'on' }) });
+    same('a `you` without `pic` takes the chip\'s picture away and brings the letter back', [imgsOf(circle(r)).length, circle(r).textContent, circle(r).getAttribute('data-pic')], [0, 'm', null]);
+    r.s().recv({ t: 'you', you: withYou({ pic: OTHER, pics: 'on' }) });
+    same('a `you` with one puts it on (a new name is a new address)', imgsOf(circle(r)).map((i) => i.attributes.src), ['/hub/pic/' + OTHER + '.png']);
+    imgsOf(circle(r))[0].fire('error');
+    same('a picture that fails to load is removed: the letter is exactly as without a picture, no broken image', [imgsOf(circle(r)).length, circle(r).textContent, circle(r).getAttribute('data-pic')], [0, 'm', null]);
+    r.s().recv({ t: 'online', n: 3 });
+    check('... and a failed name is not asked for again at the next paint', imgsOf(circle(r)).length === 0);
+    r.s().recv({ t: 'you', you: withYou({ pic: NAME, pics: 'on' }) });
+    check('... a different name is', imgsOf(circle(r)).length === 1);
+    const odd = ['A1B2C3D4E5F60718293A4B5C6D7E8F90', NAME.slice(0, 31), NAME + '0', '../' + NAME.slice(3), 'https://x.example/' + NAME + '.png', 12345, { a: 1 }, null, ''];
+    odd.forEach((v) => {
+        const q = rig({ chip: true });
+        q.live(W({ login: true, you: withYou({ pic: v, pics: 'on' }) }));
+        check('a `pic` of ' + JSON.stringify(v) + ' makes no img', q.chip.findAll((e) => e.tagName === 'img').length === 0 && q.errors.length === 0);
+    });
+    const lookalike = rig({ chip: true }); lookalike.live(W({ login: true, you: { name: NAME, mod: false, k: OTHER, pick: 'display', other: NAME, pics: 'on' } }));
+    check('a picture comes only from the `pic` field: a name, a key or another name that looks like a picture name draws none', lookalike.chip.findAll((e) => e.tagName === 'img').length === 0);
+    const nobody = rig({ chip: true });
+    nobody.live(W({ login: true, you: null }));
+    check('nobody named: no picture on the chip', nobody.chip.findAll((e) => e.tagName === 'img').length === 0);
+    check('no picture was written as markup', r.env.innerHTMLWrites.length === 0 && r.errors.length === 0);
+}
+{   // the switch
+    const NAME = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const open = (extra, o) => { const r = rig(Object.assign({ chip: true }, o)); r.live(W({ login: true, you: Object.assign({}, YOU, extra) })); r.chip.click(); return r; };
+    const box = (r) => one(r.dock.slot, 'gc-swb'), note = (r) => one(r.dock.slot, 'gc-swn'), again = (r) => one(r.dock.slot, 'gc-again');
+    const sent = (r) => r.sockets.reduce((all, s) => all.concat(s.sent.map((x) => JSON.parse(x)).filter((m) => m.t === 'pics')), []);
+    const state = (r) => ({ shown: shows(box(r)), on: box(r).checked, off: box(r).disabled, note: note(r).textContent, again: shows(again(r)) });
+    const NOTE = 'Everyone on the front page sees it next to your name.';
+    const none = open({});
+    check('on a hub that sends no `pics` the switch is not shown at all', shows(box(none)) === false && shows(note(none)) === false && shows(again(none)) === false && sent(none).length === 0);
+    const guest = rig({ chip: true }); guest.live(W({ login: true, you: null }));
+    check('a guest has no switch', shows(box(guest)) === false);
+    same('on, with a picture', state(open({ pics: 'on', pic: NAME })), { shown: true, on: true, off: false, note: NOTE, again: false });
+    same('on, with no picture yet: the note says it is loaded at login, and the button is there', state(open({ pics: 'on' })), { shown: true, on: true, off: false, note: 'Your picture is loaded when you log in.', again: true });
+    same('off', state(open({ pics: 'off' })), { shown: true, on: false, off: false, note: NOTE, again: false });
+    same('blocked: the box is off and cannot be pressed, and the note says it is hidden on this site', state(open({ pics: 'blocked' })), { shown: true, on: false, off: true, note: 'Your picture is hidden on this site.', again: false });
+    const look = open({ pics: 'off' });
+    check('the box is a real checkbox with a label that says "Show my Discord picture", tied to its note', box(look).type === 'checkbox' && box(look).parent.tagName === 'label' && box(look).parent.textContent === 'Show my Discord picture' && box(look).getAttribute('aria-describedby') === note(look).id && !!note(look).id);
+
+    // a press
+    const r = open({ pics: 'off' });
+    box(r).focus();
+    box(r).checked = true; box(r).fire('change');
+    r.env.doc.activeElement = null;       // (a browser takes the focus from a box that is turned off)
+    same('switching on sends {t:"pics",on:true} once, and the box waits (off) for the hub, showing what was pressed', [sent(r), box(r).disabled, box(r).checked], [[{ t: 'pics', on: true }], true, true]);
+    box(r).checked = false; box(r).fire('change');
+    check('a press while it waits sends nothing more', sent(r).length === 1);
+    r.s().recv({ t: 'you', you: Object.assign({}, YOU, { pics: 'on', pic: NAME }) });
+    check('a box that had the focus when it was pressed has it again when the wait is over (a keyboard user keeps the place)', r.env.doc.activeElement === box(r));
+    same('the hub\'s `you` ends the wait and the box shows what the hub says', [box(r).disabled, box(r).checked, note(r).textContent], [false, true, NOTE]);
+    r.clock.advance(20000);
+    check('... and the timer of the wait is gone (nothing comes back later)', note(r).textContent === NOTE && box(r).checked === true);
+    box(r).checked = false; box(r).fire('change');
+    same('switching off sends {t:"pics",on:false}', sent(r).slice(1), [{ t: 'pics', on: false }]);
+    r.s().recv({ t: 'err', code: 'pics' });
+    same('a refusal puts the box back to what the hub last said, enabled, with "That did not work, try again"', [box(r).checked, box(r).disabled, note(r).textContent], [true, false, 'That did not work, try again']);
+    box(r).checked = false; box(r).fire('change');
+    check('it can be pressed again after a refusal, and the old words go', sent(r).length === 3 && note(r).textContent === NOTE);
+    r.clock.advance(7999);
+    check('7.9 seconds of silence is still waiting', box(r).disabled === true && box(r).checked === false);
+    r.clock.advance(2);
+    same('8 seconds of silence puts the box back, enabled, with the same words', [box(r).checked, box(r).disabled, note(r).textContent], [true, false, 'That did not work, try again']);
+    r.s().recv({ t: 'you', you: Object.assign({}, YOU, { pics: 'off' }) });
+    same('a later `you` (the hub answered late, or a picture came) shows its state and drops the words', [box(r).checked, note(r).textContent], [false, NOTE]);
+    const dead = open({ pics: 'off' });
+    dead.s().readyState = 3;
+    box(dead).checked = true; box(dead).fire('change');
+    same('where the socket cannot send, the box comes back at once with the words', [sent(dead).length, box(dead).checked, box(dead).disabled, note(dead).textContent], [0, false, false, 'That did not work, try again']);
+    const blocked = open({ pics: 'blocked' });
+    box(blocked).checked = true; box(blocked).fire('change');
+    same('a blocked account sends nothing, whatever is pressed, and the box stays off', [sent(blocked).length, box(blocked).checked], [0, false]);
+    const login = open({ pics: 'on' });
+    again(login).click();
+    same('"Log in again" is the login navigation of the page, once, and nothing is sent', [login.went, sent(login).length], [['/hub/login?next=home'], 0]);
+    const guestSays = open({ pics: 'off' });
+    box(guestSays).checked = true; box(guestSays).fire('change');
+    guestSays.s().recv({ t: 'err', code: 'login' });
+    check('a refusal "login" to the switch is a refusal of the switch too', box(guestSays).checked === false && box(guestSays).disabled === false);
+    const kids = r.dock.slot.children, at = (c) => kids.indexOf(one(r.dock.slot, c));
+    check('the switch stands between the name choice and Log out', at('gc-pick') < at('gc-sw') && at('gc-sw') < at('gc-out') && at('gc-pick') >= 0);
+    check('nothing of the switch was written as markup or threw', [r, none, dead, blocked, login].every((q) => q.env.innerHTMLWrites.length === 0 && q.errors.length === 0));
 }
 
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');

@@ -79,6 +79,16 @@ function startHub(options) {
         hub.received.push(m);
         if (m.t === 'ping') { hub.send(peer, { t: 'online', n: o.online }); return; }
         if (m.t === 'who' || m.t === 'here') { if (m.t === 'who' && o.who) hub.send(peer, o.who); return; }       // (the players list: o.who is the frame that answers a `who`; a `here` is taken and not answered)
+        if (m.t === 'pics') {                          // the picture switch (docs/HUB.md): a refusal for a guest or an account with no switch; o.picsMode 'refuse' or 'silent' for the bad days; else the account's `you` again, to every socket
+            const y = o.you;
+            if (!y) { hub.send(peer, { t: 'err', code: 'login' }); return; }
+            if (!y.pics || y.pics === 'blocked' || typeof m.on !== 'boolean' || o.picsMode === 'refuse') { hub.send(peer, { t: 'err', code: 'pics' }); return; }
+            if (o.picsMode === 'silent') return;
+            o.you = Object.assign({}, y, { pics: m.on ? 'on' : 'off' });
+            if (!m.on) delete o.you.pic;
+            hub.broadcast({ t: 'you', you: o.you });
+            return;
+        }
         if (m.t === 'pick') {
             const y = o.you;
             if (!y || !y.other || (m.pick !== 'display' && m.pick !== 'username')) { hub.send(peer, { t: 'err', code: 'pick' }); return; }

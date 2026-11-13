@@ -3262,6 +3262,139 @@
    "old": "if (refused.cmd) answer([code === 'bad'",
    "new": "if (refused.cmd && code !== 'banned') answer([code === 'bad'",
    "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_name_check_loosened",
+   "file": "web/home/chat.js",
+   "old": "/^[0-9a-f]{32}$/",
+   "new": "/^[0-9a-f]{32}/",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_name_check_takes_capitals",
+   "file": "web/home/chat.js",
+   "old": "/^[0-9a-f]{32}$/",
+   "new": "/^[0-9a-fA-F]{32}$/",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_name_taken_unchecked_from_the_frame",
+   "file": "web/home/chat.js",
+   "old": "pic: picOf(y.pic),",
+   "new": "pic: typeof y.pic === 'string' ? y.pic : '',",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_read_from_another_field",
+   "file": "web/home/chat.js",
+   "old": "pic: picOf(y.pic),",
+   "new": "pic: picOf(y.name),",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_kept_after_an_error",
+   "file": "web/home/chat.js",
+   "old": "img.addEventListener('error', function () { if (img.parentNode) img.parentNode.removeChild(img); });",
+   "new": "img.addEventListener('error', function () { });",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_drawn_with_no_name",
+   "file": "web/home/chat.js",
+   "old": "        if (!ok) return;\n        var img",
+   "new": "        var img",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_load_does_not_hide_the_letter",
+   "file": "web/home/chat.js",
+   "old": "circle.setAttribute('data-pic', 'on'); });",
+   "new": "circle.setAttribute('data-x', 'on'); });",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "pic_made_again_at_every_paint",
+   "file": "web/home/chat.js",
+   "old": "        if (now && now.name === ok) return;\n",
+   "new": "",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "chip_pic_not_cleared_by_a_you_without_pic",
+   "file": "web/home/chat.js",
+   "old": "you.pic = next.pic;",
+   "new": "you.pic = next.pic || you.pic;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_shown_without_pics",
+   "file": "web/home/chat.js",
+   "old": "swRow.hidden = !(you && you.pics);",
+   "new": "swRow.hidden = !you;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_sends_the_opposite",
+   "file": "web/home/chat.js",
+   "old": "out({ t: 'pics', on: picWant })",
+   "new": "out({ t: 'pics', on: !picWant })",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_box_not_put_back_after_a_refusal",
+   "file": "web/home/chat.js",
+   "old": "function failPic() { picWait = false; stop('pics');",
+   "new": "function failPic() { stop('pics');",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_wait_is_not_ended_by_the_you_frame",
+   "file": "web/home/chat.js",
+   "old": "you.pics = next.pics; picPending(false);",
+   "new": "you.pics = next.pics;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_silence_wait_far_too_long",
+   "file": "web/home/chat.js",
+   "old": "regain: 1000, pics: 8000, flood",
+   "new": "regain: 1000, pics: 800000, flood",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_blocked_box_stays_enabled",
+   "file": "web/home/chat.js",
+   "old": "swBox.disabled = pp === 'blocked' || picWait;",
+   "new": "swBox.disabled = picWait;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_blocked_account_sends",
+   "file": "web/home/chat.js",
+   "old": "if (picWait || !you || !you.pics || you.pics === 'blocked') {",
+   "new": "if (picWait || !you || !you.pics) {",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_press_while_waiting_sends_again",
+   "file": "web/home/chat.js",
+   "old": "if (picWait || !you ||",
+   "new": "if (!you ||",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_log_in_again_does_nothing",
+   "file": "web/home/chat.js",
+   "old": "swAgain.addEventListener('click', guard(startLogin));",
+   "new": "swAgain.addEventListener('click', guard(function () { }));",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "switch_none_state_hides_the_button",
+   "file": "web/home/chat.js",
+   "old": "swAgain.hidden = !(gone && !picWait && !picFailed);",
+   "new": "swAgain.hidden = true;",
+   "test": "node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }
