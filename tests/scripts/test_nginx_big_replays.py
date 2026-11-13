@@ -71,6 +71,9 @@ def replay_with_map(map_bytes, padding=0, map_name="Draft Map ~test-0badf00d.lvl
 
 def free_port():
     """A number of this process's own range of ports (quick_http.free_port): two tests side by side are never given the same one."""
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import quick_http
     return quick_http.free_port()
 
