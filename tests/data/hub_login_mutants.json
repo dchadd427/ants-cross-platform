@@ -1407,7 +1407,7 @@
   {
    "id": "legal_forgets_to_say_what_is_kept",
    "file": "web/legal.html",
-   "old": "They are kept so that the site knows who you are and shows the name that you pick, and for nothing else.",
+   "old": "They are kept so that the site knows who you are, shows the name that you pick and shows your picture, and for nothing else.",
    "new": "They are used.",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1428,7 +1428,7 @@
   {
    "id": "legal_forgets_to_say_how_to_forget",
    "file": "web/legal.html",
-   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username and display name from the site&rsquo;s records; a ban or a mute, if there is one, stays.",
+   "old": "<strong>Forget me</strong> ends every login of your account, deletes your chat lines that are still kept and removes your username, display name and the copy of your picture from the site&rsquo;s records; a ban or a mute, if there is one, stays, and so does the operator&rsquo;s hiding of your picture, kept as one entry under the same kind of code, with no id and no name.",
    "new": "Ask us.",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1799,8 +1799,8 @@
   {
    "id": "legal_forgets_the_display_name",
    "file": "web/legal.html",
-   "old": "<strong>display name</strong>. They are kept",
-   "new": "<strong>name</strong>. They are kept",
+   "old": "<strong>display name</strong> and, if you have set one",
+   "new": "<strong>name</strong> and, if you have set one",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
   {
@@ -1813,7 +1813,7 @@
   {
    "id": "legal_says_two_things_only",
    "file": "web/legal.html",
-   "old": "three things only",
+   "old": "four things only",
    "new": "two things only",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   },
@@ -1830,6 +1830,69 @@
    "old": "profiles_total: int = 100000",
    "new": "profiles_total: int = 1000000000",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheCapOfProfiles tests.scripts.test_hub_login.TheLimitsAreWhatTheDocsSay"
+  },
+  {
+   "id": "legal_forgets_that_a_picture_is_fetched_once",
+   "file": "web/legal.html",
+   "old": "fetches one small copy of your Discord profile picture from Discord, once, and keeps it on its own server",
+   "new": "fetches your Discord profile picture",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_says_other_browsers_ask_discord",
+   "file": "web/legal.html",
+   "old": "other people&rsquo;s browsers do not contact Discord for it",
+   "new": "other people&rsquo;s browsers ask Discord for it",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_thirty_days_of_a_picture",
+   "file": "web/legal.html",
+   "old": "for at most 30 days after the login that fetched it",
+   "new": "for ever",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_says_the_copy_stays_when_switched_off",
+   "file": "web/legal.html",
+   "old": "deletes the copy from the server at once, and so does a kick or a ban",
+   "new": "keeps the copy on the server",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_cache_of_a_picture",
+   "file": "web/legal.html",
+   "old": "Its address can still answer for up to five minutes, and",
+   "new": "The browser",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_the_remembered_off",
+   "file": "web/legal.html",
+   "old": "for 400 days after your last login; Forget me deletes that too",
+   "new": "for ever",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_that_the_operator_may_hide_a_picture",
+   "file": "web/legal.html",
+   "old": " or the site&rsquo;s operator hides it",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_forgets_that_a_block_stays_after_forget_me",
+   "file": "web/legal.html",
+   "old": ", and so does the operator&rsquo;s hiding of your picture, kept as one entry under the same kind of code, with no id and no name",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
+  },
+  {
+   "id": "legal_says_the_picture_is_shown_to_members_only",
+   "file": "web/legal.html",
+   "old": "shown to everyone who opens the front page, logged in or not,",
+   "new": "shown to people who are logged in,",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_legal"
   }
  ]
 }
