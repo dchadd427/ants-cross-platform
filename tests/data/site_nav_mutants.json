@@ -112,8 +112,8 @@
   {
    "id": "live_page_asks_for_the_count",
    "file": "web/live.html",
-   "old": "<header class=\"sb\">",
-   "new": "<header class=\"sb\" data-live=\"now\">",
+   "old": "<header class=\"sb\" data-version=",
+   "new": "<header class=\"sb\" data-live=\"now\" data-version=",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
   },
   {
@@ -178,6 +178,48 @@
    "old": "if (bar.getAttribute('data-live') === 'menu') look();",
    "new": "look();",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "version_line_shows_an_unstamped_value",
+   "file": "web/site_nav.js",
+   "old": "return v && v.indexOf('@') < 0 ? v : '';",
+   "new": "return v;",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "version_line_is_not_added_to_the_menu",
+   "file": "web/site_nav.js",
+   "old": "if (stamp()) box.appendChild(make('p', 'sbver', stamp()));",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "build_date_reads_the_wrong_stamp",
+   "file": "web/site_nav.js",
+   "old": "got('data-built')",
+   "new": "got('data-build')",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "small_links_lose_feedback",
+   "file": "web/site_nav.js",
+   "old": "['Feedback', 'https://github.com/dchadd427/ants-cross-platform/issues'], ",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "footer_back_on_the_matches_page",
+   "file": "web/matches.html",
+   "old": "<script src=\"site_nav.js\"></script>",
+   "new": "<footer class=\"bar\"><div class=\"bar-in\"></div></footer>\n<script src=\"site_nav.js\"></script>",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "legal_page_is_not_stamped_by_the_image_build",
+   "file": "Dockerfile",
+   "old": "web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "new": "web/live.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_without_docker.TheRealDockerfileReplayed"
   }
  ]
 }

@@ -34,7 +34,7 @@ PAGE_SIZE_PHONE = 5
 PHONE_WIDTH = 700
 
 # The page's own rules (the look itself is /front/classic.css): the panels of the intro, the list of releases and each release; a release's heading, its text, links and code; the page bar
-STYLE = """main { margin-top: 26px; }
+STYLE = """main { margin: 26px 0 32px; }
 .panel { margin: 0 0 22px; padding: 16px 22px; overflow-x: auto; overflow-wrap: anywhere; }
 .panel > :last-child { margin-bottom: 0; }
 .panel p, .panel li { font-size: 15px; line-height: 1.55; }
@@ -70,7 +70,7 @@ section h2 a { color: var(--gold); }
 main:not(.paged) section:target { border-color: var(--gold); }
 section.deep { border-color: var(--gold); }
 @media (max-width: @PHONE_WIDTH@px) {
-    main { margin-top: 16px; }
+    main { margin: 16px 0 24px; }
     .panel { padding: 14px 14px; }
     .versions summary { padding: 10px 14px; }
     .versions nav { padding: 2px 14px 12px; max-height: 9.5em; overflow-y: auto; }

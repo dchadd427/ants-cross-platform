@@ -66,4 +66,4 @@ APP_ICONS_BUDGET = 73_600
 APP_MANIFEST_BUDGET = 1_300
 # the bar at the top of every page (web/site_nav.css, web/site_nav.js)
 NAV_CSS_BUDGET, NAV_CSS_GZIP_BUDGET = 5_900, 1_900
-NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 4_400, 1_800
+NAV_JS_BUDGET, NAV_JS_GZIP_BUDGET = 5_500, 2_500        # (site_nav.js measured 4,742 bytes, 1,840 gzipped, with the Menu's last line)

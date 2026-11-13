@@ -43,10 +43,11 @@ def footer_links(page):
 
 
 class TheLink(unittest.TestCase):
-    """The way to the matches: "Matches" (the list of every match) and "Live now" (the matches that are being played) in the footer of the front page, the game page and the three pages of the match history,
-    and a "Matches" button in the header of the front page and of the game page (docs/REPLAYS.md "The match pages"). It was one link, "Watch matches", to one list of the recordings."""
+    """The way to the matches: "Matches" (the list of every match) and "Live now" (the matches that are being played) in the footer of the front page and the game page, in the bar at the top of the three pages
+    of the match history (they have no footer), and a "Matches" button in the header of the front page and of the game page (docs/REPLAYS.md "The match pages"). It was one link, "Watch matches", to one list of the recordings."""
 
-    PAGES = (("the game page", "shell.html", "Menu"), ("the front page", "lobby.html", "How it works"), ("the list", "matches.html", None), ("a match", "match.html", None), ("the live page", "live.html", None))
+    PAGES = (("the game page", "shell.html", "Menu"), ("the front page", "lobby.html", "How it works"))
+    HISTORY = ("matches.html", "match.html", "live.html")
 
     def test_every_page_with_the_footer_links_has_matches_then_live_now_once_each(self):
         for name, file, before in self.PAGES:
@@ -62,7 +63,12 @@ class TheLink(unittest.TestCase):
                 self.assertIn('id="watch-link"', [f for f in found if f[2] == "Matches"][0][1], name)
             self.assertFalse({"Watch matches", "Watch live", "Watch replays"} & set(texts), name)               # (the old names are gone)
         for file, label in (("matches.html", "Matches"), ("match.html", "Matches"), ("live.html", "Live now")):
-            self.assertIn('aria-current="page"', [f for f in footer_links(read("web", file)) if f[2] == label][0][1], file)      # (a page marks its own place)
+            page = read("web", file)
+            self.assertNotIn("<footer", page, file)
+            row = re.search(r'<nav aria-label="Pages">(.*?)</nav>', page, re.S).group(1)
+            links = re.findall(r'<a class="btn[a-z ]*" href="([^"]+)"([^>]*)>(?:<span>)?([^<]+)', row)
+            self.assertEqual([l[2] for l in links][1:3], ["Matches", "Live now"], file)                  # (the bar's row: Home, Matches, Live now, ...)
+            self.assertIn('aria-current="page"', [l for l in links if l[2] == label][0][1], file)       # (a page marks its own place)
         self.assertIn("$('watch-link').setAttribute('aria-current', 'page');", read("web", "shell.html"))     # (the game page in replay or live mode says where the player is)
         for file, title in (("matches.html", "Matches"), ("match.html", "Match"), ("live.html", "Live now")):
             self.assertIn("<title>%s \u2014 Ants (1998)@@SITE_TITLE@@</title>" % title, read("web", file))     # (the tab's title agrees with the link)
@@ -512,7 +518,7 @@ class TheFiles(unittest.TestCase):
             self.assertIn(name, build, name)
         for name in ("matches", "match", "live"):
             self.assertRegex(dockerfile, r"COPY --from=builder /src/%s\.html [^\n]*%s\.html" % (name, name))
-        self.assertIn("for PAGE in matches match live; do", build)
+        self.assertIn("for PAGE in matches match live legal; do", build)
         self.assertRegex(ci, r"ls -l index\.html play\.html lobby\.html matches\.html match\.html live\.html matches\.css history_page\.js replay_stats\.css replay_page\.js")
         self.assertIn("index.data match_stats.js match_stats.css countdown_button.js", ci)                 # (the stats sections of the match page are in the image too)
         self.assertNotIn("watch.html", dockerfile + build + ci)                                              # (the list of the recordings is gone: the pages of the match history replace it)
