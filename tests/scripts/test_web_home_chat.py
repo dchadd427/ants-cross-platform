@@ -149,7 +149,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
         self.assertNotRegex(self.code, r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)))
-        self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "input", "p", "section", "span"], "no a, img, script, iframe, style or link: the dock makes text and boxes")
+        self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "p", "section", "span", "textarea"], "no a, img, script, iframe, style or link: the dock makes text and boxes")
         self.assertEqual(self.code.count("createElement"), 1, "one place makes elements")
         self.assertIn("if (text !== undefined) e.textContent = text;", self.js)
 

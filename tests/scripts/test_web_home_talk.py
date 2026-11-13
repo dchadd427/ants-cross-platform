@@ -245,12 +245,19 @@ class TheStyle(unittest.TestCase):
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto; }", self.css)
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
-    def test_a_narrow_form_puts_the_two_buttons_in_a_row_of_their_own_under_the_field_and_send(self):
-        self.assertIn("@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {", self.css)
-        narrow = self.css[self.css.index("@media (max-width: 420px)"):]
-        self.assertIn("grid-template-columns: minmax(0, 1fr) auto; }", narrow)
+    def test_the_middle_widths_put_the_two_buttons_in_a_row_of_their_own_under_the_field_and_send(self):
+        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n    .gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto; }", self.css)
+        narrow = self.css[self.css.index("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n"):]
         self.assertIn(".gt-on .gt-tools { order: 3; grid-column: 1 / -1; }", narrow)
         self.assertIn(".gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }", narrow, "the field, Send and the login button keep their order when the buttons move to the last row")
+
+    def test_a_phone_upright_has_one_box_with_the_words_on_top_and_the_buttons_under_them(self):
+        box = re.search(r"@media \(max-width: 700px\) and \(min-height: 501px\) \{(.*?)\n\}", self.css, re.S).group(1)
+        self.assertIn('grid-template-areas: "f f f" "t . s";', box, "the field over the whole width, the two buttons at the left and Send at the right of the row under it")
+        self.assertIn("border-radius: 22px;", box)
+        self.assertRegex(box, r"\.gt-say \{[^}]*position: absolute;", "the line of words is a bubble: it takes no room")
+        self.assertRegex(box, r"textarea\.gc-input \{[^}]*max-height: 110px;[^}]*overflow-y: auto;", "four lines, then the words scroll")
+        self.assertRegex(box, r"\.gc-send \{[^}]*min-height: 44px;")
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         for selector in (".gt-btn", ".gt-e"):

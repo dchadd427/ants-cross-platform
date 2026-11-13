@@ -105,8 +105,8 @@
   {
    "id": "a_send_does_not_stop_the_voice",
    "file": "web/home/talk.js",
-   "old": "form.addEventListener('submit', function () { drop(); close(false); });",
-   "new": "form.addEventListener('submit', function () { close(false); });",
+   "old": "form.addEventListener('submit', function () { drop(); close(false); note(''); });",
+   "new": "form.addEventListener('submit', function () { close(false); note(''); });",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
@@ -245,8 +245,8 @@
   {
    "id": "the_tools_row_is_not_made_in_the_middle_widths",
    "file": "web/home/talk.css",
-   "old": "@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {",
-   "new": "@media (max-width: 420px) {",
+   "old": "@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n    .gc-form.gt-on",
+   "new": "@media (min-width: 701px) and (max-width: 700px) and (min-height: 501px) {\n    .gc-form.gt-on",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   },
   {
@@ -401,6 +401,62 @@
    "file": "web/home/talk.js",
    "old": "'service-not-allowed': 'service'",
    "new": "'service-not-allowed': 'blocked'",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bubble_stays",
+   "file": "web/home/talk.js",
+   "old": "if (text && text !== TEXT.asking && text !== TEXT.listening) gone = setTimeout(",
+   "new": "if (false) gone = setTimeout(",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bubble_goes_while_it_listens",
+   "file": "web/home/talk.js",
+   "old": "text !== TEXT.asking && text !== TEXT.listening",
+   "new": "true",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "the_bubble_stays_a_minute",
+   "file": "web/home/talk.js",
+   "old": "var BUBBLE = 6000;",
+   "new": "var BUBBLE = 60000;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "an_old_timer_takes_a_new_line",
+   "file": "web/home/talk.js",
+   "old": "if (gone) { clearTimeout(gone); gone = 0; }",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "typing_keeps_the_bubble",
+   "file": "web/home/talk.js",
+   "old": "else note(''); });",
+   "new": "});",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_pick_does_not_grow_the_box",
+   "file": "web/home/talk.js",
+   "old": "note(''); field.value = r.value; grown();",
+   "new": "note(''); field.value = r.value;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "heard_words_do_not_grow_the_box",
+   "file": "web/home/talk.js",
+   "old": "var r = speak(me.before, me.text, me.after); field.value = r.value; grown();",
+   "new": "var r = speak(me.before, me.text, me.after); field.value = r.value;",
+   "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
+  },
+  {
+   "id": "a_send_keeps_the_bubble",
+   "file": "web/home/talk.js",
+   "old": "close(false); note(''); });",
+   "new": "close(false); });",
    "test": "python3 tests/scripts/test_web_home_talk.py TheHubsRules ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle ThePrivacyWords TheWayIntoTheImage && node tests/scripts/web_home_talk_check.js web/lobby.html"
   }
  ]

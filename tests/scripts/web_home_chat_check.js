@@ -1328,5 +1328,68 @@ const menuOf = (r) => { const live = r.live; r.live = (...args) => { const sock 
     });
 }
 
+{   // the field is a text area: it grows with its words on a phone held upright, Enter sends, a line break is never kept, a press on Send keeps the focus
+    const mk = (upright) => {
+        const r = rig({ width: 390, height: 844 });
+        r.win.matchMedia = () => ({ matches: upright });
+        r.live(W({ you: YOU }));
+        const f = r.field();
+        Object.defineProperty(f, 'scrollHeight', { get() { return 22 + 22 * Math.max(1, Math.ceil(this.value.length / 20)); } });       // (a stand-in for the browser's: the padding and 22 px for each line of 20 characters)
+        f.setSelectionRange = (a, b) => { f.selectionStart = a; f.selectionEnd = b; };
+        const type = (text) => { f.value = text; f.fire('input', {}); };
+        const key = (k, o) => { let stopped = false; f.fire('keydown', Object.assign({ key: k, preventDefault() { stopped = true; } }, o)); return stopped; };
+        return { r, f, type, key };
+    };
+    check('the field is a text area of one row that says which way its text runs', mk(true).f.tagName === 'textarea' && mk(true).f.getAttribute('rows') === '1' && mk(true).f.getAttribute('dir') === 'auto');
+    const up = mk(true);
+    same('a phone upright: one line is 44 px, each line adds 22, four lines (110 px) are the most, then the words scroll', [0, 20, 21, 41, 60, 61, 200].map((n) => { up.type('x'.repeat(n)); return up.f.style.height; }), ['44px', '44px', '66px', '88px', '88px', '110px', '110px']);
+    check('... and the words are scrolled to the caret', (up.type('x'.repeat(200)), up.f.scrollTop === up.f.scrollHeight));
+    const wide = mk(false);
+    wide.type('x'.repeat(200));
+    check('a window that is not a phone upright: the style sheet\'s own height (none is set here)', wide.f.style.height === '');
+    const nomq = rig({ width: 390, height: 844 });
+    nomq.live(W({ you: YOU })); nomq.field().value = 'x'; nomq.field().fire('input', {});
+    check('a page without matchMedia sets no height and breaks nothing', nomq.field().style.height === '' && nomq.errors.length === 0);
+    const e1 = mk(true);
+    e1.type('x'.repeat(100));
+    const prevented = e1.key('Enter');
+    check('Enter sends the line, empties the field, and the box is one line again', prevented && eq(e1.r.said().map((m) => m.text), ['x'.repeat(100)]) && e1.f.value === '' && e1.f.style.height === '44px');
+    e1.r.clock.advance(3000);
+    e1.type('with shift'); e1.key('Enter', { shiftKey: true });
+    check('Shift+Enter sends too (a one-line field never made a line break)', e1.r.said().length === 2 && e1.f.value === '');
+    e1.r.clock.advance(3000);
+    e1.type('half typed'); const composing = e1.key('Enter', { isComposing: true }), other = e1.key('a');
+    check('Enter that ends a composition (a keyboard\'s suggestion) and other keys send nothing and are left alone', !composing && !other && e1.r.said().length === 2 && e1.f.value === 'half typed');
+    let broke = 0;
+    e1.f.fire('beforeinput', { inputType: 'insertText', preventDefault() { broke++; } });
+    check('typing a letter through beforeinput is left alone', broke === 0 && e1.r.said().length === 2);
+    e1.f.fire('beforeinput', { inputType: 'insertLineBreak', preventDefault() { broke++; } });
+    check('a phone keyboard whose Enter arrives as a line break sends, and the break is not made', broke === 1 && e1.r.said().length === 3 && e1.r.said()[2].text === 'half typed' && e1.f.value === '');
+    const viaForm = mk(true);
+    let submits = 0;
+    viaForm.r.form().requestSubmit = () => { submits++; viaForm.r.form().fire('submit', { preventDefault() {} }); };
+    viaForm.type('through the form'); viaForm.key('Enter');
+    check('where the form can be submitted by script, Enter goes through its submit event (the emoji and voice buttons hear it) and sends once', submits === 1 && viaForm.r.said().length === 1);
+    const paste = mk(true);
+    paste.f.value = 'one\r\ntwo\n' + 'x'.repeat(30); paste.f.selectionStart = 4; paste.f.fire('input', {});
+    check('a pasted line break becomes one space, the caret stays, the box grows', paste.f.value === 'one two ' + 'x'.repeat(30) && paste.f.selectionStart === 4 && paste.f.style.height === '66px');
+    const press = mk(true);
+    const sendBtn = byClass(press.r.form(), 'gc-send').filter((b) => cls(b).indexOf('gc-login') === -1)[0];
+    let kept = 0;
+    sendBtn.fire('pointerdown', { preventDefault() { kept++; } });
+    check('a press on Send while the field is not the focus is left alone', kept === 0);
+    press.f.focus();
+    sendBtn.fire('pointerdown', { preventDefault() { kept++; } });
+    check('a press on Send while the field has the focus keeps it there (the phone\'s keyboard stays up)', kept === 1);
+    const back = mk(true);
+    back.type('draft words that are long'); back.r.clock.advance(3000);
+    back.r.dock.say('draft words that are long'); back.f.value = '';
+    back.r.s().recv({ t: 'err', code: 'bad' });
+    check('a refused line comes back into the field and the box grows to hold it', back.f.value === 'draft words that are long' && back.f.style.height === '66px');
+    const turn = mk(true);
+    turn.f.value = 'x'.repeat(30); turn.r.win.listeners.resize.forEach((fn) => fn({}));
+    check('turning the phone makes the box as tall as its words again', turn.f.style.height === '66px');
+}
+
 console.log('home chat: ' + checks + ' checks, ' + failures + ' failed');
 process.exit(failures ? 1 : 0);
