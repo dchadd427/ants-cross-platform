@@ -47,7 +47,9 @@ function between(text, begin, end, path) {
 
 const lobbyText = fs.readFileSync(lobbyPath, 'utf8');
 const shellText = fs.readFileSync(shellPath, 'utf8');
-const keyBlock = between(lobbyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', lobbyPath);
+const keyFile = path.join(path.dirname(path.resolve(lobbyPath)), 'rejoin_key.js');      // (the keys of the seats are web/rejoin_key.js's: both pages load it)
+const keyText = fs.readFileSync(keyFile, 'utf8');
+const keyBlock = between(keyText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', keyFile);
 const block = between(lobbyText, 'REJOIN_BEGIN', 'REJOIN_END', lobbyPath);
 // rejoinWords shows the code as the page's codeText does: the page has `var codeText = Rules.codeText;` (the line below the two scripts' globals, outside every block) and lobby_rules.js is the real file
 const rulesFile = path.join(path.dirname(path.resolve(lobbyPath)), 'front', 'lobby_rules.js');
@@ -125,7 +127,7 @@ const BAD_VALUES = [
     ['text after the object', entryText(5) + ' x'], ['a member too many', '{"k":"' + HEX + '","s":"' + SERVER + '","t":5,"v":2}'], ['a member too few: no time', '{"k":"' + HEX + '","s":"' + SERVER + '"}'], ['a member too few: no server', '{"k":"' + HEX + '","t":5}'],
     ['a member too few: no key', '{"s":"' + SERVER + '","t":5}'], ['a member renamed', '{"k":"' + HEX + '","s":"' + SERVER + '","time":5}'], ['the same member twice (one is lost)', '{"k":"' + HEX + '","k":"' + HEX + '","s":"' + SERVER + '"}'],
     ['a key of 31 digits', entryText(5, SERVER, HEX.slice(1))], ['a key of 33 digits', entryText(5, SERVER, HEX + '0')], ['a key with a letter that is no hex digit', entryText(5, SERVER, 'g' + HEX.slice(1))], ['a key of zeros', entryText(5, SERVER, '0'.repeat(32))],
-    ['a key with a blank', entryText(5, SERVER, ' ' + HEX.slice(1))], ['a key that is a number', '{"k":5,"s":"' + SERVER + '","t":5}'], ['a key that is null', '{"k":null,"s":"' + SERVER + '","t":5}'],
+    ['a key with a blank', entryText(5, SERVER, ' ' + HEX.slice(1))], ['a key that is a number', '{"k":5,"s":"' + SERVER + '","t":5}'], ['a key that is null', '{"k":null,"s":"' + SERVER + '","t":5}'], ['a key that is an array of one key', '{"k":["' + HEX + '"],"s":"' + SERVER + '","t":5}'],
     ['an empty server', entryText(5, '')], ['a server that is a number', '{"k":"' + HEX + '","s":5,"t":5}'], ['a server that is an object', '{"k":"' + HEX + '","s":{},"t":5}'], ['a server of 256 characters', entryText(5, 'w'.repeat(256))],
     ['a server with an accent', '{"k":"' + HEX + '","s":"w\\u00e9ss://x","t":5}'], ['a server with a control character', '{"k":"' + HEX + '","s":"w\\u0001","t":5}'], ['a server with a line end', '{"k":"' + HEX + '","s":"w\\n","t":5}'],
     ['a time that is text', '{"k":"' + HEX + '","s":"' + SERVER + '","t":"5"}'], ['a time with a fraction', '{"k":"' + HEX + '","s":"' + SERVER + '","t":5.5}'], ['a negative time', '{"k":"' + HEX + '","s":"' + SERVER + '","t":-5}'],
@@ -288,8 +290,30 @@ same('the query: a shape that is none of the table\'s (no pick yet) leaves &aspe
     check('a key in capitals is not in them either', (JSON.stringify(got) + JSON.stringify(R.rejoinWords(got)) + R.rejoinQuery(got, '', '16:9')).toLowerCase().indexOf('abcdefabcdef') === -1);
 }
 
-// the game page carries the same text of the shared block (it asks the same question of the same storage)
-check('the keys block is the same text in the front page and the game page', between(shellText, 'REJOINKEY_BEGIN', 'REJOINKEY_END', shellPath) === keyBlock);
+// the file itself, as a page and node load it: the global and the module are the same five names, and the page-side calls are the block's own functions
+{
+    const viaNode = require(keyFile);
+    const viaPage = (() => { const root = {}; new Function('self', keyText)(root); return root.AntsRejoinKey; })();
+    for (const api of [viaNode, viaPage]) {
+        same('the file gives the page exactly these members', Object.keys(api).sort(), ['FUTURE_MS', 'MAX_AGE_MS', 'PREFIX', 'offer', 'parse']);
+        check('and they are the block\'s own constants and functions', api.PREFIX === R.REJOIN_PREFIX && api.MAX_AGE_MS === R.REJOIN_MAX_AGE_MS && api.FUTURE_MS === R.REJOIN_FUTURE_MS && api.parse.toString() === R.rejoinParse.toString() && api.offer.toString() === R.rejoinOffer.toString());
+        same('the file answers a question as the block does', api.offer(makeStorage({ [nameOf('k7m2xq', 2)]: entryText(NOW - 5000) }), NOW, SERVER), { room: 'k7m2xq', seat: 2, t: NOW - 5000 });
+    }
+    check('the file touches no page, no storage of its own and no network, and keeps no key', !/innerHTML|insertAdjacentHTML|document\.|window\.|localStorage|sessionStorage|location\.|console\.|fetch\(|XMLHttpRequest|setItem|\.href|encodeURI/.test(keyText));
+    // both pages load the file before their own script and ask only through their one function; neither keeps a copy of the rules
+    for (const [label, text, file] of [['front page', lobbyText, lobbyPath], ['game page', shellText, shellPath]]) {
+        check('the ' + label + ' loads rejoin_key.js once, before its own code', text.split('<script src="rejoin_key.js"></script>').length === 2 && text.indexOf('<script src="rejoin_key.js"></script>') < text.indexOf('REJOINKEY_BEGIN'));
+        const alias = between(text, 'REJOINKEY_BEGIN', 'REJOINKEY_END', file);
+        check('the ' + label + ' has no copy of the key rules, only its question', alias.split('\n').filter((l) => l.trim() !== '' && l.trim().indexOf('//') !== 0).length === 1 && !/rejoinParse|REJOIN_PREFIX|REJOIN_MAX_AGE_MS|REJOIN_FUTURE_MS/.test(text));
+        const ask = (win) => new Function('window', alias + '\nreturn rejoinOffer;')(win);
+        const st = makeStorage({ [nameOf('k7m2xq', 1)]: entryText(NOW - 5000) });
+        same('the ' + label + ' asks the file and gets its answer', ask({ AntsRejoinKey: viaNode })(st, NOW, SERVER, '', -1), { room: 'k7m2xq', seat: 1, t: NOW - 5000 });
+        let missing = 'threw';
+        try { missing = ask({})(st, NOW, SERVER, '', -1); } catch (e) { /* stays 'threw' */ }
+        check('the ' + label + ' offers nothing, and does not throw, when the file did not load', missing === null, String(missing));
+        check('the ' + label + ' never reads the storage entries itself', !/getItem\('ants\.rejoin|localStorage\.key\(/.test(text));
+    }
+}
 
 console.log('web rejoin block: ' + checks + ' checks, ' + failures + ' failures');
 process.exit(failures === 0 ? 0 : 1);

@@ -194,6 +194,14 @@ class TheFiles(unittest.TestCase):
         self.assertIn(".sb nav [aria-current]", CSS)
         self.assertIn("@media (max-height: 480px) and (max-width: 900px)", CSS)                                 # (a phone held sideways: the title and its line share one row)
 
+    def test_the_discord_rules_name_the_class_of_the_markup(self):
+        self.assertNotIn(".dcb", CSS)                                                                           # (a class that no page has)
+        self.assertIn(".sb nav .btn.sbdc { min-width: 44px; }", CSS)                                            # (44 px wide from 720 px)
+        self.assertIn(".sb nav .btn.sbdc { padding: 6px 12px; }", CSS)
+
+    def test_the_live_count_is_asked_for_at_the_first_opening_only_where_the_bar_says_menu(self):
+        self.assertIn("if (bar.getAttribute('data-live') === 'menu') look();", JS)                              # (Live now has no attribute: its own list is the count)
+
     def test_the_old_headers_rules_are_gone_from_the_stylesheets(self):
         matches = read("web", "matches.css")
         for gone in (".mast", ".discord", ".btn.live", "hide-s"):

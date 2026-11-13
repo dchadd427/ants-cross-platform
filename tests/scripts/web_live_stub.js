@@ -37,6 +37,7 @@
         }
         return -1;
     };
+    M._ants_probe = function (what) { return what === 41 ? 540 : -1; };         // (41: the game's logical height; no other probe is answered, as before)
     M._ants_replay_do = function (what, value) {
         switch (what) {
             case 0: if (g.state === STATE.playing) g.state = STATE.paused; else if (g.state === STATE.paused) g.state = STATE.playing; break;
@@ -66,9 +67,10 @@
     function draw() {
         var ctx = canvas.getContext('2d');
         if (!ctx) return;
-        canvas.width = 960; canvas.height = 540;
+        var k = Number(window.ANTS_STUB_CANVAS_SCALE) > 0 ? Number(window.ANTS_STUB_CANVAS_SCALE) : 1;      // (the game's canvas holds device pixels: 2 on a 1080p screen, 4 at 4K; the logical height stays 540)
+        canvas.width = 960 * k; canvas.height = 540 * k;
         ctx.fillStyle = g.state === STATE.ended ? '#223' : '#3b5a3b';
-        ctx.fillRect(0, 0, 960, 540);
+        ctx.fillRect(0, 0, 960 * k, 540 * k);
     }
     function frame() {
         var now = performance.now(), dt = (now - last) / 1000;

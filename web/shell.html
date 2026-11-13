@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Ants (1998) — beta.playants.org@@SITE_TITLE@@</title>
     <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#2b5f43">
+    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=9b89d547">
+    <meta name="apple-mobile-web-app-title" content="Ants!">
     <link rel="shortcut icon" href="/favicon.ico">
     <link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
     <link rel="stylesheet" href="replay_stats.css"><link rel="stylesheet" href="death_map.css"><link rel="stylesheet" href="front/rematch.css">
@@ -1381,7 +1385,7 @@
 
     <div class="toast" id="toast" role="status" hidden></div>
 
-    <script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
+    <script src="rejoin_key.js"></script><script src="shapes.js"></script><script src="shape_picker.js"></script><script src="replay_page.js"></script><script src="history_page.js"></script><script src="death_map.js"></script><script src="map_files.js"></script><script src="countdown_button.js"></script><script src="front/lobby_net.js"></script><script src="front/player_name.js"></script><script src="front/rematch.js"></script><script src="front/test_game.js"></script>
     <script>
         var ANTS_BUILD_VER = '@@BUILD_TIMESTAMP@@';
         if (!ANTS_BUILD_VER || ANTS_BUILD_VER.indexOf('@') !== -1) {
@@ -1923,54 +1927,9 @@
         }
         // NAME_END
 
-        // REJOINKEY_BEGIN (tests/scripts/web_rejoin_block_check.js runs this block; web/lobby.html and web/shell.html carry the same text)
-        // THE KEYS OF THE SEATS that this browser holds. The game page keeps the key of every seat that it holds in a game server's room in the browser's local storage, ants.rejoin.<room>.<seat> =
-        // {"k": 32 hex digits, "s": the server's address, "t": epoch ms} (src/ants_app/rejoin_store.cpp), lets go of it when the match ends, the seat is dropped or the player leaves, and removes an
-        // entry that three hours have passed over when it reads it. This block only LOOKS (the front page's Rejoin button and the game page's name step ask it): THE KEY IS A SECRET, it is read to check an
-        // entry and is in nothing that comes out of here; the game finds it in the storage by itself.
-        var REJOIN_PREFIX = 'ants.rejoin.';
-        var REJOIN_MAX_AGE_MS = 3 * 60 * 60 * 1000;          // the game's own rule: an entry that is older is of no use (a match of the site's server is over well within three hours)
-        var REJOIN_FUTURE_MS = 60 * 1000;                    // a time further ahead than this is a clock that was wrong, not a match to go back to
-        // One entry of the storage: { room, seat, server, t } when `name` and `text` are exactly what the game page writes (a room code by the page's own rule, a seat 0 - 3, a JSON object with these three
-        // members and no others, a key of 32 hex digits that is not zero, a printable server of 1 - 255 characters, a time that is a whole number of milliseconds), else null. The key is not returned.
-        function rejoinParse(name, text) {
-            var m = /^ants\.rejoin\.([A-Za-z0-9_-]{1,32})\.([0-3])$/.exec(typeof name === 'string' ? name : '');
-            if (!m || typeof text !== 'string') return null;
-            var v;
-            try { v = JSON.parse(text); } catch (e) { return null; }
-            if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
-            var members = Object.keys(v).sort().join(',');
-            if (members !== 'k,s,t') return null;
-            if (typeof v.k !== 'string' || !/^[0-9A-Fa-f]{32}$/.test(v.k) || /^0+$/.test(v.k)) return null;
-            if (typeof v.s !== 'string' || !/^[\x20-\x7e]{1,255}$/.test(v.s)) return null;
-            if (typeof v.t !== 'number' || !isFinite(v.t) || Math.floor(v.t) !== v.t || v.t < 0 || v.t > 999999999999999) return null;
-            return { room: m[1], seat: Number(m[2]), server: v.s, t: v.t };
-        }
-        // The seat to offer, or null: the newest (by t; on a tie the lower seat, then the room) entry of `server` that is not older than three hours and not more than a minute ahead of `now` (ms), of the
-        // room `room` when one is given ('' or nothing: any) and of the seat `seat` when it is a number from 0 (nothing: any). `storage` is the browser's (length, key(i), getItem, removeItem; any call
-        // may throw). An entry that three hours have passed over is removed, as the game does when it reads (whatever its server: a key that old is of no use to anybody); an entry of another server or room,
-        // one from the future and anything that is no entry of the game are left as they are. { room, seat, t }: no key.
-        function rejoinOffer(storage, now, server, room, seat) {
-            var names = [];
-            try {
-                for (var i = 0; i < storage.length; i++) {
-                    var name = storage.key(i);
-                    if (typeof name === 'string' && name.indexOf(REJOIN_PREFIX) === 0) names.push(name);
-                }
-            } catch (e) { return null; }
-            var best = null;
-            names.forEach(function (name) {
-                var text = null;
-                try { text = storage.getItem(name); } catch (e) { return; }
-                var entry = rejoinParse(name, text);
-                if (!entry) return;
-                if (now - entry.t > REJOIN_MAX_AGE_MS) { try { storage.removeItem(name); } catch (e) { /* it stays, and is not offered */ } return; }
-                if (entry.t - now > REJOIN_FUTURE_MS || entry.server !== server) return;
-                if ((room && entry.room !== room) || (typeof seat === 'number' && seat >= 0 && entry.seat !== seat)) return;
-                if (!best || entry.t > best.t || (entry.t === best.t && (entry.seat < best.seat || (entry.seat === best.seat && entry.room < best.room)))) best = entry;
-            });
-            return best ? { room: best.room, seat: best.seat, t: best.t } : null;
-        }
+        // REJOINKEY_BEGIN (tests/scripts/web_name_check.js and web_lobby_entry_check.js run this, with the real web/rejoin_key.js as window.AntsRejoinKey)
+        // THE KEYS OF THE SEATS that this browser holds are read by web/rejoin_key.js (loaded above), which has the rules and the key's secrecy; this is its one question. No file, no key to offer: nothing is offered.
+        function rejoinOffer(storage, now, server, room, seat) { return window.AntsRejoinKey ? window.AntsRejoinKey.offer(storage, now, server, room, seat) : null; }
         // REJOINKEY_END
 
         // NAMEGATE_BEGIN (tests/scripts/web_name_check.js runs this block)
@@ -3175,7 +3134,7 @@
             var lastKey = '';                // the last picture of the bar (the page repaints only what changed)
             var cam = R.cameraControl({ doc: document, storage: (function () { try { return window.localStorage; } catch (e) { return null; } })(), get: get, command: command, VALUE: VALUE, DO: DO, setTimeout: setTimeout }), rew = R.rewindControl({ doc: document, turn: function () { return get(VALUE.state) === STATE.jumping ? get(VALUE.target) : get(VALUE.turn); }, seek: function (seconds) { seek(seconds); } });   // (the Auto / Manual button and Back 30 seconds, made by web/replay_page.js)
             var dragging = false, dragTurn = 0, idleTimer = 0, toastTimer = 0, jumpSince = 0, wokeState = -1;
-            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var c = $('canvas'), r = c.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, bottom: r.bottom, height: r.height, rows: c.height } : null; }, bar: function () { var a = $('rbar').getBoundingClientRect(), t = $('b-tab').getBoundingClientRect(), h = $('b-handle').hidden ? null : $('b-handle').getBoundingClientRect(); return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) }; }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
+            var zone = R.barZone({ setTimeout: function (f, ms) { return window.setTimeout(f, ms); }, clearTimeout: function (t) { window.clearTimeout(t); }, zone: function () { var c = $('canvas'), r = c.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, bottom: r.bottom, height: r.height, rows: (function () { try { var n = Module._ants_probe(41); return n > 0 ? n : c.height; } catch (e) { return c.height; } })() } : null; }, bar: function () { var a = $('rbar').getBoundingClientRect(), t = $('b-tab').getBoundingClientRect(), h = $('b-handle').hidden ? null : $('b-handle').getBoundingClientRect(); return { left: Math.min(a.left, t.left, h ? h.left : a.left), right: Math.max(a.right, t.right, h ? h.right : a.right), top: Math.min(a.top, t.top, h ? h.top : a.top), bottom: Math.max(a.bottom, h ? h.bottom : a.bottom) }; }, busy: function () { return dragging || !$('picpop').hidden; }, change: function (m) { applyZone(m); } });
             var ICON = {
                 play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5v17l14-8.5z"/></svg>',
                 pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 3.5h5v17h-5zM13.5 3.5h5v17h-5z"/></svg>',

@@ -55,7 +55,7 @@ MAPMAKER_LAZY = ("mapmaker_ground.js", "mapmaker_sprites.js", "mapmaker_edges.js
 UNLOADED_SCRIPTS = ("bot_names.js",)    # the names of the computer players (tests/scripts/test_bot_names.py): in the folder, loaded by no page yet
 MAP_KEYS = ("tiny", "small", "medium", "gauntlet", "treasure", "islands")
 sys.path.insert(0, os.path.join(REPO, "tools"))
-from size_limits import FRONT_BUDGET as BUDGET, ANTS_BUDGET, ANTS_GZIP_BUDGET, PICKUP_BUDGET, PICKUP_GZIP_BUDGET, CONVERT_BUDGET, CONVERT_GZIP_BUDGET, PLAY_BUDGET, PLAY_GZIP_BUDGET, GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET, SHAPES_BUDGET, SHAPES_GZIP_BUDGET, PICKER_BUDGET, PICKER_GZIP_BUDGET, GAME_BUDGET, GAME_GZIP_BUDGET, SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET, EDITOR_BUDGET, EDITOR_GZIP_BUDGET, LAZY_BUDGET, LAZY_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
+from size_limits import FRONT_BUDGET as BUDGET, ANTS_BUDGET, ANTS_GZIP_BUDGET, PICKUP_BUDGET, PICKUP_GZIP_BUDGET, CONVERT_BUDGET, CONVERT_GZIP_BUDGET, PLAY_BUDGET, PLAY_GZIP_BUDGET, GAME_MENU_BUDGET, GAME_MENU_GZIP_BUDGET, SHAPES_BUDGET, SHAPES_GZIP_BUDGET, REJOIN_KEY_BUDGET, REJOIN_KEY_GZIP_BUDGET, PICKER_BUDGET, PICKER_GZIP_BUDGET, GAME_BUDGET, GAME_GZIP_BUDGET, SUBMIT_BUDGET, SUBMIT_GZIP_BUDGET, EDITOR_BUDGET, EDITOR_GZIP_BUDGET, LAZY_BUDGET, LAZY_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 ANTS_LAZY = ("mapmaker_ants.js", "mapmaker_ants.css")        # the map maker's Ants tool box (docs/MAP_EDITOR.md, "Ants: one at a time, group, mix"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadAnts)
 PICKUP_LAZY = ("mapmaker_pickup.js", "mapmaker_pickup.css")        # the map maker's Pick up tool (docs/MAP_EDITOR.md, "Pick up"): its script and its style are loaded together the first time the tool is chosen (web/front/mapmaker_app.js, loadPick)
 CONVERT_LAZY = ("mapmaker_convert.js", "mapmaker_crop.js")        # the map maker's Copy, Save as a new map, Start an Extended map / Make a Classic map and Crop to fit (docs/MAP_EDITOR.md): the two scripts are loaded together the first time one is used (web/front/mapmaker_app.js, convertOr); apart from the editor's budget
@@ -348,6 +348,15 @@ class TheFolder(unittest.TestCase):
         self.assertNotIn(SHAPES_FILE, os.listdir(FRONT), "the table is not in web/front, whose folder has its own cap")
         for page in ("shell.html", "lobby.html"):
             self.assertIn('<script src="%s"></script>' % SHAPES_FILE, read("web", page), "both pages load it, as a script of their own")
+
+    def test_the_seat_key_reader_is_one_small_script_with_a_cap_of_its_own(self):
+        import gzip
+        data = read_bytes("web", "rejoin_key.js")
+        self.assertLess(len(data), REJOIN_KEY_BUDGET, "the seat-key reader's script is %d bytes" % len(data))
+        self.assertLess(len(gzip.compress(data, 9)), REJOIN_KEY_GZIP_BUDGET, "and %d bytes gzipped" % len(gzip.compress(data, 9)))
+        self.assertNotIn("rejoin_key.js", os.listdir(FRONT), "the reader is not in web/front, whose folder has its own cap")
+        for page in ("shell.html", "lobby.html"):
+            self.assertIn('<script src="rejoin_key.js"></script>', read("web", page), "both pages load it, as a script of their own")
 
     def test_the_pictures_picker_is_one_small_script_for_the_game_page_only(self):
         import gzip
@@ -774,7 +783,7 @@ class ThePageUsesTheArt(unittest.TestCase):
 
     def test_nothing_is_loaded_from_another_site(self):
         scripts = re.findall(r'<script[^>]*\bsrc="([^"]*)"', self.page)
-        self.assertEqual(scripts, ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
+        self.assertEqual(scripts, ["rejoin_key.js"] + ["front/" + name for name in SCRIPT_FILES] + ["shapes.js", "map_files.js", "home/home.js"])      # (the seat-key reader (web/rejoin_key.js), the folder's scripts, in this order, then the pages' table of the shapes (web/shapes.js) and the game page's file-fetching script (web/map_files.js, warm()), and no other)
         self.assertEqual(len(re.findall(r"<script\b", self.page)), len(scripts) + 1)       # (and the one inline script that is the page's)
         self.assertNotRegex(self.page, r'<script[^>]*type="module"')
         for name in SCRIPT_FILES:
@@ -814,7 +823,8 @@ class ThePageUsesTheArt(unittest.TestCase):
         self.assertEqual([m[1] for m in maps], [key.capitalize() for key in MAP_KEYS])
         for key in MAP_KEYS:
             self.assertIn("preview_%s.png" % key, os.listdir(FRONT))
-        self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.page)      # (the drop-down is the rules' list)
+        self.assertIn("room: function () { return model ? model.mapFile : ''; }, originals: Rules.MAPS });", self.page)      # (the map list's fallback, when the server's list cannot be had, is the rules' list of the six)
+        self.assertNotIn("'map-other'", self.page)                                                                        # (and the drop-down, the arrows and their code are gone: one map card)
         default = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", self.rules).group(1)
         self.assertIn(default, MAP_KEYS)
         self.assertIn('<img id="preview" src="front/preview_%s.png" alt="The map: %s"' % (default, default.capitalize()), self.page)       # (the picture that the page opens with is the default map's)
@@ -926,7 +936,7 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn(".slot .grip { position: static;", self.phone)
 
     def test_the_media_rules_come_in_the_order_that_lets_the_narrower_ones_win_and_the_two_sides_of_a_break_agree(self):
-        order = [self.style.index("@media (%s)" % query) for query in ("max-width: 1040px", "max-width: 720px", "max-width: 374px", "max-width: 339px")]
+        order = [self.style.index("@media (%s)" % query) for query in ("max-width: 1040px", "max-width: 720px", "max-width: 374px")]
         self.assertEqual(order, sorted(order), "the narrower rules come later: they win")
         self.assertIn("@media (min-width: 1041px) and (min-height: 880px)", self.style)                         # (1040 and 1041: the same break, seen from both sides)
         self.assertIn(".share { display: none; }", media(self.style, "(min-width: 721px)"))                    # (720 and 721: the Share button is for phones, and the script shows it only where a share sheet exists)
@@ -941,7 +951,8 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertIn("viewport-fit=cover", self.page)
         self.assertIn(".plan-long { display: none; } .plan-short { display: inline; }", self.phone)             # (the line under START is one short line, so that START and the line stay a small bar)
         self.assertIn(".go .plan { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }", self.phone)
-        self.assertIn(".info { text-align: left; grid-column: 2; }", self.phone)
+        self.assertIn(".info { text-align: left; }", self.phone)
+        self.assertIn(".mapcard { justify-items: start; text-align: left;", self.phone)                        # (the map card's name, chips, line and button sit left of the picture, in its column)
 
     def test_the_invitation_and_the_line_to_join_wrap_on_a_phone_and_never_scroll_sideways(self):
         self.assertEqual(self.sheet.value(".invite", "grid-template-columns"), "minmax(0, 1fr) auto auto")        # (the link, Copy, Share)
@@ -968,13 +979,14 @@ class TheCardsAtManyWidths(unittest.TestCase):
         self.assertEqual(self.sheet.value(".pname input", "width"), "100%")
 
     def test_a_narrow_phone_keeps_the_maps_name_whole(self):
-        # the map's name (Gauntlet, Treasure) is not cut off at 320 px: under 375 px a smaller picture and smaller arrows, and under 340 px a smaller name (a browser measures it)
+        # the map's name (Gauntlet, Treasure) is not cut off at 320 px: under 375 px a smaller picture and a smaller name (a browser measures it)
         narrow = media(self.style, "(max-width: 374px)")
         self.assertIn(".side .maprow { grid-template-columns: 96px minmax(0, 1fr);", narrow)
         self.assertIn(".tv { width: 96px; }", narrow)
-        self.assertIn(".maprow .pick { grid-template-columns: 36px minmax(0, 1fr) 36px; gap: 4px; }", narrow)
-        self.assertIn(".pick select { font-size: 16px; padding-left: 6px; padding-right: 26px;", narrow)
-        self.assertIn(".pick select { font-size: 15px; padding-left: 4px; }", media(self.style, "(max-width: 339px)"))
+        self.assertIn(".map-name { font-size: 21px; }", narrow)
+        self.assertEqual(self.sheet.value(".map-name", "overflow-wrap"), "anywhere")                                 # (a long name of a players' map wraps)
+        self.assertEqual(self.sheet.value(".change", "min-height"), "44px")                                      # (the one button of the card is a full touch target)
+        self.assertIn(".change { min-width: 0; padding: 4px 16px; }", self.phone)
         self.assertGreater(int(re.search(r"\.tv \{[^}]*(?<![-\w])width: (\d+)px;", self.phone).group(1)), 96)           # (a phone of 375 px or more keeps the bigger one)
 
 
@@ -1033,7 +1045,8 @@ class TheColors(unittest.TestCase):
             ("cream text in the code's field", (".joinbox input", "color"), (".joinbox input", "background")),
             ("cream text in the name step's field", (".name-step input", "color"), (".name-step input", "background")),
             ("cream text of a color's mode", (".mode", "color"), (".mode", "background")),
-            ("cream text of the map's drop-down", (".pick select", "color"), (".pick select", "background")),
+            ("cream text of the map card's chips", (".map-facts span", "color"), (".map-facts span", "background")),
+            ("the map card's kind chip", (".map-facts .tag", "color"), (".map-facts .tag", "background")),
             ("the room code", (".code", "color"), (".panel", "background")),
             ("the room code's box", (".code b", "color"), (".code b", "background")),
             ("the note under the link", (".invite-note", "color"), (".panel", "background")),

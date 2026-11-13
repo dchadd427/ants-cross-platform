@@ -458,12 +458,49 @@ const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
     check('Back from the Room is Home at "/", not Home at "/#room"', env.screen() === 'home' && env.win.location.hash === '' && env.win.location.pathname === '/');
 }
 {   // the map list is a dialog: the page makes Home's bars inert while it is open (the real list, opened by the real button)
-    const env = runLobby('', { 'ants.name': 'Maya' }, { picker: true });
+    const env = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => { throw new Error('offline'); } });      // (the site's list cannot be had, at once: the list holds the six originals from the page's own table)
     env.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
     const rbar = env.root.children.filter((c) => classes(c).indexOf('rbar') !== -1)[0];
-    check('(the list\'s button is there for the host, and no bar is inert)', !env.$('browse').hidden && !rbar.hasAttribute('inert') && !env.home('hbar').hasAttribute('inert'));
-    env.$('browse').click();
+    check('(the card\'s Change map button is there for the host, and no bar is inert)', !env.$('change-map').hidden && !rbar.hasAttribute('inert') && !env.home('hbar').hasAttribute('inert'));
+    env.$('change-map').click();
     check('the page opens the list and makes Home\'s bars inert with the rest of the page behind it (and the footer, the logo row and the strips)', env.$('picker-panel').children.length > 0 && rbar.hasAttribute('inert') && env.home('hbar').hasAttribute('inert') && env.$('lobby').hasAttribute('inert'));
+    // the map card (docs/PLAY_IN_BROWSER.md "Choosing a map"): one card, one button; the list opens with the focus in it, holds the six originals when the server's list cannot be had, and Escape gives the focus back to the button
+    same('the card names the room\'s map and its kind, and has no drop-down, no arrows and no Browse button', [env.$('map-name').textContent, env.$('map-facts').children.map((c) => c.textContent), env.$('map-facts').children[0].className, ['map', 'prev', 'next', 'browse'].map((id) => !!env.elements[id])], ['Treasure', ['Original'], 'tag', [false, false, false, false]]);
+    const listed = env.$('picker-panel').findAll((e) => e.getAttribute('data-file') !== null);
+    same('the list opened on the card\'s button: the search box has the focus, the room\'s map is picked and tagged, and the six originals are there', [env.focused.className, listed.filter((e) => e.getAttribute('aria-selected') === 'true').map((e) => e.getAttribute('data-file')), listed.filter((e) => e.className.indexOf('here') !== -1).length, listed.length], ['pk-q', ['TREASURE.LVL'], 1, 6]);
+    env.doc.listeners.keydown.forEach((fn) => fn({ key: 'Escape', preventDefault() {} }));
+    check('Escape closes the list and the focus goes back to Change map', env.$('picker').hidden === true && env.focused === env.$('change-map') && !env.$('lobby').hasAttribute('inert'));
+    {   // a guest sees the same card with no button; the host's button is off while START has been pressed
+        const g = runLobby('', { 'ants.name': 'Sam' }, { picker: true, fetch: () => { throw new Error('offline'); } });
+        g.arrive({ seat: 1, key: KEY, seats: [[C, 'Maya'], [C, 'Sam'], [E, ''], [E, '']], room: { you: 1, leader: 0 } });
+        same('a guest sees the card (name and kind) and no Change map button', [g.$('map-name').textContent, g.$('map-facts').children.map((c) => c.textContent), g.$('change-map').hidden], ['Treasure', ['Original'], true]);
+        const sock = env.last();
+        same('the host\'s button is there and on', [env.$('change-map').hidden, env.$('change-map').disabled], [false, false]);
+        sock.receive(roomMessage([[C, 'Maya'], [E, ''], [E, ''], [E, '']], { you: 0, leader: 0, flags: 7 }));
+        same('START pressed: the button is off, the card stays', [env.$('change-map').disabled, env.$('map-name').textContent], [true, 'Treasure']);
+        // a players' map: the card says its kind and what the server's list knows of it (the list is answered at once here: a thenable that runs its steps as they are given)
+        const now = (v) => ({ then(f, g) { if (!f) return now(v); try { return now(f(v)); } catch (e) { return g ? now(g(e)) : now(undefined); } } });
+        const list = { format: 2, maps: [{ file: 'BackYard.lvl', width: 60, height: 50, minutes: 12, players: 4, description: 'A yard', plays: 5, thumb: '/maps/previews/BackYard.webp' }] };
+        const c = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => now({ ok: true, json: () => list }) });
+        c.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']], room: { map: 'BackYard.lvl' } });
+        same('a players\' map: its name, its picture, and chips with what the list knows (kind, players, minutes, size)', [c.$('map-name').textContent, c.$('preview').src, c.$('map-facts').children.map((x) => x.textContent)], ['BackYard', '/maps/previews/BackYard.webp', ["Players' map", '4 players', '12 min', '60\u00d750']]);
+        // an original's chips are its kind only, whether or not this page has the list (the host who has opened it, a guest and the approved picture show the same card)
+        const known = { format: 2, maps: [{ file: 'TREASURE.LVL', original: true, width: 60, height: 60, minutes: 12, players: 4, description: 'x', plays: 3, thumb: '/front/preview_treasure.png' }, { file: 'BackYard.lvl', width: 60, height: 50, minutes: 12, players: 4, description: 'A yard', plays: 5, thumb: '/maps/previews/BackYard.webp' }] };
+        const o = runLobby('', { 'ants.name': 'Maya' }, { picker: true, fetch: () => now({ ok: true, json: () => known }) });
+        o.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        o.$('change-map').click();      // (the host opens the list, which is when the page gets it for a room on an original; then closes it with no choice)
+        o.doc.listeners.keydown.forEach((fn) => fn({ key: 'Escape', preventDefault() {} }));
+        same('an original with the list loaded: its kind only', [o.$('map-name').textContent, o.$('map-facts').children.map((x) => x.textContent)], ['Treasure', ['Original']]);
+        // the list's script did not load: no error, the button is there, and a press steps to the next of the six originals (Treasure, then Islands)
+        const n = runLobby('', { 'ants.name': 'Maya' }, {});
+        n.arrive({ key: KEY, seats: [[C, 'Maya'], [E, ''], [E, ''], [E, '']] });
+        const before = n.last().sent.length;
+        let thrown = '';
+        try { n.$('change-map').click(); n.$('preview').click(); } catch (e) { thrown = String(e); }
+        const plans = n.last().sent.slice(before).filter((b) => b[0] === NET0.MSG.Plan);
+        same('without the list\'s script: the button is on and no error', [thrown, n.$('change-map').hidden, n.$('change-map').disabled], ['', false, false]);
+        check('and each press (the button, the picture) sends one Plan for Islands', plans.length === 2 && plans.every((b) => String.fromCharCode.apply(null, b.slice(2, 2 + b[1])).toLowerCase().indexOf('islands') !== -1), plans.map((b) => Array.from(b).join(',')).join(' | '));
+    }
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

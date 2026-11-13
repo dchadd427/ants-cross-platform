@@ -44,6 +44,7 @@ NATIVE_READS = {
     "web/lobby.html": "test_ants_server.sh (a grep, web_fill_check.js, the page harness)",
     "web/shell.html": "test_ants_server.sh (a grep, web_fill_check.js)",
     "web/shapes.js": "test_ants_server.sh: web_lobby_server_check.js",
+    "web/rejoin_key.js": "test_ants_server.sh: the page harness (web_name_check.js and the lobby checks load it as the page does)",
     LOBBY_NET_JS: "test_ants_server.sh: web_lobby_server_check.js, web_lobby_handoff_check.js, the page harness",
     "web/front/player_name.js": "test_ants_server.sh: the page harness",
     "web/front/lobby_chat.js": "test_ants_server.sh: the page harness",
@@ -441,6 +442,15 @@ def code_of_cpp(line):
     return line
 
 
+def harness_reads(text):
+    """The files of web/ that the page harness loads, by its own calls: loadFront('x.js') is web/front/x.js; loadFile('x.js') is a script at the root of web/ (the seat-key reader, and any
+    root-level script that a later page adds), loadFile('front/x.js') and loadFile('home/x.js') are the scripts of those folders."""
+    found = {"web/front/" + n for n in re.findall(r"loadFront\('([a-z_]+\.js)'", text)}
+    found |= {"web/" + n for n in re.findall(r"loadFile\('((?:(?:home|front)/)?[a-z_]+\.js)'", text)}
+    found |= {"web/" + n for n in re.findall(r"'(home/[a-z_]+\.js)'", text)}
+    return found
+
+
 def cpp_reads():
     """{(source, literals): line} for every line of C++ in src/, include/, tests/ and tools/ that names a file of a light kind: after the folder of the checkout (ANTS_SOURCE_DIR and the like), or as a
     literal that begins with web/ or docs/. A path that is built over several lines, or by a function, is not found: the review of a test that reads a page must look for it."""
@@ -478,6 +488,13 @@ class TheSkippedJobsReadNoLightFile(unittest.TestCase):
         for (source, _), representative in CPP_READS.items():
             self.assertIn(representative, NATIVE_READS, source)
 
+    def test_a_root_level_script_that_the_harness_loads_is_found_without_a_new_pattern(self):
+        """The scan finds the root-level scripts that a later page adds (a bar, a strip) by the harness's own call, so that a script of the page that no list names fails the test above
+        and stays full (ci_light.sh: an unknown path is full) instead of being light while the macOS suite reads it."""
+        sample = "win.AntsRejoinKey = loadFile('rejoin_key.js', scope).AntsRejoinKey;\nwin.AntsGameBar = loadFile('game_bar.js', scope).AntsGameBar;\nloadFile('home/home.js', scope);\nloadFile('front/x.js', scope);\nloadFront('y.js', scope);"
+        self.assertEqual(sorted(harness_reads(sample)), ["web/front/x.js", "web/front/y.js", "web/game_bar.js", "web/home/home.js", "web/rejoin_key.js"])
+        self.assertNotIn("web/game_bar.js", NATIVE_READS)                    # (so the test above would fail on a harness that loads it, until the file is listed and made full)
+
     def test_the_shell_suites_the_node_checks_and_the_page_harness_read_these_files_and_no_others(self):
         found = set()
         shell = re.compile(r'(?:\$ROOT|\$\{ROOT\})/((?:web|docs)/[A-Za-z0-9_./*-]+|CHANGELOG\.md|README\.md|tests/data/[a-z_]+_mutants\.json|tests/scripts/(?:test_web_|web_)[A-Za-z0-9_.]+)')
@@ -488,9 +505,7 @@ class TheSkippedJobsReadNoLightFile(unittest.TestCase):
                         found |= set(shell.findall(line))
         with open(os.path.join(HERE, "web_page_harness.js"), encoding="utf-8") as f:
             harness = f.read()
-        found |= {"web/front/" + n for n in re.findall(r"loadFront\('([a-z_]+\.js)'", harness)}
-        found |= {"web/" + n for n in re.findall(r"loadFile\('((?:home|front)/[a-z_]+\.js)'", harness)}
-        found |= {"web/" + n for n in re.findall(r"'(home/[a-z_]+\.js)'", harness)}
+        found |= harness_reads(harness)
         for name in ("web_lobby_server_check.js", "web_lobby_handoff_check.js", "web_fill_check.js"):         # (the node checks that the script suite runs, and what they load)
             with open(os.path.join(HERE, name), encoding="utf-8") as f:
                 text = f.read()
