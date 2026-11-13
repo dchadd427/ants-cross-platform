@@ -148,7 +148,6 @@ class TheLookIsTheFrontPages(PageCase):
         return {
             "the front page's buttons": rule(self.lobby_style, ".btn"),
             "the front page's name card title": rule(self.lobby_style, ".name-step-title"),
-            "the front page's picture dropdown": rule(self.lobby_style, ".shape-select"),
             "the game page's buttons": rule(self.style, ".btn"),
             "the game page's banner": rule(self.style, ".banner"),
             "the game page's pairs": rule(self.style, ".seg button"),
@@ -229,7 +228,6 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertEqual(declarations["background"], "var(--sheen, none) var(--teal)" if where == "the small buttons of Sprites and sounds" else "var(--sheen) var(--teal)", where)
         color_only = {
             "the front page's hovered button": rule(self.lobby_style, ".btn:hover"),
-            "the front page's hovered picture dropdown": rule(self.lobby_style, ".shape-select:hover"),
             # (the front page's teal match banner, `.card.match > .banner`, is gone: its .banner is the picture's black message strip, which has no teal face to keep the sheen of)
             "the game page's hovered button": rule(self.style, ".btn:hover"),
             "the game page's hovered pair": rule(self.style, '.seg button[aria-checked="false"]:hover'),
@@ -291,19 +289,15 @@ class TheLookIsTheFrontPages(PageCase):
             self.assertTrue(roots["the style sheet of the changelog pages"][token].startswith(bevel_token + ", "), token)
 
 
-    def test_the_picture_dropdown_has_the_face_of_the_two_pages_buttons_and_the_two_state_buttons_stay_the_game_pages(self):
-        # The front page's Picture row is a native dropdown (`.shape-select`) with the face of the game page's own (`.pick-select`): the colors, the frame, the corners, the bevel and the chevron, but
-        # not its size (the front page's is as wide as the match column). Only the face is compared. The two-state buttons that are left (the fullscreen mouse, the replay's speed) are this page's `.seg button`.
-        ours, theirs = rule(self.style, ".pick-select"), rule(self.lobby_style, ".shape-select")
-        for name in ("line-height", "color", "background", "border", "border-radius"):
-            self.assertEqual(ours[name], theirs[name], name)
-        for shadow in (ours["box-shadow"], theirs["box-shadow"]):
-            self.assertRegex(shadow, r"^var\(--bevel-sm\), \d+px \d+px 0 var\(--shadow\)$")
-        # the buttons are the same elements as ever (the page's script and the browser checks find them by these)
-        for markup in ('id="aspect-pick"', 'id="lock-on" data-lock="on" aria-checked="true"', 'id="lock-off" data-lock="off" aria-checked="false"'):
-            self.assertIn(markup, self.page)
-        self.assertEqual(len(re.findall(r'<button type="button" role="radio" id="(?:lock-on|lock-off)"', self.page)), 2)
-        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 2)           # (the mouse and the replay bar's speed: TheReplayPage)
+    def test_the_picture_dropdown_keeps_the_face_of_the_pages_buttons_and_the_two_state_buttons_stay_the_game_pages(self):
+        # The game page's Picture dropdown (`.pick-select`, in the recording's Picture window; the settings menu's is `.gm-select`) has the colors, the frame, the corners and the bevel of the buttons. The two-state
+        # buttons that are left (the replay's speed) are this page's `.seg button`; the front page has no Picture dropdown.
+        ours = rule(self.style, ".pick-select")
+        self.assertRegex(ours["box-shadow"], r"^var\(--bevel-sm\), \d+px \d+px 0 var\(--shadow\)$")
+        self.assertNotIn(".shape-select", self.lobby_style)
+        for gone in ('id="aspect-pick"', 'id="lock-on"', 'id="lock-off"'):
+            self.assertNotIn(gone, self.page)
+        self.assertEqual(len(re.findall(r'<div class="seg[ "][^>]*role="radiogroup"', self.page)), 1)           # (the replay bar's speed: TheReplayPage)
 
     def test_the_black_boxes_are_the_front_pages(self):
         # (the front page's black box with its frame is `.panel`; its name card, the same card as this page's own, has the same field)

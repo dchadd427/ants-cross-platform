@@ -42,8 +42,7 @@ class PageCase(unittest.TestCase):
 class TheControlAndTheGuide(PageCase):
     def test_the_control_starts_locked_and_has_one_key(self):
         page = read(SHELL)
-        self.found(page, r'id="lock-on" data-lock="on" aria-checked="true"')                          # Locked is the default
-        self.found(page, r'id="lock-off" data-lock="off" aria-checked="false"')
+        self.not_found(page, r'id="lock-(on|off)"', "the control is a row of the settings menu: the page has no buttons for it")
         self.assertIn("var ANTS_LOCK_KEY = 'ants.pointerlock';", page)
         self.assertEqual(len(re.findall(r"getItem\(ANTS_LOCK_KEY\)", page)), 1, "the key is read once")
         self.assertIn("var ANTS_POINTER_LOCK = true;", page)

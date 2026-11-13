@@ -296,13 +296,12 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertNotRegex(self.page, r'\bid="aspect-\d')                                                   # (no button of a shape on the page at all)
 
     def test_the_window_uses_the_pages_own_selector_and_remembers_the_choice(self):
-        self.assertIn("['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']", self.page)          # (the bar's dropdown is made with the strip's, from the same picker)
-        self.assertIn("onPick: antsPickShape }", self.page)                                                 # (a choice of either is the page's own pick)
+        self.assertIn("['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']", self.page)          # (the one dropdown the page makes itself, from the same picker as the settings menu's)
+        self.assertIn("onPick: antsPickShape }", self.page)                                                 # (a choice is the page's own pick, the one function that the settings menu calls too)
         self.assertIn("window.localStorage.setItem(ANTS_ASPECT_KEY, value);", self.page)
-        self.assertIn("body.replay .view-bar", self.page)
-        self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's row stays hidden here)
+        self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's header buttons stay hidden here)
         self.assertEqual(len(re.findall(r"\n\s*\.picpop \{", self.page)), 1)
-        self.assertEqual(len(re.findall(r"\n\s*\.pick-select \{", self.page)), 1)                           # (one style for the dropdown, the player's and the bar's)
+        self.assertEqual(len(re.findall(r"\n\s*\.pick-select \{", self.page)), 1)                           # (one style for the dropdown)
 
     def test_the_bar_is_as_wide_as_the_picture_in_every_shape(self):
         """The bar reads the same custom properties as the stage (--ar-w, --ar-h, --stage-max: 16:9 until the script sets the shape's own from web/shapes.js, ANTS_PAGE.slotVars, which tests/scripts/web_aspect_key_check.js runs)."""

@@ -211,8 +211,8 @@
     @media (min-width: 1041px) and (min-height: 880px) { :root { --k: 4; } }
     @media (max-width: 1040px) {
         .grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
-        .side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 22px 26px; grid-template-rows: auto auto 1fr; }     /* the map's column is tall: the Picture row and START! stack at the top of theirs, the spare height is the third row's */
-        .side .maprow { grid-row: span 3; }
+        .side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 22px 26px; grid-template-rows: auto 1fr; }     /* the map's column is tall: the game type and START! stack at the top of theirs, the spare height is the second row's */
+        .side .maprow { grid-row: span 2; }
     }
     @media (max-width: 720px) {
         :root { --k: 2; }

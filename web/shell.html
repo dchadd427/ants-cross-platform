@@ -2691,7 +2691,7 @@
             if (line) {
                 document.querySelectorAll('.fit-note').forEach(function (note) { note.textContent = line; note.hidden = false; });
             }
-            // the dropdown of the recording's Picture window (the settings menu makes its own); each is a picker (web/shape_picker.js) with one entry for each row of the table
+            // the dropdown of the recording's Picture window (the settings menu makes its own): a picker (web/shape_picker.js) with one entry for each row of the table
             [['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']].forEach(function (c) {
                 var host = document.getElementById(c[0]);
                 if (host) antsPickers.push(AntsShapePicker.create(AntsShapes, { doc: document, host: host, id: c[3], labelledBy: c[1], describedBy: c[2], title: c[4], value: ANTS_ASPECT, onPick: antsPickShape }));

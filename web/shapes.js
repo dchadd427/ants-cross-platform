@@ -2,8 +2,7 @@
 // The game has the same rows in include/ants_app/canvas_layout.hpp (kAspectTable); tests/scripts/test_web_shapes.py fails when the two tables differ, and when a page keeps a list of its own.
 //   * A row is a shape: its name (the text of `?aspect=`, `--aspect` and the remembered value: "4:3"), its words, the game's canvas in pixels and the widest the page's slot gets. The rows are in the order of the
 //     dropdowns, narrowest to widest, and a shape's place in them is the number that the game's `ants_set_aspect` takes.
-//   * What follows from a row is worked out here and nowhere else: the shape in the smallest whole numbers (the page's box is a whole number of those steps, and the CSS slot has that ratio), the dropdown (fillSelect:
-//     one entry for each row, "16:9 \u00b7 960 x 540", for the front page; the game page and the settings menu make their own list from the rows, web/shape_picker.js), which shape fills a screen (and the line that says so), and which shape a first visit starts in.
+//   * What follows from a row is worked out here and nowhere else: the shape in the smallest whole numbers (the page's box is a whole number of those steps, and the CSS slot has that ratio), the entries of the dropdowns ("16:9 \u00b7 960 x 540"; the game page's Picture window and the settings menu make their list from the rows, web/shape_picker.js), which shape fills a screen (and the line that says so), and which shape a first visit starts in.
 // ES5, no module system: a page gets the global AntsShapes, node gets module.exports (tests/scripts/web_aspect_key_check.js and the other checks of the pages run the pages' code with it).
 (function (root, factory) {
     var api = factory();
@@ -62,17 +61,6 @@
         return ROWS.map(function (row) { return row.name; });
     }
 
-    // One option for each row in a <select> of the document `doc` (value: the name; text: the shape and its canvas, nothing else), so that a new row is an entry of every dropdown at once. Gives the select back.
-    function fillSelect(select, doc) {
-        ROWS.forEach(function (row) {
-            var option = doc.createElement('option');
-            option.value = row.name;
-            option.textContent = row.text;
-            select.appendChild(option);
-        });
-        return select;
-    }
-
     // The row whose shape is the closest to `ratio` (a ratio of ratios; a tie goes to the first row, the narrower) and how far off it is (0.05: 5 per cent)
     function closest(ratio) {
         var best = null;
@@ -116,5 +104,5 @@
         }
     }
 
-    return { rows: ROWS, names: names, rowOf: rowOf, parse: parse, placeOf: placeOf, fillSelect: fillSelect, forScreen: forScreen, fillsLine: fillsLine, firstVisit: firstVisit, closest: closest, FILLS_WITHIN: FILLS_WITHIN, FALLBACK: FALLBACK };
+    return { rows: ROWS, names: names, rowOf: rowOf, parse: parse, placeOf: placeOf, forScreen: forScreen, fillsLine: fillsLine, firstVisit: firstVisit, closest: closest, FILLS_WITHIN: FILLS_WITHIN, FALLBACK: FALLBACK };
 });

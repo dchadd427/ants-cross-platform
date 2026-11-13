@@ -85,11 +85,11 @@ class ThePages(unittest.TestCase):
         cls.shell = read(SHELL)
         cls.lobby = read(LOBBY)
 
-    def test_the_game_page_has_the_strip_between_the_picture_and_the_picture_row(self):
+    def test_the_game_page_has_the_strip_under_the_picture(self):
         page = self.shell
         strip = page.index('<section class="rematch" id="rematch" aria-label="The match is over" hidden></section>')
         self.assertLess(page.index('<div id="game-stage"'), strip)
-        self.assertLess(strip, page.index('<div class="view-bar" id="view-bar">'))
+        self.assertLess(strip, page.index('<div class="rbar rep-only" id="rbar">'))
         self.assertIn('<link rel="stylesheet" href="front/rematch.css">', page)
 
     def test_the_game_page_loads_the_client_and_the_strip_before_it_listens(self):
