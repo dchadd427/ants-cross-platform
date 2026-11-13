@@ -1442,7 +1442,7 @@ class TheProcessLogHoldsNothingOfTheList(unittest.TestCase):
         try:
             port = ths.wait_for_port(proc, log_path)
             self.assertIsNotNone(port, ths.read_text(log_path))
-            alice = hc.Client(port, login="6101:alice.canary")
+            alice = hc.Client(port, login="710200300400:alice.canary")
             clients.append(alice)
             alice.recv_json()
             send_json(alice, t="here", at="wait", pub=True, map="CANARYMAP.LVL", n=2, of=4, code="canary12")
@@ -1463,7 +1463,7 @@ class TheProcessLogHoldsNothingOfTheList(unittest.TestCase):
             self.assertIn(" open ", text)
             self.assertIn("sockets=", text, "the log counts sockets, and says so")
             self.assertNotIn("online=", text)
-            for canary in ("alice", "moddy", "canary", "CANARYMAP", "canary12", "6101", "5551234567", "not a map", "Traceback"):
+            for canary in ("alice", "moddy", "canary", "CANARYMAP", "canary12", "710200300400", "5551234567", "not a map", "Traceback"):
                 self.assertNotIn(canary, text, "the log shows " + canary)
         finally:
             for c in clients:

@@ -51,18 +51,25 @@ def sha(value):
     return hashlib.sha256(value.encode("ascii")).hexdigest()
 
 
-def wire(client, seconds=0.6):
-    """The bytes of every text frame that arrives within `seconds` of silence (the hub's pings are answered and skipped): what a socket was sent, as it was sent."""
+def wire(client, seconds=0.6, first_line_within=0.0):
+    """The bytes of every text frame that arrives within `seconds` of silence (the hub's pings are answered and skipped): what a socket was sent, as it was sent. With `first_line_within`, a chat line
+    is waited for that long first (a line that is late on a busy machine is not the silence that ends the read)."""
     out = []
+    end = time.monotonic() + first_line_within
+    got_line = first_line_within <= 0.0
     while True:
         try:
-            opcode, payload = client.recv_frame(seconds)
+            opcode, payload = client.recv_frame(seconds if got_line else max(seconds, end - time.monotonic()))
         except (socket_module.timeout, BlockingIOError, EOFError):
+            if not got_line and time.monotonic() < end:
+                continue
             return out
         if opcode == 9:
             client.send(hc.frame(10, payload))
         elif opcode == 1:
             out.append(payload)
+            if not got_line and json.loads(payload.decode("utf-8")).get("t") == "line":
+                got_line = True
 
 
 def pick_frame(word):
@@ -742,7 +749,7 @@ class TheSocket(LoginTest):
         self.assertEqual(other.wait_line()["who"], "maple.leaf")
         v.jar.cookies.clear()                                                    # (the browser lost the cookie: this socket is what it was)
         c.say("two, and a different text")
-        other.wait_line()
+        self.assertEqual(other.wait_line()["text"], "two, and a different text")
 
     def test_young_accounts_read_and_cannot_write(self):
         for age, young in ((2, True), (6.9, True), (7.1, False), (900, False)):
@@ -1092,7 +1099,7 @@ class TheTwoNamesAndTheModerators(LoginTest):
         for c in (author, twin, mod, guest):
             c.drain(0.2)
         author.say("hello from the first Maple")
-        seen = {name: wire(c) for name, c in (("author", author), ("twin", twin), ("mod", mod), ("guest", guest))}
+        seen = {name: wire(c, first_line_within=10.0) for name, c in (("author", author), ("twin", twin), ("mod", mod), ("guest", guest))}
         for name in ("author", "twin", "guest"):
             blob = b"".join(seen[name])
             self.assertIn(b"hello from the first Maple", blob, name)
@@ -1415,7 +1422,7 @@ class TheLogout(LoginTest):
         self.assertEqual(len(self.rows()), 1)                                    # (only this browser's login)
         self.assertEqual(self.socket(headers={"Cookie": "__Host-ants_hub=" + w.session()}).welcome["you"]["name"], "maple.leaf")
         other.say("still here")
-        other.wait_line()
+        self.assertEqual(other.wait_line()["text"], "still here")
 
     def test_the_old_cookie_is_nobody_after_it(self):
         v = self.member()
@@ -1482,7 +1489,7 @@ class TheForget(LoginTest):
         self.assertEqual(mine2.expect_close(3), 1000)
         self.assertEqual([h["text"] for h in self.socket().welcome["history"]], ["sam's line"])
         theirs.say("sam goes on")
-        reader.wait_line()
+        self.assertEqual(reader.wait_line()["text"], "sam goes on")
         self.assertIsNone(self.socket(w).welcome["you"])
         self.assertEqual(v.call("POST", "/hub/forget").status, 401)              # (nobody left to forget)
 

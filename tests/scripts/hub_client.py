@@ -208,13 +208,25 @@ class Client:
                 raise EOFError("closed: %r" % payload)
             raise AssertionError("unexpected opcode %d" % opcode)
 
-    def recv_reply(self, timeout=None):
-        """The next text frame that is not the online count. The hub's clock sends {"t":"online","n":..} to every socket when the number of people changed (at most once in online_seconds), at a moment that
-        no test controls: it can come just before the answer to what a socket sent. A test that waits for that answer (an error, say) reads past the count; one that tests the count asks for it with recv_json."""
+    def recv_reply(self, timeout=None, total=10.0):
+        """The next text frame that is not the online count. The hub's clock sends {"t":"online","n":..} to every socket when the number of people changed (at most once in online_seconds), at a moment
+        that no test controls: it can come just before the answer to what a socket sent. A test that waits for that answer (an error, say) reads past the count; one that tests the count asks for it with
+        recv_json. Only a frame that is exactly the count is skipped (any other frame is the answer, a wrong one too), and the whole wait is bounded by `total` seconds: when the answer does not come, the
+        failure names the counts that were skipped."""
+        end = time.monotonic() + total
+        skipped = []
         while True:
-            msg = self.recv_json(timeout)
-            if not (isinstance(msg, dict) and msg.get("t") == "online"):
-                return msg
+            left = end - time.monotonic()
+            if left <= 0:
+                raise AssertionError("no answer within %s s; counts skipped: %r" % (total, skipped))
+            try:
+                msg = self.recv_json(min(self.timeout if timeout is None else timeout, left))
+            except socket.timeout:
+                raise AssertionError("no answer within %s s; counts skipped: %r" % (total, skipped))
+            if isinstance(msg, dict) and set(msg) == {"t", "n"} and msg["t"] == "online":
+                skipped.append(msg)
+                continue
+            return msg
 
     def wait_line(self, seconds=10.0, settle=0.3):
         """The first chat line that arrives, waiting up to `seconds` for it (the hub says it as soon as it has it: on a machine that is busy that can be a second late, and a drain that ends after a short silence

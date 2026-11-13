@@ -394,7 +394,7 @@ class TheViolations(RigTest):
         c = self.connect()
         for _ in range(19):
             c.send(hc.frame(1, b"not json"))
-        replies = [c.recv_json() for _ in range(19)]
+        replies = [c.recv_reply() for _ in range(19)]
         self.assertEqual({r["code"] for r in replies}, {"bad"})
         c.send(hc.frame(1, b'{"t":"ping"}'))
         self.assertEqual(c.recv_json()["t"], "online")                   # still open after 19
@@ -438,7 +438,7 @@ class TheTimers(RigTest):
                 c.send(hc.frame(10, payload))
         self.assertGreaterEqual(pings, 4)
         c.say("still here")
-        self.assertEqual(c.recv_json()["code"], "login")                 # open and answering
+        self.assertEqual(c.recv_reply()["code"], "login")                 # open and answering
 
     def test_a_client_that_says_nothing_is_dropped_with_1001_after_the_silence(self):
         c = self.connect()
@@ -488,7 +488,14 @@ class TheHistoryOnTheWire(RigTest):
         alice = self.connect("1001:alice")
         for n in range(60):
             alice.say("line %d" % n)
-        got = [m for m in alice.drain(0.6) if m["t"] == "line"]
+        got = []
+        end = time.monotonic() + 10.0                                           # (the lines are waited for: a hub that is late is not a hub that said fewer; what comes after the sixtieth is read too)
+        while len(got) < 60 and time.monotonic() < end:
+            try:
+                got += [m for m in [alice.recv_json(1.0)] if m["t"] == "line"]
+            except socket.timeout:
+                pass
+        got += [m for m in alice.drain(0.6) if m["t"] == "line"]
         self.assertEqual(len(got), 60)
         late = hc.Client(self.rig.port)
         self.clients.append(late)
@@ -567,7 +574,7 @@ class TheLockedDatabaseOnTheWire(RigTest):
         alice = self.connect("1001:alice")
         for _ in range(3):
             alice.say("hello")
-            self.assertIn(alice.recv_json()["t"], ("line", "err"))
+            self.assertIn(alice.recv_reply()["t"], ("line", "err"))
 
 
 class TheFreeRefusalsCostFramesOnTheWire(RigTest):
@@ -1325,7 +1332,7 @@ class TheProcess(unittest.TestCase):
         proc, port, folder, log_path, env = self.run_hub(extra)
         db = env["ANTS_HUB_DB"]
         headers = {"X-Client-Address": "203.0.113.77", "Cookie": self.COOKIE}
-        alice = self.client(port, login="6101:alice", headers=headers)
+        alice = self.client(port, login="710200300400:alice", headers=headers)
         self.assertEqual(without_the_key(alice.recv_json()["you"]), {"name": "alice", "mod": False})
         mod = self.client(port, login="5551234567:moddy", headers=headers)
         self.assertEqual(without_the_key(mod.recv_json()["you"]), {"name": "moddy", "mod": True})
@@ -1338,7 +1345,7 @@ class TheProcess(unittest.TestCase):
         admin = lambda *a: subprocess.run([sys.executable, "-m", "hub.admin", *a], cwd=REPO, env=env, capture_output=True, text=True)
         self.assertNotEqual(admin("ban", "alice").returncode, 0)
         made = storemod.Store(db)
-        made.set_profile("6101", "alice", "", 100)
+        made.set_profile("710200300400", "alice", "", 100)
         made.close()
         self.assertEqual(admin("ban", "alice").returncode, 0)
         alice.drain(0.1)
@@ -1356,7 +1363,7 @@ class TheProcess(unittest.TestCase):
         self.assertNotEqual(subprocess.run([sys.executable, "-m", "hub.health"], cwd=REPO, env=dict(env, ANTS_HUB_PORT=str(port))).returncode, 0)
         # the same database in a new process: the history is back (without the deleted line) and the ban stands
         proc2, port2, _, log2, _ = self.run_hub({"ANTS_HUB_TEST_LOGIN": "1"}, db=db)
-        again = self.client(port2, login="6101:alice")
+        again = self.client(port2, login="710200300400:alice")
         self.assertEqual(again.recv_json()["history"], [])
         again.say("hello again")
         self.assertEqual(again.recv_reply(), {"t": "err", "code": "banned"})
@@ -1370,7 +1377,7 @@ class TheProcess(unittest.TestCase):
             self.assertIn(" note what=sockets_are_counted_for_each_X-Client-Address", text)          # (the dependence on the proxy setting is said at every start)
             self.assertIn(" listening port=", text)
             self.assertIn(" open ", text)
-            for canary in ("5551234567", "5559876543", self.COOKIE, "canary-cookie", chat_text, "hello again", "203.0.113.77", "127.0.0.1", "6101", "alice", "moddy",
+            for canary in ("5551234567", "5559876543", self.COOKIE, "canary-cookie", chat_text, "hello again", "203.0.113.77", "127.0.0.1", "710200300400", "alice", "moddy",
                            "X-Hub-Test-Login", "Traceback", folder):
                 self.assertNotIn(canary, text, "the log shows " + canary)
             for line in text.splitlines():

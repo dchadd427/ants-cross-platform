@@ -1108,7 +1108,7 @@ void run_bot_tests() {
         ASSERT_TRUE(clients[0]->lobby->chat_log().size() == 2);                              // the waiting room's lines are still there
     } TEST_END();
 
-    TEST_CASE("S3.71 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed, As The Thread's CPU Time: The Clients' Work Is Not The Server's, A Busy Machine Is Not Either), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
+    TEST_CASE("S3.71 Server CPU With Bots (Measured): Twelve Rooms Of One Person And Three Bots Each Cost The Server's Thread A Few Milliseconds A Second (Only mgr.update Is Timed, As The Thread's CPU Time: The Clients' Work Is Not The Server's, A Slow Host Is Not Either: What Is Bounded Is The Cost Of The Bots Against The Idle Bots On The Same Map In The Same Run), On TINY And On TREASURE, With Idle, Medium And Hard Bots; The Start Of Twelve Rooms Is Not A Stall (Each Room Analyses Its Map Once)") {
         // the clock of the measurement: it works, it does not run while the thread sleeps (a wall clock would read the whole 60 ms) and it runs while the thread works
         const double cpu_start = thread_cpu_ms();
         ASSERT_TRUE(cpu_start >= 0.0);
@@ -1137,6 +1137,8 @@ void run_bot_tests() {
             double ms_per_second{0};
             double worst_pass_ms{0};
             double start_pass_ms{0};
+            int attempts{1};                                                                 // how many times the row was measured
+            std::string readings;                                                            // every reading of the row, "ms a second / worst pass / start pass", for the printout
         };
         // twelve rooms, each with one person (a client that asks for its seat) and bots in the other three seats: through the leader's fill (`fill` set) or the room's specification
         const auto measure = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out) {
@@ -1155,7 +1157,7 @@ void run_bot_tests() {
             const auto pass = [&](double& timed_ms) {
                 w.now += 10;
                 w.net.set_time(w.now);
-                const double cpu0 = thread_cpu_ms();                                          // the thread's CPU time, not the wall clock: a loaded machine delays the thread, it does not make the pass cost more
+                const double cpu0 = thread_cpu_ms();                                          // the thread's CPU time, not the wall clock: a loaded machine delays the thread (a slow host, though, makes the same work read longer: see the bounds below)
                 w.mgr.update(w.now);
                 timed_ms = thread_cpu_ms() - cpu0;
                 for (auto& c : w.clients) c->update(w.now, maps_dir());
@@ -1196,23 +1198,37 @@ void run_bot_tests() {
 #else
         constexpr bool kSanitized = false;
 #endif
-        // The thread's CPU time is still the machine's: on a hosted runner (a virtual machine, with other jobs on the same cores) the same work can read longer while other jobs are busy (seen: TREASURE
-        // with hard bots read 122 ms a second, 156 ms for the worst pass, in one run and passed in the next on the same commit). Noise only adds time, so a row is judged by its cheapest run: it is run again,
-        // up to three times, only while it is over a bound, and each figure is the smallest of the runs. A server that really costs more is over the bound in every run, so it still fails.
-        const auto within_bounds = [](const Result& r) { return r.ms_per_second < 100.0 && r.worst_pass_ms < 250.0 && r.start_pass_ms < 250.0; };
+        // What is tested, and what is only a stop. The thread's CPU time is still the host's: on a hosted runner (a virtual machine that other jobs share) the same work reads 1.1 to 3 times longer in
+        // a slow job than in a fast one, for the whole job (TREASURE with hard bots: 25.7, 45.5, 43.1 and, in a slow job, 122.3 ms a second for the same code), so no absolute figure judges the server.
+        // The test is the RATIO of a row to the idle bots' row on the same map, measured in the same run a few seconds before (hard bots over idle bots read 2.0 to 3.1 in four jobs, whatever the host's
+        // speed): a bot whose own work grows threefold over what it was (the hard bots' search made again on every pass, a map analysed again by each bot on every pass) is over 6, and nothing else
+        // moves the ratio. The absolute bounds that follow are SAFETY STOPS, far from any reading (a host three times slower than the slowest one seen is still inside): ms a second under 300 and no pass
+        // of 750 ms or more (no stall). A row that is over a stop is measured again, up to three times, and the first run that is within all three stops is the row; when none is, the run with the
+        // smallest cost is the row and every reading is printed with it, so that a failure shows what each run read (as test_server_persist.cpp does with its trials).
+        constexpr double kStopMsPerSecond = 300.0;
+        constexpr double kStopPassMs = 750.0;
+        constexpr double kRatioBound = 6.0;
+        const auto within_stops = [](const Result& r) { return r.ms_per_second < kStopMsPerSecond && r.worst_pass_ms < kStopPassMs && r.start_pass_ms < kStopPassMs; };
         const auto best_of = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out) {
-            for (int attempt = 0; attempt < 3; ++attempt) {
+            std::string readings;
+            Result cheapest;
+            for (int attempt = 1; attempt <= 3; ++attempt) {
                 Result r;
                 if (!measure(map, kind, level, via_fill, r)) return false;
-                if (attempt == 0) {
+                std::ostringstream one;
+                one << std::fixed << std::setprecision(2) << r.ms_per_second << " / " << r.worst_pass_ms << " / " << r.start_pass_ms;
+                readings += (attempt > 1 ? "; " : "") + one.str();
+                if (attempt == 1 || r.ms_per_second < cheapest.ms_per_second) cheapest = r;
+                if (kSanitized || within_stops(r)) {
                     out = r;
-                } else {
-                    out.ms_per_second = std::min(out.ms_per_second, r.ms_per_second);
-                    out.worst_pass_ms = std::min(out.worst_pass_ms, r.worst_pass_ms);
-                    out.start_pass_ms = std::min(out.start_pass_ms, r.start_pass_ms);
+                    out.attempts = attempt;
+                    out.readings = readings;
+                    return true;
                 }
-                if (kSanitized || within_bounds(out)) break;
             }
+            out = cheapest;
+            out.attempts = 3;
+            out.readings = readings;
             return true;
         };
         Result tiny_fill, tiny_idle, tiny_medium, tiny_hard, treasure_idle, treasure_hard;
@@ -1227,6 +1243,7 @@ void run_bot_tests() {
         const auto row = [](const char* what, const Result& r) {
             std::cout << "\n    " << std::left << std::setw(34) << what << std::right << std::fixed << std::setprecision(2) << std::setw(7) << r.ms_per_second << " ms per second of play for 12 rooms ("
                       << std::setw(5) << r.ms_per_second / 12.0 << " per room), worst pass " << std::setw(6) << r.worst_pass_ms << " ms, worst pass while starting " << std::setw(6) << r.start_pass_ms << " ms";
+            if (r.attempts > 1) std::cout << " (measured " << r.attempts << " times, ms a second / worst pass / start pass: " << r.readings << ")";
         };
         std::cout << "\n    [12 rooms, one person and three bots in each; only the server's own thread is timed" << (kSanitized ? "; a sanitizer build: no figure here is the server's, nothing is bounded" : "") << "]";
         row("TINY, the leader's fill, medium", tiny_fill);
@@ -1240,9 +1257,20 @@ void run_bot_tests() {
         std::cout << "\n    ";
         if (kSanitized) return;
         for (const Result* r : {&tiny_fill, &tiny_idle, &tiny_medium, &tiny_hard, &treasure_idle, &treasure_hard}) {
-            ASSERT_TRUE(r->ms_per_second < 100.0);                                           // a tenth of the thread's time (1000 ms of it pass every second): the rooms are far from it
-            ASSERT_TRUE(r->worst_pass_ms < 250.0);                                           // no pass is a stall (the machine of a test run is shared and busy: the number is for the record, the bound is wide)
-            ASSERT_TRUE(r->start_pass_ms < 250.0);                                           // twelve rooms that start in a few passes: a hitch, not a stall
+            ASSERT_MSG(within_stops(*r), "a row is over a safety stop (" + std::to_string(r->ms_per_second) + " ms a second, worst pass " + std::to_string(r->worst_pass_ms) + " ms, start pass " + std::to_string(r->start_pass_ms) + " ms); readings: " + r->readings);
+        }
+        // the test: what the bots cost against the idle bots on the same map, in this run
+        struct Against {
+            const char* what;
+            const Result* row;
+            const Result* idle;
+        };
+        for (const Against& a : {Against{"TINY, the leader's fill, medium", &tiny_fill, &tiny_idle}, Against{"TINY, medium bots", &tiny_medium, &tiny_idle}, Against{"TINY, hard bots", &tiny_hard, &tiny_idle},
+                                 Against{"TREASURE, hard bots", &treasure_hard, &treasure_idle}}) {
+            ASSERT_TRUE(a.idle->ms_per_second > 0.0);
+            const double times = a.row->ms_per_second / a.idle->ms_per_second;
+            std::cout << "\n    " << a.what << ": " << std::fixed << std::setprecision(2) << times << " times the idle bots' cost on the same map (the bound is " << kRatioBound << ")";
+            ASSERT_MSG(times < kRatioBound, std::string(a.what) + " cost " + std::to_string(times) + " times what the idle bots of the same map cost in the same run (the bound is " + std::to_string(kRatioBound) + "); readings: " + a.row->readings + " against " + a.idle->readings);
         }
     } TEST_END();
 
