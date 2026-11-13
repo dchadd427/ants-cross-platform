@@ -17,7 +17,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hub import limits as limitmod  # noqa: E402
+from hub import limits as limitmod, store as storemod  # noqa: E402
 
 STACK = os.path.join(REPO, "docker-compose.stack.yml")
 
@@ -273,6 +273,18 @@ class TheCode(unittest.TestCase):
                           defaults.duplicate_seconds, defaults.violations, defaults.violation_window, defaults.sockets_per_address, defaults.sockets_total, defaults.ping_seconds,
                           defaults.silence_seconds, defaults.write_buffer_max),
                          (2048, 200, 800, 50, 7, 3, 2.0, 30.0, 20, 60.0, 8, 500, 25.0, 60.0, 131072))
+
+    def test_the_documented_limits_of_the_pictures_are_the_ones_in_the_code(self):
+        doc = read(os.path.join(REPO, "docs", "HUB.md"))
+        defaults = limitmod.Limits()
+        for needle in ("one fetch for an account a minute, 2 at a time and 32 waiting, a burst of 5 and then one a second for the hub", "3 seconds to connect and 6 in all", "49,152 bytes read and 32,768 kept",
+                       "2,000 pictures and 8 MiB", "20 a second for an address (a burst of 240, in nginx and in the hub)", "remembered 400 days"):
+            self.assertIn(needle, doc, needle)
+        self.assertEqual((defaults.picture_account_seconds, defaults.picture_inflight, defaults.picture_waiting, defaults.picture_burst, defaults.picture_refill_seconds, defaults.discord_connect_seconds,
+                          defaults.discord_seconds, defaults.picture_read_max, defaults.picture_bytes_max, defaults.pictures_rows_max, defaults.pictures_bytes_max, defaults.picture_serve_burst,
+                          defaults.picture_serve_refill_seconds),
+                         (60.0, 2, 32, 5, 1.0, 3.0, 6.0, 49152, 32768, 2000, 8 * 1024 * 1024, 240, 0.05))
+        self.assertEqual(storemod.PICTURE_DAYS, 400)
 
 
 class TheWiring(unittest.TestCase):

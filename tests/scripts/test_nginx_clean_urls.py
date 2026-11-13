@@ -234,7 +234,7 @@ class TheRealPagesRun(unittest.TestCase):
                 with open(os.path.join(docroot, "mapmaker_atlas", name), "wb") as f:
                     f.write(data)
             folder = os.path.join(cls.tmp, "run")
-            for sub in ("tmp", "cache_stats", "cache_history"):
+            for sub in ("tmp", "cache_stats", "cache_history", "cache_hub_pics"):
                 os.makedirs(os.path.join(folder, sub))
             maps = os.path.join(cls.tmp, "maps")
             os.makedirs(os.path.join(maps, "previews"))
@@ -243,7 +243,7 @@ class TheRealPagesRun(unittest.TestCase):
             dead = H.free_port()
             text = RAW.replace("    listen 80;", "    listen 127.0.0.1:%d;" % cls.port).replace("    listen [::]:80;", "")
             text = text.replace("/usr/share/nginx/html", docroot).replace("/srv/community-maps", maps)
-            text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history")
+            text = text.replace("/var/cache/nginx/ants_stats", folder + "/cache_stats").replace("/var/cache/nginx/ants_history", folder + "/cache_history").replace("/var/cache/nginx/ants_hub_pics", folder + "/cache_hub_pics")
             text = re.sub(r"set \$(\w+) [a-z-]+:\d+;", lambda m: "set $%s 127.0.0.1:%d;" % (m.group(1), dead), text)
             text = text.replace("access_log /dev/stdout ants_noquery;", "access_log %s/access.log ants_noquery;" % folder).replace("error_log /dev/stderr crit;", "error_log %s/loc.log crit;" % folder)
             with open(os.path.join(folder, "site.conf"), "w", encoding="utf-8") as f:

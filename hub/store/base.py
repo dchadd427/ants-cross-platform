@@ -19,6 +19,9 @@ MODLOG_ROWS = 10000                     # ... and at most this many rows (the ne
 ACTIONS = ("mute", "unmute", "del", "kick", "ban", "unban")     # what the log can say was done
 TERMINAL = "terminal"                   # the actor of an action that the command line did
 REFERENCE = re.compile(r"[0-9a-f]{16}\Z")      # the pseudonymous reference of an account (hub/pseudo.py)
+PICTURE_NAME = re.compile(r"[0-9a-f]{32}\Z")        # the public name of a picture: 128 random bits (hub/pictures.py)
+PICTURE_DAYS = 400                      # a person's `off` is remembered this long after their last login, then the row goes (the default is on again)
+SHOW_ON, SHOW_OFF, SHOW_BLOCKED = 1, 0, 2       # the state of an account's picture: shown (the default), switched off by the person, blocked by the operator
 PROFILE_DAYS = 35                       # a profile that has not been refreshed by a login for this long belongs to nobody who is logged in (a login lasts 30 days): purge() deletes it
 
 
@@ -87,7 +90,7 @@ class StoreBase:
         raise NotImplementedError
 
     def purge(self, chunk=2000):
-        """Delete up to `chunk` lines past their time or past the newest `max_lines` (every line counts, a moderator's and a deleted one too), the mutes that are over, the logins that ran out, the profiles that no login has refreshed for PROFILE_DAYS, and the rows of the moderators' log that are older than `modlog_days` or past the newest `max_modlog`; returns how many lines went."""
+        """Delete up to `chunk` lines past their time or past the newest `max_lines` (every line counts, a moderator's and a deleted one too), the mutes that are over, the logins that ran out, the profiles that no login has refreshed for PROFILE_DAYS, the pictures whose login has run out (and a person's `off` that no login has touched for PICTURE_DAYS), and the rows of the moderators' log that are older than `modlog_days` or past the newest `max_modlog`; returns how many lines went."""
         raise NotImplementedError
 
     def size(self):
@@ -107,6 +110,51 @@ class StoreBase:
 
     def forget(self, account, since=0):
         """Remove the account's logins, profile and lines and wipe its name from its mute and ban (which stay). Returns the ids of the lines that a screen may still show."""
+        raise NotImplementedError
+
+    # ---- pictures: the small copy of an account's Discord picture (hub/pictures.py), keyed by the account's pseudonymous reference, never by its id ----
+
+    def set_picture(self, account, png, name, until, rows_max, bytes_max):
+        """Keep `png` (the bytes the hub rewrote) under the public `name` (32 random hex digits) for the account, until `until` (seconds since 1970); the account's older copy and name are gone in the same step. False,
+        and nothing kept, when the account's picture is switched off or blocked, or the picture is bigger than `bytes_max`. At most `rows_max` pictures and `bytes_max` bytes are kept in all: the ones
+        fetched longest ago lose their bytes and their name first."""
+        raise NotImplementedError
+
+    def clear_picture(self, account):
+        """Delete the account's picture and name; its switch, if it was ever changed, stays. True when there was a picture."""
+        raise NotImplementedError
+
+    def set_picture_show(self, account, show, operator=False):
+        """Set the account's picture to SHOW_ON, SHOW_OFF or SHOW_BLOCKED; a picture that is not shown is deleted in the same step. A block is lifted by the operator only (`operator=True`): the person's own change of a
+        block does nothing. Returns the state the account is in after it."""
+        raise NotImplementedError
+
+    def picture_state(self, account, touch=False):
+        """SHOW_ON when the account has no word said about its picture, else the state it was put in. `touch` marks a login of an account that is switched off (its `off` is remembered `PICTURE_DAYS` after its last login)."""
+        raise NotImplementedError
+
+    def has_picture(self, account):
+        """Whether a picture is kept for the account now."""
+        raise NotImplementedError
+
+    def picture(self, name):
+        """The bytes kept under the public `name`, or None for a name that is not 32 lower-case hex digits, is not known, or whose account is not shown (switched off or blocked) or whose login has run out."""
+        raise NotImplementedError
+
+    def picture_names(self):
+        """{reference: name} of the pictures that may be shown now."""
+        raise NotImplementedError
+
+    def last_picture_change(self):
+        """The number of the last change of the pictures, by this process or by another that shares the data (the command line): it only goes up."""
+        raise NotImplementedError
+
+    def picture_usage(self):
+        """(pictures kept, their bytes)."""
+        raise NotImplementedError
+
+    def logins(self, account):
+        """How many logins the account has now."""
         raise NotImplementedError
 
     # ---- mutes and bans ----

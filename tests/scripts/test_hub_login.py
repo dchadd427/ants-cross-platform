@@ -1763,7 +1763,7 @@ class TheDiscordClient(unittest.TestCase):
         code = "c0de"
         with self.fake.lock:
             self.fake.codes[code] = self.fake.user
-        self.assertEqual(self.run_call(client, code), (OLD, "maple.leaf", None))                 # (the id, the username and the display name that Discord says: none, for a person who set none)
+        self.assertEqual(self.run_call(client, code), (OLD, "maple.leaf", None, None))           # (the id, the username, the display name that Discord says (none, for a person who set none) and the picture code (none: the fake says one that is not the shape of one))
         token = next(iter(self.fake.tokens))
         for obj in (client, client.limits, client.ssl):
             self.assertNotIn(token, repr(getattr(obj, "__dict__", {})), type(obj).__name__)

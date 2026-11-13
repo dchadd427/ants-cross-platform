@@ -84,6 +84,17 @@ class Limits:
     named_lines_refill_seconds: float = 10.0
     roles_entries_max: int = 2000       # people whose role is kept in memory: those with a socket open and a few that left (at most `sockets_total` are open)
     discord_body_max: int = 32768       # what is read of an answer of Discord (the head and the body together); more is an answer that is not Discord's
+    picture_bytes_max: int = 32768      # a profile picture's copy: the PNG that Discord sends is kept only up to this (64 pixels square is 4 to 12 KB)
+    picture_read_max: int = 49152       # what is read of the answer of Discord's image host (the head and the body together); more is not a picture
+    pictures_rows_max: int = 2000       # pictures kept in all ...
+    pictures_bytes_max: int = 8388608   # ... and their bytes (8 MiB, an eighth of db_max_bytes): a new one that does not fit takes the room of the ones fetched longest ago
+    picture_account_seconds: float = 60.0       # one fetch for an account in this long (a burst of logins makes one)
+    picture_inflight: int = 2           # fetches at one time ...
+    picture_waiting: int = 32           # ... and waiting for their turn (more are dropped: the letters stay)
+    picture_burst: int = 5              # fetches for the whole hub: a burst of 5, then one every `picture_refill_seconds`
+    picture_refill_seconds: float = 1.0
+    picture_serve_burst: int = 240      # /hub/pic/ answers for one client address: a burst of 240 (one whole list of the front page), then twenty a second (nginx has the same numbers in front)
+    picture_serve_refill_seconds: float = 0.05
 
     @property
     def prune_from_bytes(self):

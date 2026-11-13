@@ -14,6 +14,7 @@ from . import chat as chatmod, config as configmod, http, limits as limitmod, ro
 from .log import Log
 
 WS_PATH = "/hub/ws"
+PICTURE_PREFIX = "/hub/pic/"                          # the pictures (hub/pictures.py): one route for every path under it, which shapes the name itself
 HEALTH_PATH = "/hub/healthz"
 
 
@@ -141,6 +142,8 @@ class Hub:
         if self.ticker:
             self.ticker.cancel()
         self.chat.roles.stop()
+        if getattr(self.sessions, "pictures", None) is not None:
+            self.sessions.pictures.stop()
         for task in list(self.chat.busy.values()):
             task.cancel()
         if self.server:
@@ -168,6 +171,8 @@ class Hub:
             if request.path == HEALTH_PATH and request.method == "GET":
                 return writer.write(http.response(200, {"ok": True}))
             route = self.routes.get(request.split()[0])
+            if route is None and request.split()[0].startswith(PICTURE_PREFIX):
+                route = getattr(self.sessions, "picture_route", None)
             if route is not None:
                 self.pending -= 1                                     # (the place of a connection that has not finished its handshake: this one has, and may wait for Discord)
                 pending = False
