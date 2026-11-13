@@ -185,7 +185,6 @@
     .bar nav { display: flex; gap: 6px 18px; flex-wrap: wrap; }
     .bar .ver { font-variant-numeric: tabular-nums; background: var(--edge); padding: 2px 10px; border-radius: 2px; color: #fff; }
     .live { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: #8b9a93; box-shadow: 0 0 0 1px #000; vertical-align: -1px; }
-    .shape { display: flex; flex-direction: column; align-items: stretch; gap: 6px; font-size: 16px; color: var(--cream); }     /* the Picture row of the match column: the label above the dropdown, the quiet line under it */
 
     .toast { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 70; background: #0b1117; color: var(--cream); border: 3px solid var(--gold); border-radius: 6px; padding: 10px 18px; width: max-content; max-width: min(520px, 92vw); overflow-wrap: anywhere; pointer-events: none; text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, .5); }
     .how { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(5, 10, 8, .72); overflow: auto; }
@@ -212,8 +211,8 @@
     @media (min-width: 1041px) and (min-height: 880px) { :root { --k: 4; } }
     @media (max-width: 1040px) {
         .grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
-        .side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 22px 26px; grid-template-rows: auto auto 1fr; }     /* the map's column is tall: the Picture row and START! stack at the top of theirs, the spare height is the third row's */
-        .side .maprow { grid-row: span 3; }
+        .side { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; gap: 22px 26px; grid-template-rows: auto 1fr; }     /* the map's column is tall: the game type and START! stack at the top of theirs, the spare height is the second row's */
+        .side .maprow { grid-row: span 2; }
     }
     @media (max-width: 720px) {
         :root { --k: 2; }
@@ -266,15 +265,6 @@
     #stats-played:empty { display: none; }
     .bar .notice { font-size: 13px; color: #cfe3da; max-width: 90ch; } .bar .coffee { margin: 6px 0 0; text-align: center; } .bar .coffee a { display: inline-block; padding: 0; } .bar .coffee img { display: block; width: 217px; max-width: 100%; height: auto; border-radius: 6px; }                      /* the recording notice, for a visitor who is not asked for a name */
     .name-step-notice { margin-top: 8px; }
-    .shape-box { position: relative; display: flex; }
-    .shape-box::after { content: ""; position: absolute; right: 16px; top: calc(50% - 6px); width: 7px; height: 7px; border: solid var(--cream); border-width: 0 2px 2px 0; transform: rotate(45deg); pointer-events: none; }
-    .shape-select { appearance: none; -webkit-appearance: none; flex: 1 1 auto; width: 100%; min-width: 0; min-height: 40px; padding: 6px 40px 6px 14px; font: inherit; font-size: 15px; line-height: 1.1; color: var(--cream); text-overflow: ellipsis; cursor: pointer;
-        background: var(--sheen) var(--teal); border: 2px solid var(--edge); border-radius: 8px; box-shadow: var(--bevel-sm), 2px 2px 0 var(--shadow); }     /* the picture's shapes: a native dropdown that the script fills from web/shapes.js's table */
-    .shape-select:hover { background-color: var(--teal-hi); }
-    .shape-select:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
-    .shape-select option { color: var(--cream); background: #102b25; }
-    .fit-note { font-size: 13px; line-height: 1.2; color: #cfe3da; }                         /* the quiet line under the dropdown: which shape fills the computer's screen */
-    .fit-note[hidden] { display: none; }
     .live.on { background: #44e08a; box-shadow: 0 0 0 1px #000, 0 0 7px rgba(68, 224, 138, .8); }
 
     /* a long room code or name in a strip never runs over the edge of a phone */
@@ -317,7 +307,6 @@
                 <button class="btn change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button></div>
             </div>
             <div id="gtype"></div>
-            <div class="shape" id="shape-row"><label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note" title="The shape of the picture"></select></span><span class="fit-note" id="fit-note" hidden></span></div>
             <div class="go">
                 <button class="btn big" type="button" id="start">START!</button>
                 <p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>
@@ -389,14 +378,12 @@
         var mapByKey = Rules.mapByKey;
         var codeText = Rules.codeText;
 
-        // HELPERS_BEGIN (tests/scripts/web_aspect_key_check.js runs these three functions, the blocks of the picture's shape and the selector's listener below)
+        // HELPERS_BEGIN (tests/scripts/web_aspect_key_check.js runs these functions and the block of the picture's shape below)
         function $(id) { return document.getElementById(id); }
-        function remember(key, value) { try { window.localStorage.setItem(key, value); } catch (e) { /* private window: not remembered */ } }
         function recall(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
         // HELPERS_END
         // SHAPES_BEGIN (tests/scripts/web_aspect_key_check.js, web_lobby_check.js and web_rejoin_block_check.js run this block, with the AntsShapes of web/shapes.js)
-        // THE SHAPES of the picture come from web/shapes.js, the one table of the pages (the game page and the settings menu read it too; the game's own is kAspectTable in include/ants_app/canvas_layout.hpp):
-        // the entries of the Picture dropdown (AntsShapes.fillSelect), the shape nearest to a screen and the line under the dropdown that says so (AntsShapes.fillsLine).
+        // THE SHAPES of the picture come from web/shapes.js, the one table of the pages (the game page and the settings menu read it too; the game's own is kAspectTable in include/ants_app/canvas_layout.hpp).
         // isShape(text) says whether a text names one (an address, a remembered value), aspectQuery(shape) is the `&aspect=` part of a hand-off to the game (only a pick goes in it: see `pickedShape` below).
         function isShape(text) { return AntsShapes.parse(text) !== null; }
         function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }
@@ -462,28 +449,19 @@
         }
         // LOBBY_END
 
-        // The shape of the games' pictures: ?aspect= and the name of a shape of the table (anything else is ignored), else what the selector of this page or of the game page remembered, else the shape nearest to the screen (16:9 when it has no say). A hand-off to a game
-        // (START, Rejoin, a game for one) carries ?aspect= in the game's address only when the player picked (`pickedShape`): otherwise the game page works out the first visit's shape itself, when it loads.
-        // The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the selectors write it. The key of the first versions of the pages was 'ants.aspect': it is NOT
-        // read any more, so that a Classic 4:3 that a browser once remembered is forgotten once: a browser with no choice starts with the shape nearest to its screen (AntsShapes.firstVisit, which the
-        // game page asks too; it is never stored) until its player picks a shape.
-        // The quiet line under the Picture dropdown names the shape that fills the computer's screen ("16:10 fills your screen"; none when no shape does).
+        // The shape of the games' pictures: ?aspect= and the name of a shape of the table (anything else is ignored), else what the game's settings menu (or its recording's Picture button) remembered, else nothing: the game page then works out the
+        // first visit's shape itself, the one nearest to the screen. This page has no control for it: a hand-off to a game (START, Rejoin, a game for one) carries ?aspect= in the game's address only when the player picked
+        // before (`pickedShape`: the address or the stored pick; '' on a first visit). The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the game page writes it. The key of the first versions of
+        // the pages was 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered is forgotten once.
         // SHAPE_BEGIN
         var ASPECT_KEY = 'ants.aspect.v2';
-        var aspect = '16:9';
-        var pickedShape = '';                                                                 // (the shape that the player chose: the address, the stored pick or a press of the selector; '' while the page only shows the first visit's shape)
+        var pickedShape = '';                                                                 // (the shape that the player chose: the address or the stored pick; '' while nothing was chosen)
         (function () {
             var asked = null;
             try { asked = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
             var remembered = recall(ASPECT_KEY);
-            if (isShape(asked)) aspect = pickedShape = asked;
-            else if (isShape(remembered)) aspect = pickedShape = remembered;
-            else aspect = AntsShapes.firstVisit(window);                          // (nothing chosen: the shape nearest to the screen, the game page's own answer; never stored)
-            document.body.setAttribute('data-aspect', aspect);
-            AntsShapes.fillSelect($('aspect-select'), document).value = aspect;
-            var line = '';
-            try { line = AntsShapes.fillsLine(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
-            if (line) { $('fit-note').textContent = line; $('fit-note').hidden = false; }
+            if (isShape(asked)) pickedShape = asked;
+            else if (isShape(remembered)) pickedShape = remembered;
         })();
         // SHAPE_END
 
@@ -1266,20 +1244,6 @@
                 connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });
             }
         }
-
-        // SELECTOR_BEGIN
-        // the choice is remembered (the game page's selector reads it too; nothing else writes it); the lobby has no game open, so the next game is the new shape. The dropdown says a change only: choosing
-        // the entry that is shown (the first visit's) is no event, so that one is no pick
-        $('aspect-select').addEventListener('change', function () {
-            var value = $('aspect-select').value;
-            if (!isShape(value)) return;
-            pickedShape = value;                                                                  // (a choice is a pick, the shape that is shown too)
-            remember(ASPECT_KEY, value);
-            if (value === aspect) return;
-            aspect = value;
-            document.body.setAttribute('data-aspect', value);
-        });
-        // SELECTOR_END
 
         // STATS_BEGIN (tests/scripts/web_stats_check.js runs this block)
         // THE LINE OF NUMBERS in the footer: how many matches are being played, how many players are online, how many games were played and how many of them today. They come from the game server through

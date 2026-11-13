@@ -85,11 +85,11 @@ class ThePages(unittest.TestCase):
         cls.shell = read(SHELL)
         cls.lobby = read(LOBBY)
 
-    def test_the_game_page_has_the_strip_between_the_picture_and_the_picture_row(self):
+    def test_the_game_page_has_the_strip_under_the_picture(self):
         page = self.shell
         strip = page.index('<section class="rematch" id="rematch" aria-label="The match is over" hidden></section>')
         self.assertLess(page.index('<div id="game-stage"'), strip)
-        self.assertLess(strip, page.index('<div class="view-bar" id="view-bar">'))
+        self.assertLess(strip, page.index('<div class="rbar rep-only" id="rbar">'))
         self.assertIn('<link rel="stylesheet" href="front/rematch.css">', page)
 
     def test_the_game_page_loads_the_client_and_the_strip_before_it_listens(self):
@@ -104,9 +104,7 @@ class ThePages(unittest.TestCase):
     def test_the_layout_of_the_game_page_counts_the_strip(self):
         """the picture's box is what is left of the window: the strip under it takes its height (measureChrome), and a change of its size lays the box out again"""
         page = self.shell
-        measure = page[page.index("function measureChrome()"):page.index("function layoutBox(")]
-        self.assertIn("var strip = document.getElementById('rematch'); if (strip && !strip.hidden && !ANTS_REPLAY_MODE) barHeight += strip.offsetHeight", measure)
-        self.assertIn("observer.observe(document.getElementById('rematch'));", page)
+        self.assertIn("observer.observe(document.getElementById('rematch'));", page)       # (the height it takes is measured in tests/scripts/web_picture_in_settings_check.js: strip shown, the picture, the strip and the room under it in the window)
         self.assertIn("function relayout() { try { win.dispatchEvent(new win.Event('resize')); }", read(REMATCH))
 
     def test_the_front_page_loads_the_strip_and_uses_it(self):

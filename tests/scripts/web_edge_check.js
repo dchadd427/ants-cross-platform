@@ -292,50 +292,42 @@ try {
         P.releasesMouseLock(null),
     ], [false, false, false, false, false, false]);
 
-    // the block of the control, with a page of fakes
+    // the block of the control, with a page of fakes: what the settings menu's row reads (`antsLock.get`) and writes (`antsLock.set`), and what the browser keeps
     function runLock(stored, canHaveLock) {
         const block = between(text, 'ANTS_LOCK_BEGIN', 'ANTS_LOCK_END', shellPath);
         const storage = makeStorage(stored);
         const win = { localStorage: storage };
-        const on = element({ 'data-lock': 'on', 'aria-checked': 'true' });
-        const off = element({ 'data-lock': 'off', 'aria-checked': 'false' });
-        const parts = [element(), element()];
-        const doc = {
-            querySelectorAll(selectorText) {
-                if (selectorText === '.seg button[data-lock]') return [on, off];
-                if (selectorText === '.lock-part') return parts;
-                throw new Error('the page asked for ' + selectorText);
-            },
-        };
+        const doc = { querySelectorAll(selectorText) { throw new Error('the page asked for ' + selectorText); } };      // (the control has no element of the page any more)
         const canvas = canHaveLock === false ? {} : { requestPointerLock() {} };
-        const result = new Function('window', 'document', 'canvas', 'ANTS_PAGE', block + '\nreturn { get on() { return ANTS_POINTER_LOCK; }, key: ANTS_LOCK_KEY };')(win, doc, canvas, P);
-        return { result, storage, on, off, parts, shows: () => on.attributes['aria-checked'] + '/' + off.attributes['aria-checked'] };
+        const released = [];
+        const result = new Function('window', 'document', 'canvas', 'ANTS_PAGE', 'releaseLock', block + '\nreturn { get on() { return ANTS_POINTER_LOCK; }, key: ANTS_LOCK_KEY, lock: antsLock };')(win, doc, canvas, P, () => { released.push(1); });
+        return { result, storage, released, lock: result.lock };
     }
     {
         const r = runLock({});
         expect('control: the key', r.result.key, 'ants.pointerlock');
-        expect('control: nothing remembered: Locked, and nothing was written by loading', [r.result.on, r.shows(), JSON.stringify(r.storage.writes)], [true, 'true/false', '[]']);
-        r.off.listeners.click();
-        expect('control: Free clicked: off, shown, remembered', [r.result.on, r.shows(), JSON.stringify(r.storage.writes)], [false, 'false/true', JSON.stringify([['ants.pointerlock', 'off']])]);
+        expect('control: nothing remembered: Locked, and nothing was written by loading', [r.result.on, r.lock.get(), JSON.stringify(r.storage.writes)], [true, true, '[]']);
+        r.lock.set(false);
+        expect('control: Free chosen: off, remembered, the pointer let go of', [r.result.on, r.lock.get(), JSON.stringify(r.storage.writes), r.released.length], [false, false, JSON.stringify([['ants.pointerlock', 'off']]), 1]);
         const again = runLock(r.storage.data);
-        expect('control: the next visit comes back Free', [again.result.on, again.shows()], [false, 'false/true']);
-        again.on.listeners.click();
-        expect('control: Locked clicked again: on, shown, remembered as "on"', [again.result.on, again.shows(), JSON.stringify(again.storage.writes)], [true, 'true/false', JSON.stringify([['ants.pointerlock', 'on']])]);
-        expect('control: both parts are shown where the browser has a pointer lock', r.parts.map((p) => p.style.display).join(','), ',');
+        expect('control: the next visit comes back Free', [again.result.on, again.lock.get()], [false, false]);
+        again.lock.set(true);
+        expect('control: Locked chosen again: on, remembered as "on", nothing let go of', [again.result.on, again.lock.get(), JSON.stringify(again.storage.writes), again.released.length], [true, true, JSON.stringify([['ants.pointerlock', 'on']]), 0]);
+        expect('control: a browser with a pointer lock offers the row', r.lock.available(), true);
     }
     {
         const r = runLock({ 'ants.pointerlock': 'junk' });
-        expect('control: a remembered value that is no choice is Locked', [r.result.on, r.shows()], [true, 'true/false']);
+        expect('control: a remembered value that is no choice is Locked', [r.result.on, r.lock.get()], [true, true]);
     }
     {
         const r = runLock(THROWS);                                                           // a private window: the storage refuses everything
-        expect('control: a browser that refuses its storage still starts Locked', [r.result.on, r.shows()], [true, 'true/false']);
-        r.off.listeners.click();
-        expect('control: ... and the click still switches (nothing is remembered)', [r.result.on, r.shows()], [false, 'false/true']);
+        expect('control: a browser that refuses its storage still starts Locked', [r.result.on, r.lock.get()], [true, true]);
+        r.lock.set(false);
+        expect('control: ... and the choice still switches (nothing is remembered)', [r.result.on, r.lock.get()], [false, false]);
     }
     {
         const r = runLock({}, false);
-        expect('control: a browser without a pointer lock does not show the control', r.parts.map((p) => p.style.display).join(','), 'none,none');
+        expect('control: a browser without a pointer lock does not offer the row', r.lock.available(), false);
     }
 } catch (e) {
     console.log('FAIL ' + e.message);
