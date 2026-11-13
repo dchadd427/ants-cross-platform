@@ -12,7 +12,6 @@ tests/data/hub_marks_mutants.json breaks the rules one at a time for tools/mutat
 """
 import json
 import os
-import re
 import sqlite3
 import sys
 import tempfile
@@ -107,15 +106,16 @@ class TheLine(unittest.TestCase):
             self.assertNotIn("mod", row)
         self.assertEqual([m["t"] for m in plain.sent if m["t"] in ("you", "ok", "bye", "bans")], [])
 
-    def test_a_person_named_admin_or_moderator_gets_no_role_from_the_name(self):
+    def test_a_person_named_like_a_role_gets_no_role_from_the_name(self):
         w = world()
         self.addCleanup(w.close)
-        w.roles.roles.pop("7411000000000009", None)
-        peer = w.join(session.Identity("7411000000000009", "admin", False))
         reader = w.join(None)
-        w.say(peer, "I am called admin")
-        line = reader.kinds("line")[-1]
-        self.assertEqual((line["who"], line["mod"], line.get("role")), ("admin", False, None))
+        for n, name in enumerate(("admin", "moderator", "mod", "administrator")):
+            peer = w.join(session.Identity("741100000000010%d" % n, name, False))
+            w.clock.now += 5
+            w.say(peer, "I am called " + name)
+            line = reader.kinds("line")[-1]
+            self.assertEqual((line["who"], line["mod"], line.get("role")), (name, False, None), name)
 
 
 class TheStore(unittest.TestCase):

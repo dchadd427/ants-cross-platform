@@ -150,7 +150,6 @@
         var tokens = PACE.burst, tokensAt = now(), said = Object.create(null), heard = 0, skipped = 0, muted = { repaint: false, flood: false };       // (said: the texts that were sent in the last 31 s, as the hub remembers them)
         var open = (win.innerWidth || 0) >= 701 && (win.innerHeight || 0) >= 601;       // a window of 701 x 601 or more opens with the panel out, a smaller one with the folded header (home.css and home.js have the same limits)
         var hold = false;                                                        // the next repaint is for a change of the role: the reader keeps their place
-        var retry = false;                                                       // after a ban's `bye` and the welcome that follows: one line may go to the hub again (the ban may be lifted: the hub says nothing to a page)
         var removed = '';                                                        // 'kicked' or 'banned' after the hub said `bye` (or `banned` to a line): a notice stays on the screen, and a banned person's field stays off
         var taps = [], hello = null;                                             // the players list listens through this socket: fn(kind, frame), kind 'live' (the welcome), 'who', 'lost' or 'shown' (Home shows or not); hello: the open socket's welcome
 
@@ -266,7 +265,7 @@
             var live = state === 'live';
             form.hidden = !(live && (you || login));
             var ask = live && !you && login;                                    // (a login is offered and nobody is named: the field says so, and is off)
-            var barred = removed === 'banned' && !retry && !!you, said = ask ? ERR.login : barred ? TEXT.banField : TEXT.field;       // (a banned person reads on: the field is off, and says why)
+            var barred = removed === 'banned' && !!you, said = ask ? ERR.login : barred ? TEXT.banField : TEXT.field;       // (a banned person reads on: the field is off, and says why)
             field.disabled = !you || barred; field.setAttribute('placeholder', said); field.setAttribute('aria-label', said);
             send.hidden = !you || barred; enter.hidden = !!you;
             guest.hidden = !(live && !you);
@@ -369,8 +368,7 @@
             if (welcomed) return;                                                // (one welcome for each socket)
             if (m.v !== VERSION || (m.history !== undefined && !Array.isArray(m.history))) { lost(); return; }       // (a hub that speaks another version is no hub for this page)
             you = youOf(m.you);
-            if ((removed === 'kicked' && you) || (removed === 'banned' && !you)) removed = '';
-            retry = removed === 'banned';                                        // (a welcome that still names the person after a ban: one line is let through to ask the hub)       // (a person who is somebody else now, or nobody, is not the one that was removed)
+            if ((removed === 'kicked' && you) || (removed === 'banned' && !you)) removed = '';       // (a person who is somebody else now, or nobody, is not the one that was removed)
             login = m.login === true; people = count(m.online);
             var before = lastId;
             feed.length = 0;
@@ -390,7 +388,6 @@
             var e = lineOf(m);
             if (!e || known(e.id)) return;
             e.own = !e.sys && mine(e); e.fresh = !e.own && !seen();
-            if (e.own && removed === 'banned') removed = '';                    // (a line of this person was taken: the ban is lifted)
             if (e.own) { var key = nfc(e.text), at = -1, old; waiting(); for (var j = 0; j < unanswered.length && at < 0; j++) if (unanswered[j].key === key) at = j; old = oldest(false); if (at < 0 && old >= 0 && points(key) * 2 >= points(unanswered[old].key) && within(key, unanswered[old].key)) at = old; if (at >= 0) unanswered.splice(at, 1); }       // (the echo of a line: composed, or with characters taken out)
             push(e);
             if (seen() && !stale) { settle(); flow(); e.el = row(e); log.appendChild(e.el); } else stale = true;
@@ -411,12 +408,12 @@
             if (!next) return;
             var was = tools();
             you.role = next.role; you.mod = next.mod;
-            if (was !== tools()) { stale = true; hold = true; }                                   // (the numbers and the usernames come or go with the role: the log is made again)
+            if (was !== tools()) { stale = true; hold = seen(); }                                   // (the numbers and the usernames come or go with the role: the log is made again)
             render();
             tapped('you', m);
         }
         function onBye(m) {                                                      // the hub removed this person: a plain notice stays; the hub closes the socket, and the page connects again as it does after any close (with its backoff: no storm)
-            removed = m.why === 'kicked' ? 'kicked' : m.why === 'banned' ? 'banned' : removed; retry = false;
+            removed = m.why === 'kicked' ? 'kicked' : m.why === 'banned' ? 'banned' : removed;
             render();
         }
         function onBans(m) {
@@ -456,7 +453,7 @@
             waiting();
             var about = ABOUT.indexOf(code) !== -1, at = oldest(about || code === 'bad'), refused = at < 0 && about ? { cmd: true } : unanswered.splice(at < 0 ? 0 : at, 1)[0];       // (power, role and who are a command's, even when its wait is over)
             if (!refused) return;
-            if (code === 'banned') { removed = 'banned'; retry = false; }                           // (a banned person who reloads the page is told by the hub's refusal: the notice and the field off)
+            if (code === 'banned') removed = 'banned';                           // (a banned person who reloads the page is told by the hub's refusal: the notice and the field off)
             if (refused.cmd) answer([code === 'bad' ? TEXT.cmdBad : code === 'rate' ? TEXT.cmdRate : wordOf(code, login)]); else tell(code);
             if (refused.text === undefined) return;
             delete said[refused.text];
@@ -474,10 +471,9 @@
             var text = plain(String(raw)), word = you ? wordOfCommand(text) : '';
             if (word === '/help') { answer(helpOf(you.role)); return ''; }       // (this page's own: it is never sent, and it never is a line)
             if (word && you.role === 'none' && COMMANDS.some(function (c) { return c[0] === word; })) { answer([ERR.power]); return ''; }       // (a command word from a person who holds no role is not a line either: the hub would refuse it and never post it)
-            var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : removed === 'banned' && !retry ? 'banned' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
+            var why = !sock || sock.readyState !== 1 || state !== 'live' ? 'offline' : !you ? 'readonly' : removed === 'banned' ? 'banned' : !text ? 'empty' : points(text) > LIMIT.line ? 'long' : /[<>]/.test(text) ? 'markup' : !allowed(text) ? 'rate' : '';
             if (why) { tell(why); return why; }
             try { sock.send(JSON.stringify({ t: 'say', text: text })); } catch (e) { lost(); return 'offline'; }
-            retry = false;
             var cmd = you.mod && text.charAt(0) === '/';
             waiting(); unanswered.push({ text: text, key: nfc(text), at: now(), cmd: cmd });       // (a command has no answer when the hub takes it, and `bad` when it is wrong)
             return '';
@@ -489,7 +485,8 @@
         }
         function relink() {                                                     // the login changed (the hub closes the sockets of the old one): this page connects again at once, and is told who it is now
             drop();
-            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = ''; retry = false;
+            liveSince = null; welcomed = false; attempt = 0; you = null; menuOn = false; hello = null; removed = '';
+            for (var i = feed.length - 1; i >= 0; i--) if (feed[i].priv) feed.splice(i, 1);       // (the private answers go too: a list of bans is not for the next person)
             stale = true;                                                        // (the log is made again at once, without the usernames and numbers of a moderator: nobody sees them after a Log out)
             go();
             render();

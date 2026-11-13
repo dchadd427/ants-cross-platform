@@ -203,7 +203,6 @@ class TheFolderAndTheScript(unittest.TestCase):
         for words in ("Chat is offline", "reconnecting…", "Chat is read-only for now", "Slow down a little", "Log in with Discord to chat", "Global chat"):
             self.assertIn(words, self.js)
 
-
     def test_the_login_place_is_made_hidden_and_shown_only_for_a_named_visitor_where_the_hub_has_a_login(self):
         self.assertIn("slot.id = 'gchat-login-slot'; slot.setAttribute('data-slot', 'login'); slot.hidden = true;", self.js)
         self.assertIn("slot.hidden = !(live && you && login && menuOn);", self.js, "the account's dropdown: the welcome names the visitor, the hub has a login, and the chip has opened it; nothing else shows it")

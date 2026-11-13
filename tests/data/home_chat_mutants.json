@@ -2909,7 +2909,7 @@
   {
    "id": "a_refused_line_of_a_banned_person_is_forgotten",
    "file": "web/home/chat.js",
-   "old": "if (code === 'banned') { removed = 'banned'; retry = false; }",
+   "old": "if (code === 'banned') removed = 'banned';",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -2958,7 +2958,7 @@
   {
    "id": "a_banned_person_sends",
    "file": "web/home/chat.js",
-   "old": ": removed === 'banned' && !retry ? 'banned' : !text ?",
+   "old": ": removed === 'banned' ? 'banned' : !text ?",
    "new": ": !text ?",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3063,7 +3063,7 @@
   {
    "id": "a_promotion_does_not_make_the_log_again",
    "file": "web/home/chat.js",
-   "old": "if (was !== tools()) { stale = true; hold = true; }",
+   "old": "if (was !== tools()) { stale = true; hold = seen(); }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
@@ -3105,36 +3105,15 @@
   {
    "id": "a_logout_leaves_the_moderators_view",
    "file": "web/home/chat.js",
-   "old": "retry = false;\n            stale = true;",
-   "new": "retry = false;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "a_ban_that_was_lifted_is_never_tried_again",
-   "file": "web/home/chat.js",
-   "old": "retry = removed === 'banned';",
-   "new": "retry = false;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "a_line_that_was_taken_does_not_end_the_ban",
-   "file": "web/home/chat.js",
-   "old": "if (e.own && removed === 'banned') removed = '';",
+   "old": "            stale = true;                                                        // (the log is made again at once, without the usernames and numbers of a moderator: nobody sees them after a Log out)\n",
    "new": "",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "the_one_line_is_not_used_up",
-   "file": "web/home/chat.js",
-   "old": "catch (e) { lost(); return 'offline'; }\n            retry = false;",
-   "new": "catch (e) { lost(); return 'offline'; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "a_role_change_takes_the_reader_to_the_newest_line",
    "file": "web/home/chat.js",
-   "old": "if (was !== tools()) { stale = true; hold = true; }",
-   "new": "if (was !== tools()) { stale = true; }",
+   "old": "{ stale = true; hold = seen(); }",
+   "new": "{ stale = true; }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3142,6 +3121,27 @@
    "file": "web/home/chat.js",
    "old": "if (count(m.id) === null) return;",
    "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_logout_leaves_the_private_answers",
+   "file": "web/home/chat.js",
+   "old": "for (var i = feed.length - 1; i >= 0; i--) if (feed[i].priv) feed.splice(i, 1);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_keep_the_place_flag_outlives_its_cause",
+   "file": "web/home/chat.js",
+   "old": "hold = seen();",
+   "new": "hold = true;",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_reader_at_the_bottom_is_not_taken_to_the_bottom",
+   "file": "web/home/chat.js",
+   "old": "if (keep && !bottom &&",
+   "new": "if (keep &&",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
