@@ -84,7 +84,7 @@ class PlayOnlinePage(unittest.TestCase):
         self.rules = read("web", "front", "lobby_rules.js")
 
     def maps_of_the_list(self):
-        """(key, file) of each map of the rules script's list, in its order: the order of the drop-down and of the arrows of the page"""
+        """(key, file) of each map of the rules script's list, in its order: the order of the six originals in the map list"""
         block = re.search(r"var MAPS = \[(.*?)\];", self.rules, re.DOTALL)
         self.assertIsNotNone(block)
         return re.findall(r"\{ key: '([a-z]+)', name: '[A-Za-z]+', file: '([A-Z]+\.LVL)', info: ", block.group(1))
@@ -96,12 +96,12 @@ class PlayOnlinePage(unittest.TestCase):
         match = re.search(r"var DEFAULT_MAP_KEY = '([a-z]+)';", self.rules)
         self.assertIsNotNone(match, "the rules script names no default map")
         self.assertEqual(match.group(1), "treasure")
-        # the page takes the list and the default from the rules script and has none of its own (two defaults could disagree); its drop-down is filled from the list, in its order
+        # the page takes the list and the default from the rules script and has none of its own (two defaults could disagree); the map list's fallback is that list, in its order
         self.assertIn("var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY;", self.page)
         self.assertIn("var mapByKey = Rules.mapByKey;", self.page)
         self.assertNotRegex(self.page, r"var MAPS = \[")
         self.assertNotRegex(self.page, r"DEFAULT_MAP_KEY = '")
-        self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.page)
+        self.assertIn("room: function () { return model ? model.mapFile : ''; }, originals: Rules.MAPS });", self.page)
 
     def test_a_new_room_opens_on_treasure_and_a_room_that_is_kept_keeps_its_map(self):
         # a plain visit makes a room of a new code whose Hello asks for the default map; the page before the first message of the room shows it too
@@ -111,13 +111,13 @@ class PlayOnlinePage(unittest.TestCase):
         # the map is the room's, not the page's: a reload takes the seat back in the room it kept, with the map that the room has, and the page remembers no map of its own
         self.assertIn("connect({ code: stored.code, key: stored.key, name: stored.name || myName(), own: stored.own });", self.page)
         self.assertNotRegex(self.page, r"(recall|remember|getItem|setItem)\(\s*'ants[-.](four-map|map)")
-        self.assertIn("if (!sendPlan({ map: key })) render();", self.page)                              # (a choice of the leader goes to the room, which tells everybody)
+        self.assertIn("if (known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })) render();", self.page)      # (a choice of the leader goes to the room, which tells everybody)
 
     def test_every_fallback_to_a_map_is_the_default(self):
         self.assertNotIn("MAPS[0]", self.page)                                # (the first of the list is Tiny)
         self.assertIn("var map = file ? null : known || mapByKey(DEFAULT_MAP_KEY);", self.page)                                # (the address of a game on this computer)
         self.assertIn("localGameQuery(model.map || model.mapFile || DEFAULT_MAP_KEY, [], name, shape)", self.page)                           # (START with nobody else)
-        self.assertIn("var list = Rules.MAPS, key = model && model.map ? model.map : Rules.DEFAULT_MAP_KEY;", self.page)    # (the arrows before the room has said its map)
+        self.assertIn("if (!o && !file) o = mapByKey(DEFAULT_MAP_KEY);", self.rules)                                         # (the map card before the room has said its map)
 
 
 class OneDefaultEverywhere(unittest.TestCase):

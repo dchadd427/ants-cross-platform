@@ -12,6 +12,7 @@ import unittest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import check_hygiene as ch  # noqa: E402
+import size_limits as sl  # noqa: E402
 
 
 class Tree(unittest.TestCase):
@@ -34,33 +35,170 @@ class Tree(unittest.TestCase):
         return ch.tracked_files(self.root)
 
 
+class Levels(unittest.TestCase):
+    def test_the_three_levels_of_each_base(self):
+        self.assertEqual(ch.levels(sl.DOC_BASE_BYTES), {"target": 76800, "split": 92160, "cap": 128000})
+        self.assertEqual(ch.levels(sl.PRODUCTION_BASE_LINES), {"target": 1125, "split": 1350, "cap": 1875})
+        self.assertEqual(ch.levels(sl.TEST_BASE_LINES), {"target": 1875, "split": 2250, "cap": 3125})
+
+    def test_the_numbers_are_ordered_and_the_pending_names_are_paths(self):
+        self.assertLess(sl.TARGET_PERCENT, sl.SPLIT_PERCENT)
+        self.assertLess(sl.SPLIT_PERCENT, sl.CAP_PERCENT)
+        self.assertGreater(sl.CAP_PERCENT, 100)
+        for name in sl.SPLIT_PENDING:
+            self.assertTrue(os.path.exists(os.path.join(ROOT, name)), name)
+
+    def test_the_pending_list_can_only_shrink(self):
+        self.assertLessEqual(sl.SPLIT_PENDING, {"docs/GAME_REVERSE_ENGINEERING.md", "docs/NETWORK_PORT.md", "docs/BOTS.md", "web/shell.html", "tools/map_sweep.cpp"},
+                             "SPLIT_PENDING is the files that were over the cap when the policy began: a split removes a name, nothing adds one (split the new file instead)")
+
+
 class DocSize(Tree):
-    def test_over_limit_fails_and_under_passes(self):
-        self.put("docs/A.md", size=ch.DOC_LIMIT)
-        self.put("docs/B.md", size=ch.DOC_LIMIT + 1)
-        self.put("TOP.md", size=ch.DOC_LIMIT + 1)
-        out = ch.check_doc_sizes(self.root, self.files(), ceilings={})
-        self.assertEqual(sorted(l.split(":")[0] for l in out), ["TOP.md", "docs/B.md"])
+    def sizes(self, **kw):
+        errors, warnings = ch.check_sizes(self.root, self.files(), **{"pending": set(), **kw})
+        return errors, warnings
 
-    def test_ceiling_holds_grows_and_shrinks(self):
-        big = ch.DOC_LIMIT * 2
-        self.put("docs/BIG.md", size=big)
-        self.assertEqual(ch.check_doc_sizes(self.root, self.files(), ceilings={"docs/BIG.md": big}), [])
-        self.assertIn("above its ceiling", ch.check_doc_sizes(self.root, self.files(), ceilings={"docs/BIG.md": big - 1})[0])
-        out = ch.check_doc_sizes(self.root, self.files(), ceilings={"docs/BIG.md": int(big * 1.2)})
-        self.assertIn("lower the ceiling to %d" % big, out[0])
-        self.assertEqual(ch.check_doc_sizes(self.root, self.files(), ceilings={"docs/BIG.md": int(big * 1.04)}), [])
+    def test_a_document_warns_from_its_target_and_fails_only_over_the_cap(self):
+        at = ch.levels(sl.DOC_BASE_BYTES)
+        for name, size in (("below", at["target"]), ("target", at["target"] + 1), ("below_split", at["split"] - 1), ("split", at["split"]), ("at_cap", at["cap"]), ("over_cap", at["cap"] + 1)):
+            self.put("docs/%s.md" % name, size=size)
+        errors, warnings = self.sizes()
+        self.assertEqual([e.split(":")[0] for e in errors], ["docs/over_cap.md"])
+        self.assertIn("above the safety cap 128,000", errors[0])
+        self.assertEqual([w[0] for w in warnings], ["docs/at_cap.md", "docs/below_split.md", "docs/split.md", "docs/target.md"])
+        self.assertIn("split it by topic now (target 76,800)", warnings[0][1])
+        self.assertIn("125% of 102,400", warnings[0][1])
+        self.assertEqual([w[2] for w in warnings], ["split", "target", "split", "target"])
+        self.assertIn("over its target 76,800: split it by topic before it reaches 92,160", warnings[1][1])        # (80% and 96% are not told the same)
+        self.assertNotIn("now", warnings[1][1])
 
-    def test_ceiling_of_a_missing_or_small_page(self):
-        self.put("docs/SMALL.md", size=10)
-        out = ch.check_doc_sizes(self.root, self.files(), ceilings={"docs/SMALL.md": 10, "docs/GONE.md": 5})
-        self.assertTrue(any("docs/SMALL.md" in l and "remove it" in l for l in out))
-        self.assertTrue(any("docs/GONE.md" in l and "remove it" in l for l in out))
+    def test_root_documents_count_and_other_files_do_not(self):
+        self.put("TOP.md", size=ch.levels(sl.DOC_BASE_BYTES)["cap"] + 1)
+        self.put("docs/data.json", size=sl.DOC_BASE_BYTES * 2)
+        self.put("src/NOTES.md", size=sl.DOC_BASE_BYTES * 2)
+        errors, warnings = self.sizes()
+        self.assertEqual([e.split(":")[0] for e in errors], ["TOP.md"])
+        self.assertEqual(warnings, [])
 
-    def test_other_files_are_not_documents(self):
-        self.put("docs/data.json", size=ch.DOC_LIMIT * 2)
-        self.put("src/NOTES.md", size=ch.DOC_LIMIT * 2)
-        self.assertEqual(ch.check_doc_sizes(self.root, self.files(), ceilings={}), [])
+    def test_a_small_document_is_quiet(self):
+        self.put("docs/A.md", size=100)
+        self.assertEqual(self.sizes(), ([], []))
+
+
+class CodeSize(Tree):
+    def sizes(self, **kw):
+        return ch.check_sizes(self.root, self.files(), **{"pending": set(), **kw})
+
+    def test_a_code_file_warns_from_the_split_line_and_fails_only_over_the_cap(self):
+        for base, make in ((sl.PRODUCTION_BASE_LINES, "src/x/%s.cpp"), (sl.TEST_BASE_LINES, "tests/a/test_%s.cpp")):
+            at = ch.levels(base)
+            for name, n in (("target", at["target"] + 1), ("below_split", at["split"] - 1), ("split", at["split"]), ("at_cap", at["cap"]), ("over_cap", at["cap"] + 1)):
+                self.put(make % name, lines=n)
+        errors, warnings = self.sizes()
+        self.assertEqual([e.split(":")[0] for e in errors], ["src/x/over_cap.cpp", "tests/a/test_over_cap.cpp"])
+        self.assertIn("above the safety cap 1,875", errors[0])
+        self.assertIn("above the safety cap 3,125", errors[1])
+        self.assertEqual([w[0] for w in warnings], ["src/x/at_cap.cpp", "src/x/split.cpp", "tests/a/test_at_cap.cpp", "tests/a/test_split.cpp"])
+        self.assertIn("1,350 lines, 90% of 1,500", warnings[1][1])
+        self.assertNotIn("check_doc_move", errors[0])                                 # (that tool reads .md only)
+
+    def test_the_kinds_of_files(self):
+        for rel in ("web/big.html", "tools/big.py", "include/x/big.hpp"):
+            self.put(rel, lines=sl.PRODUCTION_BASE_LINES * 2)
+        self.put("src/x/generated.inc", lines=sl.PRODUCTION_BASE_LINES * 3)
+        self.put("docs/x.md", lines=sl.PRODUCTION_BASE_LINES * 3)
+        errors, _ = self.sizes()
+        self.assertEqual(sorted(e.split(":")[0] for e in errors), ["include/x/big.hpp", "tools/big.py", "web/big.html"])
+
+    def test_last_line_without_newline_counts(self):
+        self.assertEqual(ch.line_count(b"a\nb"), 2)
+        self.assertEqual(ch.line_count(b"a\nb\n"), 2)
+        self.assertEqual(ch.line_count(b""), 0)
+
+
+class Pending(Tree):
+    def test_a_pending_file_over_the_cap_warns_instead_of_failing(self):
+        self.put("docs/BIG.md", size=ch.levels(sl.DOC_BASE_BYTES)["cap"] + 1)
+        self.put("src/x/big.cpp", lines=ch.levels(sl.PRODUCTION_BASE_LINES)["cap"] + 1)
+        errors, warnings = ch.check_sizes(self.root, self.files(), pending={"docs/BIG.md", "src/x/big.cpp"})
+        self.assertEqual(errors, [])
+        self.assertEqual([w[0] for w in warnings], ["docs/BIG.md", "src/x/big.cpp"])
+        self.assertTrue(all("SPLIT_PENDING" in w[1] for w in warnings))
+
+    def test_a_pending_file_that_is_no_longer_over_the_cap_fails(self):
+        self.put("docs/A.md", size=ch.levels(sl.DOC_BASE_BYTES)["cap"])
+        self.put("src/x/b.cpp", lines=10)
+        errors, _ = ch.check_sizes(self.root, self.files(), pending={"docs/A.md", "src/x/b.cpp"})
+        self.assertEqual(sorted(e.split(":")[0] for e in errors), ["docs/A.md", "src/x/b.cpp"])
+        self.assertTrue(all("remove it from SPLIT_PENDING" in e for e in errors))
+
+    def test_a_pending_name_that_is_gone_or_is_not_measured_fails(self):
+        self.put("docs/data.json", size=sl.DOC_BASE_BYTES * 3)
+        errors, _ = ch.check_sizes(self.root, self.files(), pending={"docs/GONE.md", "docs/data.json"})
+        self.assertEqual(sorted(e.split(":")[0] for e in errors), ["docs/GONE.md", "docs/data.json"])
+        self.assertIn("not a tracked file", errors[0] if errors[0].startswith("docs/GONE") else errors[1])
+
+    def test_a_file_that_is_not_pending_gets_no_leave(self):
+        self.put("docs/BIG.md", size=ch.levels(sl.DOC_BASE_BYTES)["cap"] + 1)
+        errors, _ = ch.check_sizes(self.root, self.files(), pending={"docs/OTHER.md"})
+        self.assertEqual(sorted(e.split(":")[0] for e in errors), ["docs/BIG.md", "docs/OTHER.md"])
+
+
+class Warnings(Tree):
+    def w(self, rel, kind, pct, text="x"):
+        return (rel, text, kind, pct)
+
+    def test_the_lines_are_plain_or_annotations_for_the_pull_request(self):
+        w = [self.w("docs/A.md", "split", 93, "95,000 B, 93% of 102,400: split it by topic now (target 76,800)"), self.w("docs/B.md", "long", 0, "3 line(s) in 1 document(s)")]
+        self.assertEqual(ch.warning_lines(w, github=False), ["warning: docs/A.md: 95,000 B, 93% of 102,400: split it by topic now (target 76,800)", "notice: docs/B.md: 3 line(s) in 1 document(s)"])
+        self.assertEqual(ch.warning_lines(w, github=True), ["::warning file=docs/A.md::95,000 B, 93% of 102,400: split it by topic now (target 76,800)", "::notice file=docs/B.md::3 line(s) in 1 document(s)"])
+
+    def test_the_environment_chooses_the_form(self):
+        old = os.environ.pop("GITHUB_ACTIONS", None)
+        self.addCleanup(lambda: os.environ.update({"GITHUB_ACTIONS": old}) if old is not None else os.environ.pop("GITHUB_ACTIONS", None))
+        self.assertTrue(ch.warning_lines([self.w("a.md", "split", 91)])[0].startswith("warning: "))
+        os.environ["GITHUB_ACTIONS"] = "true"
+        self.assertTrue(ch.warning_lines([self.w("a.md", "split", 91)])[0].startswith("::warning file=a.md::"))
+
+    def test_the_closest_to_the_limit_come_first_and_the_waiting_ones_after(self):
+        w = [self.w("pending.md", "pending", 400), self.w("target.md", "target", 99), self.w("b.md", "split", 92), self.w("a.md", "split", 92), self.w("c.md", "split", 99)]
+        self.assertEqual([l.split(":")[1].strip() for l in ch.warning_lines(w, github=False)], ["c.md", "a.md", "b.md", "target.md", "pending.md"])
+
+    def test_on_the_pull_request_at_most_the_limit_is_shown_and_the_last_counts_the_rest(self):
+        w = [self.w("f%02d.md" % i, "split", 100 - i) for i in range(25)] + [self.w("long.md", "long", 0, "lines")]
+        out = ch.warning_lines(w, github=True)
+        warnings = [l for l in out if l.startswith("::warning")]
+        self.assertEqual(len(warnings), sl.ANNOTATION_LIMIT)
+        self.assertIn("f00.md", warnings[0])
+        self.assertIn("f08.md", warnings[sl.ANNOTATION_LIMIT - 2])
+        self.assertNotIn("f09.md", "".join(out))
+        self.assertTrue(warnings[-1].startswith("::warning::16 more file(s)"))
+        self.assertEqual(out[-1], "::notice file=long.md::lines")
+        few = ch.warning_lines(w[:sl.ANNOTATION_LIMIT], github=True)                     # (exactly the limit: all shown, nothing to count)
+        self.assertEqual(len(few), sl.ANNOTATION_LIMIT)
+        self.assertFalse(any("more file" in l for l in few))
+
+    def test_a_long_line_is_found_once_for_each_document_and_folded_into_one_notice(self):
+        limit = sl.DOC_LINE_WARN_CHARACTERS
+        self.put("docs/A.md", "ok\n" + "a" * limit + "\n" + "b" * (limit + 1) + "\n" + "c" * (limit + 5) + "\n")
+        self.put("docs/B.md", "a" * limit + "\n")
+        self.put("docs/C.md", "d" * (limit + 9) + "\n")
+        self.put("src/x.cpp", "// " + "a" * (limit * 2) + "\n")
+        found = ch.check_long_lines(self.root, self.files())
+        self.assertEqual(found, [("docs/A.md", 2, limit + 5, 4), ("docs/C.md", 1, limit + 9, 1)])
+        rel, text, kind, _ = ch.long_line_warning(found)
+        self.assertEqual((rel, kind), ("docs/C.md", "long"))
+        self.assertIn("3 line(s) in 2 document(s) are over 2,000 characters (the longest has 2,009, docs/C.md line 1)", text)
+        self.assertIsNone(ch.long_line_warning([]))
+
+    def test_the_run_gathers_warnings_and_errors_apart(self):
+        self.put("README.md", "[a](docs/A.md)\n")
+        self.put("docs/A.md", "x" * (ch.levels(sl.DOC_BASE_BYTES)["target"] + 1))
+        errors, warnings = ch.run_all(self.root)
+        self.assertTrue(any(w[0] == "docs/A.md" and w[2] == "target" for w in warnings))
+        self.assertFalse(any(e.startswith("docs/A.md") for e in errors))
+        self.put("docs/B.md", "a" * (sl.DOC_LINE_WARN_CHARACTERS + 1) + "\n")
+        self.assertEqual([w[2] for w in ch.run_all(self.root)[1]].count("long"), 1)
 
 
 class Reachable(Tree):
@@ -82,12 +220,117 @@ class Reachable(Tree):
         out = ch.check_reachable(self.root, self.files())
         self.assertEqual([l.split(":")[0] for l in out], ["docs/B.md"])
 
-    def test_deep_pages_need_only_a_link_from_a_reachable_page(self):
+    def test_deep_pages_are_checked_too_and_need_a_link_from_a_reachable_page(self):
         self.put("README.md", "[s](docs/sub/README.md)\n")
         self.put("docs/sub/README.md", "[d](d/one.md)\n")
         self.put("docs/sub/d/one.md", "one\n")
-        self.put("docs/sub/d/two.md", "never linked, and not a folder page\n")
-        self.assertEqual(ch.check_reachable(self.root, self.files()), [])
+        self.put("docs/sub/d/two.md", "never linked: a deep page is checked like any other\n")
+        self.put("docs/sub/d/e/three.md", "[o](../one.md)\n")
+        self.put("src/notes.md", "not a document of docs/\n")
+        out = ch.check_reachable(self.root, self.files())
+        self.assertEqual(sorted(l.split(":")[0] for l in out), ["docs/sub/d/e/three.md", "docs/sub/d/two.md"])
+
+
+class ReachableAsAReaderSees(Tree):
+    def test_only_a_link_that_the_page_shows_makes_a_page_reachable(self):
+        self.put("README.md", "[ok](docs/Ok.md)\n`[code](docs/Code.md)`\n~~~\n[tilde](docs/Tilde.md)\n~~~\n<!-- [comment](docs/Comment.md) -->\n[unused]: docs/NeverUsed.md\n")
+        for name in ("Ok", "Code", "Tilde", "Comment"):
+            self.put("docs/%s.md" % name, "x\n")
+        out = ch.check_reachable(self.root, self.files())
+        self.assertEqual(sorted(l.split(":")[0] for l in out), ["docs/Code.md", "docs/Comment.md", "docs/Tilde.md"])
+
+
+class Anchors(Tree):
+    def test_the_slug_of_a_heading(self):
+        for heading, slug in (("5.17 Foo", "517-foo"), ("The `x_y` limits (v2)", "the-x_y-limits-v2"), ("Q&A: What?", "qa-what"), ("A -- B", "a----b"), ("**Bold** and _emphasis_", "bold-and-emphasis"),
+                              ("See [the page](other.md) now", "see-the-page-now"), ("A <code>tag</code>", "a-tag"), ("A `<tag>` b", "a-tag-b"), ("The `*star*` rule", "the-star-rule"), ("With `a` and `b` end", "with-a-and-b-end"), ("snake_case_word", "snake_case_word"), ("\u00dcmlaut Stra\u00dfe", "\u00fcmlaut-stra\u00dfe")):
+            self.assertEqual(ch.slug_of(heading), slug, heading)
+
+    def test_the_headings_of_a_text_repeat_with_a_number_and_skip_code(self):
+        text = "# Top part\n## Limits\ntext\n## Limits\n### Limits #\n```\n# not a heading\n```\n#not a heading either\n<a id=\"old\"></a>\n"
+        self.assertEqual(ch.headings_of(text), {"top-part", "limits", "limits-1", "limits-2"})
+
+    def test_a_link_to_a_heading_passes_and_a_dead_one_fails_with_its_place(self):
+        self.put("README.md", "# Start\n[ok](docs/A.md#second-part) [self](#start) [dup](docs/A.md#limits-1) [enc](docs/A.md#second%20part)\n[bad](docs/A.md#third-part) [badself](#nowhere)\n")
+        self.put("docs/A.md", "# A\n## Second part\n## Limits\n## Limits\n")
+        out = ch.check_anchors(self.root, self.files())
+        self.assertEqual(len(out), 3)                                                  # (the encoded space is not a hyphen: GitHub gives no heading either)
+        self.assertTrue(any(o.startswith("README.md:3: ") and "docs/A.md#third-part" in o for o in out))
+        self.assertTrue(any(o.startswith("README.md:3: ") and "README.md#nowhere" in o for o in out))
+        self.assertTrue(any(o.startswith("README.md:2: ") and "second%20part" in o.replace(" ", "%20") for o in out))
+
+    def test_links_are_followed_from_a_folder_and_case_does_not_matter(self):
+        self.put("docs/sub/B.md", "[up](../A.md#The-Heading) [same](B.md#my-title)\n# My Title\n")
+        self.put("docs/A.md", "# The Heading\n")
+        self.assertEqual(ch.check_anchors(self.root, self.files()), [])
+        self.put("docs/sub/C.md", "[gone](../A.md#heading)\n")
+        self.assertEqual(len(ch.check_anchors(self.root, self.files())), 1)
+
+    def test_a_redirect_id_is_not_a_heading(self):
+        self.put("docs/A.md", "<a id=\"old-slug\"></a>\n# New\n")
+        self.put("docs/B.md", "[x](A.md#old-slug) [y](A.md#new)\n")
+        out = ch.check_anchors(self.root, self.files())
+        self.assertEqual(len(out), 1)
+        self.assertIn("A.md#old-slug", out[0])
+
+    def test_code_external_links_and_other_files_are_not_checked(self):
+        self.put("docs/A.md", "# A\n")
+        self.put("docs/B.md", "```\n[x](A.md#gone)\n```\n`[y](A.md#gone)` [web](https://x.org/A.md#gone) [src](../src/a.cpp#L10) [file](A.md) [empty](A.md#)\n~~~\n[z](#gone)\n~~~\n")
+        self.put("src/a.cpp", "x\n")
+        self.assertEqual(ch.check_anchors(self.root, self.files()), [])
+
+    def test_a_link_to_a_markdown_file_that_is_not_tracked_fails_with_or_without_an_anchor(self):
+        self.put("docs/A.md", "# A\n[x](NOPE.md#real-one) [y](NOPE.md) [wrong case](b.md#b) [ok](B.md#b) [folder](sub/#x) [code](../src/a.cpp)\n")
+        self.put("docs/B.md", "# B\n")
+        out = ch.check_anchors(self.root, self.files())
+        self.assertEqual(len(out), 3)
+        self.assertTrue(all("docs/A.md:2: " in o and ".md file that is not tracked" in o for o in out))
+        self.assertTrue(any("docs/NOPE.md" in o for o in out) and any("docs/b.md" in o for o in out))
+
+    def test_underscores_go_in_pairs_only(self):
+        for heading, slug in (("[__thiscall ant, ret 0x18]", "__thiscall-ant-ret-0x18"), ("a _b_ c", "a-b-c"), ("a __b__ c", "a-b-c"), ("snake_case_word", "snake_case_word"),
+                              ("_lone", "_lone"), ("lone_", "lone_"), ("__init__ method", "init-method"), ("x_ y_", "x_-y_")):
+            self.assertEqual(ch.slug_of(heading), slug, heading)
+
+    def test_an_entity_in_a_heading_is_its_character(self):
+        self.assertEqual(ch.slug_of("Q &amp; A"), "q--a")
+        self.assertEqual(ch.slug_of("Less &lt; more"), "less--more")
+
+    def test_a_heading_in_an_html_comment_is_not_one_and_does_not_shift_the_numbers(self):
+        text = "# Top\n<!--\n## Hidden\n## Limits\n-->\n## Limits\n<!-- ## Inline -->\ntext <!-- x --> more\n## Visible\n"
+        self.assertEqual(ch.headings_of(text), {"top", "limits", "visible"})
+        self.assertEqual(ch.headings_of("a <!-- c --> b\n## H\n"), {"h"})                                  # (a comment inside a line ends in the line)
+        self.assertEqual(ch.headings_of("a <!-- c\n## G\nd --> b\n## H\n"), {"h"})
+        self.put("docs/A.md", "# A\n<!-- ## Template -->\n")
+        self.put("docs/B.md", "[x](A.md#template) <!-- [y](A.md#gone) -->\n")
+        out = ch.check_anchors(self.root, self.files())
+        self.assertEqual(len(out), 1)
+        self.assertIn("A.md#template", out[0])
+
+    def test_a_comment_mark_in_inline_code_is_text_and_hides_nothing(self):
+        self.assertEqual(ch.headings_of("Write `<!--` to open a comment.\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("Write ``a <!-- b`` and `<!--` here.\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("`<!--` <!-- real --> text\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("`<!--` <!-- real\n## G\n--> text\n## H\n"), {"h"})
+        self.assertEqual(ch.headings_of("<!-- real `-->` code is no code inside a comment\n## G\n"), {"g"})
+        self.put("docs/A.md", "# A\n\nWrite `<!--` to open a comment.\n\n## Later\n")
+        self.put("docs/B.md", "[ok](A.md#later) [bad](A.md#gone)\n")
+        out = ch.check_anchors(self.root, self.files())
+        self.assertEqual(len(out), 1)
+        self.assertIn("A.md#gone", out[0])
+
+    def test_a_fence_closes_with_its_own_mark_and_no_words(self):
+        text = "````\n```\n# inside\n```\n# still inside\n````\n# outside\n~~~ python\n# in a tilde block\n~~~ not a close\n# still in it\n~~~\n# after\n"
+        self.assertEqual(ch.headings_of(text), {"outside", "after"})
+        self.assertEqual(ch.headings_of("``` has `tick`\n# not a fence, a paragraph\n"), {"not-a-fence-a-paragraph"})
+
+    def test_a_byte_order_mark_does_not_hide_the_first_heading(self):
+        self.assertEqual(ch.headings_of("\ufeff# First\n"), {"first"})
+
+    def test_a_reference_style_link_is_checked(self):
+        self.put("docs/A.md", "# A\n[r]: B.md#gone\n")
+        self.put("docs/B.md", "# B\n")
+        self.assertEqual(len(ch.check_anchors(self.root, self.files())), 1)
 
 
 class Forbidden(Tree):
@@ -165,40 +408,6 @@ class Forbidden(Tree):
         self.put("third_party/sqlite/CMakeLists.txt", "# Co-Authored-By\n")
         out = ch.check_forbidden(self.root, self.files(), allowed=set())
         self.assertEqual(len(out), 2)
-
-
-class Lines(Tree):
-    def test_limits_by_kind(self):
-        self.put("tests/a/test_ok.cpp", lines=ch.TEST_LINES)
-        self.put("tests/a/test_big.cpp", lines=ch.TEST_LINES + 1)
-        self.put("src/x/ok.cpp", lines=ch.PROD_LINES)
-        self.put("src/x/big.cpp", lines=ch.PROD_LINES + 1)
-        self.put("web/big.html", lines=ch.PROD_LINES + 1)
-        self.put("tools/big.py", lines=ch.PROD_LINES + 1)
-        self.put("src/x/generated.inc", lines=ch.PROD_LINES * 3)
-        self.put("docs/x.md", lines=ch.PROD_LINES * 3)
-        out = ch.check_lines(self.root, self.files(), ceilings={})
-        self.assertEqual(sorted(l.split(":")[0] for l in out), ["src/x/big.cpp", "tests/a/test_big.cpp", "tools/big.py", "web/big.html"])
-
-    def test_ratchet(self):
-        n = ch.PROD_LINES + 1000
-        self.put("src/x/big.cpp", lines=n)
-        f = self.files()
-        self.assertEqual(ch.check_lines(self.root, f, ceilings={"src/x/big.cpp": n}), [])
-        self.assertIn("above its ceiling", ch.check_lines(self.root, f, ceilings={"src/x/big.cpp": n - 1})[0])
-        self.assertIn("lower the ceiling to %d" % n, ch.check_lines(self.root, f, ceilings={"src/x/big.cpp": int(n * 1.2)})[0])
-        self.assertEqual(ch.check_lines(self.root, f, ceilings={"src/x/big.cpp": int(n * 1.05)}), [])
-
-    def test_table_entries_that_no_longer_apply(self):
-        self.put("src/x/small.cpp", lines=10)
-        out = ch.check_lines(self.root, self.files(), ceilings={"src/x/small.cpp": 2000, "src/x/gone.cpp": 2000})
-        self.assertTrue(any("small.cpp" in l and "remove it from the table" in l for l in out))
-        self.assertTrue(any("gone.cpp" in l and "remove it from the table" in l for l in out))
-
-    def test_last_line_without_newline_counts(self):
-        self.assertEqual(ch.line_count(b"a\nb"), 2)
-        self.assertEqual(ch.line_count(b"a\nb\n"), 2)
-        self.assertEqual(ch.line_count(b""), 0)
 
 
 class AssertTrue(Tree):
@@ -288,12 +497,23 @@ class Cli(Tree):
         self.assertTrue(any(l.startswith("src/x.cpp:1:") for l in lines))
         self.assertTrue(any("not named in any CMakeLists.txt" in l for l in lines))
         self.assertTrue(any(l.startswith("ASSERT_TRUE:") for l in lines))  # no definitions here: fewer than the constant
-        self.assertEqual(len([l for l in lines if "remove it from the table" not in l]), 4)  # the ceiling tables name files that this tree lacks
+        self.assertEqual(len([l for l in lines if "remove it from the" not in l]), 4)  # the pending names and the spelling table name the real repository's files, which this tree lacks
 
     def test_list_prints_numbers(self):
         done = self.run_tool("--list")
         self.assertEqual(done.returncode, 0)
         self.assertIn("ASSERT_TRUE definitions", done.stdout)
+        self.assertIn("files over their target", done.stdout)
+
+    def test_warnings_go_to_stderr_and_do_not_fail_by_themselves(self):
+        self.put("README.md", "[a](docs/A.md)\n")
+        self.put("docs/A.md", size=ch.levels(sl.DOC_BASE_BYTES)["split"])
+        env = {k: v for k, v in os.environ.items() if k != "GITHUB_ACTIONS"}                    # (CI sets it: the plain form is for a person at a terminal)
+        plain = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", self.root], capture_output=True, text=True, env=env)
+        self.assertIn("warning: docs/A.md: 92,160 B, 90% of 102,400: split it by topic now (target 76,800)", plain.stderr.splitlines())
+        self.assertFalse(any("docs/A.md" in l for l in plain.stdout.splitlines()))
+        gh = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", self.root], capture_output=True, text=True, env=dict(env, GITHUB_ACTIONS="true"))
+        self.assertIn("::warning file=docs/A.md::92,160 B, 90% of 102,400: split it by topic now (target 76,800)", gh.stderr.splitlines())
 
 
 class Spelling(Tree):
@@ -385,6 +605,7 @@ class RealRepository(unittest.TestCase):
 
     def test_repository_passes(self):
         done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "check_hygiene.py"), "--root", ROOT], capture_output=True, text=True)
+        sys.stderr.write(done.stderr)                                                          # (the warnings: under GITHUB_ACTIONS they are annotations of the pull request)
         self.assertEqual((done.returncode, done.stdout), (0, ""), done.stdout + done.stderr)
 
 

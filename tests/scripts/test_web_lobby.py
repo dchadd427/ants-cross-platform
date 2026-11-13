@@ -68,7 +68,7 @@ class TheFrontPageMarkup(PageCase):
     def test_the_page_is_one_lobby_the_room_with_its_four_colors_and_the_match_with_its_map_and_start(self):
         self.assertEqual(len(re.findall(r'<section class="card', self.page)), 0)                  # the one card of the earlier front page (New match: Friend seats, Sit here, START) is gone: the page is a room
         self.assertEqual(self.markup.count('<div class="grid" id="lobby">'), 1)
-        self.assertEqual(len(re.findall(r'<select ', self.page)), 2)                               # the game type's and the picture's shape (the drop-down of a color is made by the script, for the colors that the host can set; the picture's is filled by the script from web/shapes.js)
+        self.assertEqual(len(re.findall(r'<select ', self.page)), 1)                               # the picture's shape only (the map is a card with a button, no drop-down; the drop-down of a color is made by the script, for the colors that the host can set; the picture's is filled by the script from web/shapes.js)
         for gone in ('id="map-solo"', 'id="map-host"', 'id="host"', 'name="players"', 'name="opponent-', 'host-seat-', 'id="fill"', 'id="fill-label"', 'Play vs the computer', 'Play online</h2>', 'Host the match',
                      'Opponents</span>', 'Sit here', 'seat-row-', 'id="h-match"', 'id="player-name"', 'btn_start', 'setup-hint', 'four.html'):
             self.assertTrue(gone not in self.page, "the page still has " + gone)
@@ -78,9 +78,11 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn('<ul class="slots" id="slots" aria-label="The four colors"></ul>', self.markup)
         self.assertIn('<p class="slots-note" id="slots-note" role="status"></p>\n            <p class="slots-note teams-note" id="teams-note" role="status"></p>', self.markup)
         self.assertIn('<aside class="side" aria-label="The match">', self.markup)
-        self.assertIn('<div class="pick"><button class="btn square" type="button" id="prev" aria-label="Previous map">&#8249;</button><select id="map" aria-label="Map"><option id="map-other" value="*" hidden></option></select>'
-                      '<button class="btn square" type="button" id="next" aria-label="Next map">&#8250;</button></div>', self.markup)
-        self.assertIn('<p class="info" id="info" aria-live="polite"></p>', self.markup)
+        # the map: ONE card (the picture, then the map's name, its chips, its line and the host's Change map button); the arrows, the six-map drop-down and Browse all maps are gone
+        self.assertIn('<div class="mapcard" role="group" aria-labelledby="map-name"><p class="map-name" id="map-name"></p><p class="map-facts" id="map-facts"></p><p class="info" id="info" aria-live="polite"></p>\n'
+                      '                <button class="btn change" type="button" id="change-map" aria-haspopup="dialog" hidden>Change map</button></div>', self.markup)
+        for gone in ('id="prev"', 'id="next"', 'id="map"', 'id="browse"', 'Browse all maps', 'Previous map', 'Next map'):
+            self.assertNotIn(gone, self.markup, gone)
         self.assertIn('<button class="btn big" type="button" id="start">START!</button>', self.markup)
         self.assertEqual(self.markup.count('id="start"'), 1)
         self.assertIn('<p class="plan"><span class="plan-long" id="plan"></span><span class="plan-short" id="plan-short"></span></p>', self.markup)
@@ -92,7 +94,7 @@ class TheFrontPageMarkup(PageCase):
         self.assertIn("var src = side.mapKey ? 'front/preview_' + side.mapKey + '.png' : side.mapThumb;", self.script)
         for key in keys:
             self.assertTrue(os.path.isfile(os.path.join(REPO, "web", "front", "preview_%s.png" % key)), key)
-        self.assertIn("Rules.MAPS.forEach(function (m) { var o = el('option', '', m.name); o.value = m.key; $('map').appendChild(o); });", self.script)       # (the list of the drop-down is the rules' list, in its order)
+        self.assertIn("originals: Rules.MAPS });", self.script)       # (the map list's fallback is the rules' list of the six, in its order)
 
     def test_a_leaders_bot_card_shows_the_bots_name_small_under_the_level_switch(self):
         """protocol 20: the name (card.who[0], which the rules put there) is a span of its own right after the level select, and the style rule makes it small text"""

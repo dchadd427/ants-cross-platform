@@ -119,6 +119,11 @@ class TheRoutesRun(unittest.TestCase):
         for name, data in (("atlas.json", b'{"v":1}'), ("ground.png", b"\x89PNG\r\n\x1a\n a stand-in"), ("objects.png", b"\x89PNG\r\n\x1a\n a stand-in")):
             with open(os.path.join(html, "mapmaker_atlas", name), "wb") as f:
                 f.write(data)
+        os.makedirs(os.path.join(html, "app"))                                             # the web app: its manifest and an icon (stand-ins)
+        with open(os.path.join(html, "manifest.webmanifest"), "w", encoding="utf-8") as f:
+            f.write('{"name": "Ants!", "start_url": "/"}\n')
+        with open(os.path.join(html, "app", "icon-192.png"), "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n a stand-in")
         conf = os.path.join(cls.tmp, "default.conf")
         text = read(CONF)
         if not os.path.exists("/proc/net/if_inet6"):                                       # a kernel without IPv6 cannot listen on [::]: the rest of the file is the one under test

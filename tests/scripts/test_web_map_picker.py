@@ -5,7 +5,8 @@ and the choice of a map of the players, which sets the room's map as the selecto
 
   - the picker's own code is RUN (node, when it is installed): the parsing of the list, the sorts, the search, the whole picker with a small fake of the DOM (tests/scripts/web_map_picker_check.js), and
     the check is shown able to fail: broken copies of the script are refused by it;
-  - the page's side is read from the source: the button, the dialog, the scripts in their order, the selector that stays (prev, next, select) and the fall back when the list cannot be had.
+  - the page's side is read from the source: the map card and its Change map button (the arrows, the six-map drop-down and Browse all maps are gone), the dialog, the scripts in their order, and the six originals
+    that the list shows from the page's own table when the server's list cannot be had.
 """
 import os
 import re
@@ -35,12 +36,32 @@ class ThePage(unittest.TestCase):
         cls.script = read("web", "front", "map_picker.js")
         cls.css = read("web", "front", "map_picker.css")
 
-    def test_the_selector_stays_and_a_button_opens_the_list(self):
-        for ident in ('id="prev"', 'id="next"', 'id="map"', 'id="browse"', 'id="picker-panel"'):
+    def test_one_card_with_a_button_opens_the_list(self):
+        for ident in ('id="change-map"', 'id="map-name"', 'id="map-facts"', 'id="picker-panel"'):
             self.assertTrue(ident in self.page, ident)
+        for gone in ('id="prev"', 'id="next"', 'id="map"', 'id="browse"', 'Browse all maps'):
+            self.assertFalse(gone in self.page, gone)
         self.assertTrue('aria-haspopup="dialog"' in self.page)
         self.assertTrue('role="dialog" aria-modal="true"></div></div>' in self.page)                        # (the picker names it by its heading: aria-labelledby)
-        self.assertTrue("$('browse').disabled = side.mapDisabled;" in self.page)                           # the joiner's list is read-only as the selector is
+        self.assertTrue("$('change-map').disabled = side.mapDisabled; $('change-map').hidden = !model || !!model.guest;" in self.page)      # (START pressed or the connection lost: off; a guest sees the card without the button)
+        self.assertTrue("$('change-map').addEventListener('click', changeMap);" in self.page)
+        self.assertTrue("$('preview').addEventListener('click', changeMap);" in self.page)      # (a tap on the picture does the same)
+        self.assertTrue("if (window.AntsMapPicker) { ensurePicker().open(model.mapFile); return; }" in self.page)      # (the script did not load: no ReferenceError, and the button steps through the six originals)
+        self.assertTrue("chooseMap(Rules.MAPS[(at + 1) % Rules.MAPS.length]);" in self.page)
+
+    def test_the_card_says_the_kind_and_what_the_list_knows_of_the_map_and_nothing_more(self):
+        self.assertTrue("var e = picker && model && model.mapFile && !side.mapKey ? picker.find(model.mapFile) : null;" in self.page)      # (an original shows its kind only, with or without the list)
+        self.assertTrue("now = AntsMapPicker.factsOf(e, !side.mapKey);" in self.page)
+        self.assertTrue("if (!m) return [community ? \"Players' map\" : 'Original'];" in self.script)             # (no entry yet: only the kind)
+        self.assertTrue("if (m.players) out.push(" in self.script and "if (m.minutes) out.push(" in self.script and "if (m.width && m.height) out.push(" in self.script)      # (a number the list does not have is not shown)
+        self.assertTrue("room: function () { return model ? model.mapFile : ''; }, originals: Rules.MAPS });" in self.page)
+
+    def test_the_list_has_two_headings_marks_the_rooms_map_and_has_a_preview_pane(self):
+        for needle in ("title: 'The six originals'", "title: \"Players' maps\"", "'In this room'", "tag(' pk-here', 'In this room')", "parts.pane = el('div', 'pk-pane')", "'The map picked'"):
+            self.assertIn(needle, self.script, needle)
+        for needle in (".pk-pane { display: none; }", "@media (min-width: 721px), (min-width: 560px) and (max-height: 500px) {", ".pk-foot { display: contents; }", ".pk-pane.pk-none > * { visibility: hidden; }",
+                       ".pk-badge.pk-here {", "@media (max-height: 500px) and (min-width: 560px) {"):
+            self.assertIn(needle, self.css, needle)
 
     def test_only_the_host_opens_the_list_and_a_room_that_changes_hands_closes_it(self):
         self.assertTrue("function isHost() { return !!(model && !model.guest && !model.starting); }" in self.page)           # (not a constant true)
@@ -48,10 +69,9 @@ class ThePage(unittest.TestCase):
 
     def test_the_page_behind_the_open_list_is_inert(self):
         self.assertTrue("[document.querySelector('header.mast'), $('banner'), $('rejoin'), $('lobby'), $('footer-bar')].forEach(function (n) { if (on) n.setAttribute('inert', ''); else n.removeAttribute('inert'); });" in self.page)
-        self.assertTrue("onOpen: function () { inert(true); }, onClose: function () { inert(false); $('browse').focus(); }" in self.page)
+        self.assertTrue("onOpen: function () { inert(true); }, onClose: function () { inert(false); $('change-map').focus(); }," in self.page)
         for ident in ('<header class="mast">', 'id="banner"', 'id="rejoin"', 'id="lobby"', 'id="footer-bar"'):
             self.assertTrue(ident in self.page, ident)
-        self.assertLessEqual(self.page.count("\n"), 1500)
 
     def test_the_scripts_come_before_the_pages_own_in_this_order(self):
         self.assertTrue('<script src="front/map_picker.js"></script>\n<script src="shapes.js"></script><script src="map_files.js"></script><script src="home/home.js"></script>\n<script>' in self.page)
@@ -60,11 +80,12 @@ class ThePage(unittest.TestCase):
         self.assertTrue("known ? !sendPlan({ map: known.key }) : !sendPlan({ file: entry.file })" in self.page)
         self.assertTrue("canOpen: isHost, canChoose: isHost" in self.page)
         self.assertTrue("AntsMapFiles.warm(window, file)" in self.page)
-        self.assertTrue("if (isHost()) ensurePicker().open(model.mapFile);" in self.page)
+        self.assertTrue("function changeMap() {" in self.page and "if (!isHost()) return;" in self.page)
 
-    def test_the_list_is_fetched_once_and_a_failure_leaves_the_old_selector(self):
+    def test_the_list_is_fetched_once_and_a_failure_still_offers_the_six_originals(self):
         self.assertEqual(len(re.findall(r"opts\.fetch\('/maps/all'", self.script)), 1)
-        self.assertTrue("The six original maps can still be chosen with the arrows beside the picture." in self.script)
+        self.assertTrue("The six original maps can still be chosen here." in self.script)
+        self.assertTrue("shown = fallback().slice();" in self.script)                                      # (the six, from the page's own table)
 
     def test_the_view_is_remembered_in_local_storage_inside_try(self):
         self.assertTrue("var VIEW_KEY = 'ants.mapview';" in self.script)
@@ -82,7 +103,7 @@ class ThePage(unittest.TestCase):
         self.assertTrue(re.search(r"https?://|@import", self.css) is None)
 
     def test_the_lists_rules_are_in_its_own_stylesheet_which_the_page_links_after_its_own_style(self):
-        """the rules of the map list left web/lobby.html (at the 1500 lines of tools/check_hygiene.py) for web/front/map_picker.css, which is linked after the page's <style>: a rule that wins a tie
+        """the rules of the map list left web/lobby.html for web/front/map_picker.css, which is linked after the page's <style>: a rule that wins a tie
         by order (.pickhow .panel against .how .panel) still comes later, as it did"""
         self.assertNotRegex(re.search(r"<style>.*?</style>", self.page, re.S).group(0), r"\.pk-|\.pickhow")
         self.assertTrue(self.page.index('<link rel="stylesheet" href="front/map_picker.css">') > self.page.index("</style>"))
@@ -125,7 +146,30 @@ class ThePickersOwnCode(unittest.TestCase):
             "the description is printed in a row": ("body.appendChild(el('div', 'pk-meta', metaText(m)));", "body.appendChild(el('div', 'pk-meta', metaText(m) + ' ' + m.description));"),
             "Escape does not close": ("if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }", ""),
             "Enter does not choose": ("else if (k === 'Enter') { e.preventDefault(); if (i >= 0) choose(); return; }", "else if (k === 'Enter') { return; }"),
-            "a pick that a search hides can still be chosen": ("if (frag !== parts.out) parts.out.appendChild(frag);\n            parts.go.disabled = pickedIndex() < 0;", "if (frag !== parts.out) parts.out.appendChild(frag);\n            parts.go.disabled = !byFile[picked];"),
+            "a pick that a search hides can still be chosen": ("else sectionsOf([{ title: '', items: shown }]);\n            parts.go.disabled = pickedIndex() < 0;", "else sectionsOf([{ title: '', items: shown }]);\n            parts.go.disabled = !byFile[picked];"),
+            "the originals have no heading": ("sectionsOf([{ title: 'The six originals', items: own },", "sectionsOf([{ title: '', items: own },"),
+            "the other sorts have a heading too": ("} else sectionsOf([{ title: '', items: shown }]);", "} else sectionsOf([{ title: 'The six originals', items: shown }]);"),
+            "the room's map is not marked": ("if (here && m.file === here) {", "if (false) {"),
+            "every map is marked as the room's": ("if (here && m.file === here) {", "if (here) {"),
+            "the preview does not follow a pick": ("            paintPane();\n        }\n        // the preview beside the list", "        }\n        // the preview beside the list"),
+            "the preview shows a map that a search hides": ("var m = pickedIndex() >= 0 ? lookup(picked) : null;", "var m = lookup(picked);"),
+            "the preview has no description": ("parts.pdesc.textContent = m ? m.description : '';", "parts.pdesc.textContent = '';"),
+            "the list that cannot be had shows no original": ("shown = fallback().slice(); if (status === 'error' && !fb[picked]) picked = '';", "shown = []; picked = '';"),
+            "the six are not shown while the list loads": ("if (status !== 'ready') {      //", "if (status === 'error') {      //"),
+            "the six are not chosen while the list loads": ("(status !== 'ready' && fb && fb[file])", "(status === 'error' && fb && fb[file])"),
+            "the room's own map is dropped while the list loads": ("if (status === 'error' && !fb[picked]) picked = '';", "if (!fb[picked]) picked = '';"),
+            "the fallback list has no name for a screen reader": ("sectionsOf([{ title: '', items: shown }], 'The six originals');", "sectionsOf([{ title: '', items: shown }]);"),
+            "Thumbnails of the fallback show made-up plays": ("if (!m.bare) body.appendChild(el('div', 'pk-meta', playsText(m.plays)", "if (true) body.appendChild(el('div', 'pk-meta', playsText(m.plays)"),
+            "the preview keeps the old map when a search finds nothing": ("parts.out.appendChild(e); paintPane(); return; }", "parts.out.appendChild(e); return; }"),
+            "Down in the grid steps by a fixed count": ("i = grid ? across(i, 1) : i + 1;", "i += step;"),
+            "Up in the grid steps by a fixed count": ("i = grid ? across(i, -1) : i - 1;", "i -= step;"),
+            "the grid's next row is the nearest by the right edge": ("Math.abs(n[j].offsetLeft - c.offsetLeft) < Math.abs(n[b].offsetLeft - c.offsetLeft)", "n[j].offsetLeft > n[b].offsetLeft"),
+            "a tag runs into the name": ("nm.appendChild(doc.createTextNode(' ')); nm.appendChild(el('span', 'pk-badge' + cls, t));", "nm.appendChild(el('span', 'pk-badge' + cls, t));"),
+            "a map of the fallback shows made-up plays": ("if (!m.bare) { var pl", "if (true) { var pl"),
+            "the preview of the fallback shows made-up plays": ("if (!m.bare) facts.push(", "facts.push("),
+            "a map of the fallback cannot be chosen": ("var m = lookup(picked);\n            if (!m) return;", "var m = byFile[picked];\n            if (!m) return;"),
+            "the card shows a player count that the list lacks": ("if (m.players) out.push(", "out.push("),
+            "an Extended map is a players' map on the card": ("m.original ? 'Original' : m.kind === 'extended' ? 'Extended' : \"Players' map\"];", "m.original ? 'Original' : \"Players' map\"];"),
             "a name may hold a slash": ("!/[\\/\\\\:*?\"<>|]/.test(name)", "!/[\\\\:*?\"<>|]/.test(name)"),
             "a picture may be an svg": ("'\\\\.(?:webp|png)|/front/preview_[a-z]+\\\\.png)$');", "'\\\\.(?:webp|png|svg)|/front/preview_[a-z]+\\\\.png)$');"),
             "a picture of an approved map may not be a png": ("'\\\\.(?:webp|png)|/front/preview_[a-z]+\\\\.png)$');", "'\\\\.webp|/front/preview_[a-z]+\\\\.png)$');"),
@@ -140,14 +184,14 @@ class ThePickersOwnCode(unittest.TestCase):
             "the server's list is not asked": ("        if (list) {\n            var low = null;", "        if (false) {\n            var low = null;"),
             "the first spelling in another case beats the exact one": ("if (list[i].file.replace(/\\.lvl$/i, '') === base) return list[i].original ? '' : list[i].thumb;", "if (false) return '';"),
             "a map without a picture on the server gets a guessed address": ("return list[i].original ? '' : list[i].thumb;", "return list[i].thumb || previewPath(map);"),
-            "an Extended map has no badge": ("else if (m.kind === 'extended') nm.appendChild(el('span', 'pk-badge pk-ext', 'Extended'));", ""),
-            "a heavy map is not marked": ("if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));", ""),
-            "every map is marked as heavy": ("if (m.heavy) nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));", "nm.appendChild(el('span', 'pk-badge pk-heavy', HEAVY_TEXT));"),
+            "an Extended map has no badge": ("else if (m.kind === 'extended') tag(' pk-ext', 'Extended');", ""),
+            "a heavy map is not marked": ("else if (m.heavy) tag(' pk-heavy', HEAVY_TEXT);", ""),
+            "every map is marked as heavy": ("else if (m.heavy) tag(' pk-heavy', HEAVY_TEXT);", "else tag(' pk-heavy', HEAVY_TEXT);"),
             "the flag is not read from the list": ("heavy: m.heavy === true", "heavy: false"),
             "a map with no flag is heavy": ("heavy: m.heavy === true", "heavy: m.heavy !== false"),
             "the warning says the map is refused": ("var HEAVY_TEXT = 'Many ants: may run slowly';", "var HEAVY_TEXT = 'Too many ants for an online game';"),
-            "a map over the cap of ants is not marked": ("if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            else if (m.heavy)", "if (m.heavy)"),
-            "a map over the cap of ants has both chips": ("if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            else if (m.heavy)", "if (m.tooManyAnts) nm.appendChild(el('span', 'pk-badge pk-heavy', TOO_MANY_TEXT));\n            if (m.heavy)"),
+            "a map over the cap of ants is not marked": ("if (m.tooManyAnts) tag(' pk-heavy', TOO_MANY_TEXT); else if (m.heavy)", "if (m.heavy)"),
+            "a map over the cap of ants has both chips": ("if (m.tooManyAnts) tag(' pk-heavy', TOO_MANY_TEXT); else if (m.heavy)", "if (m.tooManyAnts) tag(' pk-heavy', TOO_MANY_TEXT); if (m.heavy)"),
             "the reason is read without the refusal": ("m.online === false && m.online_why === 'ants'", "m.online_why === 'ants'"),
             "any refused map is marked as too many ants": ("m.online === false && m.online_why === 'ants'", "m.online === false"),
             "the chip says the game is slow": ("var TOO_MANY_TEXT = 'Too many ants to play online';", "var TOO_MANY_TEXT = 'Many ants: may run slowly';"),

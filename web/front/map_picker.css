@@ -14,10 +14,30 @@
 .pk-nm { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; } .pk-meta { font-size: 14px; color: var(--muted); }
 .pk-badge { margin-left: 8px; padding: 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; } .pk-badge.pk-ext { color: #8fe6c8; background: #17382f; border: 1px solid #3b976f; } .pk-badge.pk-heavy { display: inline-block; max-width: 100%; color: #ffd9a8; background: #3a2512; border: 1px solid #a8682a; text-transform: none; letter-spacing: 0; }
 .pk-pl { text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; } .pk-pl b { display: block; font-weight: 500; font-size: 18px; color: var(--cream); }
-.pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 10px; align-content: start; }
+.pk-sec.pk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; padding: 10px; align-content: start; }
+.pk-h { grid-column: 1 / -1; margin: 0; padding: 10px 10px 0; font-size: 13px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); } .pk-sec.pk-grid .pk-h { padding: 0; } .pk-h span { margin-left: 10px; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.pk-badge { white-space: nowrap; } .pk-badge.pk-heavy { white-space: normal; }
+.pk-badge.pk-here { color: #05140d; background: #8fe6c8; } .pk-card .pk-badge.pk-here { margin-top: 3px; }
+.pk-pane { display: none; }
 .pk-card { padding: 6px; cursor: pointer; background: #0f1820; border: 2px solid var(--edge); border-radius: 6px; } .pk-card img, .pk-card .pk-nopic { width: 100%; height: auto; aspect-ratio: 1; } .pk-card .pk-nm { margin-top: 6px; font-size: 15px; } .pk-card .pk-badge { display: block; width: max-content; margin: 3px 0 0; }
 .pk-row.sel, .pk-card.sel { background: #14332b; outline: 3px solid var(--gold); outline-offset: -3px; } .pk-row:focus-visible, .pk-card:focus-visible { outline-offset: -3px; }
 .pk-fine { margin-top: 8px; font-size: 13px; color: var(--muted); } .pk-note { display: grid; gap: 10px; justify-items: center; padding: 28px 14px; text-align: center; color: var(--muted); } .pk-empty b { font-weight: 500; font-size: 20px; color: var(--cream); }
+/* a wide screen, or a phone on its side: the list at the left, the map that is picked at the right with Choose map under it (the footer's own row has its count at the left and the button in the pane's column) */
+@media (min-width: 721px), (min-width: 560px) and (max-height: 500px) {
+    .pickhow .panel { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, 340px); grid-template-rows: auto auto auto minmax(0, 1fr) auto auto; column-gap: 20px; }
+    .pickhow .panel > .head, .pickhow .panel > .pk-bar, .pickhow .panel > .pk-sorts { grid-column: 1 / -1; }
+    .pickhow .panel > .pk-out { grid-column: 1; grid-row: 4; min-height: 0; } .pickhow .panel > .pk-fine { grid-column: 1; grid-row: 5; } .pk-foot { display: contents; } .pk-count { grid-column: 1; grid-row: 6; margin-top: 10px; }
+    .pickhow .panel > .pk-pane { display: block; grid-column: 2; grid-row: 4 / 6; min-height: 0; overflow: auto; } .pk-foot .btn { grid-column: 2; grid-row: 6; margin-top: 10px; align-self: end; }
+    .pk-pane.pk-none > * { visibility: hidden; }
+    .pk-pic { display: block; width: 100%; max-width: 340px; height: auto; aspect-ratio: 1; margin: 0 auto 10px; background: var(--edge); border: 3px solid var(--frame); }
+    .pk-pn { margin: 0 0 4px; font-size: 26px; line-height: 1.15; overflow-wrap: anywhere; } .pk-pn .pk-badge { vertical-align: 4px; } .pk-pane .pk-meta { margin: 0 0 8px; font-size: 15px; } .pk-pd { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+}
+@media (max-height: 500px) and (min-width: 560px) {      /* a phone on its side: everything above the list is one slim row each, and the picture is small */
+    .pickhow .panel { padding: 8px 12px; grid-template-columns: minmax(0, 1fr) 170px; } .pickhow .panel > .head { margin-bottom: 4px; } .pickhow .panel h2 { font-size: 18px; margin: 0; }
+    .pickhow .panel > .pk-bar { flex-wrap: nowrap; margin-bottom: 4px; } .pk-q { flex-basis: 0; min-height: 44px; } .pk-bar .pk-chip { min-height: 44px; } .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { margin-bottom: 4px; }
+    .pickhow .panel > .pk-fine { margin: 2px 0 0; font-size: 12px; } .pk-count { margin-top: 4px; font-size: 13px; } .pk-foot .btn { margin-top: 4px; min-height: 44px; }
+    .pk-pic { max-width: 96px; margin-bottom: 6px; } .pk-pn { font-size: 20px; } .pk-pd { font-size: 14px; } .pk-h { font-size: 12px; padding-top: 6px; }
+}
 @media (max-width: 720px) {
     .pickhow { align-items: end; padding: 0; } .pickhow .panel { border-radius: 10px 10px 0 0; max-height: 90vh; max-height: calc(100dvh - 24px); padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
     .pk-sorts { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; } .pk-sorts > * { flex: none; white-space: nowrap; } .pk-sorts .pk-chip { min-height: 34px; } .pk-sorts { scrollbar-width: thin; } .pk-bar { margin-bottom: 8px; }       /* the sorts are one row that scrolls sideways: the controls leave the list most of the sheet */       /* the map list is a sheet at the bottom of the screen */

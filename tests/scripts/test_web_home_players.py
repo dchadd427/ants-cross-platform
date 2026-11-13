@@ -21,6 +21,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import subprocess
 import tempfile
 import unittest
@@ -32,7 +33,8 @@ CHECK = os.path.join(REPO, "tests", "scripts", "web_home_players_check.js")
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 NODE = shutil.which("node")
 FILES = ("players.js", "players.css")
-PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 42 * 1000, 12600       # bytes, raw and gzipped, both files together (about 39,600 and 11,900: the panel, the groups and the rows, Join, the guests, the empty and the off notes); they load after the first paint, after the chat dock, so they cost the first look nothing
+sys.path.insert(0, os.path.join(REPO, "tools"))
+from size_limits import PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET  # noqa: E402  (every byte budget: tools/size_limits.py)
 
 
 def read(*parts):
@@ -230,7 +232,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_players_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["web/lobby.html", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/games.css", "web/home/players.js", "web/home/players.css",
               "tests/scripts/test_web_home_players.py", "tests/scripts/web_home_players_check.js", "tests/scripts/web_home_chat_check.js", "tests/scripts/web_page_harness.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html", "docs/HOME_SCREEN.md"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

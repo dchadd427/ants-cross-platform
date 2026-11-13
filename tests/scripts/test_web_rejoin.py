@@ -28,6 +28,7 @@ import unittest
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 LOBBY = os.path.join(REPO, "web", "lobby.html")
 SHELL = os.path.join(REPO, "web", "shell.html")
+KEYS = os.path.join(REPO, "web", "rejoin_key.js")     # the keys of the seats, read in one place (both pages load it)
 CHECK_JS = os.path.join(REPO, "tests", "scripts", "web_rejoin_block_check.js")
 
 
@@ -71,7 +72,9 @@ class TheMarkupAndTheStyle(unittest.TestCase):
 class TheBlockAndTheWiring(unittest.TestCase):
     def setUp(self):
         self.page = read("web", "lobby.html")
-        self.keys = self.page[self.page.index("// REJOINKEY_BEGIN"):self.page.index("// REJOINKEY_END")]       # (the keys that this browser holds: the same text in the game page)
+        self.file = read("web", "rejoin_key.js")
+        self.keys = self.file[self.file.index("// REJOINKEY_BEGIN"):self.file.index("// REJOINKEY_END")]       # (the keys that this browser holds: web/rejoin_key.js, which both pages load)
+        self.ask = self.page[self.page.index("// REJOINKEY_BEGIN"):self.page.index("// REJOINKEY_END")]        # (the page's one question to it)
         self.block = self.page[self.page.index("// REJOIN_BEGIN"):self.page.index("// REJOIN_END")]            # (the front page's own: where the button goes)
         last = "window.addEventListener('storage', function () { showRejoin(); });"
         self.wiring = self.page[self.page.index("// REJOIN_END"):self.page.index(last) + len(last)]           # (the strip's own code: from the block's end to its storage listener)
@@ -79,7 +82,10 @@ class TheBlockAndTheWiring(unittest.TestCase):
     def test_the_markers_are_once_and_the_blocks_touch_neither_the_page_nor_the_storage_themselves(self):
         for marker in ("// REJOINKEY_BEGIN", "// REJOINKEY_END", "// REJOIN_BEGIN", "// REJOIN_END"):
             self.assertEqual(self.page.count(marker), 1, marker)
-        for text in (self.keys, self.block):
+        for marker in ("// REJOINKEY_BEGIN", "// REJOINKEY_END"):
+            self.assertEqual(self.file.count(marker), 1, marker)
+        self.assertNotRegex(self.ask, r"innerHTML|insertAdjacentHTML|document\.|localStorage|sessionStorage|location\.|console\.|fetch\(|XMLHttpRequest|setItem|getItem|\.key\(")      # (the page's question touches no storage: it hands the browser's to the file)
+        for text in (self.file, self.block):
             self.assertNotRegex(text, r"innerHTML|insertAdjacentHTML|document\.|window\.|localStorage|sessionStorage|location\.|console\.|fetch\(|XMLHttpRequest|setItem")
         for name in ("rejoinParse", "rejoinOffer"):
             self.assertEqual(len(re.findall(r"function %s\(" % name, self.keys)), 1, name)
@@ -184,11 +190,23 @@ class TheGamePageDoesNotAskARejoinerForAName(unittest.TestCase):
         self.shell = read("web", "shell.html")
         self.lobby = read("web", "lobby.html")
 
-    def test_the_game_page_carries_the_same_keys_block_as_the_front_page(self):
+    def test_the_game_page_asks_the_same_file_as_the_front_page_in_the_same_words(self):
         def block(text):
             return text[text.index("// REJOINKEY_BEGIN"):text.index("// REJOINKEY_END")]
         self.assertEqual(self.shell.count("// REJOINKEY_BEGIN"), 1)
         self.assertEqual(block(self.shell), block(self.lobby))
+        for page in (self.shell, self.lobby):
+            self.assertEqual(page.count('<script src="rejoin_key.js"></script>'), 1)
+            self.assertLess(page.index('<script src="rejoin_key.js"></script>'), page.index("// REJOINKEY_BEGIN"))
+            self.assertIn("function rejoinOffer(storage, now, server, room, seat) { return window.AntsRejoinKey ? window.AntsRejoinKey.offer(storage, now, server, room, seat) : null; }", page)
+            for gone in ("function rejoinParse(", "REJOIN_PREFIX", "REJOIN_MAX_AGE_MS", "REJOIN_FUTURE_MS"):
+                self.assertNotIn(gone, page, "the rules of the keys are in web/rejoin_key.js alone: " + gone)
+
+    def test_the_file_is_the_one_place_that_reads_the_keys_and_is_in_the_image_and_the_web_build(self):
+        self.assertIn("COPY web/rejoin_key.js /usr/share/nginx/html/rejoin_key.js", read("Dockerfile"))
+        self.assertIn('web/rejoin_key.js" "${DIST_DIR}/"', read("build_web.sh"))
+        self.assertRegex(read(".github", "workflows", "ci.yml"), r"\brejoin_key\.js\b")
+        self.assertIn("root.AntsRejoinKey = api;", read("web", "rejoin_key.js"))
 
     def test_the_step_asks_unless_the_browser_holds_this_seat(self):
         self.assertIn("var asks = ANTS_PAGE.asksForName(window.location.search);", self.shell)

@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.2 - 2026-11-12 - One map chooser in the room lobby and the site can be installed as an app
+
+**For players:**
+- **One chooser for the map in a room.** The room shows the map as one card with its picture, name and facts. The host's Change map button opens a single list of every map the game server offers: the six original maps first, then players' maps, with a search box. The old drop-down and the Browse all maps button are gone.
+- **The site can be installed like an app.** In a computer's browser use Install in the menu; on a phone use Add to Home screen. It is called Ants! and opens in a window of its own without the browser's bars.
+- **It still needs a connection.** The installed app is the same site: there is no offline mode, and nothing works without the network.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.1 page or game still joins. Under the hood: the size limits of documents, code files and web files sit in one place, one file reads the saved seat of a running game for the front page and the game page, and the testing guide now has written rules for tests and mutants.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/635fcae2...7298d031)
+
 ## v0.16.1 - 2026-11-12 - Clean page addresses, a clearer voice button, Have a code, Host a game, a hideable replay bar and one top bar
 
 **For players:**
@@ -467,38 +478,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...b9a0ab04)
 
-## v0.12.122 - 2026-10-24 - The picture starts in the shape nearest your screen
+## Older versions (v0.12.122 and before)
 
-**For players:**
-- **The picture now starts in the shape nearest your screen.** The first time you open the game page or the front page, and until you pick a shape yourself, it starts in Classic 4:3, 16:10, 16:9 or 21:9, whichever is closest to your screen: a 1440 x 900 laptop gets 16:10, a 3440 x 1440 ultrawide gets 21:9, a 4:3 or 5:4 screen gets Classic 4:3. Before, everyone started in 16:9.
-- A phone held upright still starts in 16:9 and is still told to turn it sideways; a phone held sideways picks by the shape of its screen, also when it opened the front page upright (the front page passes the game only a shape you picked).
-- Nothing you chose changes: a shape you pressed (16:9 too) is remembered as before, and `?aspect=` in the address still wins. The starting shape is not remembered, so it follows your screen until you press a shape.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the pages only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/36df6960...8bee7cc2)
-
-## v0.12.121 - 2026-10-24 - A Discord button in the header
-
-**For players:**
-- **A Discord button at the top of the front page**, after Matches: the Discord mark and the word (the mark alone on a phone). It opens the project's Discord invite in a new tab, so a room you are in stays open.
-- The same button ends the header of the Matches, match and Live now pages. The game page's header is unchanged.
-- It is a plain link: nothing is loaded from Discord and nothing is sent to it until you click. The Legal page says so, and that the project is not affiliated with Discord.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/bc44d6e2...47f4907c)
-
-## v0.12.120 - 2026-10-23 - A Buy me a coffee button at the bottom of the front page
-
-**For players:**
-- **A "Buy me a coffee" button at the bottom of the front page.** If you enjoy the game you can support its maintainer: the yellow button, centered in the footer, opens the maintainer's Buy Me a Coffee page in a new tab. The repository has a Sponsor button for the same page.
-- The button is a picture that your browser fetches from Buy Me a Coffee's own server, so that server sees your address as any website does; the Legal page says so. Nothing else on the front page is loaded from another company.
-
-**Rules / network:** none: network protocol 21 and the simulation rules are unchanged (the front page only).
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/e95da98a...1158f600)
-
-## Older versions (v0.12.119 and before)
-
-Every release before v0.12.120, and the long notes of v0.12.119 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.123, and the long notes of v0.12.122 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
