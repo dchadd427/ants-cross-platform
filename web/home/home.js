@@ -48,12 +48,54 @@
     // The screen that a page opens on: a link (or a test room) opens the Room; a reload keeps the screen that the address names; else Home
     function firstScreen(link, hasSeat, hash) { return link ? 'room' : hasSeat && hash === HASH ? 'room' : 'home'; }
 
+    // The height that Home must not be taller than. box: Home's own height with no limit set; inner, client, vv: the window's three readings (0 or missing: none); scale: the visual viewport's zoom
+    // (its height counts only at 1: a pinch must not shrink the page); typing: a text field has the focus. Returns a number of px (set --home-h), null (no limit) or 'keep' (change nothing).
+    // The smallest reading wins, as the page cannot be taller than any true one. A field with the focus changes nothing (the keyboard takes its room and the page slides, as it did), and a reading
+    // under two thirds of the box is a keyboard or a split window, not a page that is too tall: no limit.
+    function fitHeight(m) {
+        if (m.typing) return 'keep';
+        var least = 0, all = [m.inner, m.client, m.scale > 0.99 && m.scale < 1.01 ? m.vv : 0];
+        for (var i = 0; i < all.length; i++) if (all[i] > 0 && isFinite(all[i]) && (!least || all[i] < least)) least = all[i];
+        if (!least || !(m.box > least + 1) || least < m.box * 2 / 3) return null;
+        return Math.floor(least);
+    }
+    // The page's height (home.css): the smaller of the window's own readings, never while a field has the focus. Home is measured with no limit, so the limit cannot argue with itself.
+    // onHome() says whether Home shows (the Room's page is not as tall as the window). Returns { fit }; fit() is also what runs on load, on every resize of the window or of the visual
+    // viewport, on a turn of the phone (twice: the new size comes a moment late) and shortly after a field loses the focus (the keyboard goes).
+    function heightGuard(win, doc, onHome) {
+        function typing() { var a = doc.activeElement, t = a && a.tagName; return !!a && (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || a.isContentEditable === true); }
+        function fit() {
+            try {
+                var root = doc.documentElement, v = win.visualViewport;
+                if (typing()) return;
+                root.style.removeProperty('--home-h');
+                if (!onHome()) return;
+                var h = fitHeight({ box: doc.body.getBoundingClientRect().height, inner: win.innerHeight, client: root.clientHeight, vv: v ? v.height : 0, scale: v ? v.scale : 1, typing: false });
+                if (typeof h === 'number') root.style.setProperty('--home-h', h + 'px');
+            } catch (e) { /* the page keeps its own height */ }
+        }
+        function soon() { fit(); setTimeout(fit, 300); }
+        fit();
+        try {
+            win.addEventListener('resize', fit); win.addEventListener('orientationchange', soon); doc.addEventListener('focusout', function () { setTimeout(fit, 350); });
+            if (win.visualViewport && win.visualViewport.addEventListener) win.visualViewport.addEventListener('resize', fit);
+            setTimeout(fit, 300);
+        } catch (e) { /* no events here */ }
+        return { fit: fit };
+    }
+    // The address "/?vp" shows the numbers of the window (home/vp.js, loaded only for this address)
+    function readout(win, doc) {
+        if (!/[?&]vp(&|=|$)/.test((win.location && win.location.search) || '')) return false;
+        try { var js = doc.createElement('script'); js.src = 'home/vp.js'; js.async = true; js.onload = function () { if (win.AntsHomeVp) win.AntsHomeVp.mount({ doc: doc, win: win }); }; (doc.head || doc.body).appendChild(js); } catch (e) { /* none */ }
+        return true;
+    }
+
     // ---- the screens ----
     // mount({ doc, win, host (Home's div), lobby (the page's grid: the Room's bar goes before it), page: { info() -> { client, model, offline }, make(), leave(), how(), stalled(words) (optional), ... } })
     // returns { start, sync, opening, show, screen, inert, menu, dock }
     function mount(env) {
         var doc = env.doc, win = env.win, host = env.host, page = env.page;
-        var screen = 'home', menuOpen = false, menuFor = null, menuBox = null, liveN = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
+        var fitting = null, screen = 'home', menuOpen = false, menuFor = null, menuBox = null, liveN = null, factsBox = null, going = false, held = false, stalled = false, goingTimer = null, failTimer = null, said = '', dock = null, asked = false, games = null, askedGames = false, players = null, askedPlayers = false, askedTalk = false;
 
         function el(tag, cls, text) {
             var e = doc.createElement(tag);
@@ -214,6 +256,7 @@
             var from = screen;
             screen = name;
             doc.body.setAttribute('data-screen', name);
+            if (fitting) fitting.fit();
             if (how === 'push') push(from, name);
             sync();
             if (name === 'home') wantDock();
@@ -272,6 +315,8 @@
             show(firstScreen(!!link, !!seat, win.location.hash), 'first');
             wantGames();
             win.addEventListener('popstate', function (e) { show(screenOf(e && e.state, win.location.hash, !!page.info().client), 'pop'); });
+            fitting = heightGuard(win, doc, function () { return screen === 'home'; });
+            readout(win, doc);
             win.addEventListener('resize', function () { if (menuOpen) placeMenu(); var ph = phone(); if (dock && ph !== was) dock.open(ph ? tab === 'chat' : (win.innerHeight || 0) >= 601); was = ph; });
         }
         // START reached this page: it is on its way to the game page, so both bars take no press, and Home says so
@@ -325,5 +370,5 @@
         return { start: start, sync: sync, opening: say, show: show, screen: function () { return screen; }, inert: inert, menu: function () { return menuOpen; }, dock: function () { return dock; } };
     }
 
-    return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, screenOf: screenOf, firstScreen: firstScreen, mount: mount };
+    return { HASH: HASH, TEXT: TEXT, MENU_MAIN: MENU_MAIN, MENU_SMALL: MENU_SMALL, countOf: countOf, fitHeight: fitHeight, heightGuard: heightGuard, readout: readout, screenOf: screenOf, firstScreen: firstScreen, mount: mount };
 });

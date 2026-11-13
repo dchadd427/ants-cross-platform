@@ -44,3 +44,4 @@
     .pk-row { grid-template-columns: 56px minmax(0, 1fr) auto; gap: 10px; } .pk-row img, .pk-nopic { width: 56px; height: 56px; } .pk-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
     .pk-q { flex-basis: 100%; }
 }
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { .pickhow .panel { max-height: min(calc(100dvh - 24px), calc(100svh - 24px)); } }       /* (an installed window: the smaller height, so the sheet's top is never above the window) */
