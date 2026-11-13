@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.4 - 2026-11-13 - The phone chat box, Settings rows in the game, a new icon, no logo and faster site updates
+
+**For players:**
+- **A roomier chat box on a phone held upright.** The text field is on top and a row of buttons (emoji, voice and the rest) sits under it. The field grows as you type, Enter sends, and a small bubble shows while the voice button is listening.
+- **No logo at the top of the pages.** The top bars give the room to their buttons instead. A recording, a live view and the Map maker's list of maps now have a Home button.
+- **A new icon: the ant's head.** It is the icon of the installed app and of the browser tab. An installed copy picks it up when the browser next refreshes the app's details; an iPhone home screen icon changes only when the app is removed and added again.
+- **Picture shape and Fullscreen mouse are rows of the game's Settings.** There is one Settings gear in the game page's top bar; the strip under the game and the room's Picture row are gone (a recording's bar keeps its Picture button). For now these two rows can be changed during a match only: outside a match the menu shows "Not now". A later release will make them work everywhere.
+- **No footer on the pages that have the top bar** (Matches, Live now, the map maker and the others). The version and build line is now the last line of the bar's Menu.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.3 page or game still joins. Under the hood: the site's images are built in layers that are reused when only pages or the version change, so later site updates are faster (the first one is slow, since nothing is reused yet), and several tests are steadier.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4eb281f8...870b4439)
+
 ## v0.16.3 - 2026-11-12 - The installed app's front page fits the window
 
 **For players:**
