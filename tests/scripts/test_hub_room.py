@@ -800,7 +800,7 @@ class TheHubsClock(unittest.TestCase):
             room.store.add_line("1000", "user0", "line %d %s" % (n, "x" * 100), False)
             n += 1
         self.assertLess(room.store.used_bytes(), room.limits.prune_from_bytes)         # (a few pages of lines)
-        self.assertGreater(room.store.log_bytes(), room.limits.prune_from_bytes - 20_000)       # (and a log file that is the whole of the store, but the pages of the tables that a new file has: the secret's and the moderators' log's)
+        self.assertGreater(room.store.log_bytes(), room.limits.prune_from_bytes - 40_000)       # (and a log file that is the whole of the store, but the pages of the tables that a new file has: the secret's, the moderators' log's and the pictures')
         who = room.person(1)
         room.say(who, "hello")
         self.assertEqual(who.codes(), ["rate"])

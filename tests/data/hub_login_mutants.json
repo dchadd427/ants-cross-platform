@@ -462,14 +462,14 @@
   {
    "id": "logout_keeps_the_login",
    "file": "hub/login.py",
-   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")",
+   "old": "self.store.delete_session(digest(value))\n                self.hub.end_logins(session=digest(value))\n                if row is not None and self.store.logins(row[0]) == 0:        # (the last login of the account: its picture goes with it)\n                    self.store.clear_picture(row[0])\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "new": "pass\n        except StoreError:\n            return self.fail(503, \"busy\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
   {
    "id": "logout_keeps_the_sockets",
    "file": "hub/login.py",
-   "old": "                self.hub.end_logins(session=digest(value))\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
+   "old": "                self.hub.end_logins(session=digest(value))\n                if row is not None and self.store.logins(row[0]) == 0:        # (the last login of the account: its picture goes with it)\n                    self.store.clear_picture(row[0])\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "new": "                pass\n        except StoreError:\n            return self.fail(503, \"busy\")\n        self.log.event(\"logout\"",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheLogout"
   },
@@ -637,7 +637,7 @@
   {
    "id": "discord_answer_not_capped",
    "file": "hub/discord.py",
-   "old": "room = self.limits.discord_body_max",
+   "old": "room = cap",
    "new": "room = 10 ** 12",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDiscordClient"
   },
@@ -1624,8 +1624,8 @@
   {
    "id": "nginx_login_lets_a_sibling_site_in",
    "file": "docker/nginx.conf",
-   "old": "$http_sec_fetch_site ~ \"^(cross-site|same-site)$\"",
-   "new": "$http_sec_fetch_site ~ \"^cross-site$\"",
+   "old": "$http_sec_fetch_site ~ \"^(cross-site|same-site)$\") { return 403; }          # (a link or an image",
+   "new": "$http_sec_fetch_site ~ \"^cross-site$\") { return 403; }          # (a link or an image",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_nginx_hub_login tests.scripts.test_nginx_hub"
   },
   {

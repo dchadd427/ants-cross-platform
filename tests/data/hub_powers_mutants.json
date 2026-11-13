@@ -560,8 +560,8 @@
   {
    "id": "forget_takes_the_log_away",
    "file": "hub/store/sqlite.py",
-   "old": "            self.db.execute(\"DELETE FROM profiles WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
-   "new": "            self.db.execute(\"DELETE FROM profiles WHERE account = ?\", (account,))\n            self.db.execute(\"DELETE FROM modlog\")\n            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))",
+   "old": "            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))\n            self.db.execute(\"UPDATE mutes SET name = '' WHERE account = ?\", (account,))",
+   "new": "            self.db.execute(\"DELETE FROM modlog\")\n            self.db.execute(\"DELETE FROM lines WHERE account = ?\", (account,))\n            self.db.execute(\"UPDATE mutes SET name = '' WHERE account = ?\", (account,))",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {
@@ -581,8 +581,8 @@
   {
    "id": "a_kick_ends_every_login_of_everybody",
    "file": "hub/store/sqlite.py",
-   "old": "gone = self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,)).rowcount\n            self.write_note(note)",
-   "new": "gone = self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,)).rowcount\n            self.write_note(note)",
+   "old": "gone = self.db.execute(\"DELETE FROM sessions WHERE account = ?\", (account,)).rowcount\n            self.drop_picture",
+   "new": "gone = self.db.execute(\"DELETE FROM sessions WHERE account = ? OR 1\", (account,)).rowcount\n            self.drop_picture",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_store_contract"
   },
   {
