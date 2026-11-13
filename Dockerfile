@@ -238,7 +238,7 @@ COPY --from=builder /src/mapmaker_atlas/ /usr/share/nginx/html/mapmaker_atlas/
 COPY --from=builder /src/legal.html /usr/share/nginx/html/legal.html
 
 # The changelog page (built from CHANGELOG.md, linked from the game page); it is in the Classic look of the front page: it links
-# /front/classic.css and shows /front/logo.png, which the web/front/ copy above puts in the image
+# /front/classic.css, which the web/front/ copy above puts in the image
 COPY --from=builder /src/changelog/changelog.html /usr/share/nginx/html/
 
 # Copy Asset Catalog & Viewer for reference on beta site

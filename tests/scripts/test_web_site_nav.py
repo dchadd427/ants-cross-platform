@@ -68,7 +68,7 @@ class ThePages(unittest.TestCase):
             bar = bar_of(page)
             nav = re.search(r'<nav aria-label="Pages">(.*?)</nav>', bar.group(2), re.S).group(1)
             self.assertEqual(re.findall(r'<a class="btn[a-z ]*" href="([^"]*)"', nav), ROW, name)
-            self.assertEqual(re.findall(r'<a class="btn[a-z ]*" href="([^"]*)"', bar.group(2))[:2], ["/", "/"], name + ": Home, then the logo, are the phone's two links to the front page")
+            self.assertEqual(re.findall(r'<a class="btn[a-z ]*" href="([^"]*)"', bar.group(2))[:2], ["/", "/"], name + ": the phone's Home button and the row's Home are the two links to the front page")
             self.assertEqual(re.findall(r'data-live="([^"]*)"', bar.group(1)), [live] if live else [], name)
 
     def test_the_page_that_is_open_is_marked_in_the_row_and_no_other(self):
@@ -81,11 +81,10 @@ class ThePages(unittest.TestCase):
         for name, (page, marked, live) in PAGES.items():
             bar = bar_of(page).group(2)
             self.assertIn('<a class="btn sbhome" href="/"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>', bar, name)
-            self.assertRegex(bar, r'<a class="sblogo" href="/"><img src="/?front/logo\.png" alt="ants! - Home" width="581" height="218"></a>', name)
             self.assertIn('<a class="btn sblive" href="/live-now" hidden></a>', bar, name)                  # (hidden until the count is known and above none)
             self.assertIn('<button class="btn sbtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sbm"><i class="sbbars"></i></button>', bar, name)
             self.assertIn('<span>Live now</span><span class="sbn"></span>', bar, name)                       # (the count's place is kept, so that the row does not move when it arrives)
-            self.assertEqual(len(re.findall(r"<img", bar)), 1, name)
+            self.assertEqual(len(re.findall(r"<img", bar)), 0, name + ": the bar has no picture, so no page downloads one for it")
             self.assertNotIn("style=", bar, name)                                                             # (no inline style: the CSP of the admin page has none, the rest keeps to it)
             self.assertNotIn("onclick", bar, name)
             self.assertNotIn("<script", bar, name)
@@ -192,7 +191,6 @@ class TheFiles(unittest.TestCase):
         self.assertIn("@media (min-width: 720px)", CSS)
         self.assertIn(".sb nav { display: none; }", CSS)
         self.assertIn(".sb .btn { min-height: 44px;", CSS)                                                      # (a 44 px target)
-        self.assertIn(".sb .sblogo { display: flex; align-items: center; min-height: 44px;", CSS)
         self.assertIn("@media (forced-colors: active)", CSS)
         self.assertIn("outline: 3px solid Highlight", CSS)
         self.assertNotIn("transition", CSS)                                                                     # (no motion)

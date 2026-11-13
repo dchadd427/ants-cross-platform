@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """The game page in the front page's look (run by ./run_tests.sh --fast and by the CI). The page layout had not been updated. The game page (web/shell.html, served as /play and, as "/", for
 a link that somebody shared) has the look of web/lobby.html, which is the look of the 1998 game's own menus: the clay, the thin green frame,
-the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and the small "ants!" logo (web/front/). What needs no browser is read from the two files:
+the teal bevelled buttons with their red shadow, the black inset boxes, the game's own font and, on the loading screen, the "ants!" logo (web/front/). What needs no browser is read from the two files:
 
   - the colors are the front page's, token for token, and the rules of the buttons, the two-state buttons, the frame, the black boxes, the progress bar and the footer are the front page's own
     text, where the front page (the lobby, drawn as the approved pictures draw it) has the same piece; the buttons' corners are one rounded radius, their face is lit from above (the
     sheen) and their edges are bevelled on all four sides (the bevel tokens), on the front page, this page, the changelog pages' style sheet and Sprites and sounds
-  - the header: the logo (a link back to the menu that asks as Menu does, with the same code), the eight controls in their order, and "More" for a narrow window (a <details>, no script) with
+  - the header: no logo; Menu (a link back to the menu that asks, with the code that the footer's link has; Home in its place in a recording), the eight controls in their order, and "More" for a narrow window (a <details>, no script) with
     the other six
   - the loading screen (the logo, the same ids and messages, a teal bar), the failure cards (classes, not colors written into the script), the bottom controls (the same buttons and ids), the footer
     (the version and the build where the Dockerfile and the CI look for them), the embed mode (only the game) and the pictures that the page names
@@ -337,13 +337,20 @@ class TheHeader(PageCase):
     def header(self):
         return self.page[self.page.index("<header>"):self.page.index("</header>")]
 
-    def test_the_logo_is_a_link_to_the_front_page_in_this_tab(self):
-        logo = re.search(r'<a href="/" id="logo-link" class="logo"([^>]*)>\s*<img src="front/logo\.png" alt="([^"]+)" width="581" height="218">\s*</a>', self.header())
-        self.assertIsNotNone(logo)
-        self.assertNotIn("target=", logo.group(1))
-        self.assertEqual(png_size(os.path.join(FRONT, "logo.png")), (581, 218))
-        self.assertLess(self.header().index('id="logo-link"'), self.header().index('id="menu-btn"'))          # (at the left of the header)
+    def test_the_header_has_no_picture_and_the_menu_is_its_first_link_to_the_front_page_in_this_tab(self):
+        self.assertNotIn("<img", self.header())
+        menu = re.search(r'<a href="/" id="menu-btn"([^>]*)>', self.header())
+        self.assertIsNotNone(menu)
+        self.assertNotIn("target=", menu.group(1))
+        self.assertNotIn('href="/"', self.header()[:menu.start()])                                            # (nothing before it leads to the front page)
         self.assertEqual(len(re.findall(r"<h1[ >]", self.page)), 1)                                           # (the page keeps its heading: for a screen reader)
+
+    def test_a_recording_or_live_view_has_a_home_button_first_in_its_group_of_the_header(self):
+        group = self.header()[self.header().index('<div class="header-actions rep-only">'):]
+        first = re.search(r'<(a|button) ([^>]*)>', group)
+        self.assertIn('href="/"', first.group(2))
+        self.assertIn('id="home-btn"', first.group(2))
+        self.assertNotIn("target=", first.group(2))
 
     def test_the_eight_controls_are_there_in_their_order_in_the_teal_style(self):
         row = self.header()[self.header().index('<div class="header-actions">'):self.header().index('<details class="more">')]
@@ -384,31 +391,29 @@ class TheHeader(PageCase):
         self.assertEqual(len(re.findall(r'\bid="([^"]+)"', self.page)), len(set(re.findall(r'\bid="([^"]+)"', self.page))), "an id is used twice")
         self.assertNotRegex(self.header(), r"<script|onclick=\"[^\"]*\.open")
 
-    def test_a_wide_window_shows_the_links_and_a_narrow_one_the_logo_menu_fullscreen_and_more(self):
+    def test_a_wide_window_shows_the_links_and_a_narrow_one_the_menu_fullscreen_and_more(self):
         self.assertEqual(rule(self.style, ".more")["display"], "none")
         narrow = self.style[self.style.index("@media (max-width: 700px) {"):self.style.index("@media (max-width: 440px) {")]
         self.assertRegex(narrow, r"\.wide-only \{\s*display: none;")
         self.assertRegex(narrow, r"\.more \{\s*display: block;")
-        self.assertRegex(narrow, r"\.logo img \{\s*width: 88px;")
         self.assertEqual(self.style.count(".wide-only {"), 1, "the one rule that hides the wide row's six")
         self.assertRegex(self.style, r"@media \(min-width: 701px\) and \(max-width: 1139px\) \{\s*#watch-btn \{\s*display: none;")          # (between 701 and 1139 the header keeps the links it had, Matches being the footer's; where Feedback leaves it too is run in tests/scripts/web_picture_in_settings_check.js)
         self.assertEqual(self.style.count("#watch-btn"), 1)
-        # the label of Fullscreen is short where the row is tight, and the smallest windows get smaller buttons and a smaller logo
+        # the label of Fullscreen is short where the row is tight, and the smallest windows get smaller buttons
         self.assertIn("@media (max-width: 440px)", self.style)
         self.assertIn("@media (max-width: 380px)", self.style)
 
-    def test_the_header_is_one_row_that_the_controls_share_with_the_logo(self):
+    def test_the_header_is_one_row_that_the_controls_fill(self):
         self.assertEqual(rule(self.style, ".header-actions")["flex"], "1 1 0")
         self.assertEqual(rule(self.style, ".header-actions")["min-width"], "0")
-        self.assertNotIn("flex-wrap", rule(self.style, "header"))                                                # (the controls wrap among themselves, beside the logo)
+        self.assertNotIn("flex-wrap", rule(self.style, "header"))                                                # (the controls wrap among themselves)
 
 
-class TheMenuAndTheLogoAskTheSameQuestion(PageCase):
-    def test_the_logo_is_in_the_list_of_the_code_that_asks_and_the_question_is_in_one_place(self):
-        self.assertIn("['logo-link', 'menu-btn', 'menu-link'].forEach(function (id) {", self.page)
+class TheLinksHomeAskTheSameQuestion(PageCase):
+    def test_the_three_links_are_in_the_list_of_the_code_that_asks_and_the_question_is_in_one_place(self):
+        self.assertIn("['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {", self.page)
         self.assertEqual(self.page.count("Leave the game and go back to the menu?"), 1)
-        self.assertEqual(self.page.count("getElementById('logo-link')"), 0)
-        self.assertEqual(len(re.findall(r"id=\"(?:logo-link|menu-btn|menu-link)\"", self.page)), 3)
+        self.assertEqual(len(re.findall(r"id=\"(?:menu-btn|home-btn|menu-link)\"", self.page)), 3)
 
 
 class TheLoadingScreen(PageCase):
@@ -511,7 +516,7 @@ class ThePicturesAndTheFont(PageCase):
         for name in named:
             self.assertTrue(os.path.exists(os.path.join(FRONT, name)), name)
         tags = re.findall(r"<img [^>]*>", self.page)
-        self.assertEqual(len(tags), 2)                                                                              # (the header's logo and the loading screen's)
+        self.assertEqual(len(tags), 1)                                                                              # (the loading screen's logo: the header shows none)
         for tag in tags:
             source = re.search(r'src="front/([^"]+)"', tag).group(1)
             width, height = int(re.search(r'width="(\d+)"', tag).group(1)), int(re.search(r'height="(\d+)"', tag).group(1))

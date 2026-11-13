@@ -122,14 +122,14 @@ class TheLegalPage(unittest.TestCase):
         """Copies of the page with one address that leaves the site: each must be named by the check (a protocol-relative one and an @import included)."""
         mutants = {
             "a protocol-relative style sheet": ('<link rel="stylesheet" href="/front/classic.css">', '<link rel="stylesheet" href="/front/classic.css"><link rel="stylesheet" href="//cdn.example/x.css">', "//cdn.example/x.css"),
-            "a protocol-relative image": ('<img src="/front/logo.png"', '<img src="//cdn.example/logo.png"', "//cdn.example/logo.png"),
-            "an image of another site": ('<img src="/front/logo.png"', '<img src="https://cdn.example/logo.png"', "https://cdn.example/logo.png"),
+            "a protocol-relative image": ('<div class="pt">', '<img src="//cdn.example/logo.png"><div class="pt">', "//cdn.example/logo.png"),
+            "an image of another site": ('<div class="pt">', '<img src="https://cdn.example/logo.png"><div class="pt">', "https://cdn.example/logo.png"),
             "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
             "an address that only starts like the repository's": ('href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="https://github.com/dchadd427/ants-cross-platform.evil.example/issues"', "ants-cross-platform.evil.example"),
             "an @import of a quoted address": ("main { margin: 26px 0 32px; }", '@import "https://cdn.example/x.css";\nmain { margin: 26px 0 32px; }', "@import"),
             "an @import url()": ("main { margin: 26px 0 32px; }", "@import url(//cdn.example/x.css);\nmain { margin: 26px 0 32px; }", "@import"),
             "a url() in the page's own rules": ("main { margin: 26px 0 32px; }", 'main { margin: 26px 0 32px; background: url("/front/clay.png"); }', "url("),
-            "a srcset": ('<img src="/front/logo.png"', '<img src="/front/logo.png" srcset="//cdn.example/l.png 2x"', "//cdn.example/l.png"),
+            "a srcset": ('<div class="pt">', '<img src="/front/clay.png" srcset="//cdn.example/l.png 2x"><div class="pt">', "//cdn.example/l.png"),
         }
         for name, (old, new, needle) in sorted(mutants.items()):
             self.assertGreaterEqual(self.page.count(old), 1, "%s: the mutation's anchor is in the page" % name)

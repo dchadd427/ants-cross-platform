@@ -598,7 +598,7 @@ async function flows() {
             for (const p of [maple, sage, tess]) await p.context().close();
         }
 
-        // ---- 1h. the bars at many widths (docs/HOME_SCREEN.md, "The top bar"): in Home's bar and the Room's bar every button and the logo is inside the window and inside the bar's own padding (left >= 0, right <= the window's width), and the page has no sideways scroll, at the sizes ----
+        // ---- 1h. the bars at many widths (docs/HOME_SCREEN.md, "The top bar"): in Home's bar and the Room's bar every button is inside the window and inside the bar's own padding (left >= 0, right <= the window's width), and the page has no sideways scroll, at the sizes ----
         // of the approved pictures, in the band of narrow desktop windows (900 to 1000 px, where the bar was once wider than the window, so that the Menu button was cut off), on every tenth width from 320 to 1300 at five heights and on both sides of every
         // limit of the bar's steps; Home with its widest state (the counts "4/4" and "50+" on My room and Games, the login chip with a long name), one window that only changes its size (the media queries answer at once)
         {
@@ -641,7 +641,7 @@ async function flows() {
                 if (two && (m.bar > 110 || m.small.length || m.over.length || m.cut.length)) badRows.push(w + 'x' + h + ': two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
                 const upright = h >= w && w <= 720;       // (a phone upright: two rows of 44 px, 110 px high)
                 if (upright && (m.bar > 112 || m.small.length || m.over.length || m.cut.filter((c) => !/^gc-cn /.test(c)).length)) badRows.push(w + 'x' + h + ': the upright phone\'s two rows expected, the bar is ' + m.bar + ' px high' + (m.small.length ? ', small: ' + m.small.join(', ') : '') + (m.over.length ? ', over: ' + m.over.join(', ') : '') + (m.cut.length ? ', cut: ' + m.cut.join(', ') : ''));
-                if (!two && !upright && w <= 639 && m.bar < 150) badRows.push(w + 'x' + h + ': the three rows expected, the bar is ' + m.bar + ' px high');
+                if (!two && !upright && w <= 639 && m.bar < 120) badRows.push(w + 'x' + h + ': two or three rows expected (128 px, 184 with My room), the bar is ' + m.bar + ' px high');
                 if (w >= 640 && h <= 500 && m.bar > 70) badRows.push(w + 'x' + h + ': one low row expected, the bar is ' + m.bar + ' px high');
                 if (w === 568 && h === 320 && m.yard < 110) badRows.push('568x320: the body is only ' + m.yard + ' px high');
             }
@@ -660,7 +660,7 @@ async function flows() {
             await bar.evaluate(() => document.querySelector('.hchip.mine').click());
             await until('the page shows the Room', async () => (await screenOf(bar)) === 'room', 10000);
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); const o = await bar.evaluate(OUT); if (o.length) badRoom.push(w + 'x' + h + ': ' + o.join(', ')); }
-            check('the Room\'s slim bar at the same ' + sizes.length + ' sizes: every button and the logo inside the window and no sideways scroll', badRoom.length === 0, badRoom.slice(0, 6).join(' | ') + (badRoom.length > 6 ? ' ... ' + badRoom.length + ' sizes' : ''));
+            check('the Room\'s slim bar at the same ' + sizes.length + ' sizes: every button inside the window and no sideways scroll', badRoom.length === 0, badRoom.slice(0, 6).join(' | ') + (badRoom.length > 6 ? ' ... ' + badRoom.length + ' sizes' : ''));
             check('(no script error in the page)', bar.errors.length === 0, bar.errors.join(' | '));
             await bar.context().close();
         }

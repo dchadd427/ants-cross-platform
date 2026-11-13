@@ -260,6 +260,7 @@ The rule covers the game, the server and every test program, with three exceptio
 All tests run headless (SDL's dummy video and audio drivers). CI does not run:
 
 - the opt-in browser checks (`tests/scripts/test_web_*.sh`: a real browser against a running page);
+- what a page shows, as opposed to what its markup says: CI has no browser, and no node check computes the style of a page. So "a link to the front page is shown, and first in the Tab order" (every bar, the game page's recording view, the Map maker's two screens) and the first row of the front page's bar are checked only by the browser checks that need Playwright (`web_site_nav_browser.js`, `web_home_topbar_browser.js`, `web_picture_in_settings_check.js`; the last also runs from `test_web_picture_in_settings.py` on a machine that has Playwright, and is skipped in CI). The tests that CI runs read the markup and the fake-DOM code only: a rule that hides a link would pass them;
 - the script suites on Windows (they are bash and python);
 - a sanitizer job (AddressSanitizer and UBSan: `./run_tests.sh --asan`, locally);
 - the 32-bit and ARM Windows builds.

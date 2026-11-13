@@ -152,7 +152,7 @@
             box-shadow: var(--bevel), 3px 4px 0 var(--shadow);
         }
 
-        /* the header: the logo (a link to the front page, as Menu is) and the controls; on a narrow window one row, with "More" (see the narrow rules below) */
+        /* the header: the controls; on a narrow window one row, with "More" (see the narrow rules below) */
         header {
             display: flex;
             align-items: center;
@@ -163,25 +163,13 @@
             margin-bottom: 18px;
         }
 
-        .logo {
-            display: block;
-            flex: 0 0 auto;
-            line-height: 0;
-        }
-
-        .logo img {
-            display: block;
-            width: 112px;
-            height: auto;
-        }
-
         .header-actions {
             display: flex;
             flex: 1 1 0;
             min-width: 0;
             flex-wrap: wrap;
             align-items: center;
-            justify-content: flex-end;
+            justify-content: flex-start;
             gap: 10px 14px;
         }
 
@@ -844,7 +832,7 @@
             }
         }
 
-        /* A narrow window (a phone held upright): the header is one row, the logo, Menu, Fullscreen and a "More" that opens the other links, and the ring of the picture is thinner */
+        /* A narrow window (a phone held upright): the header is one row, Menu, Fullscreen and a "More" that opens the other links, and the ring of the picture is thinner */
         @media (max-width: 700px) {
             :root {
                 --side: 20px;
@@ -858,10 +846,6 @@
             header {
                 gap: 8px;
                 margin-bottom: 16px;
-            }
-
-            .logo img {
-                width: 88px;
             }
 
             .header-actions {
@@ -902,17 +886,15 @@
         @media (max-width: 440px) {
             .btn-text { display: none; }
             .btn-text-short { display: inline; }
-            .logo img { width: 76px; }
             .btn.sm { padding: 6px 10px; }
         }
 
         @media (max-width: 380px) {
-            .logo img { width: 64px; }
             .header-actions { gap: 8px 6px; }
             .btn.sm { padding: 6px 8px; }
         }
 
-        /* Between 701 and 1139 px the header keeps the seven links it had, and Matches is the footer's (the Settings button is in the row, a gear without its word). Feedback goes too only where that saves a row, as measured:
+        /* Between 701 and 1139 px the header keeps the seven links it had, and Matches is the footer's (the Settings button is in the row, a gear without its word). Feedback goes too only where that saves a row, at limits that were measured when the row also held a logo (the logo is gone and the limits are as they were):
            about 930 to 1040 px in a window taller than 520 px and about 740 to 830 px in a short one (a phone on its side); elsewhere the row is one row, or two rows with or without it. The footer has both links. */
         @media (min-width: 701px) and (max-width: 1139px) {
             #watch-btn {
@@ -938,10 +920,6 @@
             header {
                 margin-bottom: 14px;
                 gap: 6px 12px;
-            }
-
-            .logo img {
-                width: 70px;
             }
 
             .header-actions {
@@ -975,9 +953,10 @@
         body.replay .header-actions:not(.rep-only), body.replay .info-panel-wrapper { display: none !important; }
         .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rhandle[hidden], .rnote[hidden] { display: none !important; }
 
-        /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
+        /* the header: what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
         body.replay header { align-items: center; }
         body.replay .header-actions.rep-only { flex: 0 0 auto; flex-wrap: nowrap; }
+        @media (max-width: 340px) { body.replay .header-actions.rep-only { gap: 8px 4px; } body.replay .header-actions.rep-only .btn.sm { padding: 6px 5px; } }       /* (a 320 px phone: Home, All matches, Full and More share one row) */
         .rhead { flex: 1 1 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; line-height: 1.15; align-content: center; }
         .rhead h2 { font-size: 26px; font-weight: 500; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; color: var(--ink); overflow-wrap: anywhere; }
         .rhead h2 small { font-size: 15px; font-weight: 500; }
@@ -1144,9 +1123,6 @@
 
     <header>
         <h1 class="sr">Ants (1998)</h1>
-        <a href="/" id="logo-link" class="logo" title="Back to the menu (in this tab): play on this computer, host a match or join one">
-            <img src="front/logo.png" alt="ants! - back to the menu" width="581" height="218">
-        </a>
         <div class="rhead rep-only"><h2 id="r-title"></h2><div id="r-meta"></div></div>
         <div class="header-actions">
             <a href="/" id="menu-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Menu</a>
@@ -1170,6 +1146,7 @@
             </details>
         </div>
         <div class="header-actions rep-only">
+            <a href="/" id="home-btn" class="btn sm" title="Back to the menu (in this tab): play on this computer, host a match or join one">Home</a>
             <a href="/matches" id="all-btn" class="btn sm" title="Back to the list of matches">&lsaquo; All matches</a>
             <button id="copy-btn" type="button" class="btn sm wide-only" title="Copy the link to this match">Copy link</button>
             <button id="stats-btn" type="button" class="btn sm wide-only" title="The stats of this match" aria-expanded="false" aria-controls="mstats" hidden>Stats</button>
@@ -2721,11 +2698,11 @@
         })();
         // ANTS_SELECTOR_END
 
-        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's logo and Menu button and the footer's link go there in THIS tab (requested: nothing opens a new tab by default). The game that is running
+        // THE WAY BACK TO THE MENU: the front page (lobby.html, at "/"). The header's Menu button (Home, in a recording or a live view) and the footer's link go there in THIS tab (requested: nothing opens a new tab by default). The game that is running
         // here is left, and a room that is joined is left for good, so a click asks first while a match is being played here or a room is joined (ants_match_running, and
         // --join-url among the arguments), and No stays; Yes tells the server (antsLeaveMatch: the seat is dropped at once and the key is let go of; a closed tab would have held it).
         (function () {
-            ['logo-link', 'menu-btn', 'menu-link'].forEach(function (id) {
+            ['menu-btn', 'home-btn', 'menu-link'].forEach(function (id) {
                 var link = document.getElementById(id);
                 if (!link) return;
                 link.addEventListener('click', function (e) {

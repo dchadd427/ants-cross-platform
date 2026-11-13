@@ -823,8 +823,8 @@
   {
    "id": "bars_have_no_h1",
    "file": "web/home/home.js",
-   "old": "var h = el('h1', 'hbrand'), img = el('img', 'hlogo');",
-   "new": "var h = el('div', 'hbrand'), img = el('img', 'hlogo');",
+   "old": "function heading() { return el('h1', 'hbrand', TEXT.name); }",
+   "new": "function heading() { return el('div', 'hbrand', TEXT.name); }",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -867,13 +867,6 @@
    "file": "docker/nginx.conf",
    "old": "(lobby.html: Home, and My room, a room on the game server",
    "new": "(lobby.html: a room on the game server that is ready when the page opens, My room, a room on the game server",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "narrow_phone_bar_overflows",
-   "file": "web/home/home.css",
-   "old": "    .rbar .hbrand { flex: 1 1 0; min-width: 40px; max-width: 76px; } .rbar .hlogo { width: 100%; }\n",
-   "new": "",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {
@@ -937,27 +930,6 @@
    "file": "web/home/home.js",
    "old": "goingTimer = null; going = false; stalled = true;",
    "new": "goingTimer = null; going = going; stalled = true;",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "narrow_logo_rule_missing",
-   "file": "web/home/home.css",
-   "old": "@media (max-width: 339px) { .rbar .hbrand { position: absolute; min-width: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }\n",
-   "new": "",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "narrow_logo_loses_its_heading",
-   "file": "web/home/home.css",
-   "old": "@media (max-width: 339px) { .rbar .hbrand { position: absolute; min-width: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }",
-   "new": "@media (max-width: 339px) { .rbar .hbrand { display: none; } }",
-   "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
-  },
-  {
-   "id": "narrow_logo_rule_too_wide",
-   "file": "web/home/home.css",
-   "old": "@media (max-width: 339px) { .rbar .hbrand {",
-   "new": "@media (max-width: 389px) { .rbar .hbrand {",
    "test": "node tests/scripts/web_home_screen_check.js web/lobby.html && python3 tests/scripts/test_web_home_screen.py ThePage TheFolder TheStyle TheWayIntoTheImage"
   },
   {

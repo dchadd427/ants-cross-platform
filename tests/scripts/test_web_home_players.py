@@ -179,7 +179,7 @@ class TheStyle(unittest.TestCase):
         for selector, _body in self.rules:
             for part in selector.split(","):
                 part = part.strip()
-                if re.search(r"\.(gdock|hbar|hright|hbrand|hlogo|yard|gc|gpop|gitem|ylabel)\b", part):
+                if re.search(r"\.(gdock|hbar|hright|hbrand|yard|gc|gpop|gitem|ylabel)\b", part):
                     self.assertTrue(part.startswith(".pl-on "), "%r reaches a part of Home and is not under the class that the list puts on Home" % part)
         self.assertIn("host.classList.add('pl-on')", self.js)
         self.assertIn("host.classList.remove('pl-on')", self.js)
