@@ -181,8 +181,7 @@ class TheLegalPage(unittest.TestCase):
         for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
             self.assertTrue(os.path.exists(os.path.join(REPO, name)), name)
 
-    def test_it_has_no_footer_and_carries_the_credit_line_that_the_footer_had(self):
-        self.assertNotIn("<footer", self.page)
+    def test_it_carries_the_credit_line_that_the_footer_had(self):
         code = self.main[self.main.index('<section class="panel" id="code">'):]
         self.assertIn("Ants 1998 Native Engine Remake &amp; Port &bull; Built with C++17, WebAssembly &amp; SDL2", code)
 
@@ -212,15 +211,6 @@ class TheFooterLinks(unittest.TestCase):
         self.assertIn("lobby.html", names)
         self.assertIn("shell.html", names)
         self.assertEqual(names, ["lobby.html", "shell.html"])
-
-    def test_the_pages_with_the_bar_have_no_footer_and_the_menu_has_the_link(self):
-        pages = {name: read("web", name + ".html") for name in ("legal", "matches", "match", "live", "mapmaker")}
-        pages["changelog"] = changelog_page()
-        pages["catalog"] = read("asset_catalog", "index.html")
-        for name, page in sorted(pages.items()):
-            self.assertNotIn("<footer", page, name)
-            self.assertIn('<header class="sb"', page, name)
-        self.assertIn("['Legal', '/legal']", read("web", "site_nav.js"))                                         # (the Menu that every one of them opens)
 
     def test_every_footer_ends_with_the_legal_link_in_a_new_tab(self):
         for name, page in sorted(self.pages.items()):

@@ -220,6 +220,20 @@
    "old": "web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
    "new": "web/live.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_without_docker.TheRealDockerfileReplayed"
+  },
+  {
+   "id": "version_line_prints_brackets_without_a_date",
+   "file": "web/site_nav.js",
+   "old": "(t ? ' (' + t + ')' : '')",
+   "new": "(' (' + t + ')')",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "changelog_stamp_attribute_is_not_quoted_safely",
+   "file": "tools/changelog_to_html.py",
+   "old": "html.escape(value, quote=True))",
+   "new": "html.escape(value, quote=False))",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_changelog_to_html"
   }
  ]
 }

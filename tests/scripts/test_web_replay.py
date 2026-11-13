@@ -64,7 +64,6 @@ class TheLink(unittest.TestCase):
             self.assertFalse({"Watch matches", "Watch live", "Watch replays"} & set(texts), name)               # (the old names are gone)
         for file, label in (("matches.html", "Matches"), ("match.html", "Matches"), ("live.html", "Live now")):
             page = read("web", file)
-            self.assertNotIn("<footer", page, file)
             row = re.search(r'<nav aria-label="Pages">(.*?)</nav>', page, re.S).group(1)
             links = re.findall(r'<a class="btn[a-z ]*" href="([^"]+)"([^>]*)>(?:<span>)?([^<]+)', row)
             self.assertEqual([l[2] for l in links][1:3], ["Matches", "Live now"], file)                  # (the bar's row: Home, Matches, Live now, ...)

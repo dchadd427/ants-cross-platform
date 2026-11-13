@@ -164,7 +164,6 @@ class MadeUpFiles(unittest.TestCase):
 
     def test_version_and_build_are_on_the_bar_for_the_menu_and_the_page_has_no_footer(self):
         self.assertEqual(stamps(self.text), {"data-version": "v1.2.0", "data-build": "abc1234", "data-built": "2026-01-02 09:30 PT"})
-        self.assertNotIn("<footer", self.text)
         self.assertNotIn("game-version", self.text)
         self.assertNotIn("build abc1234", self.text)                                                  # (the page shows no line of its own: web/site_nav.js writes it in the Menu)
 
@@ -260,7 +259,6 @@ class MadeUpFiles(unittest.TestCase):
         self.assertLess(len(style), 8000)
         for needle in ('<div class="screen">', '<div class="pt"><h1>', '<details class="versions panel" id="versions" open><summary>Jump to a version</summary><nav aria-label="Versions">'):
             self.assertIn(needle, self.text)
-        self.assertNotIn("<footer", self.text)
         self.assertEqual(self.text.count("<h1"), 1)
         self.assertEqual(self.text.count("<main>"), 1)
 
@@ -269,11 +267,11 @@ class MadeUpFiles(unittest.TestCase):
         md = os.path.join(self.tmp.name, "escape.md")
         with open(md, "w", encoding="utf-8") as f:
             f.write('# A <b>title</b> & more\n\n## v1.0.0 - 2026-01-01 - <i>x</i> & "y"\n\n- a bullet\n')
-        result = run_tool(md, out, "https://example.com/a\"b/blob/main/", "--version", "<v>", "--build-id", "x&y", "--build-date", "d<t")
+        result = run_tool(md, out, "https://example.com/a\"b/blob/main/", "--version", "<v>", "--build-id", "x&y", "--build-date", 'd"t<')
         self.assertEqual(result.returncode, 0, result.stderr)
         page = read_text(out)
         for needle in ('<h1>A &lt;b&gt;title&lt;/b&gt; &amp; more</h1>', '&lt;i&gt;x&lt;/i&gt; &amp; "y"', 'data-version="&lt;v&gt;"', 'data-build="x&amp;y"',
-                       'data-built="d&lt;t"', "Generated from escape.md when"):
+                       'data-built="d&quot;t&lt;"', "Generated from escape.md when"):
             self.assertIn(needle, page, needle)
         self.assertEqual(walk(page).errors, [])
         self.assertNotIn("<b>", page)

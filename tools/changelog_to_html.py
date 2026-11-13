@@ -287,11 +287,6 @@ def inline(text, repo_blob):
     return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], text)
 
 
-def repo_home(repo_blob):
-    """The repository's own page from the address that relative links go to (.../blob/main/ becomes ...); any other address stays as it is."""
-    return re.sub(r"/blob/[^/]+/?$", "", repo_blob.rstrip("/") + "/").rstrip("/")
-
-
 def stamp_attributes(version, build_id, build_date=""):
     """The bar's attributes that web/site_nav.js writes as the last line of the Menu ("Version v0.5.0 - build abc1234 (2026-01-02 09:30 PT)"): only the part that is known, nothing when none is."""
     out = ""

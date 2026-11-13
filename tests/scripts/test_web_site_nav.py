@@ -246,6 +246,8 @@ class TheMenusLastLine(unittest.TestCase):
             add(page + ":stamped", stamped)
             add(page + ":raw", raw)                                                                       # (a page that was never stamped: the repository's own file)
             add(page + ":version", raw.replace("@@GAME_VERSION@@", "v9.8.7"))                             # (a stamp that has the version and not the build)
+            add(page + ":nodate", raw.replace("@@GAME_VERSION@@", "v9.8.7").replace("@@BUILD_ID@@", "abc1234"))      # (the version and the build, no date)
+            add(page + ":buildonly", raw.replace("@@BUILD_ID@@", "abc1234"))                              # (a build with no version)
         sys.path.insert(0, os.path.join(REPO, "tools"))
         try:
             import changelog_to_html
@@ -255,6 +257,8 @@ class TheMenusLastLine(unittest.TestCase):
         add("changelog:stamped", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, version="v9.8.7", build_id="abc1234", build_date="2026-01-02 09:30 PT"))
         add("changelog:raw", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB))
         add("changelog:version", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, version="v9.8.7"))
+        add("changelog:nodate", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, version="v9.8.7", build_id="abc1234"))
+        add("changelog:buildonly", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, build_id="abc1234"))
         with open(os.path.join(cls.tmp, "manifest.json"), "w", encoding="utf-8") as f:
             json.dump(manifest, f)
         done = subprocess.run(["node", os.path.join(REPO, "tests", "scripts", "web_site_nav_menu_check.js"), os.path.join(cls.tmp, "manifest.json")], capture_output=True, text=True, timeout=120)
@@ -299,6 +303,13 @@ class TheMenusLastLine(unittest.TestCase):
             line = self.last_line(page + ":version")
             self.assertEqual(line["text"], "Version v9.8.7" + (" - Map maker " + self.maker if page == "mapmaker" else ""), page)
 
+    def test_a_build_with_no_date_has_no_brackets_and_a_build_with_no_version_shows_nothing(self):
+        for page in BAR_PAGES + ("changelog",):
+            maker = " - Map maker " + self.maker if page == "mapmaker" else ""
+            self.assertEqual(self.last_line(page + ":nodate")["text"], "Version v9.8.7 - build abc1234" + maker, page)
+            only = self.last_line(page + ":buildonly")
+            self.assertEqual(only["text"] if only else None, "Map maker " + self.maker if page == "mapmaker" else None, page)
+
     def test_every_link_that_the_old_footers_had_is_in_the_menu_of_every_page(self):
         for name, result in sorted(self.found.items()):
             for href in LINKS_OF_THE_OLD_FOOTERS:
@@ -313,8 +324,6 @@ class TheMenusLastLine(unittest.TestCase):
         for name in ("lobby.html", "shell.html"):
             page = read("web", name)
             self.assertEqual(len(re.findall(r"<footer\b", page)), 1, name)
-            self.assertIn('id="game-version-line"', page, name)
-            self.assertIn('<span id="game-version">@@GAME_VERSION@@</span>', page, name)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""The foot of the map maker's page in the real browser (tests/scripts/web_mapmaker_browser.py, part `foot`; docs/MAP_EDITOR.md, "The bottom of the page"): kept in its own file so that the main file stays under the line limit.
+"""The foot of the map maker's page in the real browser (tests/scripts/web_mapmaker_browser.py, part `foot`; docs/SITE_NAV.md, the map maker): kept in its own file so that the main file stays under the line limit.
 The page has no footer line (the bar at the top has the version, in its Menu). The screen has a frame (classic.css, --screen-frame) that lies over the last 10 pixels of the page, and the editor's panels must end
 inside it. For desktop windows of several sizes and zooms (1280 x 720 to 1920 x 1080, at 1 and 1.25 pixels a pixel) and phones (390 x 844, 360 x 640), as the page opens, after a stroke with Ground, and with the Pick up bar
 open, there is no footer element, the panels' last edge lies inside the frame on all four sides and inside the window, and the page has no scrollbar that it did not need. The page helpers of the main file (wait_for, the
@@ -11,10 +11,11 @@ wait_for = None
 DESKTOPS = ((1280, 720, 1), (1366, 768, 1), (1536, 864, 1), (1920, 1080, 1), (1280, 800, 1), (1000, 700, 1), (1280, 720, 1.25), (1536, 864, 1.25), (1920, 1080, 1.25), (800, 500, 1))
 PHONES = ((390, 844, 2), (360, 640, 3), (320, 568, 2))
 MEASURE = """JSON.stringify((function () {
-    var f = document.querySelector('.edbody'), s = document.querySelector('.screen.ed'), frame = 0, m = getComputedStyle(s, '::after').boxShadow.match(/(\\d+(?:\\.\\d+)?)px inset/g) || [];
+    var ps = [].slice.call(document.querySelectorAll('.edbody > .panel')), s = document.querySelector('.screen.ed'), frame = 0, m = getComputedStyle(s, '::after').boxShadow.match(/(\\d+(?:\\.\\d+)?)px inset/g) || [];
     m.forEach(function (t) { frame = Math.max(frame, parseFloat(t)); });
-    var sb = s.getBoundingClientRect(), fb = f.getBoundingClientRect();
-    return {shown: f.offsetParent !== null, footers: document.querySelectorAll('footer').length, frame: frame, foot: [fb.left, fb.top, fb.right, fb.bottom], screen: [sb.left, sb.top, sb.right, sb.bottom],
+    var sb = s.getBoundingClientRect(), fb = {left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity};
+    ps.forEach(function (n) { var r = n.getBoundingClientRect(); fb.left = Math.min(fb.left, r.left); fb.top = Math.min(fb.top, r.top); fb.right = Math.max(fb.right, r.right); fb.bottom = Math.max(fb.bottom, r.bottom); });
+    return {shown: ps.length > 0 && ps[0].offsetParent !== null, footers: document.querySelectorAll('footer').length, frame: frame, foot: [fb.left, fb.top, fb.right, fb.bottom], screen: [sb.left, sb.top, sb.right, sb.bottom],
             win: [innerWidth, innerHeight], sw: document.documentElement.scrollWidth, sh: document.documentElement.scrollHeight};
 })())"""
 

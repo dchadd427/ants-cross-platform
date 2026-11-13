@@ -1,7 +1,7 @@
 /* The Menu and the live count of the bar at the top of every page (web/site_nav.css; the same links, in the same order, as the Menu of the front page, web/home/home.js: a test keeps the two lists
    the same). The bar's markup is in each page; this file builds the Menu from the bar's own <nav> and the small links below, and asks /live for the count of live matches: when the page opens
    (data-live="now"), or when the Menu is first opened (data-live="menu"), or never (the live page itself). The last line of the Menu is the stamped version and build
-   of the site (data-version, data-build, data-built on the bar, text only; the build stamps them in; a page nobody stamped shows no line) and, on the map maker, its own version (data-maker). */
+   of the site (data-version, data-build, data-built on the bar, text only; the build stamps them in; a page nobody stamped shows no site line) and, on the map maker, its own version (data-maker). */
 (function () {
     'use strict';
     var d = document, bar = d.querySelector('.sb'), btn = bar && bar.querySelector('.sbtn');

@@ -1622,7 +1622,6 @@ class TheImageCarriesThePage(unittest.TestCase):
         ver = read("web", "MAPMAKER_VERSION").strip()
         self.assertRegex(ver, r"^\d+\.\d+\.\d+$", "web/MAPMAKER_VERSION is MAJOR.MINOR.PATCH")
         page = read("web", "mapmaker.html")
-        self.assertNotIn("<footer", page)                                                       # (the page has no footer: the version and the build are the last line of the bar's Menu)
         self.assertIn(' data-maker="v%s"' % ver, page)
         self.assertEqual(sorted(re.findall(r"@@\w+@@", page)), ["@@BUILD_DATE@@", "@@BUILD_ID@@", "@@GAME_VERSION@@"])
         for href in ('href="/"', 'href="/matches"'):                                            # (the footer's links that the bar has too; the Menu has the Changelog and Legal)

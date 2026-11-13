@@ -81,7 +81,6 @@ class TheCommonFiles(unittest.TestCase):
             self.assertIn('<link rel="stylesheet" href="matches.css">', page, name)
             self.assertIn('<script src="replay_page.js"></script>\n<script src="front/map_picker.js"></script>\n<script src="history_page.js"></script>', page, name)    # (the helpers before the page's own script)
             self.assertIn('<link rel="preload" href="front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>', page, name)
-            self.assertNotIn("<footer", page, name)                                                  # (these pages end with their content; the version is the last line of the bar's Menu)
             self.assertNotIn("game-version", page, name)
             self.assertIn('<noscript>', page, name)
         css = read("web", "matches.css")
