@@ -423,16 +423,16 @@ int main() {
             for (const MatchStats::Raid& r : st.raids) ASSERT_TRUE(r.points >= 0 && r.points <= 50);
             if (k == 5) ASSERT_TRUE(st.wipes[3] == 1 && st.wipe_turn[3] == 6167 && st.out_turn[3] == -1);           // (a seat with no ant gets one for free from an egg)
             if (k != 4) continue;
-            // the numbers of this recording are fixed (seed 10, 7000 turns, four Hard computer players): the golden values
+            // the numbers of this recording are fixed (seed 21, 7000 turns, four Hard computer players): the golden values
             using A4 = std::array<uint32_t, 4>;
             using L4 = std::array<int64_t, 4>;
             uint32_t drowned = 0;
             for (const MatchStats::Kill& kl : st.kills) drowned += kl.drowned ? 1 : 0;
-            ASSERT_TRUE(st.kills.size() == 12 && drowned == 6 && st.raids.size() == 6);
-            ASSERT_TRUE(st.bombs_off == A4({0, 0, 0, 0}) && st.hatch_cost == L4({400, 0, 0, 200}) && st.banked == L4({415, 225, 200, 360}));
-            ASSERT_TRUE(st.food_trips == A4({14, 9, 8, 16}) && st.food_points == L4({395, 230, 205, 340}));
-            ASSERT_TRUE(st.damage_dealt == A4({37, 39, 60, 25}) && st.damage_taken == A4({75, 14, 3, 69}));
-            const std::array<std::array<uint32_t, 5>, 4> power = {{{1, 1, 1, 1, 0}, {0, 1, 1, 1, 0}, {0, 1, 1, 2, 0}, {0, 1, 1, 1, 0}}};
+            ASSERT_TRUE(st.kills.size() == 14 && drowned == 8 && st.raids.size() == 6);
+            ASSERT_TRUE(st.bombs_off == A4({0, 0, 4, 0}) && st.hatch_cost == L4({200, 200, 200, 0}) && st.banked == L4({385, 280, 225, 390}));
+            ASSERT_TRUE(st.food_trips == A4({14, 11, 10, 19}) && st.food_points == L4({380, 285, 240, 355}));
+            ASSERT_TRUE(st.damage_dealt == A4({30, 46, 73, 28}) && st.damage_taken == A4({48, 30, 27, 72}));
+            const std::array<std::array<uint32_t, 5>, 4> power = {{{0, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {1, 1, 1, 1, 0}, {0, 1, 1, 1, 0}}};
             ASSERT_TRUE(st.powerups == power);
             ASSERT_TRUE(st.wipes == A4({0, 0, 0, 0}) && st.samples.size() == 70 && st.samples.back().turn == 7000);
         }
