@@ -13,7 +13,7 @@ core=build_web/lvl_core
 [ -d "$game" ] && [ -d "$core" ] || { echo "relink_outputs: no build folders in $(pwd)" >&2; exit 2; }
 ports="${ANTS_PORTS_FILE:-$(dirname "$(readlink -f "$(command -v emcc)")")/tools/ports/__init__.py}"
 [ -f "$ports" ] && [ "$(grep -c '^ *dfs(unsorted.pop())$' "$ports")" = 1 ] || { echo "relink_outputs: the line dfs(unsorted.pop()) is not in $ports exactly once: this Emscripten orders its ports in another way, and this check has to be changed for it" >&2; exit 2; }
-sed -i 's/^\( *\)dfs(unsorted.pop())$/\1port = min(unsorted, key=lambda p: p.name); unsorted.remove(port); dfs(port)/' "$ports" || { echo "relink_outputs: the order of the ports could not be fixed" >&2; exit 2; }
+sed 's/^\( *\)dfs(unsorted.pop())$/\1port = min(unsorted, key=lambda p: p.name); unsorted.remove(port); dfs(port)/' "$ports" > "$ports.new" && cat "$ports.new" > "$ports" && rm -f "$ports.new" || { echo "relink_outputs: the order of the ports could not be fixed" >&2; exit 2; }
 [ "$(grep -c 'port = min(unsorted, key=lambda p: p.name); unsorted.remove(port); dfs(port)$' "$ports")" = 1 ] || { echo "relink_outputs: the order of the ports was not fixed" >&2; exit 2; }
 rm -f "$game/index.html" "$game/index.js" "$game/index.wasm" "$game/index.data" "$core/lvl_core.js" "$core/lvl_core.wasm"
 cmake --build build_web -j1 > /dev/null || { echo "relink_outputs: the link failed" >&2; exit 2; }

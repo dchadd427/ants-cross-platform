@@ -1020,8 +1020,8 @@
   {
    "id": "relink_does_not_fix_the_order_of_the_ports",
    "file": "tools/relink_outputs.sh",
-   "old": "sed -i 's/^\\( *\\)dfs(unsorted.pop())$/",
-   "new": "sed -i 's/^\\( *\\)NOT_A_LINE$/",
+   "old": "sed 's/^\\( *\\)dfs(unsorted.pop())$/",
+   "new": "sed 's/^\\( *\\)NOT_A_LINE$/",
    "test": "python3 tests/scripts/test_image_files_diff.py",
    "expect": "test_relink_makes_emscripten_take_its_ports_by_name_and_stops_when_the_line_is_not_there"
   },
