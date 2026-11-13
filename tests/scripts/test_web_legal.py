@@ -124,7 +124,7 @@ class TheLegalPage(unittest.TestCase):
             "a protocol-relative style sheet": ('<link rel="stylesheet" href="/front/classic.css">', '<link rel="stylesheet" href="/front/classic.css"><link rel="stylesheet" href="//cdn.example/x.css">', "//cdn.example/x.css"),
             "a protocol-relative image": ('<img src="/front/logo.png"', '<img src="//cdn.example/logo.png"', "//cdn.example/logo.png"),
             "an image of another site": ('<img src="/front/logo.png"', '<img src="https://cdn.example/logo.png"', "https://cdn.example/logo.png"),
-            "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
+            "a plain http address": ('<link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">', '<link rel="icon" type="image/png" href="http://cdn.example/f.png">', "http://cdn.example/f.png"),
             "an address that only starts like the repository's": ('href="https://github.com/dchadd427/ants-cross-platform/issues"', 'href="https://github.com/dchadd427/ants-cross-platform.evil.example/issues"', "ants-cross-platform.evil.example"),
             "an @import of a quoted address": ("main { margin: 26px 0 32px; }", '@import "https://cdn.example/x.css";\nmain { margin: 26px 0 32px; }', "@import"),
             "an @import url()": ("main { margin: 26px 0 32px; }", "@import url(//cdn.example/x.css);\nmain { margin: 26px 0 32px; }", "@import"),
