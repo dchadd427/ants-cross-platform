@@ -1,7 +1,7 @@
 // The settings menu of the game page (docs/GAME_MENU.md; the game's side: src/ants_app/application_game_menu.cpp and its one table of rows, game_menu.hpp).
 // Esc with nothing to cancel, or a Settings button, opens a panel over the running game: Sound, Video, Controls, Game, Resume and Leave game.
 //   * The rows come from the game as one JSON text (Module._ants_menu_describe): this script draws what the table says. A row's value is read with Module._ants_menu_get and changed with Module._ants_menu_set;
-//     Fullscreen, Picture shape and Fullscreen mouse are the page's own (its buttons are clicked, and the shape is its function `pickShape`: one function for the selector, the address and the stored choice). The Picture shape is the page's
+//     Fullscreen, Picture shape and Fullscreen mouse are the page's own (the mouse is its object `lock`, and the shape is its function `pickShape`: one function for the selector, the address and the stored choice). The Picture shape is the page's
 //     picker (`page.picker`, web/shape_picker.js: the game's own row only says how many shapes there are); a choice changes the running game's picture at once and the panel stays open. The Controls list is data of this file.
 //   * The panel is a child of the stage (it goes fullscreen with it), fixed over the window. The pointer lock is let go while it is up and asked for again when it closes; the page behind it is inert; Tab stays
 //     inside; Esc closes it (in the question of Leave game it means stay, and with the picture's list open it closes the list; a held key does nothing); the game is told (Module._ants_menu_open) and takes no input meanwhile; a click on the dimmed area does nothing;
@@ -68,7 +68,6 @@
 
         // ---- the page's own rows: its functions, by name ----
         function shapeNow() { return stage.getAttribute('data-aspect'); } // (a shape's name: the dropdown's entries are made from the page's one table of shapes, web/shapes.js, and the page's function takes a name)
-        function lockButton(on) { return doc.getElementById(on ? 'lock-on' : 'lock-off'); }
         var PAGE_ROWS = {
             picture: {
                 dropdown: true,
@@ -77,17 +76,19 @@
                 write: function (name) { page.pickShape(name); }
             },
             lockmouse: {
-                has: function () { return !!lockButton(true) && !touchy(); },
-                read: function () { return lockButton(true).getAttribute('aria-checked') === 'true' ? 0 : 1; },
-                write: function (i) { var b = lockButton(i === 0); if (b) b.click(); }
+                has: function () { return !!page.lock && page.lock.available() && !touchy(); },
+                read: function () { return page.lock.get() ? 0 : 1; },
+                write: function (i) { page.lock.set(i === 0); }
             }
         };
 
         // ---- the Settings buttons: the page's own look, made here ----
         function show(node, on) { node.hidden = !on; node.style.display = on ? '' : 'none'; } // (the page's .btn has a display of its own, which hidden alone does not beat)
         function makeButton(cls, id) {
-            var b = el('button', 'btn sm gm-btn ' + cls, 'Settings');
+            var b = el('button', 'btn sm gm-btn ' + cls);
+            b.appendChild(el('span', 'gm-txt', 'Settings'));      // (the word goes where the header is narrow: the gear stays, and the name for a screen reader)
             b.type = 'button';
+            b.setAttribute('aria-label', 'Settings');
             b.id = id;
             show(b, false);
             b.setAttribute('aria-haspopup', 'dialog');
@@ -96,13 +97,12 @@
             return b;
         }
         function placeButtons() {
-            var menu = doc.getElementById('menu-btn'), bar = doc.getElementById('view-bar'), picwrap = doc.getElementById('picwrap');
+            var menu = doc.getElementById('menu-btn'), picwrap = doc.getElementById('picwrap');
             if (page.replay) {
                 if (picwrap && picwrap.parentNode) picwrap.parentNode.insertBefore(makeButton('gm-bar', 'settings-btn-bar'), picwrap);
                 return;
             }
-            if (menu && menu.parentNode) insertAfter(makeButton('gm-wide', 'settings-btn'), menu);
-            if (bar) bar.insertBefore(makeButton('gm-narrow', 'settings-btn-narrow'), bar.firstChild);
+            if (menu && menu.parentNode) insertAfter(makeButton('gm-head', 'settings-btn'), menu);
         }
 
         function refresh() {

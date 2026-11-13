@@ -375,21 +375,7 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* The picture's shape, under the game: the selector of "Classic 4:3 / 16:10 / 16:9 / 21:9" (a press changes the picture at once, the game runs on; the browser remembers the choice) and the fullscreen mouse.
-           Each choice is a pair of the game's two-state buttons (Fog of War On / Off), the chosen one pressed in. */
-        .view-bar {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 10px 22px;
-            width: 100%;
-            max-width: 1280px;
-            margin: 22px 0 10px;
-            padding: 0 4px;
-            font-size: 16px;
-            color: var(--ink);
-        }
-
+        /* The two-state buttons of the game (Fog of War On / Off): a pair, the chosen one pressed in (the recording's speed buttons are such a pair). */
         .seg {
             display: inline-flex;
             gap: 6px;
@@ -427,8 +413,6 @@
         .pick-opt { display: flex; align-items: center; min-height: 38px; padding: 6px 14px; white-space: nowrap; cursor: pointer; touch-action: manipulation; } .pick-opt.act { background: var(--sheen) var(--teal); } .pick-opt[aria-selected="true"] { color: #f6dc86; } .pick-opt[aria-selected="true"]::after { content: "\2713"; margin-left: auto; padding-left: 14px; } @media (pointer: coarse) { .pick-opt { min-height: 44px; } } @media (forced-colors: active) { .pick-opt.act { outline: 2px solid Highlight; outline-offset: -2px; } }
         .fit-note { position: absolute; left: 4px; top: 100%; margin-top: 6px; white-space: nowrap; font-size: 13px; line-height: 1.2; color: var(--ink); pointer-events: none; }
         .fit-note[hidden] { display: none; }
-        .view-bar.has-fit-note { margin-bottom: 28px; }
-        @media (max-width: 560px) { .view-bar .pick { flex: 1 1 100%; } .view-bar .pick-select { width: 100%; } }
         @media (hover: hover) { .pick-select:hover { background-color: var(--teal-hi); } }
 
         .seg button[aria-checked="true"] {
@@ -442,13 +426,6 @@
         @media (hover: hover) {
             .seg button[aria-checked="false"]:hover {
                 background-color: var(--teal-hi);
-            }
-        }
-
-        /* The fullscreen mouse (the pointer lock) is for a mouse: a screen with no pointer that hovers (a phone, a tablet) has no use for the control */
-        @media (hover: none) {
-            .lock-part {
-                display: none;
             }
         }
 
@@ -895,11 +872,6 @@
                 box-shadow: 0 0 0 2px var(--edge), 0 0 0 4px var(--frame), 0 0 0 5px var(--edge), 3px 4px 0 5px var(--shadow);
             }
 
-            .view-bar {
-                margin: 18px 0 8px;
-                gap: 8px 16px;
-            }
-
             .info-panel-title {
                 font-size: 20px;
             }
@@ -962,10 +934,6 @@
                 font-size: 13px;
             }
 
-            .view-bar {
-                margin: 14px 0 6px;
-            }
-
             .seg button {
                 min-height: 30px;
                 padding: 4px 10px;
@@ -984,7 +952,7 @@
            are the new part. The page puts `replay` on <body> (the first line of the body) and the pieces that belong to the other mode are hidden here. ================= */
         :root { --muted: #8fb3a6; --c-green: #79bf93; --c-red: #d4707f; --c-blue: #8f8fd6; --c-black: #b3afb9; }
         body:not(.replay) .rep-only { display: none !important; }
-        body.replay .header-actions:not(.rep-only), body.replay .view-bar, body.replay .info-panel-wrapper { display: none !important; }
+        body.replay .header-actions:not(.rep-only), body.replay .info-panel-wrapper { display: none !important; }
         .rtag[hidden], .endnote[hidden], .veil[hidden], .rbar[hidden], .rm-modal[hidden], .toast[hidden], .livenow[hidden], .jtl[hidden], .rew[hidden], .redge[hidden], .rhandle[hidden], .rnote[hidden] { display: none !important; }
 
         /* the header: the logo, what is playing, and a few buttons (the other links of the header are in the footer, as they are) */
@@ -1032,7 +1000,7 @@
         .rbar .camb svg { width: 20px; height: 20px; flex: none; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } .rbar .camb .ic-auto circle:last-of-type { fill: currentColor; stroke: none; }
         .rbar .camb[data-mode="auto"], .rbar .camb[data-mode="auto"]:hover { color: #f6dc86; background: #102b25; transform: translate(1px, 2px); box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px #0a1a16, 1px 1px 0 var(--shadow); }
         @container rbar (max-width: 899px) { .rbar .camb .lbl { display: none; } }
-        /* the Picture button (spectators choose the picture's shape, as the players do in .view-bar) and the small window above it with the dropdown of the shapes (the page's own .pick and .fit-note; the padding under it is the room for the line) */
+        /* the Picture button (spectators choose the picture's shape, as the players do in the settings menu) and the small window above it with the dropdown of the shapes (the page's own .pick and .fit-note; the padding under it is the room for the line) */
         .rbar .picwrap { grid-area: pic; position: relative; }
         .rbar .picwrap > .btn { min-height: 36px; }
         .picpop { position: absolute; right: 0; box-sizing: border-box; width: max-content; max-width: calc(100vw - 44px); bottom: calc(100% + 12px); z-index: 70; display: grid; gap: 8px; justify-items: start; padding: 12px 16px 32px; white-space: nowrap; color: var(--cream); background: rgba(7, 11, 15, .94); border: 3px solid var(--frame); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
@@ -1245,14 +1213,6 @@
     </div>
 
     <section class="rematch" id="rematch" aria-label="The match is over" hidden></section>
-    <div class="view-bar" id="view-bar">
-        <span id="view-bar-label">Picture</span>
-        <span class="pick" id="aspect-pick"><span class="fit-note" id="fit-note" hidden></span></span>
-        <span id="lock-bar-label" class="lock-part">Fullscreen mouse</span>
-        <div class="seg lock-part" role="radiogroup" aria-labelledby="lock-bar-label">
-            <button type="button" role="radio" id="lock-on" data-lock="on" aria-checked="true" title="Fullscreen holds the mouse inside the game: your cursor cannot leave the picture, and on a Mac the Dock and the menu bar stay away. In Chrome and Edge Esc goes to the game (hold it to leave fullscreen); in other browsers Esc gives the mouse back first.">Locked</button>
-            <button type="button" role="radio" id="lock-off" data-lock="off" aria-checked="false" title="Fullscreen as the browser makes it: the mouse is free (a mouse over the black bars still scrolls the map at the picture's edge)">Free</button>
-        </div>
     </div>
 
     <div class="rbar rep-only" id="rbar">
@@ -2294,7 +2254,7 @@
         // The height of everything on the page that is not the game's box: the slot's CSS size is what is left of the window (--chrome, see the style above)
         function measureChrome() {
             if (isFullscreen()) return;
-            var bar = document.getElementById(ANTS_REPLAY_MODE ? 'rbar' : 'view-bar');
+            var bar = ANTS_REPLAY_MODE ? document.getElementById('rbar') : null;
             var bodyStyle = window.getComputedStyle(document.body);
             var barStyle = bar ? window.getComputedStyle(bar) : null;
             var barHeight = bar ? bar.offsetHeight + (parseFloat(barStyle.marginTop) || 0) + (parseFloat(barStyle.marginBottom) || 0) : 0;
@@ -2354,7 +2314,6 @@
             var observer = new ResizeObserver(function () { relayout(false); });
             observer.observe(stageElement);
             observer.observe(document.querySelector('header'));
-            observer.observe(document.getElementById('view-bar'));
             observer.observe(document.getElementById('rematch'));
             observer.observe(document.getElementById('rbar'));
         }
@@ -2731,10 +2690,9 @@
             try { line = AntsShapes.fillsLine(window.screen.width, window.screen.height); } catch (e) { /* no screen to ask */ }
             if (line) {
                 document.querySelectorAll('.fit-note').forEach(function (note) { note.textContent = line; note.hidden = false; });
-                document.getElementById('view-bar').classList.add('has-fit-note');
             }
-            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own); each is a picker (web/shape_picker.js) with one entry for each row of the table
-            [['aspect-pick', 'view-bar-label', 'fit-note', 'aspect-select', 'The shape of the picture; the match goes on'], ['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']].forEach(function (c) {
+            // the dropdown of the recording's Picture window (the settings menu makes its own); each is a picker (web/shape_picker.js) with one entry for each row of the table
+            [['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']].forEach(function (c) {
                 var host = document.getElementById(c[0]);
                 if (host) antsPickers.push(AntsShapePicker.create(AntsShapes, { doc: document, host: host, id: c[3], labelledBy: c[1], describedBy: c[2], title: c[4], value: ANTS_ASPECT, onPick: antsPickShape }));
             });
@@ -2758,32 +2716,24 @@
             });
         })();
 
-        // The fullscreen mouse: Locked (the default) or Free, the control next to the picture's selector. The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only
-        // "off" turns the lock off, see ANTS_PAGE.lockSetting); the pointer lock above reads ANTS_POINTER_LOCK. A browser without a pointer lock (an iPhone) does not show the control.
-        // ANTS_LOCK_BEGIN (tests/scripts/web_edge_check.js runs this block with a page of fakes: what it stores and what the control shows)
+        // The fullscreen mouse: Locked (the default) or Free, a row of the settings menu (Video; web/game_menu.js calls antsLock). The browser remembers the choice under ANTS_LOCK_KEY (nothing else writes it; only
+        // "off" turns the lock off, see ANTS_PAGE.lockSetting); the pointer lock above reads ANTS_POINTER_LOCK. A browser without a pointer lock (an iPhone) has no such row.
+        // ANTS_LOCK_BEGIN (tests/scripts/web_edge_check.js runs this block with a page of fakes: what it stores and what antsLock answers)
         var ANTS_LOCK_KEY = 'ants.pointerlock';
         var ANTS_POINTER_LOCK = true;
+        var antsLock = {
+            available: function () { return !!(canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock); },
+            get: function () { return ANTS_POINTER_LOCK; },
+            set: function (on) {
+                ANTS_POINTER_LOCK = !!on;
+                try { window.localStorage.setItem(ANTS_LOCK_KEY, ANTS_POINTER_LOCK ? 'on' : 'off'); } catch (e) { /* private window: not remembered */ }
+                if (!ANTS_POINTER_LOCK && typeof releaseLock === 'function') releaseLock();
+            }
+        };
         (function () {
             var stored = null;
             try { stored = window.localStorage.getItem(ANTS_LOCK_KEY); } catch (e) { /* private window: nothing was remembered */ }
             ANTS_POINTER_LOCK = ANTS_PAGE.lockSetting(stored);
-            var buttons = document.querySelectorAll('.seg button[data-lock]');
-            var show = function () {
-                buttons.forEach(function (button) { button.setAttribute('aria-checked', (button.getAttribute('data-lock') === 'on') === ANTS_POINTER_LOCK ? 'true' : 'false'); });
-            };
-            show();
-            buttons.forEach(function (button) {
-                button.addEventListener('click', function () {
-                    var value = button.getAttribute('data-lock');
-                    ANTS_POINTER_LOCK = value === 'on';
-                    try { window.localStorage.setItem(ANTS_LOCK_KEY, value); } catch (e) { /* private window: not remembered */ }
-                    if (!ANTS_POINTER_LOCK && typeof releaseLock === 'function') releaseLock();
-                    show();
-                });
-            });
-            if (!(canvas.requestPointerLock || canvas.webkitRequestPointerLock || canvas.mozRequestPointerLock)) {
-                document.querySelectorAll('.lock-part').forEach(function (part) { part.style.display = 'none'; });
-            }
         })();
         // ANTS_LOCK_END
 
@@ -3084,7 +3034,7 @@
         function antsLoadGameMenu(again) {
             var script = document.createElement('script'), toast = document.getElementById('toast');
             script.src = 'game_menu.js?v=' + ANTS_BUILD_VER;
-            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, pickShape: antsPickShape, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock }); };
+            script.onload = function () { window.AntsGameMenu.forPage({ doc: document, win: window, shapes: window.AntsShapes, picker: function (opts) { return window.AntsShapePicker.create(window.AntsShapes, opts); }, pickShape: antsPickShape, lock: antsLock, stage: stageElement, canvas: canvas, toast: toast, query: '?v=' + ANTS_BUILD_VER, module: function () { return Module; }, ready: function () { return isReadyToPlay; }, replay: ANTS_REPLAY_MODE, live: ANTS_LIVE_MODE, version: document.getElementById('game-version').textContent, isFullscreen: isFullscreen, enter: enterFullscreen, leave: leaveFullscreen, isLocked: isLocked, releaseLock: releaseLock, requestLock: requestLock }); };
             script.onerror = function () { script.remove(); if (again) { toast.textContent = 'The settings menu could not load. Press Reset to try again.'; toast.hidden = false; } else setTimeout(function () { antsLoadGameMenu(true); }, 2500); };
             document.head.appendChild(script);
         }
