@@ -200,15 +200,15 @@
     {
       "id": "keys_reach_the_page",
       "file": "web/game_menu.js",
-      "old": "if (USED.test(key)) e.stopPropagation();",
-      "new": "",
+      "old": "if (USED.test(key)) { keep(e); e.stopPropagation(); }",
+      "new": "if (USED.test(key)) { keep(e); }",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
       "id": "keyups_swallowed",
       "file": "web/game_menu.js",
-      "old": "                listen(doc, 'keydown', onKey, true);\n",
-      "new": "                listen(doc, 'keydown', onKey, true);\n                listen(doc, 'keyup', function (e) { e.stopPropagation(); }, true);\n",
+      "old": "            if (!kept[id]) return;\n            delete kept[id];\n            e.stopPropagation();",
+      "new": "            if (!kept[id]) { e.stopPropagation(); return; }\n            delete kept[id];\n            e.stopPropagation();",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -962,8 +962,8 @@
     {
       "id": "every_key_stopped",
       "file": "web/game_menu.js",
-      "old": "if (USED.test(key)) e.stopPropagation();",
-      "new": "e.stopPropagation();",
+      "old": "if (USED.test(key)) { keep(e); e.stopPropagation(); }",
+      "new": "if (true) { keep(e); e.stopPropagation(); }",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -1388,7 +1388,7 @@
     {
       "id": "small_form_keeps_no_text_from_the_game",
       "file": "web/game_menu.js",
-      "old": "                listen(doc, 'keypress', onPress, true);\n",
+      "old": "            doc.addEventListener('keypress', onPress, true);\n",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
@@ -1402,8 +1402,8 @@
     {
       "id": "small_form_stops_lifts",
       "file": "web/game_menu.js",
-      "old": "                listen(doc, 'keypress', onPress, true);\n",
-      "new": "                listen(doc, 'keypress', onPress, true);\n                listen(doc, 'keyup', function (e) { e.stopPropagation(); }, true);\n",
+      "old": "            if (!kept[id]) return;\n            delete kept[id];\n            e.stopPropagation();",
+      "new": "            if (!kept[id]) { if (state && state.small) e.stopPropagation(); return; }\n            delete kept[id];\n            e.stopPropagation();",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -1474,7 +1474,8 @@
       "file": "web/game_menu.js",
       "old": "else if (state && !state.small && (where() < 0 || !answered())) close({ relock: false });",
       "new": "else if (state && (where() < 0 || !answered())) close({ relock: false });",
-      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data",
+      "expect": "the screen stays the same: the poll keeps it"
     },
     {
       "id": "esc_request_opens_the_small_form",
@@ -1516,6 +1517,111 @@
       "file": "web/game_menu.js",
       "old": "function small() { return ready() && styleReady && ",
       "new": "function small() { return ready() && ",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "keys_held_past_the_close_reach_the_game_again",
+      "file": "web/game_menu.js",
+      "old": "if (!anyKept()) unwatchKeys(); // (a key still held goes on being the panel's until its lift)",
+      "new": "unwatchKeys();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lift_of_a_kept_key_reaches_the_game",
+      "file": "web/game_menu.js",
+      "old": "            delete kept[id];\n            e.stopPropagation();\n            if (!state && !anyKept()) unwatchKeys();",
+      "new": "            delete kept[id];\n            if (!state && !anyKept()) unwatchKeys();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lift_of_a_kept_key_cancelled_for_the_browser",
+      "file": "web/game_menu.js",
+      "old": "            delete kept[id];\n            e.stopPropagation();\n            if (!state && !anyKept()) unwatchKeys();",
+      "new": "            delete kept[id];\n            e.stopPropagation();\n            e.preventDefault();\n            if (!state && !anyKept()) unwatchKeys();",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "repeats_of_a_kept_key_reach_the_game",
+      "file": "web/game_menu.js",
+      "old": "            else if (kept[id]) { // (a repeat of a key that the panel kept)\n                e.stopPropagation();\n",
+      "new": "            else if (kept[id]) { // (a repeat of a key that the panel kept)\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "repeat_of_enter_not_cancelled_for_the_browser",
+      "file": "web/game_menu.js",
+      "old": "                if (key === 'Enter' || key === ' ') e.preventDefault(); // (the browser would press the focused button again, and make a keypress)\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "fresh_press_does_not_end_the_hold",
+      "file": "web/game_menu.js",
+      "old": "            if (kept[id] && !e.repeat) {",
+      "new": "            if (false) {",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "text_of_a_kept_key_reaches_the_game",
+      "file": "web/game_menu.js",
+      "old": "function onPress(e) { if (kept[e.code || e.key] || (state &&",
+      "new": "function onPress(e) { if ((state &&",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "esc_not_kept_by_the_panel",
+      "file": "web/game_menu.js",
+      "old": "            if (key === 'Escape') {\n                keep(e);\n",
+      "new": "            if (key === 'Escape') {\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lock_and_os_keys_swallowed",
+      "file": "web/game_menu.js",
+      "old": "|CapsLock|NumLock|ScrollLock|Fn)$/;",
+      "new": "|CapsLock)$/;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "gear_key_reaches_the_game",
+      "file": "web/game_menu.js",
+      "old": "                e.preventDefault();\n                e.stopPropagation();\n                if (!e.repeat && !b.disabled && open(b)) keep(e);",
+      "new": "                e.preventDefault();\n                if (!e.repeat && !b.disabled && open(b)) keep(e);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "gear_opens_on_a_repeat",
+      "file": "web/game_menu.js",
+      "old": "if (!e.repeat && !b.disabled && open(b)) keep(e);",
+      "new": "if (!b.disabled && open(b)) keep(e);",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "gear_key_not_kept",
+      "file": "web/game_menu.js",
+      "old": "if (!e.repeat && !b.disabled && open(b)) keep(e);",
+      "new": "if (!e.repeat && !b.disabled && open(b)) { }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "button_always_opens_the_small_form",
+      "file": "web/game_menu.js",
+      "old": "var lite = !available();",
+      "new": "var lite = !fullOnly;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "recording_note_says_during_a_match",
+      "file": "web/game_menu.js",
+      "old": "(page.replay ? (page.live ? SMALL_NOTE_LIVE : SMALL_NOTE_REPLAY) : SMALL_NOTE)",
+      "new": "SMALL_NOTE",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "small_form_not_described_by_its_line",
+      "file": "web/game_menu.js",
+      "old": "panel.setAttribute('aria-describedby', 'gm-note');",
+      "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]

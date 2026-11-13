@@ -58,14 +58,16 @@ const STAND_IN = `(function () {
     return 1;
 })()`;
 
-// the game's window system, imitated (SDL 2.28.4 for Emscripten: key presses, typed text and key lifts on the window in the bubble phase, the mouse on the canvas, the release on the document); what each handler returns is
-// what the game does with the event (true: it cancels it, as the real one cancels a keypress)
+// the game's window system, imitated as SDL 2.28.4 for Emscripten behaves (key presses, typed text and key lifts on the window in the bubble phase, the mouse on the canvas, the release on the document): it keeps its own
+// state of which keys are down and calls a press of a key that its state has up a NEW press, whatever the browser's `repeat` says (a repeat of a key it never saw go down is a new press); it cancels every key lift
+// and every keypress, and the keydown of Tab, Backspace, the arrows, F1 - F15 and anything with Ctrl. What is logged: 'down:KEY' for a new press, 'repeat:KEY' for one that its state has down, 'press:KEY' for text, 'up:KEY'.
 const LISTENERS = `(function () {
     window.__got = [];
+    var down = {};
     var nav = function (e) { var k = e.keyCode; return k === 8 || k === 9 || (k >= 37 && k <= 40) || (k >= 112 && k <= 135) || e.ctrlKey; };
-    window.addEventListener('keydown', function (e) { window.__got.push('down:' + e.key); if (nav(e)) e.preventDefault(); }, false);
+    window.addEventListener('keydown', function (e) { window.__got.push((down[e.code] ? 'repeat:' : 'down:') + e.key); down[e.code] = 1; if (nav(e)) e.preventDefault(); }, false);
     window.addEventListener('keypress', function (e) { window.__got.push('press:' + e.key); e.preventDefault(); }, false);
-    window.addEventListener('keyup', function (e) { window.__got.push('up:' + e.key); }, false);
+    window.addEventListener('keyup', function (e) { if (down[e.code]) { down[e.code] = 0; window.__got.push('up:' + e.key); } e.preventDefault(); }, false);
     var c = document.getElementById('canvas');
     ['mousedown', 'mousemove', 'wheel', 'touchstart', 'touchend'].forEach(function (n) { c.addEventListener(n, function (e) { if (e.isTrusted) window.__got.push(n); }, false); });
     return 1;
@@ -265,8 +267,7 @@ server.listen(0, async () => {
             await page.keyboard.press('Space');
             await page.keyboard.press('Escape');
             const got = await taken(page);
-            check('outside a match with the small form up: only the lifts of keys and a bare modifier\'s press reach the game\'s listeners', got.filter((g) => !/^up:/.test(g) && g !== 'down:Shift' && g !== 'down:Control'), []);
-            ok('...and the lifts do (the game would think a key still held otherwise): ' + got.filter((g) => /^up:/.test(g)).length, got.filter((g) => /^up:/.test(g)).length >= 10);
+            check('outside a match with the small form up: only a bare modifier\'s press and lift reach the game\'s listeners (the lifts of the keys that the panel kept stay the panel\'s)', got.filter((g) => !/^(down|up):(Shift|Control)$/.test(g)), []);
             check('...and the panel is still up (no key closed it)', await page.evaluate(() => !!document.getElementById('game-menu')), true);
             await page.mouse.move(40, 400);
             await page.mouse.down();
@@ -285,7 +286,33 @@ server.listen(0, async () => {
             await page.keyboard.press('Enter');
             await page.waitForTimeout(150);
             check('Enter on Close closes it although the game cancels the keypress, and the game was told', [await page.evaluate(() => !document.getElementById('game-menu')), await page.evaluate(() => window.__told.slice(-1)[0])], [true, 0]);
-            check('...and what reached the game was the lift only', (await taken(page)).filter((g) => !/^up:/.test(g)), []);
+            check('...and nothing of it reached the game', await taken(page), []);
+            // Space presses a focused button although the game cancels every lift (the lift of a key the panel kept is the panel's)
+            await page.click('#settings-btn');
+            await page.waitForSelector('#game-menu', { timeout: 4000 });
+            await page.focus('.gm-resume');
+            await page.keyboard.press('Space');
+            await page.waitForTimeout(150);
+            check('Space on Close closes it', await page.evaluate(() => !document.getElementById('game-menu')), true);
+            // a key held past the close: Enter on Close, then Esc, held with the keyboard\'s repeats
+            for (const key of ['Enter', 'Escape']) {
+                await page.click('#settings-btn');
+                await page.waitForSelector('#game-menu', { timeout: 4000 });
+                if (key === 'Enter') await page.focus('.gm-resume');
+                await taken(page);
+                await page.keyboard.down(key);
+                for (let i = 0; i < 5; i++) { await page.waitForTimeout(40); await page.keyboard.down(key); }
+                await page.keyboard.up(key);
+                await page.waitForTimeout(100);
+                check(key + ' held past the close: the panel closed, and nothing of the held key (a repeat is a new press for the game) reached it', [await page.evaluate(() => !document.getElementById('game-menu')), await taken(page)], [true, []]);
+            }
+            // the gear by keyboard: Enter on the focused gear opens the panel and the key is not the game's
+            await page.focus('#settings-btn');
+            await page.keyboard.press('Enter');
+            await page.waitForSelector('#game-menu', { timeout: 4000 });
+            check('a focused gear opens the panel on Enter, and the game got nothing', await taken(page), []);
+            await page.keyboard.press('Escape');
+            await taken(page);
             // the full menu of a match: a letter goes on, Enter presses Resume
             await page.evaluate(() => { window.__where = 0; });
             await page.waitForFunction(() => document.getElementById('settings-btn').title.indexOf('sound') >= 0, null, { timeout: 4000 });

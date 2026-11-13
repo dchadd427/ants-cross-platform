@@ -6,6 +6,10 @@ The quick tier runs the game's side (tests/test_app/test_game_menu.cpp: the tabl
 Needs the web page of this tree (`tools/web_without_docker.py -- tests/scripts/test_web_game_menu.sh`), a Chromium-based browser and Python 3; a recording (--replay, or ANTS_CAMERA_REPLAY: as
 for tests/scripts/test_web_camera.sh) makes the parts that watch a replay run. No game server is needed (the games are on this computer, against a computer player or alone). What it checks:
 
+  * outside a match (profile `outside`; every step runs against the real game, and no step is a stand-in): the gear on the quick help, the setup screen, the results and under a dialog opens a small form with the
+    page's own rows; nothing typed into it reaches the game (the quick help stays, no match starts, no chat line opens, the results stay, a dialog still waits); a key held past the close (Esc, Enter) is not a new
+    press for the game; Space and Enter press the focused buttons; a focused gear opens it by Enter without the game getting the key; a match that begins under it closes it; the full menu of a match is as before
+    (Esc, Enter, Space, a held Esc, Forfeit by a held Enter). The steps are the acceptance procedure of docs/GAME_MENU.md;
   * the computer, 1280 x 800 (play.html?map=tiny&bots=easy,none,none): the Settings button is in the header (and the narrow one and the fullscreen one are not shown); Esc with nothing selected (a first press) opens the
     panel inside the stage, over the whole window, with the focus on Resume; what is typed meanwhile is not the game's chat line (and is, once it is closed); Ctrl+L does not turn the health marks;
     Tab stays inside it; a click on the dimmed area does nothing; a held Esc (a repeat) does not close it and the next Esc does, the focus is on the canvas; Esc with a hill selected only deselects and the
@@ -144,6 +148,19 @@ class Page:
         self.tab.call("Input.dispatchKeyEvent", dict(params, type="keyUp"))
         time.sleep(0.4)
 
+    def hold(self, key, code, vk, repeats=4, text=None):
+        """a key held down: a first press, the keyboard's repeats (autoRepeat, no lift in between), then the lift"""
+        params = {"key": key, "code": code, "windowsVirtualKeyCode": vk}
+        down = dict(params, type="keyDown")
+        if text is not None:
+            down["text"] = text
+        self.tab.call("Input.dispatchKeyEvent", down)
+        for _ in range(repeats):
+            time.sleep(0.08)
+            self.tab.call("Input.dispatchKeyEvent", dict(down, autoRepeat=True))
+        self.tab.call("Input.dispatchKeyEvent", dict(params, type="keyUp"))
+        time.sleep(0.5)
+
     def esc(self, repeat=False):
         self.key("Escape", "Escape", 27, repeat=repeat)
 
@@ -210,11 +227,11 @@ def main():
     ap.add_argument("--browser", default=os.environ.get("CHROME", ""), help="a Chromium-based browser (default: look for one)")
     ap.add_argument("--shots", default="", help="a folder to save screenshots in")
     ap.add_argument("--ready-timeout", type=float, default=180.0, metavar="SECONDS", help="how long a page may take to get its game ready (default 180)")
-    ap.add_argument("--profile", default="all", help="desktop, phone, scroll, replay or all (default)")
+    ap.add_argument("--profile", default="all", help="desktop, phone, scroll, replay, outside or all (default)")
     args = ap.parse_args()
     aspect.READY_TIMEOUT = args.ready_timeout
-    if args.profile not in ("all", "desktop", "phone", "scroll", "replay"):
-        print("--profile is desktop, phone, scroll, replay or all")
+    if args.profile not in ("all", "desktop", "phone", "scroll", "replay", "outside"):
+        print("--profile is desktop, phone, scroll, replay, outside or all")
         return 2
     failures = []
     count = [0]
@@ -241,6 +258,8 @@ def main():
                 phone(page, args, check)
             if args.profile in ("all", "scroll"):
                 scrolling(page, args, check)
+            if args.profile in ("all", "outside"):
+                outside(page, args, check)
             if args.profile in ("all", "replay"):
                 if args.replay and os.path.isfile(args.replay):
                     recording(page, args, check)
@@ -694,6 +713,168 @@ def scrolling(p, args, check):
     scroll_every_section(p, check, "844 x 390, a finger", finger)
     scroll_every_section(p, check, "844 x 390, a wheel", wheel)
     tab.save_shot(args.shots, "menu-scroll-3-phone-landscape-end")
+
+
+OUTSIDE = r"""
+JSON.stringify({ open: !!document.getElementById('game-menu'), small: !!document.querySelector('#game-menu .gm-small'), tabs: document.querySelectorAll('#game-menu [role=tab]').length,
+                 rows: [].map.call(document.querySelectorAll('#game-menu .gm-name'), function (n) { return n.textContent; }), active: (document.activeElement.textContent || document.activeElement.id || '').slice(0, 14),
+                 where: Module._ants_menu_get(100), needs: Module._ants_menu_get(101), running: Module._ants_match_running(), chat: Module._ants_chat_probe(5), path: location.pathname })"""
+
+
+def outside(p, args, check):
+    print("[web game menu] outside a match, 1280 x 800: the quick help, the setup screen, a match under a dialog, the results")
+    tab = p.tab
+    st = lambda: json.loads(tab.ev(OUTSIDE))
+    gear = lambda: wait_for(lambda: p.buttons().get("settings-btn", {}).get("shown") and not p.buttons()["settings-btn"]["disabled"], 15)
+    open_gear = lambda: (tab.ev("window.scrollTo(0, 0); 1"), p.click_element("#settings-btn"), wait_for(lambda: st()["open"], 4))
+    on_locked = lambda: tab.ev("(function () { var m = document.querySelector('#game-menu .gm-panel'); m.setAttribute('tabindex', '-1'); m.focus(); })(); 1")      # (the focus on the panel itself, where no key presses a button)
+    on_close = lambda: tab.ev("document.querySelector('.gm-resume').focus(); 1")
+    S = ("s", "KeyS", 83)
+    # 1 - 4: the quick help at the start, then the setup screen (no map in the address: the game's own screens)
+    p.open_game("play", 1280, 800)
+    time.sleep(2.5)                                                            # (the opening picture is over)
+    check(bool(gear()), "the gear is on while the game shows its quick help (step 1)")
+    open_gear()
+    s = st()
+    check(s["open"] and s["small"] and s["tabs"] == 0 and s["rows"][:2] == ["Fullscreen", "Picture shape"] and s["active"] == "Close", "it opens the small form with the page's rows and the focus on Close (step 2: %s)" % s["rows"])
+    on_locked()
+    for ch in "cxqs":
+        p.key(ch, "Key" + ch.upper(), ord(ch.upper()), text=ch)
+    p.key("Enter", "Enter", 13, text="\r")
+    p.key(" ", "Space", 32, text=" ")
+    s = st()
+    check(s["open"] and s["running"] == 0, "c x q s, Enter and Space typed into it: the quick help is not closed by them (step 3)")
+    p.esc()
+    check(not st()["open"] and st()["running"] == 0, "a short Esc closes the form (step 4)")
+    p.key(*S, text="s")
+    time.sleep(1.5)
+    check(st()["running"] == 0, "(the control: S on the quick help starts nothing, so the quick help is still up)")
+    open_gear()
+    p.hold("Escape", "Escape", 27)
+    p.key(*S, text="s")
+    check(not st()["open"] and st()["running"] == 0, "Esc held past the close does not close the quick help (step 5)")
+    p.key("c", "KeyC", 67, text="c")                                           # (step 6: C closes the quick help: keys reach the game when no form is up; the setup screen follows)
+    time.sleep(0.8)
+    open_gear()
+    on_locked()
+    for ch in "sqxt":
+        p.key(ch, "Key" + ch.upper(), ord(ch.upper()), text=ch)
+    for ch in "hello":
+        p.key(ch, "Key" + ch.upper(), ord(ch.upper()), text=ch)
+    p.key("Enter", "Enter", 13, text="\r")
+    p.key(" ", "Space", 32, text=" ")
+    p.key("ArrowDown", "ArrowDown", 40)
+    p.key("ArrowDown", "ArrowDown", 40)
+    p.key("F1", "F1", 112)
+    p.key("Backspace", "Backspace", 8)
+    s = st()
+    check(s["running"] == 0 and s["where"] == -1 and s["chat"] == 0, "on the setup screen s q x t hello, Enter, Space, Down, Down, F1, Backspace typed into the form: no match, no chat line (step 7)")
+    p.esc()
+    check(not st()["open"] and st()["where"] == -1 and st()["running"] == 0, "...a short Esc closes it and the screen is the same (step 7)")
+    open_gear()
+    before = tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')")
+    tab.ev("document.querySelector('#game-menu .pick-select').click(); 1")
+    time.sleep(0.3)
+    tab.ev("document.querySelector('#gm-picture-o0').click(); 1")
+    time.sleep(0.6)
+    check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") != before and st()["where"] == -1, "a shape picked from the form changes the picture and the setup screen stays (step 8)")
+    p.click_element(".gm-resume")
+    # 9: Space on Close; 10: Enter held on Close
+    open_gear()
+    on_close()
+    p.key(" ", "Space", 32, text=" ")
+    check(not st()["open"], "Space on a focused Close closes the form (the game cancels every key lift: the page keeps the lift of a key it kept) (step 9)")
+    open_gear()
+    on_close()
+    p.hold("Enter", "Enter", 13, text="\r")
+    time.sleep(1.5)
+    check(st()["running"] == 0 and not st()["open"], "Enter held on Close does not start the match: the repeats after the close are not a new press for the game (step 10)")
+    p.key(*S, text="s")
+    check(bool(wait_for(lambda: st()["running"] == 1, 20, 0.5)), "S with no form starts the match (step 11: the control, it was the setup screen)")
+    # 12 - 14: a match against one computer player
+    p.open_game("play?map=tiny&bots=easy,none,none", 1280, 800)
+    time.sleep(2.5)
+    p.key("c", "KeyC", 67, text="c")
+    check(bool(wait_for(lambda: st()["running"] == 1 and st()["where"] == 0 and st()["needs"] == 0, 40, 0.5)), "a match with nothing waiting")
+    p.ctrl("q", "KeyQ", 81)
+    check(st()["needs"] == 1, "Ctrl+Q: the quit question waits")
+    open_gear()
+    s = st()
+    check(s["open"] and s["small"], "the gear opens the small form under the dialog (step 12)")
+    on_locked()
+    p.key("y", "KeyY", 89, text="y")
+    p.key("Enter", "Enter", 13, text="\r")
+    p.key("n", "KeyN", 78, text="n")
+    p.esc()
+    check(st()["needs"] == 1 and not st()["open"], "y, Enter, n typed into it and a short Esc: the question still waits (step 12)")
+    p.key("n", "KeyN", 78, text="n")
+    check(bool(wait_for(lambda: st()["needs"] == 0, 5, 0.3)), "N with no form answers it (step 12: the control)")
+    p.esc()
+    s = st()
+    check(s["open"] and not s["small"] and s["tabs"] == 4 and s["active"] == "Resume", "Esc opens the full menu with its four tabs, the focus on Resume (step 13)")
+    p.key("Enter", "Enter", 13, text="\r")
+    check(not st()["open"], "Enter on Resume closes it")
+    p.esc()
+    p.key(" ", "Space", 32, text=" ")
+    check(not st()["open"], "Space on Resume closes it too (the real game cancels the lift: the page keeps it)")
+    p.esc()
+    p.hold("Escape", "Escape", 27, repeats=6)
+    time.sleep(0.5)
+    check(not st()["open"], "Esc held past the close of the full menu: it does not come back (step 13)")
+    p.esc()
+    tab.ev("document.querySelector('.gm-leave').focus(); 1")
+    p.hold("Enter", "Enter", 13, text="\r", repeats=6)
+    check(bool(tab.ev("!!document.querySelector('.gm-ask')")) and st()["running"] == 1 and st()["where"] == 0, "Enter held on Leave game opens its question once and leaves it up (no flicker, nothing leaves) (step 13)")
+    p.esc()
+    p.esc()
+    check(not st()["open"] and st()["running"] == 1, "(Esc says stay, Esc closes the menu)")
+    open_gear()
+    check(st()["open"] and st()["tabs"] == 4, "the gear in a match opens the full menu, not the small form (step 14)")
+    p.click_element(".gm-leave")
+    tab.ev("document.querySelector('.gm-ask .gm-leave').focus(); 1")
+    p.hold("Enter", "Enter", 13, text="\r")
+    time.sleep(1.5)
+    s = st()
+    check(s["path"] == "/play" and s["where"] == -1 and s["running"] == 0, "Enter held on Forfeit: the results come and stay, the page does not leave (step 14b)")
+    # 14: the results
+    open_gear()
+    s = st()
+    check(s["open"] and s["small"], "the gear on the results opens the small form (step 14)")
+    on_locked()
+    for ch in "cqx":
+        p.key(ch, "Key" + ch.upper(), ord(ch.upper()), text=ch)
+    p.key("Enter", "Enter", 13, text="\r")
+    p.esc()
+    check(st()["path"] == "/play" and st()["where"] == -1, "c q x and Enter typed into it, a short Esc: the results stay (step 14)")
+    open_gear()
+    on_close()
+    p.hold("Enter", "Enter", 13, text="\r")
+    time.sleep(1.5)
+    check(st()["path"] == "/play" and st()["where"] == -1, "Enter held on Close on the results: they stay (step 14)")
+    p.key("c", "KeyC", 67, text="c")
+    gone = wait_for(lambda: tab.ev("location.pathname") != "/play" or st()["where"] != -1, 8, 0.3)
+    check(bool(gone), "C with no form leaves the results (the control)")
+    # the gear by keyboard
+    p.open_game("play", 1280, 800)
+    time.sleep(2.5)
+    gear()
+    tab.ev("document.getElementById('settings-btn').focus(); 1")
+    p.key("Enter", "Enter", 13, text="\r")
+    s = st()
+    check(s["open"] and s["small"], "a focused gear opens the form on Enter (the game does not get the key) (the gear by keyboard)")
+    p.esc()
+    p.key(*S, text="s")
+    check(st()["running"] == 0, "...and the quick help is still up after it (S starts nothing)")
+    # a match that begins under the form
+    p.key("c", "KeyC", 67, text="c")
+    time.sleep(0.8)
+    open_gear()
+    tab.ev("(function () { var o = { key: 's', code: 'KeyS', keyCode: 83, which: 83, bubbles: true, cancelable: true }; window.dispatchEvent(new KeyboardEvent('keydown', o)); window.dispatchEvent(new KeyboardEvent('keyup', o)); })(); 1")
+    seen = wait_for(lambda: st()["running"] == 1 and st()["needs"] == 1 and st()["open"], 10, 0.2)
+    check(bool(seen), "a match that begins under the form (its START key handed to the game's own listener): the form stays over the countdown")
+    check(bool(wait_for(lambda: st()["needs"] == 0 and not st()["open"], 40, 0.3)), "...and closes by itself when the card goes")
+    p.esc()
+    check(st()["open"] and not st()["small"], "...and Esc then opens the full menu (the game takes keys again)")
 
 
 def recording(p, args, check):

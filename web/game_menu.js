@@ -23,7 +23,7 @@
     var USED = /^(Tab|Enter| |Spacebar|Arrow(Left|Right|Up|Down)|Home|End)$/; // the keys of the panel's own controls (Esc is handled before)
     var MODIFIER = /^(Shift|Control|Alt|AltGraph|Meta|OS|CapsLock|NumLock|ScrollLock|Fn)$/; // a bare modifier press passes the small panel (the game's window system keeps count of what is held)
     var FULL_TITLE = 'Settings: sound, picture, controls and Leave game', SMALL_TITLE = 'Settings: picture shape and fullscreen mouse';
-    var SMALL_NOTE = 'Sound, ant health, controls and the game\'s own settings are here during a match.', SMALL_CLOSE = 'Close';
+    var SMALL_NOTE = 'Sound, ant health, controls and the game\'s own settings are here during a match.', SMALL_NOTE_REPLAY = 'Sound, ant health and controls are here while the recording plays.', SMALL_NOTE_LIVE = 'Sound, ant health and controls are here while the match plays.', SMALL_CLOSE = 'Close';
 
     // The Controls list: what the game's keys and the mouse do (docs/CONTROLS.md "Camera & Hotkeys"). [keys, what]: the mouse and touch lines name their input in words, a key line is a list of keys (a word that
     // starts with ~ is the text between two keys); `watch` leaves out what a recording ignores.
@@ -42,6 +42,7 @@
         var doc = page.doc, win = page.win || (doc && doc.defaultView) || {}, stage = page.stage, canvas = page.canvas;
         var info = null; // the game's table, once read
         var scrim = null, panel = null, ask = null, state = null;
+        var kept = {}, watching = false; // the keys whose press the panel kept from the game (by code): they are the panel's until their lift
         var dimmed = [], opener = null, opening = false, styleReady = false, styleFailed = 0, wasLocked = false, behind = [], removers = [], shown = { askKind: -1 };
         var buttons = [];
 
@@ -100,6 +101,12 @@
             b.id = id;
             show(b, false);
             b.setAttribute('aria-haspopup', 'dialog');
+            b.addEventListener('keydown', function (e) { // (Enter and Space press the gear here: the game's window system would take the key, which is START on its setup screen, and cancel the browser's own press)
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (!e.repeat && !b.disabled && open(b)) keep(e);
+            });
             b.addEventListener('click', function (e) { open(e && e.detail === 0 ? b : null); }); // (a press with the keyboard has the focus given back to the button; a click or a tap gives it to the game)
             buttons.push(b);
             return b;
@@ -321,7 +328,8 @@
             var note = el('div', 'gm-note'), clock = el('span', 'gm-clock');
             clock.setAttribute('aria-hidden', 'true');
             if (!lite) note.appendChild(clock);
-            note.appendChild(el('span', '', lite ? SMALL_NOTE : watching ? (page.live ? w.noteLive : w.noteReplay) : w.note));
+            if (lite) { note.id = 'gm-note'; panel.setAttribute('aria-describedby', 'gm-note'); }
+            note.appendChild(el('span', '', lite ? (page.replay ? (page.live ? SMALL_NOTE_LIVE : SMALL_NOTE_REPLAY) : SMALL_NOTE) : watching ? (page.live ? w.noteLive : w.noteReplay) : w.note));
             panel.appendChild(note);
             var btns = el('div', 'gm-btns');
             state.resume = el('button', 'btn gm-resume', lite ? SMALL_CLOSE : w.resume);
@@ -406,18 +414,54 @@
             return found;
         }
 
+        // A key whose press the panel kept stays the panel's until its lift: its repeats (a held key goes on repeating after the panel has closed, and the game's window system takes a repeat it never saw the press of
+        // for a new press), the text of its press and its lift stop at the document too, whether the panel is still up or not. The lift is the panel's as well: the game would cancel it, and a browser presses a focused
+        // button at Space's lift. A fresh press of the key (no repeat) ends it; nothing else is held back from the game after the panel has closed, and a key that went down before the panel opened keeps its lift.
+        function keep(e) { kept[e.code || e.key] = true; watchKeys(); }
+        function anyKept() { for (var k in kept) if (kept[k]) return true; return false; }
+        function watchKeys() {
+            if (watching) return;
+            watching = true;
+            doc.addEventListener('keydown', onKey, true);
+            doc.addEventListener('keypress', onPress, true);
+            doc.addEventListener('keyup', onLift, true);
+        }
+        function unwatchKeys() {
+            if (!watching) return;
+            watching = false;
+            doc.removeEventListener('keydown', onKey, true);
+            doc.removeEventListener('keypress', onPress, true);
+            doc.removeEventListener('keyup', onLift, true);
+        }
+        function onLift(e) {
+            var id = e.code || e.key;
+            if (!kept[id]) return;
+            delete kept[id];
+            e.stopPropagation();
+            if (!state && !anyKept()) unwatchKeys();
+        }
+
         function onKey(e) {
-            var key = e.key;
+            var key = e.key, id = e.code || key;
+            if (kept[id] && !e.repeat) { delete kept[id]; if (!state && !anyKept()) { unwatchKeys(); return; } } // (a fresh press: the lift of the one before was lost)
+            else if (kept[id]) { // (a repeat of a key that the panel kept)
+                e.stopPropagation();
+                if (key === 'Enter' || key === ' ') e.preventDefault(); // (the browser would press the focused button again, and make a keypress)
+                if (!state) return;
+            }
+            if (!state) return;
             if (key === 'Escape') {
+                keep(e);
                 e.preventDefault();
                 e.stopPropagation();
                 if (e.repeat) return; // (a held Esc is not a second press)
                 if (ask) hideAsk(); else close();
                 return;
             }
-            if (USED.test(key)) e.stopPropagation(); // (only the keys that the panel uses are its own; the others reach the page, which keeps the browser's reactions to Ctrl+S, F1 and the like off, and the game, which takes none while the panel is up; the lifts are left alone, or the game's window system reads the next press as a repeat)
+            if (USED.test(key)) { keep(e); e.stopPropagation(); } // (only the keys that the panel uses are its own; the others reach the page, which keeps the browser's reactions to Ctrl+S, F1 and the like off, and the game, which takes none while the panel is up; the lifts are left alone, or the game's window system reads the next press as a repeat)
             else if (state.small && !MODIFIER.test(key)) { // (the small form: the game takes keys on its setup and opening screens, so nothing but a bare modifier goes on: the page's own cancelling of the browser's keys is done here, as it cannot see the key)
                 if (page.cancelsKey && page.cancelsKey(e)) e.preventDefault();
+                keep(e);
                 e.stopPropagation();
             }
             if (key === 'Tab') {
@@ -439,7 +483,7 @@
         }
 
         // Typed text: the game makes it from the key's `keypress`, and cancels that event, which stops a native press of Enter on a button. The panel's own keys never reach it, in either form; the small form keeps all of them
-        function onPress(e) { if (state.small || USED.test(e.key)) e.stopPropagation(); }
+        function onPress(e) { if (kept[e.code || e.key] || (state && (state.small || USED.test(e.key)))) e.stopPropagation(); }
 
         // Fullscreen begins while the panel is up (its own row): the page asks for the lock then; the panel needs the free pointer
         function keepPointerFree() { if (page.isLocked && page.isLocked()) page.releaseLock(); }
@@ -459,8 +503,7 @@
                 inertBehind();
                 call('_ants_menu_open', 1);
                 if (page.releaseLock) page.releaseLock();
-                listen(doc, 'keydown', onKey, true);
-                listen(doc, 'keypress', onPress, true);
+                watchKeys();
                 ['pointerlockchange', 'webkitpointerlockchange', 'mozpointerlockchange'].forEach(function (name) { if (win.addEventListener) listen(win, name, keepPointerFree, true); }); // (the window in the capture phase, as the page's own handler: it stops the event before the document's)
                 ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (name) { listen(doc, name, function () { refresh(); }, false); });
                 state.resume.focus();
@@ -479,6 +522,7 @@
             for (var j = 0; j < behind.length; j++) behind[j].removeAttribute('inert');
             behind = [];
             scrim = panel = state = null;
+            if (!anyKept()) unwatchKeys(); // (a key still held goes on being the panel's until its lift)
             call('_ants_menu_open', 0);
             if (again && page.requestLock && (wasLocked || (page.isFullscreen && page.isFullscreen()))) page.requestLock(); // (Resume is a click: the gesture that the browser wants)
             try {
