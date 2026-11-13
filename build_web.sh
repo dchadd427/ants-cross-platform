@@ -79,7 +79,7 @@ mkdir -p "${DIST_DIR}/front" "${DIST_DIR}/home" "${DIST_DIR}/app"
 cp -f "${SCRIPT_DIR}/web/front"/* "${DIST_DIR}/front/"            # the front page's pictures and font, served at /front/
 cp -f "${SCRIPT_DIR}/web/home"/* "${DIST_DIR}/home/"              # the front page's Home and Room screens (docs/HOME_SCREEN.md), served at /home/
 cp -f "${SCRIPT_DIR}/web/manifest.webmanifest" "${DIST_DIR}/"             # the installable web app: its manifest (served at /manifest.webmanifest) ...
-cp -f "${SCRIPT_DIR}/web/app"/* "${DIST_DIR}/app/"                  # ... and its icons (tools/front_page_art/make_app_icons.py), served at /app/
+cp -f "${SCRIPT_DIR}/web/app"/* "${DIST_DIR}/app/"                  # ... and its icons (tools/make_app_icons.py), served at /app/
 python3 "${SCRIPT_DIR}/tools/map_atlas.py" "${DIST_DIR}/mapmaker_atlas"        # the map maker's sprite atlas (docs/MAP_EDITOR.md, "Sprites"); the few big toys that it fetches one by one come from /asset_catalog/sprites/, which the image has and this folder does not
 
 echo "========================================================"

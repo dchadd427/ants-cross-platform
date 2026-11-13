@@ -95,21 +95,21 @@
   {
    "id": "icon_file_not_there",
    "file": "web/manifest.webmanifest",
-   "old": "/app/icon-512.png?v=79dc0b1d",
-   "new": "/app/icon-513.png?v=79dc0b1d",
+   "old": "/app/icon-512.png?v=58a2f181",
+   "new": "/app/icon-513.png?v=58a2f181",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "icon_digits_stale",
    "file": "web/manifest.webmanifest",
-   "old": "/app/icon-512.png?v=79dc0b1d",
+   "old": "/app/icon-512.png?v=58a2f181",
    "new": "/app/icon-512.png?v=00000000",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
    "id": "icon_192_dropped",
    "file": "web/manifest.webmanifest",
-   "old": "    {\"src\": \"/app/icon-192.png?v=7e750d3f\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\"},\n",
+   "old": "    {\"src\": \"/app/icon-192.png?v=646fc7cf\", \"sizes\": \"192x192\", \"type\": \"image/png\", \"purpose\": \"any\"},\n",
    "new": "",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
@@ -144,8 +144,8 @@
   {
    "id": "icons_budget_too_small",
    "file": "tools/size_limits.py",
-   "old": "APP_ICONS_BUDGET = 73_600",
-   "new": "APP_ICONS_BUDGET = 6_000",
+   "old": "APP_ICONS_BUDGET = 4_700",
+   "new": "APP_ICONS_BUDGET = 3_000",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
   {
@@ -238,6 +238,34 @@
    "old": "    location ~* \\.(png|jpg|jpeg|gif|ico|bmp)$ {\n        add_header Cache-Control \"public, max-age=604800, no-transform\";",
    "new": "    location ~* \\.(png|jpg|jpeg|gif|ico|bmp)$ {\n        add_header Cache-Control \"public, max-age=60, no-transform\";",
    "test": "python3 -I tests/scripts/test_nginx_headers.py -f"
+  },
+  {
+   "id": "favicon_digits_stale",
+   "file": "web/lobby.html",
+   "old": "/favicon.png?v=f34bea03",
+   "new": "/favicon.png?v=f34bea04",
+   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
+  },
+  {
+   "id": "favicon_link_without_digits",
+   "file": "web/match.html",
+   "old": "/favicon.ico?v=e2d196f0",
+   "new": "/favicon.ico",
+   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
+  },
+  {
+   "id": "favicon_budget_too_small",
+   "file": "tools/size_limits.py",
+   "old": "FAVICON_BUDGET = 1_650",
+   "new": "FAVICON_BUDGET = 900",
+   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
+  },
+  {
+   "id": "icon_tool_color_changed",
+   "file": "tools/make_app_icons.py",
+   "old": "\"W\": (0xFB, 0xFF, 0xF7)",
+   "new": "\"W\": (0xFB, 0xFF, 0xF6)",
+   "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   }
  ]
 }

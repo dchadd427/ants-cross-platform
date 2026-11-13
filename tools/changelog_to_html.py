@@ -214,10 +214,10 @@ PAGE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ants (1998) - Changelog</title>
-<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="icon" type="image/png" href="/favicon.png?v=f34bea03">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#2b5f43">
-<link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=9b89d547">
+<link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=4fbefb68">
 <meta name="apple-mobile-web-app-title" content="Ants!">
 <link rel="preload" href="/front/LibreFranklin-Medium.ttf" as="font" type="font/ttf" crossorigin>
 <link rel="stylesheet" href="/front/classic.css">
