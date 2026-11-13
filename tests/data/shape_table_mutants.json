@@ -365,24 +365,10 @@
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
-      "id": "page_lobby_first_visit_ignores_the_screen",
-      "file": "web/lobby.html",
-      "old": "else aspect = AntsShapes.firstVisit(window);",
-      "new": "else aspect = '16:9';",
-      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
-    },
-    {
       "id": "page_shell_stores_the_default",
       "file": "web/shell.html",
       "old": "            ANTS_ASPECT_SOURCE = chosen.source;\n",
       "new": "            ANTS_ASPECT_SOURCE = chosen.source;\n            if (chosen.source === 'default') { try { window.localStorage.setItem(ANTS_ASPECT_KEY, chosen.aspect); } catch (e) { /* not remembered */ } }\n",
-      "test": "python3 tests/scripts/test_web_aspect_default.py"
-    },
-    {
-      "id": "page_lobby_stores_the_default",
-      "file": "web/lobby.html",
-      "old": "else aspect = AntsShapes.firstVisit(window);",
-      "new": "else { aspect = AntsShapes.firstVisit(window); remember(ASPECT_KEY, aspect); }",
       "test": "python3 tests/scripts/test_web_aspect_default.py"
     },
     {
@@ -425,20 +411,6 @@
       "file": "web/lobby.html",
       "old": "function aspectQuery(shape) { return isShape(shape) ? '&aspect=' + shape : ''; }",
       "new": "function aspectQuery(shape) { return '&aspect=' + (isShape(shape) ? shape : '16:9'); }",
-      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
-    },
-    {
-      "id": "page_lobby_press_is_no_pick",
-      "file": "web/lobby.html",
-      "old": "            pickedShape = value;                                                                  // (a choice is a pick, the shape that is shown too)\n",
-      "new": "",
-      "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
-    },
-    {
-      "id": "page_lobby_stored_pick_is_no_pick",
-      "file": "web/lobby.html",
-      "old": "else if (isShape(remembered)) aspect = pickedShape = remembered;",
-      "new": "else if (isShape(remembered)) aspect = remembered;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
@@ -505,13 +477,6 @@
       "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
-      "id": "js_fill_select_stops_early",
-      "file": "web/shapes.js",
-      "old": "        ROWS.forEach(function (row) {\n            var option = doc.createElement('option');",
-      "new": "        ROWS.slice(0, 6).forEach(function (row) {\n            var option = doc.createElement('option');",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
-    },
-    {
       "id": "js_fills_line_names_no_shape",
       "file": "web/shapes.js",
       "old": "return name ? rowOf(name).label + ' fills your screen' : '';",
@@ -561,31 +526,31 @@
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
-      "id": "page_shell_line_not_on_every_screen",
+      "id": "page_shell_line_not_shown",
       "file": "web/shell.html",
-      "old": "document.getElementById('view-bar').classList.add('has-fit-note');",
-      "new": "document.getElementById('view-bar').classList.add('has-fit-tag');",
+      "old": "note.textContent = line; note.hidden = false;",
+      "new": "note.textContent = line;",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
-      "id": "page_lobby_click_is_a_pick",
+      "id": "page_lobby_first_visit_shape_is_handed_on",
       "file": "web/lobby.html",
-      "old": "        // SELECTOR_END",
-      "new": "        $('aspect-select').addEventListener('click', function () { pickedShape = $('aspect-select').value; });\n        // SELECTOR_END",
+      "old": "        var pickedShape = '';",
+      "new": "        var pickedShape = '16:9';",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
-      "id": "page_lobby_dropdown_not_filled",
+      "id": "page_lobby_stored_pick_not_handed_on",
       "file": "web/lobby.html",
-      "old": "AntsShapes.fillSelect($('aspect-select'), document).value = aspect;",
-      "new": "$('aspect-select').value = aspect;",
+      "old": "            else if (isShape(remembered)) pickedShape = remembered;\n",
+      "new": "\n",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
-      "id": "page_lobby_change_not_stored",
+      "id": "page_lobby_address_pick_not_handed_on",
       "file": "web/lobby.html",
-      "old": "            remember(ASPECT_KEY, value);\n            if (value === aspect) return;",
-      "new": "            if (value === aspect) return;",
+      "old": "            if (isShape(asked)) pickedShape = asked;\n",
+      "new": "            if (false) pickedShape = asked;\n",
       "test": "node tests/scripts/web_aspect_key_check.js web/shell.html web/lobby.html"
     },
     {
@@ -683,13 +648,6 @@
       "build": [
         "test_canvas_layout"
       ]
-    },
-    {
-      "id": "picture_window_block_starts_before_the_dropdowns_are_made",
-      "file": "web/shell.html",
-      "old": "            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own);",
-      "new": "            // PICTURE_POPOVER_BEGIN\n            // the dropdowns: the strip under the game and the recording's Picture window (the settings menu makes its own);",
-      "test": "python3 tests/scripts/test_web_shapes.py TheTwoTablesAgree NoCopyOfTheListIsLeft TheDropdownsAreTheTable ThePagesLoadTheTable TheTablesFunctions"
     },
     {
       "id": "page_does_not_load_the_picker",

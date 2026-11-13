@@ -275,10 +275,24 @@
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
+      "id": "header_button_without_a_name",
+      "file": "web/game_menu.js",
+      "old": "            b.setAttribute('aria-label', 'Settings');\n",
+      "new": "",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "mouse_row_does_not_tell_the_page",
+      "file": "web/game_menu.js",
+      "old": "write: function (i) { page.lock.set(i === 0); }",
+      "new": "write: function (i) { }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
       "id": "overlay_button_back",
       "file": "web/game_menu.js",
-      "old": "if (bar) bar.insertBefore(makeButton('gm-narrow', 'settings-btn-narrow'), bar.firstChild);",
-      "new": "if (bar) bar.insertBefore(makeButton('gm-narrow', 'settings-btn-narrow'), bar.firstChild); stage.appendChild(makeButton('gm-fs', 'settings-btn-fs'));",
+      "old": "if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu);",
+      "new": "if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu); stage.appendChild(makeButton('gm-fs', 'settings-btn-fs'));",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -312,8 +326,8 @@
     {
       "id": "mouse_row_on_a_phone",
       "file": "web/game_menu.js",
-      "old": "has: function () { return !!lockButton(true) && !touchy(); },",
-      "new": "has: function () { return !!lockButton(true); },",
+      "old": "has: function () { return !!page.lock && page.lock.available() && !touchy(); },",
+      "new": "has: function () { return !!page.lock && page.lock.available(); },",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {
@@ -389,8 +403,8 @@
     {
       "id": "header_button_before_menu",
       "file": "web/game_menu.js",
-      "old": "if (menu && menu.parentNode) insertAfter(makeButton('gm-wide', 'settings-btn'), menu);",
-      "new": "if (menu && menu.parentNode) menu.parentNode.insertBefore(makeButton('gm-wide', 'settings-btn'), menu);",
+      "old": "if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu);",
+      "new": "if (menu && menu.parentNode) menu.parentNode.insertBefore(makeButton('gm-top', 'settings-btn'), menu);",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     },
     {

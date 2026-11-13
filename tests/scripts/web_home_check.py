@@ -599,10 +599,7 @@ def main():
                 buttons: ['copy'].map(function (id) { return document.getElementById(id).textContent; }), share: getComputedStyle(document.getElementById('share')).display, linkLine: document.getElementById('invite-line').textContent,
                 noMore: !document.getElementById('more') && !document.getElementById('morebox') && document.body.textContent.indexOf('More ways to play') === -1,
                 font: Array.from(document.fonts).some(function (f) { return f.family.indexOf('Libre Franklin') !== -1 && f.status === 'loaded'; }),
-                aspect: [document.getElementById('aspect-select').value, document.body.getAttribute('data-aspect')],
-                note: [document.getElementById('fit-note').hidden, document.getElementById('fit-note').textContent, getComputedStyle(document.getElementById('fit-note')).display], screenSize: [screen.width, screen.height],
-                shapeEntries: Array.prototype.map.call(document.querySelectorAll('#aspect-select option'), function (o) { return [o.value, o.textContent]; }),
-                shapePlace: (function () { var r = document.getElementById('shape-row').getBoundingClientRect(), i = document.getElementById('info').getBoundingClientRect(), s = document.getElementById('start').getBoundingClientRect(); return [r.top >= i.bottom - 1, r.bottom <= s.top + 1, !!document.querySelector('footer .shape, footer #aspect-select')]; })(),
+                screenSize: [screen.width, screen.height], picked: pickedShape,
                 footer: document.querySelector('footer').textContent, notice: document.getElementById('footer-notice').textContent, noticeShown: document.getElementById('footer-notice').getBoundingClientRect().height > 0,
                 nav: Array.prototype.map.call(document.querySelectorAll('footer nav > *'), function (a) { return [a.tagName, a.textContent.trim(), a.getAttribute('href'), a.getAttribute('target'), a.id]; }),
                 version: [document.getElementById('game-version').textContent, document.getElementById('game-build-id').textContent], scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth})"""))
@@ -761,59 +758,33 @@ def main():
                   "the line of numbers is either not there (a site with no /stats) or says what it counts: matches and players now, and, where the site counts them, the games played (%r; the dot between the two is drawn by the page's style)" % (stats["text"],))
             check(info["scrollW"] <= info["innerW"], "no horizontal scroll at 1440")
 
-            # the picture's shape: the one nearest the screen is chosen in the dropdown on a first visit; a choice is remembered
+            # the picture's shape is a row of the game's settings menu, not of the room: the room hands on the shape that the address or the browser holds, and nothing on a first visit
             def shape_now():
-                return json.loads(value("JSON.stringify([document.getElementById('aspect-select').value, document.body.getAttribute('data-aspect'), localStorage.getItem('ants.aspect.v2')])"))
+                return json.loads(value("JSON.stringify([pickedShape, localStorage.getItem('ants.aspect.v2')])"))
 
-            check(info["aspect"] == [FIRST, FIRST], "Picture: %s (nearest a 1440 x 900 screen) is chosen on a first visit (%s)" % (FIRST, info["aspect"]))
-            check(info["shapePlace"] == [True, True, False], "the Picture row is in the match column under the map's line and above START!, and the footer has no selector (%s)" % info["shapePlace"])
-            check(info["shapeEntries"] == aspect.SHAPE_ENTRIES, "Picture is a dropdown with the seven shapes of the table, from the narrowest to the widest, each as the shape and its canvas (%s)" % info["shapeEntries"])
-            # "fills your screen": the quiet line under the dropdown names the shape nearest to this computer's screen (nothing when no shape is within 8 per cent), on every screen
+            check(info["picked"] == "", "the room has no shape of its own on a first visit: nothing is handed on to the game (%r)" % (info["picked"],))
             sw, sh = info["screenSize"]
-            ratios = {name: aspect.SHAPE_STEPS[name][0] / aspect.SHAPE_STEPS[name][1] for name in aspect.SHAPE_ORDER}
-            near = min(ratios, key=lambda k: max(ratios[k] / (sw / sh), (sw / sh) / ratios[k])) if sw > 0 and sh > 0 else None
-            if near and max(ratios[near] / (sw / sh), (sw / sh) / ratios[near]) - 1 > 0.08:
-                near = None
-            words = (("Classic 4:3" if near == "4:3" else near) + " fills your screen") if near else None
-            check((None if info["note"][0] else info["note"][1]) == words, "the line under the dropdown says %r for the %d x %d screen (%s)" % (words, sw, sh, info["note"]))
-            check(info["note"][0] is False or info["note"][2] == "none", "a hidden line takes no room")
-            aspect.choose_shape(tab, "4:3")
-            time.sleep(0.5)
-            chosen = shape_now()
-            check(chosen == ["4:3", "4:3", "4:3"] and lobby()["code"] == st["code"], "a choice of 4:3 in the dropdown changes the page (it keeps its room) and the browser remembers it (%s)" % (chosen,))
-            tab.open(web, wait=False)
-            time.sleep(1.5)
-            check(shape_now()[:2] == ["4:3", "4:3"], "... and the next visit starts with 4:3 chosen (%s)" % (shape_now(),))
-            aspect.choose_shape(tab, "16:9")
-            time.sleep(0.5)
-            check(shape_now() == ["16:9", "16:9", "16:9"], "a choice of 16:9 brings it back")
+            for held in ("4:3", "16:9"):                       # what the game page remembered (its settings menu writes the key): the room hands it on, and the next visit has it
+                tab.ev("localStorage.setItem('ants.aspect.v2', %r); 1" % held)
+                tab.open(web, wait=False)
+                time.sleep(1.5)
+                check(shape_now()[0] == held, "a shape that the browser remembers (%s) is what the room hands on (%s)" % (held, shape_now()))
             tab.ev("localStorage.setItem('ants.aspect.v2', 'junk'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
-            check(shape_now()[:2] == [FIRST, FIRST], "a remembered value that is no shape is ignored: %s" % FIRST)
+            check(shape_now()[0] == "", "a remembered value that is no shape is ignored: nothing is handed on")
             tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.setItem('ants.aspect', '4:3'); 1")
             tab.open(web, wait=False)
             time.sleep(1.5)
-            check(shape_now()[:2] == [FIRST, FIRST], "a 4:3 that the old key 'ants.aspect' remembers is not read: %s (the first visit's shape)" % FIRST)
-            tab.open(web + "?aspect=4:3", wait=False)
-            time.sleep(1.5)
-            check(shape_now()[:2] == ["4:3", "4:3"], "?aspect=4:3 in the address chooses 4:3")
-            for asked in ("16:10", "3:2", "20:9", "21:9", "32:9"):
+            check(shape_now()[0] == "", "a 4:3 that the old key 'ants.aspect' remembers is not read: nothing is handed on")
+            tab.ev("localStorage.removeItem('ants.aspect'); 1")
+            for asked in ("4:3", "16:10", "3:2", "20:9", "21:9", "32:9"):
                 tab.open(web + "?aspect=" + asked, wait=False)
                 time.sleep(1.5)
-                check(shape_now()[:2] == [asked, asked], "?aspect=%s in the address chooses %s" % (asked, asked))
+                check(shape_now()[0] == asked, "?aspect=%s in the address is what the room hands on" % asked)
             tab.open(web + "?aspect=5:4", wait=False)
             time.sleep(1.5)
-            check(shape_now()[:2] == [FIRST, FIRST], "?aspect=5:4 is not a shape the page offers: ignored, %s" % FIRST)
-            for picked in ("16:10", "3:2", "20:9", "21:9", "32:9"):       # every other shape: chosen with the keys, remembered, and the next visit starts with it (the game page reads the same key)
-                tab.open(web, wait=False)
-                time.sleep(1.5)
-                aspect.choose_shape(tab, picked)
-                time.sleep(0.5)
-                check(shape_now() == [picked, picked, picked], "a choice of %s in the dropdown changes the page and the browser remembers it (%s)" % (picked, shape_now()))
-                tab.open(web, wait=False)
-                time.sleep(1.5)
-                check(shape_now()[:2] == [picked, picked], "... and the next visit starts with %s chosen" % picked)
+            check(shape_now()[0] == "", "?aspect=5:4 is not a shape the page offers: ignored")
             tab.ev("localStorage.removeItem('ants.aspect.v2'); localStorage.removeItem('ants.aspect'); 1")
 
             # a new tab makes a new room each time: the codes are letters and numbers
@@ -957,19 +928,9 @@ def main():
                 if m is None or m["href"] != "/mapmaker" or m["text"] != "Map maker" or m["n"] != 1 or not m["before"] or m["gap"] < 6 or abs(m["h"] - 38) > 1 or not (m["hitAbove"] and m["hitBelow"] and m["hitLeft"] and m["hitRight"]) or not m["farAbove"] or m["overLogo"] or m["scroll"] or not m["inside"] or not m["row"]:
                     bad.append((width, m))
             check(not bad, "the Map maker link: one, to /mapmaker, before Matches and as tall as it, a hit area of 44 px, clear of the logo, on the logo's row on a phone, no sideways scroll at 1280, 390 and 320 px (wrong: %s)" % bad)
-            # the quiet line under the dropdown (32:9 here: a 5120 x 1440 screen, "32:9 fills your screen"): in a narrow window it stays inside the page and the page does not scroll sideways
             fresh_tab()
-            tab.call("Emulation.setDeviceMetricsOverride", {"width": 720, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 5120, "screenHeight": 1440})       # (no touch emulation call: a second one makes Chromium report hover: none)
             tab.open(web, wait=False)
             front_ready()
-            wrong_tag = []
-            for width in (320, 360, 370, 440, 480, 600, 720):
-                tab.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": 900, "deviceScaleFactor": 1, "mobile": False, "screenWidth": 5120, "screenHeight": 1440})
-                time.sleep(0.3)
-                m = json.loads(value("JSON.stringify({sw: document.documentElement.scrollWidth, iw: document.documentElement.clientWidth, tag: (function () { var t = document.getElementById('fit-note'); if (t.hidden) return null; var r = t.getBoundingClientRect(), s = document.getElementById('aspect-select').getBoundingClientRect(); return [t.textContent, Math.round(r.left), Math.round(r.right), Math.round(r.top - s.bottom)]; })()})"))
-                if m["sw"] > m["iw"] or not m["tag"] or m["tag"][0] != "32:9 fills your screen" or m["tag"][1] < 0 or m["tag"][2] > m["iw"] or not 0 <= m["tag"][3] < 16:
-                    wrong_tag.append((width, m))
-            check(not wrong_tag, "a computer with a 5120 x 1440 screen, windows of 320 to 720 px: the line under the dropdown stays inside the page, right under it, and the page does not scroll sideways (wrong: %s)" % (wrong_tag,))
             tab.emulate(1366, 900, 1)
             time.sleep(0.4)
             shot("home_front_1366")
@@ -1484,17 +1445,19 @@ def main():
                 check(status.get("joined", 0) == 0 or status.get("state") in ("finished", "ended", None), "the room that the front page made is let go of: nobody is in it now (%s)" % {k: status.get(k) for k in ("state", "joined", "reason")})
             else:
                 check(False, "the game page of a game on this computer is ready")
-            # Classic 4:3, chosen under Screen, is what reaches the game (the choice is remembered by the browser)
+            # Classic 4:3, remembered by the browser (the game's settings menu writes it), is what reaches the game
             clear_storage()
             load(web, settle=1.5)
             front_ready()
             rename_by_pencil(tab, "Bob")
-            aspect.choose_shape(tab, "4:3")
+            tab.ev("localStorage.setItem('ants.aspect.v2', '4:3'); 1")                     # (what the game page's settings menu remembers: the room hands it on)
+            load(web, settle=1.5)
+            front_ready()
             set_modes(tab, {"red": "nobody", "blue": "nobody", "black": "nobody"})
             real_click("#start")
             ok = wait_for(lambda: tab.ev("location.pathname") == "/play", 20)
             where = tab.ev("location.pathname + location.search") if ok else ""
-            check(ok and "aspect=4:3" in where, "with Classic 4:3 chosen under Screen, START takes this tab to the game with that shape (%s)" % where)
+            check(ok and "aspect=4:3" in where, "with Classic 4:3 remembered, START takes this tab to the game with that shape (%s)" % where)
             if ok and wait_for(lambda: tab.ev("!!window.isReadyToPlay"), args.ready_timeout):
                 given = [x for x in game_args(tab) if x != "./this.program"]
                 check(given[given.index("--aspect") + 1:][:1] == ["4:3"] and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "4:3", "... and the game is the 4:3 one (--aspect 4:3, the stage says 4:3)")
@@ -1837,8 +1800,8 @@ def main():
                 var shown = function (e) { return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0 && (!e.checkVisibility || e.checkVisibility()); };
                 var controls = Array.prototype.filter.call(document.querySelectorAll('header a, header button, header summary'), shown).map(function (e) { return { text: e.innerText.trim(), rect: rect(e) }; });
                 return { inner: [de.clientWidth, window.innerHeight], scroll: [de.scrollWidth, de.scrollHeight], controls: controls, box: rect(document.getElementById('game-container')), bar: rect(document.querySelector('footer.bar')),
-                         panel: rect(document.getElementById('info-panel')), header: rect(document.querySelector('header')), more: shown(document.querySelector('header .more')), view: rect(document.getElementById('view-bar')),
-                         seg: Array.prototype.filter.call(document.querySelectorAll('.seg button, #aspect-select'), shown).map(rect) };
+                         panel: rect(document.getElementById('info-panel')), header: rect(document.querySelector('header')), more: shown(document.querySelector('header .more')), view: rect(document.getElementById('game-container')),
+                         seg: Array.prototype.filter.call(document.querySelectorAll('.seg button'), shown).map(rect) };
             })())"""
             clear_storage()
             load(play + "?aspect=16:9", ready=True, settle=1.5)
@@ -1851,7 +1814,7 @@ def main():
                 if m["scroll"][0] > m["inner"][0]:
                     wrong["scroll"].append((width, m["scroll"][0], m["inner"][0]))
                 texts = [c["text"] for c in m["controls"]]
-                want = (["", "Menu", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["", "Menu"] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub", "Feedback"])
+                want = (["", "Menu", "", "Full" if width <= 440 else "Fullscreen", "More"] if narrow else ["", "Menu", "Settings" if width >= 1140 else ""] + (["Matches"] if width >= 1140 else []) + ["Sprites and sounds", "Changelog", "Reset", "Fullscreen", "GitHub"] + ([] if 920 <= width <= 1045 else ["Feedback"]))
                 height = m["header"][3] - m["header"][1]
                 if texts != want or m["more"] != narrow or ((narrow or width >= 1024) and height > 60):
                     wrong["header"].append((width, texts, "More" if m["more"] else "no More", round(height)))
@@ -1888,29 +1851,12 @@ def main():
                   "the header of the game page has Matches right after Menu, in a new tab (a match that is being played goes on), and every button is shown at 1440 px (%s)" % [h[0] for h in head])
             contrast_of("the game page at 1440 px", 60, "document.querySelectorAll('#info-panel details').forEach(function (d) { d.open = true; })")
 
-            # --- the pairs under the game: the chosen button is pressed in, a click keeps its id and what it remembers; the Picture dropdown has the buttons' face
-            pairs = json.loads(value("""JSON.stringify(['lock-on', 'lock-off'].map(function (id) { var e = document.getElementById(id), s = getComputedStyle(e);
-                return [id, e.getAttribute('aria-checked'), s.backgroundColor, s.transform, (s.boxShadow.match(/rgb\\(157, 13, 23\\) (\\d+)px (\\d+)px/) || []).slice(1).join('x')]; }))"""))
-            pressed, raised = ("rgb(16, 43, 37)", "matrix(1, 0, 0, 1, 1, 2)"), ("rgb(43, 99, 87)", "none")
-            check([tuple(p[2:4]) for p in pairs] == [pressed, raised] and [p[1] for p in pairs] == ["true", "false"],
-                  "the mouse pair under the game: Locked is pressed in (dark, moved), Free is teal (%s)" % pairs)
-            check([p[4] for p in pairs] == ["1x1", "2x3"], "... a teal button has the front page's red shadow (2 x 3 px), a pressed one the small one (1 x 1 px) (%s)" % [p[4] for p in pairs])
-            face = json.loads(value("(function () { var s = getComputedStyle(document.getElementById('aspect-select')); return JSON.stringify([s.backgroundColor, (s.boxShadow.match(/rgb\\(157, 13, 23\\) (\\d+)px (\\d+)px/) || []).slice(1).join('x'), s.borderRadius, s.color]); })()"))
-            check(face[0] == raised[0] and face[1] == "2x3" and face[2] == "8px", "the Picture dropdown has the teal button's face: its color, its red shadow and its corners (%s)" % (face,))
-            x, y = centre_xy("#lock-off")
-            tab.click(x, y)
-            time.sleep(0.4)
-            after = json.loads(value("JSON.stringify(['lock-on', 'lock-off'].map(function (id) { var e = document.getElementById(id); return [e.getAttribute('aria-checked'), getComputedStyle(e).backgroundColor]; }).concat([localStorage.getItem('ants.pointerlock')]))"))
-            check(after == [["false", raised[0]], ["true", pressed[0]], "off"], "Free clicked: it is pressed in, Locked is teal, and the browser remembers \"off\" (%s)" % (after,))
-            x, y = centre_xy("#lock-on")
-            tab.click(x, y)
-            time.sleep(0.4)
-            check(value("document.getElementById('lock-on').getAttribute('aria-checked') + '/' + localStorage.getItem('ants.pointerlock')") == "true/on", "Locked clicked again: pressed in, remembered \"on\"")
+            # --- the picture's shape is a row of the settings menu: a choice there changes the picture at once (no reload), the browser remembers it, the address has it
             tab.ev("window.antsMarker = 7; 1")
             aspect.choose_shape(tab, "4:3")
             time.sleep(1.0)
-            chosen = json.loads(value("JSON.stringify([document.querySelector('#aspect-select-list [aria-selected=true]').getAttribute('data-shape'), localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
-            check(chosen == ["4:3", "4:3", "4:3", 7, True], "Classic 4:3 chosen in the dropdown: the picture changes at once (no reload), the browser remembers it, the address has it (%s)" % (chosen,))
+            chosen = json.loads(value("JSON.stringify([localStorage.getItem('ants.aspect.v2'), document.getElementById('game-stage').getAttribute('data-aspect'), window.antsMarker, location.search.indexOf('aspect=4:3') !== -1])"))
+            check(chosen == ["4:3", "4:3", 7, True], "Classic 4:3 chosen in the menu's Picture shape row: the picture changes at once (no reload), the browser remembers it, the address has it (%s)" % (chosen,))
             shot("game_classic_1440")
             clear_storage()
 
@@ -1945,8 +1891,8 @@ def main():
             tab.emulate(844, 390, 2, mobile=True)
             tab.open(play + "?aspect=16:9", settle=1.5)
             m = json.loads(value(LAYOUT))
-            check(m["scroll"][0] <= m["inner"][0] and m["view"][3] <= m["inner"][1] + 1 and m["header"][3] - m["header"][1] <= 60 and not m["more"],
-                  "a phone on its side (844 x 390): the header is one slim row, the whole picture and the bar under it fit the window, no sideways scroll (bar ends at %.0f of %d)" % (m["view"][3], m["inner"][1]))
+            check(m["scroll"][0] <= m["inner"][0] and m["view"][3] + 14 <= m["inner"][1] and m["header"][3] - m["header"][1] <= 60 and not m["more"],
+                  "a phone on its side (844 x 390): the header is one slim row, the whole picture with its ring fits the window, no sideways scroll (the box ends at %.0f of %d)" % (m["view"][3], m["inner"][1]))
             shot("game_844")
             tab.emulate(1440, 900, 1)
 

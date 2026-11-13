@@ -473,15 +473,15 @@
   {
    "id": "field_not_emptied",
    "file": "web/home/chat.js",
-   "old": "if (sendLine(field.value) === '') field.value = '';",
+   "old": "if (sendLine(field.value) === '') { field.value = ''; grow(); }",
    "new": "sendLine(field.value);",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "field_emptied_on_a_refusal",
    "file": "web/home/chat.js",
-   "old": "if (sendLine(field.value) === '') field.value = '';",
-   "new": "sendLine(field.value); field.value = '';",
+   "old": "if (sendLine(field.value) === '') { field.value = ''; grow(); }",
+   "new": "sendLine(field.value); field.value = ''; grow();",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -501,15 +501,15 @@
   {
    "id": "draft_not_given_back",
    "file": "web/home/chat.js",
-   "old": "if (!refused.cmd && !field.value) field.value = refused.text;",
+   "old": "if (!refused.cmd && !field.value) { field.value = refused.text; grow(); }",
    "new": "",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
    "id": "draft_given_back_over_new_words",
    "file": "web/home/chat.js",
-   "old": "if (!refused.cmd && !field.value) field.value = refused.text;",
-   "new": "if (!refused.cmd) field.value = refused.text;",
+   "old": "if (!refused.cmd && !field.value) { field.value = refused.text; grow(); }",
+   "new": "if (!refused.cmd) { field.value = refused.text; grow(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -1472,13 +1472,6 @@
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
-   "id": "field_is_short",
-   "file": "web/home/chat.css",
-   "old": ".gc-input { min-width: 0; min-height: 48px;",
-   "new": ".gc-input { min-width: 0; min-height: 30px;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
    "id": "send_is_short",
    "file": "web/home/chat.css",
    "old": ".gc-send { min-height: 48px; }",
@@ -1490,13 +1483,6 @@
    "file": "web/home/chat.css",
    "old": "gap: 10px; min-height: 50px;",
    "new": "gap: 10px; min-height: 30px;",
-   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
-  },
-  {
-   "id": "field_text_is_14_px",
-   "file": "web/home/chat.css",
-   "old": "padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117;",
-   "new": "padding: 8px 14px; font-size: 14px; color: var(--cream); background: #0b1117;",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -2335,8 +2321,8 @@
   {
    "id": "a_refused_command_is_put_back_in_the_field",
    "file": "web/home/chat.js",
-   "old": "if (!refused.cmd && !field.value) field.value = refused.text;",
-   "new": "if (!field.value) field.value = refused.text;",
+   "old": "if (!refused.cmd && !field.value) { field.value = refused.text; grow(); }",
+   "new": "if (!field.value) { field.value = refused.text; grow(); }",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   },
   {
@@ -3143,6 +3129,118 @@
    "old": "if (keep && !bottom &&",
    "new": "if (keep &&",
    "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs TheRoles && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "enter_does_not_send",
+   "file": "web/home/chat.js",
+   "old": "e.key === 'Enter' && !e.isComposing &&",
+   "new": "e.key === 'Enter' && false &&",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "enter_that_ends_a_composition_sends",
+   "file": "web/home/chat.js",
+   "old": "&& !e.isComposing && e.keyCode !== 229) {",
+   "new": "&& !e.isComposing) {",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_line_break_is_kept",
+   "file": "web/home/chat.js",
+   "old": "if (/[\\r\\n]/.test(v)) { field.value",
+   "new": "if (false) { field.value",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_box_grows_past_four_lines",
+   "file": "web/home/chat.js",
+   "old": "ROW + 3 * LINE",
+   "new": "ROW + 5 * LINE",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_keyboards_line_break_is_not_an_enter",
+   "file": "web/home/chat.js",
+   "old": "e.inputType === 'insertLineBreak' ||",
+   "new": "false ||",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_press_on_send_takes_the_focus",
+   "file": "web/home/chat.js",
+   "old": "doc.activeElement === field) e.preventDefault();",
+   "new": "false) e.preventDefault();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_box_is_tall_in_every_window",
+   "file": "web/home/chat.js",
+   "old": "if (!tall) { s.height = ''; return; }",
+   "new": "if (false) { s.height = ''; return; }",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "enter_skips_the_forms_submit",
+   "file": "web/home/chat.js",
+   "old": "if (form.requestSubmit) form.requestSubmit();\n            else if",
+   "new": "if (false) form.requestSubmit();\n            else if",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "safari_composition_enter_sends",
+   "file": "web/home/chat.js",
+   "old": "e.keyCode !== 229) {",
+   "new": "true) {",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_paragraph_break_is_made",
+   "file": "web/home/chat.js",
+   "old": "|| e.inputType === 'insertParagraph')",
+   "new": "|| false)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_caret_after_a_paste_is_lost",
+   "file": "web/home/chat.js",
+   "old": "at = v.slice(0, at).replace(/[\\r\\n]+/g, ' ').length; field.setSelectionRange(at, at);",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_log_does_not_follow_the_box",
+   "file": "web/home/chat.js",
+   "old": "if (was) log.scrollTop = log.scrollHeight;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "a_hidden_view_is_measured",
+   "file": "web/home/chat.js",
+   "old": "if (field.scrollHeight === 0) return;",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "no_submit_event_without_requestsubmit",
+   "file": "web/home/chat.js",
+   "old": "form.dispatchEvent(new win.Event('submit', { cancelable: true }));",
+   "new": "post();",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_field_has_no_hint",
+   "file": "web/home/chat.js",
+   "old": "field.setAttribute('aria-describedby', 'gchat-hint');",
+   "new": "",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
+  },
+  {
+   "id": "the_script_and_the_style_disagree_on_a_phone",
+   "file": "web/home/chat.js",
+   "old": "var UPRIGHT = '(max-width: 700px)",
+   "new": "var UPRIGHT = '(max-width: 7000px)",
+   "test": "python3 tests/scripts/test_web_home_chat.py ThePageAndTheOtherPages TheLoaderInHome TheFolderAndTheScript TheStyle TheWayIntoTheImage TheInvisibleCharactersAreTheHubs && node tests/scripts/web_home_chat_check.js web/lobby.html"
   }
  ]
 }

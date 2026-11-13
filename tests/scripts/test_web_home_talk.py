@@ -241,14 +241,13 @@ class TheStyle(unittest.TestCase):
         self.assertIn("position: relative;", self.rule(".gc-form.gt-on"), "the picker is placed against the form")
         self.assertIn("grid-column: 1 / -1;", self.rule(".gt-say"))
         self.assertNotRegex(self.css, r"position: *fixed")
-        self.assertEqual(self.css.count("z-index"), 1, "one layer, the picker's, over the log")
+        self.assertEqual(self.css.count("z-index"), 2, "two layers over the log: the picker's (2) and the voice line's (3, so that \"The message is full.\" shows over the open picker)")
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto; }", self.css)
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
-    def test_a_narrow_form_puts_the_two_buttons_in_a_row_of_their_own_under_the_field_and_send(self):
-        self.assertIn("@media (max-width: 420px), (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {", self.css)
-        narrow = self.css[self.css.index("@media (max-width: 420px)"):]
-        self.assertIn("grid-template-columns: minmax(0, 1fr) auto; }", narrow)
+    def test_the_middle_widths_put_the_two_buttons_in_a_row_of_their_own_under_the_field_and_send(self):
+        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n    .gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto; }", self.css)
+        narrow = self.css[self.css.index("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n"):]
         self.assertIn(".gt-on .gt-tools { order: 3; grid-column: 1 / -1; }", narrow)
         self.assertIn(".gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }", narrow, "the field, Send and the login button keep their order when the buttons move to the last row")
 

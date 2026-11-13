@@ -49,7 +49,7 @@
 .gc-news { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .gc-form { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 10px; }
 .gc-form[hidden], .gc-guest[hidden], .gc-slot[hidden] { display: none; }
-.gc-input { min-width: 0; min-height: 48px; padding: 8px 14px; font-size: 16px; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
+.gc-input { display: block; box-sizing: border-box; width: 100%; min-width: 0; height: 48px; min-height: 48px; padding: 11px 14px; font: inherit; font-size: 16px; line-height: 20px; white-space: pre; overflow: hidden; resize: none; color: var(--cream); background: #0b1117; border: 3px solid var(--frame); border-color: var(--frame-lo) var(--frame-hi) var(--frame-hi) var(--frame-lo); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge); }
 .gc-input::placeholder { color: #7f9c92; opacity: 1; }
 .gc-send { min-height: 48px; }
 .gc-guest { flex: none; margin-top: 8px; font-size: 14px; line-height: 1.35; color: #a8cfc0; }
@@ -68,10 +68,18 @@
 }
 @media (max-height: 500px) and (orientation: landscape) { .gc-line { font-size: 16px; } .gc-body { padding-bottom: 10px; } }
 @media (max-width: 700px) and (max-height: 500px) { .gc-head { display: none; } .gc-form { margin-top: 6px; } .gc-body { padding-top: 6px; } .gc-log { padding: 2px 12px; gap: 2px; } .gc-input, .gc-send { min-height: 44px; } }       /* (a phone held sideways: the Chat view is about 160 px high; the heading and the account line give their place to the log, which keeps three lines) */
+@media (max-width: 700px) and (max-height: 500px) { .gc-input { height: auto; padding: 8px 14px; line-height: 1.45; } }       /* (the text area is as high as the field it replaced) */
 /* a narrow phone (320 and 340): the heading and the count fit on one line; a window that is low (a phone held sideways, or a small phone with notices above Home): the guest line gives its place to the log */
 @media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }
 @media (max-height: 700px) { .gc-guest { display: none; } }
 @media (prefers-reduced-motion: reduce) { .gc-dot { animation: none; } }
+
+/* a phone held upright: the page a step smaller (the field is one box with the buttons, talk.css) */
+@media (max-width: 700px) and (min-height: 501px) {
+    .gc { margin: 2px 12px 6px; }
+    .gc-head { min-height: 0; height: 36px; padding: 0 10px 0 12px; } .gc-title { font-size: 17px; } .gc-online { gap: 6px; font-size: 14px; } .gc-dot { width: 9px; height: 9px; }
+    .gc-body { padding: 0 8px 8px; } .gc-log { gap: 3px; padding: 6px 10px; } .gc-line { font-size: 15px; }
+}
 
 /* the login (docs/HUB.md "Login"): the mark of Discord, the Log in button that stands where Send would, who the visitor is with Log out and a small menu with Forget me, and the bar's chip (home.js makes
    the button; it shows only where the hub offers a login). Every target is at least 44 px. */
