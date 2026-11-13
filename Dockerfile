@@ -120,6 +120,9 @@ COPY web/favicon.* /usr/share/nginx/html/
 
 # The pictures and the font of the front page (web/front/, served at /front/): the game's own art, made by tools/front_page_art/make_art.py, and its own font with its licence
 COPY web/front/ /usr/share/nginx/html/front/
+# The installable web app: its manifest (one exact location of nginx.conf serves it) and its icons (served by the picture rule, a week; named with ?v= and a hash of the file).
+COPY web/manifest.webmanifest /usr/share/nginx/html/manifest.webmanifest
+COPY web/app/ /usr/share/nginx/html/app/
 
 # The front page, the lobby (lobby.html): a room on the game server that is ready when the page opens (a link to send, a code to type, START), or a game for one on this computer,
 # with the site label, the version and the build put in. nginx serves it at "/"; the old address /four.html redirects there.
