@@ -1196,14 +1196,33 @@ void run_bot_tests() {
 #else
         constexpr bool kSanitized = false;
 #endif
+        // The thread's CPU time is still the machine's: on a hosted runner (a virtual machine, with other jobs on the same cores) the same work can read longer while other jobs are busy (seen: TREASURE
+        // with hard bots read 122 ms a second, 156 ms for the worst pass, in one run and passed in the next on the same commit). Noise only adds time, so a row is judged by its cheapest run: it is run again,
+        // up to three times, only while it is over a bound, and each figure is the smallest of the runs. A server that really costs more is over the bound in every run, so it still fails.
+        const auto within_bounds = [](const Result& r) { return r.ms_per_second < 100.0 && r.worst_pass_ms < 250.0 && r.start_pass_ms < 250.0; };
+        const auto best_of = [&](const char* map, const char* kind, ai::Level level, bool via_fill, Result& out) {
+            for (int attempt = 0; attempt < 3; ++attempt) {
+                Result r;
+                if (!measure(map, kind, level, via_fill, r)) return false;
+                if (attempt == 0) {
+                    out = r;
+                } else {
+                    out.ms_per_second = std::min(out.ms_per_second, r.ms_per_second);
+                    out.worst_pass_ms = std::min(out.worst_pass_ms, r.worst_pass_ms);
+                    out.start_pass_ms = std::min(out.start_pass_ms, r.start_pass_ms);
+                }
+                if (kSanitized || within_bounds(out)) break;
+            }
+            return true;
+        };
         Result tiny_fill, tiny_idle, tiny_medium, tiny_hard, treasure_idle, treasure_hard;
-        ASSERT_TRUE(measure("TINY.LVL", "standard", ai::Level::Medium, true, tiny_fill));
-        ASSERT_TRUE(measure("TINY.LVL", "standard", ai::Level::Medium, false, tiny_medium));
+        ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Medium, true, tiny_fill));
+        ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Medium, false, tiny_medium));
         if (!kSanitized) {
-            ASSERT_TRUE(measure("TINY.LVL", "idle", ai::Level::Medium, false, tiny_idle));
-            ASSERT_TRUE(measure("TINY.LVL", "standard", ai::Level::Hard, false, tiny_hard));
-            ASSERT_TRUE(measure("TREASURE.LVL", "idle", ai::Level::Medium, false, treasure_idle));
-            ASSERT_TRUE(measure("TREASURE.LVL", "standard", ai::Level::Hard, false, treasure_hard));
+            ASSERT_TRUE(best_of("TINY.LVL", "idle", ai::Level::Medium, false, tiny_idle));
+            ASSERT_TRUE(best_of("TINY.LVL", "standard", ai::Level::Hard, false, tiny_hard));
+            ASSERT_TRUE(best_of("TREASURE.LVL", "idle", ai::Level::Medium, false, treasure_idle));
+            ASSERT_TRUE(best_of("TREASURE.LVL", "standard", ai::Level::Hard, false, treasure_hard));
         }
         const auto row = [](const char* what, const Result& r) {
             std::cout << "\n    " << std::left << std::setw(34) << what << std::right << std::fixed << std::setprecision(2) << std::setw(7) << r.ms_per_second << " ms per second of play for 12 rooms ("

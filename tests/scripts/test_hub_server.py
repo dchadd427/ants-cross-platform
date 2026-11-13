@@ -319,7 +319,7 @@ class TheChatOnTheWire(RigTest):
         alice, bob, reader = self.connect("1001:alice"), self.connect("1002:bob"), self.connect()
         alice.say("hello world")
         for c in (alice, bob, reader):
-            line = next(m for m in c.drain(0.4) if m["t"] == "line")
+            line = c.wait_line()
             self.assertEqual((line["who"], line["text"], line["mod"]), ("alice", "hello world", False))
         late = hc.Client(self.rig.port)
         self.clients.append(late)
@@ -329,15 +329,15 @@ class TheChatOnTheWire(RigTest):
     def test_a_reader_cannot_write(self):
         reader = self.connect()
         reader.say("hi")
-        self.assertEqual(reader.recv_json(), {"t": "err", "code": "login"})
+        self.assertEqual(reader.recv_reply(), {"t": "err", "code": "login"})
 
     def test_the_text_rules_hold_on_the_wire(self):
         alice, reader = self.connect("1001:alice"), self.connect()
         for text, code in (("<b>", "bad"), ("", "empty"), ("\u202e", "empty"), ("x" * 201, "long")):
             alice.say(text)
-            self.assertEqual(alice.recv_json(), {"t": "err", "code": code}, repr(text))
+            self.assertEqual(alice.recv_reply(), {"t": "err", "code": code}, repr(text))
         alice.say("ad\u202emin\u200b  now")
-        self.assertEqual(next(m for m in reader.drain(0.4) if m["t"] == "line")["text"], "admin now")
+        self.assertEqual(reader.wait_line()["text"], "admin now")
 
     def test_the_limit_is_the_account_s_across_sockets(self):
         a1, a2 = self.connect("1001:alice"), self.connect("1001:alice")
@@ -369,7 +369,7 @@ class TheChatOnTheWire(RigTest):
         alice, reader = self.connect("1001:alice"), self.connect()
         alice.send(hc.say("last words") + hc.frame(2, b"binary"))
         self.assertEqual(alice.expect_close(), 1003)
-        self.assertEqual(next(m for m in reader.drain(0.4) if m["t"] == "line")["text"], "last words")
+        self.assertEqual(reader.wait_line()["text"], "last words")
 
     def test_each_kind_of_broken_frame(self):
         cases = ((hc.frame(1, b"{}", masked=False), 1002), (hc.frame(1, b"{}", rsv=1), 1002), (hc.frame(3, b""), 1002), (hc.frame(2, b"x"), 1003), (hc.frame(1, b"{", fin=False), 1003),
@@ -399,7 +399,7 @@ class TheViolations(RigTest):
         c.send(hc.frame(1, b'{"t":"ping"}'))
         self.assertEqual(c.recv_json()["t"], "online")                   # still open after 19
         c.send(hc.frame(1, b"not json"))
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "bad"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "bad"})
         self.assertEqual(c.expect_close(), 1008)
 
     def test_errors_of_the_rules_count_too(self):
@@ -603,20 +603,20 @@ class TheModeratorsOnTheWire(RigTest):
     def test_mute_and_del_in_chat(self):
         mod, alice, reader = self.connect("9001:moddy"), self.connect("1001:alice"), self.connect()
         alice.say("an ugly line")
-        line = next(m for m in reader.drain(0.4) if m["t"] == "line")
+        line = reader.wait_line()
         mod.say("/del %d" % line["id"])
         self.assertIn({"t": "del", "id": line["id"]}, reader.drain(0.5))
         mod.say("/mute alice 5")
         time.sleep(0.2)
         alice.drain(0.2)
         alice.say("more")
-        self.assertEqual(alice.recv_json(), {"t": "err", "code": "muted"})
+        self.assertEqual(alice.recv_reply(), {"t": "err", "code": "muted"})
         self.assertEqual([m["text"] for m in welcome_history(self)], [])
 
     def test_a_deletion_by_the_command_line_reaches_the_screens(self):
         alice, reader = self.connect("1001:alice"), self.connect()
         alice.say("to be deleted")
-        line = next(m for m in reader.drain(0.4) if m["t"] == "line")
+        line = reader.wait_line()
         from hub import admin
         status = admin.run(["--db", self.rig.db, "del", str(line["id"])], io.StringIO(), io.StringIO())
         self.assertEqual(status, 0)
@@ -628,17 +628,17 @@ class TheModeratorsOnTheWire(RigTest):
         from hub import admin
         self.assertEqual(admin.run(["--db", self.rig.db, "ban", "1001"], io.StringIO(), io.StringIO()), 0)
         alice.say("hello")
-        self.assertEqual(alice.recv_json(), {"t": "err", "code": "banned"})
+        self.assertEqual(alice.recv_reply(), {"t": "err", "code": "banned"})
         reborn = self.connect("1001:alice.again")
         reborn.say("hello")
-        self.assertEqual(reborn.recv_json(), {"t": "err", "code": "banned"})
+        self.assertEqual(reborn.recv_reply(), {"t": "err", "code": "banned"})
 
 
 class TheYoungAndTheOthers(RigTest):
     def test_a_young_account_reads_and_cannot_write(self):
         c = self.connect("1003:newbie:young")
         c.say("hi")
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "young"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "young"})
 
 
 class TheDefaultHasNoLogin(RigTest):
@@ -650,7 +650,7 @@ class TheDefaultHasNoLogin(RigTest):
         message = c.recv_json()
         self.assertEqual((message["login"], message["you"]), (False, None))
         c.say("hello")
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "login"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "login"})
         self.assertEqual(self.rig.call(self.rig.store.recent_lines, 10), [])
 
 
@@ -1245,7 +1245,7 @@ class TheFuzzOnTheWire(RigTest):
         self.assertTrue(c.ok)
         welcome(c)
         c.say("still alive")
-        self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["text"], "still alive")
+        self.assertEqual(c.wait_line()["text"], "still alive")
         self.assertTrue(self.settle(lambda: self.rig.hub.pending == 0), self.rig.hub.pending)
 
 
@@ -1317,7 +1317,7 @@ class TheProcess(unittest.TestCase):
         message = c.recv_json()
         self.assertEqual((message["login"], message["you"], message["history"]), (False, None, []))
         c.say("hello")
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "login"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "login"})
         c.close()
 
     def test_everything_end_to_end_and_the_log_holds_no_secret(self):
@@ -1331,7 +1331,7 @@ class TheProcess(unittest.TestCase):
         self.assertEqual(without_the_key(mod.recv_json()["you"]), {"name": "moddy", "mod": True})
         chat_text = "canary chat text 41b7"
         alice.say(chat_text)
-        line = next(m for m in mod.drain(0.5) if m["t"] == "line")
+        line = mod.wait_line()
         self.assertEqual(line["text"], chat_text)
         # the command line bans alice: from her next line she is refused, and a restart does not change that (the command line takes a username from the profile that a login made: the test login makes none, so a second
         # connection to the file makes it, as the login would)
@@ -1343,7 +1343,7 @@ class TheProcess(unittest.TestCase):
         self.assertEqual(admin("ban", "alice").returncode, 0)
         alice.drain(0.1)
         alice.say("after the ban")
-        self.assertEqual(alice.recv_json(), {"t": "err", "code": "banned"})
+        self.assertEqual(alice.recv_reply(), {"t": "err", "code": "banned"})
         # a deletion by the command line reaches the screens within a few seconds
         self.assertEqual(admin("del", str(line["id"])).returncode, 0)
         self.assertIn({"t": "del", "id": line["id"]}, mod.drain(3.5))
@@ -1359,10 +1359,10 @@ class TheProcess(unittest.TestCase):
         again = self.client(port2, login="6101:alice")
         self.assertEqual(again.recv_json()["history"], [])
         again.say("hello again")
-        self.assertEqual(again.recv_json(), {"t": "err", "code": "banned"})
+        self.assertEqual(again.recv_reply(), {"t": "err", "code": "banned"})
         admin("unban", "alice")
         again.say("hello again")
-        self.assertEqual(next(m for m in again.drain(0.5) if m["t"] == "line")["text"], "hello again")
+        self.assertEqual(again.wait_line()["text"], "hello again")
         proc2.send_signal(signal.SIGTERM)
         proc2.wait(10)
         for path in (log_path, log2):

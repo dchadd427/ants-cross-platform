@@ -208,6 +208,32 @@ class Client:
                 raise EOFError("closed: %r" % payload)
             raise AssertionError("unexpected opcode %d" % opcode)
 
+    def recv_reply(self, timeout=None):
+        """The next text frame that is not the online count. The hub's clock sends {"t":"online","n":..} to every socket when the number of people changed (at most once in online_seconds), at a moment that
+        no test controls: it can come just before the answer to what a socket sent. A test that waits for that answer (an error, say) reads past the count; one that tests the count asks for it with recv_json."""
+        while True:
+            msg = self.recv_json(timeout)
+            if not (isinstance(msg, dict) and msg.get("t") == "online"):
+                return msg
+
+    def wait_line(self, seconds=10.0, settle=0.3):
+        """The first chat line that arrives, waiting up to `seconds` for it (the hub says it as soon as it has it: on a machine that is busy that can be a second late, and a drain that ends after a short silence
+        reads that as no line). Whatever else the hub sent up to then is skipped, and what comes within `settle` seconds of silence after the line is read and dropped, as a drain does."""
+        end = time.monotonic() + seconds
+        seen = []
+        while time.monotonic() < end:
+            try:
+                msg = self.recv_json(max(0.05, end - time.monotonic()))
+            except socket.timeout:
+                break
+            except EOFError as e:
+                raise AssertionError("the socket closed before a line came (%s); frames seen: %r" % (e, seen))
+            if msg.get("t") == "line":
+                self.drain(settle)
+                return msg
+            seen.append(msg)
+        raise AssertionError("no chat line within %s s; frames seen: %r" % (seconds, seen))
+
     def expect_close(self, timeout=None):
         """The code of the close frame that the server sends (after any text still on the way); None when the socket ends without one."""
         end = time.monotonic() + (self.timeout if timeout is None else timeout)

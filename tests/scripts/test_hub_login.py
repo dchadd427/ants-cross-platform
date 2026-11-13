@@ -374,7 +374,7 @@ class TheCallback(LoginTest):
         reader = self.socket()
         self.assertEqual((reader.welcome["login"], reader.welcome["you"]), (True, None))
         member.say("hello from discord")
-        self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["who"], "maple.leaf")
+        self.assertEqual(reader.wait_line()["who"], "maple.leaf")
 
 
     def test_no_cookie_of_the_state_is_a_page_and_no_call_to_discord(self):
@@ -722,7 +722,7 @@ class TheSocket(LoginTest):
         c = self.socket(headers={"X-Hub-Test-Login": "1001:mallory"})
         self.assertEqual((c.welcome["login"], c.welcome["you"]), (True, None))
         c.say("hello")
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "login"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "login"})
         c2 = self.socket(v, headers={"X-Hub-Test-Login": "1001:mallory"})
         self.assertEqual(c2.welcome["you"]["name"], "maple.leaf")                # (the cookie decides)
 
@@ -739,10 +739,10 @@ class TheSocket(LoginTest):
         c = self.socket(v)
         other = self.socket(v)
         c.say("one")
-        self.assertEqual(next(m for m in other.drain(0.5) if m["t"] == "line")["who"], "maple.leaf")
+        self.assertEqual(other.wait_line()["who"], "maple.leaf")
         v.jar.cookies.clear()                                                    # (the browser lost the cookie: this socket is what it was)
         c.say("two, and a different text")
-        self.assertTrue(any(m["t"] == "line" for m in other.drain(3.0)))
+        other.wait_line()
 
     def test_young_accounts_read_and_cannot_write(self):
         for age, young in ((2, True), (6.9, True), (7.1, False), (900, False)):
@@ -755,10 +755,10 @@ class TheSocket(LoginTest):
             reader.drain(0.2)
             c.say("hello from age %s" % age)
             if young:
-                self.assertEqual(c.recv_json(), {"t": "err", "code": "young"}, age)
+                self.assertEqual(c.recv_reply(), {"t": "err", "code": "young"}, age)
                 self.assertEqual([m for m in reader.drain(0.4) if m["t"] == "line"], [])
             else:
-                self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["text"], "hello from age %s" % age)
+                self.assertEqual(reader.wait_line()["text"], "hello from age %s" % age)
             reader.close()
             c.close()
         self.assertEqual(self.rows("lines").__len__(), 2)
@@ -769,7 +769,7 @@ class TheSocket(LoginTest):
         v.login()
         c = self.socket(v)
         c.say("hello")
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "young"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "young"})
 
 
 class TheModeratorsOfTheSettings(LoginTest):
@@ -780,7 +780,7 @@ class TheModeratorsOfTheSettings(LoginTest):
         c = self.socket(v)
         self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": True})
         c.say("a word from a moderator")
-        self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["mod"], True)
+        self.assertEqual(c.wait_line()["mod"], True)
 
 
 class TheMeOfAModerator(LoginTest):
@@ -800,7 +800,7 @@ class TheAgeSetting(LoginTest):
         v.login()
         c = self.socket(v)
         c.say("hello")
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "young"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "young"})
 
 
 class TheAgeSettingZero(LoginTest):
@@ -812,7 +812,7 @@ class TheAgeSettingZero(LoginTest):
         v.login()
         c = self.socket(v)
         c.say("hello")
-        self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["text"], "hello")
+        self.assertEqual(c.wait_line()["text"], "hello")
 
     def test_zero_days_does_not_mind_an_id_that_is_from_the_future_either(self):
         self.fake.user = (FUTURE, "from.next.month")
@@ -820,7 +820,7 @@ class TheAgeSettingZero(LoginTest):
         v.login()
         c = self.socket(v)
         c.say("hello")
-        self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["text"], "hello")
+        self.assertEqual(c.wait_line()["text"], "hello")
 
 
 class TheBansAndMutesStandWhateverTheAccountDoes(LoginTest):
@@ -832,7 +832,7 @@ class TheBansAndMutesStandWhateverTheAccountDoes(LoginTest):
         self.assertEqual(you_without_the_key(c.welcome["you"]), {"name": "maple.leaf", "mod": False})    # (it can log in: it is a reader with a name)
         self.assertTrue(c.welcome["history"] == [] and c.welcome["login"])
         c.say("let me in")
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "banned"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "banned"})
         self.assertEqual([m for m in reader.drain(0.4) if m["t"] == "line"], [])
         r = v.call("POST", "/hub/logout")                                        # logging out and in again, in another browser too
         self.assertEqual(r.status, 200)
@@ -840,7 +840,7 @@ class TheBansAndMutesStandWhateverTheAccountDoes(LoginTest):
         w.login()
         c2 = self.socket(w)
         c2.say("again")
-        self.assertEqual(c2.recv_json(), {"t": "err", "code": "banned"})
+        self.assertEqual(c2.recv_reply(), {"t": "err", "code": "banned"})
         r = w.call("POST", "/hub/forget")                                        # forgetting is not an exit either
         self.assertEqual(r.status, 200)
         self.assertEqual(len(self.rows("bans")), 1)
@@ -850,7 +850,7 @@ class TheBansAndMutesStandWhateverTheAccountDoes(LoginTest):
         x.login()
         c3 = self.socket(x)
         c3.say("a third time")
-        self.assertEqual(c3.recv_json(), {"t": "err", "code": "banned"})
+        self.assertEqual(c3.recv_reply(), {"t": "err", "code": "banned"})
         self.assertEqual(self.rows("lines"), [])
 
     def test_a_mute_stands_too(self):
@@ -859,7 +859,7 @@ class TheBansAndMutesStandWhateverTheAccountDoes(LoginTest):
         for _ in range(2):
             c = self.socket(v)
             c.say("hello")
-            self.assertEqual(c.recv_json(), {"t": "err", "code": "muted"})
+            self.assertEqual(c.recv_reply(), {"t": "err", "code": "muted"})
             self.assertEqual(v.call("POST", "/hub/forget").status, 200)
             v.login()
         self.assertEqual(self.rows("mutes")[0][4], "")
@@ -915,7 +915,7 @@ class TheDisplayName(LoginTest):
         reader = self.socket()
         reader.drain(0.2)
         c.say("hello from a display name")
-        line = next(m for m in reader.drain(0.5) if m["t"] == "line")
+        line = reader.wait_line()
         self.assertEqual((line["who"], line["text"], line["k"]), ("Maple Leaf", "hello from a display name", c.welcome["you"]["k"]))
         self.assertNotIn("u", line)
 
@@ -1120,15 +1120,15 @@ class TheTwoNamesAndTheModerators(LoginTest):
         a, b, m = self.accounts()
         author, twin, mod = self.socket(a), self.socket(b), self.socket(m)
         mod.say("/mute Maple 5")
-        self.assertEqual(mod.recv_json(), {"t": "err", "code": "bad"})
+        self.assertEqual(mod.recv_reply(), {"t": "err", "code": "bad"})
         mod.say("/mute aaa.one 5")
         time.sleep(0.3)
         author.say("I was muted")
-        self.assertEqual(author.recv_json(), {"t": "err", "code": "muted"})
+        self.assertEqual(author.recv_reply(), {"t": "err", "code": "muted"})
         reader = self.socket()
         reader.drain(0.2)
         twin.say("and I was not")
-        self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["text"], "and I was not")
+        self.assertEqual(reader.wait_line()["text"], "and I was not")
         self.assertEqual([(row[0], row[4]) for row in self.rows("mutes")], [(OLD, "aaa.one")])
 
     def test_mute_takes_the_username_of_an_account_that_has_left_from_its_profile(self):
@@ -1168,7 +1168,7 @@ class ThePickOnTheWire(LoginTest):
         reader = self.socket()
         reader.drain(0.2)
         again.say("written under the username")
-        self.assertEqual(next(m for m in reader.drain(0.5) if m["t"] == "line")["who"], "maple.leaf")
+        self.assertEqual(reader.wait_line()["who"], "maple.leaf")
         again.send(pick_frame("display"))
         self.assertEqual(again.expect_close(3), 1000)
         self.assertEqual(self.socket(v).welcome["you"]["name"], "Maple Leaf")
@@ -1187,22 +1187,22 @@ class ThePickOnTheWire(LoginTest):
         self.fake.user = (OLD, "maple.leaf")
         c = self.socket(self.member())
         c.send(pick_frame("display"))
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "pick"})
         c.send(pick_frame("username"))
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "pick"})
         c.send(hc.frame(1, b'{"t":"ping"}'))
         self.assertEqual(c.recv_json()["t"], "online")
 
     def test_a_reader_cannot_pick_and_a_word_that_is_not_one_of_the_two_is_a_mistake(self):
         reader = self.socket()
         reader.send(pick_frame("username"))
-        self.assertEqual(reader.recv_json(), {"t": "err", "code": "login"})
+        self.assertEqual(reader.recv_reply(), {"t": "err", "code": "login"})
         c = self.socket(self.member())
         for word in ("both", "", "DISPLAY"):
             c.send(pick_frame(word))
-            self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"}, word)
+            self.assertEqual(c.recv_reply(), {"t": "err", "code": "pick"}, word)
         c.send(hc.frame(1, json.dumps({"t": "pick", "pick": ["display"]}).encode()))
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "pick"})
         self.assertEqual(self.rows("profiles")[0][3], "display")
 
     def test_the_switch_is_limited_for_the_account_and_the_refusal_keeps_the_socket(self):
@@ -1213,7 +1213,7 @@ class ThePickOnTheWire(LoginTest):
             self.assertEqual(c.expect_close(3), 1000, n)
         c = self.socket(v)
         c.send(pick_frame("username"))
-        self.assertEqual(c.recv_json(), {"t": "err", "code": "pick"})
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "pick"})
         c.send(hc.frame(1, b'{"t":"ping"}'))
         self.assertEqual(c.recv_json()["t"], "online")
         self.assertEqual(self.rows("profiles")[0][3], "username")                                    # (the third switch was the last: display, username, display... n = 2 is "username")
@@ -1329,7 +1329,7 @@ class TheForgetOfAHugeBacklog(LoginTest):
         reader = self.socket()
         mine = self.socket(v)
         mine.say("an unlucky line")
-        line = next(m for m in reader.drain(0.5) if m["t"] == "line")
+        line = reader.wait_line()
         self.rig.call(lambda: self.rig.store.delete_line(line["id"], "command line"))                          # (what `python -m hub.admin del` does: the hub is not told)
         self.assertEqual(v.call("POST", "/hub/forget").status, 200)
         self.assertIn({"t": "del", "id": line["id"]}, reader.drain(0.6))
@@ -1415,7 +1415,7 @@ class TheLogout(LoginTest):
         self.assertEqual(len(self.rows()), 1)                                    # (only this browser's login)
         self.assertEqual(self.socket(headers={"Cookie": "__Host-ants_hub=" + w.session()}).welcome["you"]["name"], "maple.leaf")
         other.say("still here")
-        self.assertTrue(any(m["t"] == "line" for m in other.drain(0.5)))
+        other.wait_line()
 
     def test_the_old_cookie_is_nobody_after_it(self):
         v = self.member()
@@ -1482,7 +1482,7 @@ class TheForget(LoginTest):
         self.assertEqual(mine2.expect_close(3), 1000)
         self.assertEqual([h["text"] for h in self.socket().welcome["history"]], ["sam's line"])
         theirs.say("sam goes on")
-        self.assertTrue(any(m["t"] == "line" for m in reader.drain(0.5)))
+        reader.wait_line()
         self.assertIsNone(self.socket(w).welcome["you"])
         self.assertEqual(v.call("POST", "/hub/forget").status, 401)              # (nobody left to forget)
 
@@ -2016,7 +2016,7 @@ class TheProcess(unittest.TestCase):
         welcome = c.recv_json()
         self.assertEqual((welcome["login"], you_without_the_key(welcome["you"])), (True, {"name": "maple.leaf", "mod": False}))
         c.say("process canary 77c1")
-        self.assertEqual(next(m for m in c.drain(0.5) if m["t"] == "line")["text"], "process canary 77c1")
+        self.assertEqual(c.wait_line()["text"], "process canary 77c1")
         self.assertEqual(v.call("POST", "/hub/logout").status, 200)
         self.assertEqual(c.expect_close(3), 1000)
         fake.token_mode = "hang"

@@ -1400,10 +1400,10 @@ class OnTheWire(ths.RigTest):
         self.clients.append(guest)
         guest.recv_json()
         send_json(guest, t="here", at="look")
-        self.assertEqual(guest.recv_json(), {"t": "err", "code": "login"})
+        self.assertEqual(guest.recv_reply(), {"t": "err", "code": "login"})
         alice, _ = self.login("1001:alice")
         send_json(alice, t="here", at="wait", pub=True, map="../../etc/passwd.LVL")
-        self.assertEqual(alice.recv_json(), {"t": "err", "code": "here"}, "a refused here has a code of its own: the chat's `bad` is for its lines")
+        self.assertEqual(alice.recv_reply(), {"t": "err", "code": "here"}, "a refused here has a code of its own: the chat's `bad` is for its lines")
 
     def test_the_whole_list_is_sent_again_only_after_the_wait(self):
         alice, _ = self.login("1001:alice")
