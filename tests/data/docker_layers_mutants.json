@@ -60,8 +60,8 @@
   {
    "id": "web_stamps_go_into_the_template",
    "file": "Dockerfile",
-   "old": "build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
-   "new": "web/shell.html web/lobby.html web/matches.html web/match.html web/live.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "old": "build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
+   "new": "web/shell.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html && \\\n    ! grep -q '@@GAME_VERSION@@'",
    "test": "python3 tests/scripts/test_docker_layers.py",
    "expect": "test_the_stamps_go_into_the_game_page_that_the_link_made_not_into_the_template"
   },
@@ -928,6 +928,22 @@
    "new": "digest.update(b\"\")",
    "test": "python3 tests/scripts/test_image_files_diff.py",
    "expect": "test_a_library_that_differs_in_code_or_names_or_members_is_not_the_same"
+  },
+  {
+   "id": "manifest_forgets_the_legal_page_stamp",
+   "file": "tools/image_manifest.py",
+   "old": "    HTML + \"legal.html\": (BAR,),\n",
+   "new": "",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_every_page_that_the_builder_stamps_with_the_build_date_is_listed"
+  },
+  {
+   "id": "manifest_misses_the_date_of_the_bar",
+   "file": "tools/image_manifest.py",
+   "old": "BAR = (r'(data-built=\")",
+   "new": "BAR = (r'(data-built2=\")",
+   "test": "python3 tests/scripts/test_image_files_diff.py",
+   "expect": "test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it"
   }
  ]
 }

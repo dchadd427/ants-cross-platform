@@ -92,6 +92,28 @@ class TheManifest(unittest.TestCase):
         none = manifest({HTML + "lobby.html": b"<span></span>"})
         self.assertTrue(im.differences(with_date, none))
 
+    def test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it(self):
+        def bar(minute, build="abc1234"):
+            return ('<header class="sb" data-version="v1.2.3" data-build="%s" data-built="2026-11-11 10:%02d PT">' % (build, minute)).encode("ascii")
+        for name in ("matches", "match", "live", "legal", "mapmaker", "changelog"):
+            with self.subTest(name):
+                path = HTML + name + ".html"
+                one, two = manifest({path: bar(1)}), manifest({path: bar(9)})
+                self.assertEqual(im.differences(one, two), [])
+                self.assertEqual(one[path]["stamps"], 1)
+                self.assertTrue(im.differences(one, manifest({path: bar(1, "other")})), "the build id is compared")
+                self.assertTrue(im.differences(one, manifest({path: b"<header>"})), "a page that loses its stamp differs")
+
+    def test_every_page_that_the_builder_stamps_with_the_build_date_is_listed(self):
+        with open(os.path.join(REPO, "Dockerfile"), encoding="utf-8") as handle:
+            docker = handle.read()
+        line = re.search(r"sed -i \"s/@@BUILD_ID@@[^&\\n]*", docker.replace("\\\n", " ")).group(0)
+        pages = {HTML + name + ".html" for name in re.findall(r"/src/web/(\w+)\.html", line)}
+        pages.add(HTML + "index.html")
+        self.assertGreaterEqual(len(pages), 7)
+        for path in sorted(pages):
+            self.assertIn(path, im.STAMPED)
+
     def test_each_kind_of_difference_is_found_and_named(self):
         base = manifest({HTML + "a.js": b"1", "bin/x": (b"x", 0o755, 0), "etc/y": b"y"}, [("lib/l", "symlink", "a")])
         for what, new, word in (
@@ -119,7 +141,7 @@ class TheManifest(unittest.TestCase):
         self.assertEqual(im.differences(tarfile_with(1), tarfile_with(999999)), [])
 
     def test_the_list_of_stamped_files_is_short_and_has_only_pages(self):
-        self.assertLessEqual(len(im.STAMPED), 8)
+        self.assertLessEqual(len(im.STAMPED), 10)
         for path in im.STAMPED:
             self.assertTrue(path.startswith(HTML) and path.endswith(".html"), path)
 

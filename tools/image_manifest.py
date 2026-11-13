@@ -8,7 +8,7 @@ usage: image_manifest.py manifest < image.tar > manifest.json        the tar is 
        image_manifest.py relink BASE NEW [--label TEXT]              two listings made by tools/relink_outputs.sh (the programs that a deterministic link of those inputs makes)
 
 Two kinds of file are not compared byte for byte, and only these (the lists are STAMPED and LINKED below):
-  - the pages that carry the build time and the build date: the stamp is replaced by a fixed text before the hash, and the number of replacements is part of the manifest, so a file that gains or
+  - the pages that carry the build time and the build date (as text in a footer, or as the data-built attribute of the bar at the top): the stamp is replaced by a fixed text before the hash, and the number of replacements is part of the manifest, so a file that gains or
     loses a stamp differs (the build id is the same in both builds: the script passes the same ANTS_BUILD_ID);
   - the WebAssembly programs that Emscripten links (index.wasm, lvl_core.wasm), their JavaScript and the compressed copies: two links of the SAME objects do not always give the same bytes (the linker
     and the optimizer depend on the address space layout and on thread timing: the order of the functions, and so their numbers in the JavaScript, differs from link to link). Of these the final image
@@ -24,17 +24,19 @@ import tarfile
 
 HTML = "usr/share/nginx/html/"
 DATE = (r"\(\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT\)", "(<build date>)")                 # the build date that the pages show, minute resolution, Pacific time
+BAR = (r'(data-built=")\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT(")', r"\1<build date>\2")             # the same date as the pages with a bar at the top carry it (data-built; the Menu shows it as its last line)
 TIME = (r"(ANTS_BUILD_VER\s*=\s*['\"]?)\d+", r"\1<build time>")                              # the game page's build time (seconds since 1970), lockstep versioning of its files
 CACHE = (r"(index\.js\?v=)\d+", r"\1<build time>")                                       # the same time, as the cache buster of the game page's script
 STAMPED = {                                                                               # file (in the image, no leading slash) -> the stamps that may differ between two builds
     HTML + "index.html": (TIME, CACHE, DATE),
     HTML + "play.html": (TIME, CACHE, DATE),
     HTML + "lobby.html": (DATE,),
-    HTML + "matches.html": (DATE,),
-    HTML + "match.html": (DATE,),
-    HTML + "live.html": (DATE,),
-    HTML + "mapmaker.html": (DATE,),
-    HTML + "changelog.html": (DATE,),
+    HTML + "matches.html": (BAR,),
+    HTML + "match.html": (BAR,),
+    HTML + "live.html": (BAR,),
+    HTML + "legal.html": (BAR,),
+    HTML + "mapmaker.html": (BAR,),
+    HTML + "changelog.html": (BAR,),
 }
 LINKED = (HTML + "index.js", HTML + "index.js.gz", HTML + "index.wasm", HTML + "index.wasm.gz", HTML + "lvl_core.js", HTML + "lvl_core.wasm")      # the files that a link makes (and the gzip copies of two)
 SIZE_PERCENT = 1                        # by how many percent the size of a linked file may differ (the numbers of functions are LEB128 numbers of a changing length)

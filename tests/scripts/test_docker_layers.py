@@ -203,7 +203,7 @@ class TheWebImage(unittest.TestCase):
 
     def test_the_stamps_go_into_the_game_page_that_the_link_made_not_into_the_template(self):
         stamp = [s for s in self.builder if s.op == "RUN" and "@@BUILD_TIMESTAMP@@" in s.text][0].text
-        self.assertIn("build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html", stamp)
+        self.assertIn("build_web/src/ants_app/index.html web/lobby.html web/matches.html web/match.html web/live.html web/legal.html web/mapmaker.html", stamp)
         self.assertNotIn("web/shell.html", stamp)
         self.assertIn("@@GAME_VERSION@@", stamp)
         self.assertIn("MAPMAKER_VERSION", stamp)
@@ -222,7 +222,7 @@ class TheWebImage(unittest.TestCase):
     def test_the_runner_stage_copies_the_same_builder_outputs_and_runs_as_before(self):
         outputs = sorted(w for s in self.runner if s.op == "COPY" and "from" in s.flags for w in s.words[:-1])
         self.assertEqual(outputs, sorted([
-            "/src/build_web/src/ants_app/index.*", "/src/build_web/lvl_core/lvl_core.js", "/src/build_web/lvl_core/lvl_core.wasm", "/src/lobby.html", "/src/matches.html", "/src/match.html", "/src/live.html",
+            "/src/build_web/src/ants_app/index.*", "/src/build_web/lvl_core/lvl_core.js", "/src/build_web/lvl_core/lvl_core.wasm", "/src/lobby.html", "/src/matches.html", "/src/match.html", "/src/live.html", "/src/legal.html",
             "/src/mapmaker.html", "/src/mapmaker_atlas/", "/src/changelog/changelog.html"]))
         text = self.docker.text[self.docker.text.index("FROM nginx:alpine AS runner"):]
         self.assertEqual(len(re.findall(r"(?m)^USER ", text)), 0)
