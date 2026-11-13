@@ -466,8 +466,6 @@ try {
     {   // the page has no selector, no line and no body attribute of the shape, and nothing a person could press changes the hand-off
         const r = runLobby(lobbyPath, '', {}, { screen: { width: 1440, height: 900 } });
         expect('lobby.html, a laptop that has not picked: the page asked for no element of the picture\'s shape (the fake document throws for any)', r.picked() + '|' + JSON.stringify(r.body.attributes || {}), '|{}');
-        const text = fs.readFileSync(lobbyPath, 'utf8');
-        expect('lobby.html, no Picture row, dropdown or quiet line in the markup', /id="shape-row"|id="aspect-select"|id="fit-note"/.test(text), false);
     }
 
     // ---- A FIRST VISIT: nothing stored that names a shape, no ?aspect= that does: the shape NEAREST the player's screen, the same on both pages, and never stored ----

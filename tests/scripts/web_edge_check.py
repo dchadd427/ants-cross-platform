@@ -52,6 +52,11 @@ PICTURE_W, PICTURE_H = 960, 540                                              # t
 OPTIONS_BUTTON = (845 + 26, 7 + 11)                                          # the Options button of the 16:9 picture (the classic (525, 7, 52, 23) moved by the 320 pixels that the picture is wider), its middle
 
 
+
+def add_probe(tab, box):
+    """A control of the page in the margin under the picture, 24 px below its bottom edge (nothing of the game page stands there now): the page's rule for a pointer over a control is what is tested"""
+    tab.ev("(function () { if (document.getElementById('probe-control')) return; var b = document.createElement('button'); b.id = 'probe-control'; b.textContent = 'probe'; b.style.cssText = 'position:fixed;z-index:5;width:70px;height:26px;left:%dpx;top:%dpx'; document.body.appendChild(b); })(); 1" % (box[0] + box[2] / 2 - 35, box[1] + box[3] + 24))
+
 def wait_for(condition, timeout=4.0, step=0.05):
     deadline = time.time() + timeout
     value = condition()
@@ -434,8 +439,8 @@ def main():
                 expect_gone("margin, beside the box but 120 px below its bottom edge (one axis is far enough)", box, left - 40, bottom + 120)
 
                 # the page's own controls: a pointer over one is on the page, whatever its distance from the box (all of these are inside the margin)
-                for what, selector in (("the picture's dropdown", "#aspect-select"), ("the mouse setting Locked", "#lock-on"),
-                                       ("the mouse setting Free", "#lock-off"), ("a link of the header above the game", "header a.btn"), ("the Fullscreen button of the header", "#fullscreen-btn")):
+                add_probe(tab, box)
+                for what, selector in (("a control of the page in the margin under the box", "#probe-control"), ("a link of the header above the game", "header a.btn"), ("the Fullscreen button of the header", "#fullscreen-btn")):
                     x, y = spot(selector)
                     dx = max(left - x, x - right, 0)
                     dy = max(top - y, y - bottom, 0)
@@ -462,7 +467,7 @@ def main():
                     game.move(cx, cy)
                     time.sleep(0.4)
                 # ... and off the control, back into the plain margin, the map scrolls again
-                x, y = spot("#lock-on")
+                x, y = spot("#probe-control")
                 s0 = game.park(box)
                 game.move(x, y)
                 time.sleep(0.2)
@@ -484,8 +489,8 @@ def main():
                 after = game.state()
                 check(before["out"] == 0 and after["out"] == 0 and after["vy"] > before["vy"] + 40,
                       "the canvas's leave towards the margin that comes AFTER the motion (Safari's and Firefox's order) is not passed on: the pointer stays (%s -> %s) and the view goes on scrolling (%d -> %d)" % (before["out"], after["out"], before["vy"], after["vy"]))
-                lx, ly = spot("#lock-on")
-                tab.ev("document.getElementById('canvas').dispatchEvent(new MouseEvent('mouseleave', {bubbles: false, relatedTarget: document.getElementById('lock-on'), clientX: %d, clientY: %d})); 1" % (lx, ly))
+                lx, ly = spot("#probe-control")
+                tab.ev("document.getElementById('canvas').dispatchEvent(new MouseEvent('mouseleave', {bubbles: false, relatedTarget: document.getElementById('probe-control'), clientX: %d, clientY: %d})); 1" % (lx, ly))
                 time.sleep(0.3)
                 check(game.state()["out"] == 1, "... a leave towards a control is passed on: the pointer is gone")
                 game.move(cx, cy)
@@ -608,7 +613,8 @@ def main():
                 game.move(cx, bottom - 2)
                 time.sleep(0.5)
                 scrolling = game.state()
-                x, y = spot("#lock-on")
+                add_probe(tab, box)
+                x, y = spot("#probe-control")
                 game.move(x, y)
                 time.sleep(0.2)
                 gone = game.state()
@@ -625,34 +631,6 @@ def main():
                 expect_scroll("margin, the top left corner (90 px beyond on both axes)", box, left - 90, top - 90, 0, 0, -1, -1)
                 expect_scroll("margin, the top right corner (90 px beyond on both axes)", box, right + 90, top - 90, PICTURE_W - 1, 0, 1, -1)
                 expect_gone("margin, a corner is a square: 97 px beyond on both axes (top left)", box, left - 97, top - 97)
-
-        if wanted("windowed list"):
-            print("[web edge] the WINDOWED page's open Picture list (1280 x 1500 window: it opens downward, under the box, inside the margin) is the page's: hovering a row is gone for the game")
-            game.open(width=1280, height=1500, storage={})
-            if started("windowed list"):
-                g = game.geometry()
-                box = g["box"]
-                left, top, right, bottom = box[0], box[1], box[0] + box[2], box[1] + box[3]
-                cx, cy = box[0] + box[2] / 2, box[1] + box[3] / 2
-                tab.ev("document.getElementById('aspect-select').click(); 1")
-                time.sleep(0.3)
-                check(tab.ev("document.getElementById('aspect-select').getAttribute('aria-expanded')") == "true", "windowed list: a click on the Picture dropdown opens its list")
-                for row in ("0",):
-                    x, y = spot("#aspect-select-list li:nth-child(%d)" % (int(row) + 1))
-                    dy = y - bottom
-                    check(not (left <= x <= right and top <= y <= bottom) and 0 < dy <= 96, "windowed list: row %s is under the box and inside the margin (%.0f px below its bottom edge): the page's own rule is what is tested" % (row, dy))
-                    s0 = game.park(box)
-                    game.move(x, y)
-                    time.sleep(0.15)
-                    mid = game.state()
-                    time.sleep(0.6)
-                    s1 = game.state()
-                    check(mid["out"] == 1 and abs(s1["vx"] - s0["vx"]) <= 4 and abs(s1["vy"] - s0["vy"]) <= 4,
-                          "windowed list: the pointer over row %s of the open list is gone for the game (%s) and the view stays (%+d, %+d px)" % (row, "gone" if mid["out"] else "STILL HERE", s1["vx"] - s0["vx"], s1["vy"] - s0["vy"]))
-                    check(tab.ev("document.getElementById('aspect-select').getAttribute('aria-expanded')") == "true", "windowed list: the list is still open (a pointer over it closes nothing)")
-                tab.ev("document.getElementById('aspect-select').click(); 1")
-                game.move(cx, cy)
-                time.sleep(0.3)
 
         if wanted("pillar"):
             print("[web edge] a wide screen (2560 x 1080, 21:9) and the classic 4:3 picture on a 1440 x 900 screen: bars at the sides")
@@ -768,7 +746,7 @@ def main():
             tab.ev(SPY)
             if not started("lock"):
                 return
-            check(tab.ev("ANTS_POINTER_LOCK") is True and tab.ev("document.getElementById('lock-on').getAttribute('aria-checked')") == "true", "nothing remembered: Fullscreen mouse is Locked")
+            check(tab.ev("ANTS_POINTER_LOCK") is True and tab.ev("antsLock.get()") is True, "nothing remembered: Fullscreen mouse is Locked")
             g = game.enter_fullscreen(3.0)
             box = g["box"]
             check(g["fullscreen"] and game.locked(), "the click on the Fullscreen button gives the browser's fullscreen AND the pointer lock on the canvas (fullscreen %s, locked %s)" % (g["fullscreen"], game.locked()))
@@ -994,19 +972,38 @@ def main():
             relock_checks()
 
         def setting_checks():
-            print("[web edge] the control under the game (Fullscreen mouse: Locked / Free) and its key")
+            print("[web edge] the settings menu's Fullscreen mouse row (Locked / Free) and its key")
+            row = "Array.prototype.filter.call(document.querySelectorAll('.gm-row'), function (r) { var n = r.querySelector('.gm-name'); return n && n.textContent === 'Fullscreen mouse'; })[0]"
+
+            def in_menu(then):
+                """open the menu at Video, run `then()` and shut the menu (Resume)"""
+                tab.ev("window.antsGameMenuAsk(); 1")
+                time.sleep(0.4)
+                tab.ev("document.getElementById('gm-tab-video').click(); 1")
+                time.sleep(0.3)
+                result = then()
+                tab.ev("document.querySelector('.gm-resume').click(); 1")
+                time.sleep(0.3)
+                return result
+
+            shown = lambda: in_menu(lambda: tab.ev("(function () { var r = %s; return r ? Array.prototype.map.call(r.querySelectorAll('button'), function (b) { return b.getAttribute('aria-checked'); }).join('/') : 'no row'; })()" % row))
+
+            def press(index):
+                def go():
+                    x, y = json.loads(tab.ev("(function () { var b = %s.querySelectorAll('button')[%d].getBoundingClientRect(); return JSON.stringify([b.x + b.width / 2, b.y + b.height / 2, b.width, b.height]); })()" % (row, index)))[:2]
+                    tab.click(x, y)
+                    time.sleep(0.4)
+                in_menu(go)
+
             game.open(storage=None)
             tab.ev("localStorage.clear(); 1")
             tab.open(game.web + "?aspect=16:9", settle=2.5)
-            shown = lambda: tab.ev("[document.getElementById('lock-on').getAttribute('aria-checked'), document.getElementById('lock-off').getAttribute('aria-checked')].join('/')")
             check(shown() == "true/false" and tab.ev("localStorage.getItem('ants.pointerlock')") is None, "a fresh browser: Locked, nothing stored (%s)" % shown())
-            box = tab.ev("(function(){var r = document.getElementById('lock-off').getBoundingClientRect(); return JSON.stringify([r.x + r.width / 2, r.y + r.height / 2, r.width, r.height]);})()")
-            x, y, w, h = json.loads(box)
-            check(w > 20 and h > 20, "the Free button is on the page (%.0f x %.0f px)" % (w, h))
+            size = in_menu(lambda: json.loads(tab.ev("(function () { var b = %s.querySelectorAll('button')[1].getBoundingClientRect(); return JSON.stringify([b.width, b.height]); })()" % row)))
+            check(size[0] > 20 and size[1] > 20, "the Free button is in the menu (%.0f x %.0f px)" % (size[0], size[1]))
             shot("edge_setting_locked")
-            tab.click(x, y)
-            time.sleep(0.4)
-            check(shown() == "false/true" and tab.ev("localStorage.getItem('ants.pointerlock')") == "off", "Free clicked: shown, remembered as 'off' (%s)" % shown())
+            press(1)
+            check(shown() == "false/true" and tab.ev("localStorage.getItem('ants.pointerlock')") == "off", "Free chosen: shown, remembered as 'off' (%s)" % shown())
             tab.open(game.web + "?aspect=16:9", settle=2.5)
             check(shown() == "false/true" and tab.ev("ANTS_POINTER_LOCK") is False, "the next visit comes back Free (%s)" % shown())
             tab.ev(SPY)
@@ -1018,20 +1015,17 @@ def main():
             check(tab.ev("getComputedStyle(document.getElementById('game-stage')).cursor") == "none", "Free: the browser's arrow is hidden over the stage in fullscreen all the same")
             tab.ev("document.exitFullscreen(); 1")
             time.sleep(1.2)
-            lock_button = json.loads(tab.ev("(function(){var r = document.getElementById('lock-on').getBoundingClientRect(); return JSON.stringify([r.x + r.width / 2, r.y + r.height / 2]);})()"))
-            tab.click(lock_button[0], lock_button[1])
-            time.sleep(0.4)
-            check(shown() == "true/false" and tab.ev("localStorage.getItem('ants.pointerlock')") == "on", "Locked clicked again: shown, remembered as 'on' (%s)" % shown())
+            press(0)
+            check(shown() == "true/false" and tab.ev("localStorage.getItem('ants.pointerlock')") == "on", "Locked chosen again: shown, remembered as 'on' (%s)" % shown())
             tab.ev("localStorage.setItem('ants.pointerlock', 'junk'); 1")
             tab.open(game.web + "?aspect=16:9", settle=2.5)
             check(shown() == "true/false", "a stored value that is no choice is Locked (%s)" % shown())
             tab.ev("localStorage.removeItem('ants.pointerlock'); 1")
-            # a phone has no use for it (no hovering pointer): the control is not shown there, and is on a desktop
-            visible = lambda: tab.ev("getComputedStyle(document.getElementById('lock-on').parentElement).display !== 'none' && getComputedStyle(document.getElementById('lock-bar-label')).display !== 'none'")
-            check(visible() is True, "(control) on a desktop window the control is shown")
+            # a phone has no use for it (no hovering pointer): the row is not in the menu there, and is on a desktop
+            check(shown() != "no row", "(control) on a desktop window the row is in the menu")
             tab.emulate(844, 390, 3, True)
             tab.open(game.web + "?aspect=16:9", settle=1.5)
-            check(visible() is False, "a phone (no pointer that hovers) is not shown the control")
+            check(shown() == "no row", "a phone (no pointer that hovers) is not shown the row")
             tab.emulate(1440, 900, 1)
 
         if wanted("setting"):
