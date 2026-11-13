@@ -875,7 +875,7 @@
   {
    "id": "the_names_are_read_for_every_frame",
    "file": "hub/pictures.py",
-   "old": "        if self.seen is None:\n            self.sync()\n        return self.cache.get(ref)",
+   "old": "        return None if ref in self.marks else self.cache.get(ref)",
    "new": "        return self.store.picture_names().get(ref)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheTick"
   },
@@ -896,29 +896,29 @@
   {
    "id": "nopic_is_not_written_to_the_log",
    "file": "hub/admin.py",
-   "old": "note=(TERMINAL, \"nopic\", whom, \"\"))",
-   "new": "note=None)",
+   "old": "setter(SHOW_BLOCKED, (TERMINAL, \"nopic\", whom, \"\"))",
+   "new": "setter(SHOW_BLOCKED, None)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
   },
   {
    "id": "nopic_prints_the_account",
    "file": "hub/admin.py",
-   "old": "out.write(\"%s picture blocked\\n\" % whom)",
-   "new": "out.write(\"%s picture blocked\\n\" % account)",
+   "old": "            whom = ref(store, account)\n            return change_picture(",
+   "new": "            whom = account\n            return change_picture(",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
   },
   {
    "id": "pic_of_an_account_that_is_not_blocked_is_done",
    "file": "hub/admin.py",
-   "old": "            if store.picture_state(account) != SHOW_BLOCKED:\n                err.write(\"hub.admin: the picture of %s was not blocked\\n\" % whom)\n                return 1",
-   "new": "            if False:\n                return 1",
+   "old": "    if state != SHOW_BLOCKED:\n        err.write(\"hub.admin: the picture of %s was not blocked\\n\" % whom)\n        return 1",
+   "new": "    if False:\n        return 1",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
   },
   {
    "id": "pic_does_not_lift_the_block",
    "file": "hub/admin.py",
-   "old": "store.set_picture_show(account, SHOW_ON, operator=True, note=(TERMINAL, \"pic\", whom, \"\"))",
-   "new": "store.set_picture_show(account, SHOW_ON, operator=False, note=(TERMINAL, \"pic\", whom, \"\"))",
+   "old": "store.set_picture_show(account, show, operator=True, note=note)",
+   "new": "store.set_picture_show(account, show, operator=False, note=note)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
   },
   {
@@ -934,6 +934,118 @@
    "old": "format(marks.count(SHOW_OFF), \",\"), format(marks.count(SHOW_BLOCKED), \",\")",
    "new": "format(marks.count(SHOW_BLOCKED), \",\"), format(marks.count(SHOW_OFF), \",\")",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "the_switch_limit_is_per_socket",
+   "file": "hub/chat.py",
+   "old": "self.pics_limits.take(self.key_of(who.account_id), self.clock())",
+   "new": "self.pics_limits.take(id(peer), self.clock())",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "a_cut_time_is_not_counted",
+   "file": "hub/store/sqlite.py",
+   "old": "            elif self.db.execute(\"UPDATE pictures SET until = ? WHERE ref = ? AND until > ?\", (live, self.ref(account), live)).rowcount:\n                self.count_picture_change()",
+   "new": "            elif self.db.execute(\"UPDATE pictures SET until = ? WHERE ref = ? AND until > ?\", (live, self.ref(account), live)).rowcount:\n                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "no_look_after_the_switch",
+   "file": "hub/chat.py",
+   "old": "        try:\n            self.pictures.sync()\n        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)",
+   "new": "        try:\n            pass\n        except StoreError as e:\n            self.trouble(peer, e, PICS_REFUSED)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheAtOnce"
+  },
+  {
+   "id": "no_look_after_a_ban",
+   "file": "hub/chat.py",
+   "old": "            self.remove(self.sockets_of(target), \"banned\")\n            self.sync_pictures()",
+   "new": "            self.remove(self.sockets_of(target), \"banned\")",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheAtOnce"
+  },
+  {
+   "id": "no_look_after_the_fetch",
+   "file": "hub/pictures.py",
+   "old": "        self.sync()\n\n    def forget_idle",
+   "new": "        pass\n\n    def forget_idle",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheAtOnce"
+  },
+  {
+   "id": "a_purged_mark_is_not_counted",
+   "file": "hub/store/sqlite.py",
+   "old": "            if gone_pictures:\n                self.count_picture_change()",
+   "new": "            if gone_pictures:\n                pass",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_kick_or_a_ban_fails_when_the_look_is_refused",
+   "file": "hub/chat.py",
+   "old": "            except StoreError as e:\n                if self.on_store_error:\n                    self.on_store_error(e)\n",
+   "new": "            except ZeroDivisionError as e:\n                pass\n",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheStoreRefusing"
+  },
+  {
+   "id": "an_unchanged_switch_is_not_answered",
+   "file": "hub/chat.py",
+   "old": "        if state == before:",
+   "new": "        if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "an_unchanged_switch_is_answered_to_the_account",
+   "file": "hub/chat.py",
+   "old": "            peer.send_text(dumps({\"t\": \"you\", \"you\": self.you_of(who)}))\n\n    @staticmethod\n    def parse(line):",
+   "new": "            self.picture_changed({self.ref(who.account_id)})\n\n    @staticmethod\n    def parse(line):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheSwitch"
+  },
+  {
+   "id": "the_first_look_of_a_refusing_database_drops_the_handshake",
+   "file": "hub/pictures.py",
+   "old": "            except StoreError:\n                pass\n\n    def name_of",
+   "new": "            except ZeroDivisionError:\n                pass\n\n    def name_of",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheStoreRefusing"
+  },
+  {
+   "id": "a_hidden_picture_is_named_by_a_look_that_disagrees",
+   "file": "hub/pictures.py",
+   "old": "        return None if ref in self.marks else self.cache.get(ref)",
+   "new": "        return self.cache.get(ref)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheEnds tests.scripts.test_hub_pictures_frames.TheYou"
+  },
+  {
+   "id": "a_block_is_not_found_by_its_reference",
+   "file": "hub/admin.py",
+   "old": "if args.command in (\"nopic\", \"pic\") and pseudo.REFERENCE.match(args.account) and store.picture_state_by_reference(args.account) is not None:",
+   "new": "if False:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "a_block_is_not_lifted_by_its_reference",
+   "file": "hub/store/sqlite.py",
+   "old": "        return self.set_show(reference, show, operator, note)",
+   "new": "        return self.set_show(reference, show, False, note)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract tests.scripts.test_hub_pictures_frames.TheOperator"
+  },
+  {
+   "id": "a_reference_that_has_no_row_makes_one",
+   "file": "hub/store/sqlite.py",
+   "old": "        if self.picture_state_by_reference(reference) is None:\n            return None\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "a_note_is_written_when_nothing_changed",
+   "file": "hub/store/sqlite.py",
+   "old": "            if show == now_in:\n                return show",
+   "new": "            if show == now_in:\n                self.write_note(note)\n                return show",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_store_contract.SqliteContract"
+  },
+  {
+   "id": "the_switch_buckets_are_never_forgotten",
+   "file": "hub/server.py",
+   "old": "            self.chat.pics_limits.forget_idle(now)\n",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_server.TheHubTidiesTheLimits"
   }
  ]
 }

@@ -31,7 +31,7 @@ import hub_rig  # noqa: E402
 import test_hub_pictures as T  # noqa: E402
 import test_hub_roles as R  # noqa: E402
 from hub import admin, pseudo  # noqa: E402
-from hub.store import base  # noqa: E402
+from hub.store import StoreError, base  # noqa: E402
 
 ACCOUNT, OTHER, THIRD = T.ACCOUNT, T.OTHER, T.THIRD
 MOD, ADMIN = fd.snowflake(650), fd.snowflake(640)
@@ -261,6 +261,36 @@ class TheSwitch(FrameTest):
         d.send(pics(False))                                                             # (another account has its own allowance)
         self.assertEqual(self.you_frames(d)[-1]["you"]["pics"], "off")
 
+    def test_the_limit_is_the_accounts_and_not_a_sockets(self):
+        v, c = self.member()
+        d = self.socket(v)
+        for on in (False, True, False):
+            c.send(pics(on))
+            self.you_frames(c, settle=0.3)
+        d.drain(0.3)
+        d.send(pics(True))                                                              # (the account's other socket: the fourth switch of the account)
+        self.assertEqual(d.recv_reply(), {"t": "err", "code": "pics"})
+        e = self.socket(self.login())                                                   # (and a new login of the account)
+        e.send(pics(True))
+        self.assertEqual(e.recv_reply(), {"t": "err", "code": "pics"})
+        self.assertEqual(self.store("picture_state", ACCOUNT), base.SHOW_OFF)
+
+    def test_a_switch_to_the_state_the_account_is_in_is_answered_to_the_asking_socket_only_and_costs_a_token(self):
+        v, c = self.member()
+        d = self.socket(v)
+        name = self.name()
+        c.send(pics(True))                                                              # (it is on already)
+        answer = c.recv_reply()
+        self.assertEqual((answer["t"], answer["you"]["pics"], answer["you"]["pic"]), ("you", "on", name))
+        self.assertEqual([m for m in d.drain(0.5) if m["t"] != "online"], [])             # (nothing changed: the account's other socket is told nothing)
+        c.send(pics(True))
+        self.assertEqual(c.recv_reply()["t"], "you")
+        c.send(pics(True))
+        self.assertEqual(c.recv_reply()["t"], "you")
+        c.send(pics(True))
+        self.assertEqual(c.recv_reply(), {"t": "err", "code": "pics"})                  # (a token was spent for each of the three)
+        self.assertEqual((self.store("picture_state", ACCOUNT), [r[2] for r in self.kept()]), (base.SHOW_ON, [name]))
+
     def test_a_block_stays_and_a_person_cannot_lift_it_and_it_wins_over_a_login_and_forget_me(self):
         v, c = self.member()
         name = self.name()
@@ -288,13 +318,94 @@ class TheSwitch(FrameTest):
         c.send(raw(dict({"t": "who"}, **forged)))
         c.send(raw(dict({"t": "ping"}, **forged)))
         c.send(raw(dict({"t": "pick", "pick": "username"}, **forged)))
-        frames = c.drain(1.0)
-        line = next(m for m in frames if m["t"] == "line")
+        line = c.wait_line()                                                              # (the line that must arrive: waited for)
         self.assertEqual(sorted(line), ["at", "id", "k", "mod", "t", "text", "who"])
-        self.assertNotIn("you", [m["t"] for m in frames])
+        self.assertNotIn("you", [m["t"] for m in c.drain(0.6)])
         self.assertEqual((self.store("picture_state", ACCOUNT), [r[2] for r in self.kept()]), (base.SHOW_ON, [name]))
         row = self.row_of(self.socket(), "maple.leaf")
         self.assertEqual(row["pic"], name)
+
+
+class TheAtOnce(FrameTest):
+    """With the hub's clock set to 30 seconds, what the hub does itself is told within seconds: the tick does not hide a missing look."""
+
+    limits = dict(FAST, tick_seconds=30.0)
+
+    def test_the_switch_is_told_at_once(self):
+        v, c = self.member()
+        c.send(pics(False))
+        frame = R.wait_frames(c, "you", 0.3, 3.0)[-1]["you"]
+        self.assertEqual((frame["pics"], "pic" in frame), ("off", False))
+
+    def test_a_fetch_that_ends_is_told_at_once_and_a_page_that_opens_after_it_reads_the_name(self):
+        self.fake.cdn_mode = "slow:0.5"
+        v = self.login()
+        c = self.socket(v)
+        self.assertNotIn("pic", c.welcome["you"])
+        frame = R.wait_frames(c, "you", 0.3, 3.0)[-1]["you"]
+        self.assertEqual(frame["pic"], self.name())
+        self.assertEqual(self.socket(v).welcome["you"]["pic"], frame["pic"])
+
+    def test_a_banned_person_who_connects_again_at_once_is_not_told_the_deleted_name(self):
+        v, c = self.member()
+        boss = self.socket(self.login((ADMIN, "admin.one")))
+        boss.send(hc.say("/ban maple.leaf"))
+        self.assertIn({"t": "ok", "c": "ban"}, R.wait_frames(boss, "ok", 0.3, 5.0))
+        again = self.socket(v)
+        self.assertEqual({k: x for k, x in again.welcome["you"].items() if k in ("pic", "pics")}, {"pics": "on"})
+        me = v.call("GET", "/hub/me").json()["you"]
+        self.assertEqual(("pic" in me, me["pics"]), (False, "on"))
+
+
+class TheStoreRefusing(FrameTest):
+    limits = dict(FAST, tick_seconds=30.0)
+
+    def refuse_the_next_look(self):
+        store = self.rig.store
+        real, state = store.last_picture_change, {"n": 0}
+
+        def refusing(*args, **kwargs):
+            if state["n"] == 0:
+                state["n"] = 1
+                raise StoreError("canary-db-text")
+            return real(*args, **kwargs)
+        self.rig.call(lambda: setattr(store, "last_picture_change", refusing))
+
+    def test_a_kick_whose_look_is_refused_is_done_and_has_its_line_and_its_answer(self):
+        self.member(user=(OTHER, "other.one"))
+        mod = self.socket(self.login((MOD, "mod.one")))
+        self.refuse_the_next_look()
+        mod.send(hc.say("/kick other.one"))
+        frames = R.wait_frames(mod, "ok", 0.4, 10.0)
+        self.assertIn({"t": "ok", "c": "kick"}, frames)
+        self.assertIn("other.one was kicked.", [m.get("text") for m in frames if m["t"] == "line"])
+        self.assertNotIn({"t": "err", "code": "bad"}, frames)
+        self.assertEqual(self.kept_for(OTHER), [])
+        self.assertNotIn("canary-db-text", self.log())
+
+    def test_a_ban_whose_look_is_refused_is_done_and_has_its_line_and_its_answer(self):
+        self.member(user=(OTHER, "other.one"))
+        boss = self.socket(self.login((ADMIN, "admin.one")))
+        self.refuse_the_next_look()
+        boss.send(hc.say("/ban other.one"))
+        frames = R.wait_frames(boss, "ok", 0.4, 10.0)
+        self.assertIn({"t": "ok", "c": "ban"}, frames)
+        self.assertIn("other.one was banned.", [m.get("text") for m in frames if m["t"] == "line"])
+        self.assertEqual(self.kept_for(OTHER), [])
+
+    def test_before_the_first_look_a_refusing_database_leaves_a_member_a_welcome_and_me_an_answer(self):
+        self.fake.avatar = None
+        store = self.rig.store
+
+        def refusing(*args, **kwargs):
+            raise StoreError("canary-db-text")
+        self.rig.call(lambda: setattr(store, "last_picture_change", refusing))
+        v = self.login()
+        c = self.socket(v)
+        self.assertEqual({k: x for k, x in c.welcome["you"].items() if k in ("pic", "pics")}, {"pics": "on"})
+        r = v.call("GET", "/hub/me")
+        self.assertEqual((r.status, r.json()["you"]["pics"]), (200, "on"))
+        self.assertNotIn("canary-db-text", self.log())
 
 
 class TheEnds(FrameTest):
@@ -330,6 +441,15 @@ class TheEnds(FrameTest):
         self.login((ACCOUNT, "maple.leaf"))
         time.sleep(0.6)
         self.assertEqual((len(self.asked()), self.kept_for(ACCOUNT)), (asked, []))
+
+    def test_a_look_never_names_a_picture_that_the_same_look_says_is_hidden(self):
+        v, c = self.member()
+        pictures, ref = self.rig.hub.sessions.pictures, self.ref()
+        name = self.name()
+        self.rig.call(lambda: (setattr(pictures, "cache", {ref: name}), setattr(pictures, "marks", {ref: base.SHOW_BLOCKED})))      # (two lists that disagree, as a torn look would give)
+        you = self.rig.call(lambda: self.rig.hub.chat.you_of(next(p.identity for p in self.rig.hub.chat.peers if p.identity is not None)))
+        self.assertEqual(("pic" in you, you["pics"]), (False, "blocked"))
+        self.assertIsNone(self.rig.call(pictures.name_of, ref))
 
     def test_every_kind_of_socket_gets_no_id_hash_reference_or_code_in_any_frame(self):
         v, c = self.member()
@@ -372,6 +492,8 @@ class TheOperator(FrameTest):
     def run_admin(self, *argv):
         out, err = io.StringIO(), io.StringIO()
         code = admin.run(["--db", self.rig.db] + list(argv), out=out, err=err)
+        for account in (ACCOUNT, OTHER, THIRD, MOD, ADMIN):
+            self.assertNotIn(account, out.getvalue() + err.getvalue(), "a command printed an id")        # (the reference is what is printed, in the answer and in the refusals)
         return code, out.getvalue(), err.getvalue()
 
     def test_nopic_blocks_the_picture_at_once_and_pic_lifts_it_and_the_log_says_so_by_reference_only(self):
@@ -393,6 +515,30 @@ class TheOperator(FrameTest):
         self.assertEqual(self.you_frames(c)[-1]["you"]["pics"], "on")
         self.assertEqual(self.run_admin("pic", ref)[0], 1)
         self.assertIn(" pic    by terminal to %s" % ref, self.run_admin("log")[1])
+
+    def test_the_refusals_say_the_reference_and_never_the_id(self):
+        self.member()
+        ref = self.ref()
+        self.run_admin("nopic", "@maple.leaf")
+        code, out, err = self.run_admin("nopic", ref)
+        self.assertEqual((code, out, err), (1, "", "hub.admin: the picture of %s is blocked already\n" % ref))
+        self.run_admin("pic", ref)
+        code, out, err = self.run_admin("pic", "@maple.leaf")
+        self.assertEqual((code, out, err), (1, "", "hub.admin: the picture of %s was not blocked\n" % ref))
+
+    def test_a_block_is_lifted_by_its_reference_after_forget_me_when_nothing_else_names_the_account(self):
+        v, c = self.member()
+        ref = self.ref()
+        self.run_admin("nopic", "@maple.leaf")
+        self.assertEqual(v.call("POST", "/hub/forget").status, 200)
+        self.assertEqual(self.store("picture_state", ACCOUNT), base.SHOW_BLOCKED)
+        self.assertEqual(self.run_admin("pic", "@maple.leaf")[0], 1)                      # (no profile any more: the name finds nobody)
+        code, out, err = self.run_admin("pic", ref)
+        self.assertEqual((code, out, err), (0, "%s picture is no longer blocked\n" % ref, ""))
+        self.assertEqual(self.store("picture_state", ACCOUNT), base.SHOW_ON)
+        self.assertIn(" pic    by terminal to %s" % ref, self.run_admin("log")[1])
+        code, out, err = self.run_admin("nopic", ref)                                      # (a reference that no row of the pictures has is found the usual way: here nothing names it)
+        self.assertEqual(code, 1)
 
     def test_a_block_survives_the_switch_a_login_and_forget_me_and_only_the_operator_lifts_it(self):
         self.member()
