@@ -149,7 +149,7 @@ class TheFolderAndTheScript(unittest.TestCase):
         self.assertNotRegex(self.code, r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\b|new Function|srcdoc|createContextualFragment|DOMParser|setTimeout\(\s*['\"]")
         self.assertNotRegex(self.code, r"\.href\b|\.src\b|setAttribute\(\s*['\"](href|src|style|on\w+|srcdoc)")
         made = sorted(set(re.findall(r"\bel\('(\w+)'", self.code)))
-        self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "input", "p", "section", "span"], "no a, img, script, iframe, style or link: the dock makes text and boxes")
+        self.assertEqual(made, ["bdi", "button", "div", "form", "h2", "i", "p", "section", "span", "textarea"], "no a, img, script, iframe, style or link: the dock makes text and boxes")
         self.assertEqual(self.code.count("createElement"), 1, "one place makes elements")
         self.assertIn("if (text !== undefined) e.textContent = text;", self.js)
 
@@ -286,6 +286,19 @@ class TheStyle(unittest.TestCase):
     def test_a_narrow_or_a_low_window_gives_the_log_its_room(self):
         self.assertIn("@media (max-width: 359px) { .gc-head { gap: 6px; } .gc-title { font-size: 19px; white-space: nowrap; } .gc-online { gap: 6px; font-size: 13px; } }", self.css, "the heading and the count on one line at 320 px")
         self.assertIn("@media (max-height: 700px) { .gc-guest { display: none; } }", self.css, "in a short window the guest line gives its place to the log")
+
+    def test_the_script_and_the_style_sheets_agree_on_what_a_phone_upright_is_and_how_tall_the_box_grows(self):
+        """a number that two programs must agree on (the one place where this file reads the style as text): the media query and the sizes that chat.js uses to set the text area's height are the ones that talk.css and chat.css draw"""
+        js = read("web", "home", "chat.js")
+        query = re.search(r"var UPRIGHT = '([^']+)', ROW = (\d+), LINE = (\d+);", js)
+        self.assertIsNotNone(query)
+        talk = read("web", "home", "talk.css")
+        self.assertIn("@media " + query.group(1) + " {", talk, "the box's own media query")
+        self.assertIn("@media " + query.group(1) + " {", self.css, "the smaller page's media query")
+        row, line = int(query.group(2)), int(query.group(3))
+        self.assertIn("min-height: %dpx;" % row, talk)
+        self.assertIn("max-height: %dpx;" % (row + 3 * line), talk, "one row, and three more lines of the same height: four lines")
+        self.assertIn("line-height: %dpx;" % line, talk)
 
     def test_the_input_is_16_px_so_that_a_phone_does_not_zoom_into_it(self):
         self.assertIn("font-size: 16px;", self.rule(".gc-input"))
@@ -532,7 +545,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/home_chat_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the
     copy with nothing changed must pass"""
-    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
+    FILES = (["tools/size_limits.py", "web/lobby.html", "web/rejoin_key.js", "web/front/player_name.js", "web/shapes.js", "web/home/home.js", "web/home/home.css", "web/home/chat.js", "web/home/chat.css", "web/home/talk.css", "web/home/players.css", "web/home/players.js", "tests/scripts/test_web_home_chat.py", "tests/scripts/test_hub_text.py", "tests/scripts/web_home_chat_check.js",
               "tests/scripts/web_home_chat_hub_check.js", "tests/scripts/web_page_harness.js", "tests/scripts/fake_hub.js", "tests/scripts/mini_websocket.js", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml",
               "docs/HOME_SCREEN.md", "hub/__init__.py", "hub/text.py", "web/matches.html", "web/live.html", "web/match.html", "web/legal.html", "web/mapmaker.html", "web/shell.html", "web/admin.html"]
              + ["web/front/" + n for n in ("lobby_rules.js", "lobby_net.js", "lobby_chat.js", "lobby_chat.css", "rematch.js", "game_modes.js", "game_type.js", "map_picker.js", "map_maker_link.js")])

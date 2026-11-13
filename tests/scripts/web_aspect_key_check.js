@@ -1,15 +1,14 @@
 // Runs the pages' OWN code that decides the shape of the picture and remembers the player's choice, on a table of addresses and of what a browser had remembered
 // (web/shell.html: everything between ANTS_PAGE_BEGIN and ANTS_PAGE_END, and the selector's block; web/lobby.html, the front page: its helpers, the table of the shapes, the block of the picture's
-// shape, the selector's listener, and the functions that build the addresses of its hand-offs: the Rejoin / START address of a lobby (rejoinQuery) and the address of a game on this computer (localGameQuery)).
+// shape, and the functions that build the addresses of its hand-offs: the Rejoin / START address of a lobby (rejoinQuery) and the address of a game on this computer (localGameQuery)).
 // A first visit (nothing under the key `ants.aspect.v2` that names a shape, and no ?aspect= that does) starts in the shape NEAREST the player's screen (AntsShapes.firstVisit; 16:9 for a phone held upright
-// and for a screen that cannot be asked), the same on both pages and never stored: only the choice of the selector (the key) or ?aspect= in the address ends it. Both pages have every shape of the
-// table (4:3, 3:2, 16:10, 16:9, 20:9, 21:9, 32:9) as a dropdown with one entry for each row (the shape and its canvas): the front page's is a native one that web/shapes.js fills, the game page's two are made
-// by web/shape_picker.js (a button and a list that works in fullscreen; its own check is web_shape_picker_check.js, and a fake of it stands here), with the quiet line "16:10 fills your screen" under it for the shape
-// nearest to the computer's screen (within 8 per cent). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
-// starts with the first visit's shape once), and the selectors write the new key and nothing else. The game page's selector changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
+// and for a screen that cannot be asked), the same on both pages and never stored: only a choice in the game (its settings menu, or a recording's Picture window; the key) or ?aspect= in the address ends it.
+// The game page has every shape of the table (4:3, 3:2, 16:10, 16:9, 20:9, 21:9, 32:9) in a dropdown with one entry for each row (the shape and its canvas) in the recording's Picture window, made by web/shape_picker.js
+// (a button and a list that works in fullscreen; its own check is web_shape_picker_check.js, and a fake of it stands here), with the quiet line "16:10 fills your screen" under it for the shape nearest to the
+// computer's screen (within 8 per cent); the settings menu makes its own (web_game_menu_check.js). A Classic 4:3 that the first versions of the pages remembered under `ants.aspect` is NOT read any more (every browser
+// starts with the first visit's shape once), and only the game page writes the new key. A choice changes the picture AT ONCE, in the running game (no reload, no question, the room and the seat
 // stay): what it stores, tells the game (ants_set_aspect), puts in the address and shows is checked here on a page of fakes; "fills your screen" and the shapes' boxes too.
-// The front page's selector (the lobby is the page's only mode) keeps the match and the room, changes the shape of the page at once, remembers it, and the address of the hand-off to the game
-// (START, Rejoin, a game for one) carries it (`aspect=`).
+// The front page has NO control for the shape: it reads what the address or the browser holds and the address of the hand-off to the game (START, Rejoin, a game for one) carries it (`aspect=`) only then.
 // tests/scripts/test_web_aspect_default.py runs this with node (the quick tier); tests/scripts/web_aspect_check.py is the opt-in check in a real browser.
 // usage: node web_aspect_key_check.js web/shell.html web/lobby.html     (exit 0: every row holds; every differing row is printed)
 'use strict';
@@ -85,19 +84,6 @@ function element(attributes) {
     return el;
 }
 
-// a dropdown (a <select>) as a browser has it for the page's code: the page fills it from the table (fillSelect makes the options with the document's createElement), its `value` is the chosen entry,
-// and the person's choice is a new value and a `change` event. Key events are listened to for the page's own reasons (the game's window listener must not see a dropdown's keys).
-function fakeSelect() {
-    const select = {
-        options: [],
-        listeners: {},
-        value: '',
-        appendChild(option) { select.options.push(option); return option; },
-        addEventListener(type, fn) { (select.listeners[type] = select.listeners[type] || []).push(fn); },
-        fire(type, event) { (select.listeners[type] || []).forEach((fn) => fn(event || {})); },
-    };
-    return select;
-}
 // the game page's pickers (web/shape_picker.js, which its own check runs): the page makes them from the table into two hosts, shows each the shape that the picture has and is told of a pick by `onPick`; a picker says nothing
 // when the shape that it shows is chosen again (tests/scripts/web_shape_picker_check.js), so `choose` is the person's, and the page's own function is `opts.onPick` (what `press` calls: a pick of any shape, the shown one too)
 function fakePickers() {
@@ -105,13 +91,6 @@ function fakePickers() {
     return { made, create(shapes, opts) { const picker = { shapes, opts, shown: opts.value, set(name) { picker.shown = name; }, choose(shape) { if (shape !== picker.shown) opts.onPick(shape); } }; made.push(picker); return picker; } };
 }
 const fakeCreate = (tag) => { if (tag !== 'option') throw new Error('the page made a <' + tag + '>'); return {}; };
-// the person chooses another entry: the dropdown has the new value and says `change` (choosing the entry that is shown says nothing: no event)
-function choose(select, shape) { select.value = shape; select.fire('change'); }
-function pick(r, shape) { choose(r.select, shape); }
-const shown = (r) => r.select.value;
-// what a dropdown has after the page filled it: the shapes of the table, in its order, each as an entry with its words and its canvas
-const ENTRIES = AntsShapes.rows.map((row) => [row.name, row.label + ' \u00b7 ' + row.width + ' x ' + row.height]);
-
 const SHELL_SHAPES = AntsShapes.names();                                         // the game page's dropdown, from the narrowest shape to the widest
 
 // web/shell.html: returns what the page decides and the dropdowns of its selector (the strip under the game and the replay's Picture window), with the quiet line under each
@@ -125,17 +104,14 @@ function runShell(path, search, stored, options) {
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner, options && options.framed);
     win.AntsReplay = { fileOf() { return 'ants-TEST-20260101-000000Z.antsrep'; }, liveIdOf() { return 'LIVE-1'; } };         // (replay_page.js: only a spectator's address asks for it)
     const stage = element({ 'data-aspect': '16:9' });
-    const hosts = [element(), element()];                                           // (where the strip under the game and the replay's Picture window get their dropdowns)
+    const hosts = [element()];                                                      // (where the replay's Picture window gets its dropdown)
     const makers = fakePickers();
-    const notes = [element(), element()];
+    const notes = [element()];
     notes.forEach((note) => { note.hidden = true; });                               // (the markup hides every line: the script shows them)
-    const viewBar = element();
-    viewBar.classes = [];
-    viewBar.classList = { add(name) { viewBar.classes.push(name); }, contains(name) { return viewBar.classes.indexOf(name) !== -1; } };
     const body = element();
     const doc = {
         body,
-        getElementById(id) { if (id === 'game-stage') return stage; if (id === 'view-bar') return viewBar; if (id === 'aspect-pick') return hosts[0]; if (id === 'pic-pick') return hosts[1]; throw new Error('the page asked for #' + id); },
+        getElementById(id) { if (id === 'game-stage') return stage; if (id === 'pic-pick') return hosts[0]; throw new Error('the page asked for #' + id); },
         createElement: fakeCreate,
         querySelectorAll(selectorText) { if (selectorText === '.fit-note') return notes; throw new Error('the page asked for ' + selectorText); },
     };
@@ -162,19 +138,18 @@ function runShell(path, search, stored, options) {
     result.hosts = hosts;
     result.pickers = makers.made;
     result.notes = notes;
-    result.viewBar = viewBar;
     result.events = events;
-    result.press = (shape) => makers.made[0].opts.onPick(shape);                  // (a pick of the strip's dropdown, as the page is told of it)
+    result.press = (shape) => makers.made[0].opts.onPick(shape);                  // (a pick of the Picture window's dropdown, as the page is told of it)
     // (read when asked: what the dropdowns show and what the quiet line says change as they are used)
     Object.defineProperty(result, 'checked', { get() { return makers.made.map((picker) => picker.shown).join('+'); } });
-    Object.defineProperty(result, 'tags', { get() { const said = notes.map((note) => (note.hidden ? '' : note.textContent)); return said[0] === said[1] ? said[0].replace(/ fills your screen$/, '') : 'THE TWO LINES DIFFER: ' + said.join(' | '); } });
+    Object.defineProperty(result, 'tags', { get() { const said = notes.map((note) => (note.hidden ? '' : note.textContent)); return said[0].replace(/ fills your screen$/, ''); } });
     return result;
 }
 // what the slot's CSS reads of each shape: its steps (the shape in the smallest whole numbers) and the widest the slot gets (the classic picture is not shown wider than 960 CSS pixels)
 const SLOT_VARS = Object.fromEntries(AntsShapes.rows.map((row) => [row.name, { '--ar-w': String(row.stepW), '--ar-h': String(row.stepH), '--stage-max': row.slot + 'px' }]));
 // ... which for the shapes of the table is: the classic picture is 960 CSS pixels wide at most, the others the page's 1280, and the widest canvas, 32:9, its own 1920 (a monitor shows it at 1x)
 const SLOT_RULE = { '4:3': ['4', '3', '960px'], '3:2': ['3', '2', '1280px'], '16:10': ['8', '5', '1280px'], '16:9': ['16', '9', '1280px'], '20:9': ['20', '9', '1280px'], '21:9': ['7', '3', '1280px'], '32:9': ['32', '9', '1920px'] };
-const checkedString = (shape) => shape + '+' + shape;                              // (the two dropdowns of the game page show the same shape)
+const checkedString = (shape) => shape;                                            // (the game page's dropdown shows the shape that the picture has)
 const tagOf = (shape) => (shape ? AntsShapes.rowOf(shape).label : '');             // (the quiet line says the shape's words: "Classic 4:3 fills your screen")
 
 // web/lobby.html.
@@ -186,39 +161,26 @@ function runLobby(path, search, stored, options) {
     const shapes = between(text, 'SHAPES_BEGIN', 'SHAPES_END', path);
     const shape = between(text, 'SHAPE_BEGIN', 'SHAPE_END', path);
     const rejoin = between(text, 'REJOIN_BEGIN', 'REJOIN_END', path);
-    const selector = between(text, 'SELECTOR_BEGIN', 'SELECTOR_END', path);
     const rules = require(nodePath.resolve(nodePath.dirname(path), 'front', 'lobby_rules.js'));       // (what the page reads its maps, its default map and codeText from)
     const storage = makeStorage(stored);
     const win = makeWindow(search, storage, !(options && options.decline), options && options.screen, options && options.inner, options && options.framed);
     if (options && options.noScreen) win.screen = undefined;                          // a window that has no screen to ask
-    const select = fakeSelect();
     const body = element();
-    // the Picture row: its dropdown, and the quiet line under it (hidden until the page shows it)
-    const note = element();
-    note.hidden = true;
-    const doc = {
+    const doc = {                                                                     // (the page has no control for the shape: it asks for no element of it)
         body,
         createElement: fakeCreate,
-        getElementById(id) {
-            if (id === 'aspect-select') return select;
-            if (id === 'fit-note') return note;
-            throw new Error('the page asked for #' + id);
-        },
+        getElementById(id) { throw new Error('the page asked for #' + id); },
     };
     // handoff: the address of the game page that START (and the Rejoin button) open, built as the page builds it, with the page's `aspect` as it is NOW (onStarting and the Rejoin button pass the variable);
     // solo: the address of a game for one on this computer (startAlone passes the variable too)
     const code = 'var DEFAULT_MAP_KEY = Rules.DEFAULT_MAP_KEY; var mapByKey = Rules.mapByKey; var codeText = Rules.codeText;\n'
-        + helpers + shapes + fill + lobby + shape + rejoin + selector
-        + '\nreturn { aspect: aspect, key: ASPECT_KEY, now: function () { return aspect; },'
+        + helpers + shapes + fill + lobby + shape + rejoin
+        + '\nreturn { key: ASPECT_KEY,'
         + ' handoff: function (code, seat, name) { return rejoinQuery({ room: code, seat: seat }, name, pickedShape); }, solo: function (name) { return localGameQuery(DEFAULT_MAP_KEY, [], name, pickedShape); }, picked: function () { return pickedShape; } };';
     const result = new Function('window', 'document', 'Rules', code)(win, doc, rules);
     result.storage = storage;
     result.win = win;
-    result.select = select;
-    result.note = note;
     result.body = body;
-    // (read when asked) the words of the quiet line under the dropdown, '' while it is hidden
-    Object.defineProperty(result, 'tags', { get() { return note.hidden ? '' : note.textContent.replace(/ fills your screen$/, ''); } });
     return result;
 }
 
@@ -292,7 +254,7 @@ try {
         expect('shell.html, ' + label + ' (the slot\'s custom properties)', JSON.stringify(r.body.style.props), JSON.stringify(SLOT_VARS[aspect]));
         expect('shell.html, ' + label + ' (... which are the rule: the shape\'s steps, and 960 / 1280 / its canvas\'s width as the widest slot)', Object.values(r.body.style.props).join(' '), SLOT_RULE[aspect].join(' '));
         expect('shell.html, ' + label + ' (the dropdowns show it)', r.checked, checkedString(aspect));
-        expect('shell.html, ' + label + ' (two dropdowns are made from the page\'s table, one in each host, named and described by the page\'s own words, each showing the chosen shape)', JSON.stringify(r.pickers.map((picker) => [picker.shapes === AntsShapes, picker.opts.host === (picker.opts.id === 'aspect-select' ? r.hosts[0] : r.hosts[1]), picker.opts.id, picker.opts.labelledBy, picker.opts.describedBy, picker.opts.value, typeof picker.opts.onPick])), JSON.stringify([[true, true, 'aspect-select', 'view-bar-label', 'fit-note', aspect, 'function'], [true, true, 'pic-select', 'picpop-h', 'pic-note', aspect, 'function']]));
+        expect('shell.html, ' + label + ' (the Picture window\'s dropdown is made from the page\'s table, in its host, named and described by the page\'s own words, showing the chosen shape; the page makes no other)', JSON.stringify(r.pickers.map((picker) => [picker.shapes === AntsShapes, picker.opts.host === r.hosts[0], picker.opts.id, picker.opts.labelledBy, picker.opts.describedBy, picker.opts.value, typeof picker.opts.onPick])), JSON.stringify([[true, true, 'pic-select', 'picpop-h', 'pic-note', aspect, 'function']]));
         expect('shell.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('shell.html, the key', r.key, NEW_KEY);
     }
@@ -363,7 +325,6 @@ try {
         const r = runShell(shellPath, '', {}, { screen: { width: w, height: h } });
         expect('shell.html, the line on a ' + w + ' x ' + h + ' screen', r.tags, tagOf(shape));
         expect('shell.html, the line on a ' + w + ' x ' + h + ' screen: the words', r.notes[0].hidden ? 'hidden' : r.notes[0].textContent, shape ? tagOf(shape) + ' fills your screen' : 'hidden');
-        expect('shell.html, the line on a ' + w + ' x ' + h + ' screen: the bar makes room for it', r.viewBar.classes.join(' '), shape ? 'has-fit-note' : '');
         expect('shell.html, the line on a ' + w + ' x ' + h + ' screen: the shape that is shown is the screen\'s nearest, with or without a line', r.checked, checkedString(first));
     }
     {
@@ -374,7 +335,7 @@ try {
     }
     {
         const r = runShell(shellPath, '', {}, { screen: { get width() { throw new Error('no screen'); }, height: 900 } });   // (a browser that refuses to say: no tag, the selector works)
-        expect('shell.html, a screen that cannot be asked: no line, no breakage', r.tags + '|' + r.viewBar.classes.join(' ') + '|' + r.notes.map((n) => n.hidden).join(), '||true,true');
+        expect('shell.html, a screen that cannot be asked: no line, no breakage', r.tags + '|' + r.notes.map((n) => n.hidden).join(), '|true');
         r.press('16:10');
         expect('shell.html, ... and the selector still works', r.aspect + ' ' + r.now(), '16:9 16:10');
     }
@@ -490,13 +451,9 @@ try {
         expect('shell.html, antsSetAspect with a text that is no shape (or the shape it has) changes nothing', r.now() + ' ' + r.relayoutCalls.length + ' ' + r.win.history.replaced.length, '16:9 0 0');
     }
 
-    // ---- the front page ----
+    // ---- the front page: no control for the shape; what the address and the browser hold is handed on, and only that ----
     for (const [label, search, stored, aspect, source] of table.concat(shellOnly)) {
         const r = runLobby(lobbyPath, search, stored);
-        expect('lobby.html, ' + label + ' (the shape)', r.aspect, aspect);
-        expect('lobby.html, ' + label + ' (the body)', r.body.attributes['data-aspect'], aspect);
-        expect('lobby.html, ' + label + ' (the entry that is chosen)', shown(r), aspect);
-        expect('lobby.html, ' + label + ' (the dropdown has one entry for each row of the table, in its order, each with its canvas)', JSON.stringify(r.select.options.map((o) => [o.value, o.textContent])), JSON.stringify(ENTRIES));
         expect('lobby.html, ' + label + ' (nothing was written by merely loading)', JSON.stringify(r.storage.writes), '[]');
         expect('lobby.html, the key', r.key, NEW_KEY);
         // a pick (the address, a stored shape) goes into the hand-off; a first visit's shape does NOT: the game page works out its own, when it loads (a phone that opens the front page upright and is turned
@@ -504,94 +461,11 @@ try {
         const named = source === 'default' ? '' : '&aspect=' + aspect;
         expect('lobby.html, ' + label + ' (the START hand-off carries a pick, and only a pick)', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann' + named);
         expect('lobby.html, ' + label + ' (a game for one carries a pick, and only a pick)', r.solo('Ann').endsWith('&name=Ann' + named), true);
+        expect('lobby.html, ' + label + ' (the pick)', r.picked(), source === 'default' ? '' : aspect);
     }
-    // "fills your screen": the quiet line under the dropdown names the shape nearest to the computer's screen, and there is none when no shape is within 8 per cent of it (the same rule as the game page's, on the same screens)
-    for (const [label, screen, shape, first] of [
-        ['a 1920 x 1080 monitor', { width: 1920, height: 1080 }, '16:9', '16:9'], ['a 1440 x 900 laptop', { width: 1440, height: 900 }, '16:10', '16:10'], ['a 3440 x 1440 ultrawide', { width: 3440, height: 1440 }, '21:9', '21:9'],
-        ['a 1280 x 1024 monitor', { width: 1280, height: 1024 }, '4:3', '4:3'], ['a 2560 x 1080 ultrawide', { width: 2560, height: 1080 }, '21:9', '21:9'], ['a 1366 x 768 laptop', { width: 1366, height: 768 }, '16:9', '16:9'],
-        ['a 5120 x 1440 super ultrawide (32:9)', { width: 5120, height: 1440 }, '32:9', '32:9'], ['a 2736 x 1824 tablet (3:2)', { width: 2736, height: 1824 }, '3:2', '3:2'], ['a phone held sideways, 844 x 390', { width: 844, height: 390 }, '20:9', '20:9'],
-        ['a screen wider than 32:9 (7680 x 1080): nearest, no line', { width: 7680, height: 1080 }, '', '32:9'],
-        ['a square screen', { width: 1000, height: 1000 }, '', '4:3'], ['a screen of no size', { width: 0, height: 0 }, '', '16:9'],
-        ['a screen that is not a number', { width: NaN, height: 1080 }, '', '16:9'], ['a phone held upright (390 x 844)', { width: 390, height: 844 }, '', '16:9'],
-        ['a screen 5 per cent off 3:2 (1427 x 1000): near enough', { width: 1427, height: 1000 }, '3:2', '3:2'], ['a screen 9 per cent off 16:9 (1940 x 1000): too far from every shape', { width: 1940, height: 1000 }, '', '16:9'],
-    ]) {
-        const r = runLobby(lobbyPath, '', {}, { screen });
-        expect('lobby.html, ' + label + ': the line', r.tags, tagOf(shape));
-        expect('lobby.html, ' + label + ': the words', r.note.hidden ? 'hidden' : r.note.textContent, shape ? tagOf(shape) + ' fills your screen' : 'hidden');
-        expect('lobby.html, ' + label + ': what is chosen is the screen\'s nearest shape, with or without a line (until the player picks)', shown(r) + ' ' + r.now(), first + ' ' + first);
-        const shell = runShell(shellPath, '', {}, { screen });
-        expect('lobby.html, ' + label + ': the same line as the game page\'s', r.tags, shell.tags);
-    }
-    {
-        const r = runLobby(lobbyPath, '', {}, { noScreen: true });                       // a window with no screen to ask: no tag, no error, the page still has its shape
-        expect('lobby.html, a window with no screen to ask: no line, 16:9 chosen', r.tags + '|' + r.note.hidden + '|' + shown(r), '|true|16:9');
-        expect('lobby.html, the default screen of the test (1920 x 1080) names 16:9', runLobby(lobbyPath, '', {}).tags, '16:9');
-    }
-    {
-        const r = runLobby(lobbyPath, '', { [NEW_KEY]: '21:9' }, { screen: { width: 1440, height: 900 } });   // the tag follows the screen, the checked shape follows the choice: they are two things
-        expect('lobby.html, 21:9 remembered on a 1440 x 900 laptop: 21:9 is chosen and the line names 16:10', shown(r) + ' ' + r.tags, '21:9 16:10');
-    }
-
-    // THE LOBBY (the room view, the front page itself: the page's `room` is '' and no game of it sits in a frame): a pick changes the shape of the page AT ONCE, with no reload and no question, so that the
-    // room and the match stay; it is remembered under the new key and nothing else; the hand-off to the game (START, Rejoin, a game for one) carries the shape that is picked
-    {
-        const r = runLobby(lobbyPath, '', { [OLD_KEY]: '4:3' });
-        pick(r, '4:3');                                                              // the player picks 4:3
-        expect('lobby.html selector, 4:3 picked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '4:3']]));
-        expect('lobby.html selector, 4:3 picked: the old key is untouched', r.storage.data[OLD_KEY], '4:3');
-        expect('lobby.html selector, 4:3 picked: no reload, nothing is asked (the match and the room stay)', r.win.assigned.length + ' ' + r.win.asked.length, '0 0');
-        expect('lobby.html selector, 4:3 picked: the page has the shape at once', r.now() + ' ' + r.body.attributes['data-aspect'] + ' ' + shown(r), '4:3 4:3 4:3');
-        expect('lobby.html selector, 4:3 picked: the START hand-off carries it', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=4:3');
-        expect('lobby.html selector, 4:3 picked: ... and so does a game for one', r.solo('Ann').endsWith('&aspect=4:3'), true);
-        const again = runLobby(lobbyPath, '', r.storage.data);
-        expect('lobby.html selector, the next visit', again.aspect + ' ' + shown(again), '4:3 4:3');
-    }
-    for (const picked of ['16:10', '3:2', '20:9', '21:9', '32:9']) {                  // the other shapes of the table: picked like the first
-        const r = runLobby(lobbyPath, '', { [OLD_KEY]: '4:3' });
-        pick(r, picked);
-        expect('lobby.html selector, ' + picked + ' picked: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, picked]]));
-        expect('lobby.html selector, ' + picked + ' picked: no reload, nothing is asked (the match and the room stay)', r.win.assigned.length + ' ' + r.win.asked.length, '0 0');
-        expect('lobby.html selector, ' + picked + ' picked: the page has the shape at once', r.now() + ' ' + r.body.attributes['data-aspect'] + ' ' + shown(r), picked + ' ' + picked + ' ' + picked);
-        expect('lobby.html selector, ' + picked + ' picked: the START hand-off carries it', r.handoff('k7m2xq', 1, 'Ann'), '?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=' + picked);
-        expect('lobby.html selector, ' + picked + ' picked: ... and so does a game for one', r.solo('Ann').endsWith('&aspect=' + picked), true);
-        const again = runLobby(lobbyPath, '', r.storage.data);
-        expect('lobby.html selector, ' + picked + ': the next visit', again.aspect + ' ' + shown(again) + ' ' + again.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=' + picked), picked + ' ' + picked + ' true');
-        const game = runShell(shellPath, '', r.storage.data);                          // ... and the game page opens the same shape: the one choice is shared
-        expect('lobby.html selector, ' + picked + ' picked: the game page reads the same choice', game.aspect + ' ' + game.source, picked + ' remembered');
-    }
-    {
-        const r = runLobby(lobbyPath, '', { [NEW_KEY]: '21:9' });                    // a 21:9 that the game page remembered is shown and handed on, not turned into 16:9
-        pick(r, '16:10');
-        expect('lobby.html selector, 16:10 picked over 21:9: written, shown at once, handed on', JSON.stringify(r.storage.writes) + ' ' + r.now() + ' ' + shown(r) + ' ' + r.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:10'), JSON.stringify([[NEW_KEY, '16:10']]) + ' 16:10 16:10 true');
-    }
-    {
-        const r = runLobby(lobbyPath, '', { [NEW_KEY]: '4:3' });                     // 4:3 is there: picking 16:9 gives the default picture back
-        pick(r, '16:9');
-        expect('lobby.html selector, 16:9 picked over 4:3: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
-        expect('lobby.html selector, 16:9 picked over 4:3: no reload, nothing is asked', r.win.assigned.length + ' ' + r.win.asked.length, '0 0');
-        expect('lobby.html selector, 16:9 picked over 4:3: the page has the shape at once, and the hand-off carries it', r.now() + ' ' + r.body.attributes['data-aspect'] + ' ' + shown(r) + ' ' + r.handoff('k7m2xq', 1, 'Ann'), '16:9 16:9 16:9 ?join=/ws&room=k7m2xq&seat=1&name=Ann&aspect=16:9');
-    }
-    {
-        const r = runLobby(lobbyPath, '', {});
-        r.select.fire('change');                                                     // the same picture again (a change event that names the shape that is already there): remembered, nothing to change
-        expect('lobby.html selector, 16:9 again: what was written', JSON.stringify(r.storage.writes), JSON.stringify([[NEW_KEY, '16:9']]));
-        expect('lobby.html selector, 16:9 again: no reload, nothing is asked, the shape is the same', r.win.assigned.length + ' ' + r.win.asked.length + ' ' + r.now() + ' ' + r.body.attributes['data-aspect'], '0 0 16:9 16:9');
-    }
-    {
-        const r = runLobby(lobbyPath, '', {});                                       // one pick after another: each is its own change, the last wins, each is remembered, no reload ever
-        pick(r, '4:3'); pick(r, '16:9'); pick(r, '4:3');
-        expect('lobby.html selector, three picks (4:3, 16:9, 4:3): each is remembered, the last wins, no reload, no question', JSON.stringify(r.storage.writes) + ' ' + r.now() + ' ' + r.win.assigned.length + ' ' + r.win.asked.length,
-               JSON.stringify([[NEW_KEY, '4:3'], [NEW_KEY, '16:9'], [NEW_KEY, '4:3']]) + ' 4:3 0 0');
-    }
-    {
-        const r = runLobby(lobbyPath, '?aspect=4:3', {});                            // the address asked for 4:3: a pick of 16:9 is the player's own choice and the hand-off follows it
-        pick(r, '16:9');
-        expect('lobby.html selector, the address says 4:3 and 16:9 is picked: remembered, no reload, the hand-off carries 16:9', JSON.stringify(r.storage.writes) + ' ' + r.win.assigned.length + ' ' + r.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:9'), JSON.stringify([[NEW_KEY, '16:9']]) + ' 0 true');
-    }
-    {
-        const r = runLobby(lobbyPath, '', THROWS);                                   // a private window: the pick still changes the page, nothing breaks, nothing reloads
-        pick(r, '4:3');
-        expect('lobby.html selector without storage: the page changes all the same (no reload)', r.now() + ' ' + r.body.attributes['data-aspect'] + ' ' + r.win.assigned.length + ' ' + r.win.asked.length, '4:3 4:3 0 0');
+    {   // the page has no selector, no line and no body attribute of the shape, and nothing a person could press changes the hand-off
+        const r = runLobby(lobbyPath, '', {}, { screen: { width: 1440, height: 900 } });
+        expect('lobby.html, a laptop that has not picked: the page asked for no element of the picture\'s shape (the fake document throws for any)', r.picked() + '|' + JSON.stringify(r.body.attributes || {}), '|{}');
     }
 
     // ---- A FIRST VISIT: nothing stored that names a shape, no ?aspect= that does: the shape NEAREST the player's screen, the same on both pages, and never stored ----
@@ -634,10 +508,8 @@ try {
         expect('first visit, shell.html, ' + label + ' (the shape)', shell.aspect + ' ' + shell.source, shape + ' default');
         expect('first visit, shell.html, ' + label + ' (--aspect for the game, the stage, the dropdowns)', shell.args.slice(-2).join(' ') + ' ' + shell.stage.attributes['data-aspect'] + ' ' + shell.checked, '--aspect ' + shape + ' ' + shape + ' ' + checkedString(shape));
         expect('first visit, shell.html, ' + label + ' (loading stores nothing)', JSON.stringify(shell.storage.writes) + JSON.stringify(shell.storage.data), '[]{}');
-        expect('first visit, lobby.html, ' + label + ' (the shape, the body, the chosen entry)', lobby.aspect + ' ' + lobby.body.attributes['data-aspect'] + ' ' + shown(lobby), shape + ' ' + shape + ' ' + shape);
         expect('first visit, lobby.html, ' + label + ' (loading stores nothing)', JSON.stringify(lobby.storage.writes) + JSON.stringify(lobby.storage.data), '[]{}');
         expect('first visit, lobby.html, ' + label + ' (START and a game for one hand NO shape on: the game page decides when it loads)', lobby.handoff('k7m2xq', 1, 'Ann') + ' ' + /aspect/.test(lobby.solo('Ann')), '?join=/ws&room=k7m2xq&seat=1&name=Ann false');
-        expect('first visit, ' + label + ': the two pages show the same shape and tag the same one', shell.aspect + ' ' + shell.tags, lobby.aspect + ' ' + lobby.tags);
     }
     {   // the line names the shape within 8 per cent of the screen, and that is the shape that a first visit starts in whenever there is one
         for (const [w, h] of [[1920, 1080], [1440, 900], [3440, 1440], [1280, 1024], [1024, 768], [1366, 768], [2560, 1080], [1680, 1050], [2736, 1824], [3840, 1080], [915, 412]]) {
@@ -647,13 +519,13 @@ try {
     }
     {   // devicePixelRatio and the browser's zoom scale both numbers of the screen: only the ratio counts
         for (const [w, h, shape] of [[720, 450, '16:10'], [1440, 900, '16:10'], [2880, 1800, '16:10'], [4320, 2700, '16:10'], [960, 540, '16:9'], [2560, 1440, '16:9'], [1720, 720, '21:9'], [3440, 1440, '21:9'], [1368, 912, '3:2'], [2736, 1824, '3:2'], [1920, 540, '32:9'], [3840, 1080, '32:9']]) {
-            expect('first visit, a ' + w + ' x ' + h + ' screen at any device pixel ratio', runShell(shellPath, '', {}, { screen: { width: w, height: h } }).aspect + ' ' + runLobby(lobbyPath, '', {}, { screen: { width: w, height: h } }).aspect, shape + ' ' + shape);
+            expect('first visit, a ' + w + ' x ' + h + ' screen at any device pixel ratio', runShell(shellPath, '', {}, { screen: { width: w, height: h } }).aspect, shape);
         }
     }
     {   // a browser that cannot say: 16:9, no breakage (the screen is missing, or asking for it throws)
         for (const [label, options] of [['no screen at all', { noScreen: true }], ['a screen that throws', { screen: { get width() { throw new Error('no screen'); }, height: 900 } }], ['a window with no inner size on an upright screen', { screen: { width: 390, height: 844 } }]]) {
             const lobby = runLobby(lobbyPath, '', {}, options);
-            expect('first visit, lobby.html, ' + label + ': 16:9', lobby.aspect + ' ' + shown(lobby), '16:9 16:9');
+            expect('first visit, lobby.html, ' + label + ': no shape is handed on', lobby.picked() + '|' + /aspect/.test(lobby.solo('Ann')), '|false');
             if (!options.noScreen) expect('first visit, shell.html, ' + label + ': 16:9', runShell(shellPath, '', {}, options).aspect, '16:9');
         }
         const noScreenShell = (() => { try { return runShell(shellPath, '', {}, { noScreen: true }).aspect; } catch (e) { return 'threw: ' + e.message; } })();
@@ -691,16 +563,16 @@ try {
             expect('who keeps what, shell.html, ' + label, r.aspect + ' ' + r.source + ' ' + JSON.stringify(r.storage.writes), aspect + ' ' + source + ' []');
         }
         for (const [label, search, stored, aspect] of [
-            ['nothing stored', '', {}, '16:10'], ['16:9 stored', '', { [NEW_KEY]: '16:9' }, '16:9'], ['21:9 stored', '', { [NEW_KEY]: '21:9' }, '21:9'], ['the old key 4:3', '', { [OLD_KEY]: '4:3' }, '16:10'],
-            ['junk stored', '', { [NEW_KEY]: 'junk' }, '16:10'], ['5:4 stored (no row)', '', { [NEW_KEY]: '5:4' }, '16:10'], ['3:2 stored', '', { [NEW_KEY]: '3:2' }, '3:2'], ['32:9 stored', '', { [NEW_KEY]: '32:9' }, '32:9'], ['the address asks for 16:9', '?aspect=16:9', {}, '16:9'],
-            ['the address asks for 4:3 over a stored 21:9', '?aspect=4:3', { [NEW_KEY]: '21:9' }, '4:3'], ['an address that is no shape', '?aspect=wide', {}, '16:10'], ['no storage', '', THROWS, '16:10'],
+            ['nothing stored', '', {}, ''], ['16:9 stored', '', { [NEW_KEY]: '16:9' }, '16:9'], ['21:9 stored', '', { [NEW_KEY]: '21:9' }, '21:9'], ['the old key 4:3', '', { [OLD_KEY]: '4:3' }, ''],
+            ['junk stored', '', { [NEW_KEY]: 'junk' }, ''], ['5:4 stored (no row)', '', { [NEW_KEY]: '5:4' }, ''], ['3:2 stored', '', { [NEW_KEY]: '3:2' }, '3:2'], ['32:9 stored', '', { [NEW_KEY]: '32:9' }, '32:9'], ['the address asks for 16:9', '?aspect=16:9', {}, '16:9'],
+            ['the address asks for 4:3 over a stored 21:9', '?aspect=4:3', { [NEW_KEY]: '21:9' }, '4:3'], ['an address that is no shape', '?aspect=wide', {}, ''], ['no storage', '', THROWS, ''],
         ]) {
             const r = runLobby(lobbyPath, search, stored, laptop);
-            expect('who keeps what, lobby.html, ' + label, r.aspect + ' ' + shown(r) + ' ' + JSON.stringify(r.storage.writes), aspect + ' ' + aspect + ' []');
+            expect('who keeps what, lobby.html, ' + label, r.picked() + ' ' + JSON.stringify(r.storage.writes), aspect + ' []');
         }
     }
     {   // the first visit's shape is not a stored choice: it follows the screen at every visit, and stays out of the storage whatever the page does
-        for (const [name, run] of [['shell.html', (screen, stored) => runShell(shellPath, '', stored, { screen })], ['lobby.html', (screen, stored) => runLobby(lobbyPath, '', stored, { screen })]]) {
+        for (const [name, run] of [['shell.html', (screen, stored) => runShell(shellPath, '', stored, { screen })]]) {
             const first = run({ width: 1440, height: 900 }, {});
             expect('a default is not stored, ' + name + ': the first visit shows 16:10 and writes nothing', first.aspect + ' ' + JSON.stringify(first.storage.writes) + JSON.stringify(first.storage.data), '16:10 []{}');
             const again = run({ width: 1920, height: 1080 }, first.storage.data);          // the next visit, on another monitor, with what the first visit left behind (nothing)
@@ -713,28 +585,21 @@ try {
         expect('a pick of the shape that is the default, shell.html: stored', JSON.stringify(shell.storage.writes) + ' ' + shell.now(), JSON.stringify([[NEW_KEY, '16:10']]) + ' 16:10');
         const next = runShell(shellPath, '', shell.storage.data, { screen: { width: 1920, height: 1080 } });
         expect('a pick of the shape that is the default, shell.html: the next visit on another screen keeps it', next.aspect + ' ' + next.source, '16:10 remembered');
-        const lobby = runLobby(lobbyPath, '', {}, { screen: { width: 1440, height: 900 } });
-        pick(lobby, '16:10');
-        expect('a pick of the shape that is the default, lobby.html: stored', JSON.stringify(lobby.storage.writes), JSON.stringify([[NEW_KEY, '16:10']]));
-        const lobbyNext = runLobby(lobbyPath, '', lobby.storage.data, { screen: { width: 1920, height: 1080 } });
-        expect('a pick of the shape that is the default, lobby.html: the next visit on another screen keeps it', lobbyNext.aspect, '16:10');
-        const game = runShell(shellPath, '', lobby.storage.data, { screen: { width: 3440, height: 1440 } });
-        expect('a pick of the shape that is the default, lobby.html: the game page reads it', game.aspect + ' ' + game.source, '16:10 remembered');
+        const game = runShell(shellPath, '', shell.storage.data, { screen: { width: 3440, height: 1440 } });
+        expect('a pick of the shape that is the default: a later game page reads it', game.aspect + ' ' + game.source, '16:10 remembered');
     }
-    {   // the hand-off to the game: nothing before a pick, the shape after any press (the shown shape too), and a phone that opens the front page upright is not frozen into 16:9
+    {   // the hand-off to the game: nothing before a pick, the pick that the address or the browser holds after it, and a phone that opens the front page upright is not frozen into 16:9
         const phone = runLobby(lobbyPath, '', {}, { screen: { width: 390, height: 844 }, inner: [390, 664] });
-        expect('hand-off, a phone upright on the front page: the page shows 16:9 and START hands no shape on', phone.aspect + ' ' + phone.handoff('k7m2xq', 1, 'Ann') + ' ' + phone.picked(), '16:9 ?join=/ws&room=k7m2xq&seat=1&name=Ann ');
+        expect('hand-off, a phone upright on the front page: START hands no shape on', phone.handoff('k7m2xq', 1, 'Ann') + ' ' + phone.picked(), '?join=/ws&room=k7m2xq&seat=1&name=Ann ');
         const laptop = runLobby(lobbyPath, '', {}, { screen: { width: 1440, height: 900 } });
         expect('hand-off, a laptop that has not picked: no shape', laptop.picked() + '|' + laptop.handoff('k7m2xq', 1, 'Ann').includes('aspect') + '|' + laptop.solo('Ann').includes('aspect'), '|false|false');
-        expect('hand-off, the shown entry chosen again says nothing (a dropdown sends no event; opening it is no pick either): the page listens to change and to nothing else', Object.keys(laptop.select.listeners).join(), 'change');
         const shellPick = runShell(shellPath, '', {}, { screen: { width: 1440, height: 900 } });
         shellPick.pickers[0].choose('16:10');
-        expect('hand-off, the game page too: the picker says nothing when the shape that it shows is chosen again (its own check), so a pick is a shape that is not the shown one', JSON.stringify(shellPick.storage.writes), '[]');
-        shellPick.pickers[1].choose('21:9');
-        expect('hand-off, ... and a choice in either dropdown is the page\'s pick: stored, and both dropdowns show it', JSON.stringify(shellPick.storage.writes) + ' ' + shellPick.checked, JSON.stringify([[NEW_KEY, '21:9']]) + ' 21:9+21:9');
-        laptop.select.fire('change');                                                   // (the value is the shape that is shown)
-        expect('hand-off, a change that names the shown shape: it is a pick and goes on', laptop.picked() + ' ' + laptop.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:10') + ' ' + laptop.solo('Ann').endsWith('&aspect=16:10'), '16:10 true true');
-        expect('hand-off, ... and it is stored', JSON.stringify(laptop.storage.writes), JSON.stringify([[NEW_KEY, '16:10']]));
+        expect('hand-off, the game page: the picker says nothing when the shape that it shows is chosen again (its own check), so a pick is a shape that is not the shown one', JSON.stringify(shellPick.storage.writes), '[]');
+        shellPick.pickers[0].choose('21:9');
+        expect('hand-off, ... and a choice in the Picture window is the page\'s pick: stored, and the dropdown shows it', JSON.stringify(shellPick.storage.writes) + ' ' + shellPick.checked, JSON.stringify([[NEW_KEY, '21:9']]) + ' 21:9');
+        const next = runLobby(lobbyPath, '', shellPick.storage.data, { screen: { width: 1440, height: 900 } });
+        expect('hand-off, the next visit of the front page hands that pick on, START and a game for one', next.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=21:9') + ' ' + next.solo('Ann').endsWith('&aspect=21:9'), 'true true');
         const stored = runLobby(lobbyPath, '', { [NEW_KEY]: '16:9' }, { screen: { width: 1440, height: 900 } });
         expect('hand-off, a stored 16:9 on a 16:10 laptop: goes on', stored.handoff('k7m2xq', 1, 'Ann').endsWith('&aspect=16:9'), true);
         const asked = runLobby(lobbyPath, '?aspect=21:9', {}, { screen: { width: 1440, height: 900 } });
@@ -746,14 +611,11 @@ try {
         shell.press('16:9');
         const next = runShell(shellPath, '', shell.storage.data, { screen: { width: 3440, height: 1440 } });
         expect('16:9 picked on a 21:9 screen, shell.html: the next visit shows 16:9', next.aspect + ' ' + next.source, '16:9 remembered');
-        const lobby = runLobby(lobbyPath, '', {}, { screen: { width: 3440, height: 1440 } });
-        pick(lobby, '16:9');
-        expect('16:9 picked on a 21:9 screen, lobby.html: the next visit shows 16:9', runLobby(lobbyPath, '', lobby.storage.data, { screen: { width: 3440, height: 1440 } }).aspect, '16:9');
     }
     {   // the address changes nothing in the storage, whatever the screen
         const r = runShell(shellPath, '?aspect=4:3', {}, { screen: { width: 3440, height: 1440 } });
         const l = runLobby(lobbyPath, '?aspect=4:3', {}, { screen: { width: 3440, height: 1440 } });
-        expect('the address wins over the screen and is not stored', r.aspect + ' ' + l.aspect + ' ' + JSON.stringify(r.storage.writes.concat(l.storage.writes)), '4:3 4:3 []');
+        expect('the address wins over the screen and is not stored', r.aspect + ' ' + l.picked() + ' ' + JSON.stringify(r.storage.writes.concat(l.storage.writes)), '4:3 4:3 []');
     }
 
     // THE NEAREST SHAPE IS WORKED OUT OVER THE TABLE'S ROWS: a row that the table gets later is considered with no other change. shapes.js is loaded with extra rows put into its table (the way the
@@ -790,5 +652,5 @@ try {
     failed++;
 }
 
-if (failed === 0) console.log('web aspect key: ' + (table.length + shellOnly.length) + ' rows x 2 pages (every shape of the table on both), the "fills your screen" lines, the first visit\'s shape on a table of screens, and the selectors (the game page\'s and the lobby\'s), 0 failures');
+if (failed === 0) console.log('web aspect key: ' + (table.length + shellOnly.length) + ' rows x 2 pages (every shape of the table on both), the "fills your screen" lines, the first visit\'s shape on a table of screens, and the game page\'s picker (the front page has none), 0 failures');
 process.exit(failed === 0 ? 0 : 1);

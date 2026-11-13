@@ -151,7 +151,7 @@ class TheOnlyWayIsTheTypedAddress(unittest.TestCase):
     def test_the_page_links_nothing_and_loads_only_its_own_files(self):
         page = read("web", "admin.html")
         self.assertNotRegex(page, r"<a\b")
-        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page), ["/favicon.png", "/front/classic.css", "admin.css", "admin_page.js"])
+        self.assertEqual(re.findall(r'(?:href|src)="([^"]+)"', page), ["/favicon.png?v=f34bea03", "/front/classic.css", "admin.css", "admin_page.js"])
         self.assertIn('<meta name="robots" content="noindex, nofollow">', page)
         self.assertNotRegex(page, r"<script>|<style|onclick|onload|javascript:")
         css = read("web", "admin.css")

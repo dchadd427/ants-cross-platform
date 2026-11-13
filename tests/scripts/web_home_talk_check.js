@@ -113,11 +113,13 @@ function rig(o) {
     const dock = ChatApi.mount({ doc, win, host, chip: null, screen: () => 'home', fetch: undefined, now: () => 0, random: () => 0, WebSocket: HubSocket, error: (e) => { throw e; } });
     dock.shown(true);
     sockets[0].open().recv({ t: 'welcome', v: 1, you: o.noLogin ? null : { name: 'maple.leaf', mod: false }, login: !!o.noLogin, online: 3, history: [] });
-    const Talk = loadScript(talkSource, 'AntsHomeTalk', clock);
+    const timers = [], tclock = { t: 0, setTimeout: (fn, ms) => { timers.push({ fn, at: tclock.t + ms }); return timers.length; }, clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = null; },
+        advance: (ms) => { tclock.t += ms; timers.forEach((x) => { if (x.fn && x.at <= tclock.t) { const f = x.fn; x.fn = null; f(); } }); } };       // (a fake clock for the line of words: the dock's own never moves)
+    const Talk = loadScript(talkSource, 'AntsHomeTalk', tclock);
     const taps = [], realTap = dock.tap;
     dock.tap = (fn) => { taps.push(fn); realTap(fn); };      // (the dock's own taps, and a way to tell the buttons what the dock tells them)
     const talk = Talk.mount({ doc, win, dock });
-    const r = { env, doc, win, host, dock, talk, recs, sockets, tell: (kind) => taps.forEach((fn) => fn(kind)) };
+    const r = { env, doc, win, host, dock, talk, recs, sockets, clock: tclock, tell: (kind) => taps.forEach((fn) => fn(kind)) };
     r.field = dock.field;
     r.form = dock.field.parent;
     r.emoji = one(r.form, 'gt-emoji');
@@ -170,6 +172,8 @@ for (const [label, o] of [['no speech recognition (Firefox)', { speech: false }]
     check('...and shown again when the field is on (the dock tells the buttons through its taps)', q.talk.root.hidden === false);
     q.field.disabled = true; q.tell('lost');
     check('...and hidden again when it goes off', q.talk.root.hidden === true);
+    q.field.disabled = false; q.tell('live'); q.talk.emoji.click(); const before = q.field.value; q.field.disabled = true; q.tell('field');
+    check('a field that goes off for a ban (the dock\'s tap `field`): the buttons go with it, the picker closes, and an emoji cannot be put into it', q.talk.root.hidden === true && q.talk.pick.hidden === true && q.field.value === before);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -487,6 +491,65 @@ function bring(env, file, name) {
     check('the speech constructor is named only where the support is looked up', (code.match(/SpeechRecognition/g) || []).length === 2);
     check('it speaks to the dock through its field and taps only (no socket of its own)', !/dock\.(send|say|state)\b/.test(code) && /dock\.tap\(/.test(code));
     check('words from outside are put in a field\'s value or a node\'s textContent', /field\.value = /.test(code) && /textContent = text/.test(code));
+}
+
+{   // the line of words is a bubble: announced, it goes by itself after 6 s, and at once on the next action; the listening line stays while it listens
+    const nothing = () => { const r = rig(); const rec = r.start(); rec.onend({}); return r; };
+    const r = nothing();
+    check('the voice line is shown in the polite status line (a screen reader says it)', r.sayText() === Pure.TEXT.nothing && r.say.getAttribute('role') === 'status' && r.say.getAttribute('aria-live') === 'polite');
+    r.clock.advance(5900);
+    check('... it is still there before 6 seconds', r.sayText() === Pure.TEXT.nothing);
+    r.clock.advance(200);
+    check('... and gone after them (hidden, empty)', r.sayText() === '' && r.say.hidden === true);
+    const a = rig(); const rec = a.start();
+    check('while the microphone listens the line says so', a.sayText() === Pure.TEXT.listening);
+    a.clock.advance(120000);
+    check('... and it stays as long as it listens', a.sayText() === Pure.TEXT.listening && a.say.hidden === false);
+    rec.onerror({ error: 'not-allowed' });
+    check('an error line shows at once', a.sayText() !== '' && a.sayText() !== Pure.TEXT.listening);
+    a.clock.advance(6001);
+    check('... and goes after 6 seconds too', a.sayText() === '');
+    const t = nothing(); t.field.fire('input', {});
+    check('typing takes it away at once', t.sayText() === '');
+    const e = nothing(); e.emoji.click();
+    check('opening the picker takes it away at once', e.sayText() === '');
+    const m = nothing(); m.start();
+    check('the next press of the microphone replaces it at once', m.sayText() === Pure.TEXT.listening);
+    const s = nothing(); s.field.value = 'hi'; s.form.fire('submit', { preventDefault() {} });
+    check('a send takes it away at once', s.sayText() === '');
+    const two = rig(); let rec1 = two.start(); rec1.onend({});
+    two.clock.advance(4000);
+    rec1 = two.start(); rec1.onend({});
+    two.clock.advance(4000);
+    check('a second line has its own 6 seconds (the first one\'s timer does not take it away)', two.sayText() === Pure.TEXT.nothing);
+    two.clock.advance(2100);
+    check('... and then goes', two.sayText() === '');
+}
+{   // the line before the microphone starts stays until the state changes, like "Listening"; Enter ends the listening and closes the picker where the form cannot requestSubmit
+    const r = rig();
+    r.mic.click();
+    check('the line "asking" (before the browser starts to listen) is shown', r.sayText() === Pure.TEXT.asking);
+    r.clock.advance(120000);
+    check('... and it stays until the browser says something (it is not timed)', r.sayText() === Pure.TEXT.asking);
+    const q = rig();
+    q.form.dispatchEvent = (ev) => q.form.fire(ev.type, ev);
+    q.win.Event = function (type, o) { this.type = type; this.cancelable = !!(o && o.cancelable); this.preventDefault = () => {}; };
+    const rec = q.start(); q.heard('half a line');
+    q.emoji.click();
+    q.field.fire('keydown', { key: 'Enter', preventDefault() {} });
+    check('Enter in a form without requestSubmit (iOS 15) goes through a submit event: the listening ends and the picker closes, as for Send', rec.aborts === 1 && q.pick.hidden === true && q.said().length === 1);
+}
+{   // the field is a text area that the chat makes as tall as its words: after a pick and after the words that are heard
+    const r = rig();
+    r.win.matchMedia = () => ({ matches: true });
+    Object.defineProperty(r.field, 'scrollHeight', { get() { return 22 + 22 * Math.max(1, Math.ceil(this.value.length / 20)); } });
+    r.field.value = 'x'.repeat(19); r.caret(19);
+    r.emoji.click(); r.keys()[0].click();
+    check('an emoji that makes the line longer grows the box', r.field.style.height === '66px');
+    r.field.value = ''; r.caret(0);
+    const rec = r.start(); r.heard('word word word word word word word word word word');
+    check('words that are heard grow the box', r.field.style.height === '88px');
+    rec.onend({});
 }
 
 console.log(failures === 0 ? 'OK: ' + checks + ' checks' : failures + ' of ' + checks + ' checks FAILED');

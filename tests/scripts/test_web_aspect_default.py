@@ -39,7 +39,7 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         page = read(SHELL)
         self.assertIn('<div id="game-stage" data-aspect="16:9">', page)
         self.assertNotIn("data-aspect=\"4:3\" aria-checked", page)                                          # (the buttons of the old selector are gone: a dropdown that the script fills)
-        self.assertRegex(page, r":root \{\s*--chrome: 180px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # the slot's own shape; the script sets the other shapes' numbers (web/shapes.js's rows: slotVars), a rule for each shape is gone
+        self.assertRegex(page, r":root \{\s*--chrome: \d+px;[^}]*--ar-w: 16;\s*--ar-h: 9;\s*--stage-max: 1280px;")      # the slot's own shape; the script sets the other shapes' numbers (web/shapes.js's rows: slotVars), a rule for each shape is gone
         self.assertNotIn('#game-stage[data-aspect=', page)
         self.assertIn("var ANTS_ASPECT = '16:9';", page)
         self.assertIn("function resolveAspect(fromAddress, remembered, firstVisit) {", page)
@@ -47,14 +47,10 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertIn("ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window))", page)
         self.assertEqual(page.count("source: 'default' }"), 1)                                                   # (one place answers 'default', and it asks the table)
 
-    def test_the_selector_is_one_empty_host_with_a_label_and_a_line_under_it(self):
+    def test_the_one_host_of_the_picker_left_on_the_game_page_is_the_recordings_window(self):
+        """The Picture dropdown and the Fullscreen mouse pair are rows of the settings menu (Video); the page keeps the one host of the picker that its recording's Picture button opens."""
         page = read(SHELL)
-        bar = page[page.index('<div class="view-bar" id="view-bar">'):page.index('id="lock-bar-label"')]
-        self.assertEqual(bar.strip().splitlines()[1:3], [
-            '        <span id="view-bar-label">Picture</span>',
-            '        <span class="pick" id="aspect-pick"><span class="fit-note" id="fit-note" hidden></span></span>',
-        ])                                                                                                  # (the picker, web/shape_picker.js, puts the button and its list in the host: the label names the button by id)
-        self.assertNotIn("role=\"radio\" id=\"aspect-", page)                                                 # (no button for a shape any more: the entries come from web/shapes.js)
+        self.assertEqual(len(re.findall(r'<span class="pick" id="pic-pick">', page)), 1)                   # (the picker, web/shape_picker.js, puts the button and its list in the host)
 
     def test_the_page_and_the_game_agree_on_the_shapes(self):
         """The selector's order is the game's table (kAspectTable, which kAllAspects is made from), ants_set_aspect takes the shape's place in it, and each canvas is a whole number of steps of the page's box.
@@ -85,36 +81,19 @@ class PagesMarkupStartsIn16x9AndTheScriptPicks(unittest.TestCase):
         self.assertIn("antsSetAspect(value);", block)
         self.assertIn("onPick: antsPickShape }", block)                                                   # (a choice in either dropdown is the pick: the settings menu calls the same function)
 
-    def test_the_front_page_dropdown_is_empty_markup_until_the_script_fills_it_from_the_table(self):
+    def test_the_front_page_has_no_picture_row_and_hands_on_only_a_pick(self):
         page = read(LOBBY)
         self.assertNotIn(".frame {", page)                                                                 # (the lobby has no games in frames: the test room that had them is gone)
-        self.assertIn("var aspect = '16:9';", page)                                                         # (what the page shows until the block below runs)
-        self.assertIn("else aspect = AntsShapes.firstVisit(window);", page)
-        self.assertEqual(len(re.findall(r'name="aspect"', page)), 0)                                         # (no radio button for a shape any more)
-        self.assertEqual(len(re.findall(r'<select class="shape-select" id="aspect-select"', page)), 1)       # (the picture's one dropdown, nothing else)
-        self.assertIn("AntsShapes.fillSelect($('aspect-select'), document).value = aspect;", page)           # (filled from the table, the first visit's shape chosen)
+        self.assertEqual(len(re.findall(r'name="aspect"', page)), 0)
+        self.assertIn("var pickedShape = '';", page)                                                        # (nothing is handed on until the address or the browser names a shape)
 
-    def test_the_front_page_and_the_game_page_make_their_dropdowns_with_the_same_function_and_say_the_same_line(self):
+    def test_the_game_page_reads_the_one_table_of_shapes_and_says_the_line(self):
         page, shell = read(LOBBY), read(SHELL)
         self.assertNotIn("var SHAPES = {", page + shell)                                                  # (no table of its own: both pages read web/shapes.js, which test_web_shapes.py pins to the game's)
         self.assertIn('<script src="shapes.js"></script>', page)
         self.assertIn('<script src="shapes.js"></script>', shell)
-        self.assertEqual(page.count("AntsShapes.fillsLine(window.screen.width, window.screen.height)"), 1)
         self.assertEqual(shell.count("AntsShapes.fillsLine(window.screen.width, window.screen.height)"), 1)
         self.assertNotIn("fit-tag", page + shell)                                                         # (the tag under a button is the quiet line under the dropdown now)
-
-    def test_the_front_page_dropdown_is_the_picture_row_of_the_match_column_under_the_map_and_above_start(self):
-        """The picture draws the match column as the map picker, the map's line, the "Picture" row (the label above the dropdown, the quiet line under it) and START!; the footer has no selector."""
-        page = read(LOBBY)
-        side = page[page.index('<aside class="side"'):page.index('</aside>')]
-        footer = page[page.index('<footer class="bar" id="footer-bar">'):page.index("</footer>")]
-        self.assertLess(side.index('id="change-map"'), side.index('<div class="shape" id="shape-row">'))
-        self.assertLess(side.index('id="info"'), side.index('<div class="shape" id="shape-row">'))
-        self.assertLess(side.index('<div class="shape" id="shape-row">'), side.index('id="start"'))
-        self.assertIn('<label class="shape-label" id="shape-label" for="aspect-select">Picture</label><span class="shape-box"><select class="shape-select" id="aspect-select" aria-describedby="fit-note"', side)
-        self.assertLess(side.index('id="aspect-select"'), side.index('id="fit-note"'))                    # (the line is under the dropdown)
-        for gone in ('aspect-select', 'class="shape"', 'fit-note', 'class="grow"', "Screen "):
-            self.assertNotIn(gone, footer, "the footer has no selector: " + gone)
 
 
 class TheChoiceLivesUnderTheNewKey(unittest.TestCase):
@@ -140,7 +119,7 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
 
     def test_both_pages_ask_the_one_function_once(self):
         self.assertEqual(read(SHELL).count("AntsShapes.firstVisit("), 1)
-        self.assertEqual(read(LOBBY).count("AntsShapes.firstVisit("), 1)
+        self.assertEqual(read(LOBBY).count("AntsShapes.firstVisit("), 0)                                  # (the front page has no picture of its own to start: the game page works out the first visit's shape when it loads)
         self.assertNotIn("firstVisit", read(os.path.join(REPO, "web", "game_menu.js")))                  # (the settings menu only follows the page's shape)
 
     def test_only_a_press_of_a_selector_stores_the_choice(self):
@@ -152,9 +131,7 @@ class TheFirstVisitStartsNearTheScreen(unittest.TestCase):
         self.assertEqual(shell.count("function antsPickShape(value) {"), 1)                                  # (the one function that a choice calls: the dropdowns' change and the settings menu)
         self.assertEqual(len(re.findall(r"antsPickShape\(", block)), 1)                                       # (its definition: the dropdowns are handed the function itself, nothing else writes the key)
         self.assertEqual(len(re.findall(r"onPick: antsPickShape\b", block)), 1)                              # (... as the one `onPick` of the picker that both dropdowns are made with)
-        selector = lobby[lobby.index("// SELECTOR_BEGIN"):lobby.index("// SELECTOR_END")]
-        self.assertEqual(len(re.findall(r"remember\(\s*ASPECT_KEY\b", lobby)), len(re.findall(r"remember\(\s*ASPECT_KEY\b", selector)))
-        self.assertGreaterEqual(len(re.findall(r"remember\(\s*ASPECT_KEY\b", selector)), 1)
+        self.assertNotRegex(lobby, r"(remember|setItem)\(\s*ASPECT_KEY\b")                              # (the front page has no control for the shape: it never writes the key)
         shape_block = lobby[lobby.index("// SHAPE_BEGIN"):lobby.index("// SHAPE_END")]
         self.assertNotIn("remember(", shape_block)                                                       # (the block that picks the first visit's shape only reads)
         self.assertNotIn("setItem", shape_block)
@@ -215,12 +192,9 @@ class TheFrontPageHandsTheShapeOnToTheGame(unittest.TestCase):
         self.assertIn("window.location.assign(new URL('./' + rejoinQuery(rejoinOffered, '', pickedShape), window.location.href).href);", page)         # the Rejoin button
         self.assertIn("window.location.assign(new URL(address, window.location.href).href);", page)                               # START with nobody else (startAlone)
         self.assertIn("var address = soloAddress(model, client.name, pickedShape);", page)                                                  # (the game for one's address carries the live pick)
-        block = page[page.index("// SELECTOR_BEGIN"):page.index("// SELECTOR_END")]
-        self.assertIn("aspect = value;", block)                                                                                            # (a pick in the lobby changes the live variable, which the calls above read)
-        self.assertIn("pickedShape = value;", block)                                                                                            # (and it is a pick, the shown shape too)
         shape_block = page[page.index("// SHAPE_BEGIN"):page.index("// SHAPE_END")]
-        self.assertIn("aspect = pickedShape = asked;", shape_block)                                                                              # (the address and the stored pick are picks)
-        self.assertIn("aspect = pickedShape = remembered;", shape_block)
+        self.assertIn("if (isShape(asked)) pickedShape = asked;", shape_block)                                                                              # (the address and the stored pick are picks)
+        self.assertIn("else if (isShape(remembered)) pickedShape = remembered;", shape_block)
         self.assertNotRegex(shape_block, r"pickedShape = AntsShapes\.firstVisit")                                                               # (the first visit's shape is not)
 
     def test_every_game_address_of_the_page_is_one_of_those_three_builders(self):

@@ -1,6 +1,7 @@
 /* The Menu and the live count of the bar at the top of every page (web/site_nav.css; the same links, in the same order, as the Menu of the front page, web/home/home.js: a test keeps the two lists
    the same). The bar's markup is in each page; this file builds the Menu from the bar's own <nav> and the small links below, and asks /live for the count of live matches: when the page opens
-   (data-live="now"), or when the Menu is first opened (data-live="menu"), or never (the live page itself). */
+   (data-live="now"), or when the Menu is first opened (data-live="menu"), or never (the live page itself). The last line of the Menu is the stamped version and build
+   of the site (data-version, data-build, data-built on the bar, text only; the build stamps them in; a page nobody stamped shows no site line) and, on the map maker, its own version (data-maker). */
 (function () {
     'use strict';
     var d = document, bar = d.querySelector('.sb'), btn = bar && bar.querySelector('.sbtn');
@@ -14,6 +15,13 @@
         if (cur) a.setAttribute('aria-current', 'page');
         if (/^https?:/.test(href)) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
         return a;
+    }
+    function stamp() {
+        function got(k) { var v = bar.getAttribute(k) || ''; return v && v.indexOf('@') < 0 ? v : ''; }
+        var v = got('data-version'), b = got('data-build'), t = got('data-built'), m = got('data-maker'), out = [];
+        if (v) out.push('Version ' + v + (b ? ' - build ' + b + (t ? ' (' + t + ')' : '') : ''));
+        if (m) out.push('Map maker ' + m);
+        return out.join(' - ');
     }
     function paint() {
         var n = count > 0 ? String(count) : '', lv = bar.querySelector('.sblv'), top = bar.querySelector('.sblive'), inbox = box && box.querySelector('.sbn');
@@ -39,6 +47,7 @@
         var small = make('p', 'sbsmall');
         SMALL.forEach(function (s) { small.appendChild(item(s[0], s[1], d.location.pathname.indexOf(s[1]) === 0)); });
         box.appendChild(small);
+        if (stamp()) box.appendChild(make('p', 'sbver', stamp()));
         d.body.appendChild(box);
         paint();
     }

@@ -344,11 +344,16 @@ class TheRealDockerfileReplayed(Scratch):
     def test_the_site_placeholders_become_nothing_in_the_titles_and_the_footers(self):
         self.assertIn("<title>Ants (1998)</title>", self.page("plain", "lobby.html"))
         self.assertIn("<title>Ants (1998) \u2014 beta.playants.org</title>", self.page("plain", "index.html"))
-        for name in ("index.html", "play.html", "lobby.html", "matches.html", "match.html", "live.html"):
+        for name in ("index.html", "play.html", "lobby.html"):
             if os.path.exists(self.html("plain", name)):
                 text = self.page("plain", name)
                 self.assertNotIn("@@SITE_", text, name)
-                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)
+                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)            # (the footers of the game page and the front page)
+        for name in ("matches.html", "match.html", "live.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
+            text = self.page("plain", name)
+            self.assertNotIn("@@", text, name)
+            self.assertNotIn("<footer", text, name)
+            self.assertRegex(text, r'<header class="sb"[^>]* data-version="%s" data-build="abc1234" data-built="\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT"' % re.escape("v" + read("VERSION").strip()), name)
 
     def test_the_changelog_page_is_made_from_the_changelog_and_is_the_only_one(self):
         page = self.page("plain", "changelog.html")
