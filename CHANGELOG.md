@@ -23,6 +23,16 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.3 - 2026-11-12 - The installed app's front page fits the window
+
+**For players:**
+- **The front page fits the window in the installed app on a phone.** The bottom tabs (Games, Players, Chat) are no longer cut off by the phone's bars: the page takes the smallest height that the window reports. The game page and the map list use the same care in the installed app.
+- **Screen numbers for a bug report.** Add ?vp to the end of the front page's address, or press and hold the app's icon and choose Screen numbers, to see a small box with the window's sizes for a screenshot. It sends and saves nothing.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.2 page or game still joins.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/4e6c7c0c...f436bd12)
+
 ## v0.16.2 - 2026-11-12 - One map chooser in the room lobby and the site can be installed as an app
 
 **For players:**

@@ -163,10 +163,10 @@
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
-   "id": "matches_footer_link_with_html",
+   "id": "matches_bar_link_with_html",
    "file": "web/matches.html",
-   "old": "<a href=\"/live-now\">Live now</a>",
-   "new": "<a href=\"/live.html\">Live now</a>",
+   "old": "<a class=\"btn sblv\" href=\"/live-now\">",
+   "new": "<a class=\"btn sblv\" href=\"/live.html\">",
    "test": "python3 -I tests/scripts/test_nginx_clean_urls.py -f"
   },
   {
