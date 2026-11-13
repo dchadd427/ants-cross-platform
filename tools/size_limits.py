@@ -55,7 +55,7 @@ SHAPES_BUDGET, SHAPES_GZIP_BUDGET = 8_100, 3_100        # the one table of the p
 REJOIN_KEY_BUDGET, REJOIN_KEY_GZIP_BUDGET = 5_900, 2_400    # the seat-key reader (web/rejoin_key.js), shared by the front page and the game page
 PICKER_BUDGET, PICKER_GZIP_BUDGET = 15_500, 5_000       # the picture's dropdown
 # the front page (web/home/, web/front/player_name.js)
-HOME_BUDGET, HOME_GZIP_BUDGET = 44_000, 13_500
+HOME_BUDGET, HOME_GZIP_BUDGET = 49_500, 15_000
 GAMES_BUDGET, GAMES_GZIP_BUDGET = 98_000, 28_000
 PLAYERS_BUDGET, PLAYERS_GZIP_BUDGET = 33_000, 10_500
 VP_BUDGET, VP_GZIP_BUDGET = 4_200, 1_900            # vp.js: the screen numbers of /?vp (loaded for that address only)

@@ -28,8 +28,8 @@
   {
    "id": "a_pinch_counts_as_a_short_window",
    "file": "web/home/home.js",
-   "old": "m.scale > 0.99 && m.scale < 1.01 ? m.vv : 0",
-   "new": "m.vv",
+   "old": "one = m.scale > 0.99 && m.scale < 1.01,",
+   "new": "one = true,",
    "test": "node tests/scripts/web_home_height_check.js"
   },
   {
@@ -107,6 +107,55 @@
    "file": "web/home/vp.js",
    "old": "'vh ' + probe.vh + ', dvh ' + probe.dvh + ', svh ' + probe.svh + ', lvh ' + probe.lvh",
    "new": "'vh ' + probe.vh + ', dvh ' + probe.vh + ', svh ' + probe.vh + ', lvh ' + probe.vh",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "a_pinch_counts_in_innerheight",
+   "file": "web/home/home.js",
+   "old": "all = [one ? m.inner : 0, m.client,",
+   "new": "all = [m.inner, m.client,",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "a_tab_counts_the_roots_height",
+   "file": "web/home/home.js",
+   "old": "client: installed() ? root.clientHeight : 0,",
+   "new": "client: root.clientHeight,",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "a_select_is_not_a_field",
+   "file": "web/home/home.js",
+   "old": " || t === 'SELECT'",
+   "new": "",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "no_look_after_a_field_lets_go",
+   "file": "web/home/home.js",
+   "old": "doc.addEventListener('focusout', function () { setTimeout(fit, 350); });",
+   "new": "",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_also_reads_the_hash",
+   "file": "web/home/home.js",
+   "old": "(win.location && win.location.search) || ''",
+   "new": "((win.location && win.location.search) || '') + ((win.location && win.location.hash) || '').replace('#', '?')",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_pattern_has_no_start",
+   "file": "web/home/home.js",
+   "old": "/[?&]vp(&|=|$)/",
+   "new": "/vp(&|=|$)/",
+   "test": "node tests/scripts/web_home_height_check.js"
+  },
+  {
+   "id": "the_readout_leaves_out_the_outer_size",
+   "file": "web/home/vp.js",
+   "old": "'outer ' + w.outerWidth + ' x ' + w.outerHeight, ",
+   "new": "",
    "test": "node tests/scripts/web_home_height_check.js"
   }
  ]

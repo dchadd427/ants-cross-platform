@@ -7,6 +7,8 @@
 //   2. the fault (the window shows 60 px less than the units say): each reading alone, and all three, after the load and from the first look: the strip's bottom edge is inside what the window shows;
 //   3. the keyboard: a field with the focus and a drop of 40 percent, or of 60 px: the page is not squeezed; the field lets go and the page fits what the window shows again;
 //   4. a turn of the phone: the limit is taken away and the box is as tall as the window;
+//   4b. a browser with no dvh and no svh (the units are made unknown words): Home is the window's height, a phone and a desktop, in a tab and installed;
+//   4c. a tab whose address bar went away (the root's height stays 56 px short, the units and innerHeight do not): the page is the window's height and no limit is set, as on an older version;
 //   5. "/?vp": every number is in the box, it asks for nothing but its own script and keeps nothing; a plain address has no box.
 //   --shots DIR takes the pictures (DIR/NAME.png, cut at what the window shows).
 //
@@ -80,16 +82,21 @@ async function main() {
     try { browser = await playwright.chromium.launch(launch); } catch (e) { console.log('SKIP: no browser could be started (' + String(e.message).split('\n')[0] + '): the page\'s height was NOT run in a browser'); site.stop(); process.exit(0); }
     const errors = [];
     // a phone window: touch, 2x pixels, the page's meta viewport honoured; `installed` makes (display-mode: standalone) true through the browser's own emulation
-    async function open(w, h, installed, search, fault) {
+    async function open(w, h, installed, search, fault, oldBrowser) {
         const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
         const page = await context.newPage();
         page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
-        if (installed) {                                    // the browser cannot be told that it is an installed window: the style's own display-mode query is made true, and so is the script's
+        if (installed) {                                    // (CDP's setEmulatedMedia takes no display-mode feature in this browser: the style's display-mode query is made true on the way, and so is the script's)
+            await page.addInitScript(() => { const mm = window.matchMedia.bind(window); window.matchMedia = (q) => (/display-mode: standalone/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {} } : mm(q)); });
+        }
+        if (installed || oldBrowser) {                      // an old browser: dvh and svh are words that it does not know, so @supports says no and a declaration that names one is dropped
             await page.route('**/home/home.css', async (route) => {
                 const res = await route.fetch();
-                await route.fulfill({ response: res, body: (await res.text()).split('@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').join('@media all') });
+                let css = await res.text();
+                if (installed) css = css.split('@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').join('@media all');
+                if (oldBrowser) css = css.replace(/(\d)(dvh|svh)/g, '$1$2x');
+                await route.fulfill({ response: res, body: css });
             });
-            await page.addInitScript(() => { const mm = window.matchMedia.bind(window); window.matchMedia = (q) => (q === '(display-mode: standalone)' ? { matches: true, media: q, addEventListener() {}, removeEventListener() {} } : mm(q)); });
         }
         if (fault) await page.addInitScript(FAULT);
         const requests = [];
@@ -125,6 +132,7 @@ async function main() {
     // ---- 2. the fault: the units say 998, the window shows 938 ----
     for (const installed of [true, false]) {
         for (const only of ['all', 'inner', 'client', 'vv']) {
+            if (!installed && only === 'client') continue;           // (a tab does not read the root's height: 4c)
             for (const late of [true, false]) {
                 const w = 448, h = 998, shown = 938;
                 const { page, context } = await open(w, h, installed, '', true);
@@ -192,9 +200,33 @@ async function main() {
         await context.close();
     }
 
+    // ---- 4b. a browser that has no dvh (and no svh): Home is the window's height, as it was ----
+    for (const [w, h, label] of [[448, 998, 'a phone'], [1280, 800, 'a desktop']]) {
+        for (const installed of [false, true]) {
+            const { page, context } = await open(w, h, installed, '', true, true);
+            const m = await page.evaluate(METRICS);
+            check('no dvh, ' + label + (installed ? ' (installed)' : '') + ': Home is as tall as the window (the 100vh line is what counts)', Math.abs(m.body.bottom - m.inner) <= 1 && m.body.top === 0, JSON.stringify(m));
+            await shot(page, 'olddvh_' + w + (installed ? '_installed' : '_tab'));
+            await context.close();
+        }
+    }
+
+    // ---- 4c. a browser tab whose address bar went away: the root's height stays the small window (56 px less), the units and innerHeight are the big one; a tab behaves as it always did ----
+    for (const [w, h] of SIZES) {
+        const { page, context } = await open(w, h, false, '', true);
+        await page.addStyleTag({ content: 'html { height: ' + (h - 56) + 'px !important; }' });
+        await page.evaluate((n) => { window.__only = 'client'; window.__shown = n; window.dispatchEvent(new Event('resize')); }, h - 56);
+        await sleep(400);
+        const m = await page.evaluate(METRICS);
+        check(w + 'x' + h + ' tab, address bar gone: Home is as tall as the window and no limit is set', Math.abs(m.body.bottom - h) <= 1 && m.limit === '', JSON.stringify(m));
+        await shot(page, 'tabbar_' + w);
+        await context.close();
+    }
+
     // ---- 5. the readout ----
     {
         const plain = await open(448, 998, true, '', false);
+        const plainRequests = plain.requests.map((r) => r.replace('/?vp', '/'));
         const plainBox = await plain.page.evaluate(() => !!document.getElementById('vp-readout'));
         const plainStore = await plain.page.evaluate(() => JSON.stringify([Object.keys(localStorage), Object.keys(sessionStorage)]));
         check('a plain address: no box and no request for the numbers\' script', !plainBox && !plain.requests.some((r) => /vp\.js/.test(r)), JSON.stringify(plain.requests.filter((r) => /vp/.test(r))));
@@ -209,8 +241,9 @@ async function main() {
             check('the readout says ' + re, re.test(text), text);
         }
         const store = await page.evaluate(() => JSON.stringify([Object.keys(localStorage), Object.keys(sessionStorage)]));
-        const extra = requests.filter((r) => !/^GET \/home\/vp\.js/.test(r));
-        check('the readout asks for its own script and nothing else more than the page does', requests.filter((r) => /vp\.js/.test(r)).length === 1 && requests.every((r) => /^(GET|POST|OPTIONS) /.test(r)) && extra.length >= 0, requests.join(' | '));
+        const known = new Set(plainRequests);
+        const more = requests.map((r) => r.replace('/?vp', '/')).filter((r) => !known.has(r));
+        check('the readout asks for its own script and for nothing that a plain visit does not ask for', requests.filter((r) => /vp\.js/.test(r)).length === 1 && more.length === 1 && /^GET \/home\/vp\.js/.test(more[0]), more.join(' | '));
         check('the readout keeps nothing in the browser (same storage keys as a plain visit)', store === plainStore, store + ' vs ' + plainStore);
         await shot(page, 'readout_448_installed', 998);
         if (there) { await page.click('#vp-readout'); check('a tap puts the box away', await page.evaluate(() => document.getElementById('vp-readout').hidden === true)); }

@@ -15,7 +15,7 @@
     function lines(w, d, probe) {
         var v = w.visualViewport, r = d.body.getBoundingClientRect(), ua = w.navigator.userAgent || '', c = /Chrome\/([\d.]+)/.exec(ua), a = /Android ([\d.]+)/.exec(ua), mode = 'browser';
         for (var i = 0; i < MODES.length; i++) if (w.matchMedia('(display-mode: ' + MODES[i] + ')').matches) { mode = MODES[i]; break; }
-        return ['display-mode ' + mode, 'inner ' + w.innerWidth + ' x ' + w.innerHeight, 'client height ' + d.documentElement.clientHeight,
+        return ['display-mode ' + mode, 'inner ' + w.innerWidth + ' x ' + w.innerHeight, 'outer ' + w.outerWidth + ' x ' + w.outerHeight, 'client height ' + d.documentElement.clientHeight,
             'visual viewport ' + (v ? v.width + ' x ' + v.height + ', top ' + v.offsetTop + ', scale ' + v.scale : 'none'),
             'screen ' + w.screen.width + ' x ' + w.screen.height + ', avail ' + w.screen.availWidth + ' x ' + w.screen.availHeight, 'pixel ratio ' + w.devicePixelRatio,
             'vh ' + probe.vh + ', dvh ' + probe.dvh + ', svh ' + probe.svh + ', lvh ' + probe.lvh, 'safe top ' + probe.t + ', right ' + probe.r + ', bottom ' + probe.b + ', left ' + probe.l,

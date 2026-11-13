@@ -30,16 +30,17 @@ check('a missing or zero reading is not a window of no height', fit({ inner: 0, 
 check('1 px of difference is rounding, 2 px is a limit', fit({ inner: 997 }) === null && fit({ inner: 996 }) === 996);
 check('a fraction is cut down, so the box is never a hair too tall', fit({ inner: 937.6 }) === 937);
 check('a pinch-zoomed visual viewport is not a short window (its height counts at scale 1 only)', fit({ vv: 500, scale: 2 }) === null && fit({ vv: 938, scale: 1.005 }) === 938);
+check('a pinch-zoomed window reads nothing from innerHeight either (an iPhone\'s follows the pinch)', fit({ inner: 700, vv: 700, scale: 1.2 }) === null && fit({ inner: 800, vv: 800, scale: 1.05 }) === null && fit({ inner: 940, vv: 940, scale: 1 }) === 940);
 check('a field with the focus changes nothing, however short the window', fit({ inner: 938, typing: true }) === 'keep' && fit({ inner: 500, typing: true }) === 'keep');
 check('a drop of more than a third is the keyboard or a split window: no limit', fit({ inner: 600 }) === null && fit({ inner: 665 }) === null && fit({ inner: 666 }) === 666);
 check('the box shorter than the window: no limit', fit({ box: 800 }) === null);
 
 // ---- 2. the guard ----
 // A window and a page that are just enough: Home's box is the natural height, or the limit when there is one; the window shows `shown` px (all three readings, or what a test says).
-function world(natural, shown, onHome) {
+function world(natural, shown, onHome, tab) {
     const listeners = {};
     const props = {};
-    const w = { innerHeight: shown, listeners, timers: [] };
+    const w = { innerHeight: shown, listeners, timers: [], matchMedia: (q) => ({ matches: !tab && /display-mode: standalone/.test(q) }) };       // (a tab: no display mode of an installed window matches)
     const vv = { height: shown, scale: 1, listeners: {}, addEventListener(n, f) { this.listeners[n] = f; } };
     w.visualViewport = vv;
     w.addEventListener = (n, f) => { listeners[n] = f; };
@@ -73,6 +74,8 @@ function world(natural, shown, onHome) {
     check('a text field has the focus and the window gets shorter: the page is not squeezed', !('--home-h' in t.props) && t.box() === 998);
     t.d.activeElement = { tagName: 'TEXTAREA' }; t.fire('resize');
     check('the same with a text area', !('--home-h' in t.props));
+    t.d.activeElement = { tagName: 'SELECT' }; t.fire('resize');
+    check('the same with a drop-down list', !('--home-h' in t.props));
     t.d.activeElement = { tagName: 'DIV', isContentEditable: true }; t.fire('resize');
     check('the same with an editable box', !('--home-h' in t.props));
     t.d.activeElement = { tagName: 'BUTTON' }; t.fire('resize');
@@ -82,10 +85,35 @@ function world(natural, shown, onHome) {
     t.d.activeElement = null; t.d.listeners.focusout && t.d.listeners.focusout({});
     tick(500).then(() => {
         check('the field lets go: the page looks again after the keyboard went, and the limit goes', !('--home-h' in t.props));
+        stage2();
+    });
+}
+// the guard's own second look (300 ms after the load) must not stand in for the focusout look: wait it out first
+function stage2() {
+    const t = world(998, 998);
+    tick(400).then(() => {
+        t.d.activeElement = { tagName: 'INPUT' };
+        t.set(938); t.fire('resize');
+        t.d.activeElement = null;
+        t.d.listeners.focusout && t.d.listeners.focusout({});
+        return tick(100).then(() => {
+            check('a field lets go: nothing is looked at at once (the keyboard is still going)', !('--home-h' in t.props));
+            return tick(400);
+        });
+    }).then(() => {
+        check('a field lets go and the window shows less: the page fits it after the focusout look', t.props['--home-h'] === '938px');
         done2();
     });
 }
 function done2() {
+    const tabW = world(998, 998, true, true);
+    tabW.d.documentElement.clientHeight = 940; tabW.fire('resize');
+    check('a browser tab ignores the root\'s clientHeight (it stays the small window when the address bar hides)', !('--home-h' in tabW.props));
+    tabW.set(940); tabW.d.documentElement.clientHeight = 940; tabW.fire('resize');
+    check('a browser tab still follows innerHeight and the visual viewport', tabW.props['--home-h'] === '940px');
+    const inst = world(998, 998);
+    inst.d.documentElement.clientHeight = 940; inst.fire('resize');
+    check('an installed window counts the root\'s clientHeight', inst.props['--home-h'] === '940px');
     const t = world(998, 938);
     t.vv.scale = 2; t.vv.height = 400; t.fire('resize');
     check('a pinch-zoomed page with the window as before keeps the limit of the other readings', t.props['--home-h'] === '938px');
@@ -115,7 +143,7 @@ function part3() {
         const mk = () => { const e = { style: '', attrs: {}, listeners: {}, hidden: false, textContent: '', children: [], setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(n, f) { this.listeners[n] = f; }, getBoundingClientRect() { const m = /height:100(l|s|d)?vh/.exec(this.attrs.style || ''); return { height: m ? UNITS[m[1] || ''] : 0, top: 0, bottom: 0 }; } }; return e; };
         const d = { createElement: mk, head: { appendChild(e) { appended.push(e); } }, documentElement: { clientHeight: 820, style: { getPropertyValue: () => '' } }, body: { appendChild(e) { appended.push(e); }, getBoundingClientRect: () => ({ top: 3, bottom: 897, height: 894 }) } };
         const w = Object.assign({
-            location: { search }, innerWidth: 448, innerHeight: 900, devicePixelRatio: 2.5, screen: { width: 448, height: 998, availWidth: 448, availHeight: 960 },
+            location: { search }, innerWidth: 448, innerHeight: 900, outerWidth: 460, outerHeight: 1000, devicePixelRatio: 2.5, screen: { width: 448, height: 998, availWidth: 448, availHeight: 960 },
             visualViewport: { width: 448, height: 897, offsetTop: 0, scale: 1 }, navigator: { userAgent: 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.7390.122 Mobile Safari/537.36' },
             matchMedia: (q) => ({ matches: q === '(display-mode: standalone)' }), getComputedStyle: () => ({ paddingTop: '24px' }), addEventListener() {},
             fetch() { requests.push('fetch'); }, XMLHttpRequest: function () { requests.push('xhr'); }, WebSocket: function () { requests.push('ws'); }, localStorage: { setItem() { stored.push('l'); } }, sessionStorage: { setItem() { stored.push('s'); } },
@@ -124,7 +152,9 @@ function part3() {
     }
     const plain = page('');
     check('a plain address loads nothing for the readout', Home.readout(plain.w, plain.d) === false && plain.appended.length === 0);
-    for (const s of ['?room=abcd', '?vpx', '?x=vp1', '?vpn=1']) { const p = page(s); check('the address ' + s + ' is not the readout\'s', Home.readout(p.w, p.d) === false && p.appended.length === 0); }
+    for (const s of ['?room=abcd', '?vpx', '?x=vp1', '?vpn=1', '?room=xxvp', '?xvp', '?x=vp', '?VP']) { const p = page(s); check('the address ' + s + ' is not the readout\'s', Home.readout(p.w, p.d) === false && p.appended.length === 0); }
+    const hashed = page('', { location: { search: '', hash: '#vp' } });
+    check('a #vp at the end of the address is not the readout\'s', Home.readout(hashed.w, hashed.d) === false && hashed.appended.length === 0);
     for (const s of ['?vp', '?vp=1', '?a=1&vp', '?vp&a=1']) {
         const p = page(s);
         check('the address ' + s + ' loads the numbers\' script (one script, from this site)', Home.readout(p.w, p.d) === true && p.appended.length === 1 && p.appended[0].src === 'home/vp.js');
@@ -136,7 +166,7 @@ function part3() {
     const box = p.appended.filter((e) => e.id === 'vp-readout')[0] || {};
     check('the script mounts a box over the page that nothing else is in', p.appended.length >= 2 && box.id === 'vp-readout' && p.appended.filter((e) => e.id === 'vp-readout').length === 1);
     const text = box.textContent;
-    const want = ['display-mode standalone', 'inner 448 x 900', 'client height 820', 'visual viewport 448 x 897, top 0, scale 1', 'screen 448 x 998, avail 448 x 960', 'pixel ratio 2.5', 'vh 900, dvh 897, svh 880, lvh 910',
+    const want = ['display-mode standalone', 'inner 448 x 900', 'outer 460 x 1000', 'client height 820', 'visual viewport 448 x 897, top 0, scale 1', 'screen 448 x 998, avail 448 x 960', 'pixel ratio 2.5', 'vh 900, dvh 897, svh 880, lvh 910',
         'safe top 24px, right 24px, bottom 24px, left 24px', 'home top 3, bottom 897, limit none', 'Chrome 141.0.7390.122, Android 15'];
     for (const x of want) check('the box says "' + x + '"', text.indexOf(x) !== -1, text);
     check('the box is text (no markup, no link)', !/<|href/.test(text) && box.innerHTML === undefined);

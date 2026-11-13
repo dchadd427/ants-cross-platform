@@ -49,12 +49,12 @@
     function firstScreen(link, hasSeat, hash) { return link ? 'room' : hasSeat && hash === HASH ? 'room' : 'home'; }
 
     // The height that Home must not be taller than. box: Home's own height with no limit set; inner, client, vv: the window's three readings (0 or missing: none); scale: the visual viewport's zoom
-    // (its height counts only at 1: a pinch must not shrink the page); typing: a text field has the focus. Returns a number of px (set --home-h), null (no limit) or 'keep' (change nothing).
+    // (no reading of the window's height counts while it is not 1: a pinch must not shrink the page, and some phones' innerHeight follows it); typing: a text field has the focus. Returns a number of px (set --home-h), null (no limit) or 'keep' (change nothing).
     // The smallest reading wins, as the page cannot be taller than any true one. A field with the focus changes nothing (the keyboard takes its room and the page slides, as it did), and a reading
     // under two thirds of the box is a keyboard or a split window, not a page that is too tall: no limit.
     function fitHeight(m) {
         if (m.typing) return 'keep';
-        var least = 0, all = [m.inner, m.client, m.scale > 0.99 && m.scale < 1.01 ? m.vv : 0];
+        var least = 0, one = m.scale > 0.99 && m.scale < 1.01, all = [one ? m.inner : 0, m.client, one ? m.vv : 0];
         for (var i = 0; i < all.length; i++) if (all[i] > 0 && isFinite(all[i]) && (!least || all[i] < least)) least = all[i];
         if (!least || !(m.box > least + 1) || least < m.box * 2 / 3) return null;
         return Math.floor(least);
@@ -64,13 +64,14 @@
     // viewport, on a turn of the phone (twice: the new size comes a moment late) and shortly after a field loses the focus (the keyboard goes).
     function heightGuard(win, doc, onHome) {
         function typing() { var a = doc.activeElement, t = a && a.tagName; return !!a && (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || a.isContentEditable === true); }
+        function installed() { try { return !!win.matchMedia && win.matchMedia('(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)').matches; } catch (e) { return false; } }       // (a browser tab: the root's height stays the small window when the address bar hides, so it is not a reading there)
         function fit() {
             try {
                 var root = doc.documentElement, v = win.visualViewport;
                 if (typing()) return;
                 root.style.removeProperty('--home-h');
                 if (!onHome()) return;
-                var h = fitHeight({ box: doc.body.getBoundingClientRect().height, inner: win.innerHeight, client: root.clientHeight, vv: v ? v.height : 0, scale: v ? v.scale : 1, typing: false });
+                var h = fitHeight({ box: doc.body.getBoundingClientRect().height, inner: win.innerHeight, client: installed() ? root.clientHeight : 0, vv: v ? v.height : 0, scale: v ? v.scale : 1, typing: false });
                 if (typeof h === 'number') root.style.setProperty('--home-h', h + 'px');
             } catch (e) { /* the page keeps its own height */ }
         }

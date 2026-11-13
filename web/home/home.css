@@ -7,9 +7,10 @@ body[data-screen="room"] #home { display: none; }
 .mast { display: none; }                                    /* the old logo row: its buttons are in the Menu now, and the slim bar below has the logo */
 .strips { flex: none; padding-top: 0; padding-bottom: 0; }
 .strips > :not([hidden]) { margin-top: 16px; margin-bottom: 0; }
-html { height: 100%; }                                      /* (the percentage chain: html, body and the screen's box, so that Home can take the smaller of the window's height and the units' height) */
-body[data-screen="home"] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; height: min(var(--home-h, 100dvh), 100%); padding-bottom: env(safe-area-inset-bottom); overflow: hidden; }       /* (a strip above the page, "Back from the match", takes its height out of the screen's) */
-@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { body[data-screen="home"] { height: min(var(--home-h, 100dvh), 100%, 100svh); } }       /* (an installed window: the smallest height that can be right; --home-h is set by home.js only while the box is taller than the window) */
+html { height: 100%; }                                      /* (the percentage chain: html, then body, for an installed window's smaller candidate) */
+body[data-screen="home"] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env(safe-area-inset-bottom); overflow: hidden; }       /* (a strip above the page, "Back from the match", takes its height out of the screen's) */
+@supports (height: 100dvh) { body[data-screen="home"] { height: var(--home-h, 100dvh); } }       /* (--home-h: set by home.js only while the box is taller than the window; inside @supports, so that a browser with no dvh keeps the 100vh line) */
+@supports (height: 100svh) { @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { body[data-screen="home"] { height: min(var(--home-h, 100dvh), 100%, 100svh); } } }       /* (an installed window: the smallest height that can be right) */
 body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #home { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .hopen { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; width: max-content; max-width: calc(100% - 24px); padding: 18px 34px; font-size: 24px; text-align: center; color: var(--cream); background: var(--inset);
@@ -86,6 +87,7 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 /* ---- the Menu ---- */
 .hmenubox { position: fixed; right: 10px; z-index: 60; width: min(316px, calc(100vw - 20px)); max-height: calc(100vh - 90px); max-height: calc(100dvh - 90px); overflow-y: auto; overscroll-behavior: contain; padding: 6px 16px 12px; color: var(--cream); background: #050b0e; border: 3px solid var(--frame);
     border-color: var(--frame-hi) var(--frame-lo) var(--frame-lo) var(--frame-hi); border-radius: 4px; box-shadow: 0 0 0 2px var(--edge), 3px 4px 0 2px var(--shadow); }
+@supports (height: 100svh) { @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) { .hmenubox { max-height: min(calc(100dvh - 90px), calc(100svh - 90px)); } } }       /* (an installed window: the smaller height) */
 .hmenubox a, .hmenubox button.mitem { display: flex; align-items: center; min-height: 48px; padding: 0 4px; font-size: 18px; text-decoration: none; text-align: left; color: var(--cream); background: none; border: 0; border-bottom: 1px solid #1d3a31; cursor: pointer; width: 100%; }
 .hmenubox a:hover, .hmenubox button.mitem:hover { background: #0e1f1b; }
 .hmenubox a[aria-current] { color: var(--gold); }

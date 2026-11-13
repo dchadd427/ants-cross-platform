@@ -181,7 +181,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn('body[data-screen="home"] main.wrap, body[data-screen="home"] .bar { display: none; }', css)
         self.assertIn('body[data-screen="room"] #home { display: none; }', css)
         self.assertRegex(css, r"\.mast \{ display: none; \}")
-        self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; height: min\(var\(--home-h, 100dvh\), 100%\); padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')
+        self.assertRegex(css, r'body\[data-screen="home"\] \{ display: flex; flex-direction: column; height: 100vh; height: 100dvh; padding-bottom: env\(safe-area-inset-bottom\); overflow: hidden; \}')
         self.assertRegex(css, r'body\[data-screen="home"\] \.screen \{ flex: 1 1 auto; min-height: 0; overflow: hidden; \}')
 
     def test_leave_room_is_red_like_leave_game_with_the_stamped_look(self):
