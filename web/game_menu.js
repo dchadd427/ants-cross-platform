@@ -102,7 +102,7 @@
                 if (picwrap && picwrap.parentNode) picwrap.parentNode.insertBefore(makeButton('gm-bar', 'settings-btn-bar'), picwrap);
                 return;
             }
-            if (menu && menu.parentNode) insertAfter(makeButton('gm-head', 'settings-btn'), menu);
+            if (menu && menu.parentNode) insertAfter(makeButton('gm-top', 'settings-btn'), menu);
         }
 
         function refresh() {

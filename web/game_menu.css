@@ -5,8 +5,8 @@
 .gm-btn[hidden] { display: none !important; }
 .gm-btn::before { content: "\2699\FE0E"; font-size: 1.1em; line-height: 1; }
 .gm-btn:disabled { opacity: .55; cursor: default; }
-.btn.gm-head { min-height: 44px; }
-@media (max-width: 440px) { .gm-head .gm-txt { display: none; } .gm-head { min-width: 44px; justify-content: center; } }
+.btn.gm-top { min-height: 44px; }
+@media (max-width: 440px) { .gm-top .gm-txt { display: none; } .gm-top { min-width: 44px; justify-content: center; } }
 
 /* the dimmed screen and the panel */
 .gm-scrim { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .64); cursor: default;
