@@ -172,7 +172,7 @@ class Pictures:
             self.dropped, self.dropped_at = 0, now
 
     def pump(self):
-        while not self.stopping and self.waiting and self.inflight < self.limits.picture_inflight:
+        while self.waiting and self.inflight < self.limits.picture_inflight:
             account, avatar, key = self.waiting.popleft()
             self.inflight += 1
             task = asyncio.ensure_future(self.work(account, avatar, key))

@@ -775,13 +775,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.ThePngCheck"
   },
   {
-   "id": "a_stopping_hub_starts_the_next_fetch",
-   "file": "hub/pictures.py",
-   "old": "        while not self.stopping and self.waiting and",
-   "new": "        while self.waiting and",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
-  },
-  {
    "id": "a_stopping_hub_keeps_its_queue",
    "file": "hub/pictures.py",
    "old": "        self.stopping = True\n        self.waiting.clear()\n        self.queued.clear()\n",

@@ -1015,6 +1015,7 @@ class Contract(unittest.TestCase):
         self.store.add_session("b", "1001", "alice", 700, 10, 100)
         self.store.add_session("c", "1001", "alice", 300, 10, 100)
         name, _ = self.keep(name="a" * 32, until=self.clock.now + 5000)
+        self.store.delete_session("c")                                            # (a login ends and two are left: the picture's time is the latest of them)
         self.clock.now += 650
         self.assertEqual(self.store.picture(name), b"\x89PNG-one")                  # (the time was cut to the latest login's end, 700, not to the earliest or the newest)
         self.clock.now += 49
