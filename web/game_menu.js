@@ -417,7 +417,7 @@
         // A key whose press the panel kept stays the panel's until its lift: its repeats (a held key goes on repeating after the panel has closed, and the game's window system takes a repeat it never saw the press of
         // for a new press), the text of its press and its lift stop at the document too, whether the panel is still up or not. The lift is the panel's as well: the game would cancel it, and a browser presses a focused
         // button at Space's lift. A fresh press of the key (no repeat) ends it; nothing else is held back from the game after the panel has closed, and a key that went down before the panel opened keeps its lift.
-        function keep(e) { kept[e.code || e.key] = true; watchKeys(); }
+        function keep(e) { if (e.repeat) return; kept[e.code || e.key] = true; watchKeys(); } // (only a press that the panel saw: a key that went down before the panel opened and repeats under it is the game's, and so is its lift)
         function anyKept() { for (var k in kept) if (kept[k]) return true; return false; }
         function watchKeys() {
             if (watching) return;

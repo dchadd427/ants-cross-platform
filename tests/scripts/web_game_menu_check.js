@@ -176,9 +176,12 @@ function makeDocument() {
     doc.addEventListener = (type, fn, capture) => { (doc.listeners[type] = doc.listeners[type] || []).push({ fn, capture: !!capture }); };
     doc.removeEventListener = (type, fn, capture) => { doc.listeners[type] = (doc.listeners[type] || []).filter((l) => !(l.fn === fn && l.capture === !!capture)); };
     doc.count = (type) => (doc.listeners[type] || []).length;
-    // a key goes to the document's capture listeners (the panel listens there), and to the active element's own only when no capture listener stopped it
+    // a key goes to the document's capture listeners (the panel listens there), and to the active element's own only when no capture listener stopped it. An event carries a `code` as a browser's does: the key
+    // that is pressed (the place on the keyboard: it stays the same when `key` changes between a press and its lift, as with a letter and Shift)
+    const codeOf = (key) => (/^[a-z]$/i.test(key) ? 'Key' + key.toUpperCase() : /^[0-9]$/.test(key) ? 'Digit' + key : key === ' ' ? 'Space' : /^(Shift|Control|Alt|Meta)$/.test(key) ? key + 'Left' : key);
+    doc.codeOf = codeOf;
     doc.key = (key, extra) => {
-        const e = Object.assign({ type: 'keydown', key, shiftKey: false, repeat: false, target: doc.active, prevented: false, stopped: false, immediate: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; }, stopImmediatePropagation() { this.stopped = true; this.immediate = true; } }, extra || {});
+        const e = Object.assign({ type: 'keydown', key, code: codeOf(key), shiftKey: false, repeat: false, target: doc.active, prevented: false, stopped: false, immediate: false, preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; }, stopImmediatePropagation() { this.stopped = true; this.immediate = true; } }, extra || {});
         for (const l of (doc.win && doc.win.listeners[e.type] || []).filter((x) => x.capture).slice()) { if (e.immediate) break; l.fn(e); }       // (the window's capture phase comes first: the page's own keys, the picker's)
         if (!e.stopped) for (const l of (doc.listeners[e.type] || []).filter((x) => x.capture).slice()) l.fn(e);
         e.reachedPage = !e.stopped;
@@ -1024,6 +1027,66 @@ const outside = (opts) => { const p = makePage(opts).ready(); p.game.where = -1;
     });
 }
 
+// ---- a key that went down before the panel opened -----------------------------------------------------------------------------------------------------------------------------
+// The game's window system, as a model: it keeps its own state of which keys are down, calls a press of a key that its state has down a REPEAT, and drops a lift of a key that its state has up. The game ignores repeats
+// for Esc's request of the menu, START in a room, T, F2 / F3 and F9 - F12: a lift that never reaches it leaves the key down in its state, and the next press of that key does nothing.
+function sdlModel(p) {
+    const down = {}, log = [];
+    const send = (key, type, extra) => {
+        const e = p.doc.key(key, Object.assign({ type: type || 'keydown' }, extra || {}));
+        if (e.reachedPage && e.type !== 'keypress') {
+            if (e.type === 'keydown') { log.push(key + ':' + (down[e.code] ? 'repeat' : 'new')); down[e.code] = true; } else delete down[e.code];
+        }
+        return e;
+    };
+    return { send, down, log };
+}
+{
+    [['full menu', 'Escape'], ['full menu', 'ArrowRight'], ['small form', 'Escape'], ['small form', 's'], ['small form', 'ArrowDown']].forEach(([form, key]) => {
+        const at = form + ', ' + key + ' held from before the panel: ';
+        const p = form === 'full menu' ? makePage().ready() : outside();
+        const g = sdlModel(p);
+        g.send(key);                                                                       // (the game saw it go down; there is no panel yet)
+        if (form === 'full menu') p.open(); else p.q('#settings-btn').click();
+        ok(at + 'the panel is up', p.menu.isOpen());
+        const repeats = [1, 2, 3].map(() => g.send(key, 'keydown', { repeat: true }));
+        ok(at + 'its repeats under the panel are the panel\'s (they are not the game\'s to act on)', repeats.every((e) => !e.reachedPage));
+        const lift = g.send(key, 'keyup');
+        ok(at + 'its lift reaches the game (the game saw the press: it must see the lift)', lift.reachedPage && !g.down[lift.code]);
+        p.q('.gm-resume').click();
+        g.send(key);
+        expect(at + 'its next press arrives as a fresh press, not as a repeat of one that never ended', g.log.slice(-1), [key + ':new']);
+        g.send(key, 'keyup');
+        expect(at + 'and nothing is left listening', [p.doc.count('keydown'), p.doc.count('keypress'), p.doc.count('keyup')], [0, 0, 0]);
+    });
+    // a key that went down under the panel is the panel's, whatever its lift calls it (Shift changes `key` between a press and its lift, not `code`)
+    const p = outside();
+    p.q('#settings-btn').click();
+    const down = p.doc.key('S', { code: 'KeyS', shiftKey: true });
+    p.q('.gm-resume').click();
+    ok('a press of Shift+S that the panel kept: the lift (as `s`, the same code) is the panel\'s too', !down.reachedPage && !p.doc.key('s', { type: 'keyup', code: 'KeyS' }).reachedPage);
+    expect('...and then nothing is left listening', [p.doc.count('keydown'), p.doc.count('keypress'), p.doc.count('keyup')], [0, 0, 0]);
+}
+{
+    // The holds stay when the panel opens again (a key is held until it is lifted, whatever the page does meanwhile): Enter held on Close, the panel opened again with the mouse, a repeat must not press the new panel's Close,
+    // and its lift ends the hold
+    ['small form', 'full menu'].forEach((form) => {
+        const at = form + ', Enter held across a second open: ';
+        const p = form === 'small form' ? outside() : makePage().ready();
+        const g = sdlModel(p);
+        p.q('#settings-btn').click();
+        g.send('Enter');
+        p.q('.gm-resume').click();
+        p.q('#settings-btn').click();
+        ok(at + 'the panel is up again', p.menu.isOpen());
+        const again = g.send('Enter', 'keydown', { repeat: true });
+        ok(at + 'a repeat is cancelled for the browser (it would press the new Close) and does not reach the game', again.prevented && !again.reachedPage && p.menu.isOpen());
+        ok(at + 'the lift ends the hold and is the panel\'s', !g.send('Enter', 'keyup').reachedPage);
+        p.q('.gm-resume').click();
+        expect(at + 'then nothing is left listening and a new Enter is the game\'s', [p.doc.count('keydown'), p.doc.count('keypress'), p.doc.count('keyup'), g.send('Enter').reachedPage], [0, 0, 0, true]);
+    });
+}
+
 // ---- the gear by keyboard ----------------------------------------------------------------------------------------------------------------------------------------------------
 {
     // the game's window system takes a focused button's Enter (START on the setup screen) and cancels its press: the gear presses itself
@@ -1031,10 +1094,10 @@ const outside = (opts) => { const p = makePage(opts).ready(); p.game.where = -1;
         const p = outside();
         const b = p.q('#settings-btn');
         b.focus();
-        const e = b.fire('keydown', { key: k, repeat: false });
+        const e = b.fire('keydown', { key: k, code: p.doc.codeOf(k), repeat: false });
         ok('a focused gear opens the panel on ' + (k === ' ' ? 'Space' : 'Enter') + ', and the key does not reach the game', p.menu.isOpen() && e.prevented && e.stopped);
         const q = outside();
-        q.q('#settings-btn').fire('keydown', { key: k, repeat: false });
+        q.q('#settings-btn').fire('keydown', { key: k, code: p.doc.codeOf(k), repeat: false });
         q.qa('.gm-resume')[0].click();
         ok('...the key is still held when it closes: its repeats are the panel\'s (they would press the game\'s START)', !q.doc.key(k, { repeat: true }).reachedPage && !q.doc.key(k, { type: 'keypress', repeat: true }).reachedPage);
         ok('...so is the lift', !q.doc.key(k, { type: 'keyup' }).reachedPage && q.doc.count('keydown') === 0);
@@ -1046,21 +1109,21 @@ const outside = (opts) => { const p = makePage(opts).ready(); p.game.where = -1;
     });
     const p = outside();
     const b = p.q('#settings-btn');
-    const rep = b.fire('keydown', { key: 'Enter', repeat: true });
+    const rep = b.fire('keydown', { key: 'Enter', code: p.doc.codeOf('Enter'), repeat: true });
     ok('a repeat on the gear opens nothing', !p.menu.isOpen() && rep.prevented);
-    const tab = b.fire('keydown', { key: 'Tab' });
+    const tab = b.fire('keydown', { key: 'Tab', code: p.doc.codeOf('Tab') });
     ok('another key on the gear is left alone', !tab.prevented && !p.menu.isOpen());
     b.disabled = true;
-    b.fire('keydown', { key: 'Enter' });
+    b.fire('keydown', { key: 'Enter', code: p.doc.codeOf('Enter') });
     ok('a gear that is off opens nothing', !p.menu.isOpen());
     const n = makePage().ready();
     n.game.needsAnswer = 1;
     n.poll();
-    n.q('#settings-btn').fire('keydown', { key: 'Enter' });
+    n.q('#settings-btn').fire('keydown', { key: 'Enter', code: p.doc.codeOf('Enter') });
     ok('under a dialog the gear\'s Enter opens the small form', n.menu.isOpen() && n.qa('[role=tab]').length === 0);
     n.menu.close();
     const m = makePage().ready();
-    m.q('#settings-btn').fire('keydown', { key: ' ' });
+    m.q('#settings-btn').fire('keydown', { key: ' ', code: p.doc.codeOf(' ') });
     ok('in a match the gear\'s Space opens the full menu', m.menu.isOpen() && m.qa('[role=tab]').length === 4);
     m.menu.close();
 }

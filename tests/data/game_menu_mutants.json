@@ -1623,6 +1623,34 @@
       "old": "panel.setAttribute('aria-describedby', 'gm-note');",
       "new": "",
       "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "a_repeat_under_the_panel_is_kept",
+      "file": "web/game_menu.js",
+      "old": "function keep(e) { if (e.repeat) return; kept[",
+      "new": "function keep(e) { kept[",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "kept_under_the_key_looked_up_under_the_code",
+      "file": "web/game_menu.js",
+      "old": "kept[e.code || e.key] = true; watchKeys(); }",
+      "new": "kept[e.key] = true; watchKeys(); }",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "lift_looked_up_under_the_key",
+      "file": "web/game_menu.js",
+      "old": "        function onLift(e) {\n            var id = e.code || e.key;",
+      "new": "        function onLift(e) {\n            var id = e.key;",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
+    },
+    {
+      "id": "holds_forgotten_at_a_second_open",
+      "file": "web/game_menu.js",
+      "old": "                call('_ants_menu_open', 1);\n",
+      "new": "                kept = {};\n                call('_ants_menu_open', 1);\n",
+      "test": "node tests/scripts/web_game_menu_check.js web/game_menu.js tests/data"
     }
   ]
 }
