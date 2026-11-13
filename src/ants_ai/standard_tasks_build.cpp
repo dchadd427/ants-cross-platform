@@ -185,6 +185,10 @@ void WallTask::step(TaskContext& c) {
             if (plan.fire_defence && fired_in_wall(v, hill, plan, w.tile, hold_over)) continue;          // a wall of the ring round the own gate: not before the Fire Ant that lights it is dealt with
             const int harm = harm_to(v, c.map, plan, w.tile);                              // the own economy first, then the ally's
             if (harm == 0) continue;
+            if (plan.own_ground_counters && harm == 1) {
+                if (tactics_.wall_demand && w.tile.chebyshev_dist(hill.origin) > plan.counter_keeper_leash) continue;        // the keeper stays at its hole while the walls are wanted
+                if (v.mine().size() <= tactics_.reserve_of(v) && hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own) continue;   // the last ants do not leave their own ground
+            }
             const int32_t d = keeper->tile.chebyshev_dist(w.tile);
             if (!have_counter || harm < best_harm || (harm == best_harm && d < best)) {
                 have_counter = true;
@@ -288,8 +292,8 @@ void WallTask::step(TaskContext& c) {
 
 // ---- BombTask -------------------------------------------------------------------------------------------------------------------------------------------
 
-int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept {
-    if (harms_economy(view, map, plan, tile)) return 1;
+int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned) noexcept {
+    if (harms_economy(view, map, plan, tile, map_owned)) return 1;
     const uint8_t ally = view.ally();
     if (!plan.ally_help || ally >= sim::MAX_PLAYERS) return 0;
     const HillInfo& hill = map.hill(ally);
@@ -302,7 +306,8 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
     return 0;
 }
 
-bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept {
+bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned) noexcept {
+    if (plan.own_ground_counters && !map_owned && hazard_ground(view, map, plan, tile) == HazardGround::Foreign) return false;      // another team's base is none of the bot's business
     for (const PileView& p : view.piles()) {
         const PileInfo* info = map.pile(p.index);
         if (info == nullptr || !info->approach[view.seat()].reachable()) continue;
@@ -364,17 +369,25 @@ void BombTask::step(TaskContext& c) {
     const BombView* pick = nullptr;
     int32_t best = 0;
     int best_harm = 0;
+    HazardGround pick_ground = HazardGround::Own;
+    const bool few_ants = v.mine().size() <= tactics_.reserve_of(v);                                   // (the last ants stay out of every chore that leaves the own ground)
     for (const BombView& b : v.bombs()) {
         if (b.owner == c.seat || (v.ally() < sim::MAX_PLAYERS && b.owner == v.ally()) || (plan.gate_spare_map_bombs && tactics_.gate_goals_live && b.owner >= sim::MAX_PLAYERS)) continue;   // an own or an allied bomb is no enemy's; a gate map's own bombs (no team, 255) are its gate, which the live gate goals defuse on their way (goals exhausted or in the fallback: countered as on any map)
         const auto bl = black_.find(key_of(b.tile));
         if (bl != black_.end() && bl->second > now) continue;
-        const int harm = harm_to(v, c.map, plan, b.tile);                                              // the own economy first, then the ally's (only a Bomber goes there)
+        const int harm = harm_to(v, c.map, plan, b.tile, b.owner >= sim::MAX_PLAYERS);                 // the own economy first, then the ally's (only a Bomber goes there)
         if (harm == 0) continue;
+        HazardGround ground = HazardGround::Own;
+        if (plan.own_ground_counters && harm == 1 && b.owner < sim::MAX_PLAYERS) {
+            ground = hazard_ground(v, c.map, plan, b.tile);
+            if (ground != HazardGround::Own && few_ants) continue;                                       // the last ants do not leave their own ground
+        }
         const int32_t d = hill.present ? b.tile.chebyshev_dist(hill.origin) : 0;
         if (pick == nullptr || harm < best_harm || (harm == best_harm && d < best)) {
             pick = &b;
             best = d;
             best_harm = harm;
+            pick_ground = ground;
         }
     }
     if (pick == nullptr) return;
@@ -383,7 +396,7 @@ void BombTask::step(TaskContext& c) {
     bool defuse = false;
     int32_t actor_d = 0;
     for (const AntView& a : v.mine()) {
-        if (a.type != sim::AntType::Bomber || a.hp < 3 || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
+        if (a.type != sim::AntType::Bomber || a.hp < (plan.own_ground_counters ? plan.counter_bomber_hp : 3u) || a.holding || a.carried_points > 0 || !a.takes_orders() || a.state == sim::UnitState::Stunned) continue;
         const TaskId owner = c.ledger.owner(a.id);
         if (owner != kNoTask && owner != id() && c.ledger.rank(owner) >= c.ledger.rank(id())) continue;
         const int32_t d = a.tile.chebyshev_dist(pick->tile);
@@ -393,7 +406,8 @@ void BombTask::step(TaskContext& c) {
             defuse = true;
         }
     }
-    if (actor == nullptr && plan.bomb_hit && best_harm == 1) {                                         // (a worker does not walk to the ally's base to set a bomb off)
+    // (a worker does not walk to the ally's base to set a bomb off, and with own-ground counters only steps on a bomb on the own ground, and not as one of the last ants)
+    if (actor == nullptr && plan.bomb_hit && best_harm == 1 && (!plan.own_ground_counters || (pick_ground == HazardGround::Own && !few_ants))) {
         for (const AntView& a : v.mine()) {
             if (a.type != v.default_ant_type() || a.hp < 8 || a.holding || a.carried_points > 0 || !a.idle() || v.powerup_at(a.tile) != nullptr) continue;
             const TaskId owner = c.ledger.owner(a.id);

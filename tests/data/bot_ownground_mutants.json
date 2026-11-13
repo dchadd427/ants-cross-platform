@@ -1,0 +1,171 @@
+{
+ "note": "Mutants of the counters on the own ground (include/ants_ai/tactics.hpp, include/ants_ai/standard_tasks.hpp, src/ants_ai/tactics.cpp hazard_ground, src/ants_ai/standard_tasks_build.cpp, tools/bot_arena_tune.cpp, docs/BOT_FIGHT.md 'Hazards on another hill's ground') for tools/mutate.py (docs/TESTING.md, 'Mutation checks'). Run from the checkout with a configured build folder: python3 tools/mutate.py tests/data/bot_ownground_mutants.json --keep-going --jobs 1 --timeout 900. Every mutant must be caught. Each is caught by the case named in expect (AI40.n), or by the arena's self-test for the tune keys.",
+ "defaults": {
+  "build": "test_ai"
+ },
+ "baseline": [
+  {
+   "build": "test_ai",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai"
+  },
+  {
+   "build": "bot_arena",
+   "test": "timeout 300 ./build/bot_arena --selftest"
+  }
+ ],
+ "mutants": [
+  {
+   "id": "rule_not_asked",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "hazard_ground(view, map, plan, tile) == HazardGround::Foreign) return false;",
+   "new": "hazard_ground(view, map, plan, tile) == HazardGround::Foreign && false) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.3"
+  },
+  {
+   "id": "map_owned_bomb_asked",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.own_ground_counters && !map_owned && hazard_ground",
+   "new": "if (plan.own_ground_counters && (map_owned || !map_owned) && hazard_ground",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.6"
+  },
+  {
+   "id": "hole_tiles_not_foreign",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "if (e == tile) return HazardGround::Foreign;",
+   "new": "if (e == tile && false) return HazardGround::Foreign;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "gate_ring_not_foreign",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "if (on_gate_ring(other, tile)) return HazardGround::Foreign;",
+   "new": "if (on_gate_ring(other, tile) && false) return HazardGround::Foreign;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "home_radius_zero",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "tile.chebyshev_dist(hill.origin) <= plan.counter_home_radius) return HazardGround::Own;",
+   "new": "tile.chebyshev_dist(hill.origin) <= 0) return HazardGround::Own;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "walking_cost_flipped",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "nearer_elsewhere = other >= 0 && other < mine;",
+   "new": "nearer_elsewhere = other >= 0 && other > mine;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "rivals_not_asked",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "if (rival_of(view, map, t) && info->approach[t].reachable()) cheapest",
+   "new": "if (false && info->approach[t].reachable()) cheapest",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "claim_percent_ignored",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "cheapest * static_cast<int64_t>(plan.counter_claim_percent)) return HazardGround::Claimed;",
+   "new": "cheapest * 100000) return HazardGround::Claimed;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "working_ant_ignored",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "if ((a.holding || a.carried_points > 0 || a.state == sim::UnitState::HarvestingFood) && a.tile",
+   "new": "if (false && (a.holding || a.carried_points > 0 || a.state == sim::UnitState::HarvestingFood) && a.tile",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "ally_a_rival",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "if (team == view.seat() || (view.ally() < sim::MAX_PLAYERS && team == view.ally()) || !map.hill(team).present) return false;",
+   "new": "if (team == view.seat() || !map.hill(team).present) return false;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "bomber_hp_three",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "a.hp < (plan.own_ground_counters ? plan.counter_bomber_hp : 3u)",
+   "new": "a.hp < 3u",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.6"
+  },
+  {
+   "id": "worker_off_own_ground",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "(pick_ground == HazardGround::Own && !few_ants)",
+   "new": "(pick_ground != HazardGround::Foreign && !few_ants)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.6"
+  },
+  {
+   "id": "last_ants_may_step_on_bombs",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "(pick_ground == HazardGround::Own && !few_ants)",
+   "new": "(pick_ground == HazardGround::Own)",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.6"
+  },
+  {
+   "id": "last_ants_bomber_leaves",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (ground != HazardGround::Own && few_ants) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.4"
+  },
+  {
+   "id": "last_ants_keeper_leaves",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (v.mine().size() <= tactics_.reserve_of(v) && hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.5"
+  },
+  {
+   "id": "keeper_leash_ignored",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (tactics_.wall_demand && w.tile.chebyshev_dist(hill.origin) > plan.counter_keeper_leash) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.5"
+  },
+  {
+   "id": "medium_off",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "            p.own_ground_counters = true;            // the counters clear an enemy's bomb or fire wall on the own ground or beside a pile with a claim, not on another hill's ground (docs/BOT_FIGHT.md)\n            break;\n        case Level::Hard:\n            p.assault = true;\n            p.assault_force = 3;",
+   "new": "            break;\n        case Level::Hard:\n            p.assault = true;\n            p.assault_force = 3;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.1"
+  },
+  {
+   "id": "flag_default_on",
+   "file": "include/ants_ai/tactics.hpp",
+   "old": "bool own_ground_counters{false};",
+   "new": "bool own_ground_counters{true};",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.1"
+  },
+  {
+   "id": "tune_key_ignored",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "if (key == \"ownground\") return flag(p.own_ground_counters);",
+   "new": "if (key == \"ownground\") return true;",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "the keys ownground",
+   "build": "bot_arena"
+  }
+ ]
+}

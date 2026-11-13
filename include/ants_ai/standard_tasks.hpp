@@ -259,6 +259,8 @@ private:
 ///   renew      a level with a renewal lead (Medium, Hard) puts a wall out and lights it again when it has stood that long minus the lead, at a calm moment (no enemy Thief within
 ///              reach of the hill) and one wall at a time; the other levels light the wall again after it burned out, while the threat lasts
 ///   failure    an order after which the ant is idle again and the tile is still open: the tile is left alone for 300 ticks
+///   counter    an enemy fire wall that is in the way of the economy (harms_economy) is put out when nothing of the above is due; with plan.own_ground_counters only a wall on ground that the bot has
+///              a claim to (hazard_ground), not one farther than plan.counter_keeper_leash from the own hill while walls are wanted, and, when only the last ants are left, only on the own ground
 class WallTask final : public Task {
 public:
     WallTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
@@ -304,6 +306,9 @@ public:
 ///   a worker    without a Bomber (and with plan.bomb_hit) a healthy idle worker is clicked onto the bomb's tile and sets it off on purpose (a person's click on a bomb): it loses 2
 ///               hit points, which it heals at the hill, instead of a carrier on its way losing them and its walk
 /// A bomb that is still there when the ant is idle again is left alone for 300 ticks. The ant is claimed for the job (a Bomber harvests between jobs).
+/// With plan.own_ground_counters (Medium, Hard) only a bomb on ground that the bot has a claim to is cleared (hazard_ground): its own ground, or beside a pile it has a claim to or works. A bomb in
+/// another team's base is left alone; a bomb that no team owns (the map's own) is asked as before. A Bomber needs plan.counter_bomber_hp hit points; a worker steps on a bomb only on the own ground and
+/// never as one of the last ants (Tactics::reserve_of); no ant goes beside a pile, off its own ground, when only the last ants are left.
 class BombTask final : public Task {
 public:
     BombTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
@@ -409,12 +414,13 @@ private:
 bool home_mine_turn(const LevelPlan& plan, uint32_t home_laid, uint32_t other_laid) noexcept;
 
 /// Whether a bomb or a fire wall on `tile` is in the way of the seat's economy: within `plan.counter_hill_radius` of its hill, or within `plan.counter_pile_radius` tiles of a pile
-/// with units that its hill reaches
-bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
+/// with units that its hill reaches. With plan.own_ground_counters it must also lie on ground that the seat has a claim to (hazard_ground: not Foreign), so that the hazards in
+/// another team's base are left alone; a bomb that no team owns (`map_owned`: the map's own) is asked as it always was.
+bool harms_economy(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned = false) noexcept;
 
 /// Whose economy a bomb or a fire wall on `tile` is in the way of: 1 the own (harms_economy), 2 the ally's (with plan.ally_help: within counter_hill_radius of the ally's hill, or
 /// within counter_pile_radius of a pile that the ally's hill reaches), 0 nobody's
-int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
+int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile, bool map_owned = false) noexcept;
 
 // ---- rank 3: the raids -------------------------------------------------------------------------------------------------------------------------------------
 
