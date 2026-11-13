@@ -68,6 +68,16 @@ same('the address of the Room is the hash #room', Home.HASH, '#room');
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // 2. A plain visit: Home, no room
 // ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    // Home's height (tests/scripts/web_home_height_check.js has the rule and the guard): showing Home looks at the window at once, so a screen that was left while the window changed is right when it comes back
+    const env = runLobby('', { 'ants.name': 'Maya' }, { stayHome: true });
+    const props = {};
+    env.doc.documentElement = { clientHeight: 800, style: { setProperty(k, v) { props[k] = v; }, removeProperty(k) { delete props[k]; }, getPropertyValue(k) { return props[k] || ''; } } };
+    env.doc.body.getBoundingClientRect = () => ({ top: 0, bottom: 800, height: 800 });
+    env.win.innerHeight = 740;
+    (env.win.listeners.popstate || []).forEach((fn) => fn({ state: { ants: 'home' } }));
+    check('showing Home looks at the window\'s height at once (a window of 740 px under a Home of 800 gets the limit)', props['--home-h'] === '740px', JSON.stringify(props));
+}
 const classes = (e) => String(e.className).split(/\s+/);
 const buttonsOf = (env) => env.$('home').findAll((e) => e.tagName === 'button');
 {

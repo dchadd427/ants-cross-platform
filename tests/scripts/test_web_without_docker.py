@@ -345,7 +345,8 @@ class TheRealDockerfileReplayed(Scratch):
 
     def test_the_files_that_the_image_has_are_there(self):
         for name in ("index.html", "play.html", "lobby.html", "index.js", "index.wasm", "index.data", "lvl_core.js", "lvl_core.wasm", "lvl_core_api.js", "changelog.html", "favicon.png", os.path.join("front", "logo.png"),
-                     os.path.join("front", "LibreFranklin-Medium.ttf"), os.path.join("front", "classic.css")):
+                     os.path.join("front", "LibreFranklin-Medium.ttf"), os.path.join("front", "classic.css"), "manifest.webmanifest", os.path.join("app", "icon-192.png"), os.path.join("app", "icon-512.png"),
+                     os.path.join("app", "icon-maskable-512.png"), os.path.join("app", "apple-touch-icon.png")):
             self.assertTrue(os.path.isfile(self.html("plain", name)), name)
         self.assertTrue(os.path.isdir(self.html("plain", "asset_catalog")))
         with open(self.html("plain", "index.html"), "rb") as a, open(self.html("plain", "play.html"), "rb") as b:
@@ -380,11 +381,16 @@ class TheRealDockerfileReplayed(Scratch):
     def test_the_site_placeholders_become_nothing_in_the_titles_and_the_footers(self):
         self.assertIn("<title>Ants (1998)</title>", self.page("plain", "lobby.html"))
         self.assertIn("<title>Ants (1998) \u2014 beta.playants.org</title>", self.page("plain", "index.html"))
-        for name in ("index.html", "play.html", "lobby.html", "matches.html", "match.html", "live.html"):
+        for name in ("index.html", "play.html", "lobby.html"):
             if os.path.exists(self.html("plain", name)):
                 text = self.page("plain", name)
                 self.assertNotIn("@@SITE_", text, name)
-                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)
+                self.assertRegex(text, r'<span><span class="ver" id="game-version-line">', name)            # (the footers of the game page and the front page)
+        for name in ("matches.html", "match.html", "live.html", "legal.html", "mapmaker.html"):          # (the pages with the bar at the top: no footer, the three stamps are on the bar for its Menu)
+            text = self.page("plain", name)
+            self.assertNotIn("@@", text, name)
+            self.assertNotIn("<footer", text, name)
+            self.assertRegex(text, r'<header class="sb"[^>]* data-version="%s" data-build="abc1234" data-built="\d{4}-\d{2}-\d{2} \d{2}:\d{2} PT"' % re.escape("v" + read("VERSION").strip()), name)
 
     def test_the_changelog_page_is_made_from_the_changelog_and_is_the_only_one(self):
         page = self.page("plain", "changelog.html")

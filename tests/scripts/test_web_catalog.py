@@ -52,7 +52,7 @@ class TheHead(unittest.TestCase):
 
     def test_nothing_is_loaded_but_the_data_the_font_and_the_stylesheet(self):
         self.assertEqual(re.findall(r'<script[^>]*\bsrc="([^"]+)"', PAGE), ["catalog_data.js", "/site_nav.js"])
-        self.assertEqual(re.findall(r'<link[^>]*\bhref="([^"]+)"', PAGE), ["/front/LibreFranklin-Medium.ttf", "/front/classic.css", "/site_nav.css"])
+        self.assertEqual(re.findall(r'<link[^>]*\bhref="([^"]+)"', PAGE), ["/manifest.webmanifest", "/app/apple-touch-icon.png?v=4fbefb68", "/front/LibreFranklin-Medium.ttf", "/front/classic.css", "/site_nav.css"])
         self.assertNotIn("@import", STYLE)
         self.assertNotRegex(STYLE, r"url\(\s*[\"']?(?:https?:)?//")
         self.assertNotRegex(PAGE, r"<(?:img|iframe|video|audio|source)[^>]*src=\"(?:https?:)?//")

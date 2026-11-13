@@ -324,7 +324,7 @@ class TheBrowserCheck(unittest.TestCase):
 
     def test_the_check_names_what_it_looks_at(self):
         text = read(BROWSER_CHECK)
-        for part in ("game-menu", "settings-btn-narrow", "settings-btn-bar", "Module._ants_menu_get(100)", "gm-leave", "embed=1", "390, 844", "844, 390", "hold_esc"):
+        for part in ("game-menu", "settings-btn", "settings-btn-bar", "Module._ants_menu_get(100)", "gm-leave", "embed=1", "390, 844", "844, 390", "hold_esc"):
             self.assertIn(part, text)
 
 

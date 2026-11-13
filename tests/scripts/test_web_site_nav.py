@@ -6,12 +6,18 @@ What this holds the bar to, without a browser (tests/scripts/web_site_nav_browse
     web/site_nav.js (one list: the two files name the same links);
   - the files are in the image (the Dockerfile copies each once), are plain ES5 and CSS, carry no copy of the colors, and the pages put no inline style or script into the bar (the CSP of /admin
     has none, and the other pages keep to it);
-  - the byte budgets of the two files, and the pages that are meant to stay without the bar (the admin page).
+  - the byte budgets of the two files, and the pages that are meant to stay without the bar (the admin page);
+  - the Menu run in node on the real markup of the pages (web/site_nav.js with a small fake of the DOM: tests/scripts/web_site_nav_menu_check.js): its last line is the stamped version and build as
+    text, a page that nobody stamped shows no line (never "@@GAME_VERSION@@"), every link that the old footers had is in it, and the pages with the bar have no footer (the front page and the game page keep theirs).
 """
 import gzip
+import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -209,6 +215,115 @@ class TheFiles(unittest.TestCase):
         classic = read("web", "front", "classic.css")
         for gone in (".site-head", ".links {", ".logo"):
             self.assertNotIn(gone, classic, gone)
+
+
+STAMPS = {"@@GAME_VERSION@@": "v9.8.7", "@@BUILD_ID@@": "abc1234", "@@BUILD_DATE@@": "2026-01-02 09:30 PT"}
+LINKS_OF_THE_OLD_FOOTERS = ["/", "/matches", "/live-now", "/asset_catalog/", "/changelog", "https://github.com/dchadd427/ants-cross-platform", "https://github.com/dchadd427/ants-cross-platform/issues", "/legal"]
+BAR_PAGES = ("matches", "match", "live", "legal", "mapmaker")
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed: the Menu is not run here")
+class TheMenusLastLine(unittest.TestCase):
+    """The Menu opened on the real markup of every page that has the bar (node, a fake DOM): what a visitor of a stamped build reads at its foot, and what a page that was never stamped shows."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="site_nav_menu_")
+        cls.maker = "v" + read("web", "MAPMAKER_VERSION").strip()
+        manifest = []
+
+        def add(name, text):
+            path = os.path.join(cls.tmp, name + ".html")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            manifest.append({"name": name, "path": path})
+
+        for page in BAR_PAGES:
+            raw = read("web", page + ".html")
+            stamped = raw
+            for placeholder, value in STAMPS.items():
+                stamped = stamped.replace(placeholder, value)
+            add(page + ":stamped", stamped)
+            add(page + ":raw", raw)                                                                       # (a page that was never stamped: the repository's own file)
+            add(page + ":version", raw.replace("@@GAME_VERSION@@", "v9.8.7"))                             # (a stamp that has the version and not the build)
+            add(page + ":nodate", raw.replace("@@GAME_VERSION@@", "v9.8.7").replace("@@BUILD_ID@@", "abc1234"))      # (the version and the build, no date)
+            add(page + ":buildonly", raw.replace("@@BUILD_ID@@", "abc1234"))                              # (a build with no version)
+        sys.path.insert(0, os.path.join(REPO, "tools"))
+        try:
+            import changelog_to_html
+        finally:
+            sys.path.pop(0)
+        md = read("CHANGELOG.md")
+        add("changelog:stamped", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, version="v9.8.7", build_id="abc1234", build_date="2026-01-02 09:30 PT"))
+        add("changelog:raw", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB))
+        add("changelog:version", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, version="v9.8.7"))
+        add("changelog:nodate", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, version="v9.8.7", build_id="abc1234"))
+        add("changelog:buildonly", changelog_to_html.convert(md, changelog_to_html.DEFAULT_REPO_BLOB, build_id="abc1234"))
+        with open(os.path.join(cls.tmp, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+        done = subprocess.run(["node", os.path.join(REPO, "tests", "scripts", "web_site_nav_menu_check.js"), os.path.join(cls.tmp, "manifest.json")], capture_output=True, text=True, timeout=120)
+        if done.returncode != 0:
+            raise AssertionError("the Menu check did not run: " + done.stderr[-1500:])
+        cls.found = json.loads(done.stdout)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def last_line(self, name):
+        items = self.found[name]["items"]
+        return items[-1] if items and items[-1]["cls"] == "sbver" else None
+
+    def test_a_stamped_page_ends_its_menu_with_the_version_and_the_build_as_text(self):
+        for page in BAR_PAGES + ("changelog",):
+            line = self.last_line(page + ":stamped")
+            self.assertIsNotNone(line, page)
+            expected = "Version v9.8.7 - build abc1234 (2026-01-02 09:30 PT)" + (" - Map maker " + self.maker if page == "mapmaker" else "")
+            self.assertEqual(line["text"], expected, page)
+            self.assertEqual(line["links"], [], page + ": the line is text, not a link")
+            self.assertFalse(self.found[page + ":stamped"]["hidden"], page)
+            self.assertEqual([i["cls"] for i in self.found[page + ":stamped"]["items"]].count("sbver"), 1, page)
+
+    def test_a_page_that_nobody_stamped_shows_no_line_and_never_a_placeholder(self):
+        for page in BAR_PAGES + ("changelog",):
+            items = self.found[page + ":raw"]["items"]
+            for item in items:
+                self.assertNotIn("@", item["text"], page)
+                self.assertNotIn("Version", item["text"], page)
+                self.assertNotIn("build", item["text"], page)
+            line = self.last_line(page + ":raw")
+            if page == "mapmaker":
+                self.assertEqual(line["text"], "Map maker " + self.maker)                               # (the editor's own version is no stamp: the file web/MAPMAKER_VERSION)
+            else:
+                self.assertIsNone(line, page)
+                self.assertEqual(items[-1]["cls"], "sbsmall", page + ": the small links are the last thing")
+
+    def test_a_stamp_that_has_only_the_version_shows_the_version_alone(self):
+        for page in BAR_PAGES + ("changelog",):
+            line = self.last_line(page + ":version")
+            self.assertEqual(line["text"], "Version v9.8.7" + (" - Map maker " + self.maker if page == "mapmaker" else ""), page)
+
+    def test_a_build_with_no_date_has_no_brackets_and_a_build_with_no_version_shows_nothing(self):
+        for page in BAR_PAGES + ("changelog",):
+            maker = " - Map maker " + self.maker if page == "mapmaker" else ""
+            self.assertEqual(self.last_line(page + ":nodate")["text"], "Version v9.8.7 - build abc1234" + maker, page)
+            only = self.last_line(page + ":buildonly")
+            self.assertEqual(only["text"] if only else None, "Map maker " + self.maker if page == "mapmaker" else None, page)
+
+    def test_every_link_that_the_old_footers_had_is_in_the_menu_of_every_page(self):
+        for name, result in sorted(self.found.items()):
+            for href in LINKS_OF_THE_OLD_FOOTERS:
+                self.assertIn(href, result["hrefs"], "%s: %s" % (name, href))
+
+    def test_the_pages_with_the_bar_have_no_footer_and_none_of_the_footers_version_markup(self):
+        for name, result in sorted(self.found.items()):
+            self.assertEqual(result["footers"], 0, name)
+            self.assertEqual(result["versionIds"], [], name)
+
+    def test_the_front_page_and_the_game_page_keep_their_footers_with_the_version_line(self):
+        for name in ("lobby.html", "shell.html"):
+            page = read("web", name)
+            self.assertEqual(len(re.findall(r"<footer\b", page)), 1, name)
 
 
 if __name__ == "__main__":

@@ -129,14 +129,15 @@ def read_png(data):
 GEOMETRY = r"""
 JSON.stringify((function () {
   var r = function (e) { var b = e.getBoundingClientRect(); return [b.x, b.y, b.width, b.height]; };
-  var stage = document.getElementById('game-stage'), box = document.getElementById('game-container'), cv = document.getElementById('canvas'), bar = document.getElementById('view-bar');
+  var stage = document.getElementById('game-stage'), box = document.getElementById('game-container'), cv = document.getElementById('canvas');
   var de = document.documentElement;
+  function ringReach(b) { return (getComputedStyle(b).boxShadow.match(/-?[\d.]+px -?[\d.]+px -?[\d.]+px -?[\d.]+px/g) || []).map(function (t) { var n = t.match(/-?[\d.]+/g).map(Number); return n[1] + n[2] + n[3]; }).reduce(function (a, c) { return Math.max(a, c); }, 0); }
   return { dpr: window.devicePixelRatio, inner: [window.innerWidth, window.innerHeight], aspect: stage.getAttribute('data-aspect'), args: ANTS_ARGS,
            fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement), pseudo: stage.classList.contains('pseudo-fullscreen'),
-           stage: r(stage), box: r(box), canvas: r(cv), bar: r(bar), backing: [cv.width, cv.height], ready: !!window.isReadyToPlay,
+           stage: r(stage), box: r(box), canvas: r(cv), ring: ringReach(box), backing: [cv.width, cv.height], ready: !!window.isReadyToPlay,
            scroll: [de.scrollWidth, de.clientWidth, de.scrollHeight, de.clientHeight],
-           checked: (document.querySelector('#aspect-select-list [aria-selected=true]') || document.body).getAttribute('data-shape'), shown: document.getElementById('aspect-select').textContent,
-           entries: Array.prototype.map.call(document.querySelectorAll('#aspect-select-list [role=option]'), function (o) { return [o.getAttribute('data-shape'), o.textContent]; }) };
+           checked: stage.getAttribute('data-aspect'), shown: (document.getElementById('gm-picture') || {}).textContent || '',
+           entries: Array.prototype.map.call(document.querySelectorAll('#gm-picture-list [role=option]'), function (o) { return [o.getAttribute('data-shape'), o.textContent]; }) };
 })())
 """
 
@@ -430,9 +431,24 @@ def quick_help_start(shape):
     return x + (page[0] - 640) + offset[0] + w / 2, y + (page[1] - 480) + offset[1] + h / 2
 
 
-def choose_shape(tab, shape, select="aspect-select"):
-    """Choose a shape in a dropdown of the page as a person does it with the keyboard: the dropdown's button is focused, Enter opens its list (a real key of the browser), ArrowDown or ArrowUp moves the mark
-    until it is on the shape, and Enter chooses it (the picture changes at once). The pointer's way is click_shape."""
+def open_picture_row(tab):
+    """Open the settings menu on Video (what the game's own Esc calls) and stand at the Picture shape row: the shape's control is a row of the menu now, nothing is under the picture"""
+    tab.ev("window.antsGameMenuAsk(); 1")
+    time.sleep(0.4)
+    tab.ev("document.getElementById('gm-tab-video').click(); 1")
+    time.sleep(0.3)
+
+
+def close_menu(tab):
+    """Resume: the menu is shut, the game runs on and the picture is what it was (a shot or a pixel is of the game, not of the panel)"""
+    tab.ev("document.querySelector('.gm-resume').click(); 1")
+    time.sleep(0.3)
+
+
+def choose_shape(tab, shape, select="gm-picture"):
+    """Choose a shape in the menu's Picture shape row as a person does it with the keyboard: the dropdown's button is focused, Enter opens its list (a real key of the browser), ArrowDown or ArrowUp moves the mark
+    until it is on the shape, and Enter chooses it (the picture changes at once, the menu stays open; then Resume). The pointer's way is click_shape."""
+    open_picture_row(tab)
     now = tab.ev("[].findIndex.call(document.querySelectorAll('#%s-list [role=option]'), function (o) { return o.getAttribute('aria-selected') === 'true'; })" % select)
     want = SHAPE_ORDER.index(shape)
     tab.ev("document.getElementById('%s').focus(); 1" % select)
@@ -443,10 +459,12 @@ def choose_shape(tab, shape, select="aspect-select"):
         time.sleep(0.1)
     tab.key("Enter")
     time.sleep(0.15)
+    close_menu(tab)
 
 
-def click_shape(tab, shape, select="aspect-select"):
-    """Choose a shape with the mouse: a click on the dropdown's button opens the list, a click on the row of the shape chooses it (real presses of the browser at the middle of each)"""
+def click_shape(tab, shape, select="gm-picture"):
+    """Choose a shape with the mouse: a click on the dropdown's button opens the list, a click on the row of the shape chooses it (real presses of the browser at the middle of each); then Resume"""
+    open_picture_row(tab)
     spot = lambda element_id: json.loads(tab.ev("JSON.stringify((function () { var r = document.getElementById('%s').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })())" % element_id))
     x, y = spot(select)
     tab.click(x, y)
@@ -454,6 +472,7 @@ def click_shape(tab, shape, select="aspect-select"):
     x, y = spot("%s-o%d" % (select, SHAPE_ORDER.index(shape)))
     tab.click(x, y)
     time.sleep(0.2)
+    close_menu(tab)
 
 
 def pixel_at(shot, g, fx, fy):
@@ -1184,8 +1203,7 @@ def main():
             title = (300, 30)
             guide = centre_of("guide-mouse")
             guide[1] = tab.ev("document.getElementById('guide-mouse').getBoundingClientRect().y + 20")
-            selector = centre_of("aspect-select")
-            for label, point in (("the page's title", title), ("the selector's bar", selector), ("the guide", guide)):
+            for label, point in (("the page's title", title), ("the guide", guide)):
                 tab.ev("window.__w.length = 0; 1")
                 tab.mouse("mouseMoved", point[0], point[1], button="none")
                 wheel(point[0], point[1], 120)
@@ -1465,7 +1483,7 @@ def main():
                 step_w = shape[0] / dpr
                 step_h = shape[1] / dpr
                 check(bx[2] + step_w > st[2] + 0.01 or bx[3] + step_h > st[3] + 0.01, "%s: the box is the largest that fits its slot (slot %.1f x %.1f, box %.2f x %.2f)" % (label, st[2], st[3], bx[2], bx[3]))
-                check(g["bar"][1] + g["bar"][3] <= g["inner"][1] + 1.0, "%s: the whole picture and the bar under it fit the window without scrolling (bar ends at %.0f of %d)" % (label, g["bar"][1] + g["bar"][3], g["inner"][1]))
+                check(bx[1] + bx[3] + g["ring"] <= g["inner"][1] + 1.0, "%s: the whole framed picture (its ring and shadow too) fits the window without scrolling (it ends at %.0f of %d)" % (label, bx[1] + bx[3] + g["ring"], g["inner"][1]))
             # the pointer: a box whose CSS size is a whole number stands on a whole pixel, any other 1/64 px short of one (Emscripten cuts the box's position and SDL scales by floor(size) / size:
             # web/shell.html, ANTS_PAGE.snapOffset)
             for axis, pos, size in (("x", bx[0], bx[2]), ("y", bx[1], bx[3])):
@@ -1550,8 +1568,12 @@ def main():
         # the selector (a fresh profile has nothing remembered): a press changes the picture AT ONCE, in the running game, with no reload
         tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
         tab.open(web)
+        open_picture_row(tab)
+        tab.ev("document.getElementById('gm-picture').click(); 1")                               # (the menu's list, open: its entries are what the table has)
+        time.sleep(0.2)
         g = tab.geometry()
         check(g["checked"] == checked_of("16:9") and g["entries"] == SHAPE_ENTRIES, "the dropdown shows 16:9 and has one entry for each shape of the table, the shape and its canvas (%s, %s)" % (g["checked"], g["entries"]))
+        close_menu(tab)
         tab.ev("window.antsMarker = 12345; 1")                                                    # (a reload would lose it)
         for shape in ("4:3", "3:2", "16:10", "20:9", "21:9", "32:9", "16:9", "32:9", "21:9"):
             choose_shape(tab, shape)
@@ -1580,17 +1602,18 @@ def main():
             click_shape(tab, shape)
             time.sleep(1.0)
             g = tab.geometry()
-            check(g["aspect"] == shape and g["checked"] == shape and g["shown"] == dict(SHAPE_ENTRIES)[shape], "the mouse's choice of %s: the picture and the dropdown show it (%s, %s)" % (shape, g["aspect"], g["shown"]))
-            check(tab.ev("document.getElementById('aspect-select-list').hidden") is True and tab.ev("document.activeElement.id") == "aspect-select" and tab.ev("localStorage.getItem('ants.aspect.v2')") == shape,
-                  "the mouse's choice of %s: the list is shut, the focus is the button's and the choice is remembered" % shape)
-        x0, y0 = json.loads(tab.ev("JSON.stringify((function () { var r = document.getElementById('aspect-select').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })())"))
+            check(g["aspect"] == shape and g["checked"] == shape, "the mouse's choice of %s: the picture shows it (%s)" % (shape, g["aspect"]))
+            check(tab.ev("localStorage.getItem('ants.aspect.v2')") == shape, "the mouse's choice of %s: the choice is remembered" % shape)
+        open_picture_row(tab)
+        x0, y0 = json.loads(tab.ev("JSON.stringify((function () { var r = document.getElementById('gm-picture').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })())"))
         tab.click(x0, y0)
         time.sleep(0.2)
-        box = json.loads(tab.ev("JSON.stringify((function () { var l = document.getElementById('aspect-select-list').getBoundingClientRect(), b = document.getElementById('aspect-select').getBoundingClientRect(); return [l.top >= b.bottom || l.bottom <= b.top, l.left >= 0, l.right <= window.innerWidth, l.top >= 0, l.bottom <= window.innerHeight, document.getElementById('aspect-select-list').hidden]; })())"))
+        box = json.loads(tab.ev("JSON.stringify((function () { var l = document.getElementById('gm-picture-list').getBoundingClientRect(), b = document.getElementById('gm-picture').getBoundingClientRect(); return [l.top >= b.bottom || l.bottom <= b.top, l.left >= 0, l.right <= window.innerWidth, l.top >= 0, l.bottom <= window.innerHeight, document.getElementById('gm-picture-list').hidden]; })())"))
         check(box == [True, True, True, True, True, False], "the open list lies beside its button (never over it), inside the window (%s)" % box)
-        tab.click(20, 20)
+        tab.click(20, 20)                                                      # (the dimmed margin of the panel: it closes nothing of the panel, and the picker shuts its list)
         time.sleep(0.2)
-        check(tab.ev("document.getElementById('aspect-select-list').hidden") is True and tab.geometry()["aspect"] == "16:9", "a click elsewhere closes the list and chooses nothing")
+        check(tab.ev("document.getElementById('gm-picture-list').hidden") is True and tab.geometry()["aspect"] == "16:9", "a click elsewhere closes the list and chooses nothing")
+        close_menu(tab)
         tab.ev("localStorage.setItem('ants.aspect.v2', '21:9'); 1")
         tab.open(web)                                                 # no parameter: the remembered choice
         g = tab.geometry()
@@ -1630,25 +1653,26 @@ def main():
         tab.emulate(1280, 720, 1)
 
         # "fills your screen": the quiet line under the dropdown names the shape nearest to the computer's screen (the headless browser's screen is what the emulation says), on every screen, a phone's too
-        print("[web aspect] the line under the dropdown that names the shape that fills the screen")
+        print("[web aspect] the line under the menu's Picture shape dropdown that names the shape that fills the screen")
         tag_tab = Tab(browser)
+        fits = "(function () { var n = document.querySelector('.gm-fits'); return n ? n.textContent : ''; })()"
         for w, h, want in ((1280, 720, "16:9"), (1440, 900, "16:10"), (2560, 1080, "21:9"), (1280, 1024, "4:3"), (3840, 1080, "32:9"), (2736, 1824, "3:2"), (1100, 1100, None)):
             tag_tab.emulate(w, h, 1, touch=False)
             tag_tab.open(web)
-            said = tag_tab.ev("(function () { var n = document.getElementById('fit-note'); return n.hidden || getComputedStyle(n).display === 'none' ? '' : n.textContent; })()")
+            open_picture_row(tag_tab)
+            said = tag_tab.ev(fits)
             words = ("Classic 4:3" if want == "4:3" else want) + " fills your screen" if want else ""
             check(said == words, "a %d x %d screen: the line under the dropdown says %r (%r)" % (w, h, words, said))
             if want:
-                line = json.loads(tag_tab.ev("JSON.stringify((function(){var t=document.getElementById('fit-note').getBoundingClientRect(), b=document.getElementById('aspect-select').getBoundingClientRect(); return [t.x - b.x, t.y - (b.y + b.height), t.width, b.width];})())"))
+                line = json.loads(tag_tab.ev("JSON.stringify((function(){var t=document.querySelector('.gm-fits').getBoundingClientRect(), b=document.getElementById('gm-picture').getBoundingClientRect(); return [t.x - b.x, t.y - (b.y + b.height), t.width, b.width];})())"))
                 check(abs(line[0]) < 8 and 0 <= line[1] < 14, "%d x %d: the line is under the dropdown's left edge, close below it (%s)" % (w, h, line))
-                g = tag_tab.geometry()
-                check(g["bar"][1] + g["bar"][3] + 28 <= g["inner"][1] + 1.0 or g["scroll"][2] > g["scroll"][3], "%d x %d: the bar has room for the line (%s)" % (w, h, g["bar"]))
         # a phone has the line too (it explains the shape that a first visit started in), inside the screen: held sideways (844 x 390: 20:9) it names 20:9, held upright no shape fills the screen and there is none
-        for w, h, hidden, words in ((844, 390, False, "20:9 fills your screen"), (390, 844, True, "")):
+        for w, h, words in ((844, 390, "20:9 fills your screen"), (390, 844, "")):
             tag_tab.emulate(w, h, 3, True)
             tag_tab.open(web)
-            line = json.loads(tag_tab.ev("JSON.stringify((function(){var n=document.getElementById('fit-note'), t=n.getBoundingClientRect(); return [n.hidden, n.hidden ? '' : n.textContent, t.right, window.innerWidth, document.documentElement.scrollWidth];})())"))
-            check(line[0] is hidden and line[1] == words and line[2] <= line[3] and line[4] <= line[3], "a phone %s (%d x %d): the line says %r and does not leave the screen (%s)" % ("held sideways" if w > h else "held upright", w, h, words, line))
+            open_picture_row(tag_tab)
+            line = json.loads(tag_tab.ev("JSON.stringify((function(){var n=document.querySelector('.gm-fits'), t=n ? n.getBoundingClientRect() : {right: 0}; return [n ? n.textContent : '', t.right, window.innerWidth, document.documentElement.scrollWidth];})())"))
+            check(line[0] == words and line[1] <= line[2] and line[3] <= line[2], "a phone %s (%d x %d): the line says %r and does not leave the screen (%s)" % ("held sideways" if w > h else "held upright", w, h, words, line))
         tag_tab.close()
         tab.emulate(1280, 720, 1)
 
@@ -1666,8 +1690,7 @@ def main():
             check(tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s, the game page: nothing was stored by loading" % label)
             tab.open(site, wait=False)                                                      # (the front page has no game: nothing to wait for)
             time.sleep(2.0)
-            lobby = tab.ev("document.getElementById('aspect-select').value")
-            check(lobby == want and tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s, the front page: the same shape (%s) and nothing stored" % (label, lobby))
+            check(tab.ev("localStorage.getItem('ants.aspect.v2')") is None, "%s, the front page: nothing stored (it has no shape of its own)" % label)
         tab.emulate(1440, 900, 1)
         tab.open(web, settle=0.5)
         tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {} 1")
