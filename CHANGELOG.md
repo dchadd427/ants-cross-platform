@@ -23,6 +23,17 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.2 - 2026-11-12 - One map chooser in the room lobby and the site can be installed as an app
+
+**For players:**
+- **One chooser for the map in a room.** The room shows the map as one card with its picture, name and facts. The host's Change map button opens a single list of every map the game server offers: the six original maps first, then players' maps, with a search box. The old drop-down and the Browse all maps button are gone.
+- **The site can be installed like an app.** In a computer's browser use Install in the menu; on a phone use Add to Home screen. It is called Ants! and opens in a window of its own without the browser's bars.
+- **It still needs a connection.** The installed app is the same site: there is no offline mode, and nothing works without the network.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.1 page or game still joins. Under the hood: the size limits of documents, code files and web files sit in one place, one file reads the saved seat of a running game for the front page and the game page, and the testing guide now has written rules for tests and mutants.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/635fcae2...7298d031)
+
 ## v0.16.1 - 2026-11-12 - Clean page addresses, a clearer voice button, Have a code, Host a game, a hideable replay bar and one top bar
 
 **For players:**
