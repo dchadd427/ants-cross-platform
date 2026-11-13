@@ -151,7 +151,7 @@
   {
    "id": "manifest_budget_too_small",
    "file": "tools/size_limits.py",
-   "old": "APP_MANIFEST_BUDGET = 1_300",
+   "old": "APP_MANIFEST_BUDGET = 1_500",
    "new": "APP_MANIFEST_BUDGET = 900",
    "test": "python3 -I tests/scripts/test_web_app_manifest.py -f"
   },
