@@ -4,12 +4,13 @@
 Usage: changelog_to_html.py IN.md OUT.html [REPO_BLOB_URL]
            [--version vX.Y.Z] [--build-id ID]
 
-  --version, --build-id   shown in the footer of the page ("v0.1.0 - build abc1234"): which build of the site this is
+  --version, --build-id, --build-date   which build of the site this is: the last line of the page's Menu names it ("Version v0.1.0 - build abc1234 (2026-01-02 09:30 PT)"; the bar
+                          carries the three as data-version, data-build and data-built, and web/site_nav.js writes the line as text)
 
 An HTML comment (<!-- ... -->, the template at the top of CHANGELOG.md) is dropped.
 
-The page is in the Classic look of the front page: it links the site's /front/classic.css (the tokens, the buttons, the frame, the footer), preloads the font and shows the logo
-from /front/, and adds only the rules of its own panels here. Nothing else is loaded; a long line scrolls inside its panel. The footer names the version and the build.
+The page is in the Classic look of the front page: it links the site's /front/classic.css (the tokens, the buttons, the frame), preloads the font and shows the logo
+from /front/, and adds only the rules of its own panels here. Nothing else is loaded; a long line scrolls inside its panel.
 
 The page is the whole list of releases (a long page that works without JavaScript); a small inline script shows it in pages (PAGE_SIZE releases, PAGE_SIZE_PHONE on a phone), named by the versions
 they hold, and the address of a release (#v0-12-30 or #v0.12.30) opens the page that has it. The script touches nothing it cannot put back: it hides the releases of the other pages and adds the page
@@ -228,12 +229,12 @@ PAGE = """<!DOCTYPE html>
 <body>
 <div class="screen">
 <div class="wrap narrow">
-<header class="sb" data-live="menu"><a class="btn sbhome" href="/"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>
+<header class="sb" data-live="menu"{stamps}><a class="btn sbhome" href="/"><span class="sbchev" aria-hidden="true">&lsaquo;</span>Home</a>
     <a class="sblogo" href="/"><img src="/front/logo.png" alt="ants! - Home" width="581" height="218"></a>
     <nav aria-label="Pages"><a class="btn" href="/">Home</a><a class="btn" href="/matches">Matches</a><a class="btn sblv" href="/live-now"><span>Live now</span><span class="sbn"></span></a><a class="btn" href="/mapmaker">Map maker</a><a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a></nav>
     <span class="sbgrow"></span><a class="btn sblive" href="/live-now" hidden></a>
     <button class="btn sbtn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="sbm"><i class="sbbars"></i></button></header>
-<div class="pt"><h1>{title}</h1><p>What changed in each version, newest first.</p></div>
+<div class="pt"><h1>{title}</h1><p>What changed in each version, newest first. Generated from {source} when the site image is built, so this page always matches the running build.</p></div>
 <main>
 {intro}
 <details class="versions panel" id="versions" open><summary>Jump to a version</summary><nav aria-label="Versions">{nav}</nav></details>
@@ -243,10 +244,6 @@ PAGE = """<!DOCTYPE html>
 {script}
 </script>
 </div>
-<footer class="bar"><div class="bar-in">
-{versionline}<span class="grow">Generated from {source} when the site image is built, so this page always matches the running build.</span>
-<nav aria-label="Footer links"><a href="/">Play</a><a href="{github}" target="_blank" rel="noopener noreferrer">GitHub</a><a href="{github}/issues" target="_blank" rel="noopener noreferrer">Feedback</a><a href="/legal" target="_blank" rel="noopener noreferrer">Legal</a></nav>
-</div></footer>
 </div>
 <script src="/site_nav.js"></script>
 </body>
@@ -295,15 +292,13 @@ def repo_home(repo_blob):
     return re.sub(r"/blob/[^/]+/?$", "", repo_blob.rstrip("/") + "/").rstrip("/")
 
 
-def version_line(version, build_id, build_date=""):
-    """The footer's pill: "v0.5.0 - build abc1234 (2026-01-02 09:30 PT)" (the same ids as the front page's footer), only the part that is known, nothing when neither is."""
-    parts = []
-    if version:
-        parts.append('<span id="game-version">%s</span>' % html.escape(version))
-    if build_id:
-        date_part = (' <span id="game-build-date">(%s)</span>' % html.escape(build_date)) if build_date else ""
-        parts.append('<span id="game-build">%sbuild <span id="game-build-id">%s</span>%s</span>' % (" - " if version else "", html.escape(build_id), date_part))
-    return '<span class="ver" id="game-version-line">%s</span>\n' % "".join(parts) if parts else ""
+def stamp_attributes(version, build_id, build_date=""):
+    """The bar's attributes that web/site_nav.js writes as the last line of the Menu ("Version v0.5.0 - build abc1234 (2026-01-02 09:30 PT)"): only the part that is known, nothing when none is."""
+    out = ""
+    for name, value in (("data-version", version), ("data-build", build_id), ("data-built", build_date)):
+        if value:
+            out += ' %s="%s"' % (name, html.escape(value, quote=True))
+    return out
 
 
 def slug(heading):
@@ -388,8 +383,7 @@ def convert(md, repo_blob, version="", build_id="", build_date="", source="CHANG
 
     body = "\n".join('<section id="%s" class="panel"><h2>%s</h2>\n%s\n</section>' % (sid, head, "\n".join(blocks)) for sid, head, blocks in sections)
     intro_html = '<div class="intro panel">%s</div>' % "\n".join(intro)
-    return PAGE.format(style=STYLE, script=SCRIPT, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, versionline=version_line(version, build_id, build_date),
-                       github=html.escape(repo_home(repo_blob), quote=True), source=html.escape(source))
+    return PAGE.format(style=STYLE, script=SCRIPT, title=html.escape(title), intro=intro_html, nav=" ".join(nav), sections=body, stamps=stamp_attributes(version, build_id, build_date), source=html.escape(source))
 
 
 def main(argv):
