@@ -112,6 +112,9 @@ server.listen(0, async () => {
             ok(at + ': no sideways scroll', g.scrollW <= g.innerW);
             const nextTo = await page.evaluate(() => document.getElementById('settings-btn').previousElementSibling.id);
             check(at + ': right after Menu', nextTo, 'menu-btn');
+            // the header draws no logo: Menu is the way to the front page, it starts at the header's left edge (no gap where a logo was), and the page's heading is still there for a screen reader
+            const head = await page.evaluate(() => { const h = document.querySelector('header'), m = document.getElementById('menu-btn'), r = (e) => e.getBoundingClientRect(); return { pictures: h.querySelectorAll('img').length, href: m.getAttribute('href'), gap: r(m).left - r(h).left, shown: r(m).width > 0, h1: [...document.querySelectorAll('h1')].map((e) => e.textContent) }; });
+            ok(at + ': the header has no picture, Menu leads to the front page and starts at the header\'s left edge, and the h1 names the page (' + JSON.stringify(head) + ')', head.pictures === 0 && head.href === '/' && head.shown && head.gap <= 1 && head.h1.length === 1 && /Ants/.test(head.h1[0]));
             await context.close();
         }
         // a tap on a phone opens the menu; Video has the Picture shape row; a choice changes the page's shape at once and is remembered

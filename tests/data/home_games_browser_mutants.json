@@ -144,8 +144,8 @@
   {
    "id": "phone_sideways_rows_not_collapsed",
    "file": "web/home/home.css",
-   "old": ".hbar .games { grid-area: 2 / 3; }",
-   "new": ".hbar .games { grid-area: 3 / 3; }",
+   "old": ".hbar .games { grid-area: 2 / 2; }",
+   "new": ".hbar .games { grid-area: 3 / 2; }",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   },
   {
@@ -158,8 +158,8 @@
   {
    "id": "phone_sideways_wider_column_for_games_dropped",
    "file": "web/home/home.css",
-   "old": "@media (max-width: 479px) { .hbar { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr) auto; } }",
-   "new": "@media (max-width: 479px) { .hbar { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; } }",
+   "old": "@media (max-width: 479px) { .hbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto; } }",
+   "new": "@media (max-width: 479px) { .hbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; } }",
    "test": "node tests/scripts/web_home_games_browser.js --server build/src/ants_server/ants_server --maps Original-Ants/Maps"
   },
   {

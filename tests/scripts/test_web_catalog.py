@@ -59,10 +59,9 @@ class TheHead(unittest.TestCase):
 
 
 class TheHeader(unittest.TestCase):
-    def test_the_logo_is_a_link_to_the_front_page_and_has_the_size_of_its_picture(self):
-        link = re.search(r'<a class="sblogo" href="/"><img src="/front/logo\.png" alt="ants! - Home" width="(\d+)" height="(\d+)"></a>', BAR)
-        self.assertIsNotNone(link)
-        self.assertEqual((int(link.group(1)), int(link.group(2))), png_size(os.path.join(REPO, "web", "front", "logo.png")))
+    def test_the_bar_has_a_way_to_the_front_page_and_no_picture(self):
+        self.assertIn('<a class="btn sbhome" href="/">', BAR)
+        self.assertNotIn("<img", BAR)
 
     def test_the_banner_the_three_tabs_and_the_buttons(self):
         self.assertEqual(re.findall(r"<h1 class=\"banner gold\">(.*?)</h1>", HEADER), ["Ants Asset Catalog &amp; Inspector"])

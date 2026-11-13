@@ -109,7 +109,7 @@ class TheCommonFiles(unittest.TestCase):
             bar = re.search(r'<header class="sb"[^>]*>.*?</header>', page, re.S).group(0)                    # (the bar of every page: web/site_nav.css, web/site_nav.js)
             self.assertIn('<a class="btn sbdc" href="https://discord.gg/WaWrXQnKPj" target="_blank" rel="noopener noreferrer" aria-label="Discord server"><svg class="dc"', bar, name)
             self.assertEqual(page.count("discord.gg"), 1, name)
-            self.assertEqual(len(re.findall(r"<img", bar)), 1, name + ": the logo is the bar's only picture")
+            self.assertEqual(len(re.findall(r"<img", bar)), 0, name + ": the bar has no picture")
             self.assertNotIn('class="mast"', page, name)
             self.assertIn('<link rel="stylesheet" href="site_nav.css">', page, name)
             self.assertIn('<script src="site_nav.js"></script>\n<script src="replay_page.js"></script>', page, name)      # (the bar's script before the page's own)

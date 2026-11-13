@@ -23,20 +23,6 @@
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },
   {
-   "id": "topbar_chip_over_the_logo",
-   "file": "web/home/home.css",
-   "old": "min-width: 0; margin-left: 102px;",
-   "new": "min-width: 0; margin-left: 0;",
-   "test": "node tests/scripts/web_home_topbar_browser.js"
-  },
-  {
-   "id": "topbar_chip_not_to_the_right",
-   "file": "web/home/home.css",
-   "old": "margin-left: 102px; justify-content: flex-end; }",
-   "new": "margin-left: 102px; justify-content: flex-start; }",
-   "test": "node tests/scripts/web_home_topbar_browser.js"
-  },
-  {
    "id": "topbar_chip_padding_wide",
    "file": "web/home/home.css",
    "old": "flex: 0 1 auto; gap: 6px; padding: 0 9px; }",
@@ -95,7 +81,7 @@
   {
    "id": "mine_games_sideways_leaves_a_hole",
    "file": "web/home/home.css",
-   "old": "    .hbar .mine[hidden] ~ .games { grid-area: 2 / 1 / 3 / 4; }\n",
+   "old": "    .hbar .mine[hidden] ~ .games { grid-area: 2 / 1 / 3 / 3; }\n",
    "new": "",
    "test": "node tests/scripts/web_home_topbar_browser.js"
   },

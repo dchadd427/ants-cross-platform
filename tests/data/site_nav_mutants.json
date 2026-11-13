@@ -61,13 +61,6 @@
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
   },
   {
-   "id": "the_logo_is_a_small_target",
-   "file": "web/site_nav.css",
-   "old": ".sb .sblogo { display: flex; align-items: center; min-height: 44px;",
-   "new": ".sb .sblogo { display: flex; align-items: center; min-height: 34px;",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
-  },
-  {
    "id": "the_row_never_shows_on_a_phone_breakpoint",
    "file": "web/site_nav.css",
    "old": "@media (min-width: 720px)",

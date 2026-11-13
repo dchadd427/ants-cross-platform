@@ -155,11 +155,12 @@ class MadeUpFiles(unittest.TestCase):
         self.assertEqual(self.result.returncode, 0, self.result.stderr)
         self.assertTrue(self.text.startswith("<!DOCTYPE html>"))
 
-    def test_the_header_is_the_site_bar_and_the_logo_goes_to_the_front_page(self):
+    def test_the_header_is_the_site_bar_with_a_way_to_the_front_page_and_no_picture(self):
         header = part(self.text, "header")
         self.assertIn('<header class="sb" data-live="menu"', header)                                # (web/site_nav.css and web/site_nav.js make the bar; this page is in its Menu: Changelog)
         self.assertEqual(re.findall(r'<nav aria-label="Pages">.*?</nav>', header, re.S)[0].count("<a "), 5)
-        self.assertIn('<a class="sblogo" href="/"', header)                                          # and the logo goes to the front page too
+        self.assertIn('<a class="btn sbhome" href="/">', header)                                     # Home goes to the front page
+        self.assertNotIn("<img", header)
         self.assertIn('<div class="pt"><h1>', self.text)
 
     def test_version_and_build_are_on_the_bar_for_the_menu_and_the_page_has_no_footer(self):
@@ -243,13 +244,13 @@ class MadeUpFiles(unittest.TestCase):
     def test_the_title_block_names_the_source_file(self):
         self.assertIn("Generated from CHANGELOG.md when the site image is built", self.text)
 
-    def test_the_page_is_in_the_classic_look_and_loads_only_the_logo_the_font_and_the_one_stylesheet(self):
+    def test_the_page_is_in_the_classic_look_and_loads_only_the_font_and_the_one_stylesheet(self):
         page = walk(self.text)
         self.assertEqual(page.errors, [])
         self.assertEqual(page.stack, [])
         self.assertEqual([(l.get("rel"), l.get("href")) for l in page.links],
                          [("icon", "/favicon.png?v=f34bea03"), ("manifest", "/manifest.webmanifest"), ("apple-touch-icon", "/app/apple-touch-icon.png?v=4fbefb68"), ("preload", "/front/LibreFranklin-Medium.ttf"), ("stylesheet", "/front/classic.css"), ("stylesheet", "/site_nav.css")])
-        self.assertEqual([i.get("src") for i in page.imgs], ["/front/logo.png"])
+        self.assertEqual([i.get("src") for i in page.imgs], [])
         self.assertEqual(page.scripts, ["script", "script"])                                       # (the one inline script that makes the pages: TheScript, below, and the site bar's file at the end)
         self.assertIn('</div>\n<script src="/site_nav.js"></script>\n</body>', self.text)
         style = re.search(r"<style>(.*?)</style>", self.text, re.S).group(1)

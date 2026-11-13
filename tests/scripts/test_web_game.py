@@ -337,12 +337,12 @@ class TheHeader(PageCase):
     def header(self):
         return self.page[self.page.index("<header>"):self.page.index("</header>")]
 
-    def test_the_logo_is_a_link_to_the_front_page_in_this_tab(self):
-        logo = re.search(r'<a href="/" id="logo-link" class="logo"([^>]*)>\s*<img src="front/logo\.png" alt="([^"]+)" width="581" height="218">\s*</a>', self.header())
-        self.assertIsNotNone(logo)
-        self.assertNotIn("target=", logo.group(1))
-        self.assertEqual(png_size(os.path.join(FRONT, "logo.png")), (581, 218))
-        self.assertLess(self.header().index('id="logo-link"'), self.header().index('id="menu-btn"'))          # (at the left of the header)
+    def test_the_header_has_no_picture_and_the_menu_is_its_first_link_to_the_front_page_in_this_tab(self):
+        self.assertNotIn("<img", self.header())
+        menu = re.search(r'<a href="/" id="menu-btn"([^>]*)>', self.header())
+        self.assertIsNotNone(menu)
+        self.assertNotIn("target=", menu.group(1))
+        self.assertNotIn('href="/"', self.header()[:menu.start()])                                            # (nothing before it leads to the front page)
         self.assertEqual(len(re.findall(r"<h1[ >]", self.page)), 1)                                           # (the page keeps its heading: for a screen reader)
 
     def test_the_eight_controls_are_there_in_their_order_in_the_teal_style(self):
@@ -384,31 +384,30 @@ class TheHeader(PageCase):
         self.assertEqual(len(re.findall(r'\bid="([^"]+)"', self.page)), len(set(re.findall(r'\bid="([^"]+)"', self.page))), "an id is used twice")
         self.assertNotRegex(self.header(), r"<script|onclick=\"[^\"]*\.open")
 
-    def test_a_wide_window_shows_the_links_and_a_narrow_one_the_logo_menu_fullscreen_and_more(self):
+    def test_a_wide_window_shows_the_links_and_a_narrow_one_the_menu_fullscreen_and_more(self):
         self.assertEqual(rule(self.style, ".more")["display"], "none")
         narrow = self.style[self.style.index("@media (max-width: 700px) {"):self.style.index("@media (max-width: 440px) {")]
         self.assertRegex(narrow, r"\.wide-only \{\s*display: none;")
         self.assertRegex(narrow, r"\.more \{\s*display: block;")
-        self.assertRegex(narrow, r"\.logo img \{\s*width: 88px;")
         self.assertEqual(self.style.count(".wide-only {"), 1, "the one rule that hides the wide row's six")
         self.assertRegex(self.style, r"@media \(min-width: 701px\) and \(max-width: 1139px\) \{\s*#watch-btn \{\s*display: none;")          # (between 701 and 1139 the header keeps the links it had, Matches being the footer's; where Feedback leaves it too is run in tests/scripts/web_picture_in_settings_check.js)
         self.assertEqual(self.style.count("#watch-btn"), 1)
-        # the label of Fullscreen is short where the row is tight, and the smallest windows get smaller buttons and a smaller logo
+        # the label of Fullscreen is short where the row is tight, and the smallest windows get smaller buttons
         self.assertIn("@media (max-width: 440px)", self.style)
         self.assertIn("@media (max-width: 380px)", self.style)
 
-    def test_the_header_is_one_row_that_the_controls_share_with_the_logo(self):
+    def test_the_header_is_one_row_that_the_controls_fill(self):
         self.assertEqual(rule(self.style, ".header-actions")["flex"], "1 1 0")
         self.assertEqual(rule(self.style, ".header-actions")["min-width"], "0")
-        self.assertNotIn("flex-wrap", rule(self.style, "header"))                                                # (the controls wrap among themselves, beside the logo)
+        self.assertNotIn("flex-wrap", rule(self.style, "header"))                                                # (the controls wrap among themselves)
 
 
-class TheMenuAndTheLogoAskTheSameQuestion(PageCase):
-    def test_the_logo_is_in_the_list_of_the_code_that_asks_and_the_question_is_in_one_place(self):
-        self.assertIn("['logo-link', 'menu-btn', 'menu-link'].forEach(function (id) {", self.page)
+class TheMenuAndTheFooterLinkAskTheSameQuestion(PageCase):
+    def test_both_are_in_the_list_of_the_code_that_asks_and_the_question_is_in_one_place(self):
+        self.assertIn("['menu-btn', 'menu-link'].forEach(function (id) {", self.page)
         self.assertEqual(self.page.count("Leave the game and go back to the menu?"), 1)
-        self.assertEqual(self.page.count("getElementById('logo-link')"), 0)
-        self.assertEqual(len(re.findall(r"id=\"(?:logo-link|menu-btn|menu-link)\"", self.page)), 3)
+        self.assertEqual(len(re.findall(r"id=\"(?:logo-link|menu-btn|menu-link)\"", self.page)), 2)
+        self.assertNotIn("logo-link", self.page)
 
 
 class TheLoadingScreen(PageCase):
@@ -511,7 +510,7 @@ class ThePicturesAndTheFont(PageCase):
         for name in named:
             self.assertTrue(os.path.exists(os.path.join(FRONT, name)), name)
         tags = re.findall(r"<img [^>]*>", self.page)
-        self.assertEqual(len(tags), 2)                                                                              # (the header's logo and the loading screen's)
+        self.assertEqual(len(tags), 1)                                                                              # (the loading screen's logo: the header shows none)
         for tag in tags:
             source = re.search(r'src="front/([^"]+)"', tag).group(1)
             width, height = int(re.search(r'width="(\d+)"', tag).group(1)), int(re.search(r'height="(\d+)"', tag).group(1))

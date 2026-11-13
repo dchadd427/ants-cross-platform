@@ -598,7 +598,7 @@ async function flows() {
             for (const p of [maple, sage, tess]) await p.context().close();
         }
 
-        // ---- 1h. the bars at many widths (docs/HOME_SCREEN.md, "The top bar"): in Home's bar and the Room's bar every button and the logo is inside the window and inside the bar's own padding (left >= 0, right <= the window's width), and the page has no sideways scroll, at the sizes ----
+        // ---- 1h. the bars at many widths (docs/HOME_SCREEN.md, "The top bar"): in Home's bar and the Room's bar every button is inside the window and inside the bar's own padding (left >= 0, right <= the window's width), and the page has no sideways scroll, at the sizes ----
         // of the approved pictures, in the band of narrow desktop windows (900 to 1000 px, where the bar was once wider than the window, so that the Menu button was cut off), on every tenth width from 320 to 1300 at five heights and on both sides of every
         // limit of the bar's steps; Home with its widest state (the counts "4/4" and "50+" on My room and Games, the login chip with a long name), one window that only changes its size (the media queries answer at once)
         {
@@ -660,7 +660,7 @@ async function flows() {
             await bar.evaluate(() => document.querySelector('.hchip.mine').click());
             await until('the page shows the Room', async () => (await screenOf(bar)) === 'room', 10000);
             for (const [w, h] of sizes) { await bar.setViewportSize({ width: w, height: h }); const o = await bar.evaluate(OUT); if (o.length) badRoom.push(w + 'x' + h + ': ' + o.join(', ')); }
-            check('the Room\'s slim bar at the same ' + sizes.length + ' sizes: every button and the logo inside the window and no sideways scroll', badRoom.length === 0, badRoom.slice(0, 6).join(' | ') + (badRoom.length > 6 ? ' ... ' + badRoom.length + ' sizes' : ''));
+            check('the Room\'s slim bar at the same ' + sizes.length + ' sizes: every button inside the window and no sideways scroll', badRoom.length === 0, badRoom.slice(0, 6).join(' | ') + (badRoom.length > 6 ? ' ... ' + badRoom.length + ' sizes' : ''));
             check('(no script error in the page)', bar.errors.length === 0, bar.errors.join(' | '));
             await bar.context().close();
         }

@@ -1,12 +1,10 @@
-/* The bar at the top of every page of the site (web/site_nav.js fills in its Menu and its live count). On a phone it is the lobby's Room bar: "< Home", the logo, a red live button (only while a
+/* The bar at the top of every page of the site (web/site_nav.js fills in its Menu and its live count). On a phone it is the lobby's Room bar: "< Home", a red live button (only while a
    match is live) and the Menu. From 720 px up the same markup shows its <nav> as a row of buttons, the page you are on in gold. It builds on the page's own .btn and color tokens
    (web/matches.css or web/front/classic.css), so it carries no copy of them. Under it, .pt is the page's title and one line about it. */
 .sb { display: flex; align-items: center; gap: 8px; min-height: 58px; margin: 0 0 6px; position: relative; }
 .sb .btn { min-height: 44px; padding: 6px 14px; font-size: 16px; }
 .sb .sbhome { gap: 6px; padding-left: 10px; }
 .sb .sbchev { font-size: 24px; line-height: 1; margin-top: -3px; }
-.sb .sblogo { display: flex; align-items: center; min-height: 44px; flex: 0 1 92px; min-width: 44px; }
-.sb .sblogo img { width: 100%; height: auto; }
 .sb nav { display: none; }
 .sb .sbgrow { flex: 1 1 0; }
 .sb .sblive { gap: 9px; background-color: #5a1015; border-color: #2a0509; box-shadow: var(--bevel-sm), 2px 3px 0 #3a070b; }
@@ -42,20 +40,17 @@
     .sb { gap: 6px; }
     .sb .btn { padding: 6px 10px; font-size: 15px; }
     .sb .sbhome { padding-left: 8px; }
-    .sb .sblogo { flex-basis: 64px; min-width: 44px; }
     .sb .sbtn { min-width: 44px; padding: 0; }
 }
 @media (min-width: 720px) {
     .sb { gap: 8px; min-height: 64px; }
     .sb .sbhome, .sb .sblive { display: none; }
-    .sb .sblogo { flex: none; width: 100px; margin-right: 6px; }
     .sb nav { display: flex; gap: 6px; align-items: center; }
     .sb nav .btn { padding: 6px 10px; font-size: 15px; }
     .sb nav .btn.sbdc { min-width: 44px; }
 }
 @media (min-width: 960px) {
     .sb { gap: 10px; }
-    .sb .sblogo { width: 150px; }
     .sb nav { gap: 10px; }
     .sb nav .btn { padding: 6px 16px; font-size: 16px; }
     .sb nav .btn.sbdc { padding: 6px 12px; }

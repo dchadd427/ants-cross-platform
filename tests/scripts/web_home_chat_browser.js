@@ -4,7 +4,7 @@
 // that shares the page's address, as nginx's /hub/ws does. It looks at what no fake DOM can: the places and sizes of the dock at 390 x 844 (a phone), 844 x 390 (a phone held sideways) and 1280 x 800 (a desktop) next to
 // the approved pictures, that nothing scrolls sideways, that every target is 44 px, that the dock covers none of the bar, that the dock comes after the first paint, that the page asks for its two files and for
 // nothing else, that no other page of the site opens a hub socket, the real WebSocket against the fake hub (read only, a writer, the two names and the switch between them, the hub's pace, untrusted text, a hub that goes and comes back, a hub that is not
-// there, a site with no /hub/ws), and the Room bar's logo at 320 to 389 px.
+// there, a site with no /hub/ws), and the Room bar at 320 to 389 px (no logo, Home and Leave room in reach).
 //
 //   node tests/scripts/web_home_chat_browser.js [--shots DIR]      (CHROME=/path/to/chromium names a browser; as root it runs with --no-sandbox)
 //
@@ -132,7 +132,7 @@ async function main() {
         const inside = await rect(page, '#gchat');
         check(size + ': the dock is wholly inside the window', inside.x >= 0 && inside.y >= 0 && inside.right <= W && inside.bottom <= Hh, JSON.stringify(inside));
         await sleep(400);       // (the log is quiet for 300 ms after it is made again: a screen reader is not read all of it)
-        check(size + ': one h1 on the screen (the logo), the dock\'s heading is an h2, the log is role=log aria-live=polite', (await page.evaluate(() => [...document.querySelectorAll('h1')].filter((h) => h.getClientRects().length).length)) === 1
+        check(size + ': one h1 on the screen (the page's name), the dock\'s heading is an h2, the log is role=log aria-live=polite', (await page.evaluate(() => [...document.querySelectorAll('h1')].filter((h) => h.getClientRects().length).length)) === 1
               && (await page.evaluate(() => document.querySelector('#gchat h2').tagName === 'H2' && document.querySelector('#gchat .gc-log').getAttribute('role') === 'log' && document.querySelector('#gchat .gc-log').getAttribute('aria-live') === 'polite')));
         await context.close();
     }
@@ -356,8 +356,8 @@ async function main() {
             await sleep(300);
             await page.evaluate(() => { const b = document.getElementById('name-step-go'); if (b) b.click(); });
             await sleep(300);
-            const logo = await page.evaluate(() => { const l = document.querySelector('.rbar .hlogo'); const h = document.querySelector('.rbar h1'); const r = l.getBoundingClientRect(); return { w: Math.round(r.width), alt: l.getAttribute('alt'), h1: h.tagName, sideways: document.documentElement.scrollWidth > window.innerWidth }; });
-            check('the Room\'s bar at ' + width + ' px: ' + (width <= 339 ? 'the logo\'s picture is left out (1 px, clipped) and the h1 keeps its name' : 'the logo is drawn (at least 40 px wide)') + ', nothing scrolls sideways', logo.alt === 'Ants!' && logo.h1 === 'H1' && !logo.sideways && (width <= 339 ? logo.w <= 1 : logo.w >= 40), JSON.stringify(logo));
+            const bar = await page.evaluate(() => { const h = document.querySelector('.rbar h1'); const r = (e) => { const b = e.getBoundingClientRect(); return [b.left, b.right]; }; return { pictures: document.querySelectorAll('.rbar img').length, name: h.textContent, h1: h.tagName, home: r(document.querySelector('.rbar .rhome')), leave: r(document.querySelector('.rbar .leave')), sideways: document.documentElement.scrollWidth > window.innerWidth }; });
+            check('the Room\'s bar at ' + width + ' px: no picture, an h1 that says Ants!, Home and Leave room inside the window, nothing scrolls sideways', bar.pictures === 0 && bar.name === 'Ants!' && bar.h1 === 'H1' && !bar.sideways && bar.home[0] >= 0 && bar.home[1] <= bar.leave[0] && bar.leave[1] <= width, JSON.stringify(bar));
             if (width === 320 || width === 360) { if (shotsAt) { fs.mkdirSync(shotsAt, { recursive: true }); await page.screenshot({ path: path.join(shotsAt, 'dock7_room_bar_' + width + '.png') }); } }
             await context.close();
         }
