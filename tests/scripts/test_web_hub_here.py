@@ -80,7 +80,7 @@ class TheCodeRuns(unittest.TestCase):
 class TheChecksAreNotVacuous(unittest.TestCase):
     """the mutants of tests/data/hub_here_mutants.json (the list that tools/mutate.py runs too, with `--keep-going --jobs 1`) on a COPY of the files, one at a time: each must make the checks fail, and the copy with
     nothing changed must pass"""
-    FILES = ["web/hub_here.js", "web/shell.html", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "tests/scripts/test_web_hub_here.py", "tests/scripts/web_hub_here_check.js"]
+    FILES = ["web/hub_here.js", "web/shell.html", "web/lobby.html", "web/matches.html", "web/match.html", "web/mapmaker.html", "web/admin.html", "web/legal.html", "Dockerfile", "build_web.sh", ".github/workflows/ci.yml", "tests/scripts/test_web_hub_here.py", "tests/scripts/web_hub_here_check.js"]
 
     @classmethod
     def setUpClass(cls):
