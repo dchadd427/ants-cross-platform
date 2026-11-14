@@ -129,11 +129,14 @@ class TheScript(unittest.TestCase):
     def test_the_rows_that_it_handles_by_name_are_rows_of_the_table(self):
         keys = set(table_keys())
         self.assertEqual(len(keys), 15)
+        own = {"touchkeys"}        # (the one row that the page adds to the game's table: the hotkey buttons' Touch buttons, web/touch_keys.js; it needs no game and is not in the table)
         for name in re.findall(r"^\s{12}(\w+): \{$", self.script, re.M):
-            self.assertIn(name, keys, "the page's own row %s is in the table" % name)
+            if name not in own:
+                self.assertIn(name, keys, "the page's own row %s is in the table" % name)
         for name in re.findall(r"row\.key === '(\w+)'", self.script):
-            self.assertIn(name, keys)
-        self.assertEqual(set(re.findall(r"^\s{12}(\w+): \{$", self.script, re.M)), {"picture", "lockmouse"})
+            if name not in own:
+                self.assertIn(name, keys)
+        self.assertEqual(set(re.findall(r"^\s{12}(\w+): \{$", self.script, re.M)), {"picture", "lockmouse"} | own)
 
     def test_it_draws_what_the_table_says_and_has_no_row_of_its_own(self):
         for label in ("Master volume", "Mute everything", "Sound effects volume", "Participate in chat", "Map scroll speed"):

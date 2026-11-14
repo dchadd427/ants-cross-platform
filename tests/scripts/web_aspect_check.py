@@ -565,10 +565,12 @@ class Browser:
 
 
 class Tab:
-    def __init__(self, browser):
+    def __init__(self, browser, buttons=True):
         self.dt = browser.devtools
         self.target, self.session = self.dt.new_tab("")
         self.dt.call("Emulation.setFocusEmulationEnabled", {"enabled": True}, session=self.session)
+        if not buttons:                                             # (a mouse-driven check: the touch buttons (ants.touchkeys) are off before the page starts, whatever the tab says about hovering)
+            self.dt.call("Page.addScriptToEvaluateOnNewDocument", {"source": "try { localStorage.setItem('ants.touchkeys', 'off'); } catch (e) {}"}, session=self.session)
 
     def call(self, method, params=None):
         return self.dt.call(method, params or {}, session=self.session)
@@ -730,7 +732,7 @@ def main():
     browser = None
     try:
         browser = Browser(path)
-        tab = Tab(browser)
+        tab = Tab(browser, buttons=False)
 
         print("[web aspect] the page's own logic (ANTS_PAGE) in %s" % os.path.basename(path))
         tab.emulate(1280, 720, 1)
@@ -740,7 +742,7 @@ def main():
             for run in range(args.downloads):
                 fresh = Browser(path)                                           # a browser of its own: nothing is cached
                 try:
-                    t = Tab(fresh)
+                    t = Tab(fresh, buttons=False)
                     t.emulate(1500, 900, 1)
                     t.call("Page.navigate", {"url": web + "?map=tiny"})
                     deadline = time.time() + 120
@@ -1654,7 +1656,7 @@ def main():
 
         # "fills your screen": the quiet line under the dropdown names the shape nearest to the computer's screen (the headless browser's screen is what the emulation says), on every screen, a phone's too
         print("[web aspect] the line under the menu's Picture shape dropdown that names the shape that fills the screen")
-        tag_tab = Tab(browser)
+        tag_tab = Tab(browser, buttons=False)
         fits = "(function () { var n = document.querySelector('.gm-fits'); return n ? n.textContent : ''; })()"
         for w, h, want in ((1280, 720, "16:9"), (1440, 900, "16:10"), (2560, 1080, "21:9"), (1280, 1024, "4:3"), (3840, 1080, "32:9"), (2736, 1824, "3:2"), (1100, 1100, None)):
             tag_tab.emulate(w, h, 1, touch=False)
