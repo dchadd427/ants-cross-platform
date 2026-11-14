@@ -38,11 +38,15 @@ from .store.base import SHOW_OFF, SHOW_ON
 
 NUMBER = re.compile(r"[0-9]{1,9}\Z")
 MAX_CHAT_MUTE_MINUTES = 10080               # a moderator's /mute: a week at the most (the command line has no such bound)
-COMMANDS = frozenset(("/mute", "/unmute", "/del", "/kick", "/ban", "/unban", "/bans"))     # the words of a moderator's commands: from an account with no role they are refused and never become a line of chat
+COMMANDS = frozenset(("/mute", "/unmute", "/del", "/kick", "/ban", "/unban", "/bans", "/mutes"))     # the words of a moderator's commands: from an account with no role they are refused and never become a line of chat
 RANK = {"none": 0, "mod": 1, "admin": 2}
-NEEDS = {"mute": 1, "unmute": 1, "del": 1, "kick": 1, "ban": 2, "unban": 2, "bans": 2}       # the rank that a command needs
+NEEDS = {"mute": 1, "unmute": 1, "del": 1, "kick": 1, "ban": 2, "unban": 2, "bans": 2, "mutes": 1}       # the rank that a command needs
 SYSTEM = "system"                           # who a line of the hub's own is from: a reserved name (hub/text.py), which no account can have
 BANS_SHOWN = 50                             # the newest bans that /bans lists
+MUTES_SHOWN = 50                            # the mutes that /mutes lists (the ones that end soonest first)
+PURGE_MINUTES = 60                          # `/ban who purge`: the lines of the person from this many minutes back are taken off every screen
+LINE_WORD = re.compile(r"#[0-9]{1,9}\Z")     # a person named by the number of one of their lines: no username has a `#` (hub/text.py NAME)
+ROW_WORD = re.compile(r"row:[0-9]{1,9}\Z")   # ... or by the number of their row in the list of the front page (no username has a `:`)
 PICS_REFUSED = "pics"                       # the code of the `err` for a `pics` that is not done
 PICK_REFUSED = "pick"                       # the code of the `err` for a `pick` that is not done (a page that reads the codes of its lines must not take it for one)
 
@@ -357,16 +361,19 @@ class Chat:
 
     @staticmethod
     def parse(line):
-        """(command, who or line id, minutes) of a moderator's command, or None when it is not one that is written right: single spaces, a username (or a line's number), and for /mute minutes 1 to 10080."""
+        """(command, who or line id, minutes) of a moderator's command, or None when it is not one that is written right: single spaces, a person (a username, `#` and the number of one of their lines,
+        or `row:` and the number of their row in the list; aim reads it), and for /mute minutes 1 to 10080. `/ban who purge` is a ban that also deletes the person's lines of the last hour (minutes is PURGE_MINUTES)."""
         words = line.split(" ")
         name = words[0].lower()[1:]
         if name == "mute" and len(words) == 3 and NUMBER.match(words[2]) and 1 <= int(words[2]) <= MAX_CHAT_MUTE_MINUTES:
             return name, words[1], int(words[2])
+        if name == "ban" and len(words) == 3 and words[2] == "purge":
+            return name, words[1], PURGE_MINUTES                    # (a ban that also takes the person's lines of the last hour off every screen: the same power as /ban)
         if name in ("unmute", "kick", "ban", "unban") and len(words) == 2:
             return name, words[1], 0
         if name == "del" and len(words) == 2 and NUMBER.match(words[1]):
             return name, int(words[1]), 0
-        if name == "bans" and len(words) == 1:
+        if name in ("bans", "mutes") and len(words) == 1:
             return name, None, 0
         return None
 
@@ -414,7 +421,7 @@ class Chat:
         looked up. `who` for a username that is nobody's here (or two people's), and for a /kick of a person who is not here; `bad` for a line that is not there; /del of one's own line needs nobody's role
         but the one who acts."""
         name, arg, _ = job
-        if name == "bans":
+        if name in ("bans", "mutes"):
             return [me.account_id], None, None
         if name == "del":
             target = self.store.account_of_line(arg)
@@ -423,10 +430,35 @@ class Chat:
             if target == "":
                 return None, None, "power"                          # (a line of the hub's own is nobody's to delete from the chat)
         else:
-            target = self.account_named(arg) or (self.ban_named(arg) if name == "unban" else None)
+            target, refusal = self.person_of(arg, name)
+            if refusal:
+                return None, None, refusal
             if target is None or (name == "kick" and not self.sockets_of(target)):
                 return None, None, "who"
         return ([me.account_id] if target == me.account_id and name == "del" else [me.account_id, target]), target, None
+
+    def person_of(self, word, name):
+        """(the account that a moderator's word means, the code that refuses it or None). A username as always; `#n`: the author of line n (`bad` when there is no such line any more, `power` for a line of the
+        hub's own); `row:n`: the account whose row in the list of the front page is n, when it has a socket open now (else None, which is `who`). The same table of the powers is asked of all three."""
+        if LINE_WORD.match(word):
+            target = self.store.account_of_line(int(word[1:]))
+            if target is None:
+                return None, "bad"
+            if target == "":
+                return None, "power"
+            return target, None
+        if ROW_WORD.match(word):
+            number = int(word[4:])
+            found = [a for a, i in self.presence.ids.items() if i == number and self.sockets_of(a)]
+            return (found[0] if len(found) == 1 else None), None
+        return self.account_named(word) or (self.ban_named(word) if name == "unban" else self.mute_named(word) if name == "unmute" else None), None
+
+    def label_of(self, target, word):
+        """The name that a mute or a ban is kept under (what /bans, /mutes, /unban and /unmute show): the word that was typed when it is a username, else the person's username, else (nobody here, no profile) their
+        pseudonymous reference (hub/pseudo.py), which those commands take as a name: never the `#n` or `row:n` text, never an id."""
+        if not (LINE_WORD.match(word) or ROW_WORD.match(word)):
+            return word
+        return self.usernames([target]).get(target) or self.ref(target)
 
     def carry_out(self, peer, job):
         """Do the command, now: the accounts' roles are fresh (else `role`), the table of the powers says yes (else `power`), and what is asked is true of the person (else `bad`: not muted, not banned, already
@@ -444,8 +476,9 @@ class Chat:
         if not allowed(name, actor, self.roles.role_of(target) if target is not None else None, target == me.account_id):
             return self.mistake(peer, "power")
         by, whom = self.ref(me.account_id), self.ref(target) if target is not None else ""
+        label = self.label_of(target, arg) if target is not None and name in ("mute", "ban") else arg
         if name == "mute":
-            self.store.mute(target, minutes, by, arg, note=(by, "mute", whom, str(minutes)))
+            self.store.mute(target, minutes, by, label, note=(by, "mute", whom, str(minutes)))
         elif name == "unmute":
             if not self.store.muted_until(target):
                 return self.mistake(peer, "bad")
@@ -457,6 +490,14 @@ class Chat:
         elif name == "bans":
             rows = [{"u": who, "at": at} for _, who, at, _ in reversed(self.store.bans())][:BANS_SHOWN]
             return peer.send_text(dumps({"t": "bans", "rows": rows}))
+        elif name == "mutes":
+            rows = []
+            for account, stored, until, _ in self.store.mutes()[:MUTES_SHOWN]:
+                row = {"u": stored or self.usernames([account]).get(account, ""), "until": until}
+                if self.sockets_of(account) and account in self.presence.ids:
+                    row["i"] = self.presence.ids[account]          # (the row number is public already: the page can say where the person is)
+                rows.append(row)
+            return peer.send_text(dumps({"t": "mutes", "rows": rows}))
         elif name == "unban":
             if not self.store.unban(target, note=(by, "unban", whom, "")):
                 return self.mistake(peer, "bad")
@@ -470,8 +511,15 @@ class Chat:
         else:
             if self.store.is_banned(target):
                 return self.mistake(peer, "bad")
-            shown = self.shown_name(target) or arg
-            self.store.ban(target, by, arg, note=(by, "ban", whom, ""))
+            shown = self.shown_name(target) or label or "Someone"
+            self.store.ban(target, by, label, note=(by, "ban", whom, ""))
+            if minutes:
+                try:
+                    self.store.delete_lines_since(target, int(self.store.clock()) - minutes * 60, by, note=(by, "del", whom, "purge"))
+                    self.sync_deletions()                          # (the same path as /del: a bounded number of `del` frames, see drop_lines)
+                except StoreError as e:
+                    if self.on_store_error:
+                        self.on_store_error(e)                     # (the ban is done and stays: the person is removed and the answer is `ok`; the lines can be taken off with /del)
             self.remove(self.sockets_of(target), "banned")
             self.sync_pictures()
             self.announce("%s was banned." % shown, me)
@@ -516,6 +564,13 @@ class Chat:
         if not textrules.valid_name(username):
             return None
         found = [account for account, name, _, _ in self.store.bans() if name == username]
+        return found[0] if len(found) == 1 else None
+
+    def mute_named(self, name):
+        """The account that is muted under this name (a username, or the reference that a mute of a person with no profile is kept under), when exactly one is."""
+        if not textrules.valid_name(name):
+            return None
+        found = [account for account, stored, _, _ in self.store.mutes() if stored == name]
         return found[0] if len(found) == 1 else None
 
     def account_named(self, username):
