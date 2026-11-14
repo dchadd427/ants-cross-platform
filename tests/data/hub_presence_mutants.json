@@ -168,15 +168,15 @@
   {
    "id": "a_private_room_keeps_its_details",
    "file": "hub/presence.py",
-   "old": "if at == \"look\" or msg.get(\"pub\") is not True:",
-   "new": "if at == \"look\":",
+   "old": "    if msg.get(\"pub\") is not True:\n",
+   "new": "    if False:\n",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
    "id": "a_visitor_who_looks_keeps_details",
    "file": "hub/presence.py",
-   "old": "if at == \"look\" or msg.get(\"pub\") is not True:",
-   "new": "if msg.get(\"pub\") is not True:",
+   "old": "    if at == \"look\":\n        return Where(at, None, None, None, False, None, seq)\n    if msg",
+   "new": "    if at == \"look\" and msg.get(\"pub\") is not True:\n        return Where(at, None, None, None, False, None, seq)\n    if msg",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -196,8 +196,8 @@
   {
    "id": "a_status_is_not_checked",
    "file": "hub/presence.py",
-   "old": "if at not in AT or (\"pub\" in msg and not isinstance(msg[\"pub\"], bool)):",
-   "new": "if (\"pub\" in msg and not isinstance(msg[\"pub\"], bool)):",
+   "old": "    if at not in AT or (\"pub\" in msg and not isinstance(msg[\"pub\"], bool)) or",
+   "new": "    if (\"pub\" in msg and not isinstance(msg[\"pub\"], bool)) or",
    "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   },
   {
@@ -717,6 +717,69 @@
    "old": "welcome[\"me\"] = self.presence.row_id(you.account_id)",
    "new": "welcome[\"me\"] = self.presence.row_id(you.name)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_presence"
+  },
+  {
+   "id": "a_private_mark_is_not_kept",
+   "file": "hub/presence.py",
+   "old": "return Where(at, None, None, None, False, None, seq, True)             # (private",
+   "new": "return Where(at, None, None, None, False, None, seq)             # (private",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_visitor_who_looks_has_a_private_mark",
+   "file": "hub/presence.py",
+   "old": "    if at == \"look\":\n        return Where(at, None, None, None, False, None, seq)",
+   "new": "    if False:\n        return Where(at, None, None, None, False, None, seq)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_muted_account_loses_the_private_mark",
+   "file": "hub/presence.py",
+   "old": "return Where(where.at, None, None, None, False, None, where.seq, where.priv)",
+   "new": "return Where(where.at, None, None, None, False, None, where.seq)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "a_muted_account_keeps_the_solo_mark",
+   "file": "hub/presence.py",
+   "old": "return Where(where.at, None, None, None, False, None, where.seq, where.priv)",
+   "new": "return Where(where.at, None, None, None, False, None, where.seq, where.priv, where.solo)",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "solo_is_for_any_status",
+   "file": "hub/presence.py",
+   "old": "if at == \"play\" and msg.get(\"solo\") is True:",
+   "new": "if msg.get(\"solo\") is True:",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "solo_is_not_checked_for_its_kind",
+   "file": "hub/presence.py",
+   "old": " or (\"solo\" in msg and not isinstance(msg[\"solo\"], bool))",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "solo_wins_over_a_private_mark",
+   "file": "hub/presence.py",
+   "old": "if msg.get(\"pub\") is False:",
+   "new": "if msg.get(\"pub\") is False and not msg.get(\"solo\"):",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_private_mark_is_not_in_the_row",
+   "file": "hub/presence.py",
+   "old": "row[\"priv\"] = True                      # (a private room",
+   "new": "pass                      # (a private room",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
+  },
+  {
+   "id": "the_solo_mark_is_not_in_the_row",
+   "file": "hub/presence.py",
+   "old": "row[\"solo\"] = True                      # (a game",
+   "new": "pass                      # (a game",
+   "test": "PYTHONDONTWRITEBYTECODE=1 timeout 600 python3 -m unittest -f tests.scripts.test_hub_presence tests.scripts.test_hub_core"
   }
  ]
 }

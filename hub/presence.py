@@ -8,11 +8,11 @@ one send after the socket closes.
 
 Messages (JSON, docs/HUB.md has the table):
   up    {"t":"who"}                                    watch the list: it is answered at once with the whole list as it was last sent
-        {"t":"here","at":"look"|"wait"|"play", ...}    what this page's visitor is doing (a login is needed); a room that is public may say its map, seats and code, a private one nothing; an account that
+        {"t":"here","at":"look"|"wait"|"play", ...}    what this page's visitor is doing (a login is needed); a room that is public may say its map, seats and code, a private one only that it is private (`pub`:false), a game against the computer `solo`:true and its map; an account that
                                                        may not chat (muted, too new) has none of it kept
   down  {"t":"who","full":bool,"n","g","more","rows":[row,...],"gone":[id,...]}
         the welcome of a login says `me`, the number of the row that is the account's own
-A row is {"i": a number that names it while the person is here, "name", "at", "pic" (the public name of the account's picture, 32 hex digits, where it has one that may be shown), "mod" and "role" (`mod` or `admin`: moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
+A private room or match is a row with `priv`:true (kept for an account that may not chat too: a fact, never a map, seats or code); a game against the computer is `solo`:true, with `map` where the page said one. A row is {"i": a number that names it while the person is here, "name", "at", "pic" (the public name of the account's picture, 32 hex digits, where it has one that may be shown), "mod" and "role" (`mod` or `admin`: moderators only), and for a public room "pub", "map" (a file name), "n", "of", "code"}. A socket that said nothing is looking.
 A `here` that is not what a page says is refused with the code `here` and is a mistake of the socket; a second `who` too soon is not (it costs the socket a frame more, like any refusal that is not its doing).
 """
 import collections
@@ -29,7 +29,7 @@ ROOM_CODE = re.compile(r"[a-z0-9_-]{1,32}\Z")           # (the codes that the ga
 MAP_FILE = re.compile(r"[ -~]{5,64}\Z")                 # (a map's file name as the game takes it, net::valid_map_name: printable ASCII, 5 to 64 characters; double spaces and dots are fine)
 NOT_IN_A_FILE_NAME = frozenset('/\\:*?"<>|')
 
-Where = collections.namedtuple("Where", "at map n of pub code seq")
+Where = collections.namedtuple("Where", "at map n of pub code seq priv solo", defaults=(False, False))       # priv: the page said the room or match is private (a fact and nothing else); solo: a game against the computer (no room)
 
 
 def whole(value, low, high):
@@ -47,14 +47,20 @@ def parse_here(msg, seq):
     """What a page said it is doing, as a Where; None when it is not what a page says (a field of the wrong kind or size). Details are kept only where they belong and only for a room that
     the page calls public: a private room is "a private room" and nothing more (no map, no seats, never a code), a match has no code, and a visitor who is looking has none of it."""
     at = msg.get("at")
-    if at not in AT or ("pub" in msg and not isinstance(msg["pub"], bool)):
+    if at not in AT or ("pub" in msg and not isinstance(msg["pub"], bool)) or ("solo" in msg and not isinstance(msg["solo"], bool)):
         return None
     n, size, file, code = msg.get("n"), msg.get("of"), msg.get("map"), msg.get("code")
     if (n is not None and not whole(n, 0, SEATS)) or (size is not None and not whole(size, 1, SEATS)) or (n is not None and size is not None and n > size):
         return None
     if (file is not None and map_file(file) is None) or (code is not None and not (isinstance(code, str) and ROOM_CODE.match(code))):
         return None
-    if at == "look" or msg.get("pub") is not True:
+    if at == "look":
+        return Where(at, None, None, None, False, None, seq)
+    if msg.get("pub") is not True:
+        if msg.get("pub") is False:
+            return Where(at, None, None, None, False, None, seq, True)             # (private: the mark is kept, never a map, seats or code)
+        if at == "play" and msg.get("solo") is True:
+            return Where(at, file, None, None, False, None, seq, False, True)      # (a game against the computer: its map only)
         return Where(at, None, None, None, False, None, seq)
     if at == "play":
         return Where(at, file, n, None, True, None, seq)
@@ -63,7 +69,7 @@ def parse_here(msg, seq):
 
 def bare(where):
     """What a person is doing and nothing about the room: what is kept of an account that may not chat."""
-    return Where(where.at, None, None, None, False, None, where.seq)
+    return Where(where.at, None, None, None, False, None, where.seq, where.priv)
 
 
 def row_of(ident, name, mod, where, pic=None):
@@ -80,6 +86,12 @@ def row_of(ident, name, mod, where, pic=None):
         for key, value in (("map", where.map), ("n", where.n), ("of", where.of), ("code", where.code)):
             if value is not None:
                 row[key] = value
+    elif where is not None and where.priv:
+        row["priv"] = True                      # (a private room or match: a fact, with no map, seats or code, and no way in)
+    elif where is not None and where.solo:
+        row["solo"] = True                      # (a game against the computer, with the map if the page said one)
+        if where.map is not None:
+            row["map"] = where.map
     return row
 
 

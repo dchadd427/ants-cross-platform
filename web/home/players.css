@@ -37,6 +37,8 @@
 .pl-who { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
 .pl-name { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 1.25; color: #9fe0b8; }
 .pl-meta { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.25; color: #a8cfc0; }
+.pl-lock { display: inline-block; position: relative; width: 8px; height: 6px; margin: 0 6px 1px 1px; border-radius: 1px; background: currentColor; vertical-align: middle; }
+.pl-lock::before { content: ''; position: absolute; left: 1px; top: -5px; width: 4px; height: 4px; border: 1.5px solid currentColor; border-bottom: 0; border-radius: 3px 3px 0 0; }
 .pl-tag { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; vertical-align: 2px; color: #1a1405; background: var(--gold); border-radius: 3px; }
 .pl-card.r-admin .pl-nm { color: #ff5f66; }       /* (the role is the color of the NAME: red for an administrator, yellow for a moderator; the word is in the accessible name; the red is measured in tests/scripts/test_web_home_chat.py) */
 .pl-card.r-mod .pl-nm { color: var(--gold); }
