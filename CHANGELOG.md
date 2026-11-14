@@ -23,6 +23,19 @@ Work that is not released yet is written in the same template under a heading th
 `tools/release.py X.Y.Z "title"` turns that heading into "## vX.Y.Z - date - title" and refuses when there is no "## Next" or it is empty.
 -->
 
+## v0.16.7 - 2026-11-14 - Phone hotkey buttons, damage and heal numbers, Automatic picture shape
+
+**For players:**
+- **Hotkey buttons on a phone.** While you play, a phone shows buttons for the game's keys, All ants first, then Stop, Home, Next and None, and a More button for the other keys. Held sideways they form a rail beside the picture, held upright a row under it. The "Touch buttons" row of the game's Settings turns them off.
+- **Damage and heal numbers over the ants.** A small -N shows over an ant that loses hit points and a +N over an ant that is healed at its hill. They are on by default, never shown under fog of war, and the "Damage & heal numbers" row of the game's Settings (Video) switches them off.
+- **Automatic picture shape.** The Picture shape list starts with "Automatic": the shape nearest your screen when the phone is held sideways, 16:9 when held upright, following the way you hold it. A shape you pick is kept for the way the phone was held; every browser starts on Automatic once.
+- **The countdown card's Fullscreen button fits the card on a phone.** It takes the size and place of the card's own button and stays inside the card.
+- **Quick host, My room and Join use your Discord name when you are logged in.** A guest answer is no longer kept until the page is reloaded.
+
+**Rules / network:** none: network protocol 23 and the rules numbers are unchanged, so a v0.16.6 page or game still joins. Under the hood: the numbers change nothing in a match.
+
+**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/f9011b41...a795f86a)
+
 ## v0.16.6 - 2026-11-13 - Chat roles from Discord and Discord pictures in the Players list
 
 **For players:**
@@ -479,27 +492,6 @@ Work that is not released yet is written in the same template under a heading th
 
 **Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/50b7ae4b...67a05f86)
 
-## v0.12.126 - 2026-10-24 - Orders for big selections
+## Older versions (v0.12.126 and before)
 
-**For players:**
-- **Ctrl+A or a drag over more than 32 ants no longer orders only the first 32.** A click or Stop on a bigger selection is sent as several orders of 32 ants each, in the order you selected them, together in that click. A click on 32 ants or fewer works exactly as before.
-- **A move now names up to 81 ants:** the game gives a free tile within four tiles of the clicked spot to 81 ants at the most (fewer near walls or water), so the first 81 of a bigger selection walk there; the rest are left alone and keep what they were doing, and the status line says "Up to 81 walk here." Thieves sent to an enemy hill are not limited. A wider search is planned for the next rules release.
-- Attack, special and Stop orders reach up to 1,536 ants in one click ("Only 1536 ants ordered." beyond that). A held Stop key (S) now stops once, not twenty times a second.
-- A big click adds to a recording (a move about 350 bytes, a Stop of 1,500 ants about 6 KB), so a very long match on a big map can pass the size a recording may have and then keeps none.
-
-**Rules / network:** none in the rules; network protocol 21 is unchanged (several ordinary commands). A server holds up to 1,024 waiting commands of a player (it was 256) so that a burst of big clicks is carried, not refused.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/ac6454fd...50b7ae4b)
-
-## v0.12.125 - 2026-10-24 - Replays can carry their map
-
-**For players:**
-- Under the hood: a replay file can now hold the map it was played on (an optional part, up to 1 MiB, checked against the map's hash), so that a match on a map that the server keeps only for a while can be watched later; `replay_tool map FILE OUT` takes the map out. Nothing records one yet. The game, the tool and the replay page read it already, and every replay that exists plays as before.
-
-**Rules / network:** none: network protocol 21, the simulation rules and the replay format (1) are unchanged.
-
-**Details:** [commits](https://github.com/dchadd427/ants-cross-platform/compare/2d157bf3...dcda43d2)
-
-## Older versions (v0.12.124 and before)
-
-Every release before v0.12.125, and the long notes of v0.12.124 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.
+Every release before v0.12.127, and the long notes of v0.12.126 - v0.12.69, v0.12.59 - v0.12.55, v0.12.53 - v0.12.48, v0.12.46 - v0.12.35, v0.12.33 - v0.12.26, v0.12.24 - v0.12.18, v0.12.16 - v0.12.0, v0.11.0, v0.10.0, v0.9.1, v0.9.0, v0.8.3, v0.8.2, v0.8.1, v0.8.0, v0.7.0, v0.6.0, v0.5.1, v0.5.0, v0.4.0, v0.3.0, v0.2.0, v0.1.3, v0.1.2, v0.1.1, v0.1.0 and v0.0.99 - v0.0.90, are only in the git history.

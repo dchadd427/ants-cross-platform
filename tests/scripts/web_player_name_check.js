@@ -248,7 +248,8 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         r.ready();
         await r.reply(0, 200, GUEST_PAGE);
         r.ready();
-        same('how: a guest answer is kept for the page and says the same at once (a seat that asks later)', r.hows, ['login', 'login']);
+        await r.reply(1, 200, GUEST_PAGE);
+        same('how: a guest answer is asked again at the next seat and says the same (a seat that asks later)', r.hows, ['login', 'login']);
         r.restore();
         const none = rig();
         none.ready();
@@ -278,19 +279,28 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         await r.reply(2, 200, GUEST_PAGE);
         same('the person logged out: the next room is a guest\'s, with the guest name', r.heard.slice(-1), [[GUEST_NAME, 'guest', false]]);
         r.ready();
-        check('a guest is not asked again: the answer is at once', r.fetches.length === 3 && r.heard.length === 3 && r.heard[2][1] === 'guest');
-        same('known() is the guest name now', r.who.known(), GUEST_NAME);
-        r.who.ask();
-        check('the page asking again changes nothing for a guest', r.fetches.length === 3);
+        check('a guest of a site with a login is asked again too: a login may have come meanwhile', r.fetches.length === 4 && r.heard.length === 2);
+        await r.reply(3, 200, GUEST_PAGE);
+        same('... and is still a guest', [r.heard[2], r.who.known()], [[GUEST_NAME, 'guest', false], '']);
+        const none = rig();
+        none.ready();
+        await none.reply(0, 404, null);
+        none.ready();
+        same('a site with no login is never asked again: the guest name is known at once', [none.fetches.length, none.heard.length, none.who.known()], [1, 2, GUEST_NAME]);
+        none.who.ask();
+        check('the page asking again changes nothing for a site with no login', none.fetches.length === 1);
+        none.restore();
         r.restore();
     }
     // -- the guest name never changes
     {
         const r = rig({ random: (n) => (n === 1 ? 0.5 : 0.25) });
-        r.who.ask();
+        r.ready();
         await r.reply(0, 200, GUEST_PAGE);
         r.ready();
-        same('a guest\'s name is made once', r.heard, [[GUEST_NAME, 'guest', false]]);
+        await r.reply(1, 200, GUEST_PAGE);
+        same('a guest\'s name is made once', r.heard.slice(0, 1), [[GUEST_NAME, 'guest', false]]);
+        same('... and the same at the next seat', r.heard.slice(1), [[GUEST_NAME, 'guest', false]]);
         same('... and kept in this browser under its own key', [r.sets, r.store], [[['ants.guest', '550000']], { 'ants.guest': '550000' }]);
         r.restore();
         const again = rig({ store: r.store, random: 0.9 });
@@ -305,6 +315,7 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         r.ready();
         await r.reply(0, 200, GUEST_PAGE);
         r.ready();
+        await r.reply(1, 200, GUEST_PAGE);
         r.who.known();
         check('the guest name is read from the storage once for a page, and made once', r.gets.length === 1 && r.randoms === 1 && r.sets.length === 1);
         r.restore();
@@ -330,7 +341,7 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
     }
     for (const [what, o] of [['reads', { getThrows: true }], ['writes', { setThrows: true }], ['is given at all', { storageThrows: true }], ['is not there', { noStorage: true }]]) {
         const r = rig(o);
-        r.ready(); await r.reply(0, 200, GUEST_PAGE);
+        r.ready(); await r.reply(0, 404, null);
         r.ready(); r.ready();
         same('a browser whose storage ' + what + ' still has a guest name, and it stays the same for the page', r.heard, [[GUEST_NAME, 'guest', false], [GUEST_NAME, 'guest', false], [GUEST_NAME, 'guest', false]]);
         check('... and made once', r.randoms === 1);
@@ -498,6 +509,14 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         same('... the new question\'s own limit still ends it', r.heard.length, 2);
         r.restore();
     }
+    {
+        const r = rig({ cancelDoesNothing: true });
+        r.ready();
+        await r.reply(0, 404, null);
+        r.advance(P.ASK_MS);
+        same('a timer that could not be taken back does not undo the answer of a site with no login', [r.who.known(), r.heard.length], [GUEST_NAME, 1]);
+        r.restore();
+    }
     // -- the callbacks
     {
         const r = rig();
@@ -510,7 +529,7 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
     {
         const r = rig();
         r.ready();
-        await r.reply(0, 200, GUEST_PAGE);
+        await r.reply(0, 404, null);
         r.who.ready(() => { throw new Error('later mistake'); });
         r.ready();
         check('... also for a seat that is answered at once', r.heard.length === 2 && r.errors.length === 1);
@@ -528,9 +547,44 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         const r = rig();
         let inner = null;
         r.who.ready(() => { r.who.ready((n) => { inner = n; }); });
-        await r.reply(0, 200, GUEST_PAGE);
-        check('a seat asked for inside an answer (a guest\'s) is answered at once, not lost', inner === GUEST_NAME);
+        await r.reply(0, 404, null);
+        check('a seat asked for inside an answer (a site with no login) is answered at once, not lost', inner === GUEST_NAME);
         r.restore();
+    }
+
+    // -- a seat never plays under a guest name that an older answer gave while the site has a login (Quick host, My room, Join, Quick join, a rematch all ask through ready)
+    {
+        // (a) the page opens while the hub says nobody is logged in, the person logs in without a reload, then a seat
+        const r = rig();
+        r.who.ask();
+        await r.reply(0, 200, GUEST_PAGE);
+        same('(a) a guest answer is no name to use without asking: known() says nothing', r.who.known(), '');
+        r.ready();
+        check('(a) a seat after a guest answer asks again', r.fetches.length === 2 && r.heard.length === 0, r.fetches.length + ' requests, ' + r.heard.length + ' heard');
+        await r.reply(1, 200, LOGIN('maya'));
+        same('(a) ... and plays under the login that came meanwhile', r.heard, [['maya', 'login', false]]);
+        r.ready();
+        await r.reply(2, 200, GUEST_PAGE);
+        r.ready();
+        check('(a) a person who stays a guest on a site with a login is asked at every seat (and still gets the guest name)', r.fetches.length === 4 && r.heard.length === 2 && r.heard[1][1] === 'guest', r.fetches.length + ' requests');
+        r.restore();
+    }
+    {
+        // (c) a slow hub: the question at page open is given up at the limit; the next seat asks again and hears a login that comes in time
+        const r = rig();
+        r.who.ask();
+        r.advance(P.ASK_MS);
+        await r.reply(0, 200, LOGIN('maya'));
+        same('(c) a slow hub: nothing is known at page open', r.who.known(), '');
+        r.ready();
+        check('(c) the seat asks again', r.fetches.length === 2);
+        await r.reply(1, 200, LOGIN('maya'));
+        same('(c) ... and plays under the login', r.heard, [['maya', 'login', false]]);
+        const down = rig();
+        down.ready();
+        await down.fail(0);
+        same('a hub that is down: a guest plays at once (no wait for the limit)', down.heard, [[GUEST_NAME, 'guest', false]]);
+        down.restore(); r.restore();
     }
 
     // -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -284,7 +284,7 @@ class TheSpectatorsPicture(unittest.TestCase):
         self.assertNotRegex(self.page, r"if \(ANTS_REPLAY_MODE\)[^\n]*remembered = null")
         block = self.page[self.page.index("var ANTS_ASPECT_KEY"):self.page.index("// The game tells the page the seat")]
         self.assertNotIn("ANTS_REPLAY_MODE", block)                                                          # (the choice is the page's for every address)
-        self.assertIn("var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.firstVisit(window));", block)        # (the same first visit as a player: the shape nearest the screen)
+        self.assertIn("var chosen = ANTS_PAGE.resolveAspect(fromAddress, remembered, AntsShapes.automatic(window));", block)        # (the same Automatic as a player: the shape nearest the screen for the way the device is held)
 
     def test_the_picture_button_and_its_window_are_in_the_bar_with_the_dropdown_of_the_shapes(self):
         bar = self.page[self.page.index('<div class="rbar rep-only" id="rbar">'):self.page.index('id="b-tab"')]
@@ -301,7 +301,7 @@ class TheSpectatorsPicture(unittest.TestCase):
     def test_the_window_uses_the_pages_own_selector_and_remembers_the_choice(self):
         self.assertIn("['pic-pick', 'picpop-h', 'pic-note', 'pic-select', 'The shape of the picture']", self.page)          # (the one dropdown the page makes itself, from the same picker as the settings menu's)
         self.assertIn("onPick: antsPickShape }", self.page)                                                 # (a choice is the page's own pick, the one function that the settings menu calls too)
-        self.assertIn("window.localStorage.setItem(ANTS_ASPECT_KEY, value);", self.page)
+        self.assertIn("window.localStorage.setItem(ANTS_ASPECT_KEY, AntsShapes.withPick(stored, way, value));", self.page)
         self.assertIn("body.replay .header-actions:not(.rep-only), body.replay .info-panel-wrapper { display: none !important; }", self.page)   # (the player's header buttons stay hidden here)
         self.assertEqual(len(re.findall(r"\n\s*\.picpop \{", self.page)), 1)
         self.assertEqual(len(re.findall(r"\n\s*\.pick-select \{", self.page)), 1)                           # (one style for the dropdown)

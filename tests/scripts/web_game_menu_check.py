@@ -381,17 +381,18 @@ def computer(p, args, check):
     p.tab_to("video")
     tab.save_shot(args.shots, "menu-2-video")
     groups = json.loads(tab.ev("JSON.stringify([].map.call(document.querySelectorAll('.gm-seg'), function (g) { return [].map.call(g.children, function (b) { return b.textContent; }); }))"))
-    check(groups == [["Locked", "Free"], ["Hurt ants", "All ants", "Off"], ["Bar", "Number"]], "the Video section has the mouse and the two rows of the ant health as button groups (%s)" % groups)
+    check(groups == [["Locked", "Free"], ["Hurt ants", "All ants", "Off"], ["Bar", "Number"], ["On", "Off"]], "the Video section has the mouse, the two rows of the ant health and the damage and heal numbers as button groups (%s)" % groups)
     dd = ".gm-panel .pick-select"
     list_open = lambda: tab.ev("document.querySelector('.gm-panel [role=listbox]').hidden") is False
     shown_in_menu = lambda: tab.ev("(document.querySelector('.gm-panel [role=option][aria-selected=true]') || document.body).getAttribute('data-shape')")
     entries = json.loads(tab.ev("JSON.stringify([].map.call(document.querySelectorAll('.gm-panel [role=option]'), function (o) { return [o.getAttribute('data-shape'), o.textContent]; }))"))
-    check(entries == SHAPE_ENTRIES, "...and the picture's shape is a dropdown (the page's own button and list: no native select in the panel) with one entry for each shape of the table: the shape and its canvas (%s)" % entries)
+    check(entries[1:] == SHAPE_ENTRIES and entries[0][0] == "auto" and entries[0][1].startswith("Automatic (now "), "...and the picture's shape is a dropdown (the page's own button and list: no native select in the panel) with one entry for each shape of the table: the shape and its canvas (%s)" % entries)
     check(tab.ev("document.querySelector('.gm-panel select') === null") is True and tab.ev("document.querySelector('%s').tagName" % dd) == "BUTTON", "...(a button that opens a list inside the panel)")
     start = aspect.first_visit_of(1280, 800, 1280, 800)                              # (the shape that a first visit has on this screen: the dropdown shows it)
     at = aspect.SHAPE_ORDER.index(start)
-    check(shown_in_menu() == start and (tab.ev("document.querySelector('.gm-fits') ? document.querySelector('.gm-fits').textContent : ''") or "").endswith(" fills your screen"),
-          "...%s is chosen (a first visit's shape on a 1280 x 800 screen), and a quiet line under it names the shape that fills the screen" % start)
+    check(shown_in_menu() == "auto" and entries[0][1] == "Automatic (now %s)" % start and (tab.ev("document.querySelector('.gm-fits') ? document.querySelector('.gm-fits').textContent : ''") or "").endswith(" fills your screen"),
+          "...Automatic is chosen and says %s (the shape on a 1280 x 800 screen), and a quiet line under it names the shape that fills the screen" % start)
+    tab.ev("antsPickShape('%s'); 1" % start)                                         # (the keys below start from a hand pick of the same shape: the marked row is its own)
     tab.ev("document.querySelector('%s').focus(); 1" % dd)
     shape_of = lambda k: aspect.SHAPE_ORDER[min(max(k, 0), len(aspect.SHAPE_ORDER) - 1)]
     p.key("ArrowDown", "ArrowDown", 40)
@@ -412,7 +413,7 @@ def computer(p, args, check):
     s = p.state()
     want = shape_of(at + 3)
     check(s["aspect"] == want and s["shape"] == aspect.SHAPE_ORDER.index(want) and ("aspect=" + want) in tab.ev("location.search"), "the shape is the page's own: the stage, the game's canvas and the address (%s, shape %s)" % (s["aspect"], s["shape"]))
-    check(tab.ev("(document.querySelector('#gm-picture-list [aria-selected=true]') || document.body).getAttribute('data-shape')") == want and tab.ev("localStorage.getItem('ants.aspect.v2')") == want, "the menu's dropdown follows, and the choice is remembered")
+    check(tab.ev("(document.querySelector('#gm-picture-list [aria-selected=true]') || document.body).getAttribute('data-shape')") == want and tab.ev("localStorage.getItem('ants.aspect.v3')") == aspect.pick(want), "the menu's dropdown follows, and the choice is remembered")
     p.key("Enter", "Enter", 13)
     p.key("End", "End", 35)
     p.key("Enter", "Enter", 13)

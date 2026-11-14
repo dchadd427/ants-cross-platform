@@ -123,7 +123,7 @@ function setup(opts) {
     host.appendChild(note);
     const picks = [];
     let now = 1000;
-    const picker = made.create({ doc: w.doc, host, id: 'pic', labelledBy: 'lab', describedBy: 'note', className: 'extra', title: 'The shape', value: opts.value === undefined ? '16:9' : opts.value, onPick: (name) => { picks.push(name); }, now: () => now });
+    const picker = made.create({ doc: w.doc, host, id: 'pic', labelledBy: 'lab', describedBy: 'note', className: 'extra', title: 'The shape', value: opts.value === undefined ? '16:9' : opts.value, onPick: (name) => { picks.push(name); }, now: () => now, automatic: opts.automatic, auto: opts.auto });
     const button = picker.button, list = picker.list;
     button.rect = { left: 400, top: 300, right: 700, bottom: 340, width: 300, height: 40 };
     const lateEsc = [];           // a listener of the window that comes after the picker's: the Picture window's Esc, or the menu's keys
@@ -169,6 +169,47 @@ function setup(opts) {
     const more = SHAPES_SOURCE.replace(marker, marker + ',\n        { name: \'5:4\', label: \'5:4\', width: 1000, height: 800, slot: 1280 }');
     const p = setup({ shapesSource: more });
     expect('a row added to the table is an entry of the list, last, with its words', [p.options().length, p.options()[7].textContent, p.options()[7].id], [8, '5:4 · 1000 x 800', 'pic-o7']);
+}
+
+{   // the Automatic entry: the first row, which says the shape that Automatic gives now; chosen, it is the page's AUTO; the shape that it shows, chosen, is a pick like any other
+    let now = '20:9';
+    const p = setup({ automatic: () => now, auto: true, value: '20:9' });
+    const S = p.w.AntsShapes;
+    const selected = () => p.options().map((o) => o.getAttribute('aria-selected')).indexOf('true');
+    expect('with `automatic` the list has Automatic first, then the table\'s rows in their order, each with its own id', [p.options().length, p.options().map((o) => o.getAttribute('data-shape')), p.options().map((o) => o.id)[0], p.options().map((o) => o.id)[1], p.options().map((o) => o.id)[7]],
+        [8, ['auto'].concat(S.names()), 'pic-oauto', 'pic-o0', 'pic-o6']);
+    expect('Automatic says what it gives now, and when it is in use the button says it and its row is the selected one', [p.options()[0].textContent, p.button.textContent, selected(), p.picker.shape()], ['Automatic (now 20:9)', 'Automatic (now 20:9)', 0, S.AUTO]);
+    now = '16:9';
+    p.press(p.button);
+    expect('opening the list asks again what Automatic gives now', p.options()[0].textContent, 'Automatic (now 16:9)');
+    expect('...the mark starts on the row in use (Automatic)', p.mark(), 'auto');
+    p.press(p.options()[0]);
+    expect('choosing the row in use (Automatic) chooses nothing', [p.picks, p.shown()], [[], false]);
+    p.press(p.button);
+    p.press(p.options()[5]);
+    expect('with Automatic in use, choosing the shape that it shows (20:9) is a pick: the page pins it', p.picks, ['20:9']);
+    p.picker.set('20:9', false);
+    expect('set(shape, false) shows the shape and not Automatic', [p.button.textContent, selected()], ['20:9 \u00b7 1200 x 540', 5]);
+    p.press(p.button);
+    p.press(p.options()[5]);
+    expect('choosing the shape in use chooses nothing', p.picks, ['20:9']);
+    p.press(p.button);
+    p.press(p.options()[0]);
+    expect('choosing Automatic over a hand pick says AUTO', p.picks, ['20:9', S.AUTO]);
+    p.picker.set('16:9', true);
+    expect('set(shape, true) shows Automatic again, with the shape it gives now', [p.button.textContent, selected()], ['Automatic (now 16:9)', 0]);
+    now = '4:3'; p.picker.set('4:3', true);
+    expect('when Automatic gives the classic shape it says the row\'s own words', [p.options()[0].textContent, p.button.textContent], ['Automatic (now Classic 4:3)', 'Automatic (now Classic 4:3)']);
+    now = '16:9'; p.picker.set('16:9', true);
+    p.down('ArrowDown');
+    p.down('End');
+    p.down('Home');
+    expect('Home marks Automatic', p.mark(), 'auto');
+    p.down('ArrowDown');
+    p.down('a');
+    expect('a typed letter marks Automatic (the next row that starts with it)', p.mark(), 'auto');
+    const plain = setup({ value: '16:9' });
+    expect('with no `automatic` the list has no such row', [plain.options().length, plain.options()[0].getAttribute('data-shape')], [7, '4:3']);
 }
 
 // ---- the pointer ------------------------------------------------------------------------------------------------------------------------------------------------------------

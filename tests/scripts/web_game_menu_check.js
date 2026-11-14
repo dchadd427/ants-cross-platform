@@ -195,7 +195,7 @@ function makeDocument() {
 function makeGame(json) {
     const g = {
         where: 0, needsAnswer: 0, leave: 2, opened: false, calls: [],
-        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0 },
+        values: { 1: 100, 2: 65, 3: 99, 4: 0, 8: 0, 9: 50, 10: 1, 11: 1, 15: 0, 16: 1 },
         describes: 0, saves: [],
     };
     g.module = {
@@ -226,25 +226,30 @@ function makePage(opts) {
     const stage = make('div', 'game-stage'), box = make('div', 'game-container', stage), canvas = make('canvas', 'canvas', box), chat = make('input', 'chat-keys', box);
     stage.setAttribute('data-aspect', '16:9');
     const shapes = {};                                                                   // (what the page's own dropdown does with a pick: antsPickShape; the page's `pickShape` is that function)
-    const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); if (!opts.keepShape) stage.setAttribute('data-aspect', shape); };
+    const auto = { on: !!opts.auto, now: '20:9' };                                                    // (the page's source of the shape: Automatic's, or a pick's)
+    const pickShape = opts.noPick ? undefined : (shape) => { shapes.clicked = (shapes.clicked || []).concat(shape); auto.on = shape === AntsShapes.AUTO; if (!opts.keepShape) stage.setAttribute('data-aspect', auto.on ? '20:9' : shape); };
     win.screen = opts.screen || { width: 1440, height: 900 };
     win.innerWidth = 1440;
     win.innerHeight = 900;
     const lockState = { on: true };                                                       // (the page's object `lock`: the pointer lock's setting, what the Fullscreen mouse row reads and writes)
     const lock = opts.noLock ? undefined : { available: () => true, get: () => lockState.on, set: (on) => { lockState.on = !!on; game.calls.push(['lock', on ? 'on' : 'off']); } };
+    const touchState = { on: true, sets: [] };                                           // (the page's object `touchKeys`: the hotkey buttons' setting, what the Touch buttons row reads and writes)
+    const touchKeys = opts.touchKeys ? { available: () => opts.touchKeys !== 'no', get: () => touchState.on, set: (on) => { touchState.on = !!on; touchState.sets.push(!!on); } } : undefined;
     const rbar = make('div', 'rbar'), picwrap = make('div', 'picwrap', rbar);
     const toast = make('div', 'toast');
     toast.hidden = true;
     const asked = [], intervals = [], state = { fullscreen: false, locked: false, ready: true, locks: [], enters: 0, leaves: 0 };
+    const watchers = [];
     const page = {
-        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, lock, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
+        onShape: (fn) => { watchers.push(fn); return () => { const at = watchers.indexOf(fn); if (at !== -1) watchers.splice(at, 1); }; },
+        doc, win, shapes: AntsShapes, picker: (o) => AntsShapePicker.create(AntsShapes, o), pickShape, isAutomatic: opts.auto ? () => auto.on : undefined, automatic: opts.auto ? () => auto.now : undefined, lock, touchKeys, stage, canvas, toast, module: () => (opts.noModule ? null : game.module), ready: () => state.ready, replay: !!opts.watch, live: !!opts.live, version: 'v0.12.111', query: '?v=7',
         isFullscreen: () => state.fullscreen, enter: () => { state.enters++; state.fullscreen = true; }, leave: () => { state.leaves++; state.fullscreen = false; },
         isLocked: () => state.locked, releaseLock: () => { state.locks.push('release'); state.locked = false; }, requestLock: () => { state.locks.push('request'); state.locked = true; },
         every: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
         cancelsKey: opts.noCancel ? undefined : (e) => { asked.push(e.key + (e.ctrlKey ? '+ctrl' : '')); return !!(e.ctrlKey ? 'ahlnopqs'.indexOf(e.key) >= 0 : /^F[123]$/.test(e.key)); },       // (the page's ANTS_PAGE.cancelsBrowserKey, in the cases that matter here)
     };
     const menu = Menu.forPage(page);
-    const p = { asked, doc, win, game, state, page, menu, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, intervals, box };
+    const p = { shapeChanged: () => watchers.slice().forEach((fn) => fn()), asked, doc, win, game, state, page, menu, auto, stage, canvas, header, menuBtn, picwrap, rbar, toast, chat, shapes, lockState, touchState, intervals, box };
     p.styleLoaded = () => { doc.links.forEach((l) => { if (l.onload) l.onload(); }); };
     p.poll = () => intervals.forEach((i) => i.fn());
     p.ready = () => { p.styleLoaded(); p.poll(); return p; };
@@ -366,6 +371,38 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     expect('the tabs are a row there', p.q('[role=tablist]').getAttribute('aria-orientation'), 'horizontal');
 }
 {
+    // the hotkey buttons' own row (web/touch_keys.js): a row of the page, not of the game's table, in Video right after the Fullscreen mouse row, on a touch screen only
+    const t = makePage({ touch: true, touchKeys: true }).ready();
+    t.open();
+    t.tab('video');
+    const videoNow = t.rows().map((r) => r.name);
+    expect('a touch screen with the hotkey buttons has a Touch buttons row at the end of the Video rows that it shows', videoNow, names(MATCH_ROWS, 'video').filter((n) => n !== 'Fullscreen mouse').slice(0, 2).concat(['Touch buttons'], names(MATCH_ROWS, 'video').slice(3)));
+    const seg = t.qa('.gm-k-touchkeys .gm-opt');
+    expect('...On and Off, On marked (the default)', [seg.map((b) => b.textContent), seg.map((b) => b.getAttribute('aria-checked'))], [['On', 'Off'], ['true', 'false']]);
+    seg[1].click();
+    expect('...Off is stored through the page\'s object and marked', [t.touchState.sets, t.qa('.gm-k-touchkeys .gm-opt').map((b) => b.getAttribute('aria-checked'))], [[false], ['false', 'true']]);
+    t.qa('.gm-k-touchkeys .gm-opt')[0].click();
+    expect('...and On again', [t.touchState.sets, t.touchState.on], [[false, true], true]);
+    t.menu.close();
+    const n = makePage({ touch: true, touchKeys: 'no' }).ready();
+    n.open();
+    n.tab('video');
+    ok('a page whose buttons are not available (not a touch screen) has no Touch buttons row', n.rows().map((r) => r.name).indexOf('Touch buttons') < 0);
+    const w = makePage({ touch: true }).ready();
+    w.open();
+    w.tab('video');
+    ok('a page without the hotkey buttons has no Touch buttons row', w.rows().map((r) => r.name).indexOf('Touch buttons') < 0);
+}
+
+// the small form (the gear outside a match or under a dialog) has no Touch buttons row, on a touch screen with the buttons too: the setting changes nothing there
+const outsideTouch = (() => { const o = makePage({ touch: true, touchKeys: true }).ready(); o.game.where = -1; o.poll(); return o; })();
+{
+    const p = outsideTouch;
+    p.q('#settings-btn').click();
+    ok('the small form on a touch screen with the hotkey buttons: a panel with no tabs', p.menu.isOpen() && p.qa('[role=tab]').length === 0);
+    expect('...has no Touch buttons row (the table\'s page rows only)', [p.rows().map((r) => r.name).indexOf('Touch buttons') < 0, p.qa('.gm-k-touchkeys').length], [true, 0]);
+}
+{
     const p = makePage({ noLock: true }).ready();
     p.open();
     p.tab('video');
@@ -385,6 +422,22 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     pick.click();
     p.q('#gm-picture-o4').click();
     expect('a pick that the page did not take: the dropdown shows what the game has, not what was asked', [p.shapes.clicked, pick.textContent], [['20:9'], '16:9 \u00b7 960 x 540']);
+}
+{   // the Automatic entry of the Picture shape list: the first row, in use until a shape is picked, chosen again to go back
+    const p = makePage({ auto: true }).ready();
+    p.open();
+    p.tab('video');
+    const pick = p.q('.gm-pick .pick-select');
+    expect('the Picture shape list has Automatic first, and says what it gives now', [p.qa('.gm-pick [role=option]').length, (p.q('#gm-picture-oauto') || {}).textContent, p.q('#gm-picture-oauto') && p.q('#gm-picture-oauto').getAttribute('data-shape')], [8, 'Automatic (now 20:9)', AntsShapes.AUTO]);
+    expect('Automatic is in use at the start: the button says it', [pick.textContent, p.q('#gm-picture-oauto').getAttribute('aria-selected')], ['Automatic (now 20:9)', 'true']);
+    pick.click();
+    p.q('#gm-picture-o3').click();
+    expect('a shape chosen over Automatic is the page\'s pick and the button shows the shape', [p.shapes.clicked, pick.textContent, p.q('#gm-picture-oauto').getAttribute('aria-selected')], [['16:9'], '16:9 \u00b7 960 x 540', 'false']);
+    pick.click();
+    p.q('#gm-picture-oauto').click();
+    expect('Automatic chosen again is handed to the page as its AUTO, and the button says Automatic', [p.shapes.clicked, pick.textContent], [['16:9', AntsShapes.AUTO], 'Automatic (now 20:9)']);
+    p.auto.now = '16:9'; p.stage.setAttribute('data-aspect', '16:9'); p.shapeChanged();
+    expect('the panel open over a turn: the button and the row say what Automatic gives now, and Automatic stays the row in use', [pick.textContent, p.q('#gm-picture-oauto').textContent, p.q('#gm-picture-oauto').getAttribute('aria-selected')], ['Automatic (now 16:9)', 'Automatic (now 16:9)', 'true']);
 }
 {
     const p = makePage({ watch: true }).ready();
@@ -448,7 +501,7 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     p.game.calls.length = 0;
     p.tab('video');
     const video = p.qa('[role=radiogroup]');
-    expect('the Video section: the mouse and the two rows of the ant health are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number']]);
+    expect('the Video section: the mouse, the two rows of the ant health and the damage and heal numbers are button groups (the picture\'s shape is a dropdown)', video.map((g) => g.children.map((b) => b.textContent)), [['Locked', 'Free'], ['Hurt ants', 'All ants', 'Off'], ['Bar', 'Number'], ['On', 'Off']]);
     const dropdown = p.qa('.pick-select');
     expect('one dropdown in the panel: the picture\'s shape, the page\'s picker (a button), in the row of its own', [dropdown.length, dropdown[0].tagName, dropdown[0].parentNode.className + '/' + dropdown[0].parentNode.parentNode.className, dropdown[0].parentNode.parentNode.parentNode.querySelector('.gm-name').textContent], [1, 'button', 'pick/gm-ctl gm-pick', 'Picture shape']);
     ok('...no native select is in the panel', !p.q('select') && p.qa('option').length === 0);
@@ -487,6 +540,11 @@ const names = (rows, sec) => rows.filter((r) => r.sec === sec).map((r) => r.labe
     scroll.value = '12';
     scroll.fire('change', {});
     expect('the scroll speed is row 9', p.game.calls[4], ['set', 9, 12]);
+    expect('Damage & heal numbers is the row of its name, On (value 1) by default, a switch after Show health as', [p.qa('.gm-name').map((n) => n.textContent).filter((t) => /numbers$/.test(t)), video[3].children.map((b) => b.getAttribute('aria-checked'))], [['Damage & heal numbers'], ['true', 'false']]);
+    video[3].children[1].click();
+    expect('Off is row 16, value 0, shown pressed in, and kept at once', [p.game.calls[5], video[3].children.map((b) => b.getAttribute('aria-checked')), p.game.saves[p.game.saves.length - 1]], [['set', 16, 0], ['false', 'true'], [16, 0, 1]]);
+    video[3].children[0].click();
+    expect('On is value 1 of row 16', [p.game.calls[6], video[3].children.map((b) => b.getAttribute('aria-checked'))], [['set', 16, 1], ['true', 'false']]);
 
     p.game.calls.length = 0;
     const fsButton = p.qa('.gm-act')[0];

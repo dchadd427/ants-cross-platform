@@ -39,6 +39,7 @@
 #include "ants_app/config_store.hpp"
 #include "ants_app/fps_overlay.hpp"
 #include "ants_app/game_menu.hpp"
+#include "ants_app/health_changes.hpp"
 #include "ants_app/latency_corner.hpp"
 #include "ants_app/local_teams.hpp"
 #include "ants_app/midi_player.hpp"
@@ -379,6 +380,7 @@ public:
     bool game_menu_is_open() const noexcept { return game_menu_open_; }
     const std::string& game_menu_describe();
     const game_menu::MenuSettings& menu_settings() const noexcept { return menu_settings_; }
+    const health::ChangeTracker& health_changes() const noexcept { return health_changes_; }      // the live damage and heal numbers (empty while the setting is Off)
     /// A PHONE'S KEYBOARD for the match's chat box (application_touch.cpp; the page, web/shell.html "ANTS_CHAT", opens the browser's keyboard when a finger taps the box and hands the
     /// game what is typed, through these and the exports ants_chat_probe / ants_chat_do): the box takes text now (a match is on the screen, no recording, no catch-up screen, chat on, no dialog)
     bool web_chat_available() const noexcept;
@@ -698,6 +700,8 @@ private:
     uint8_t local_roster_{0x0F};                           // the seats of the local game that was started (all four, or the local player and the bots)
     std::unique_ptr<replay::Recorder> recorder_;          // the recording of the match that is on (replay.hpp; empty: none is made, or the match has ended); the sinks below hold a reference to it
     bool replay_mode_{false};                             // --replay: the game shows a recording
+    health::ChangeTracker health_changes_;                // the damage and heal numbers (health_changes.hpp): read from the confirmed engine after every tick, drawn by the renderer; view only
+    double health_clock_ms_{0.0};                         // ... their clock: real milliseconds that pass while the match runs (it stops while a match or a replay is paused)
     game_menu::MenuSettings menu_settings_;               // Master volume, Mute and the hit point numbers (application_game_menu.cpp)
     std::function<void()> on_game_menu_{nullptr};
     std::string game_menu_json_;                          // what ants_menu_describe hands to the page (it stays until the next call)

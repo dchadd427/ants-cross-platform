@@ -218,11 +218,9 @@ void Renderer::draw_anthill_selection_brackets(int32_t cx, int32_t cy, uint32_t 
 void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
     for (const auto& a : world.ants) {
         // The original shows the local player's and the allies' ants always (0x101aa0d); every other ant only on explored ground
-        const bool allied = hud_team_id_ < world.player_alliances.size() && a.player_id < world.player_alliances.size() &&
-                            world.player_alliances[hud_team_id_] == a.player_id && world.player_alliances[a.player_id] == hud_team_id_;
-        if (world.fog_of_war_enabled && a.player_id != hud_team_id_ && !allied &&
-            !world.is_tile_revealed(a.tile_x, a.tile_y)) {
-            continue; // Concealed enemy ant under fog of war
+        if (!health::ant_drawn(world, hud_team_id_, a)) {              // Concealed enemy ant under fog of war
+            if (changes_ != nullptr && changes_->count() > 0) changes_->note_hidden(a.id);       // (and no damage or heal number over it)
+            continue;
         }
         RenderItem item{};
         // The sort key is the sprite's y: a thrown ant's key jumps with its position at the end of the first flight frame
@@ -230,6 +228,7 @@ void Renderer::collect_ant_units(const ants::sim::WorldState& world) {
         item.sort_y = a.py + pred.dy;
         item.draw_func = [this, a, pred](SDL_Renderer*, TextureCache&) { this->draw_single_ant(a); this->draw_ant_number(a, a.px + pred.dx, a.py + pred.dy); };    // (the original's number follows its ant: renderer_health.cpp)
         note_health_mark(a, a.px + pred.dx, a.py + pred.dy);
+        if (changes_ != nullptr && changes_->count() > 0) changes_->note_position(a.id, a.px + pred.dx, a.py + pred.dy);       // (the damage and heal numbers stand over the ant as it is drawn)
         render_queue_.push_back(std::move(item));
     }
 }

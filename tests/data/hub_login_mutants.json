@@ -1659,8 +1659,8 @@
   {
    "id": "docs_forget_the_rollback",
    "file": "docs/HUB.md",
-   "old": "**The schema is 3** (`PRAGMA user_version`; the `sessions` table came with it). A hub of an earlier version does not start on such a database",
-   "new": "The schema is 3. A hub of an earlier version reads such a database",
+   "old": "**The schema is 4** (`PRAGMA user_version`; the `sessions` table came with version 3). A hub of an earlier version does not start on such a database",
+   "new": "The schema is 4. A hub of an earlier version reads such a database",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_login.TheDocumentsSayWhatAnOperatorNeedsToKnow"
   },
   {

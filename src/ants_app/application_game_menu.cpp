@@ -1,5 +1,5 @@
 // The settings menu in the application (game_menu.hpp is the model and the one table of rows; docs/GAME_MENU.md): what the page's panel (web/game_menu.js) reads and changes through
-// the exports at the end of this file, what the game does while the panel is up (its keys, text, clicks and finger are not the game's), and the three settings that did not exist before the menu.
+// the exports at the end of this file, what the game does while the panel is up (its keys, text, clicks and finger are not the game's), and the settings that did not exist before the menu.
 // Nothing here touches the simulation: sound, display and the HUD's own flags are local, and Leave game is the quit dialog's Yes (confirm_quit), so the Quit command, a drop out, the recording and the
 // hashes are what they were.
 
@@ -123,6 +123,7 @@ int Application::game_menu_get(int what) {
         case gm::kMute:            return menu_settings_.mute ? 1 : 0;
         case gm::kAntHealth:       return static_cast<int>(hud_.ant_health().when);
         case gm::kHealthStyle:     return static_cast<int>(hud_.ant_health().style);
+        case gm::kHealthChanges:   return menu_settings_.health_changes ? 1 : 0;
         case gm::kScroll:          return hud_.get_scroll_speed();
         case gm::kChat:            return hud_.is_chat_enabled() ? 1 : 0;
         case gm::kQuickHelpAtStart: return hud_.is_quick_help_enabled() ? 1 : 0;
@@ -143,6 +144,12 @@ bool Application::game_menu_set(int id, int value, bool save) {
             menu_settings_.mute = value != 0;
             menu_settings_.write(config_store_, id);
             audio_mixer_.set_output_gain(menu_settings_.gain());
+            return true;
+        case gm::kHealthChanges:
+            if (value != 0 && value != 1) return false;                                  // (an On / Off word that the row does not have)
+            menu_settings_.health_changes = value != 0;
+            menu_settings_.write(config_store_, id);
+            if (!menu_settings_.health_changes) health_changes_.reset();                 // (Off: nothing is kept, and what comes back starts from the hit points of that moment)
             return true;
         case gm::kAntHealth:
         case gm::kHealthStyle: {

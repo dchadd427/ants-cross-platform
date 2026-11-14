@@ -629,7 +629,7 @@ def main():
             key = lambda tab, name, code, vk: [tab.call("Input.dispatchKeyEvent", {"type": kind, "key": name, "code": code, "windowsVirtualKeyCode": vk}) for kind in ("keyDown", "keyUp")]
             for query, shape in (("", "16:9"), ("&aspect=4:3", "4:3"), ("&aspect=16:10", "16:10"), ("&aspect=21:9", "21:9"), ("&aspect=32:9", "32:9")):
                 tab = new_tab()
-                tab.ev("try { localStorage.removeItem('ants.aspect.v2'); } catch (e) {}")
+                tab.ev("try { localStorage.removeItem('ants.aspect.v3'); } catch (e) {}")
                 open_page(tab, "/play?replay=" + KEPT + query)
                 check(until(tab, READY) is True, "a replay starts (%s)" % shape)
                 time.sleep(0.5)
@@ -661,14 +661,14 @@ def main():
                     key(tab, "Escape", "Escape", 27)
                     check(tab.ev("document.getElementById('pic-select-list').hidden") is True and tab.ev(state)[0] is False and tab.ev("document.activeElement.id") == "pic-select", "Esc with the list open closes the list alone: the window stays open and the focus stays on the dropdown")
                     key(tab, "Enter", "Enter", 13)
-                    key(tab, "ArrowDown", "ArrowDown", 40)
-                    key(tab, "ArrowDown", "ArrowDown", 40)                                          # (16:9, 20:9, 21:9: the mark moves, nothing is chosen yet)
+                    for _ in range(6):
+                        key(tab, "ArrowDown", "ArrowDown", 40)                                      # (Automatic is the first row and in use: 4:3, 3:2, 16:10, 16:9, 20:9, 21:9: the mark moves, nothing is chosen yet)
                     check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "16:9", "the arrows only move the mark: the picture is still 16:9")
                     key(tab, "Enter", "Enter", 13)                                                  # (the choice; the window stays open)
                     time.sleep(0.5)
                     got = tab.ev(width_of)
                     check(tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9" and abs(got[0] - got[1]) <= 1 and got[0] > 1200, "a shape chosen in the window changes the picture at once and the bar follows it (stage %s, bar %s)" % (got[0], got[1]))
-                    check(tab.ev("localStorage.getItem('ants.aspect.v2')") == "21:9" and "aspect=21:9" in tab.ev("location.search") and tab.ev(state)[0] is False, "the choice is remembered and put in the address; the window stays open")
+                    check(tab.ev("localStorage.getItem('ants.aspect.v3')") == '{"sideways":"21:9"}' and "aspect=21:9" in tab.ev("location.search") and tab.ev(state)[0] is False, "the choice is remembered and put in the address; the window stays open")
                     check(tab.ev(shown_shape) == "21:9" and tab.ev("document.getElementById('pic-select-list').hidden") is True, "the chosen shape is the dropdown's, and its list is shut")
                     tab.call("Page.reload")
                     check(until(tab, READY) is True and tab.ev("document.getElementById('game-stage').getAttribute('data-aspect')") == "21:9", "the page, opened again with the address as it was, keeps the shape")

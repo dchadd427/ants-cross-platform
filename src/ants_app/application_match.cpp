@@ -156,6 +156,7 @@ void Application::enter_match(bool rejoin) {
     if (!rejoin) hud_.start_match_modal(network_active());                  // (the simulation waits for it: update_simulation, post_tick)
     held_since_ms_ = -1.0;                                                  // (nothing of an earlier match's pauses and votes)
     catch_up_backlog_ = false;
+    health_changes_.reset();                                                // (no damage or heal number of an earlier match)
     prev_missing_.clear();
     back_name_.clear();
     vote_press_ = 0;

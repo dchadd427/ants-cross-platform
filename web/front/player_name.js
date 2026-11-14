@@ -1,9 +1,9 @@
 // The name that a person plays under on the front page and on the game page (web/lobby.html, web/shell.html): nobody types a name on the web (tests/scripts/web_player_name_check.js).
 //   * A person who is logged in with Discord (docs/HUB.md "Login") plays under the login's name made to fit the game's rules. The page asks the site's own `GET /hub/me` (same origin; the cookie is HttpOnly)
-//     when it opens, and again at every seat while the answer was a login, so that a log out in the chat is known at the next room. `you.name` is tried first, then `you.other`; the username always fits.
+//     when it opens, and again at every seat (a login, a guest of a site that has a login, a failed answer), so that a log in or a log out in the chat is known at the next room. `you.name` is tried first, then `you.other`; the username always fits.
 //   * Everybody else (not logged in, no hub or no login, an answer that is late or wrong) plays under a guest name: "Guest" and six digits, made once and kept in this browser (localStorage, GUEST_KEY; a
 //     browser that refuses its storage keeps it for the page). A login and a log out never change it. It is a random number and nothing else.
-//   * ready(fn) calls fn(name, kind, canSwitch, how) once: at once when the answer cannot change (a guest's, or no login), else when the question is answered, failed or given up (ASK_MS). how: 'other' (the
+//   * ready(fn) calls fn(name, kind, canSwitch, how) once: at once when the answer cannot change (a site with no login), else when the question is answered, failed or given up (ASK_MS). how: 'other' (the
 //     shown name did not fit: the other one is used), 'login' (a guest whom the hub could log in) or ''. A question on its way is shared by all who wait; a failed one is asked again at the next ready().
 //   * ES5, no module system: a page gets the global AntsPlayerName, node gets module.exports. A name from the hub is text from strangers: cut before any work, and only printable ASCII is kept.
 (function (root, factory) {
@@ -80,8 +80,9 @@
             kept = value;
             return kept;
         }
-        // A login's answer can change (a log out) and a failed one may be better next time: both are asked again; a guest's and a site without a login stay
-        function again(result) { return result.kind === 'login' || result.kind === 'failed'; }
+        // A login's answer can change (a log out, a log in in the chat without a reload) and a failed one may be better next time: a login, a guest of a site that has a login and a failed one are all asked again at
+        // every seat; only a site without a login stays
+        function again(result) { return result.kind !== 'none'; }
         function answer(result) {
             return result.kind === 'login' && result.name ? { name: result.name, kind: 'login', canSwitch: result.canSwitch, how: result.viaOther ? 'other' : '' } : { name: guestName(guest()), kind: 'guest', canSwitch: false, how: result.kind === 'guest' ? 'login' : '' };
         }
@@ -132,7 +133,7 @@
                 waiting.push(fn);
                 ask();
             },
-            // The name that can be used without asking (a guest's, or a site with no login), else ''
+            // The name that can be used without asking (a site with no login: a guest's), else ''
             known: function () { return last && !again(last) ? guestName(guest()) : ''; }
         };
     }

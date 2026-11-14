@@ -4,7 +4,7 @@
 //   * there is no strip under the game: the box takes the window's height that the strip had, and the WHOLE framed box (its border and red shadow too) is inside the window with at least the page's side margin
 //     under it, as large as that allows (1280 x 800 and 844 x 390: the height decides; 390 x 844, 360 x 740 and 448 x 998: the picture is as wide as the page);
 //   * the header has ONE Settings button after Menu at 360, 390, 844 and 1280 px, 44 x 44 or more, named "Settings", and the header stays one row on a 360 px phone (Menu, Fullscreen, Settings, More);
-//   * a tap on it (390 px, touch) opens the menu, Video has a Picture shape row, and a choice changes the page's shape at once, is remembered under ants.aspect.v2 and put in the address;
+//   * a tap on it (390 px, touch) opens the menu, Video has a Picture shape row, and a choice changes the page's shape at once, is remembered under ants.aspect.v3 (for the way the phone is held) and put in the address;
 //   * on a computer the Fullscreen mouse row switches Locked / Free and the choice is remembered under ants.pointerlock; on a touch screen the row is not there;
 //   * the game's own call for Esc (the stand-in has no game to press the key in) and the button open the same menu;
 //   * outside a match (the stand-in answers "no match screen"): the button opens the small form with Fullscreen, Picture shape and Fullscreen mouse, and with listeners that imitate the game's window system (SDL's: key
@@ -153,7 +153,7 @@ server.listen(0, async () => {
             await page.waitForTimeout(200);
             await page.tap('#gm-picture-o6');                                       // 32:9, the last row of the table
             await page.waitForTimeout(500);
-            const after = await page.evaluate(() => ({ shape: document.getElementById('game-stage').getAttribute('data-aspect'), kept: localStorage.getItem('ants.aspect.v2'), address: location.search, open: !!document.getElementById('game-menu') }));
+            const after = await page.evaluate(() => ({ shape: document.getElementById('game-stage').getAttribute('data-aspect'), kept: (function () { var k = localStorage.getItem('ants.aspect.v3'); try { return Object.values(JSON.parse(k))[0]; } catch (e) { return k; } })(), address: location.search, open: !!document.getElementById('game-menu') }));
             check('a choice in the row changes the shape at once (was ' + before + '), remembers it, puts it in the address and leaves the menu open', after, { shape: '32:9', kept: '32:9', address: '?map=TREASURE&aspect=32:9', open: true });
             await context.close();
         }
@@ -210,7 +210,7 @@ server.listen(0, async () => {
             await page.waitForTimeout(200);
             await page.click('#gm-picture-o6');
             await page.waitForTimeout(400);
-            const after = await page.evaluate(() => ({ shape: document.getElementById('game-stage').getAttribute('data-aspect'), kept: localStorage.getItem('ants.aspect.v2') }));
+            const after = await page.evaluate(() => ({ shape: document.getElementById('game-stage').getAttribute('data-aspect'), kept: (function () { var k = localStorage.getItem('ants.aspect.v3'); try { return Object.values(JSON.parse(k))[0]; } catch (e) { return k; } })() }));
             check(label + ': a choice changes the shape at once and is remembered', after, { shape: '32:9', kept: '32:9' });
             await context.close();
         }
@@ -277,7 +277,7 @@ server.listen(0, async () => {
             // a shape pick and Locked / Free work from here
             await page.click('#game-menu .pick-select');
             await page.click('#gm-picture-o5');
-            const picked = await page.evaluate(() => ({ stage: document.getElementById('game-stage').getAttribute('data-aspect'), stored: localStorage.getItem('ants.aspect.v2'), address: location.search }));
+            const picked = await page.evaluate(() => ({ stage: document.getElementById('game-stage').getAttribute('data-aspect'), stored: (function () { var k = localStorage.getItem('ants.aspect.v3'); try { return Object.values(JSON.parse(k))[0]; } catch (e) { return k; } })(), address: location.search }));
             check('a shape pick sets the stage\'s shape, the stored choice and the address', [picked.stage, picked.stored, /aspect=21:9/.test(picked.address)], ['21:9', '21:9', true]);
             await page.click('#game-menu [role=radio]:nth-of-type(2)');
             check('Free is remembered under ants.pointerlock', await page.evaluate(() => localStorage.getItem('ants.pointerlock')), 'off');

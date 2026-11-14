@@ -60,6 +60,9 @@ void Application::update_simulation(float dt) {
         return;
     }
 
+    // The damage and heal numbers' clock: real time, while the match or the replay runs (a pause stops it, so a number stays where it is)
+    if (state_ == AppState::Playing && !(replay_mode_ && replay_paused_) && !(network_active() && net_->paused())) health_clock_ms_ += static_cast<double>(std::min(dt, 0.1f)) * 1000.0;
+
     if (replay_mode_) {
         run_replay(dt);
         update_auto_camera(dt);
@@ -119,6 +122,12 @@ void Application::post_tick() {
     // The first tick after a catch-up: the engine queued the sounds and news of every turn it ran without a picture. They are not played or said now (the news flashes of the chat log stay).
     const bool replayed = catch_up_backlog_;
     catch_up_backlog_ = false;
+    // The damage and heal numbers read the CONFIRMED engine once per executed tick (a jump, the catch-up screen or the setting Off: nothing is made, and the starting hit points are taken again)
+    if (!menu_settings_.health_changes || replayed || catch_up_screen_active()) {
+        health_changes_.reset();
+    } else {
+        health_changes_.on_tick(sim_.get_world_state(), static_cast<uint32_t>(sim_.current_tick()), static_cast<int64_t>(health_clock_ms_), local_player_id_);
+    }
     hud_.poll_sim_events(sim_, replayed);                    // (the news are the confirmed engine's: they are told once, whatever was shown before)
 
     if (page_hidden_) ++hidden_ticks_;                       // (the console's line about a hidden period says how far the match went)
