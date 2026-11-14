@@ -313,6 +313,26 @@ class TheFreshCheck(DoorTest):
         self.assertEqual(self.modlog(), [])
         self.assertEqual(self.fake.member_ids.count(ADMIN), 2, "the action asked Discord again")
 
+    def test_an_action_needs_the_fresh_check_of_both_and_a_discord_that_is_down_refuses_it(self):
+        self.token(ADMIN)                                            # (the actor's role is known and believed for 30 seconds: the door lets it in whatever the runner's speed)
+        self.fake.member_mode = "status:500"
+        r = self.post("ban", {"account": NAMES[TARGET]})            # (the person acted on has no answer at all: the action must ask, and Discord does not answer)
+        self.assertEqual((r.status, r.json()), (503, {"error": "role"}))
+        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
+        self.assertEqual(self.modlog(), [])
+
+    def test_an_actor_whose_role_ran_out_while_discord_is_down_is_refused_by_the_door_first(self):
+        self.token(ADMIN)
+        self.fake.member_mode = "status:500"
+        time.sleep(0.5)                                              # (past the 0.2 second an action allows an answer; the door's own belief lasts 30 seconds, so it still lets the actor in)
+        self.assertEqual(self.gate(ADMIN).status, 204)
+        r = self.post("ban", {"account": NAMES[TARGET]})
+        self.assertEqual((r.status, r.json()), (503, {"error": "role"}))
+        self.rig.call(setattr, self.rig.hub.chat.roles.entries[ADMIN], "ok_at", self.rig.hub.clock() - 100.0)      # (the belief itself has run out)
+        r = self.post("ban", {"account": NAMES[TARGET]})
+        self.assertEqual((r.status, r.json()), (403, {"error": "admin"}), "stale and unconfirmable: the door says no, before any action")
+        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
+
     def test_an_action_on_a_person_whose_answer_is_old_asks_for_it(self):
         self.token(ADMIN)
         self.assertEqual(self.post("mute", {"account": NAMES[TARGET], "minutes": 5}).status, 200)
@@ -643,15 +663,6 @@ class TheChanges(DoorTest):
         line_id = self.rig.call(self.rig.store.add_line, "", "system", "canary notice", False).id
         self.assertEqual(self.post("del", {"line": line_id}).status, 200)
         self.assertEqual([(a.target, a.detail) for a in self.row("del")], [("", str(line_id))])
-
-    def test_an_action_needs_the_fresh_check_of_both_and_a_discord_that_is_down_refuses_it(self):
-        self.token(ADMIN)
-        self.fake.member_mode = "status:500"
-        time.sleep(1.2)                          
-        r = self.post("ban", {"account": NAMES[TARGET]})
-        self.assertEqual((r.status, r.json()), (503, {"error": "role"}))
-        self.assertFalse(self.rig.call(self.rig.store.is_banned, TARGET))
-        self.assertEqual(self.modlog(), [])
 
     def test_the_operators_account_acts_on_a_person_whose_role_is_confirmed_and_on_nobody_else(self):
         self.fake.member_mode = "status:500"
