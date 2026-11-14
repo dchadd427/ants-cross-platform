@@ -826,7 +826,7 @@ def main():
             bad = load_front({"ants.rejoin.junk-room.0": "not json", "ants.rejoin.bad-seat.7": entry(), "ants.rejoin.a.b.0": entry(), "ants.rejoin.zero-key.2": entry(key="0" * 32),
                               "ants.rejoin.extra.1": json.dumps({"k": hexkey, "s": mine, "t": int(time.time() * 1000), "v": 2}), "ants.rejoin.ahead.3": entry(age_ms=-3600 * 1000)})
             check(bad["hidden"] and len(bad["names"]) == 6, "malformed entries, a bad seat, a room with a dot, a key of zeros, an extra member and a time an hour ahead: nothing is offered and nothing is removed (%d kept)" % len(bad["names"]))
-            good = load_front({"ants.rejoin.k7m2xq.2": entry(), "ants.rejoin.older-room.0": entry(age_ms=600000), "ants.name": "Zed", "ants.aspect.v2": "4:3"})
+            good = load_front({"ants.rejoin.k7m2xq.2": entry(), "ants.rejoin.older-room.0": entry(age_ms=600000), "ants.name": "Zed", "ants.aspect.v3": '{"sideways":"4:3"}'})
             check(not good["hidden"] and good["shown"] and good["button"] == "Rejoin it" and "k7m 2xq" in good["note"], "a fresh entry of this site: the button is there, for the newest of two entries, with its code in two groups of three in the note beside it (%r, %r)" % (good["button"], good["note"]))
             check(good["gap"] > 40, "... it takes its own room above the logo (%s px) and the page moves down" % good["gap"])
             p.shot(args.shots, "rejoin_front_with_button")

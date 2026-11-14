@@ -448,17 +448,17 @@
         }
         // LOBBY_END
 
-        // The shape of the games' pictures: ?aspect= and the name of a shape of the table (anything else is ignored), else what the game's settings menu (or its recording's Picture button) remembered, else nothing: the game page then works out the
-        // first visit's shape itself, the one nearest to the screen. This page has no control for it: a hand-off to a game (START, Rejoin, a game for one) carries ?aspect= in the game's address only when the player picked
-        // before (`pickedShape`: the address or the stored pick; '' on a first visit). The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the game page writes it. The key of the first versions of
-        // the pages was 'ants.aspect': it is NOT read any more, so that a Classic 4:3 that a browser once remembered is forgotten once.
+        // The shape of the games' pictures: ?aspect= and the name of a shape of the table (anything else is ignored), else what the game's settings menu (or its recording's Picture button) remembered, else nothing: the game page then works out Automatic's
+        // shape itself, the one nearest to the screen for the way it is held. This page has no control for it: a hand-off to a game (START, Rejoin, a game for one) carries ?aspect= in the game's address only when the player picked
+        // before (`pickedShape`: the address or the stored pick; '' when none, which is Automatic). The choice is remembered under ASPECT_KEY (the game page's key: web/shell.html), and only the game page writes it. The key of the first versions of
+        // the pages was 'ants.aspect', and the next 'ants.aspect.v2': they are NOT read any more, so that the picks that browsers remembered are forgotten once.
         // SHAPE_BEGIN
-        var ASPECT_KEY = 'ants.aspect.v2';
+        var ASPECT_KEY = 'ants.aspect.v3';
         var pickedShape = '';                                                                 // (the shape that the player chose: the address or the stored pick; '' while nothing was chosen)
         (function () {
             var asked = null;
             try { asked = new URLSearchParams(window.location.search).get('aspect'); } catch (e) { /* no address to read */ }
-            var remembered = recall(ASPECT_KEY);
+            var remembered = AntsShapes.pickFor(recall(ASPECT_KEY), AntsShapes.wayOf(window));       // (a pick holds for the way the device is held now)
             if (isShape(asked)) pickedShape = asked;
             else if (isShape(remembered)) pickedShape = remembered;
         })();

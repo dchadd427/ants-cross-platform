@@ -35,7 +35,7 @@ The small form has the three rows with `page: 1` that the page serves. The rows 
 | Sound | Sound effects volume | the original's `Sound Volume` | at the release, with the test voice |
 | Sound | **Mute everything** (new) | `mute=on` / `off` | at once; every slider stays where it is and a muted sound goes on playing |
 | Video | Fullscreen | the page | the page's own enter / leave (a real click: the browser's permission) |
-| Video | Picture shape | the page (`ants.aspect.v2`, the address) | the page's picker (`web/shape_picker.js`, made from the page's table, `web/shapes.js`: the shape and its canvas, a quiet line under it names the shape that fills the screen); a choice calls the page's one function (the address and the stored choice follow); the row's range and words (their number) are made from the game's shape table (`kAspectTable`) |
+| Video | Picture shape | the page (`ants.aspect.v3`, one pick for each way the device is held; the address) | the page's picker (`web/shape_picker.js`, made from the page's table, `web/shapes.js`: first the entry **Automatic (now 20:9)**, then each shape and its canvas, a quiet line under it names the shape that fills the screen); a choice calls the page's one function (the address and the stored choice follow); the row's range and words (their number) are made from the game's shape table (`kAspectTable`) |
 | Video | Fullscreen mouse | the page (`ants.pointerlock`) | Locked / Free; not on a touch screen |
 | Video | **Ant health** (new: Hurt ants, All ants, Off) and **Show health as** (new: Bar, Number) | `ant_health=` and `ant_health_style=` (Ctrl+L flips Off and the last choice that was on); [what they draw](VIEW_AND_HUD.md#ant-health-marks) | at once |
 | Video | **Damage & heal numbers** (new: On, Off) | `health_changes=on` / `off` (On when the key is absent or says anything else; no key on the keyboard); [what it draws](VIEW_AND_HUD.md#damage-and-heal-numbers) | at once; Off draws nothing and keeps nothing; also while a recording or a live match is watched |
@@ -44,6 +44,8 @@ The small form has the three rows with `page: 1` that the page serves. The rows 
 | Game | Participate in chat, Show quick help at startup | the original's names | at once |
 | Game | Quick help (F1), Original options window (Ctrl+O) | none | close the panel and open the original's window |
 | Game | Version | none | |
+
+**One row is the page's alone and is not in the game's table: Touch buttons** (On or Off, in Video after Fullscreen mouse, on a touch screen only, in the full menu; `web/game_menu.js` adds it to the table that the game describes when the page has the hotkey buttons, [`TOUCH.md`](TOUCH.md#the-hotkey-buttons)). It is remembered in the browser under `ants.touchkeys` and calls nothing in the game.
 
 Master volume and the three that are the original's use the same numbers as the original's options window (0 to 99 on the slider; the stored 100 reads as 99), and the panel and the window show the same state, so they always agree. The values are the player's own: **Clear Cache & Update** erases the settings file and they come back to their defaults. The original's options window, Ctrl+O and the top bar's buttons are unchanged.
 

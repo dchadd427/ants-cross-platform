@@ -173,7 +173,7 @@ def main():
     browser = None
     try:
         browser = Browser(path)
-        tab = Tab(browser)
+        tab = Tab(browser, buttons=False)
         game = Game(tab, args.web)
 
         def shot(name):
