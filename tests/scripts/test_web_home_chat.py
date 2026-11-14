@@ -78,8 +78,8 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                 if re.search(r"/hub/ws", text):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_the_dock), ["web/home/chat.css", "web/home/chat.js", "web/home/home.js"], "the front page's own script asks for the dock; no other page does")
-        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
-        self.assertEqual(sorted(naming_the_door), ["web/front/player_name.js", "web/home/chat.js"], "the one other script that names the hub is the one that asks for the name to play under: its one page, GET /hub/me (tests/scripts/test_web_player_name.py)")
+        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"], "only the dock's script knows the address of the hub's socket: a page that opens a socket to it is a page that has a chat")
+        self.assertEqual(sorted(naming_the_door), ["web/front/player_name.js", "web/home/chat.js", "web/hub_here.js"], "the one other script that names the hub is the one that asks for the name to play under: its one page, GET /hub/me (tests/scripts/test_web_player_name.py)")
 
     def test_the_game_server_and_the_game_never_open_the_hub(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js")):

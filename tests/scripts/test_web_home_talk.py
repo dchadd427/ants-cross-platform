@@ -139,7 +139,7 @@ class ThePageAndTheOtherPages(unittest.TestCase):
                 if re.search(r"/hub/ws", text):
                     naming_the_socket.add(rel)
         self.assertEqual(sorted(naming_them), ["web/home/home.js", "web/home/talk.css"], "only the front page's own script asks for them (the style names its script)")
-        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js"])
+        self.assertEqual(sorted(naming_the_socket), ["web/home/chat.js", "web/hub_here.js"])
 
     def test_the_game_and_the_other_pages_never_hear_of_them(self):
         for rel in (("web", "shell.html"), ("web", "front", "lobby_net.js"), ("web", "front", "lobby_chat.js"), ("web", "front", "lobby_rules.js")):

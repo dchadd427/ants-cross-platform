@@ -552,9 +552,9 @@ class WhatAPageSays(WorldTest):
 
     def test_a_private_room_is_a_private_room_and_nothing_more_whatever_the_page_sent(self):
         self.w.here(self.a, "wait", pub=False, map="SECRET.LVL", n=2, of=4, code="s3cr3t")
-        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "wait"})
+        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "wait", "priv": True}, "the mark is a fact and nothing else")
         self.w.here(self.a, "wait", map="SECRET.LVL", n=2, of=4, code="s3cr3t")
-        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "wait"}, "a page that does not say that the room is public has a private one")
+        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "wait"}, "a page that does not say that the room is public has no details, and says nothing of private either")
         self.assertNotIn("s3cr3t", json.dumps(self.watcher.peer.sent))
         self.assertNotIn("SECRET", json.dumps(self.watcher.peer.sent))
 
@@ -562,7 +562,60 @@ class WhatAPageSays(WorldTest):
         self.w.here(self.a, "play", pub=True, map="ISLANDS.LVL", n=3, of=4, code="p4n8dz")
         self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "play", "pub": True, "map": "ISLANDS.LVL", "n": 3})
         self.w.here(self.a, "play", pub=False, map="ISLANDS.LVL", n=3, of=4, code="p4n8dz")
+        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "play", "priv": True})
+        self.assertNotIn("p4n8dz", json.dumps(self.watcher.peer.sent))
+
+    def test_a_game_against_the_computer_is_solo_with_its_map_only_and_never_seats_or_a_code(self):
+        self.w.here(self.a, "play", solo=True, map="TREASURE.LVL", n=3, of=4, code="s0l0s0")
+        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "play", "solo": True, "map": "TREASURE.LVL"})
+        self.assertNotIn("s0l0s0", json.dumps(self.watcher.peer.sent))
+        self.w.here(self.a, "play", solo=True)
+        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "play", "solo": True}, "a solo game may say no map")
+
+    def test_solo_is_for_a_match_only_and_never_beside_a_public_or_private_mark(self):
+        for at, fields in (("wait", dict(solo=True, map="TREASURE.LVL")), ("look", dict(solo=True, map="TREASURE.LVL")), ("play", dict(solo=True, pub=True, map="ISLANDS.LVL", n=3)), ("play", dict(solo=True, pub=False, map="ISLANDS.LVL"))):
+            self.w.here(self.a, at, **fields)
+            row = {k: v for k, v in self.row().items() if k != "i"}
+            self.assertNotIn("solo", row, (at, fields))
+            if "pub" not in fields:
+                self.assertEqual(row, {"name": "alice", "at": at}, (at, fields))
+        self.assertEqual(row, {"name": "alice", "at": "play", "priv": True}, "private wins, with no map")
+
+    def test_the_private_mark_is_for_a_room_or_a_match_and_not_for_a_visitor_who_looks_or_a_page_that_says_nothing(self):
+        self.w.here(self.a, "look", pub=False)
+        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "look"})
+        self.w.here(self.a, "play")
         self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "play"})
+        self.w.here(self.a, "wait", pub=True)
+        self.assertNotIn("priv", self.row())
+
+    def test_a_solo_that_is_not_true_or_false_is_a_mistake_and_changes_nothing(self):
+        self.w.here(self.a, "play", pub=False)
+        for bad in ("yes", 1, None, [True]):
+            self.w.here(self.a, "play", solo=bad)
+        self.assertEqual(self.a.codes(), ["here"] * 4)
+        self.assertEqual({k: v for k, v in self.row().items() if k != "i"}, {"name": "alice", "at": "play", "priv": True})
+
+    def test_two_sockets_of_one_account_play_wins_and_the_front_page_closing_leaves_the_game_page_playing(self):
+        front, game = self.a, self.w.join(person(1, "alice"))
+        self.w.here(front, "look")
+        self.w.here(game, "play", pub=True, map="ISLANDS.LVL", n=3)
+        self.assertEqual(self.row()["at"], "play")
+        self.assertEqual(len(self.watcher.rows), 1, "one person, one row")
+        self.w.leave(front)
+        self.assertEqual(self.row()["at"], "play", "the front page's socket closes at the hand-over: the person stays")
+        self.w.leave(game)
+        self.w.advance(2.5)
+        self.watcher.update()
+        self.assertEqual(self.watcher.rows, {}, "the game page closes: the person is gone one send later")
+
+    def test_the_game_page_closing_while_the_front_page_is_open_is_back_to_what_the_front_page_says(self):
+        front, game = self.a, self.w.join(person(1, "alice"))
+        self.w.here(front, "wait", pub=True, map="ISLANDS.LVL", n=2, of=4, code="c1v3rr")
+        self.w.here(game, "play", pub=False)
+        self.assertEqual(self.row()["at"], "play")
+        self.w.leave(game)
+        self.assertEqual(self.row()["at"], "wait")
 
     def test_a_visitor_who_is_looking_has_no_details_even_if_the_page_sent_them(self):
         self.w.here(self.a, "look", pub=True, map="TREASURE.LVL", n=2, of=4, code="c1v3rr")
@@ -681,6 +734,20 @@ class WhoMayChat(WorldTest):
         self.assertEqual((a.codes(), a.strikes), ([], 0), "what a muted page says is taken, and shown to nobody")
         self.w.store.mute("1001", 0, "9001")
         self.assertEqual(self.rows()["alice"], {"name": "alice", "at": "wait", **self.ROOM})
+
+    def test_a_muted_or_too_new_account_keeps_the_private_mark_and_a_public_match_stays_in_a_game_and_solo_has_no_map(self):
+        a, b, c = self.w.join(person(1, "alice")), self.w.join(person(2, "bob")), self.w.join(person(3, "carol", young=True))
+        self.w.here(a, "play", pub=False, map="SECRET.LVL", n=2, of=4, code="s3cr3t")
+        self.w.here(b, "play", solo=True, map="TREASURE.LVL")
+        self.w.here(c, "wait", pub=False, code="s3cr3t")
+        self.w.store.mute("1001", 10, "9001", "alice")
+        self.w.store.mute("1002", 10, "9001", "bob")
+        rows = self.rows()
+        self.assertEqual(rows["alice"], {"name": "alice", "at": "play", "priv": True})
+        self.assertEqual(rows["bob"], {"name": "bob", "at": "play"}, "a muted account's details stay hidden: In a game")
+        self.assertEqual(rows["carol"], {"name": "carol", "at": "wait", "priv": True})
+        self.assertNotIn("s3cr3t", json.dumps(self.watcher.peer.sent))
+        self.assertNotIn("TREASURE", json.dumps(self.watcher.peer.sent))
 
     def test_a_too_new_account_is_named_and_has_none_of_the_rooms_details(self):
         a = self.w.join(person(1, "alice", young=True))
