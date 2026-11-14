@@ -381,6 +381,8 @@ LIVE_ROWS = [
     ("a match, old address", "GET", "/match.html?id=x", (), 302, "plain"),
     ("the page of the matches that run now, which is gone", "GET", "/live-now", (), 302, "plain"),
     ("the page of the matches that run now, old file address", "GET", "/live.html", (), 302, "plain"),
+    ("the page of the matches that run now, in capital letters", "GET", "/LIVE-NOW", (), 302, "plain"),
+    ("the page of the matches that run now, old file address in mixed case", "GET", "/Live.html", (), 302, "plain"),
     ("the legal page", "GET", "/legal", (), 200, "page"),
     ("the legal page, old file, no redirect", "GET", "/legal.html", (), 200, "page"),
     ("the changelog page", "GET", "/changelog", (), 200, "page"),

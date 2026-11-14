@@ -246,8 +246,8 @@
   {
    "id": "mark_is_shown_when_the_request_fails",
    "file": "web/site_nav.js",
-   "old": ".catch(function () { /* no count */ });",
-   "new": ".catch(function () { count = 1; paint(); });",
+   "old": ".catch(function () { if (again)",
+   "new": ".catch(function () { count = 1; paint(); if (again)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
   },
   {
@@ -260,9 +260,100 @@
   {
    "id": "mark_is_not_named_for_a_screen_reader",
    "file": "web/site_nav.js",
-   "old": "' live, see them on the front page'",
+   "old": "' live: see them on the front page'",
    "new": "' live'",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "mark_name_does_not_start_with_its_words",
+   "file": "web/site_nav.js",
+   "old": "count + ' live: see them on the front page'",
+   "new": "count + ' matches, see them on the front page'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "mark_has_no_title",
+   "file": "web/site_nav.js",
+   "old": "top.setAttribute('title', ",
+   "new": "top.setAttribute('data-title', ",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "mark_title_says_matches_for_one",
+   "file": "web/site_nav.js",
+   "old": "(count === 1 ? ' match is' : ' matches are')",
+   "new": "' matches are'",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "count_cap_is_gone",
+   "file": "web/site_nav.js",
+   "old": "Math.min(data.live.length, 99)",
+   "new": "data.live.length",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "tab_back_does_not_ask",
+   "file": "web/site_nav.js",
+   "old": "if (asked && d.visibilityState === 'visible') look(true);",
+   "new": "if (false) look(true);",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "tab_going_to_the_back_asks",
+   "file": "web/site_nav.js",
+   "old": " && d.visibilityState === 'visible') look(true);",
+   "new": ") look(true);",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "tab_back_asks_a_page_that_never_asked",
+   "file": "web/site_nav.js",
+   "old": "if (asked && d.visibilityState",
+   "new": "if (d.visibilityState",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "tab_back_asks_only_the_first_time",
+   "file": "web/site_nav.js",
+   "old": "if ((asked && !again) ||",
+   "new": "if (asked ||",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "tab_back_with_no_match_keeps_the_mark",
+   "file": "web/site_nav.js",
+   "old": ": 0;\n            paint();",
+   "new": ": 0;\n            if (count) paint();",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "tab_back_with_an_unreadable_answer_keeps_the_count",
+   "file": "web/site_nav.js",
+   "old": "if (again) { count = 0; paint(); }",
+   "new": "",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "forced_colors_dot_vanishes",
+   "file": "web/site_nav.css",
+   "old": ".sb .sblive::before { background: ButtonText; box-shadow: none; }",
+   "new": ".sb .sblive::before { box-shadow: none; }",
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_web_site_nav"
+  },
+  {
+   "id": "forced_colors_dot_vanishes_in_the_browser",
+   "file": "web/site_nav.css",
+   "old": "background: ButtonText; box-shadow: none; }",
+   "new": "background: Canvas; box-shadow: none; }",
+   "test": "node tests/scripts/web_site_nav_browser.js"
+  },
+  {
+   "id": "tab_back_does_not_ask_in_the_browser",
+   "file": "web/site_nav.js",
+   "old": "if (asked && d.visibilityState === 'visible') look(true);",
+   "new": "if (false) look(true);",
+   "test": "node tests/scripts/web_site_nav_browser.js"
   }
  ]
 }
