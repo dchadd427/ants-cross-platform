@@ -1742,7 +1742,7 @@ void run_guest_tests() {
         spec.players = 2;
         spec.has_seed = true;
         spec.seed = 4242;
-        spec.countdown_s = 0;                                                                  // (a room that does not count down says 0 in its Begin, as a room of one person and a game on the local network do: S3.192, N4.4c)
+        spec.countdown_s = 0;                                                                  // (a room that does not count down says 0 in its Begin, as a game on the local network does: S3.192, N4.4c)
         ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
         Peer bob;
         ASSERT_TRUE(bob.net.join("127.0.0.1", srv.port(), "Bob", 255, "CDN-2"));
@@ -1773,6 +1773,63 @@ void run_guest_tests() {
         }
         ASSERT_TRUE(waited >= kDialogMs - 300 && waited <= kDialogMs + 400);
         bob.net.freeze();
+    } TEST_END();
+
+    TEST_CASE("N5.100 Protocol 21, A Room Of One Person With A Computer Player Opens The Countdown Card With The Solo Count: The Card Counts 10 s Down From The Begin, Keeps The Map Out Of Reach And The Chat In It, Marks The Computer Player, And Is Gone With The First Executed Turn") {
+        Server srv;
+        ASSERT_TRUE(srv.listener != nullptr);
+        server::RoomSpec spec;
+        spec.code = "CDN-4";
+        spec.map = "TINY.LVL";
+        spec.players = 2;
+        spec.has_seed = true;
+        spec.seed = 4242;
+        spec.countdown_s = net::kMatchCountdownSeconds;
+        spec.solo_countdown_s = net::kSoloCountdownSeconds;
+        spec.bots = {ai::BotSpec{1, "standard", ai::Level::Medium}};
+        ASSERT_TRUE(srv.mgr.create_room(spec, srv.now).ok);
+        ApplicationConfig cfg = headless_config();
+        cfg.net_role = ApplicationConfig::NetRole::Join;
+        cfg.net_address = "127.0.0.1";
+        cfg.net_port = srv.port();
+        cfg.net_room = "CDN-4";
+        cfg.player_name = "Ana";
+        Application app;
+        ASSERT_TRUE(app.init(cfg));
+        Hall hall{srv, &app, {}};
+        ASSERT_TRUE(hall.until([&]() { return app.state() == AppState::Playing && app.hud().is_match_start_modal_active(); }, 15000));
+        const uint32_t begin = srv.now;
+        ASSERT_TRUE(app.hud().is_match_countdown_active() && app.hud().is_modal_open());
+        const int32_t first = app.countdown_seconds_left();
+        ASSERT_TRUE(first == 10 || first == 9);
+        ASSERT_EQ(app.sim().current_tick(), 0u);
+        ASSERT_EQ(app.hud().status_line().text(), "Match starts in " + std::to_string(first) + " s");
+        ASSERT_TRUE(app.hud().chat_takes_text());                                              // the chat is as open as in the card of two people: only the words of the card change
+        {   // the map is out of reach: a click on an own ant selects nothing
+            const uint32_t mine = ants_of(app.sim(), app.local_player_id()).front();
+            for (const auto& a : app.sim().get_world_state().ants) {
+                if (a.id != mine) continue;
+                app.renderer().camera().center_on(a.px, a.py, app.sim().grid().width(), app.sim().grid().height());
+                int32_t sx = 0;
+                int32_t sy = 0;
+                ASSERT_TRUE(app.renderer().camera().world_to_screen(a.px, a.py, sx, sy));
+                ASSERT_TRUE(app.hud().handle_mouse_down(sx, sy, 1, app.sim(), app.renderer().camera()));
+                app.hud().handle_mouse_up(sx, sy, 1, app.sim(), app.renderer().camera());
+                ASSERT_TRUE(app.hud().get_selected_ant_ids().empty() && app.hud().get_selected_ant_id() == 0u);
+            }
+        }
+        uint32_t waited = srv.now - begin;
+        while (app.sim().current_tick() == 0 && waited < 20000) {
+            ASSERT_TRUE(app.hud().is_match_countdown_active());
+            hall.step(10);
+            waited += 10;
+        }
+        ASSERT_TRUE(app.sim().current_tick() >= 1);
+        ASSERT_FALSE(app.hud().is_match_start_modal_active() || app.hud().is_match_countdown_active());
+        ASSERT_EQ(app.countdown_seconds_left(), -1);
+        ASSERT_TRUE(waited >= net::kSoloCountdownSeconds * 1000u - 150 && waited <= net::kSoloCountdownSeconds * 1000u + 400);
+        hall.step(3000);
+        ASSERT_TRUE(app.sim().current_tick() > 40 && !app.net()->desynced());
     } TEST_END();
 
     TEST_CASE("N5.79 Protocol 21, The Native Game's Fullscreen Button On The Countdown Card Is Wired To The Game's Fullscreen: A Click On It (Press And Release) Puts The Window Fullscreen, The Next One Takes It Back (A Real Window On SDL's Dummy Video Driver; The Page's Own Button Does It In A Browser)") {

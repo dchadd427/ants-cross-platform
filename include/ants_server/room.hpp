@@ -140,8 +140,11 @@ struct RoomSpec {
     bool bots_only{false};
     /// Protocol 21: the seconds that the room holds the first turn of its match (the countdown: everybody can chat and go fullscreen) when at least net::kCountdownMinPeople people play; 0 .. net::kMaxCountdownSeconds,
     /// 0 = none (the plain 5 s "Get ready" dialog of protocol 12). A spec built by code says what it wants (0 here); the server's rooms start from RoomManager::default_spec(), which has the server's own setting
-    /// (--start-countdown-seconds, default 30; the control key "countdown_seconds"). A room of one person, with or without computer players, never counts down.
+    /// (--start-countdown-seconds, default 30; the control key "countdown_seconds"). A room of exactly one person, with or without computer players, holds the first turn min(solo_countdown_s, countdown_s) seconds.
     uint32_t countdown_s{0};
+    /// The seconds that a room of exactly one person holds the first turn (the same card, a shorter count): 0 .. net::kMaxCountdownSeconds, 0 = the plain 5 s dialog. A spec built by code says 0; the server's rooms
+    /// start from RoomManager::default_spec() (--solo-countdown-seconds, default 10; the control key "solo_countdown_seconds"). A room whose countdown_s is 0 never counts down, whatever this says.
+    uint32_t solo_countdown_s{0};
 };
 
 /// The bounds of the room's reconnect settings (the control interface refuses others, RoomManager::create_room too)
@@ -252,6 +255,7 @@ struct RoomStatus {
     uint32_t max_catch_up_ms{0};            // ... one absence may spend this long catching up in all; the match is held this long after a pause (0: not at all)
     uint32_t resume_countdown_ms{0};
     uint32_t countdown_s{0};                // protocol 21: the seconds that the room holds the first turn when two or more people play (0: none)
+    uint32_t solo_countdown_s{0};           // ... and when exactly one person plays (the shorter of this and countdown_s; 0: the plain 5 s dialog)
     uint8_t resume_s{0};                    // the countdown that follows a pause is running: the seconds that are left (0: none)
     bool paused{false};                     // the match waits for a seat (running rooms only)
     struct Absent {

@@ -139,7 +139,12 @@ void HUD::render_match_countdown(IRenderer& renderer, const assets::AssetArchive
         renderer.draw_text(tag, r.right() - tag_w - 8, r.y + (r.h - 14) / 2, who.computer ? ColorRGBA{168, 194, 184, 255} : ColorRGBA{143, 224, 178, 255}, FontSize::Px14);
     }
 
-    centred(options_.state().chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon.", c, l.hint_y, FontSize::Px18, ink);
+    // one person alone (with or without computer players) has nobody to say hello to: the card says what is at hand instead
+    size_t people_in = 0;
+    for (const CountdownSeat& who : countdown_seats_) people_in += who.plays && !who.computer ? 1u : 0u;
+    centred(people_in <= 1 ? "Get ready. Fullscreen is one press away."
+                           : (options_.state().chat ? "Everybody is in. Say hello in the chat." : "Everybody is in. The match starts soon."),
+            c, l.hint_y, FontSize::Px18, ink);
 
 #if !defined(__EMSCRIPTEN__)
     // the native game draws its own Fullscreen button (the browser's page lays a real one over this place: a request for fullscreen needs the click of a real button)

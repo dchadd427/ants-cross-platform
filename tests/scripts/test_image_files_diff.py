@@ -95,7 +95,7 @@ class TheManifest(unittest.TestCase):
     def test_the_date_of_the_bar_at_the_top_of_a_page_does_not_count_and_nothing_else_of_it(self):
         def bar(minute, build="abc1234", version="v1.2.3", date="2026-11-11 10:%02d PT"):
             return ('<header class="sb" data-version="%s" data-build="%s" data-built="%s">' % (version, build, date % minute if "%" in date else date)).encode("ascii")
-        for name in ("matches", "match", "live", "legal", "mapmaker", "changelog"):
+        for name in ("matches", "match", "legal", "mapmaker", "changelog"):
             with self.subTest(name):
                 path = HTML + name + ".html"
                 one, two = manifest({path: bar(1)}), manifest({path: bar(9)})
@@ -115,7 +115,7 @@ class TheManifest(unittest.TestCase):
         line = re.search(r"sed -i \"s/@@BUILD_ID@@[^&\\n]*", docker.replace("\\\n", " ")).group(0)
         pages = {HTML + name + ".html" for name in re.findall(r"/src/web/(\w+)\.html", line)}
         pages.add(HTML + "index.html")
-        self.assertGreaterEqual(len(pages), 7)
+        self.assertGreaterEqual(len(pages), 6)
         for path in sorted(pages):
             self.assertIn(path, im.STAMPED)
         if re.search(r"cp /usr/share/nginx/html/index\.html /usr/share/nginx/html/play\.html", docker):

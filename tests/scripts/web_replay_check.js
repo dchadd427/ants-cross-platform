@@ -1,4 +1,4 @@
-// Runs the code that the two replay pages share (web/replay_page.js: the matches that run now, web/live.html, and the game page in replay mode, web/shell.html) on tables:
+// Runs the code that the replay pages share (web/replay_page.js: the game page in replay mode, web/shell.html, and the match history) on tables:
 //   - the address of a replay (?replay=<file>): only the shape of the names that the server's store makes, which docker/nginx.conf lets through, is ever asked for (no path, no other ending);
 //   - the time of a match in the visitor's own time zone ("Today, 7:32 AM", "Yesterday, ...", "Oct 6, ..."), the length of a match as a clock, the six maps' names;
 //   - the players as the list gives them ("Green (Mika)", "Red (Bot (Medium))") and as the game reports them (the roster's bits and the four seats' names);
@@ -193,21 +193,6 @@ same('half speed, 3.4 s behind', R.liveTag({ gap: 3.4, speed: '\u00bd\u00d7' }),
 same('the feed stopped and the playhead caught up', R.liveTag({ waiting: true, at: true, gap: 0, speed: '1\u00d7' }), 'waiting for the match');
 same('paused at the present', R.liveTag({ paused: true, at: true, gap: 0, speed: '1\u00d7' }), 'Paused \u00b7 0:10 behind');
 same('no gap given', R.liveTag({ speed: '1\u00d7' }), '1\u00d7 \u00b7 0:10 behind');
-
-// ---- the list of the matches that are being played, as the page takes it
-const players = ['Green (Mika)', 'Red (Bot (Medium))', 'Blue (Bot (Medium))', 'Black (Bot (Medium))'];
-same('the list of the contract', R.liveEntriesOf({ live: [{ id: liveGood, map: 'TREASURE.LVL', started: 1791533464, turns: 13680, seconds: 684, players }], count: 1, sim_rules: 1 }),
-     [{ id: liveGood, map: 'TREASURE.LVL', started: 1791533464, seconds: 684, players }]);
-same('seconds from the turns, the map and the start from the id', R.liveEntriesOf({ live: [{ id: liveGood, turns: 1230 }] }),
-     [{ id: liveGood, map: 'TREASURE', started: Date.UTC(2026, 9, 9, 8, 21, 4) / 1000, seconds: 61, players: [] }]);
-same('a number that is not one is 0', R.liveEntriesOf({ live: [{ id: liveGood, seconds: 'many', turns: null }] })[0].seconds, 0);
-same('a negative length is 0', R.liveEntriesOf({ live: [{ id: liveGood, seconds: -5 }] })[0].seconds, 0);
-same('an id that is not of the shape is not a match', R.liveEntriesOf({ live: [{ id: '../x' }, { id: 7 }, null, 'x', { id: liveGood + '\n' }, { id: '<img src=x onerror=alert(1)>' }] }), []);
-same('a player that is not text is dropped, a nasty one is kept as the text it is', R.liveEntriesOf({ live: [{ id: liveGood, players: [7, null, 'Green (<b>x</b>)', { a: 1 }] }] })[0].players, ['Green (<b>x</b>)']);
-same('at most four players', R.liveEntriesOf({ live: [{ id: liveGood, players: ['a', 'b', 'c', 'd', 'e'] }] })[0].players.length, 4);
-same('at most 50 matches', R.liveEntriesOf({ live: Array.from({ length: 80 }, () => ({ id: liveGood })) }).length, 50);
-same('no list', [R.liveEntriesOf(null), R.liveEntriesOf({}), R.liveEntriesOf({ live: 'x' }), R.liveEntriesOf(7)], [[], [], [], []]);
-
 
 // ---- the camera button of the game page in replay mode: the choice of the device, the button, the note
 {

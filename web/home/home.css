@@ -90,8 +90,6 @@ body[data-screen="home"] .screen { flex: 1 1 auto; min-height: 0; overflow: hidd
 .hmenubox a, .hmenubox button.mitem { display: flex; align-items: center; min-height: 48px; padding: 0 4px; font-size: 18px; text-decoration: none; text-align: left; color: var(--cream); background: none; border: 0; border-bottom: 1px solid #1d3a31; cursor: pointer; width: 100%; }
 .hmenubox a:hover, .hmenubox button.mitem:hover { background: #0e1f1b; }
 .hmenubox a[aria-current] { color: var(--gold); }
-.hmenubox .mn { margin-left: auto; padding: 0 7px; border-radius: 11px; background: #c4122b; color: #fff; font-size: 14px; line-height: 22px; }
-.hmenubox .mn:empty { display: none; }
 .msmall { display: flex; flex-wrap: wrap; gap: 0 18px; padding: 6px 0 2px; }
 .hmenubox .mlink { width: auto; min-width: 44px; min-height: 44px; padding: 0 2px; font-size: 15px; text-decoration: underline; text-underline-offset: 3px; color: #a8cfc0; border: 0; }
 .mfacts { margin-top: 4px; padding-top: 10px; border-top: 1px solid #1d3a31; font-size: 14px; line-height: 1.5; white-space: pre-line; color: #a8cfc0; }

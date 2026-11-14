@@ -397,7 +397,7 @@ def main():
             open_page(tab, "/matches")
             check(until(tab, cards + " === 25") is True, "the plain address is the list again")
             door.set(live=[live.ID, live.OTHER])
-            check(until(tab, "!document.getElementById('live-btn').hidden && document.getElementById('live-btn').textContent === '2 live now'") is True, "two matches are on: the button 'Live now' says so and goes to the live page (%s)" % tab.ev("document.getElementById('live-btn').getAttribute('href')"))
+            check(until(tab, "!document.querySelector('.sblive').hidden && document.querySelector('.sblive').textContent === '2 live'") is True, "two matches are on: the bar's mark says so and goes to the front page (%s)" % tab.ev("document.querySelector('.sblive').getAttribute('href')"))
             shot(tab, "list")
             tab.ev("window.__keep = 1")
             # who played: the address and the request change, and the page is not loaded again

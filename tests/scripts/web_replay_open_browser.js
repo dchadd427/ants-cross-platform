@@ -98,7 +98,7 @@ function makeSite(o) {
             if (p === '/index.js') return send(200, fs.readFileSync(path.join(__dirname, 'web_live_stub.js')), 'text/javascript');
             if (p === '/index.data') return send(200, Buffer.alloc(2000), 'application/octet-stream');
             if (p === '/index.wasm') return send(200, Buffer.from([0, 0x61, 0x73, 0x6d]), 'application/wasm');
-            const CLEAN = { '/play': 'shell.html', '/matches': 'matches.html', '/match': 'match.html', '/live-now': 'live.html', '/legal': 'legal.html', '/changelog': 'changelog.html', '/mapmaker': 'mapmaker.html' };       // (the clean addresses of docker/nginx.conf)
+            const CLEAN = { '/play': 'shell.html', '/matches': 'matches.html', '/match': 'match.html', '/legal': 'legal.html', '/changelog': 'changelog.html', '/mapmaker': 'mapmaker.html' };       // (the clean addresses of docker/nginx.conf)
             const rel = CLEAN[p] || p.replace(/^\/+/, '');
             const file = path.resolve(WEB, rel);
             if (file.startsWith(WEB + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
