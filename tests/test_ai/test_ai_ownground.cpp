@@ -3,13 +3,16 @@
 // bot's business: the bot clears an enemy's hazard on its own ground, or beside a pile it has a claim to or works, and nowhere else. The scenes run the real path (a real BotView, a real BombTask and WallTask in
 // a Rig on a field of grass of 60 by 60 tiles with the bot's hill at (4, 4)); each is played with the rule off and on, so that the scene shows the old trips as well as the new quiet.
 //
-//   AI40.1  the plans and the numbers: the rule is on at Medium and Hard, off at Easy and in a plan made by hand; the five numbers; the tune keys' defaults
+//   AI40.1  the plans and the numbers: the rule is on at Medium and Hard, off at Easy and in a plan made by hand; the six numbers; the tune keys' defaults
 //   AI40.2  hazard_ground as a function: own ground by distance and by walking cost, another hill's hole tiles and gate ring always foreign, a pile with a claim, a pile that an ant works, the ally's hill
 //   AI40.3  a bomb near the enemy's hill and far from the bot's is left alone, the same bomb near the bot's hill is defused
 //   AI40.4  a bomb beside a pile near the enemy's hill is left alone, beside a pile that the bot has a claim to it is defused, but not by the last ants
 //   AI40.5  a fire wall on the enemy's hole tile near a pile is left alone, one near the bot's hill is put out, and the keeper of the walls stays inside its leash while walls are wanted
 //   AI40.6  the worker's way (no Bomber): only on the own ground and not as one of the last ants; a Bomber needs five hit points; the map's own bombs are asked as they were
 //   AI40.7  the bench bot turtle on TREASURE against three Hard bots: before, every bot goes into its base now and then to defuse or put out fire; after, none does
+//   AI40.8  the claim by walking cost stops short of a pile twice as far as a rival's, the keeper's leash holds at 14 tiles, a team that dropped out is no rival
+//   AI40.9  a bot that helps its ally answers a bomb in the ally's yard but not one in a third team's yard
+//   AI40.10 a Fire Ant with three hit points (what a keeper is chosen with) does not go to an enemy wall, with five it does (the same rule as the Bomber's)
 // AI40.1 is a pin of the plans; the others play scenes.
 #include <algorithm>
 #include <cstdint>
@@ -80,6 +83,7 @@ void run_ownground_tests() {
             ASSERT_EQ(p.counter_home_radius, 6);
             ASSERT_EQ(p.counter_claim_percent, 170u);
             ASSERT_EQ(p.counter_work_tiles, 4);
+            ASSERT_EQ(p.counter_rival_yard, 10);
             ASSERT_EQ(p.counter_keeper_leash, 12);
             ASSERT_EQ(p.counter_bomber_hp, 5u);
             ASSERT_EQ(p.counter_hill_radius, 10);                                                          // (the radii of the old rule are as they were)
@@ -148,15 +152,19 @@ void run_ownground_tests() {
             ASSERT_TRUE(hazard_ground(view, map, plan, TileCoord{32, 12}) == HazardGround::Claimed);
             ASSERT_TRUE(hazard_ground(view, map, plan, TileCoord{34, 12}) == HazardGround::Claimed);
         }
-        for (const bool beside : {true, false}) {   // an ant of the bot that carries food beside the far pile: the bot works it now (one that is far from it does not)
-            sim::SimulationEngine sim;
-            close_field(sim, TileCoord{50, 4});
-            add_pile(sim, 46, 9, 60, 25);
-            const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, beside ? TileCoord{44, 10} : TileCoord{30, 30});
-            ASSERT_TRUE(ground(sim, TileCoord{46, 12}) == HazardGround::Foreign);
-            sim.get_unit(ant).pick_up_food(1, 25);
-            sim.tick();                                                                                     // (the view reads the world state of the last tick)
-            ASSERT_TRUE(ground(sim, TileCoord{46, 12}) == (beside ? HazardGround::Claimed : HazardGround::Foreign));
+        struct Work { TileCoord pile; TileCoord ant; TileCoord tile; bool claimed; };
+        // an ant of the bot that carries food beside a pile works it now: a pile far from every hill becomes the bot's by that, a pile in a rival's yard (within 10 tiles of its hill at (50, 4)) does not
+        for (const Work& w : {Work{TileCoord{56, 18}, TileCoord{54, 19}, TileCoord{56, 21}, true}, Work{TileCoord{46, 9}, TileCoord{44, 10}, TileCoord{46, 12}, false}}) {
+            for (const bool beside : {true, false}) {
+                sim::SimulationEngine sim;
+                close_field(sim, TileCoord{50, 4});
+                add_pile(sim, w.pile.x, w.pile.y, 60, 25);
+                const uint32_t ant = sim.spawn_unit(0, sim::AntType::Worker, beside ? w.ant : TileCoord{30, 30});
+                ASSERT_TRUE(ground(sim, w.tile) == HazardGround::Foreign);
+                sim.get_unit(ant).pick_up_food(1, 25);
+                sim.tick();                                                                                 // (the view reads the world state of the last tick)
+                ASSERT_TRUE(ground(sim, w.tile) == (beside && w.claimed ? HazardGround::Claimed : HazardGround::Foreign));
+            }
         }
     } TEST_END();
 
@@ -336,6 +344,108 @@ void run_ownground_tests() {
             seat_ants(sim, 4, sim::AntType::Bomber);
             sim.grid_mut().place_bomb(static_cast<uint32_t>(far.x), static_cast<uint32_t>(far.y), 255);
             ASSERT_TRUE(play(sim, scene_plan(true), far, 600) >= 1);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI40.8 The Claim By Walking Cost Stops Short Of A Pile Twice As Far As A Rival's, The Keeper's Leash Holds At 14 Tiles, A Team That Dropped Out Is No Rival") {
+        const LevelPlan plan = scene_plan(true);
+        {   // a pile whose walk costs the bot about twice what it costs the enemy (hill at (50, 4)): no claim, nothing is worked there
+            sim::SimulationEngine sim;
+            close_field(sim, TileCoord{50, 4});
+            add_pile(sim, 35, 9, 60, 25);
+            seat_ants(sim, 1);
+            const MapInfo map(sim);
+            const BotView view = BotView::build(sim, 0, &map);
+            ASSERT_TRUE(hazard_ground(view, map, plan, TileCoord{35, 12}) == HazardGround::Foreign);
+            ASSERT_TRUE(hazard_ground(view, map, plan, TileCoord{37, 12}) == HazardGround::Foreign);
+        }
+        {   // a team that dropped out is no rival: ground that was nearer to its hill than to the bot's is nobody's, its hole tiles are no longer shut to the bot
+            sim::SimulationEngine sim;
+            close_field(sim, TileCoord{14, 4});
+            seat_ants(sim, 1);
+            const auto ground = [&](TileCoord tile) {
+                const MapInfo map(sim);
+                const BotView view = BotView::build(sim, 0, &map);
+                return hazard_ground(view, map, plan, tile);
+            };
+            ASSERT_TRUE(ground(TileCoord{11, 8}) == HazardGround::Foreign);
+            ASSERT_TRUE(ground(TileCoord{18, 5}) == HazardGround::Foreign);
+            sim.drop_player(1);
+            sim.tick();
+            ASSERT_TRUE(ground(TileCoord{11, 8}) == HazardGround::Own);
+            ASSERT_TRUE(ground(TileCoord{18, 5}) == HazardGround::Own);
+        }
+        {   // the leash: a wall 15 tiles from the bot's hill, beside a pile that the bot reaches first, is put out when no walls are wanted and left while they are wanted
+            const TileCoord wall{19, 13};
+            for (const bool wanted : {false, true}) {
+                sim::SimulationEngine sim;
+                close_field(sim, TileCoord{50, 4});
+                add_pile(sim, 18, 9, 200, 25);
+                if (wanted) sim.grid_mut().place_powerup(40, 30, 3);
+                seat_ants(sim, 5, sim::AntType::Fire);
+                sim.set_fire_at(wall, 3500);
+                LevelPlan p = scene_plan(true);
+                if (!wanted) p.wall_trigger = WallTrigger::Never;
+                const size_t orders = play(sim, p, wall, 1500);
+                ASSERT_EQ(orders >= 1, !wanted);
+                ASSERT_EQ(sim.grid().has_fire_at(wall), wanted);
+            }
+        }
+    } TEST_END();
+
+    TEST_CASE("AI40.9 A Bot That Helps Its Ally Answers A Bomb In The Ally's Yard But Not One In A Third Team's Yard (The Old Rule Answered Both)") {
+        // the bot's hill at (4, 4), its ally's at (30, 4), a third team's at (40, 4); a Bomber and workers of the bot, the plan of the Defensive style of Medium (ally_help)
+        const TileCoord ally_yard{33, 8};                                                                   // 3 tiles from the ally's hill
+        const TileCoord third_yard{38, 8};                                                                  // 8 tiles from the ally's hill (within the old radius of 10), 2 from the third team's
+        for (const bool rule : {false, true}) {
+            for (const TileCoord bomb : {ally_yard, third_yard}) {
+                sim::SimulationEngine sim;
+                close_field(sim, TileCoord{30, 4});
+                sim.grid_mut().set_anthill(2, TileCoord{40, 4});
+                sim.form_alliance(0, 1);
+                seat_ants(sim, 4, sim::AntType::Bomber);
+                sim.grid_mut().place_bomb(static_cast<uint32_t>(bomb.x), static_cast<uint32_t>(bomb.y), 2);
+                LevelPlan plan = scene_plan(rule);
+                plan.ally_help = true;
+                const size_t orders = play(sim, plan, bomb, 1500);
+                const bool answered = bomb == ally_yard || !rule;
+                ASSERT_EQ(orders >= 1, answered);
+                ASSERT_EQ(sim.grid().has_bomb_at(bomb), !answered);
+            }
+        }
+        {   // the same as a function: the fire wall on the third team's hole tile is nobody's business of the ally's helper, the ally's own is
+            sim::SimulationEngine sim;
+            close_field(sim, TileCoord{30, 4});
+            sim.grid_mut().set_anthill(2, TileCoord{40, 4});
+            sim.form_alliance(0, 1);
+            seat_ants(sim, 1);
+            const MapInfo map(sim);
+            const BotView view = BotView::build(sim, 0, &map);
+            LevelPlan plan = scene_plan(true);
+            plan.ally_help = true;
+            ASSERT_EQ(harm_to(view, map, plan, TileCoord{44, 5}), 0);                                       // a tile in front of the third team's thief hole
+            ASSERT_EQ(harm_to(view, map, plan, TileCoord{33, 8}), 2);
+            plan.own_ground_counters = false;
+            ASSERT_EQ(harm_to(view, map, plan, TileCoord{44, 5}), 0);                                       // (beyond the old radii: nothing either way)
+            ASSERT_EQ(harm_to(view, map, plan, TileCoord{38, 8}), 2);
+        }
+    } TEST_END();
+
+    TEST_CASE("AI40.10 A Fire Ant With Three Hit Points Does Not Go To An Enemy Wall (Two Blasts Would Kill It), With Five It Does: The Keeper Is Chosen With Three, For The Walls Of Its Own Hole") {
+        const TileCoord home{10, 6};
+        for (const uint16_t hp : std::initializer_list<uint16_t>{3, 5}) {
+            for (const bool rule : {false, true}) {
+                sim::SimulationEngine sim;
+                close_field(sim, TileCoord{50, 4});
+                add_pile(sim, 12, 12, 200, 25);
+                seat_ants(sim, 4);
+                const uint32_t keeper = sim.spawn_unit(0, sim::AntType::Fire, TileCoord{30, 30});
+                sim.get_unit(keeper).hp = hp;
+                sim.set_fire_at(home, 3500);
+                LevelPlan plan = scene_plan(rule);
+                plan.wall_trigger = WallTrigger::Never;
+                ASSERT_EQ(play(sim, plan, home, 100) >= 1, !rule || hp == 5);                              // (an ant heals a hit point every few hundred ticks: the first 100 are the question)
+            }
         }
     } TEST_END();
 

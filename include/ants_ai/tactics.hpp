@@ -129,9 +129,10 @@ struct LevelPlan {
     bool own_ground_counters{false};     // (Medium, Hard) the counters ask hazard_ground: a hazard on another hill's ground is left alone; a Bomber needs counter_bomber_hp, the last ants and the keeper of the walls stay home
     int32_t counter_home_radius{6};      // the ground within this many tiles of the own hill is the bot's own, whichever hill lies nearer (never the tiles of another hill's thief hole or gate ring)
     uint32_t counter_claim_percent{170}; // a pile is the bot's to clear around when its walk costs at most this percentage of the cheapest walk of any hill
-    int32_t counter_work_tiles{4};       // ... or when an own ant of the economy carries food or harvests within this many tiles of the pile
+    int32_t counter_work_tiles{4};       // ... or when an own ant that carries food or harvests is within this many tiles of the pile (not within counter_rival_yard of another hill, see below)
+    int32_t counter_rival_yard{10};      // a pile within this many tiles of another team's hill is not made the bot's by work alone, whatever its ants do there (0: no such limit); a team that dropped out is no rival
     int32_t counter_keeper_leash{12};    // while walls are wanted the Fire Ant that keeps them goes for no enemy wall farther than this from the own hill (a trip to a far pile waits until it is free)
-    uint32_t counter_bomber_hp{5};       // a Bomber goes for a bomb with at least this many hit points: one more than two blasts take away (the way there may cross a second bomb)
+    uint32_t counter_bomber_hp{5};       // an ant that goes to an enemy's bomb or fire wall (a Bomber, the Fire Ant that keeps the walls, a worker that sets a bomb off: that one needs 8) has at least this many hit points: one more than two blasts take away (the way there may cross a second bomb)
     // power-ups, raids, guards (Medium and Hard)
     bool combat_when_attacked{true};     // Combat Ants are taken only once the enemy fights (a blow, an enemy Combat Ant or Thief in sight), not at the start of the match ...
     bool combat_when_idle{true};         // ... or when the economy has workers that stand idle with nothing to harvest (they cost nothing)
@@ -672,8 +673,12 @@ bool harmless_stray_bomb(const BotView& view, const MapInfo& map, const HillInfo
 /// Whose ground an enemy's bomb or fire wall on `tile` lies on, for the counters (docs/BOT_FIGHT.md, "Hazards on another hill's ground"):
 ///   Own      the bot's own ground: within plan.counter_home_radius of its hill, or a tile that no other hill (the ally's and a team that dropped out excepted) walks to for less than the bot's hill does
 ///   Claimed  not its own, but within the pile radius of a pile with food that it has a claim to (its walk costs at most plan.counter_claim_percent of the cheapest walk of any hill) or that one of its
-///            ants works now (carries food or harvests within plan.counter_work_tiles of it)
+///            ants works now (carries food or harvests within plan.counter_work_tiles of it), the work claim never on a tile within plan.counter_rival_yard of another team's hill
 ///   Foreign  any other tile, and always the three tiles in front of another hill's thief hole and that hill's gate ring
 HazardGround hazard_ground(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
+
+/// The same question asked for the hill of the seat's ally (a bot that helps its ally): the ally's own ground and the piles it has a claim to (by walking cost) are Own or Claimed, a third team's ground is Foreign.
+/// Foreign without an ally.
+HazardGround ally_hazard_ground(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim::TileCoord tile) noexcept;
 
 }  // namespace ants::ai

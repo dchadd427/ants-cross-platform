@@ -260,7 +260,7 @@ private:
 ///              reach of the hill) and one wall at a time; the other levels light the wall again after it burned out, while the threat lasts
 ///   failure    an order after which the ant is idle again and the tile is still open: the tile is left alone for 300 ticks
 ///   counter    an enemy fire wall that is in the way of the economy (harms_economy) is put out when nothing of the above is due; with plan.own_ground_counters only a wall on ground that the bot has
-///              a claim to (hazard_ground), not one farther than plan.counter_keeper_leash from the own hill while walls are wanted, and, when only the last ants are left, only on the own ground
+///              a claim to (hazard_ground), not one farther than plan.counter_keeper_leash from the own hill while walls are wanted, and, when only the last ants are left, only on the own ground; the keeper is chosen with 3 hit points (it keeps the walls of its own hole), but goes to an enemy wall only with plan.counter_bomber_hp
 class WallTask final : public Task {
 public:
     WallTask(TaskId id, Tactics& tactics) : Task(id), tactics_(tactics) {}
@@ -307,7 +307,7 @@ public:
 ///               hit points, which it heals at the hill, instead of a carrier on its way losing them and its walk
 /// A bomb that is still there when the ant is idle again is left alone for 300 ticks. The ant is claimed for the job (a Bomber harvests between jobs).
 /// With plan.own_ground_counters (Medium, Hard) only a bomb on ground that the bot has a claim to is cleared (hazard_ground): its own ground, or beside a pile it has a claim to or works. A bomb in
-/// another team's base is left alone; a bomb that no team owns (the map's own) is asked as before. A Bomber needs plan.counter_bomber_hp hit points; a worker steps on a bomb only on the own ground and
+/// another team's base is left alone; a bomb that no team owns (the map's own) is asked as before. A Bomber needs plan.counter_bomber_hp hit points (the Fire Ant that puts out an enemy wall as well, a worker 8); a worker steps on a bomb only on the own ground and
 /// never as one of the last ants (Tactics::reserve_of); no ant goes beside a pile, off its own ground, when only the last ants are left.
 class BombTask final : public Task {
 public:

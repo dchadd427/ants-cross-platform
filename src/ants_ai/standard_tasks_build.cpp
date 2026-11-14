@@ -185,6 +185,7 @@ void WallTask::step(TaskContext& c) {
             if (plan.fire_defence && fired_in_wall(v, hill, plan, w.tile, hold_over)) continue;          // a wall of the ring round the own gate: not before the Fire Ant that lights it is dealt with
             const int harm = harm_to(v, c.map, plan, w.tile);                              // the own economy first, then the ally's
             if (harm == 0) continue;
+            if (plan.own_ground_counters && keeper->hp < plan.counter_bomber_hp) continue;                    // an ant that two blasts would kill does not go
             if (plan.own_ground_counters && harm == 1) {
                 if (tactics_.wall_demand && w.tile.chebyshev_dist(hill.origin) > plan.counter_keeper_leash) continue;        // the keeper stays at its hole while the walls are wanted
                 if (v.mine().size() <= tactics_.reserve_of(v) && hazard_ground(v, c.map, plan, w.tile) != HazardGround::Own) continue;   // the last ants do not leave their own ground
@@ -296,6 +297,7 @@ int harm_to(const BotView& view, const MapInfo& map, const LevelPlan& plan, sim:
     if (harms_economy(view, map, plan, tile, map_owned)) return 1;
     const uint8_t ally = view.ally();
     if (!plan.ally_help || ally >= sim::MAX_PLAYERS) return 0;
+    if (plan.own_ground_counters && !map_owned && ally_hazard_ground(view, map, plan, tile) == HazardGround::Foreign) return 0;      // nor is a third team's base the ally's business
     const HillInfo& hill = map.hill(ally);
     if (hill.present && tile.chebyshev_dist(hill.origin) <= plan.counter_hill_radius) return 2;
     for (const PileView& p : view.piles()) {

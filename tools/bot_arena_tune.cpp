@@ -92,6 +92,7 @@ bool apply_tune(ai::LevelPlan& p, const std::string& key, int64_t v, std::string
     if (key == "grhome") { p.counter_home_radius = static_cast<int32_t>(v); return true; }
     if (key == "grclaim") { p.counter_claim_percent = static_cast<uint32_t>(v); return true; }
     if (key == "grwork") { p.counter_work_tiles = static_cast<int32_t>(v); return true; }
+    if (key == "grrival") { p.counter_rival_yard = static_cast<int32_t>(v); return true; }
     if (key == "grleash") { p.counter_keeper_leash = static_cast<int32_t>(v); return true; }
     if (key == "grhp") { p.counter_bomber_hp = static_cast<uint32_t>(v); return true; }
     if (key == "chv") return flag(p.combat_harvests);

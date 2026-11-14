@@ -65,7 +65,7 @@
   {
    "id": "rivals_not_asked",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "if (rival_of(view, map, t) && info->approach[t].reachable()) cheapest",
+   "old": "if (rival_of(view, map, t, subject, friend_team) && info->approach[t].reachable()) cheapest",
    "new": "if (false && info->approach[t].reachable()) cheapest",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
    "expect": "AI40.2"
@@ -89,8 +89,8 @@
   {
    "id": "ally_a_rival",
    "file": "src/ants_ai/tactics.cpp",
-   "old": "if (team == view.seat() || (view.ally() < sim::MAX_PLAYERS && team == view.ally()) || !map.hill(team).present) return false;",
-   "new": "if (team == view.seat() || !map.hill(team).present) return false;",
+   "old": "if (team == subject || (friend_team < sim::MAX_PLAYERS && team == friend_team) || !map.hill(team).present) return false;",
+   "new": "if (team == subject || !map.hill(team).present) return false;",
    "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
    "expect": "AI40.2"
   },
@@ -163,6 +163,79 @@
    "file": "tools/bot_arena_tune.cpp",
    "old": "if (key == \"ownground\") return flag(p.own_ground_counters);",
    "new": "if (key == \"ownground\") return true;",
+   "test": "timeout 300 ./build/bot_arena --selftest",
+   "expect": "the keys ownground",
+   "build": "bot_arena"
+  },
+  {
+   "id": "claim_percent_250",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "cheapest * static_cast<int64_t>(plan.counter_claim_percent)) return HazardGround::Claimed;",
+   "new": "cheapest * 250) return HazardGround::Claimed;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.8"
+  },
+  {
+   "id": "keeper_leash_20",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "w.tile.chebyshev_dist(hill.origin) > plan.counter_keeper_leash) continue;",
+   "new": "w.tile.chebyshev_dist(hill.origin) > 20) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.8"
+  },
+  {
+   "id": "dropped_team_is_rival",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "return !view.rows()[team].dropped;",
+   "new": "return true;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.8"
+  },
+  {
+   "id": "work_claim_in_rival_yard",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "if (!works || rival_yard) continue;",
+   "new": "if (!works) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "rival_yard_five",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "<= plan.counter_rival_yard;",
+   "new": "<= 5;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "rival_yard_twenty",
+   "file": "src/ants_ai/tactics.cpp",
+   "old": "<= plan.counter_rival_yard;",
+   "new": "<= 20;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.2"
+  },
+  {
+   "id": "ally_third_yard_answered",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.own_ground_counters && !map_owned && ally_hazard_ground(view, map, plan, tile) == HazardGround::Foreign) return 0;",
+   "new": "if (false) return 0;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.9"
+  },
+  {
+   "id": "fire_ant_two_blasts_goes",
+   "file": "src/ants_ai/standard_tasks_build.cpp",
+   "old": "if (plan.own_ground_counters && keeper->hp < plan.counter_bomber_hp) continue;",
+   "new": "if (false) continue;",
+   "test": "timeout 900 env ANTS_TEST_FILTER='AI40.' ./build/tests/test_ai/test_ai",
+   "expect": "AI40.10"
+  },
+  {
+   "id": "tune_key_rival_ignored",
+   "file": "tools/bot_arena_tune.cpp",
+   "old": "if (key == \"grrival\") { p.counter_rival_yard = static_cast<int32_t>(v); return true; }",
+   "new": "if (key == \"grrival\") { return true; }",
    "test": "timeout 300 ./build/bot_arena --selftest",
    "expect": "the keys ownground",
    "build": "bot_arena"
