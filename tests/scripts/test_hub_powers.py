@@ -48,7 +48,8 @@ TARGET_ID = "7311000099990002"                # ... and of one who is acted on
 PLANTED = (ID, ID[:8], ID[-8:], TARGET_ID, TARGET_ID[:8], TARGET_ID[-8:])
 OWNER = "1900000000000001"
 ROLES = ("none", "mod", "admin")
-COMMANDS = ("mute", "unmute", "del", "kick", "ban", "unban", "bans")
+COMMANDS = ("mute", "unmute", "del", "kick", "ban", "unban", "bans", "mutes")
+NO_TARGET = ("bans", "mutes")
 
 MODERATOR = session.Identity("9001", "moddy", False)
 MODERATOR2 = session.Identity("9002", "other.mod", False)
@@ -64,7 +65,7 @@ def assert_no_id(test, text, where):
 
 def allowed_by_the_rules(command, actor, target, same):
     """The table of the powers as the owner stated it, written the other way round from hub/chat.py: a list of what each role may do, and nothing else."""
-    may = {"none": [], "mod": ["mute", "unmute", "del", "kick"], "admin": ["mute", "unmute", "del", "kick", "ban", "unban", "bans"]}
+    may = {"none": [], "mod": ["mute", "unmute", "del", "kick", "mutes"], "admin": ["mute", "unmute", "del", "kick", "ban", "unban", "bans", "mutes"]}
     if command not in may[actor]:
         return False
     if target is None:
@@ -82,9 +83,9 @@ class ThePowerTable(unittest.TestCase):
     def test_the_function_is_the_table_for_every_command_actor_and_target(self):
         for command, actor, same in itertools.product(COMMANDS, ROLES, (False, True)):
             for target in (None,) + ROLES:
-                if command == "bans" and target is not None:
+                if command in NO_TARGET and target is not None:
                     continue
-                if command != "bans" and target is None:
+                if command not in NO_TARGET and target is None:
                     continue
                 self.assertEqual(chatmod.allowed(command, actor, target, same), allowed_by_the_rules(command, actor, target, same), (command, actor, target, same))
 
@@ -135,7 +136,7 @@ class ThePowersOfEveryRole(Powers):
 
     def test_every_command_by_every_role_on_every_kind_of_person(self):
         for command, actor_role, target_role, kind in itertools.product(COMMANDS, ROLES, ROLES + ("self",), ("here", "away")):
-            if command == "bans" and (target_role != "none" or kind != "here"):
+            if command in NO_TARGET and (target_role != "none" or kind != "here"):
                 continue
             with self.subTest(command=command, actor=actor_role, target=target_role, kind=kind):
                 w = World(mods=())
@@ -147,7 +148,7 @@ class ThePowersOfEveryRole(Powers):
                 same = target_role == "self"
                 ident = actor_id if same else self.TARGETS.get(target_role, self.TARGETS["none"])[0]
                 shown_role = actor_role if same else target_role
-                if command != "bans":
+                if command not in NO_TARGET:
                     if not same:
                         w.store.set_profile(ident.account_id, ident.username, "", 100)
                         if kind == "here":
@@ -156,10 +157,10 @@ class ThePowersOfEveryRole(Powers):
                         self.prepare(w, command, ident.account_id, kind == "here")
                     text = "/%s %s" % (command, ident.username) if command not in ("del", "mute") else "/del 1" if command == "del" else "/mute %s 5" % ident.username
                 else:
-                    text = "/bans"
+                    text = "/" + command
                 before = len(w.store.actions())
                 w.say(actor, text)
-                codes, kinds = actor.codes(), [m["t"] for m in actor.sent if m["t"] in ("ok", "bans")]
+                codes, kinds = actor.codes(), [m["t"] for m in actor.sent if m["t"] in ("ok", "bans", "mutes")]
                 if actor_role == "none":
                     self.assertEqual(codes, ["bad"])                                              # (a command from an account with no role is refused and never posted)
                     self.assertEqual(bystander.kinds("line"), [])
@@ -168,12 +169,12 @@ class ThePowersOfEveryRole(Powers):
                 if command == "kick" and kind == "away" and not same:
                     self.assertEqual(codes, ["who"])                                              # (a person who is not here cannot be kicked)
                     continue
-                should = allowed_by_the_rules(command, actor_role, None if command == "bans" else shown_role, same)
+                should = allowed_by_the_rules(command, actor_role, None if command in NO_TARGET else shown_role, same)
                 if command == "unban" and same or command == "unmute" and same:
                     should = False
                 if should:
                     self.assertEqual(codes, [], text)
-                    self.assertTrue(kinds in (["ok"], ["bans"]), kinds)
+                    self.assertTrue(kinds in (["ok"], ["bans"], ["mutes"]), kinds)
                 else:
                     self.assertEqual((codes, kinds), (["power"], []), text)
                     self.assertEqual(system(bystander), [])
@@ -510,6 +511,305 @@ class TheNamedLine(Powers):
         self.assertEqual([l.text for l in self.w.store.recent_lines(10)], ["u" * 32 + " was kicked."])
         self.assertLess(len(self.w.store.recent_lines(10)[0].text), chatmod.textrules.MAX_CODE_POINTS)
         self.assertNotRegex(self.w.store.recent_lines(10)[0].text, "[<>]")
+
+
+class TheLineAndRowTargets(Powers):
+    """A person named by `#<line number>` or `row:<n>` instead of a username: the same table, the same stored name, and nothing that was typed before changes meaning."""
+    PEERS = {"none": "bob", "mod": "mod2", "admin": "admin2"}
+    NAMES = {"none": "bob", "mod": "other.mod", "admin": "boss.two"}
+
+    def speak(self, peer, text="a line"):
+        self.w.clock.now += 3
+        self.say(peer, text)
+        return self.w.store.lines(1)[0][0]
+
+    def row(self, peer):
+        return self.w.chat.welcome(peer)["me"]
+
+    def test_the_powers_matrix_by_name_line_and_row_for_every_role(self):
+        for actor_role, target_role, command, how in itertools.product(("mod", "admin"), ROLES, ("mute", "kick", "ban", "unmute"), ("name", "line", "row")):
+            with self.subTest(actor=actor_role, target=target_role, command=command, how=how):
+                Powers.setUp(self)
+                target = getattr(self, self.PEERS[target_role])
+                line = self.speak(target)
+                word = {"name": self.NAMES[target_role], "line": "#%d" % line, "row": "row:%d" % self.row(target)}[how]
+                if command == "unmute":
+                    self.w.store.mute(target.identity.account_id, 60, "x", "x")
+                text = "/mute %s 5" % word if command == "mute" else "/%s %s" % (command, word)
+                actor = self.mod if actor_role == "mod" else self.admin
+                before = len(self.rows())
+                self.say(actor, text)
+                if allowed_by_the_rules(command, actor_role, target_role, False):
+                    self.assertEqual((actor.codes(), [m["c"] for m in actor.kinds("ok")]), ([], [command]), text)
+                    self.assertEqual(len(self.rows()), before + 1)
+                else:
+                    self.assertEqual(actor.codes(), ["power"], text)
+                    self.assertEqual(len(self.rows()), before)
+                self.w.close()
+
+    def test_a_person_without_a_role_cannot_use_any_form(self):
+        line = self.speak(self.bob)
+        for text in ("/mute #%d 5" % line, "/kick row:%d" % self.row(self.bob), "/ban #%d purge" % line, "/mutes"):
+            self.say(self.alice, text)
+        self.assertEqual(self.alice.codes(), ["bad"] * 4)
+        self.assertEqual((self.w.store.mutes(), self.w.store.bans()), ([], []))
+        self.assertEqual(self.reader.kinds("line")[-1]["text"], "a line")           # (and none of it became a line of chat)
+        self.assertEqual(len(self.reader.kinds("line")), 1)
+
+    def test_nobody_acts_on_themselves_by_any_form(self):
+        for who in (self.mod, self.admin):
+            line = self.speak(who)
+            for word in (who.identity.username, "#%d" % line, "row:%d" % self.row(who)):
+                self.say(who, "/mute %s 5" % word)
+            self.assertEqual(who.codes(), ["power"] * 3)
+
+    def test_a_line_that_is_gone_or_never_was_or_is_the_hubs_own(self):
+        line = self.speak(self.bob)
+        self.say(self.mod, "/del %d" % line)
+        for word in ("#%d" % line, "#99999"):
+            self.say(self.mod, "/mute %s 5" % word)
+        self.assertEqual(self.mod.codes(), ["bad", "bad"])
+        self.say(self.admin, "/ban #%d" % self.speak(self.alice))
+        sys_id = self.w.store.lines(1)[0][0]
+        self.assertTrue(system(self.bob))
+        self.say(self.mod, "/mute #%d 5" % sys_id)
+        self.assertEqual(self.mod.codes()[-1], "power")                              # (a line of the hub's own is nobody's)
+        self.assertEqual(self.w.store.mutes(), [])
+
+    def test_a_person_who_left_is_muted_by_their_line_but_not_kicked_and_a_stale_row_is_nobody(self):
+        self.w.store.set_profile("1002", "bob", "", 100)
+        line, row = self.speak(self.bob), self.row(self.bob)
+        self.w.chat.peers.discard(self.bob)
+        self.say(self.mod, "/kick #%d" % line)
+        self.say(self.mod, "/mute row:%d 5" % row)
+        self.say(self.mod, "/mute row:98765 5")
+        self.assertEqual(self.mod.codes(), ["who"] * 3)
+        self.assertEqual(self.w.store.mutes(), [])
+        self.say(self.mod, "/mute #%d 5" % line)
+        self.assertEqual(self.mod.codes(), ["who"] * 3)
+        self.assertEqual([m["c"] for m in self.mod.kinds("ok")], ["mute"])
+        self.assertEqual([(a, n) for a, n, _, _ in self.w.store.mutes()], [("1002", "bob")])      # (the stored name is the username, found from the profile or the line's name)
+
+    def test_the_stored_name_is_the_username_never_the_typed_word(self):
+        self.w.store.set_profile("1002", "bob", "Bobby", 100)
+        line = self.speak(self.bob)
+        self.say(self.mod, "/mute #%d 5" % line)
+        self.say(self.admin, "/mute row:%d 9" % self.row(self.alice))
+        self.assertEqual([n for _, n, _, _ in self.w.store.mutes()], ["bob", "alice"])      # (the mute that ends first is listed first)
+        self.say(self.admin, "/ban row:%d" % self.row(self.bob))
+        self.assertEqual([n for _, n, _, _ in self.w.store.bans()], ["bob"])
+        self.say(self.admin, "/bans")
+        self.assertEqual(self.admin.kinds("bans")[-1]["rows"], [{"u": "bob", "at": int(self.w.wall())}])
+        self.say(self.admin, "/unban bob")
+        self.assertFalse(self.w.store.is_banned("1002"))
+        self.say(self.admin, "/ban #%d" % line)
+        self.say(self.admin, "/unban #%d" % line)
+        self.assertEqual((self.admin.codes(), self.w.store.bans()), ([], []))
+        for peer in (self.mod, self.admin, self.reader):
+            self.assertNotIn(b"row:", b"".join(peer.raw))
+            self.assertNotIn(b"#%d" % line, b"".join(peer.raw))
+        for line_text in [m["text"] for m in self.reader.kinds("line")]:
+            self.assertNotIn("#", line_text)
+
+    def test_the_parse_table_accepts_the_forms_and_nothing_else(self):
+        p = chatmod.Chat.parse
+        self.assertEqual(p("/mute #148 10"), ("mute", "#148", 10))
+        self.assertEqual(p("/kick row:7"), ("kick", "row:7", 0))
+        self.assertEqual(p("/ban bob purge"), ("ban", "bob", chatmod.PURGE_MINUTES))
+        self.assertEqual(p("/mutes"), ("mutes", None, 0))
+        for bad in ("/ban bob purge now", "/ban bob Purge", "/kick bob purge", "/mutes x", "/mute bob 0", "/mute bob 10081", "/mute bob 1.5", "/mute #1", "/ban"):
+            self.assertIsNone(p(bad), bad)
+        self.assertEqual(p("/mute bob 10080"), ("mute", "bob", 10080))           # (the custom minutes stay 1 to 10080)
+        self.assertEqual(p("/mute bob 1"), ("mute", "bob", 1))
+        for word in ("#148", "row:7", "#1x", "row:", "#", "row:1234567890"):
+            self.assertIsNone(textrules_valid(word), word)                       # (neither form can be a username)
+
+    def test_a_malformed_number_is_nobody_and_a_username_is_still_a_username(self):
+        for word in ("#abc", "row:x", "#-1", "#1234567890", "row:"):
+            self.say(self.mod, "/mute %s 5" % word)
+        self.assertEqual(self.mod.codes(), ["who"] * 5)
+        self.say(self.mod, "/mute bob 5")
+        self.assertEqual(self.mod.codes(), ["who"] * 5)
+
+
+def textrules_valid(word):
+    from hub import text as textrules
+    return word if textrules.valid_name(word) else None
+
+
+class TheMutesList(Powers):
+    def test_a_moderator_and_an_administrator_get_rows_and_nobody_else(self):
+        for peer in (self.alice, self.reader):
+            self.say(peer, "/mutes")
+        self.assertEqual((self.alice.kinds("mutes"), self.reader.kinds("mutes")), ([], []))
+        self.assertEqual(self.alice.codes(), ["bad"])
+        self.say(self.mod, "/mute bob 5")
+        self.say(self.admin, "/mute alice 7")
+        row = self.w.chat.welcome(self.bob)["me"]
+        for peer in (self.mod, self.admin):
+            self.say(peer, "/mutes")
+            (frame,) = peer.kinds("mutes")[-1:]
+            self.assertEqual(frame["t"], "mutes")
+            self.assertEqual([r["u"] for r in frame["rows"]], ["bob", "alice"])
+            self.assertEqual([r["until"] for r in frame["rows"]], [int(self.w.wall()) + 300, int(self.w.wall()) + 420])
+            self.assertEqual(frame["rows"][0]["i"], row)
+
+    def test_the_row_number_only_for_a_person_here_and_an_ended_mute_is_not_listed(self):
+        self.w.chat.welcome(self.bob)
+        self.say(self.mod, "/mute bob 5")
+        self.say(self.mod, "/mute alice 60")
+        self.w.chat.peers.discard(self.bob)
+        self.say(self.mod, "/mutes")
+        rows = self.mod.kinds("mutes")[-1]["rows"]
+        self.assertEqual([("i" in r) for r in rows], [False, False])                # (alice never asked for a row, bob left)
+        self.w.chat.welcome(self.alice)
+        self.w.wall.now += 301
+        self.say(self.mod, "/mutes")
+        rows = self.mod.kinds("mutes")[-1]["rows"]
+        self.assertEqual([r["u"] for r in rows], ["alice"])
+        self.assertIn("i", rows[0])
+
+    def test_only_the_three_keys_and_at_most_fifty_rows(self):
+        for n in range(53):
+            self.w.store.mute("acct%d" % n, 5 + n, "x", "user%02d" % n)
+        self.say(self.mod, "/mutes")
+        rows = self.mod.kinds("mutes")[-1]["rows"]
+        self.assertEqual(len(rows), 50)
+        self.assertEqual([r["u"] for r in rows][:2], ["user00", "user01"])
+        for r in rows:
+            self.assertLessEqual(set(r), {"u", "until", "i"})
+        self.assertEqual(self.mod.codes(), [])
+
+
+class TheBanAndPurge(Powers):
+    def setUp(self):
+        super().setUp()
+        self.old = [self.say_as(self.bob, "old %d" % n) for n in range(2)]
+        self.w.wall.now += 3700
+        self.mine = [self.say_as(self.bob, "recent %d" % n) for n in range(3)]
+        self.others = [self.say_as(self.alice, "other %d" % n) for n in range(2)]
+        self.mod_line = self.say_as(self.mod, "a moderator's line")
+
+    def say_as(self, peer, text):
+        self.w.clock.now += 3
+        self.w.wall.now += 1
+        self.say(peer, text)
+        return self.w.store.lines(1)[0][0]
+
+    def alive(self):
+        return {line.id for line in self.w.chat.ring}
+
+    def test_a_ban_with_purge_takes_only_that_accounts_lines_of_the_last_hour_off_every_screen(self):
+        self.say(self.admin, "/ban #%d purge" % self.mine[1])
+        self.assertEqual((self.admin.codes(), [m["c"] for m in self.admin.kinds("ok")]), ([], ["ban"]))
+        self.assertTrue(self.w.store.is_banned("1002"))
+        gone = sorted(m["id"] for m in self.reader.kinds("del"))
+        self.assertEqual(gone, sorted(self.mine))
+        announced = {l.id for l in self.w.chat.ring if l.account == ""}
+        self.assertEqual(len(announced), 1)
+        self.assertEqual(self.alive() - announced, set(self.old) | set(self.others) | {self.mod_line})
+        self.assertEqual({r[0] for r in self.w.store.lines(50) if r[5]}, set(self.mine))
+        self.assertEqual([m["text"] for m in self.w.chat.welcome(self.reader)["history"] if m["who"] == "bob"], ["old 0", "old 1"])
+        self.assertEqual(len(system(self.reader)), 1)                               # (the one public line: "bob was banned.")
+        self.assertEqual(self.bob.closed, (1000, "banned"))
+        (row,) = [r for r in self.rows() if r.action == "del"]
+        self.assertEqual(row.detail, "purge")
+
+    def test_the_other_forms_of_the_person_and_the_edge_of_the_hour(self):
+        self.say(self.admin, "/ban row:%d purge" % self.w.chat.welcome(self.bob)["me"])
+        self.assertEqual(sorted(m["id"] for m in self.reader.kinds("del")), sorted(self.mine))
+        w = World(mods=())
+        self.addCleanup(w.close)
+        w.roles.roles.update({"9101": "admin"})
+        admin, bob = w.join(ADMIN1), w.join(BOB)
+        w.say(bob, "just outside")
+        w.wall.now += 1
+        w.clock.now += 3
+        w.say(bob, "just inside")
+        w.wall.now += 3600
+        w.clock.now += 3
+        w.say(admin, "/ban bob purge")
+        deleted = [r[4] for r in w.store.lines(10) if r[5]]
+        self.assertEqual(deleted, ["just inside"])                 # (a line written exactly 3,600 seconds ago is inside; one a second older is not)
+
+    def test_a_plain_ban_deletes_nothing_and_a_moderator_may_not_purge(self):
+        self.say(self.admin, "/ban bob")
+        self.assertEqual((self.reader.kinds("del"), self.alive() >= set(self.mine)), ([], True))
+        self.say(self.mod, "/ban alice purge")
+        self.assertEqual(self.mod.codes(), ["power"])
+        self.assertFalse(self.w.store.is_banned("1001"))
+        self.assertEqual(self.reader.kinds("del"), [])
+        self.say(self.admin, "/ban boss.two purge")
+        self.assertEqual(self.admin.codes(), ["power"])                  # (nobody acts on an administrator, purge or not)
+        self.assertEqual((self.reader.kinds("del"), self.w.store.is_banned("9102")), ([], False))
+        self.say(self.admin, "/ban #%d purge" % self.mod_line)       # (an administrator may act on a moderator)
+        self.assertEqual(self.admin.codes(), ["power"])
+        self.assertEqual(sorted(m["id"] for m in self.reader.kinds("del")), [self.mod_line])
+
+    def test_a_store_that_fails_in_the_purge_leaves_the_ban_done_the_person_removed_and_the_answer_ok(self):
+        errors = []
+        self.w.chat.on_store_error = errors.append
+        with mock.patch.object(self.w.store, "delete_lines_since", side_effect=storemod.StoreError("busy")):
+            self.say(self.admin, "/ban bob purge")
+        self.assertEqual((self.admin.codes(), [m["c"] for m in self.admin.kinds("ok")]), ([], ["ban"]))
+        self.assertTrue(self.w.store.is_banned("1002"))
+        self.assertEqual(self.bob.closed, (1000, "banned"))
+        self.assertEqual(len(system(self.reader)), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(self.reader.kinds("del"), [])                                 # (the lines stay: /del takes them off one by one)
+
+    def test_a_person_with_no_socket_and_no_profile_is_kept_under_their_reference_and_that_name_works(self):
+        line = self.mine[0]
+        self.w.chat.peers.discard(self.bob)
+        ref = self.w.chat.ref("1002")
+        self.say(self.admin, "/ban #%d" % line)
+        self.say(self.admin, "/bans")
+        self.assertEqual(self.admin.kinds("bans")[-1]["rows"], [{"u": ref, "at": int(self.w.wall())}])
+        self.say(self.admin, "/unban %s" % ref)
+        self.assertFalse(self.w.store.is_banned("1002"))
+        self.say(self.mod, "/mute #%d 5" % line)
+        self.say(self.mod, "/mutes")
+        self.assertEqual([r["u"] for r in self.mod.kinds("mutes")[-1]["rows"]], [ref])
+        self.say(self.mod, "/unmute %s" % ref)
+        self.assertEqual((self.mod.codes(), self.admin.codes(), self.w.store.mutes()), ([], [], []))
+        for peer in (self.admin, self.mod, self.reader):
+            assert_no_id(self, b"".join(peer.raw).decode("utf-8"), "a frame")
+
+    def test_a_person_who_is_banned_already_is_refused_and_nothing_is_deleted(self):
+        self.w.store.ban("1002", "x", "bob")
+        self.say(self.admin, "/ban bob purge")
+        self.assertEqual((self.admin.codes(), self.reader.kinds("del")), (["bad"], []))
+
+    def test_a_long_run_of_lines_is_announced_in_a_bounded_number_of_frames(self):
+        small = dataclasses.replace(self.w.limits, deleted_announce_max=2)
+        self.w.chat.limits = small
+        self.say(self.admin, "/ban bob purge")
+        self.assertEqual(sorted(m["id"] for m in self.reader.kinds("del")), sorted(self.mine)[-2:])
+        self.assertEqual({r[0] for r in self.w.store.lines(50) if r[5]}, set(self.mine))
+
+
+class TheNewCommandsKeepTheIdOut(unittest.TestCase):
+    def test_a_planted_id_is_in_no_frame_row_name_or_log_line(self):
+        w = World(mods=())
+        self.addCleanup(w.close)
+        w.roles.roles.update({ID: "admin"})
+        admin = w.join(session.Identity(ID, "the.actor", False))
+        target = w.join(session.Identity(TARGET_ID, "the.target", False))
+        other = w.join(None)
+        w.store.set_profile(TARGET_ID, "the.target", "", 100)
+        w.clock.now += 3
+        w.say(target, "hello")
+        row = w.chat.welcome(target)["me"]
+        for text in ("/mute #1 5", "/mutes", "/unmute row:%d" % row, "/mute row:%d 9" % row, "/ban #1 purge", "/bans", "/mutes", "/unban #1", "/ban row:%d purge" % row, "/mute #77 5", "/kick row:5"):
+            w.say(admin, text)
+        seen = [admin.raw, target.raw, other.raw]
+        for raw in seen:
+            assert_no_id(self, b"".join(raw).decode("utf-8"), "a frame")
+        assert_no_id(self, repr([r[1:] for r in w.store.mutes()]) + repr([r[1:] for r in w.store.bans()]), "the names kept")
+        assert_no_id(self, repr(w.store.actions()), "the moderators' log")
+        for frame in admin.kinds("mutes"):
+            for r in frame["rows"]:
+                self.assertLessEqual(set(r), {"u", "until", "i"})
 
 
 class FreshBase(unittest.IsolatedAsyncioTestCase):
@@ -867,6 +1167,55 @@ class TheFreshCheck(FreshBase):
         self.assertEqual(self.w.chat.busy, {})                                                     # (the socket may send another command)
         self.w.say(self.mod, "/mute bob 5")
         self.assertEqual(self.mod.codes()[-1:], [])
+
+
+class TheFreshCheckOfLineAndRowTargets(FreshBase):
+    """`#n` and `row:n` need the same look at both people's roles as a username does."""
+
+    def forms(self):
+        self.w.clock.now += 3
+        self.w.say(self.bob, "a line")
+        line = self.w.store.lines(1)[0][0]
+        return "#%d" % line, "row:%d" % self.w.chat.presence.row_id("1002")
+
+    async def test_a_command_by_line_or_row_waits_for_the_lookup_of_both(self):
+        for word in self.forms():
+            self.age()
+            self.stub.calls.clear()
+            self.w.say(self.mod, "/mute %s 5" % word)
+            self.assertEqual(self.w.store.muted_until("1002"), 0)                  # (it waits)
+            await self.settle()
+            self.assertTrue({"1002", "9001"} <= set(self.asked()), word)
+            self.assertGreater(self.w.store.muted_until("1002"), 0)
+            self.w.store.mute("1002", 0, "x")
+        self.age()
+        self.stub.calls.clear()
+        self.w.say(self.mod, "/kick %s" % self.forms()[1])
+        await self.settle()
+        self.assertTrue({"1002", "9001"} <= set(self.asked()))
+        self.assertEqual((self.bob.closed, self.mod.codes()), ((1000, "kicked"), []))
+
+    async def test_a_discord_that_fails_refuses_both_forms_with_role(self):
+        for word in self.forms():
+            self.mode = lambda account: (500, {"message": "x"}, {})
+            self.age()
+            self.w.say(self.mod, "/kick %s" % word)
+            await self.settle()
+            self.assertEqual(self.mod.codes()[-1], "role", word)
+            self.assertEqual((self.bob.closed, self.w.store.actions()), (None, []))
+            self.mode = None
+            self.roles.pause_until = self.roles.hold_until = float("-inf")
+            self.grant("9001", "mod")
+            self.grant("1002", "none")
+
+    async def test_a_target_promoted_during_the_wait_is_power_by_either_form(self):
+        for word in self.forms():
+            self.age()
+            self.members["1002"] = [ADMIN]
+            self.w.say(self.mod, "/mute %s 5" % word)
+            await self.settle()
+            self.assertEqual((self.mod.codes()[-1], self.w.store.mutes()), ("power", []), word)
+            self.members["1002"] = []
 
 
 class Slow(Stub):

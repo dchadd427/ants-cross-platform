@@ -234,22 +234,28 @@ class TheStyle(unittest.TestCase):
     def rule(self, selector):
         return next(body for sel, body in self.rules if sel.strip() == selector)
 
-    def test_the_picker_lies_over_the_log_right_above_the_form_and_the_words_are_the_forms_first_row(self):
+    def test_the_picker_lies_over_the_log_right_above_the_form_and_the_words_are_a_bubble_that_takes_no_room(self):
         picker = self.rule(".gt-pick")
         for part in ("position: absolute;", "bottom: 100%;", "left: 0;", "right: 0;"):
             self.assertIn(part, picker, part)
         self.assertIn("position: relative;", self.rule(".gc-form.gt-on"), "the picker is placed against the form")
-        self.assertIn("grid-column: 1 / -1;", self.rule(".gt-say"))
+        for part in ("position: absolute;", "bottom: 100%;"):
+            self.assertIn(part, self.rule(".gt-say"), "the line of words is a bubble over the log: it takes no room")
         self.assertNotRegex(self.css, r"position: *fixed")
         self.assertEqual(self.css.count("z-index"), 2, "two layers over the log: the picker's (2) and the voice line's (3, so that \"The message is full.\" shows over the open picker)")
-        self.assertIn("grid-template-columns: minmax(0, 1fr) auto auto; }", self.css)
+        self.assertIn("grid-template-columns: auto minmax(0, 1fr) auto;", self.css)
         self.assertIn("pick.style.maxHeight = Math.max(72, Math.min(180, ", read("web", "home", "talk.js"), "the script sets its height to the room above the form")
 
-    def test_the_middle_widths_put_the_two_buttons_in_a_row_of_their_own_under_the_field_and_send(self):
-        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n    .gc-form.gt-on { grid-template-columns: minmax(0, 1fr) auto; }", self.css)
-        narrow = self.css[self.css.index("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) {\n"):]
-        self.assertIn(".gt-on .gt-tools { order: 3; grid-column: 1 / -1; }", narrow)
-        self.assertIn(".gt-on .gc-input { order: 1; } .gt-on .gc-send { order: 2; } .gt-on .gc-login { order: 2; }", narrow, "the field, Send and the login button keep their order when the buttons move to the last row")
+    def test_one_composer_in_every_window_the_buttons_under_the_field_and_in_a_low_window_beside_it(self):
+        self.assertIn('grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "f f f" "t . s";', self.rule(".gc-form.gt-on"), "the field on top over the whole width, the buttons at the left and Send at the right")
+        self.assertIn("max-height: 66px;", self.rule(".gt-on textarea.gc-input"), "two lines in a wide window")
+        low = self.css[self.css.index("@media (max-height: 500px) {"):]
+        self.assertIn('grid-template-areas: "f t s";', low, "a low window: one row, the field, the buttons, Send")
+        self.assertIn(".gt-on textarea.gc-input { max-height: 44px; }", low)
+        self.assertNotIn("(min-width: 701px) and (max-width: 1000px)", self.css.replace("@media (min-width: 701px) and (min-height: 501px)", ""), "no composer of its own for the middle widths")
+        self.assertNotIn("order: 3", self.css, "no button row that is placed by order: the grid areas place everything")
+        for part in (".gt-on .btn.gt-btn", ".gt-on .gc-send"):
+            self.assertIn("min-height: 44px;", self.rule(part), part)
 
     def test_every_target_is_at_least_44_px_high_and_wide(self):
         for selector in (".gt-btn", ".gt-e"):
@@ -267,7 +273,7 @@ class TheStyle(unittest.TestCase):
         self.assertIn("max-height: 150px;", self.rule(".gt-pick"), "without the script's measure (a page that cannot measure) it is 150 px")
 
     def test_the_dock_is_taller_where_the_buttons_have_a_row_of_their_own(self):
-        self.assertIn("@media (min-width: 701px) and (max-width: 1000px) and (min-height: 501px) { .gc[data-open=\"true\"]:has(.gc-form.gt-on) { height: clamp(240px, 38vh, 320px); } }", self.css, "the middle widths: the dock is about 60 to 80 px taller (its own is 160 to 260 px), so that the log keeps its room")
+        self.assertIn("@media (min-width: 701px) and (min-height: 501px) { .gc[data-open=\"true\"]:has(.gc-form.gt-on) { height: clamp(240px, 34vh, 300px); } }", self.css, "a wide window: the dock is 240 to 300 px (its own is 160 to 260 px), so that the log keeps its room")
 
     def test_the_two_pictures_are_inline_svg_in_the_buttons_own_color_and_the_listening_microphone_is_solid(self):
         self.assertIn("stroke: currentColor;", self.rule(".gt-ico"))
