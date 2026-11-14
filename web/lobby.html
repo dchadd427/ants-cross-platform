@@ -420,9 +420,6 @@
         // THE PERSON of this page (front/player_name.js): the site's own page for the login is asked once when the page opens, so that a button pressed soon after finds the answer (myName() and open() below)
         var person = PlayerName.forWindow(window, nameCheck, { later: setTimeout, cancel: clearTimeout, random: Math.random });
         person.ask();
-        // A page that is shown again (the back-forward cache, a tab that was hidden or frozen) asks again: what it knew may be old (front/player_name.js refresh)
-        window.addEventListener('pageshow', function (e) { if (e && e.persisted) person.refresh(); });
-        document.addEventListener('visibilitychange', function () { if (!document.hidden) person.refresh(); });
 
         // The level of a computer player in an address: only these three words, in any case (anything else is none; what comes back is the lower case word that was tested, it is never put into a link as it came)
         // FILL_BEGIN (tests/scripts/web_fill_check.js runs this function on a table of values)

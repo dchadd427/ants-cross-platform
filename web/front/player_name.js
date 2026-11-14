@@ -1,6 +1,6 @@
 // The name that a person plays under on the front page and on the game page (web/lobby.html, web/shell.html): nobody types a name on the web (tests/scripts/web_player_name_check.js).
 //   * A person who is logged in with Discord (docs/HUB.md "Login") plays under the login's name made to fit the game's rules. The page asks the site's own `GET /hub/me` (same origin; the cookie is HttpOnly)
-//     when it opens, and again at every seat (a login, a guest of a site that has a login, a failed answer), and when the page is shown again (refresh), so that a log in or a log out in the chat is known at the next room. `you.name` is tried first, then `you.other`; the username always fits.
+//     when it opens, and again at every seat (a login, a guest of a site that has a login, a failed answer), so that a log in or a log out in the chat is known at the next room. `you.name` is tried first, then `you.other`; the username always fits.
 //   * Everybody else (not logged in, no hub or no login, an answer that is late or wrong) plays under a guest name: "Guest" and six digits, made once and kept in this browser (localStorage, GUEST_KEY; a
 //     browser that refuses its storage keeps it for the page). A login and a log out never change it. It is a random number and nothing else.
 //   * ready(fn) calls fn(name, kind, canSwitch, how) once: at once when the answer cannot change (a site with no login), else when the question is answered, failed or given up (ASK_MS). how: 'other' (the
@@ -67,7 +67,7 @@
         var kept = '';                    // the guest digits of this page
         var last = null;                  // the last question that ended: { kind, name, canSwitch }
         var waiting = [];                 // what waits for the question that is on its way
-        var round = 0, flying = false, timer = null, asking = null;
+        var round = 0, flying = false, timer = null;
 
         function guest() {
             if (kept) return kept;
@@ -104,7 +104,6 @@
             var mine = ++round;
             var ctl = null;
             try { ctl = env.Abort ? new env.Abort() : null; } catch (e) { ctl = null; }
-            asking = ctl;
             timer = later(function () {
                 timer = null;
                 if (mine !== round) return;
@@ -125,20 +124,7 @@
                 body.then(function (data) { if (mine === round) settle(fromMe(data, env.check)); }, failed);
             }, failed);
         }
-        // The page is shown again (restored from the back-forward cache, or visible after being hidden): what it knew may be old, and a question that was on its way may never come back. It is given up and asked anew
-        // (a site without a login is not asked)
-        function refresh() {
-            if (last && !again(last)) return;
-            if (flying) {
-                if (timer !== null) { cancel(timer); }
-                timer = null;
-                if (asking) { try { asking.abort(); } catch (e) { /* it is given up all the same */ } }
-                round++; flying = false;
-            }
-            ask();
-        }
         return {
-            refresh: refresh,
             // The question, at once (the page asks it when it opens, so that a button pressed soon after finds it answered)
             ask: function () { if (!last || again(last)) ask(); },
             // fn(name, kind, canSwitch, how): kind 'login' or 'guest'; at once for an answer that cannot change, else when the question ends (ASK_MS at the latest)

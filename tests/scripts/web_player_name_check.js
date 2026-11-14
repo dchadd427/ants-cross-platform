@@ -570,43 +570,6 @@ const GUEST_NAME = 'Guest 550000';                      // (the guest name that 
         r.restore();
     }
     {
-        // (b) the page was frozen or hidden: a question that never came back, and an old guest answer, are asked again when the page is shown
-        const r = rig();
-        check('(b) the page has refresh() for a page that is shown again (pageshow, visibilitychange)', typeof r.who.refresh === 'function');
-        if (typeof r.who.refresh === 'function') {
-            r.who.ask();
-            r.who.refresh();
-            check('(b) a question that is on its way when the page is shown again is given up and asked anew', r.fetches.length === 2 && r.fetches[0].init.signal.aborted === true, r.fetches.length + ' requests');
-            await r.reply(0, 200, GUEST_PAGE);
-            check('(b) ... the old question\'s late answer changes nothing', r.who.known() === '' && r.heard.length === 0);
-            r.ready();
-            await r.reply(1, 200, LOGIN('maya'));
-            same('(b) ... a seat hears the new answer', r.heard, [['maya', 'login', false]]);
-            r.who.refresh();
-            check('(b) a page shown again asks even after a login', r.fetches.length === 3);
-            await r.reply(2, 200, GUEST_PAGE);
-            r.who.refresh();
-            check('(b) ... and after a guest answer', r.fetches.length === 4);
-            await r.reply(3, 200, GUEST_PAGE);
-            r.ready();
-            check('(b) ... a seat then asks again too', r.fetches.length === 5);
-            await r.reply(4, 200, LOGIN('maya'));
-            same('(b) ... and plays under the login', r.heard.slice(-1), [['maya', 'login', false]]);
-            const none = rig();
-            none.who.ask(); await none.reply(0, 404, null);
-            none.who.refresh();
-            check('(b) a site with no login is not asked again by a page that is shown again', none.fetches.length === 1);
-            none.restore();
-            const waiter = rig();
-            waiter.ready();
-            waiter.who.refresh();
-            await waiter.reply(1, 200, LOGIN('maya'));
-            same('(b) a seat that waits through a refresh hears the new answer once', waiter.heard, [['maya', 'login', false]]);
-            waiter.restore();
-        }
-        r.restore();
-    }
-    {
         // (c) a slow hub: the question at page open is given up at the limit; the next seat asks again and hears a login that comes in time
         const r = rig();
         r.who.ask();
