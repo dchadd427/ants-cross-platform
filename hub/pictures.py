@@ -157,17 +157,15 @@ class Pictures:
     # ---- the fetch ---------------------------------------------------------------------------------------------------------------------------
 
     def offer(self, account, avatar):
-        """What a finished login hands over: the account and the short code of its picture (None for none). It decides at once, never waits and never raises: a switched off or blocked account, a banned one, one
+        """What a finished login hands over: the account and the short code of its picture (None for none). It decides at once, never waits and never raises: an account whose picture is off, hidden or banned or that has no login (`allowed`), one
         whose fetch is waiting or running already, a full queue: nothing is fetched (and the drop is counted and told). A new login always gets its fetch: the next login is the retry. No picture at
         Discord deletes the older copy of ours."""
         try:
             if self.stopping:
                 return
-            if self.store.picture_state(account, touch=True) != SHOW_ON:
+            self.store.picture_state(account, touch=True)          # (a login renews the time of an `off` that the person set)
+            if not self.allowed(account):
                 return
-            if self.store.is_banned(account):
-                self.store.clear_picture(account)
-                return self.sync()
             if avatar is None:
                 self.store.clear_picture(account)
                 self.log.event("picture", kind="none")

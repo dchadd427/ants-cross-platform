@@ -79,7 +79,7 @@
    "file": "hub/pictures.py",
    "old": "        if not self.token or self.stopping or not self.allowed(account):",
    "new": "        if not self.token or self.stopping:",
-   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheEndsStopTheFetch"
+   "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures_refresh.TheQueueIsLookedAtAgain"
   },
   {
    "id": "login_copy_is_not_a_look",

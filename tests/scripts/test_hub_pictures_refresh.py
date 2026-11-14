@@ -359,6 +359,23 @@ class TheQueueIsLookedAtAgain(RefreshTest):
                 self.release()
                 self.assertEqual((self.fake.user_ids, self.kept()), ([], []))
 
+    def test_nothing_is_queued_for_a_stopped_account_or_one_with_no_login(self):
+        self.fake.profiles[ACCOUNT] = AVATAR
+        self.hold()
+        p = self.pictures()
+        self.rig.call(p.ask, ACCOUNT)                                           # (no login yet)
+        self.assertEqual(self.rig.call(lambda: len(p.waiting)), 0)
+        self.login()
+        for how in ("off", "hidden", "banned"):
+            with self.subTest(how=how):
+                self.stop(how)
+                self.rig.call(p.ask, ACCOUNT)
+                self.assertEqual(self.rig.call(lambda: len(p.waiting)), 0)
+                self.store("set_picture_show", ACCOUNT, base.SHOW_ON, True)
+                self.store("unban", ACCOUNT)
+        self.rig.call(p.ask, ACCOUNT)
+        self.assertEqual(self.rig.call(lambda: len(p.waiting)), 1)              # (and one that may be looked up is queued)
+
     def test_a_fetch_that_waited_is_not_made_after_the_picture_went_off_or_was_hidden_or_the_person_was_banned(self):
         for how in ("off", "hidden", "banned"):
             with self.subTest(how=how):
@@ -477,6 +494,20 @@ class TheSwitchComesBack(RefreshTest):
         self.fake.profiles[ACCOUNT] = AVATAR2
         c.send(hc.frame(1, json.dumps({"t": "pics", "on": True}).encode("utf-8")))
         self.until(lambda: self.png() == PNG2, "the picture again")
+        self.assertEqual(len(self.fake.user_ids), 2)
+
+    def test_a_person_with_no_picture_at_discord_who_switches_off_and_on_is_asked_again(self):
+        v = self.login()
+        self.fake.profiles[ACCOUNT] = None
+        c = self.connect(v)
+        self.until(lambda: len(self.fake.user_ids) >= 1, "a lookup")
+        time.sleep(0.4)
+        self.assertEqual(self.kept(), [])
+        c.send(hc.frame(1, json.dumps({"t": "pics", "on": False}).encode("utf-8")))
+        time.sleep(0.4)
+        self.fake.profiles[ACCOUNT] = AVATAR
+        c.send(hc.frame(1, json.dumps({"t": "pics", "on": True}).encode("utf-8")))
+        self.until(lambda: self.png() == PNG1, "the picture")
         self.assertEqual(len(self.fake.user_ids), 2)
 
     def test_a_hidden_picture_that_is_lifted_and_switched_on_comes_back(self):

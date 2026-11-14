@@ -217,15 +217,15 @@
   {
    "id": "switched_off_or_blocked_is_fetched",
    "file": "hub/pictures.py",
-   "old": "            if self.store.picture_state(account, touch=True) != SHOW_ON:\n                return",
-   "new": "            self.store.picture_state(account, touch=True)",
+   "old": "        return self.store.picture_state(account) == SHOW_ON and not self.store.is_banned(account) and self.store.has_login(account)",
+   "new": "        return not self.store.is_banned(account) and self.store.has_login(account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheEndOfAPicture"
   },
   {
    "id": "banned_is_fetched",
    "file": "hub/pictures.py",
-   "old": "            if self.store.is_banned(account):",
-   "new": "            if False:",
+   "old": "        return self.store.picture_state(account) == SHOW_ON and not self.store.is_banned(account) and self.store.has_login(account)",
+   "new": "        return self.store.picture_state(account) == SHOW_ON and self.store.has_login(account)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheEndOfAPicture"
   },
   {
@@ -784,8 +784,8 @@
   {
    "id": "a_login_during_the_stop_is_fetched",
    "file": "hub/pictures.py",
-   "old": "            if self.stopping:\n                return\n            if self.store.picture_state(account, touch=True) != SHOW_ON:",
-   "new": "            if self.store.picture_state(account, touch=True) != SHOW_ON:",
+   "old": "            if self.stopping:\n                return\n            self.store.picture_state(account, touch=True)",
+   "new": "            self.store.picture_state(account, touch=True)",
    "test": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -f tests.scripts.test_hub_pictures.TheStop"
   },
   {
