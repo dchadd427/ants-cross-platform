@@ -1693,10 +1693,11 @@
                 return out;
             }
 
-            // The countdown card of a game on THIS computer (the game's --start-card-seconds, docs/MATCH_COUNTDOWN.md): a game that the page starts itself (its arguments hold --play) gets 10 seconds of the card, which carries
-            // the Fullscreen button; a join of a room (the server holds the wait), a rejoin and a reload into a running match (they have no start), a recording and a live view (no --play) get none.
+            // The countdown card of a game on THIS computer (the game's --start-card-seconds, docs/MATCH_COUNTDOWN.md): every game that runs here gets 10 seconds of the card, which carries the Fullscreen button, whether the
+            // address names a map or opens the game's own setup screen (the match is started there with START, the first and every later one); a join of a room (the server holds the wait, and a rejoin or a reload into a
+            // running match has no start) and a recording or a live view get none.
             function startCardArguments(args) {
-                return args.indexOf('--play') !== -1 && args.indexOf('--join-url') === -1 ? ['--start-card-seconds', '10'] : [];
+                return args.indexOf('--join-url') === -1 && args.indexOf('--replay') === -1 ? ['--start-card-seconds', '10'] : [];
             }
 
             // Does this address make the page ASK for a name before the game connects? A link that somebody shared does: a join of a room (a door and a room code that joinArguments accepts) with no

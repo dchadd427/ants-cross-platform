@@ -1,5 +1,6 @@
 // Application integration tests: suites 7 and 8 (input scheme, marquee selection, right-click abilities, unit health, map select)
 #include "app_integration_fixtures.hpp"
+#include "ants_ai/bot_names.hpp"
 
 // ============================================================================
 // SUITE 7: Input Scheme, Multi-Unit Marquee Selection & Right-Click Abilities
@@ -482,12 +483,113 @@ void run_suite_7_input_controls() {
             ASSERT_TRUE(app.hud().is_match_countdown_active() && app.sim().current_tick() == 0);
             app.shutdown();
         }
+        {   // the card's seats and so its words: a game for one (--alone) lists only the player's own color, with the name that was typed, and one person alone has the line of its own
+            ApplicationConfig cfg = config(3, false);
+            cfg.alone = true;
+            cfg.player_name = "Maple";
+            Application app;
+            ASSERT_TRUE(app.init(cfg));
+            ASSERT_TRUE(app.hud().is_match_countdown_active());
+            const auto& seats = app.hud().countdown_seats();
+            size_t listed = 0;
+            size_t people = 0;
+            size_t computers = 0;
+            for (const auto& s : seats) {
+                listed += s.plays ? 1u : 0u;
+                people += s.plays && !s.computer ? 1u : 0u;
+                computers += s.computer ? 1u : 0u;
+            }
+            ASSERT_TRUE(listed == 1 && people == 1 && computers == 0);
+            ASSERT_TRUE(seats[app.local_player_id()].plays && !seats[app.local_player_id()].computer);
+            ASSERT_EQ(seats[app.local_player_id()].name, std::string("Maple"));
+            app.shutdown();
+        }
+        {   // a game with a computer player: the player and the bot are listed, the bot is marked as a computer player (named like "Pip (bot, Medium)"), the other two colors are not
+            Application app;
+            ASSERT_TRUE(app.init(config(3, true)));
+            ASSERT_TRUE(app.hud().is_match_countdown_active());
+            const auto& seats = app.hud().countdown_seats();
+            size_t listed = 0;
+            size_t people = 0;
+            size_t computers = 0;
+            for (const auto& s : seats) {
+                listed += s.plays ? 1u : 0u;
+                people += s.plays && !s.computer ? 1u : 0u;
+                computers += s.computer ? 1u : 0u;
+            }
+            ASSERT_TRUE(listed == 2 && people == 1 && computers == 1);
+            ASSERT_TRUE(seats[1].plays && seats[1].computer && ants::ai::is_reserved_bot_name(seats[1].name));
+            ASSERT_TRUE(seats[0].plays && !seats[0].computer && !seats[2].plays && !seats[3].plays);
+            app.shutdown();
+        }
+        {   // one second is a card of one second (not the 5 s dialog): the smallest count, up from the start, closed after its 20 steps, tick 0 on the step after
+            Application app;
+            ASSERT_TRUE(app.init(config(1, false)));
+            ASSERT_TRUE(app.hud().is_match_countdown_active());
+            ASSERT_EQ(app.countdown_seconds_left(), 1);
+            const int steps = steps_to_first_tick(app);
+            ASSERT_TRUE(steps >= 20 && steps <= 22);
+            ASSERT_EQ(app.sim().current_tick(), 1u);
+            ASSERT_FALSE(app.hud().is_match_start_modal_active());
+            app.shutdown();
+        }
         {   // without the option: the plain dialog, 100 steps and the one that runs tick 0
             Application app;
             ASSERT_TRUE(app.init(config(0, false)));
             ASSERT_TRUE(app.hud().is_match_start_modal_active() && !app.hud().is_match_countdown_active());
             ASSERT_EQ(app.countdown_seconds_left(), -1);
             ASSERT_EQ(steps_to_first_tick(app), 101);
+            app.shutdown();
+        }
+    } TEST_END();
+
+    TEST_CASE("7.6l Every way a game on this computer starts gets the card when --start-card-seconds is set (the page passes it to a game that names a map and to the game's own setup screen alike): the setup screen's START with no --play, with and without a computer player, and the next match after the first one (the way back to the setup screen and START again) each open the card for the full count; without the option none does") {
+        const std::string tiny = "Original-Ants/Maps/TINY.LVL";
+        const auto config = [&](uint32_t card_s, bool with_bot) {
+            ApplicationConfig cfg;
+            cfg.headless = true;
+            cfg.start_in_map_select = true;               // the setup screen, and no --play: the person presses START
+            cfg.default_map_path = tiny;
+            cfg.start_card_seconds = card_s;
+            if (with_bot) {
+                ants::ai::BotSpec bot;
+                bot.seat = 1;
+                bot.level = ants::ai::Level::Medium;
+                cfg.bots.push_back(bot);
+            }
+            return cfg;
+        };
+        for (const bool with_bot : {false, true}) {
+            Application app;
+            ASSERT_TRUE(app.init(config(10, with_bot)));
+            ASSERT_FALSE(app.hud().is_match_countdown_active());                   // (the setup screen: no match yet)
+            for (int match = 0; match < 2; ++match) {                              // the first match, and the second one after it
+                ASSERT_TRUE(app.start_game(tiny));
+                ASSERT_TRUE(app.hud().is_match_countdown_active() && app.hud().is_modal_open());
+                ASSERT_EQ(app.countdown_seconds_left(), 10);
+                ASSERT_EQ(app.sim().current_tick(), 0u);
+                for (int i = 0; i < 100; ++i) app.update_simulation(0.05f);        // the 5 s dialog's length: the card is still up
+                ASSERT_TRUE(app.hud().is_match_countdown_active() && app.sim().current_tick() == 0u);
+                ASSERT_EQ(app.countdown_seconds_left(), 5);
+                int steps = 100;
+                while (app.sim().current_tick() == 0 && steps < 4000) {
+                    app.update_simulation(0.05f);
+                    ++steps;
+                }
+                ASSERT_TRUE(steps >= 200 && steps <= 202);
+                ASSERT_FALSE(app.hud().is_match_countdown_active());
+                if (match == 0) app.return_to_map_select();
+            }
+            app.shutdown();
+        }
+        {   // without the option the setup screen's START opens the plain dialog, in the first match and the second
+            Application app;
+            ASSERT_TRUE(app.init(config(0, false)));
+            for (int match = 0; match < 2; ++match) {
+                ASSERT_TRUE(app.start_game(tiny));
+                ASSERT_TRUE(app.hud().is_match_start_modal_active() && !app.hud().is_match_countdown_active());
+                if (match == 0) app.return_to_map_select();
+            }
             app.shutdown();
         }
     } TEST_END();

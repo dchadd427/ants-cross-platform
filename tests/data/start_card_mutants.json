@@ -210,20 +210,68 @@
    "new": "n < 0 || n > 61) {\n                if (cfg.startup_error.empty()) cfg.startup_error = \"--start-card-seconds",
    "build": "test_network_app",
    "test": "ANTS_TEST_FILTER=N5.101 timeout 900 ./build/tests/test_app/test_network_app"
+   },
+  {
+   "id": "local_card_marks_no_bot",
+   "file": "src/ants_app/application_net.cpp",
+   "old": "(seats[seat].plays && bot.seat == seat)",
+   "new": "(seats[seat].plays && bot.seat == seat && seat > 3)",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
   },
   {
-   "id": "page_gives_the_card_to_every_game",
+   "id": "local_card_lists_empty_seats",
+   "file": "src/ants_app/application_net.cpp",
+   "old": "seats[seat].plays = (roster & (1u << seat)) != 0;",
+   "new": "seats[seat].plays = (roster | 0x0Fu) != 0;",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "local_card_one_second_is_none",
+   "file": "src/ants_app/application_match.cpp",
+   "old": "config_.start_card_seconds > 0 && !network_active()",
+   "new": "config_.start_card_seconds > 1 && !network_active()",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "local_card_only_after_play",
+   "file": "src/ants_app/application_match.cpp",
+   "old": "config_.start_card_seconds > 0 && !network_active()",
+   "new": "config_.start_card_seconds > 0 && config_.play_at_once && !network_active()",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "local_card_drops_the_typed_name",
+   "file": "src/ants_app/application_net.cpp",
+   "old": "seat == local_player_id_ && !player_name_.empty() ? player_name_ : names[seat]",
+   "new": "names[seat]",
+   "build": "test_app_integration",
+   "test": "ANTS_TEST_FILTER=7.6 timeout 900 ./build/tests/test_app/test_app_integration"
+  },
+  {
+   "id": "page_card_needs_a_map",
    "file": "web/shell.html",
-   "old": "return args.indexOf('--play') !== -1 && args.indexOf('--join-url') === -1 ?",
-   "new": "return args.indexOf('--join-url') === -1 ?",
+   "old": "return args.indexOf('--join-url') === -1 && args.indexOf('--replay') === -1 ?",
+   "new": "return args.indexOf('--play') !== -1 && args.indexOf('--join-url') === -1 && args.indexOf('--replay') === -1 ?",
    "build": [],
    "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
   },
   {
    "id": "page_gives_the_card_to_a_room",
    "file": "web/shell.html",
-   "old": "return args.indexOf('--play') !== -1 && args.indexOf('--join-url') === -1 ?",
-   "new": "return args.indexOf('--play') !== -1 ?",
+   "old": "return args.indexOf('--join-url') === -1 && args.indexOf('--replay') === -1 ?",
+   "new": "return args.indexOf('--replay') === -1 ?",
+   "build": [],
+   "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
+  },
+  {
+   "id": "page_gives_the_card_to_a_recording",
+   "file": "web/shell.html",
+   "old": "return args.indexOf('--join-url') === -1 && args.indexOf('--replay') === -1 ?",
+   "new": "return args.indexOf('--join-url') === -1 ?",
    "build": [],
    "test": "node tests/scripts/web_lobby_check.js web/shell.html web/lobby.html"
   }

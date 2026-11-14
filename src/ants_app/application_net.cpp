@@ -120,7 +120,7 @@ void Application::begin_local_countdown(uint8_t roster, uint32_t seconds) {
     const std::array<std::string, 4> names = local_team_names();
     for (uint8_t seat = 0; seat < sim::MAX_PLAYERS; ++seat) {
         seats[seat].plays = (roster & (1u << seat)) != 0;
-        seats[seat].name = names[seat];
+        seats[seat].name = seat == local_player_id_ && !player_name_.empty() ? player_name_ : names[seat];     // your own row shows the name you typed
         for (const ai::BotSpec& bot : config_.bots) seats[seat].computer = seats[seat].computer || (seats[seat].plays && bot.seat == seat);
     }
     local_countdown_ms_ = static_cast<int64_t>(seconds) * 1000;
